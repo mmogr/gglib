@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { TrayPanel } from '../../../src/pages/TrayPanel';
 import type { DashboardSnapshot } from '../../../src/services/transport/types/dashboard';
+import { dashboardSnapshot } from '../fixtures/dashboard';
 
 const transport = vi.hoisted(() => ({
   startProxy: vi.fn().mockResolvedValue(undefined),
@@ -47,16 +48,8 @@ vi.mock('../../../src/hooks/useProxyDashboard', () => ({
   useProxyDashboard: () => dashboard.current,
 }));
 
-function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot {
-  return {
-    active_connections: [],
-    slots: [],
-    slots_available: false,
-    slots_status: 'Slot metrics unavailable.',
-    total_requests: 0,
-    ...overrides,
-  } as DashboardSnapshot;
-}
+const snapshot = (overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot =>
+  dashboardSnapshot(overrides);
 
 describe('TrayPanel', () => {
   beforeEach(() => {

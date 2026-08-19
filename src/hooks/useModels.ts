@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { GgufModel, InferenceConfig, ServerConfig } from '../types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { GgufModel, SparseInferenceConfig, ServerConfig } from '../types';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
@@ -10,17 +10,29 @@ export function useModels() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Which fetch is the newest. Reloads used to come only from awaited,
+  // sequential mutation handlers; they now also arrive from library events,
+  // so two can be in flight at once. Without this, a slow first response
+  // landing after a fast second one would overwrite fresh state with stale —
+  // and since no further event is coming, the list would stay wrong.
+  const requestGeneration = useRef(0);
+
   const loadModels = useCallback(async () => {
+    const generation = ++requestGeneration.current;
     try {
       setLoading(true);
       setError(null);
       const modelList = await getTransport().listModels();
+      if (generation !== requestGeneration.current) return;
       setModels(modelList);
     } catch (err) {
+      if (generation !== requestGeneration.current) return;
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to load models: ${errorMessage}`);
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -57,7 +69,7 @@ export function useModels() {
     name?: string;
     quantization?: string;
     filePath?: string;
-    inferenceDefaults?: InferenceConfig;
+    inferenceDefaults?: SparseInferenceConfig;
     serverDefaults?: ServerConfig | null;
   }) => {
     await getTransport().updateModel({ 

@@ -89,7 +89,7 @@ use crate::domain::{
 /// template does not read `reasoning_effort`, so nothing was sent" — and the
 /// rung is the half that would otherwise be destroyed, because
 /// [`ParamSource::SuppressedByTemplate`] overwrites it in
-/// [`FieldSources`](crate::domain::FieldSources).
+/// [`FieldSources`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct SuppressedEffort {
     /// The level the ladder resolved, which llama-server never saw.

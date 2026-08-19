@@ -24,6 +24,7 @@ use super::types::DownloadId;
 /// - Failures before metadata available → key still valid
 /// - Survives cancellations and retries
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CompletionKey {
     /// `HuggingFace` model file.
@@ -39,6 +40,7 @@ pub enum CompletionKey {
         filename_canon: String,
         /// Quantization type (e.g., "`Q4_K_M`").
         /// Optional since some downloads may not have a meaningful quantization.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         quantization: Option<String>,
     },
@@ -87,6 +89,7 @@ impl fmt::Display for CompletionKey {
 
 /// Result kind for a completion attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum CompletionKind {
     /// Successfully downloaded and registered.
@@ -101,6 +104,7 @@ pub enum CompletionKind {
 
 /// Counts of attempts by result kind.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct AttemptCounts {
     /// Number of successful downloads.
     pub downloaded: u32,
@@ -166,6 +170,7 @@ impl AttemptCounts {
 
 /// Details for a single completed artifact in a queue run.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CompletionDetail {
     /// Stable artifact identity key.
     pub key: CompletionKey,
@@ -174,6 +179,7 @@ pub struct CompletionDetail {
     /// Most recent result for this artifact.
     pub last_result: CompletionKind,
     /// Unix timestamp (milliseconds since epoch) of last completion.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub last_completed_at_ms: u64,
     /// All download IDs that contributed to this completion.
     /// Multiple IDs indicate retries or re-queues.
@@ -187,12 +193,20 @@ pub struct CompletionDetail {
 /// Emitted when the queue transitions from busy → idle, capturing all
 /// completions that occurred during the run regardless of timing.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct QueueRunSummary {
     /// Unique identifier for this queue run.
+    ///
+    /// `Uuid` serializes as its hyphenated string form. ts-rs is built here
+    /// without `uuid-impl`, so the substitute is spelled out — a primitive,
+    /// which needs no import and so takes `type` rather than `as`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     pub run_id: Uuid,
     /// Unix timestamp (milliseconds since epoch) when the run started.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub started_at_ms: u64,
     /// Unix timestamp (milliseconds since epoch) when the run completed.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub completed_at_ms: u64,
 
     // Attempt-based totals (diagnostics)

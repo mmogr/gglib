@@ -29,18 +29,23 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// A point-in-time view of prompt-cache reuse since the proxy started.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CacheUsage {
     /// Completed requests whose upstream reported a cached-token count.
     /// The denominator for [`Self::cached_tokens`] and [`Self::prompt_tokens`].
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub reporting_requests: u64,
     /// Completed requests whose upstream omitted the field. Excluded from
     /// every other figure here — counted so a consumer can tell "no reuse"
     /// apart from "no data".
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub unreported_requests: u64,
     /// Total prompt tokens across [`Self::reporting_requests`].
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub prompt_tokens: u64,
     /// Total prompt tokens served from the KV cache across those requests.
     /// Always `<= prompt_tokens`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub cached_tokens: u64,
     /// Prompt tokens in the most recent reporting request.
     pub last_prompt_tokens: Option<u32>,

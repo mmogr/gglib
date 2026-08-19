@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Used by monitoring systems to track server state and emit lifecycle events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum ServerHealthStatus {
     /// Server is responding to health checks and process is alive.

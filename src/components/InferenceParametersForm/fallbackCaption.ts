@@ -166,6 +166,11 @@ export function fallbackCaption(
   const source = describeSource(usable.entry, {
     profile: explanation.profile,
     isReasoning: explanation.isReasoning,
+    // Three origins share the auto-detected rung, and this is the only thing
+    // that separates them. Omitting it does not make the caption vaguer — it
+    // makes it name the reasoning-tag guess for all three, which is this
+    // module working something out for itself.
+    defaultsOrigin: explanation.defaultsOrigin,
   });
   const value = explanation.resolved[field];
 

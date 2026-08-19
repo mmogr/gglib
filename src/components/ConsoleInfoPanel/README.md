@@ -27,6 +27,6 @@ Left panel in the console view showing the served model's identity, real-time in
 | `startTime` | Server start time for uptime display |
 | `onStopServer` | Callback wired to stop button |
 
-Polling automatically pauses when the server stops and resumes on the next `server:started` event.
+Polling automatically pauses when the server stops and resumes on the next `server_started` frame.
 
 <!-- module-docs:end -->

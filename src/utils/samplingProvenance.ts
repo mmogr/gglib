@@ -135,11 +135,17 @@ export function formatParamValue(
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
 }
 
-/** Read the value for one provenance entry out of the resolved config. */
+/**
+ * Read the value for one provenance entry out of the resolved config.
+ *
+ * `number | null` and not `| undefined`: `resolved` is the wire's
+ * `InferenceConfig`, where all eighteen keys are present and an unset
+ * parameter arrives as `null`. There is no absent case to represent.
+ */
 export function resolvedValue(
   resolved: InferenceConfig,
   param: SamplingParamKey,
-): number | undefined {
+): number | null {
   return resolved[param];
 }
 
@@ -168,7 +174,14 @@ export function formatProvenanceValue(
  * like a defect. `ProxySamplingPanel.formatValue` and the CLI's
  * `fmt_published` do the same thing to the same values.
  */
-function trimFloat(value: number): string {
+function trimFloat(value: number | null | undefined): string {
+  // Tolerates a missing number rather than throwing. The types say it cannot
+  // happen — `PublishedDefaultDto`'s arms carry `published` where they claim
+  // to — but this renders inside the inspector panel, and a `TypeError` here
+  // unmounts the whole panel rather than spoiling one row. It reads `—`,
+  // never `0`: a fabricated zero would render as a number the model author
+  // published, which is the one thing this function must not invent.
+  if (value == null) return UNKNOWN;
   return Number(value.toPrecision(6)).toString();
 }
 
@@ -183,18 +196,29 @@ function trimFloat(value: number): string {
  * the same fact the same way.
  */
 export function describePublished(entry: PublishedDefault): string {
+  // The four `?? 0` guards are gone and are not coming back:
+  // `PublishedDefaultDto` is a discriminated union, so `published` is present
+  // on the three arms that read it and absent from `unreadable`. The
+  // hand-written mirror was a flat object that made both numbers optional on
+  // every state, and `?? 0` was standing in for a shape the wire does not
+  // have — at the cost of printing a `0` the model author never published.
+  //
+  // The `default:` arm does stay, on the argument `publishedByParam` makes
+  // below: the declaration is a claim about the endpoint, not a guarantee
+  // about the bytes, and without it an unrecognised `state` returns
+  // `undefined` from a function typed `string`.
   switch (entry.state) {
     case 'overridden':
-      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib is sending ${trimFloat(
-        entry.sending ?? 0,
+      return `${entry.key} = ${trimFloat(entry.published)}; gglib is sending ${trimFloat(
+        entry.sending,
       )}`;
     // Named even though it is benign: the row above reads as unset, and an
     // unset row with no note is indistinguishable from a gap. The missing
     // number is the model author's, not nobody's.
     case 'deferred':
-      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib defers to it`;
+      return `${entry.key} = ${trimFloat(entry.published)}; gglib defers to it`;
     case 'restated':
-      return `${entry.key} = ${trimFloat(entry.published ?? 0)}; gglib sends the same value`;
+      return `${entry.key} = ${trimFloat(entry.published)}; gglib sends the same value`;
     case 'unreadable':
       return `${entry.key} is set to a value gglib cannot read`;
     default:
@@ -205,8 +229,11 @@ export function describePublished(entry: PublishedDefault): string {
 /**
  * Index published entries by parameter, for rendering beside their rows.
  *
- * Tolerates the field being absent: a backend that predates it sends nothing,
- * and that must read as "this model published nothing" rather than as an error.
+ * Still tolerates the field being absent, though `SamplingExplanation` now
+ * types it as an unconditional array. The value reaches this function through
+ * an unchecked cast over parsed JSON, so the declaration is a claim about the
+ * endpoint rather than a guarantee about the bytes — and "this model published
+ * nothing" is the right reading of a missing list either way.
  */
 export function publishedByParam(
   published: PublishedDefault[] | undefined,

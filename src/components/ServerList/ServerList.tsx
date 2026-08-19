@@ -1,7 +1,7 @@
 import { FC, useState } from 'react';
 import { RotateCcw, ServerOff, Square } from 'lucide-react';
 import { appLogger } from '../../services/platform';
-import { ServerInfo } from '../../types';
+import type { ServerViewModel } from '../../hooks/useServers';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import { Tabs } from '../ui/Tabs';
 import { ServerHealthIndicator } from '../ServerHealthIndicator';
@@ -11,7 +11,7 @@ import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
 
 interface ServerListProps {
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   onStopServer: (modelId: number) => Promise<void>;
   onSelectModel?: (modelId: number, view?: 'chat' | 'console') => void;
   /** Compact mode for popover display */

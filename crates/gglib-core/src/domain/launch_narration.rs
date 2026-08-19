@@ -30,7 +30,7 @@
 //! no business appearing in this struct. Notably absent is the GPU layer
 //! split: gglib never emits `-ngl`, so how many layers get offloaded is
 //! llama.cpp's decision and is not gglib's to report. See
-//! [`Self::backend`] for what *is* known.
+//! the `backend` [`LaunchDecision`] for what *is* known.
 
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +40,7 @@ use serde::{Deserialize, Serialize};
 /// provenance tells a user what happened but never why, which is precisely
 /// the gap this record closes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct LaunchDecision {
     /// Short stable key naming the decision: `ctx`, `backend`, `kv`,
     /// `cache`, `mtp`, `flags`, `dialect`.
@@ -92,6 +93,7 @@ impl LaunchDecision {
 /// consumers all render the same rows in the same order, and a list keeps
 /// adding a decision to a single site instead of four.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct LaunchNarration {
     /// Model name as the catalog knows it.
     pub model_name: String,
@@ -99,6 +101,7 @@ pub struct LaunchNarration {
     pub quantization: Option<String>,
     /// On-disk weight size in bytes, summed across shards. `0` when unknown —
     /// rendered as absent rather than as "0 GB".
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub weights_bytes: u64,
     /// The decisions, in the order they should be displayed.
     pub decisions: Vec<LaunchDecision>,

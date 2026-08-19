@@ -12,10 +12,8 @@ export type { ServeConfig, ServerInfo };
 /**
  * Response from starting a server.
  */
-export interface ServeResponse {
-  port: number;
-  message: string;
-}
+import type { StartServerResponse as ServeResponse } from '../../../types/generated/StartServerResponse';
+export type { ServeResponse };
 
 /**
  * Servers transport operations.

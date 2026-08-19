@@ -385,6 +385,7 @@ pub fn is_retryable_error_type(discriminant: &str) -> bool {
 /// retry hints alongside the human-readable message, mirroring the shape
 /// `gglib_proxy::models::ErrorResponse` already sends over HTTP.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RuntimeErrorEnvelope {
     /// Human-readable error message.
     pub message: String,
@@ -550,6 +551,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
 /// Carried by [`ModelRuntimePort::set_pin`] and serialized inside the
 /// daemon's `POST /api/proxy/start` body, which is why it derives serde.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct PinnedSpec {
     /// Name clients must address the model by. Matched exactly.
     pub name: String,

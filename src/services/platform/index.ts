@@ -3,7 +3,7 @@
 // UI components may import from platform/, but clients/ must NOT.
 
 // Platform detection
-export { isDesktop, isWeb } from './detect';
+export { isDesktop } from './detect';
 
 // Shell integration
 export { openUrl } from './openUrl';
@@ -11,7 +11,7 @@ export { setSelectedModel, syncMenuState, syncMenuStateSilent } from './menuSync
 
 // Desktop menu events
 export { listenToMenuEvents, MENU_EVENTS } from './menuEvents';
-export type { MenuEventHandlers, MenuEventType } from './menuEvents';
+export type { MenuEventHandlers } from './menuEvents';
 
 // File dialogs
 export { pickGgufFile } from './fileDialogs';

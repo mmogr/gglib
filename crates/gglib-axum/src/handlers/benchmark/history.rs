@@ -19,11 +19,14 @@ use crate::state::AppState;
 
 /// Query parameters for `GET /api/benchmark/runs`.
 #[derive(Debug, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ListRunsQuery {
     /// Maximum number of runs to return (default: 20, max: 100).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default = "default_limit")]
     pub limit: i64,
     /// Number of runs to skip for pagination (default: 0).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default)]
     pub offset: i64,
 }
@@ -34,26 +37,31 @@ fn default_limit() -> i64 {
 
 /// Response body for `GET /api/benchmark/runs`.
 #[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ListRunsResponse {
     pub runs: Vec<BenchmarkRun>,
 }
 
 /// Response body for `GET /api/benchmark/runs/{id}`.
 #[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct GetRunResponse {
     pub run: BenchmarkRun,
 }
 
 /// Query parameters for `GET /api/models/{id}/benchmark`.
 #[derive(Debug, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ModelBenchmarkQuery {
     /// Maximum number of compare results to return (default: 20).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default = "default_limit")]
     pub limit: i64,
 }
 
 /// Response body for `GET /api/models/{id}/benchmark`.
 #[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ModelBenchmarkResponse {
     pub summary: Option<ModelBenchmarkSummary>,
     pub compare_history: Vec<ModelCompareResult>,
@@ -62,28 +70,34 @@ pub(crate) struct ModelBenchmarkResponse {
 
 /// Query parameters for `GET /api/models/{id}/tune-history`.
 #[derive(Debug, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ModelTuneHistoryQuery {
     /// Maximum number of tune candidate results to return (default: 20).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default = "default_limit")]
     pub limit: i64,
 }
 
 /// Response body for `GET /api/models/{id}/tune-history`.
 #[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ModelTuneHistoryResponse {
     pub results: Vec<TuneCandidateResult>,
 }
 
 /// Query parameters for `GET /api/models/{id}/agentic-history`.
 #[derive(Debug, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ModelAgenticHistoryQuery {
     /// Maximum number of A/B reports to return (default: 20).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default = "default_limit")]
     pub limit: i64,
 }
 
 /// Response body for `GET /api/models/{id}/agentic-history`.
 #[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ModelAgenticHistoryResponse {
     pub reports: Vec<AgenticEvalReport>,
 }

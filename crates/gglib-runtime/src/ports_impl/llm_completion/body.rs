@@ -8,7 +8,7 @@
 //! **Translation only.** Every transform that *reshapes* a request — the
 //! reasoning strip, capability coalescing, resolving the sampling hierarchy —
 //! belongs to [`gglib_core::request_pipeline`] and runs on the finished body in
-//! [`super::LlmCompletionAdapter::chat_stream`], so the agent path and the proxy
+//! [`LlmCompletionAdapter`]'s `chat_stream`, so the agent path and the proxy
 //! apply the same ones in the same order. What this module writes is only what
 //! the *caller* asked for.
 //!

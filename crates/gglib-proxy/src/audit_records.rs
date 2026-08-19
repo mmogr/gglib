@@ -87,6 +87,7 @@ pub(crate) const MAX_TRACKED_FIELD_NAMES: usize = 32;
 /// read that failed, and a caps object that did not carry the field — so each
 /// carries its own reason rather than sharing a label.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum EffortSupportState {
     /// The observed template positively reads the variable.
@@ -137,6 +138,7 @@ impl EffortSupportState {
 
 /// The `reasoning_effort` the most recent request resolved, and its rung.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct EffortRung {
     /// The level the ladder resolved.
     pub level: ReasoningEffort,
@@ -151,6 +153,7 @@ pub struct EffortRung {
 
 /// The `reasoning_budget_tokens` the most recent request resolved, and its rung.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct BudgetRung {
     /// The cap, in tokens. `0` is the documented "stop thinking".
     pub tokens: i32,
@@ -166,6 +169,7 @@ pub struct BudgetRung {
 /// [`AuditState`](crate::sampling_audit::AuditState)'s, applied to a field that
 /// has no wire observation to fall back on.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ResolvedReasoning {
     /// The resolved level, suppressed or not.
     pub effort: Option<EffortRung>,
@@ -175,6 +179,7 @@ pub struct ResolvedReasoning {
 
 /// Everything a surface needs to render the reasoning controls honestly.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ReasoningReadback {
     /// Whether the running model's template reads `reasoning_effort`.
     pub effort_support: EffortSupportState,
@@ -194,6 +199,7 @@ pub struct ReasoningReadback {
 /// `temperature`" and "gglib could not read it" are one lookup, and two lists
 /// make a reader check two places to learn it is in neither.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ClientFieldTally {
     /// The wire key, as gglib names it. Never a client-supplied string — see
     /// the module docs.
@@ -201,8 +207,10 @@ pub struct ClientFieldTally {
     /// Times the trust gate binned it. Large by default and not a fault:
     /// `trust_client_sampling` is off, so every client-supplied sampler value
     /// is discarded by design.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub discarded: u64,
     /// Times it could not be read as sent.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub rejected: u64,
 }
 
@@ -216,6 +224,7 @@ impl ClientFieldTally {
 
 /// The whole tally, ready to surface.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ClientFieldNames {
     /// Tracked names, most-dropped first, then alphabetical.
     pub fields: Vec<ClientFieldTally>,
@@ -224,6 +233,7 @@ pub struct ClientFieldNames {
     /// currently produce, and reported anyway: a silent bound and a bound
     /// nobody hit look identical, and the first makes [`Self::fields`] a claim
     /// it cannot support.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub untracked: u64,
 }
 

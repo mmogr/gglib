@@ -39,6 +39,15 @@ tracing-subscriber = { workspace = true }
 futures-util = { workspace = true }
 futures-core = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# Emit TypeScript for this crate's HTTP wire types. Optional dependency, so
+# nothing enters the build graph with the feature off and
+# `#![deny(unused_crate_dependencies)]` stays satisfied. Forwards to the crates
+# whose types these bodies embed — ts-rs needs `TS` on the whole reachable
+# graph, not just the outermost struct.
+ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-app-services/ts-bindings"]
 
 [dev-dependencies]
 # Re-declared to turn on `test-support`, which carries
@@ -49,6 +58,11 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 hyper = "1.0"
 tempfile = "3.10"
+
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
 
 [lints.rust]
 unsafe_code = "deny"

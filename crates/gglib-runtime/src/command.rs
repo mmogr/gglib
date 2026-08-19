@@ -354,11 +354,10 @@ impl ServerLogSinkPort for NoopLogSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
+    // Only the `#[cfg(unix)]` tests below write an executable stub to disk.
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
+    use {std::fs, std::os::unix::fs::PermissionsExt, tempfile::TempDir};
 
     #[test]
     fn is_truthy_flag_recognises_on_values() {

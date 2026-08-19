@@ -1,6 +1,7 @@
 import { FC, useState } from 'react';
 import { BookOpenText, PlusCircle, RefreshCcw, SlidersHorizontal } from 'lucide-react';
-import { GgufModel, ServerInfo, HfModelSummary, ModelFilterOptions } from '../../types';
+import { GgufModel, HfModelSummary, ModelFilterOptions } from '../../types';
+import type { ServerViewModel } from '../../hooks/useServers';
 import { Tabs, type TabItem } from '../ui/Tabs';
 import { Banner } from '../ui/Banner';
 
@@ -26,7 +27,7 @@ interface ModelLibraryPanelProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   tags: string[];
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   
   // Filter props
   filterOptions: ModelFilterOptions | null;

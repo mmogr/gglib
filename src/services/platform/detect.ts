@@ -13,10 +13,3 @@ import { isTauriApp } from '../../utils/platform';
 export function isDesktop(): boolean {
   return isTauriApp;
 }
-
-/**
- * Returns true if running in web browser mode.
- */
-export function isWeb(): boolean {
-  return !isTauriApp;
-}

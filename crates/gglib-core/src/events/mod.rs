@@ -19,12 +19,14 @@ use crate::download::DownloadEvent;
 /// discriminated union. Each variant includes all necessary context
 /// for the event to be self-describing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AppEvent {
     // ========== Server Events ==========
     /// A model server has started and is ready to accept requests.
     ServerStarted {
         /// ID of the model being served.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "modelId")]
         model_id: i64,
         /// Name of the model being served.
@@ -37,6 +39,7 @@ pub enum AppEvent {
     /// A model server has been stopped (clean shutdown).
     ServerStopped {
         /// ID of the model that was being served.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "modelId")]
         model_id: i64,
         /// Name of the model that was being served.
@@ -47,6 +50,10 @@ pub enum AppEvent {
     /// A model server encountered an error.
     ServerError {
         /// ID of the model being served (if known).
+        ///
+        /// Serde always sends the key — an unparseable model ID arrives as
+        /// `null`, not as an absent field.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
         #[serde(rename = "modelId")]
         model_id: Option<i64>,
         /// Name of the model being served.
@@ -84,6 +91,7 @@ pub enum AppEvent {
     /// A model was removed from the library.
     ModelRemoved {
         /// ID of the removed model.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "modelId")]
         model_id: i64,
     },
@@ -98,6 +106,7 @@ pub enum AppEvent {
     /// Model verification progress update.
     VerificationProgress {
         /// ID of the model being verified.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "modelId")]
         model_id: i64,
         /// Name of the model being verified.
@@ -107,9 +116,11 @@ pub enum AppEvent {
         #[serde(rename = "shardName")]
         shard_name: String,
         /// Bytes processed so far.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "bytesProcessed")]
         bytes_processed: u64,
         /// Total bytes to process.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "totalBytes")]
         total_bytes: u64,
     },
@@ -117,6 +128,7 @@ pub enum AppEvent {
     /// Model verification completed.
     VerificationComplete {
         /// ID of the verified model.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "modelId")]
         model_id: i64,
         /// Name of the verified model.
@@ -132,17 +144,21 @@ pub enum AppEvent {
     /// Emitted by continuous monitoring when a server's health state changes.
     ServerHealthChanged {
         /// Unique server instance identifier.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "serverId")]
         server_id: i64,
         /// ID of the model being served.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         #[serde(rename = "modelId")]
         model_id: i64,
         /// New health status.
         status: crate::ports::ServerHealthStatus,
         /// Optional detail message (e.g., error description).
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
         /// Unix timestamp in milliseconds when status changed.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         timestamp: u64,
     },
 
@@ -192,17 +208,17 @@ impl AppEvent {
 }
 
 impl AppEvent {
-    /// Create a [`ProxyStarted`] event.
+    /// Create a [`AppEvent::ProxyStarted`] event.
     pub const fn proxy_started(port: u16) -> Self {
         Self::ProxyStarted { port }
     }
 
-    /// Create a [`ProxyStopped`] event.
+    /// Create a [`AppEvent::ProxyStopped`] event.
     pub const fn proxy_stopped() -> Self {
         Self::ProxyStopped
     }
 
-    /// Create a [`ProxyCrashed`] event.
+    /// Create a [`AppEvent::ProxyCrashed`] event.
     pub const fn proxy_crashed() -> Self {
         Self::ProxyCrashed
     }

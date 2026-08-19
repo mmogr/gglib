@@ -85,7 +85,7 @@ impl ModelContext {
     /// [`CHARS_PER_TOKEN_APPROX`].
     ///
     /// `None` when the context size is unknown, which
-    /// [`apply`](super::apply) reads as *do not truncate*. Guessing a budget
+    /// [`apply`](super::apply()) reads as *do not truncate*. Guessing a budget
     /// for an unresolvable model would risk rejecting a request over a number
     /// nobody actually knows; losing model-specific handling is the whole
     /// fallback policy of this module.

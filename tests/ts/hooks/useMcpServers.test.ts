@@ -39,6 +39,7 @@ const {
   stopMcpServer,
 } = transport;
 import { syncAllMcpTools } from '../../../src/services/tools';
+import { mcpServer, mcpServerInfo } from '../fixtures/mcp';
 
 // ==========================================================================
 // Test Fixtures
@@ -276,9 +277,21 @@ describe('useMcpServers', () => {
   });
 
   describe('startServer', () => {
-    it('starts server, syncs tools, and returns tool list', async () => {
+    /**
+     * `POST /api/mcp/servers/{id}/start` answers with the whole
+     * `McpServerInfo` — server, status and tools — not a bare tool array.
+     * This test used to mock a tool array, so it asserted against the
+     * declaration rather than the wire and passed while the hook handed an
+     * object onward as `McpTool[]`. Only a later `syncAllMcpTools()` doing
+     * the real work kept that invisible.
+     */
+    it('starts server, syncs tools, and returns the tools from the server info', async () => {
       const tools = [{ name: 'tool1' }, { name: 'tool2' }];
-      vi.mocked(startMcpServer).mockResolvedValue(tools);
+      vi.mocked(startMcpServer).mockResolvedValue({
+        ...mockServerInfo,
+        status: 'running',
+        tools,
+      });
 
       const { result } = renderHook(() => useMcpServers());
 
@@ -315,7 +328,13 @@ describe('useMcpServers', () => {
 
   describe('stopServer', () => {
     it('stops server and syncs tools', async () => {
-      vi.mocked(stopMcpServer).mockResolvedValue(undefined);
+      // `/stop` answers with the server info too. The hook ignores it, but a
+      // mock that resolves `undefined` against a `Promise<McpServerInfo>`
+      // declaration is the same shape of fiction this commit removed.
+      vi.mocked(stopMcpServer).mockResolvedValue({
+        ...mockServerInfo,
+        status: 'stopped',
+      });
 
       const { result } = renderHook(() => useMcpServers());
 
@@ -352,7 +371,9 @@ describe('useMcpServers', () => {
   describe('error handling', () => {
     it('throws on first failure and succeeds on second call', async () => {
       vi.mocked(addMcpServer).mockRejectedValueOnce(new Error('First error'));
-      vi.mocked(addMcpServer).mockResolvedValueOnce({ id: 2, name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
+      vi.mocked(addMcpServer).mockResolvedValueOnce(
+        mcpServerInfo({ server: mcpServer({ id: 2, name: 'New' }) }),
+      );
 
       const { result } = renderHook(() => useMcpServers());
 
@@ -370,7 +391,7 @@ describe('useMcpServers', () => {
       // Second call succeeds
       await act(async () => {
         const server = await result.current.addServer({ name: 'New', server_type: 'stdio', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
-        expect(server.id).toBe(2);
+        expect(server.server.id).toBe(2);
       });
     });
   });

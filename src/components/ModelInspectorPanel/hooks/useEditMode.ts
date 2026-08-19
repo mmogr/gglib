@@ -1,17 +1,17 @@
 import { useState, useCallback } from 'react';
-import type { GgufModel, InferenceConfig, ServerConfig } from '../../../types';
+import type { GgufModel, SparseInferenceConfig, ServerConfig } from '../../../types';
 
 export interface EditModeState {
   isEditMode: boolean;
   editedName: string;
   editedQuantization: string;
   editedFilePath: string;
-  editedInferenceDefaults: InferenceConfig | undefined;
+  editedInferenceDefaults: SparseInferenceConfig | undefined;
   editedServerDefaults: ServerConfig | null | undefined;
   setEditedName: (name: string) => void;
   setEditedQuantization: (quant: string) => void;
   setEditedFilePath: (path: string) => void;
-  setEditedInferenceDefaults: (config: InferenceConfig) => void;
+  setEditedInferenceDefaults: (config: SparseInferenceConfig) => void;
   setEditedServerDefaults: (config: ServerConfig | null) => void;
   handleEdit: () => void;
   handleCancel: () => void;
@@ -27,7 +27,7 @@ export function useEditMode(model: GgufModel | null): EditModeState {
   const [editedName, setEditedName] = useState('');
   const [editedQuantization, setEditedQuantization] = useState('');
   const [editedFilePath, setEditedFilePath] = useState('');
-  const [editedInferenceDefaults, setEditedInferenceDefaults] = useState<InferenceConfig | undefined>(undefined);
+  const [editedInferenceDefaults, setEditedInferenceDefaults] = useState<SparseInferenceConfig | undefined>(undefined);
   const [editedServerDefaults, setEditedServerDefaults] = useState<ServerConfig | null | undefined>(undefined);
 
   const handleEdit = useCallback(() => {

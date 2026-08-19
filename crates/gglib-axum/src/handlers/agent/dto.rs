@@ -23,18 +23,23 @@ use gglib_core::domain::agent::{AgentConfig, AgentMessage};
 /// to classify a custom tool as observation-only (and therefore subject to the
 /// higher repetition threshold) should pass its name fragment here.
 #[derive(Debug, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub(crate) struct AgentRequestConfig {
     /// Maximum number of LLM→tool→LLM iterations.
-    /// Clamped to [`MAX_ITERATIONS_CEILING`] server-side.
+    /// Clamped to [`MAX_ITERATIONS_CEILING`](gglib_core::domain::agent::config::MAX_ITERATIONS_CEILING)
+    /// server-side.
     pub max_iterations: Option<usize>,
 
     /// Maximum number of tool calls dispatched in parallel per iteration.
-    /// Clamped to [`MAX_PARALLEL_TOOLS_CEILING`] server-side.
+    /// Clamped to [`MAX_PARALLEL_TOOLS_CEILING`](gglib_core::domain::agent::config::MAX_PARALLEL_TOOLS_CEILING)
+    /// server-side.
     pub max_parallel_tools: Option<usize>,
 
     /// Per-tool execution timeout in milliseconds.
-    /// Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`] server-side.
+    /// Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`](gglib_core::domain::agent::config::MAX_TOOL_TIMEOUT_MS_CEILING)
+    /// server-side.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub tool_timeout_ms: Option<u64>,
 
     /// Substring/suffix patterns that classify a tool as observation-only.
@@ -78,6 +83,7 @@ impl AgentRequestConfig {
 
 /// Request body for `POST /api/agent/chat`.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct AgentChatRequest {
     /// Port of the llama-server instance to drive.
     ///

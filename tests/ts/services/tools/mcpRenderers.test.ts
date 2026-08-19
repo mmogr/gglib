@@ -4,7 +4,6 @@ import {
   isArrayOfHomogeneousObjects,
   mcpGenericRenderer,
 } from '../../../../src/services/tools/renderers/McpGenericRenderer';
-import { createMcpSchemaRenderer } from '../../../../src/services/tools/renderers/McpSchemaRenderer';
 
 // =============================================================================
 // looksLikeMarkdown
@@ -163,43 +162,3 @@ describe('mcpGenericRenderer.renderSummary', () => {
   });
 });
 
-// =============================================================================
-// createMcpSchemaRenderer
-// =============================================================================
-
-describe('createMcpSchemaRenderer', () => {
-  it('returns an object with renderResult and renderSummary functions', () => {
-    const renderer = createMcpSchemaRenderer({ type: 'object' });
-    expect(typeof renderer.renderResult).toBe('function');
-    expect(typeof renderer.renderSummary).toBe('function');
-  });
-
-  it('returns a new renderer instance each call (factory pattern)', () => {
-    const schema = { type: 'object', properties: {} };
-    const r1 = createMcpSchemaRenderer(schema);
-    const r2 = createMcpSchemaRenderer(schema);
-    expect(r1).not.toBe(r2);
-  });
-
-  it('renderSummary delegates to fallbackRenderer and returns a string', () => {
-    const renderer = createMcpSchemaRenderer({ type: 'object' });
-    const result = renderer.renderSummary!({ status: 'ok', count: 5 }, 'schema_tool');
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  it('renderSummary returns a string for null data without throwing', () => {
-    const renderer = createMcpSchemaRenderer({ type: 'object' });
-    expect(() => {
-      const result = renderer.renderSummary!(null, 'schema_tool');
-      expect(typeof result).toBe('string');
-    }).not.toThrow();
-  });
-
-  it('renderResult returns a defined React element', () => {
-    const renderer = createMcpSchemaRenderer({ type: 'object', properties: {} });
-    const result = renderer.renderResult({ key: 'value' }, 'schema_tool');
-    expect(result).not.toBeNull();
-    expect(result).toBeDefined();
-  });
-});

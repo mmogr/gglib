@@ -4,193 +4,149 @@
  */
 
 import type { Unsubscribe, EventHandler } from './common';
-import type { DownloadId } from './ids';
-import type { RuntimeErrorInfo } from '../../../types';
 
 // ============================================================================
 // Server Events
 // ============================================================================
 
-export type ServerStatus = 'running' | 'stopping' | 'stopped' | 'crashed';
+/**
+ * The server frames `/api/events` actually carries.
+ *
+ * These are `AppEvent`'s server variants as serde writes them — snake_case
+ * tags, camelCase fields, `modelId` a *number*. Deliberately not the shape
+ * consumers work with: `serverEvents.normalize` turns these into the
+ * registry's `ServerEvent`, which is keyed by string and speaks in
+ * running/stopping/stopped/crashed. Two shapes, because there really are two.
+ */
+import type { AppEvent } from '../../../types/generated/AppEvent';
 
-export interface ServerStateInfo {
-  modelId: string;
-  status: ServerStatus;
-  port?: number;
-  updatedAt: number;
-}
-
-export type ServerEvent =
-  | { type: 'snapshot'; servers: ServerStateInfo[] }
-  | { type: 'running'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'stopping'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'stopped'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number; error?: RuntimeErrorInfo };
+/**
+ * The `server_*` slice of `AppEvent`.
+ *
+ * An `Extract` rather than a re-declaration, so the arms cannot drift. Note
+ * what that buys and what it does not: a new `server_*` arm added in Rust
+ * joins this type with no TypeScript error anywhere, and
+ * `normalizeServerEventFromAppEvent` will drop it in its `default:`. The
+ * compiler cannot flag that, because widening a union it consumes is not a
+ * type error. A new arm needs a normalizer case written by hand.
+ */
+export type ServerWireEvent = Extract<AppEvent, { type: `server_${string}` }>;
 
 // ============================================================================
 // Download Events
 // ============================================================================
 
-export interface DownloadSummary {
-  id: DownloadId;
-  display_name: string;
-  status: 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
-  position: number;
-  error?: string | null;
-  group_id?: string | null;
-  shard_info?: {
-    shard_index: number;
-    total_shards: number;
-    filename: string;
-    file_size?: number | null;
-  } | null;
-}
-
 /**
- * Stable artifact identity for completion tracking.
- * Represents "what the user thinks they downloaded" from an artifact perspective.
+ * One row of the download queue.
+ *
+ * `status` is the full seven-member `DownloadStatus`, where the mirror named
+ * five. A snapshot row only ever carries `downloading` or `queued` —
+ * `gglib-download` hard-codes both — so the two the mirror omitted never
+ * arrived, and nothing was misrendered. The type is simply the type.
+ *
+ * `error`, `group_id` and `shard_info` are optional and *not* nullable: each
+ * carries `skip_serializing_if`, so the key is absent rather than `null`. The
+ * mirror admitted both, which is why the normalizer reached for them through
+ * `as any` casts.
  */
-export type CompletionKey =
-  | {
-      kind: 'hf_file';
-      repo_id: string;
-      revision: string;
-      filename_canon: string;
-      quantization?: string;
-    }
-  | {
-      kind: 'url_file';
-      url: string;
-      filename: string;
-    }
-  | {
-      kind: 'local_file';
-      path: string;
-    };
-
-/**
- * Breakdown of attempts by result kind.
- */
-export interface AttemptCounts {
-  downloaded: number;
-  failed: number;
-  cancelled: number;
-}
+import type { DownloadSummary } from '../../../types/generated/DownloadSummary';
+export type { DownloadSummary };
 
 /**
  * Result kind for a completion attempt.
  */
-export type CompletionKind = 'downloaded' | 'failed' | 'cancelled' | 'already_present';
+export type { CompletionKind } from '../../../types/generated/CompletionKind';
 
 /**
  * Details for a single completed artifact in a queue run.
+ *
+ * `download_ids` carries the structured wire id — `{ model_id, quantization }`
+ * — not the `"model_id:quantization"` string that `./ids` calls a
+ * `DownloadId`. Two different things share that name, so the generated one is
+ * imported under its own alias rather than shadowing the string form, which
+ * the rest of the transport still uses.
  */
-export interface CompletionDetail {
-  key: CompletionKey;
-  display_name: string;
-  last_result: CompletionKind;
-  last_completed_at_ms: number;
-  download_ids: DownloadId[];
-  attempt_counts: AttemptCounts;
-}
+import type { CompletionDetail } from '../../../types/generated/CompletionDetail';
+export type { CompletionDetail };
 
 /**
  * Summary of an entire queue run from start to drain.
  * Emitted when the queue transitions from busy → idle.
+ *
+ * The last hand-written type in this file, and the only drift class it could
+ * still hide was field *addition*: `useDownloadManager` assigns the generated
+ * `DownloadEvent.summary` into state typed by this, so a removal or a type
+ * change already failed to compile, while a new Rust field simply stayed
+ * unreadable. Nothing gated it either — `check_ts_bindings.sh` and
+ * `make bindings-check` only ever look at Rust and `src/types/generated`.
  */
-export interface QueueRunSummary {
-  run_id: string;
-  started_at_ms: number;
-  completed_at_ms: number;
-  total_attempts_downloaded: number;
-  total_attempts_failed: number;
-  total_attempts_cancelled: number;
-  unique_models_downloaded: number;
-  unique_models_failed: number;
-  unique_models_cancelled: number;
-  truncated: boolean;
-  items: CompletionDetail[];
-}
+import type { QueueRunSummary } from '../../../types/generated/QueueRunSummary';
+export type { QueueRunSummary };
 
-export type DownloadEvent =
-  | { type: 'queue_snapshot'; items: DownloadSummary[]; max_size: number }
-  | { type: 'download_started'; id: DownloadId; shard_index?: number; total_shards?: number }
-  // speed_bps / eta_seconds are omitted while the manager's rate estimator is
-  // still warming up. Absent means unknown, never zero — render a placeholder.
-  | { type: 'download_progress'; id: DownloadId; downloaded: number; total: number; speed_bps?: number; eta_seconds?: number; percentage: number }
-  | { type: 'shard_progress'; id: DownloadId; shard_index: number; total_shards: number; shard_filename: string; shard_downloaded: number; shard_total: number; aggregate_downloaded: number; aggregate_total: number; speed_bps?: number; eta_seconds?: number; percentage: number }
-  | { type: 'download_completed'; id: DownloadId; message?: string | null }
-  | { type: 'download_failed'; id: DownloadId; error: string }
-  | { type: 'download_cancelled'; id: DownloadId }
-  | { type: 'download_status_changed'; id: DownloadId; status: import('./downloads').DownloadStatus }
-  // Transient, non-persisted note about work happening for this download
-  // that produces no byte progress (e.g. first-run Python env setup for the
-  // fast downloader). Unlike download_status_changed, message is free-form
-  // text rather than a fixed status.
-  | { type: 'download_notice'; id: DownloadId; message: string }
-  | { type: 'queue_run_complete'; summary: QueueRunSummary };
+export type { DownloadEvent } from '../../../types/generated/DownloadEvent';
 
 // ============================================================================
-// Log Events
+// Model Events
 // ============================================================================
 
-export interface LogEntry {
-  timestamp: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  message: string;
-  source?: string;
-}
+/**
+ * The lightweight model shape library events carry — deliberately not the full
+ * model row, since a listener's job is to notice the change, not to render
+ * from the notification.
+ *
+ * Mirrors `gglib_core::events::ModelSummary` (camelCase).
+ */
+export type { ModelSummary as ModelEventSummary } from '../../../types/generated/ModelSummary';
 
-export type LogEvent = LogEntry;
+/**
+ * Library changes, broadcast to every client attached to the daemon.
+ *
+ * These let a second window or browser tab reach a list that would otherwise
+ * refresh only when its own tab made the edit. A `gglib model add` in a
+ * terminal is a separate process and does not reach here.
+ */
+export type ModelEvent = Extract<AppEvent, { type: `model_${string}` }>;
 
 // ============================================================================
 // Verification Events
 // ============================================================================
 
-export type OverallHealth = 'healthy' | 'unhealthy' | 'unverifiable';
+export type { OverallHealth } from '../../../types/generated/OverallHealth';
 
-export interface VerificationProgressEvent {
-  type: 'verification_progress';
-  modelId: number;
-  modelName: string;
-  shardName: string;
-  bytesProcessed: number;
-  totalBytes: number;
-}
-
-export interface VerificationCompleteEvent {
-  type: 'verification_complete';
-  modelId: number;
-  modelName: string;
-  overallHealth: OverallHealth;
-}
-
-export type VerificationEvent = VerificationProgressEvent | VerificationCompleteEvent;
+export type VerificationEvent = Extract<AppEvent, { type: `verification_${string}` }>;
 
 // ============================================================================
 // Proxy Events
 // ============================================================================
 
-export type ProxyEvent =
-  | { type: 'proxy_started'; port: number }
-  | { type: 'proxy_stopped' }
-  | { type: 'proxy_crashed' };
+export type ProxyEvent = Extract<AppEvent, { type: `proxy_${string}` }>;
 
 // ============================================================================
 // App Event Map
 // ============================================================================
 
 /**
- * Map of all event types to their payload types.
- * Used for type-safe event subscriptions.
+ * Each subscribable category, and the slice of `AppEvent` it delivers.
  *
- * Note: Download events arrive wrapped as { type: "download", event: DownloadEvent }
- * to preserve all details including shard progress.
+ * Every value is a named slice and never a bare `AppEvent`. That is the point
+ * of the map: a handler registered for `'proxy'` should not have to narrow
+ * against `server_started`, and typing any entry as the whole union would let
+ * a `server` handler compile while reading a `download` payload.
+ *
+ * `getEventCategory` is what actually routes a message here, and it is
+ * ordinary runtime code — so these five slices are a claim about the router,
+ * not a guarantee from it. The five together are exhaustive over `AppEvent`'s
+ * fourteen arms today, which `tests/ts/services/eventCategory.test.ts` is the
+ * place to keep true.
+ *
+ * Download events arrive wrapped as `{ type: "download", event: DownloadEvent }`
+ * to preserve shard-level detail, which is why that entry is the whole arm
+ * rather than the inner event.
  */
 export interface AppEventMap {
-  'server': ServerEvent;
-  'download': { type: 'download'; event: DownloadEvent };
-  'log': LogEvent;
+  'server': ServerWireEvent;
+  'download': Extract<AppEvent, { type: 'download' }>;
+  'model': ModelEvent;
   'verification': VerificationEvent;
   'proxy': ProxyEvent;
 }

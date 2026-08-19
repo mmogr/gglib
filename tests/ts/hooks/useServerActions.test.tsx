@@ -16,20 +16,19 @@ import { renderHook, act } from '@testing-library/react';
 import { ReactNode } from 'react';
 import { useServerActions, ServerActionsConfig } from '../../../src/components/ModelInspectorPanel/hooks/useServerActions';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
-import type { GgufModel } from '../../../src/types';
+import { guiModel } from '../fixtures/model';
+
+const serveModel = vi.fn();
+
+vi.mock('../../../src/services/transport', () => ({
+  getTransport: () => ({ serveModel }),
+}));
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ToastProvider>{children}</ToastProvider>
 );
 
-const baseModel: GgufModel = {
-  id: 1,
-  name: 'Test Model',
-  filePath: '/models/test.gguf',
-  paramCountB: 7.0,
-  addedAt: '2024-01-01T00:00:00Z',
-  serverDefaults: { contextLength: 8192 },
-};
+const baseModel = guiModel({ serverDefaults: { contextLength: 8192 } });
 
 /** Build a minimal ServerActionsConfig with sensible no-op defaults. */
 function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfig {
@@ -125,5 +124,46 @@ describe('useServerActions handleSave — serverDefaults null-clearing', () => {
     expect(onUpdateModel).toHaveBeenCalledTimes(1);
     const [, updates] = onUpdateModel.mock.calls[0];
     expect(updates.serverDefaults).toEqual({ contextLength: 32768 });
+  });
+});
+
+describe('useServerActions handleStartServer — the sampling half of a serve', () => {
+  /**
+   * The serve modal renders the whole `InferenceParametersForm`, which offers
+   * seventeen of the eighteen sampling parameters — all but `seed`, which has
+   * no control. `handleStartServer` used to copy nine of them into the
+   * `ServeConfig` by name, so the other nine went missing: the eight the form
+   * offers (the four DRY knobs, both dynatemp knobs, `frequencyPenalty` and
+   * `topNSigma`) were dropped between the form and the request, and `seed`
+   * had no way through at all. `toStartServerRequest` kept the same nine-name
+   * list, so each value was discarded twice over.
+   */
+  it('carries every parameter the form offers, not the nine it used to name', async () => {
+    serveModel.mockReset();
+    serveModel.mockResolvedValue(undefined);
+
+    const offered = {
+      temperature: 0.7,
+      dryMultiplier: 0.8,
+      dryBase: 1.75,
+      dryAllowedLength: 2,
+      dryPenaltyLastN: 64,
+      frequencyPenalty: 0.1,
+      dynatempRange: 0.5,
+      dynatempExponent: 1,
+      topNSigma: 3,
+    };
+
+    const { result } = renderHook(
+      () => useServerActions(makeConfig({ inferenceParams: offered })),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.handleStartServer();
+    });
+
+    expect(serveModel).toHaveBeenCalledTimes(1);
+    expect(serveModel.mock.calls[0][0]).toMatchObject(offered);
   });
 });

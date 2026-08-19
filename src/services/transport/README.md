@@ -45,5 +45,7 @@ Both halves reach the same gglib daemon, on desktop and on the web.
 | `mappers.ts` | Maps frontend types to backend request DTOs (`toStartServerRequest()`, etc.) |
 | `sanitizeMessages.ts` | Strips `<think>` tags and unsupported fields before sending to llama-server |
 | `parseTitleResponse.ts` | Parses LLM title generation responses |
+| `downloadQueue.ts` | Bucketing a download snapshot into in-flight, pending and failed, and whether the queue is busy |
+| `slotTokens.ts` | Tokens in use across a proxy's inference slots |
 
 <!-- module-docs:end -->

@@ -11,8 +11,11 @@ use std::str::FromStr;
 /// Represents a unique download as `model_id:quantization` (or just `model_id` if no quantization).
 /// This is the single identifier format used throughout the system.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct DownloadId {
     model_id: String,
+    /// No `skip_serializing_if`, so the key is always on the wire — `null`
+    /// when the download names no quantization.
     quantization: Option<String>,
 }
 
@@ -523,6 +526,7 @@ impl FromStr for Quantization {
 /// `this_shard_size * shard_count` made the percentage both wrong and
 /// discontinuous at every shard boundary.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ShardInfo {
     /// 0-based index of this shard.
     pub shard_index: u32,
@@ -531,12 +535,15 @@ pub struct ShardInfo {
     /// The specific filename for this shard.
     pub filename: String,
     /// Size of this shard file in bytes (if known).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_size: Option<u64>,
     /// Summed size of every shard before this one (if all sizes are known).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preceding_bytes: Option<u64>,
     /// Summed size of every shard in the group (if all sizes are known).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_total_bytes: Option<u64>,
 }

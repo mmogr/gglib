@@ -7,6 +7,8 @@
 //! gglib's own record of what it resolved and say so in the server's words.
 //!
 //! Pure, like its sibling: data in, `String` out, no IO and no clock.
+//!
+//! [`super::render`]: crate::handlers::proxy_dashboard::render
 
 use super::render::{thousands, truncate};
 use super::wire_sampling::{EffortSupport, SamplingAudit};

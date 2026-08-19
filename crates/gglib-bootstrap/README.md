@@ -33,14 +33,14 @@ This crate is the **Composition Root** — sitting between adapter crates and pu
                                           ▼
               ┌───────────────────────────────────────────────────────┐
               │              ►► gglib-bootstrap ◄◄                    │
-              │        Single shared wiring call for all adapters      │
+              │        Single shared wiring call for all adapters     │
               └───────────────────────────┬───────────────────────────┘
                                           │
                                           ▼
               ┌───────────────────────────────────────────────────────┐
               │    gglib-core, gglib-db, gglib-download,              │
-              │    gglib-gguf, gglib-hf, gglib-runtime                │
-              │              (Infrastructure crates)                   │
+              │    gglib-gguf, gglib-hf                               │
+              │              (Infrastructure crates)                  │
               └───────────────────────────────────────────────────────┘
 ```
 
@@ -78,9 +78,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## Hexagonal boundary
 
 Depends **only** on infrastructure crates:
-`gglib-core`, `gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`, `gglib-runtime`.
+`gglib-core`, `gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`.
 
-Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-tauri`, `gglib-cli`).
+Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-tauri`, `gglib-cli`, `gglib-app-services`).
 
 ## Testing
 

@@ -1,6 +1,6 @@
 import { FC, useRef, useEffect } from 'react';
 import { RotateCcw } from 'lucide-react';
-import { ServerInfo } from '../../types';
+import type { ServerViewModel } from '../../hooks/useServers';
 import { ServerList } from '../ServerList';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { Icon } from '../ui/Icon';
@@ -9,7 +9,7 @@ import { Button } from '../ui/Button';
 interface RunsPopoverProps {
   isOpen: boolean;
   onClose: () => void;
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   onStopServer: (modelId: number) => Promise<void>;
   onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
   onRefresh?: () => void;

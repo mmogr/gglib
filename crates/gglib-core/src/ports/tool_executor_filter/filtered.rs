@@ -17,7 +17,7 @@ use super::TOOL_NOT_AVAILABLE_MSG;
 /// Return the **bare** tool name — the portion after the first `':'`.
 ///
 /// MCP tools are qualified with a server-id prefix by
-/// [`McpToolExecutorAdapter`] (e.g. `"3:read_file"` → `"read_file"`,
+/// `McpToolExecutorAdapter` (e.g. `"3:read_file"` → `"read_file"`,
 /// `"builtin:get_current_time"` → `"get_current_time"`).  The Director and
 /// workers specify allowlists using bare names from the tool catalog; this
 /// helper lets the filter match those bare names against the qualified names

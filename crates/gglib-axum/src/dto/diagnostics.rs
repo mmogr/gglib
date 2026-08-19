@@ -3,10 +3,7 @@
 //! `gglib config check-deps` / `paths` / `fast-downloads status` print
 //! directly from types that live in `gglib-core` and `gglib-download` and
 //! carry no `Serialize`. Rather than derive serde onto domain types for the
-//! benefit of one HTTP route, this mirrors them here — the same boundary
-//! [`VulkanStatusDto`] already draws.
-//!
-//! [`VulkanStatusDto`]: super::system::VulkanStatusDto
+//! benefit of one HTTP route, this mirrors them here.
 
 use gglib_core::paths::{ModelsDirSource, ResolvedPaths};
 use gglib_core::utils::system::{Dependency, DependencyStatus};
@@ -18,6 +15,7 @@ use serde::Serialize;
 /// externally-tagged enum: the GUI switches on three cases and the extra
 /// nesting buys nothing.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DependencyDto {
     pub name: String,
@@ -52,6 +50,7 @@ impl From<&Dependency> for DependencyDto {
 /// Where everything resolves to — `gglib config paths`, the golden-truth tool
 /// for "which directory is it actually using?".
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ResolvedPathsDto {
     pub data_root: String,
@@ -87,6 +86,7 @@ impl From<ResolvedPaths> for ResolvedPathsDto {
 /// callers can surface install hints — so the failure is carried as data
 /// rather than failing the whole diagnostics request.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AccelerationDto {
     pub detected: Option<String>,
@@ -95,6 +95,7 @@ pub(crate) struct AccelerationDto {
 
 /// The optional `hf_xet` download accelerator.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FastDownloadsDto {
     /// Whether a usable environment is present — the same question, and the
@@ -117,6 +118,7 @@ pub(crate) struct FastDownloadsDto {
 /// "why isn't this working", and a user comparing a missing dependency
 /// against a resolved path should not be watching four spinners.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DiagnosticsDto {
     pub dependencies: Vec<DependencyDto>,
@@ -131,6 +133,7 @@ pub(crate) struct DiagnosticsDto {
 /// model in the shortlist fits this machine" is a real answer and the UI has
 /// to say so, not show a recommendation card with blanks in it.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RecommendationDto {
     pub repo: String,
@@ -139,12 +142,16 @@ pub(crate) struct RecommendationDto {
     pub rationale: String,
     /// Weights plus KV cache at the candidate's context, at the quantization
     /// the runtime actually launches with.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub required_bytes: u64,
     /// The memory figure it was sized against.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub budget_bytes: u64,
     /// Where that figure came from: `"vram" | "unifiedMemory" | "systemRam"`.
     pub budget_source: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub headroom_bytes: u64,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub context: u64,
 }
 

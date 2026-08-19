@@ -2,7 +2,7 @@
 //!
 //! Both transforms rewrite the `messages` array and nothing else. They are
 //! paired in [`shape_messages`] because they are the contiguous run of
-//! message-level work in the pipeline — see [`super::apply`] for why the order
+//! message-level work in the pipeline — see [`mod@super::apply`] for why the order
 //! within that run is fixed.
 
 use serde_json::Value;

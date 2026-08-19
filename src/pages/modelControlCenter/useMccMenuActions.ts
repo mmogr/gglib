@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { syncMenuStateSilent } from '../../services/platform';
-import type { ServerInfo } from '../../types';
+import type { ServerViewModel } from '../../hooks/useServers';
 import type { SidebarTabId } from '../../components/ModelLibraryPanel/ModelLibraryPanel';
 import type { AddDownloadSubTab } from '../../components/ModelLibraryPanel/AddDownloadContent';
 
@@ -17,7 +17,7 @@ interface UseMccMenuActionsArgs {
     selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   }) => void;
   selectedModelId: number | null;
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   models: Array<{ id?: number; name?: string }>;
   loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;

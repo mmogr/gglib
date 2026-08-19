@@ -93,7 +93,7 @@ impl ApplyVerdict {
 
     /// Why the gate decided this, in one sentence.
     ///
-    /// Split from [`Display`] because the two surfaces want different
+    /// Split from [`Display`](std::fmt::Display) because the two surfaces want different
     /// amounts: a table column wants the numbers, a detail view wants the
     /// numbers *and* the reasoning. Keeping them apart lets both read from
     /// one source instead of each restating the gate's rules in its own

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { InferenceConfig } from '../../../types';
+import type { SparseInferenceConfig } from '../../../types';
 
 export interface ServeModalState {
   showServeModal: boolean;
@@ -11,7 +11,7 @@ export interface ServeModalState {
   /** null = use default 0.75; only meaningful when mtpNMaxOverride is set */
   mtpPMinOverride: number | null;
   isServing: boolean;
-  inferenceParams: InferenceConfig | undefined;
+  inferenceParams: SparseInferenceConfig | undefined;
   /** Serve as a pinned proxy (`gglib serve`) instead of a bare model start. */
   pinProxy: boolean;
   setShowServeModal: (show: boolean) => void;
@@ -21,7 +21,7 @@ export interface ServeModalState {
   setMtpNMaxOverride: (override: number | null) => void;
   setMtpPMinOverride: (override: number | null) => void;
   setIsServing: (serving: boolean) => void;
-  setInferenceParams: (params: InferenceConfig | undefined) => void;
+  setInferenceParams: (params: SparseInferenceConfig | undefined) => void;
   setPinProxy: (pin: boolean) => void;
   openServeModal: () => void;
   closeServeModal: () => void;
@@ -39,7 +39,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
   const [mtpNMaxOverride, setMtpNMaxOverride] = useState<number | null>(null);
   const [mtpPMinOverride, setMtpPMinOverride] = useState<number | null>(null);
   const [isServing, setIsServing] = useState(false);
-  const [inferenceParams, setInferenceParams] = useState<InferenceConfig | undefined>(undefined);
+  const [inferenceParams, setInferenceParams] = useState<SparseInferenceConfig | undefined>(undefined);
   const [pinProxy, setPinProxy] = useState(false);
 
   // Reset overrides and inference params when model changes

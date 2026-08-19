@@ -1,11 +1,9 @@
-import type { ModelBenchmarkSummary } from './benchmark';
-import type { ReasoningEffortLevel } from '../constants/reasoningEffort';
-import type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './reasoning';
+import type { ProvenanceParamKey } from './reasoning';
 
 // The reasoning-control wire shapes live in their own module — see its header
 // for why — and are re-exported here so every caller keeps importing from
 // `../types`.
-export type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './reasoning';
+export type { ProvenanceParamKey, TemplateSupport } from './reasoning';
 
 // ============================================================================
 // Inference Configuration
@@ -21,86 +19,19 @@ export type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './re
  * 3. Global settings (stored in AppSettings.inferenceDefaults)
  * 4. Hardcoded fallback (e.g., temperature = 0.7)
  */
-export interface InferenceConfig {
-  /** Sampling temperature (0.0 - 2.0). Controls randomness. */
-  temperature?: number;
-  /** Nucleus sampling threshold (0.0 - 1.0). Cumulative probability cutoff. */
-  topP?: number;
-  /** Top-K sampling limit. Considers only K most likely tokens. */
-  topK?: number;
-  /** Maximum tokens to generate in response. */
-  maxTokens?: number;
-  /** Repetition penalty (> 0.0, typically 1.0 - 1.3). */
-  repeatPenalty?: number;
-  /** Presence penalty (0.0 - 2.0). Discourages token repetition across the output.
-   *  0.0 = disabled. 1.5 = recommended for reasoning/thinking models. */
-  presencePenalty?: number;
-  /** Min-P sampling threshold (0.0 - 1.0). Removes tokens below min_p × P(top token).
-   *  0.0 = disabled (recommended by Qwen3.6). */
-  minP?: number;
-  /** Frequency penalty (−2.0 - 2.0), presencePenalty's twin: penalises tokens
-   *  in proportion to how often they already appeared. 0.0 = disabled; unset
-   *  defers to llama.cpp's default (0.0). */
-  frequencyPenalty?: number;
-  /** Dynamic-temperature half-range: entropy-scales the effective temperature
-   *  within [temp − range, temp + range]. 0.0 = disabled; unset defers to
-   *  llama.cpp's default (0.0). */
-  dynatempRange?: number;
-  /** Dynamic-temperature exponent; inert unless dynatempRange is set. Unset
-   *  defers to llama.cpp's default (1.0). */
-  dynatempExponent?: number;
-  /** Top-n-sigma: keep tokens within n·σ of the max pre-softmax logit, so the
-   *  candidate set does not widen with temperature. −1.0 = disabled; unset
-   *  defers to llama.cpp's default (−1.0). */
-  topNSigma?: number;
-  /** DRY repetition penalty strength. 0.0 = disabled; catches multi-token
-   *  loops that the flat `repeatPenalty` cannot see. */
-  dryMultiplier?: number;
-  /** DRY penalty base — the exponent applied per token of matched sequence.
-   *  Unset defers to llama.cpp's default (1.75). */
-  dryBase?: number;
-  /** Tokens of repeat DRY tolerates before penalising. Unset defers to
-   *  llama.cpp's default (2). */
-  dryAllowedLength?: number;
-  /** How far back DRY scans, in tokens; 0 disables. Unset defers to
-   *  llama.cpp's default (64). */
-  dryPenaltyLastN?: number;
-  /**
-   * How hard to ask the model to think, where its chat template reads the
-   * variable.
-   *
-   * Conditional by nature, and the only field here that is: a template that
-   * does not read `reasoning_effort` ignores it in silence, so the server
-   * deletes the key rather than sending it on a model whose observed caps say
-   * so (ADR 0007 decision 3). `ModelDetail.reasoningEffortSupport` is what a
-   * surface consults before offering the control — see `TemplateSupport` for
-   * why the answer has three states and not two.
-   *
-   * Unset is not a level. Omitting the key leaves the *template's* own default
-   * in place, which is a different act from naming one, and is why no `none`
-   * rung exists.
-   */
-  reasoningEffort?: ReasoningEffortLevel;
-  /**
-   * Ceiling on this turn's thinking tokens.
-   *
-   * `-1` defers to the launch-time default; `0` stops thinking altogether.
-   * Enforced by llama.cpp's own sampler rather than by a template, so unlike
-   * {@link reasoningEffort} it holds on every model and is never
-   * capability-gated. Validated `>= -1` on save.
-   */
-  reasoningBudgetTokens?: number;
-  /**
-   * RNG seed. Unset means llama.cpp draws a fresh one per request.
-   *
-   * Request-scoped, like `maxTokens` and unlike everything else here: it is
-   * not a sampling policy, and a seed stored per model would pin every
-   * response that model produces to the same text. No settings, profile or
-   * per-model surface offers it — the benchmark harness is the only caller
-   * that sets one.
-   */
-  seed?: number;
-}
+import type { InferenceConfig } from './generated/InferenceConfig';
+export type { InferenceConfig };
+
+/**
+ * A partially-specified {@link InferenceConfig} — what an edit form holds
+ * mid-edit, and what a starter profile stores.
+ *
+ * The wire always sends all eighteen fields, `null` for the ones nothing has
+ * set, which is why the generated type has no optional keys. A form is a
+ * different thing: it needs to express "this field is not in play" by the
+ * key being absent, and to `delete` a key when the user clears a control.
+ */
+export type SparseInferenceConfig = Partial<InferenceConfig>;
 
 /** Capability bitflags, mirroring `gglib_core::domain::ModelCapabilities` (a bare u32 on the wire). */
 export const CAPABILITY_FLAGS = {
@@ -112,54 +43,56 @@ export const CAPABILITY_FLAGS = {
 
 export type CapabilityFlagName = keyof typeof CAPABILITY_FLAGS;
 
-/** `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged. */
-export interface SetCapabilitiesRequest {
-  supportsSystemRole?: boolean;
-  requiresStrictTurns?: boolean;
-  supportsToolCalls?: boolean;
-  supportsReasoning?: boolean;
-}
+/**
+ * `PATCH /api/models/{id}/capabilities` body — absent fields are left unchanged.
+ *
+ * `Partial` over the generated shape, deliberately. ts-rs renders an
+ * `Option<T>` as a required `T | null` unless the field carries
+ * `#[ts(optional)]`, but serde lets a missing `Option<T>` deserialize to
+ * `None` on its own — no attribute involved — so the handler genuinely
+ * accepts omission, and omission is what "left unchanged" means. The one call
+ * site builds a single-key literal from a computed flag name, which the
+ * generated shape rejects. Adding `#[ts(optional)]` to the four fields would
+ * let this drop the wrapper.
+ */
+import type { SetCapabilitiesRequest as SetCapabilitiesBody } from './generated/SetCapabilitiesRequest';
+export type SetCapabilitiesRequest = Partial<SetCapabilitiesBody>;
 
 /** What a retag pass changed (`POST /api/models/{id}/retag`). */
-export interface RetagResponse {
-  changed: boolean;
-  added: string[];
-  removed: string[];
-  specChanged: boolean;
-}
+export type { RetagResponse } from './generated/RetagResponse';
 
 /** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
-export interface UpgradeCheck {
-  hasUpdate: boolean;
-  currentSha?: string | null;
-  latestSha: string;
-}
+export type { UpgradeCheck } from './generated/UpgradeCheck';
 
 /** Outcome of `POST /api/models/{id}/upgrade`. */
-export interface UpgradeOutcome {
-  updated: boolean;
-  latestSha: string;
-  filePath?: string | null;
-}
+export type { UpgradeOutcome } from './generated/UpgradeOutcome';
 
 /**
  * A named sampling profile, selectable per request as `<model>:<profile>`.
  *
- * Profiles are global: one `coding` profile applies to every model. They are
- * deliberately *sparse* — only the fields set here override, and everything
- * left undefined falls through to the model's own defaults, which is what
- * makes one profile safe to apply across differing model architectures.
+ * Profiles are global: one `coding` profile applies to every model, which
+ * works because a profile only displaces the parameters it names — the rest
+ * fall through to the model's own defaults, and that is what makes one
+ * profile safe across differing architectures.
+ *
+ * "Only the ones it names" is a fact about the *stored* profile, not about
+ * this type: a saved profile round-trips through `InferenceConfig`, so it
+ * carries all eighteen keys with `null` where nothing was set, and `null` is
+ * how the resolver hears "say nothing about this one".
+ * {@link SparseInferenceProfile} below is the shape that genuinely has fewer
+ * keys — a starter template, or one mid-edit.
  */
-export interface InferenceProfile {
-  /** Slug: lowercase letters, digits and '-', 1-32 chars. */
-  name: string;
-  /** Human-readable summary, shown in the model picker. */
-  description?: string | null;
-  /** The sampling overrides. Sparse — see above. */
-  config: InferenceConfig;
-  /** Advertise `<model>:<name>` in /v1/models so clients can select it. */
-  listInModels: boolean;
-}
+import type { InferenceProfile } from './generated/InferenceProfile';
+export type { InferenceProfile };
+
+/**
+ * A profile whose config is only partly specified — a starter template, or one
+ * being edited. The wire form carries all eighteen sampling fields; a template
+ * that names two is not a lesser wire value, it is a different thing.
+ */
+export type SparseInferenceProfile = Omit<InferenceProfile, 'config'> & {
+  config: SparseInferenceConfig;
+};
 
 // ============================================================================
 // Sampling provenance
@@ -172,25 +105,10 @@ export interface InferenceProfile {
  * (`gglib-app-services/src/sampling_explain.rs`), which is the wire form of
  * `gglib_core::domain::SamplingLayer`.
  */
-export type SamplingLayerName =
-  | 'request'
-  | 'profile'
-  | 'modelUserSet'
-  | 'global'
-  | 'modelAutoDetected';
-
-/**
- * What class of source supplied a resolved value.
- *
- * Mirrors the backend `ProvenanceKindDto`. `floorCoupled` is distinct from
- * `floor`: it means a layer claimed `temperature` and this parameter is tuned
- * against it, so lower layers were deliberately passed over rather than simply
- * having nothing to say. `suppressedByTemplate` means a layer named a value and
- * a request-shaping stage then threw it away, because the model's observed chat
- * template does not read that field (ADR 0007) — distinct from `unset`, where
- * nobody named anything at all.
- */
-export type ProvenanceKind = 'layer' | 'floor' | 'floorCoupled' | 'unset' | 'suppressedByTemplate';
+// Imported as well as re-exported: a bare `export … from` does not bind the
+// name in this module, and declarations below refer to it.
+import type { SamplingLayerDto as SamplingLayerName } from './generated/SamplingLayerDto';
+export type { SamplingLayerName };
 
 /**
  * The numeric parameters with a bounded range — the keys of `INFERENCE_PARAMS`
@@ -231,12 +149,24 @@ export type SamplingParamKey =
  * Mirrors the backend `ParamProvenanceDto`. `layer` is present only when
  * `kind` is `'layer'`.
  */
-export interface ParamProvenance {
-  /** The key this entry describes in {@link SamplingExplanation.resolved}. */
+import type { ParamProvenanceDto } from './generated/ParamProvenanceDto';
+export type ParamProvenance = ParamProvenanceDto & {
+  /**
+   * The key this entry describes in {@link SamplingExplanation.resolved}.
+   *
+   * Narrowed from the generated `string` by intersection — `string & Union`
+   * collapses to the union — because three call sites index `PARAM_LABELS`,
+   * `publishedByParam` and `formatProvenanceValue` with it, and Rust types the
+   * field as a plain `String`. This is the one place the mirror was better
+   * than the generated shape; narrowing it properly is a Rust-side change.
+   *
+   * The union is `ProvenanceParamKey`, which is *seventeen* members and not
+   * `InferenceConfig`'s eighteen. `FieldSources::iter` — what `wire_key`
+   * renders — names seventeen fields and has none for `seed`, so `seed` never
+   * appears in `sources` and the explain table has no row for it.
+   */
   param: ProvenanceParamKey;
-  kind: ProvenanceKind;
-  layer?: SamplingLayerName;
-}
+};
 
 /**
  * A model's resolved sampling parameters and where each value came from —
@@ -246,74 +176,34 @@ export interface ParamProvenance {
  * rather than beside each provenance entry, so `sources[i].param` is a key
  * into `resolved`.
  */
-export interface SamplingExplanation {
-  /** The fully resolved configuration, after floors. */
-  resolved: InferenceConfig;
+import type { SamplingExplanationDto } from './generated/SamplingExplanationDto';
+export type SamplingExplanation = Omit<SamplingExplanationDto, 'sources' | 'published'> & {
   /** Per-parameter provenance, already in display order. */
   sources: ParamProvenance[];
-  /** The profile applied, if one was named. */
-  profile?: string | null;
-  /** Whether the model carries the `reasoning` tag, which selects the floor. */
-  isReasoning: boolean;
-  /** Whether client-supplied sampling is trusted — a rung the table cannot show. */
-  trustClientSampling: boolean;
   /**
    * What the model's own GGUF publishes, for the fields it publishes at all.
    *
-   * Empty on almost every model, and absent entirely from a backend that
-   * predates the field — so treat `undefined` as "nothing published", never as
-   * an error.
+   * Always sent — an empty array on almost every model. The mirror made it
+   * optional to tolerate a backend predating the field; that backend is gone
+   * and the key is unconditional.
    */
-  published?: PublishedDefault[];
-  /**
-   * Where the model's stored defaults came from.
-   *
-   * `published` and `autoDetected` share a ladder rung — both are unreviewed,
-   * so both rank below global settings — which means `ParamProvenance.layer`
-   * alone cannot name its own source. Without this, a recipe fetched from the
-   * model author renders as gglib's reasoning-tag guess.
-   */
-  defaultsOrigin?: DefaultsOriginName | null;
-  /**
-   * The `reasoningEffort` this model's template would ignore, when the stored
-   * configuration resolves one it does not read.
-   *
-   * The suppression is in {@link sources} too, as a `suppressedByTemplate`
-   * entry — but that entry has overwritten the rung that asked, and `resolved`
-   * carries nothing, so between them a reader learns only that *something* was
-   * dropped. This is the level and the layer.
-   *
-   * Conditional, not historical: the endpoint explains stored configuration, so
-   * nothing has been sent. Word it as what *would* happen on a request.
-   * Absent on a backend that predates the field, which reads as "no suppression
-   * to report".
-   */
-  effortSuppressed?: SuppressedEffort | null;
-}
+  published: PublishedDefault[];
+};
 
 /**
  * Where a model's stored `inferenceDefaults` came from.
  *
  * - `user` — set by a person. Outranks global settings.
- * - `autoDetected` — gglib's `reasoning`-tag guess. Ranks below.
+ * - `auto_detected` — gglib's `reasoning`-tag guess. Ranks below.
  * - `published` — the author's `generation_config.json`, read at import. Ranks
- *   exactly where `autoDetected` does; what differs is the evidence.
- */
-export type DefaultsOriginName = 'user' | 'autoDetected' | 'published' | 'measured';
-
-/**
- * What gglib does with one field's published recommendation.
+ *   exactly where `auto_detected` does; what differs is the evidence.
+ * - `measured` — a tune sweep's winner on this hardware, ranked with those two.
  *
- * Mirrors the backend `PublishedStateDto`. There is no `notPublished` arm: a
- * field with no author recommendation is simply absent from the list.
- *
- * - `deferred` — gglib names nothing, so llama.cpp applies the model's number.
- * - `restated` — gglib sends the same number the model published.
- * - `overridden` — gglib sends a different number. The only one that warns.
- * - `unreadable` — the published value could not be parsed, so gglib cannot say
- *   what it displaced. Renders as unknown, never as an override.
+ * Snake_case: this mirrors `gglib_core::domain::DefaultsOrigin` itself, which
+ * is the one spelling every endpoint reporting the column now uses.
  */
-export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadable';
+import type { DefaultsOrigin as DefaultsOriginName } from './generated/DefaultsOrigin';
+export type { DefaultsOriginName };
 
 /**
  * One field's published value and what gglib does with it — the `published`
@@ -325,17 +215,17 @@ export type PublishedState = 'deferred' | 'restated' | 'overridden' | 'unreadabl
  * *the build's default applies* on one that did not. Those render identically
  * without this.
  */
-export interface PublishedDefault {
-  /** Joins to {@link ParamProvenance.param}. */
+import type { PublishedDefaultDto } from './generated/PublishedDefaultDto';
+export type PublishedDefault = PublishedDefaultDto & {
+  /**
+   * Joins to {@link ParamProvenance.param}, but narrowed one member tighter:
+   * `SamplingParamKey` and not `ProvenanceParamKey`, because a published
+   * default is a number read out of a GGUF key and `reasoningEffort` has
+   * none. In practice the set is smaller still — only the fields
+   * `general.sampling.*` covers are ever published.
+   */
   param: SamplingParamKey;
-  /** The GGUF key carrying it, e.g. `general.sampling.penalty_repeat`. */
-  key: string;
-  state: PublishedState;
-  /** What the model author published. Absent only when `state` is `unreadable`. */
-  published?: number;
-  /** What gglib sends instead. Present only when `state` is `overridden`. */
-  sending?: number;
-}
+};
 
 // ============================================================================
 // Server Configuration
@@ -345,79 +235,61 @@ export interface PublishedDefault {
  * Per-model server defaults.
  * Overrides global settings for specific llama-server launch parameters.
  */
-export interface ServerConfig {
-  /** Context window size (e.g., 4096, 8192, 32768). */
-  contextLength?: number;
-}
+import type { ServerConfig } from './generated/ServerConfig';
+export type { ServerConfig };
 
 // ============================================================================
 // Model Types
 // ============================================================================
 
-export interface GgufModel {
-  /** Capability bitfield — see CAPABILITY_FLAGS. Absent/0 = unknown, pass-through. */
-  capabilities?: number;
-  id?: number;
-  name: string;
-  filePath: string;
-  paramCountB: number;
-  architecture?: string;
-  quantization?: string;
-  contextLength?: number;
-  expertCount?: number;
-  expertUsedCount?: number;
-  expertSharedCount?: number;
-  addedAt: string;
-  hfRepoId?: string;
-  tags?: string[];
-  // Server status
-  isServing?: boolean;
-  port?: number;
-  // Inference defaults
-  inferenceDefaults?: InferenceConfig;
-  /**
-   * Whether `inferenceDefaults` was set by the user or auto-detected at
-   * import time from the model's `reasoning` tag. Auto-detected values rank
-   * below the global inference defaults in the resolution hierarchy — see
-   * the `InferenceConfig` doc comment above.
-   */
-  defaultsOrigin?: 'user' | 'auto_detected' | null;
-  // Per-model server defaults (overrides global settings for launch params)
-  serverDefaults?: ServerConfig;
-  // Benchmark summary (cached from benchmark_summaries table)
-  benchmarkSummary?: ModelBenchmarkSummary;
-}
+/**
+ * A model as the library list sends it — `GET /api/models`.
+ *
+ * Named `GgufModel` at the call sites and `GuiModel` in Rust. Eight fields
+ * the mirror made optional are required on the wire: `id`, `capabilities`,
+ * `tags` and `isServing` are always sent, and `architecture`,
+ * `quantization`, `contextLength` and `hfRepoId` are always-present
+ * nullables rather than absent keys. Every read site already tests
+ * truthiness or `!= null`, so the narrowing is free at the call sites and
+ * only fixtures had to grow.
+ *
+ * The three MoE fields stay optional: they carry `skip_serializing_if`, so a
+ * dense model genuinely omits them.
+ */
+import type { GuiModel } from './generated/GuiModel';
+export type GgufModel = GuiModel;
 
 /**
- * Full detail for a single model — superset of GgufModel.
- * Returned by `GET /api/models/:id/detail` and mirrors the backend `ModelDetailDto`.
- * Adds HuggingFace provenance, download timestamps, and raw GGUF metadata.
+ * Full detail for a single model — `GET /api/models/:id/detail`.
+ *
+ * Named `ModelDetail` at the call sites and `ModelDetailDto` in Rust; the
+ * alias keeps the GUI's spelling without inventing a second shape.
+ *
+ * It is *not* an extension of `GuiModel`, though the hand-written mirror said
+ * so twice: `ModelDetailDto` carries neither `serverDefaults` nor
+ * `benchmarkSummary`, so the inheritance advertised two fields the endpoint
+ * has never sent. Nothing read them.
  */
-export interface ModelDetail extends GgufModel {
-  /** Original filename on HuggingFace (e.g. "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"). */
-  hfFilename?: string;
-  /** Git commit SHA of the HF repo snapshot at download time. */
-  hfCommitSha?: string;
-  /** ISO-8601 timestamp of when the model was first downloaded. */
-  downloadDate?: string;
-  /** ISO-8601 timestamp of the last update-check for this model. */
-  lastUpdateCheck?: string;
-  /** Raw GGUF key-value metadata pairs (may be large). */
-  metadata: Record<string, string>;
-  /**
-   * Whether this model's chat template reads `reasoning_effort`.
-   *
-   * Only the model *detail* carries it: the observation is taken from
-   * `GET /props` at launch and stored on the row, and the list endpoint does
-   * not publish it. Absent on a backend that predates the field — which reads
-   * as `'unknown'`, the one default that cannot hide the control from a model
-   * that supports it.
-   */
-  reasoningEffortSupport?: TemplateSupport;
-}
+import type { ModelDetailDto } from './generated/ModelDetailDto';
+export type ModelDetail = ModelDetailDto;
 
 
-export interface ServeConfig {
+/**
+ * One serve session's launch options — the body of `POST /api/servers/start`.
+ *
+ * Launch-only fields are declared here; the sampling half is
+ * {@link SparseInferenceConfig}, so every field the wire's `InferenceConfig`
+ * carries is available and none has to be hand-transcribed.
+ *
+ * It used to be a hand-kept *subset*, and the subset had drifted: nine
+ * `InferenceConfig` fields — `frequencyPenalty`, the two dynatemp knobs,
+ * `topNSigma`, the four DRY knobs and `seed` — were absent. Eight of those
+ * nine have a control on the serve modal, so a parameter the form rendered
+ * was one the launch silently discarded; `seed` has no control anywhere and
+ * was simply unreachable. Extending the generated shape is what stops that
+ * recurring: a field added in Rust arrives here without an edit.
+ */
+export interface ServeConfig extends SparseInferenceConfig {
   id: number;
   contextLength?: number;
   mlock?: boolean;
@@ -427,187 +299,93 @@ export interface ServeConfig {
   specDraftNMax?: number;
   /** Minimum acceptance probability for MTP draft tokens (default 0.75). */
   specDraftPMin?: number;
-  // Inference parameters for this serve session
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  maxTokens?: number;
-  repeatPenalty?: number;
-  presencePenalty?: number;
-  minP?: number;
-  /**
-   * Session reasoning controls, forwarded to `inference_params`.
-   *
-   * Listed because the serve modal offers them: this struct is a hand-kept
-   * subset of {@link InferenceConfig}, not a projection of it, so a field the
-   * modal renders and this omits is a control the user can set and the launch
-   * silently discards. (Nine of `InferenceConfig`'s fields are in exactly that
-   * position already — see `tests/ts/contracts/startServerRequest.test.ts`.)
-   */
-  reasoningEffort?: ReasoningEffortLevel;
-  reasoningBudgetTokens?: number;
 }
 
-export interface ServerInfo {
-  modelId: number;
-  modelName: string;
-  port: number;
-  status: string;
-}
+/**
+ * A running server as `GET /api/servers` reports it.
+ *
+ * Mirrors `gglib_app_services::types::ServerInfo`, which carries no
+ * `rename_all` — these keys really are snake_case, unlike the camelCase
+ * `AppEvent` frames describing the same servers. Not what the UI renders
+ * from: that is `ServerViewModel`, built off the event registry, and it has
+ * a `status` this shape has no answer for.
+ */
+export type { ServerInfo } from './generated/ServerInfo';
 
-export interface ModelsDirectoryInfo {
-  path: string;
-  // Matches gglib_app_services::settings::format_source() exactly:
-  // ModelsDirSource::{Explicit,EnvVar,Default} -> "explicit"/"environment"/"default".
-  source: 'explicit' | 'environment' | 'default';
-  defaultPath: string;
-  exists: boolean;
-  writable: boolean;
-}
+/**
+ * `source` widens to `string` here, from the hand-written
+ * `'explicit' | 'environment' | 'default'`. Its Rust field is a plain `String`
+ * produced by `format_source()`, so the narrow union was a claim the wire does
+ * not make. Its only consumer indexes a `Record<string, string>`, so the
+ * widening costs nothing; narrowing it properly is a Rust-side change.
+ */
+export type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
 
-export interface AppSettings {
-  defaultDownloadPath?: string | null;
-  defaultContextSize?: number | null;
-  proxyPort?: number | null;
-  llamaBasePort?: number | null;
-  maxDownloadQueueSize?: number | null;
-  titleGenerationPrompt?: string | null;
-  showMemoryFitIndicators?: boolean | null;
-  /** Maximum iterations for tool calling agentic loop (default: 25) */
-  maxToolIterations?: number | null;
-  /** Default model ID for quick commands (e.g., `gglib question`) */
-  defaultModelId?: number | null;
-  /** Global inference parameter defaults */
-  inferenceDefaults?: InferenceConfig | null;
-  /** Named sampling profiles, selectable per request as `<model>:<profile>` */
-  inferenceProfiles?: InferenceProfile[] | null;
-  /** Whether the setup wizard has been completed */
-  setupCompleted?: boolean | null;
-  /**
-   * Bearer token the proxy requires on `/v1/*` and `/mcp`; `/health` stays
-   * open. Unset leaves the endpoint unauthenticated, which is the default for
-   * a loopback bind. The proxy sets this itself the first time it binds a
-   * non-loopback host, so the GUI dashboard reads it from here to authenticate
-   * against the proxy it started.
-   */
-  proxyApiKey?: string | null;
-  /**
-   * Whether a client's own sampling parameters (temperature, topP, topK,
-   * presencePenalty, repeatPenalty, minP) are honoured by the proxy at all.
-   * `false`/unset (the default) drops them from the resolution hierarchy —
-   * only `maxTokens` still comes from the request. Most clients that talk to
-   * this proxy send fixed sampling values with no user-facing control behind
-   * them (VS Code Copilot's LLM Gateway, for one), so trusting them by
-   * default would let that boilerplate silently outrank this server's own
-   * per-model and global defaults.
-   */
-  trustClientSampling?: boolean | null;
-  /**
-   * Whether the proxy's turn-level loop/stagnation guard runs on
-   * /v1/chat/completions. Unset/`true` (the default) means active: a
-   * conversation whose replayed history repeats the same tool-call batch or
-   * assistant response beyond the threshold is rejected with a clean 400
-   * before any model work. `false` disables the guard — the escape hatch for
-   * a client that legitimately repeats identical requests.
-   */
-  proxyLoopDetection?: boolean | null;
-  /**
-   * Whether the desktop app starts the proxy as soon as it launches. Desktop
-   * app only — `gglib proxy` and `gglib serve` stay explicit foreground
-   * commands.
-   */
-  proxyAutostart?: boolean | null;
-  /** Whether closing the desktop window hides to the tray instead of quitting. */
-  closeToTray?: boolean | null;
-  /** Whether the desktop app registers itself to launch on login. */
-  startAtLogin?: boolean | null;
-  /**
-   * Maximum consecutive no-progress agent steps before the loop stops.
-   * Shared by the built-in agent loop and the proxy's turn-level guard.
-   */
-  maxStagnationSteps?: number | null;
-  /** Literal IP the daemon binds. Unset = the compiled-in 127.0.0.1. */
-  bindHost?: string | null;
-  /** Whether the daemon binds beyond loopback. Unset/false = localhost-only. */
-  shareLan?: boolean | null;
-  /**
-   * Whether a structured-output turn gets its temperature capped when no
-   * human chose one. Unset/true = active; anything set by a person stands.
-   */
-  agenticSampling?: boolean | null;
-  /**
-   * Whether a tool call that fails schema validation is re-issued with
-   * `tool_choice: "required"`. Unset/`true` (the default) means active.
-   * `false` forwards the malformed call as the model produced it — which is
-   * what you want when you are measuring a model's own behaviour rather than
-   * using it.
-   */
-  toolCallRepair?: boolean | null;
-}
+/**
+ * Global settings — `GET`/`PUT /api/settings`.
+ *
+ * All 23 fields are required keys carrying `T | null`, not optional keys.
+ * `GET /api/settings` answers with `gglib_app_services::types::AppSettings`
+ * — not `gglib_core::Settings`, which is the persisted shape and never
+ * crosses the wire — and no field of it uses `skip_serializing_if`, so the
+ * response always names every one. "Nothing configured" is a `null`, never an
+ * absent key. The mirror's `?:` described a shape the endpoint does not send,
+ * and every read site is already `settings?.x`-style, so adopting the true one
+ * changes no call site.
+ *
+ * The *request* shape is a different type for a real reason: `PUT` treats an
+ * absent key as "leave unchanged" and an explicit `null` as "clear", which is
+ * the `double_option` three-state — see {@link UpdateSettingsRequest}.
+ */
+import type { AppSettings } from './generated/AppSettings';
+export type { AppSettings };
 
-export interface UpdateSettingsRequest {
-  defaultDownloadPath?: string | null | undefined;
-  defaultContextSize?: number | null | undefined;
-  proxyPort?: number | null | undefined;
-  llamaBasePort?: number | null | undefined;
-  maxDownloadQueueSize?: number | null | undefined;
-  titleGenerationPrompt?: string | null | undefined;
-  showMemoryFitIndicators?: boolean | null | undefined;
-  /** Maximum iterations for tool calling agentic loop (default: 25) */
-  maxToolIterations?: number | null | undefined;
-  /** Default model ID for quick commands (e.g., `gglib question`) */
-  defaultModelId?: number | null | undefined;
-  /** Global inference parameter defaults */
-  inferenceDefaults?: InferenceConfig | null | undefined;
+/**
+ * `PUT /api/settings` body — the three-state update.
+ *
+ * Absent key = leave unchanged; explicit `null` = clear to default; a value =
+ * set it. Every field carries `#[serde(default, with = "…double_option")]` on
+ * the Rust side, and ts-rs renders that as `field?: T | null`, which is
+ * exactly the shape — so unlike the other request bodies here, this one needs
+ * no wrapper to be accurate.
+ *
+ * Two fields are narrowed, and only two. A settings update carries a
+ * *partially specified* config — the settings form sends the parameters the
+ * user touched — where the generated body asks for the complete eighteen-key
+ * `InferenceConfig` a response would carry. `Omit` is safe here because
+ * `UpdateSettingsRequest` is a plain object type; the intersection form is
+ * only required where the target is a union of arms.
+ */
+import type { UpdateSettingsRequest as UpdateSettingsBody } from './generated/UpdateSettingsRequest';
+export type UpdateSettingsRequest = Omit<
+  UpdateSettingsBody,
+  'inferenceDefaults' | 'inferenceProfiles'
+> & {
+  /** Global inference parameter defaults, as far as the form specified them. */
+  inferenceDefaults?: SparseInferenceConfig | null;
   /**
    * Replaces the whole profile list. `null` clears it; omitting the key
    * leaves it untouched, so an unrelated settings update cannot drop
    * profiles it never knew about.
    */
-  inferenceProfiles?: InferenceProfile[] | null | undefined;
-  /** Whether the setup wizard has been completed */
-  setupCompleted?: boolean | null | undefined;
-  /** See `AppSettings.proxyApiKey`. */
-  proxyApiKey?: string | null | undefined;
-  /** See `AppSettings.trustClientSampling`. */
-  trustClientSampling?: boolean | null | undefined;
-  /** See `AppSettings.proxyLoopDetection`. */
-  proxyLoopDetection?: boolean | null | undefined;
-  /** See `AppSettings.proxyAutostart`. */
-  proxyAutostart?: boolean | null | undefined;
-  /** See `AppSettings.closeToTray`. */
-  closeToTray?: boolean | null | undefined;
-  /** See `AppSettings.startAtLogin`. */
-  startAtLogin?: boolean | null | undefined;
-  /** See `AppSettings.maxStagnationSteps`. */
-  maxStagnationSteps?: number | null | undefined;
-  /** See `AppSettings.bindHost`. */
-  bindHost?: string | null | undefined;
-  /** See `AppSettings.shareLan`. */
-  shareLan?: boolean | null | undefined;
-  /** See `AppSettings.agenticSampling`. */
-  agenticSampling?: boolean | null | undefined;
-  /** See `AppSettings.toolCallRepair`. */
-  toolCallRepair?: boolean | null | undefined;
-}
+  inferenceProfiles?: SparseInferenceProfile[] | null;
+};
 
 // ============================================================================
 // System Memory Types (for "Will it fit?" indicators)
 // ============================================================================
 
 /**
- * System memory information for model fit calculations.
+ * What the host has to run a model on — `GET /api/system/memory`.
+ *
+ * `gpuMemoryBytes` is optional and *not* nullable, which is the correction:
+ * it is the one field carrying `skip_serializing_if`, so a machine with no
+ * readable GPU memory omits the key rather than sending `null`. The mirror
+ * admitted both, so a reader had two absent-shapes to handle and only one
+ * could ever arrive.
  */
-export interface SystemMemoryInfo {
-  /** Total system RAM in bytes */
-  totalRamBytes: number;
-  /** GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon) */
-  gpuMemoryBytes?: number | null;
-  /** Whether the system has Apple Silicon with unified memory */
-  isAppleSilicon: boolean;
-  /** Whether the system has an NVIDIA GPU */
-  hasNvidiaGpu: boolean;
-}
+import type { SystemMemoryInfoDto as SystemMemoryInfo } from './generated/SystemMemoryInfoDto';
+export type { SystemMemoryInfo };
 
 /**
  * Fit status for a model quantization based on available memory.
@@ -623,11 +401,8 @@ export type FitStatus = 'fits' | 'tight' | 'wont_fit' | 'unknown';
  * Maps to gglib-core::ports::server_health::ServerHealthStatus.
  * Uses 'status' as discriminant to match Rust serde(tag = "status").
  */
-export type ServerHealthStatus = 
-  | { status: 'healthy' }
-  | { status: 'degraded'; reason: string }
-  | { status: 'unreachable'; lastError: string }
-  | { status: 'processdied' };
+import type { ServerHealthStatus } from './generated/ServerHealthStatus';
+export type { ServerHealthStatus };
 
 /**
  * Semantic tone for a health state. Callers map this to a token colour
@@ -639,11 +414,8 @@ export type HealthTone = 'healthy' | 'degraded' | 'failed' | 'unknown';
  * Structured detail for a model runtime failure.
  * Maps to gglib-core::ports::model_runtime::RuntimeErrorEnvelope.
  */
-export interface RuntimeErrorInfo {
-  message: string;
-  type: string;
-  retryable: boolean;
-}
+import type { RuntimeErrorEnvelope as RuntimeErrorInfo } from './generated/RuntimeErrorEnvelope';
+export type { RuntimeErrorInfo };
 
 /**
  * Get display info for a health status (tone, label, title).
@@ -706,108 +478,49 @@ export type {
 
 /**
  * Summary of a HuggingFace model from the search API.
+ *
+ * Four fields the mirror made optional are required nullables — `author`,
+ * `last_modified`, `parameters_b` and `description`. The search handler builds
+ * every one of them, and `None` crosses as `null`.
  */
-export interface HfModelSummary {
-  /** Model ID (e.g., "TheBloke/Llama-2-7B-GGUF") */
-  id: string;
-  /** Human-readable model name (derived from id) */
-  name: string;
-  /** Author/organization (e.g., "TheBloke") */
-  author?: string | null;
-  /** Total download count */
-  downloads: number;
-  /** Like count */
-  likes: number;
-  /** Last modified timestamp */
-  last_modified?: string | null;
-  /** Total parameter count in billions (from safetensors.total) */
-  parameters_b?: number | null;
-  /** Model description/README excerpt */
-  description?: string | null;
-  /** Model tags */
-  tags: string[];
-}
+export type { HfModelSummary } from './generated/HfModelSummary';
 
 /**
  * Sort field options for HuggingFace model search.
  */
-export type HfSortField = 'downloads' | 'likes' | 'modified' | 'created' | 'id';
+import type { HfSortField } from './generated/HfSortField';
+export type { HfSortField };
 
 /**
  * Request for searching HuggingFace models.
+ *
+ * Every field is required here, which the one construction site already
+ * satisfies — it names all seven. `sort_by` and `sort_ascending` had defaults
+ * in the mirror that the caller never relied on.
  */
-export interface HfSearchRequest {
-  /** Search query (model name) */
-  query?: string | null;
-  /** Minimum parameters in billions */
-  min_params_b?: number | null;
-  /** Maximum parameters in billions */
-  max_params_b?: number | null;
-  /** Page number (0-indexed) */
-  page: number;
-  /** Results per page (default 30) */
-  limit: number;
-  /** Sort field (default: downloads) */
-  sort_by?: HfSortField;
-  /** Sort direction: true = ascending, false = descending (default: false/descending) */
-  sort_ascending?: boolean;
-}
+export type { HfSearchRequest } from './generated/HfSearchRequest';
 
 /**
  * Response from HuggingFace model search.
  */
-export interface HfSearchResponse {
-  /** Models matching the search criteria */
-  models: HfModelSummary[];
-  /** Whether more results are available */
-  has_more: boolean;
-  /** Current page number (0-indexed) */
-  page: number;
-  /** Total count of matching models (if available) */
-  total_count?: number | null;
-}
+export type { HfSearchResponse } from './generated/HfSearchResponse';
 
 /**
  * Information about a specific quantization variant.
  */
-export interface HfQuantization {
-  /** Quantization name (e.g., "Q4_K_M", "Q8_0") */
-  name: string;
-  /** File path within the repository */
-  file_path: string;
-  /** File size in bytes */
-  size_bytes: number;
-  /** File size in MB (for display) */
-  size_mb: number;
-  /** Whether this is a sharded model (multiple files) */
-  is_sharded: boolean;
-  /** Number of shards if sharded */
-  shard_count?: number | null;
-}
+export type { HfQuantization } from './generated/HfQuantization';
 
 /**
  * Response containing available quantizations for a model.
  */
-export interface HfQuantizationsResponse {
-  /** Model ID */
-  model_id: string;
-  /** Available quantizations */
-  quantizations: HfQuantization[];
-}
+export type { HfQuantizationsResponse } from './generated/HfQuantizationsResponse';
 
 /**
  * Response for tool/function calling support detection.
  *
  * Used for both HuggingFace model metadata and local running server queries.
  */
-export interface ToolSupportResponse {
-  /** Whether the model supports tool/function calling */
-  supports_tool_calls: boolean;
-  /** Confidence level of the detection (0.0 to 1.0) */
-  confidence: number;
-  /** Detected tool calling format (e.g., "hermes", "llama3", "mistral") */
-  detected_format?: string | null;
-}
+export type { ToolSupportResponse } from './generated/ToolSupportResponse';
 
 // ============================================================================
 // Model Filter Options Types
@@ -816,36 +529,27 @@ export interface ToolSupportResponse {
 /**
  * A range of numeric values with min and max.
  */
-export interface RangeValues {
-  min: number;
-  max: number;
-}
+export type { RangeValues } from './generated/RangeValues';
 
 /**
  * Filter options for the model library UI.
- * Contains aggregate data about available models for building dynamic filter controls.
+ *
+ * All three ranges are required nullables. The mirror made `speed_range`
+ * optional, which read as "a backend that has not benchmarked anything omits
+ * the key" — it does not; it sends `null`, exactly as the other two do when
+ * the library is empty.
  */
-export interface ModelFilterOptions {
-  /** All distinct quantization types present in the library */
-  quantizations: string[];
-  /** Minimum and maximum parameter counts (in billions) */
-  param_range: RangeValues | null;
-  /** Minimum and maximum context lengths */
-  context_range: RangeValues | null;
-  /** Token-generation speed range (t/s) derived from benchmark data.
-   *  Only present when at least one model has been benchmarked. */
-  speed_range?: RangeValues | null;
-}
+export type { ModelFilterOptions } from './generated/ModelFilterOptions';
 
 /**
  * Sort field for `GET /api/models`.
  * Matches the backend `ModelSortBy` domain enum (snake_case).
  */
-export type ModelSortBy = 'added_at' | 'name' | 'param_count' | 'latest_tg_tps';
+export type { ModelSortBy } from './generated/ModelSortBy';
 
 /**
  * Sort direction for model list queries.
  */
-export type SortOrder = 'asc' | 'desc';
+export type { SortOrder } from './generated/SortOrder';
 
 

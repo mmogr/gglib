@@ -13,7 +13,7 @@
 //! NVIDIA documents which GCC versions are supported as host compilers
 //! for each CUDA toolkit release. Building with an unsupported GCC
 //! version produces confusing template errors deep inside CUDA headers.
-//! [`validate_cuda_gcc_compatibility`] catches this early and prints
+//! `validate_cuda_gcc_compatibility` catches this early and prints
 //! actionable remediation steps.
 //!
 //! This validation is only performed on Linux where GCC/CUDA

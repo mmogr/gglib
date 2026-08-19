@@ -60,6 +60,16 @@ futures-core = { version = "0.3" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3"
+
+# TypeScript binding generation, behind each deriving crate's `ts-bindings`
+# feature. Every one of those crates sets `#![deny(unused_crate_dependencies)]`,
+# so they take it as `{ workspace = true, optional = true }`: an optional
+# dependency stays out of the build graph entirely until the feature turns it
+# on, which is what keeps `-D warnings` clean in the default build.
+#
+# `chrono-impl` because a few wire types carry `DateTime<Utc>` directly; ts-rs
+# maps those to `string`, which is what RFC 3339 arrives as.
+ts-rs = { version = "12", features = ["chrono-impl"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 
@@ -171,6 +181,26 @@ unsafe_code = "deny"
 # deliberately, because they cannot occur here at all: edition 2024 requires the
 # `#[unsafe(...)]` spelling for both, and that same deny rejects it outright.
 unreachable_pub = "deny"
+
+[workspace.lints.rustdoc]
+# Nothing here is published. Almost every package says `publish = false`, and
+# the ones that do not take sibling crates from `[workspace.dependencies]`
+# below, where they are bare `path` entries carrying no version — which
+# `cargo publish` refuses outright. So no docs.rs build exists, and the only
+# doc builds that do are `docs.yml` and `release.yml`, both of which pass
+# `--document-private-items`.
+# Under that flag these links resolve; the lint fires anyway, to warn that they
+# would break without it.
+#
+# So it warns about a build this workspace never runs, and silencing it is not
+# free: it buys back the module-to-module navigation that is most of what makes
+# these docs worth reading, since the majority of this codebase is deliberately
+# private. The alternative was to delete links that work.
+#
+# The coupling is real and worth stating: **if either workflow ever drops
+# `--document-private-items`, those links go dead and nothing will say so.**
+# Change this to "warn" in the same commit that drops the flag.
+private_intra_doc_links = "allow"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

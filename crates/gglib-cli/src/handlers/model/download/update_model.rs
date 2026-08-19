@@ -6,11 +6,11 @@
 //! implementation consumed by this CLI, the Axum WebUI and the Tauri app.
 //! What stays here is what only a terminal has: the plan, the prompt and the
 //! printed result.
-
-use std::sync::Arc;
+//!
+//! [`ModelOps::check_upgrade`]: gglib_app_services::ModelOps::check_upgrade
+//! [`ModelOps::apply_upgrade`]: gglib_app_services::ModelOps::apply_upgrade
 
 use anyhow::Result;
-use gglib_app_services::{ModelDeps, ModelOps};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
@@ -25,11 +25,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
     // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
     // no shared `ProcessManager`, and the upgrade path never touches serving
     // status. Same construction as `model capabilities`.
-    let ops = ModelOps::new(ModelDeps {
-        core: ctx.app.clone(),
-        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
-        gguf_parser: ctx.gguf_parser.clone(),
-    });
+    let ops = crate::handlers::model::one_shot_model_ops(ctx);
 
     println!("Updating model {} (ID: {})...", model.name, model.id);
     if let Some(repo) = model.hf_repo_id.as_deref() {

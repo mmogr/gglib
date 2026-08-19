@@ -69,6 +69,7 @@ pub enum ProfileNameError {
 
 /// A named sampling profile applied on top of a model's own defaults.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceProfile {
     /// Profile slug, used as the `:{suffix}` on a model id.

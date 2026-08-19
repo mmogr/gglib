@@ -38,6 +38,7 @@ serde_with = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 dirs = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 # Async
 tokio = { workspace = true, features = ["fs", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
@@ -46,10 +47,27 @@ async-trait = "0.1"
 tokio-util = "0.7"
 futures-util = "0.3"
 
+[features]
+# Emit TypeScript for the wire types. Test-driven: `cargo test --features
+# ts-bindings export_bindings_` writes `src/types/generated/`. Off in every
+# ordinary build, so it costs nothing at runtime and nothing in the default
+# dependency graph — which is what keeps `#![deny(unused_crate_dependencies)]`
+# satisfied without the feature.
+#
+# Forwards to `gglib-core`: the DTOs here embed domain types (`InferenceConfig`,
+# `DefaultsOrigin`, …), and ts-rs needs `TS` on the whole reachable graph, not
+# just the outermost struct.
+ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }
 tempfile = { workspace = true }
+
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
 
 [lints.rust]
 unsafe_code = "deny"

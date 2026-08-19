@@ -18,7 +18,7 @@ appLogger.info('service.download', 'Download started', { modelId })
           ▼
   truncatePayload(payload)   ← prevents oversized IPC messages
           ▼
-  MultiTransport routes to:
+  appLogger fans out to each registered transport:
     ├── ConsoleTransport      → console.log/warn/error
     └── TauriTracingTransport → invoke('plugin:log|...')
 ```
@@ -29,7 +29,7 @@ appLogger.info('service.download', 'Download started', { modelId })
 |------|------|
 | `appLogger.ts` | Singleton logger; category-typed `debug/info/warn/error` methods |
 | `types.ts` | `LogLevel`, `LogEntry`, `ILogger` interface; `isLevelEnabled()`, `parseLogLevel()` |
-| `transports.ts` | `ConsoleTransport`, `TauriTracingTransport`, `MultiTransport` |
+| `transports.ts` | `ConsoleTransport`, `TauriTracingTransport` |
 | `truncate.ts` | Caps payload size to avoid flooding the Tauri IPC channel |
 
 ## Configuration

@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 /// against the pinned binary, not inferred. Offering it as a level would ship
 /// a control whose most obvious value does the opposite of what it reads as.
 /// "Stop thinking" is
-/// [`reasoning_budget_tokens: 0`](InferenceConfig::reasoning_budget_tokens),
+/// [`reasoning_budget_tokens: 0`](super::InferenceConfig#structfield.reasoning_budget_tokens),
 /// which is sampler-enforced and range-validated upstream. See ADR 0007
 /// finding 4 and decision 4.
 ///
@@ -54,6 +54,7 @@ use serde::{Deserialize, Serialize};
 /// [`InferenceConfig::reasoning_effort`]: super::InferenceConfig#structfield.reasoning_effort
 /// [`InferenceConfig::reasoning_budget_tokens`]: super::InferenceConfig#structfield.reasoning_budget_tokens
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
     /// The least thinking the template offers.

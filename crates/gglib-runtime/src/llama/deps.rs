@@ -140,7 +140,7 @@ pub fn check_disk_space(_required_mb: u64) -> Result<bool> {
     {
         // On Windows, you'd use GetDiskFreeSpaceEx
         // For now, assume enough space
-        return Ok(true);
+        Ok(true)
     }
 
     #[cfg(not(any(unix, windows)))]

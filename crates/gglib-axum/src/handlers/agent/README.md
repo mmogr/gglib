@@ -20,7 +20,7 @@ handler only forwards already-typed [`AgentEvent`]s.
 
 When the HTTP client disconnects (browser tab closed, `curl` killed, etc.),
 Axum drops the SSE response and therefore the [`guard::AgentTaskGuard`] stream
-wrapper. Its [`Drop`] impl calls [`JoinHandle::abort`], which cancels the
+wrapper. Its [`Drop`] impl calls [`tokio::task::JoinHandle::abort`], which cancels the
 spawned `AgentLoop` task at its next `await` point — immediately stopping
 LLM token generation and any in-flight tool calls without leaking compute
 or resources.
@@ -33,8 +33,8 @@ or resources.
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
-| [`dto_tests.rs`](dto_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto_tests-coverage.json) |
 | [`dto.rs`](dto.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto-coverage.json) |
+| [`dto_tests.rs`](dto_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-dto_tests-coverage.json) |
 | [`guard.rs`](guard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-guard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-guard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-guard-coverage.json) |
 | [`retry_notice.rs`](retry_notice.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-retry_notice-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-retry_notice-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-agent-retry_notice-coverage.json) |
 <!-- module-table:end -->

@@ -6,12 +6,10 @@
 //! by this CLI, the Axum WebUI, and the Tauri app.
 //!
 //! [`ModelCapabilities`]: gglib_core::ModelCapabilities
-
-use std::sync::Arc;
+//! [`ModelOps::set_capabilities`]: gglib_app_services::ModelOps::set_capabilities
 
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::SetCapabilitiesRequest;
-use gglib_app_services::{ModelDeps, ModelOps};
 use gglib_core::ModelCapabilities;
 
 use super::resolver;
@@ -22,6 +20,8 @@ use crate::bootstrap::CliContext;
 /// Without `--set` or `--unset` flags the command is read-only and prints the
 /// current capability state.  With flags it applies the requested overrides
 /// via [`ModelOps::set_capabilities`] and prints the updated state.
+///
+/// [`ModelOps::set_capabilities`]: gglib_app_services::ModelOps::set_capabilities
 pub(crate) async fn execute(
     ctx: &CliContext,
     identifier: &str,
@@ -35,11 +35,7 @@ pub(crate) async fn execute(
     // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
     // no shared `ProcessManager` to check, and this handler never touches
     // serving status anyway (`get`/`set_capabilities` only).
-    let ops = ModelOps::new(ModelDeps {
-        core: ctx.app.clone(),
-        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
-        gguf_parser: ctx.gguf_parser.clone(),
-    });
+    let ops = super::one_shot_model_ops(ctx);
 
     // Read-only: no flags provided.
     if set.is_empty() && unset.is_empty() {

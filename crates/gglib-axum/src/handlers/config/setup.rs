@@ -96,6 +96,7 @@ pub(crate) async fn disable_fast_downloads(
 /// Whether disabling actually removed anything, so the GUI can say
 /// "disabled" rather than claiming a change that did not happen.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DisableFastDownloadsResponse {
     pub removed: bool,
@@ -190,8 +191,8 @@ pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, 
         .map_err(|e| HttpError::Internal(e.to_string()))
 }
 
-/// Pull upstream and rebuild llama.cpp, streaming the same [`BuildEvent`]s as
-/// [`build_llama_from_source`] — the GUI face of `gglib config llama update`.
+/// Pull upstream and rebuild llama.cpp, streaming [`BuildEvent`]s over SSE —
+/// the GUI face of `gglib config llama update`.
 ///
 /// Rebuilds with the acceleration the current build recorded, so an update
 /// cannot silently change backend. Preflight failures are reported as a

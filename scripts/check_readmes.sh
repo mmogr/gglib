@@ -304,7 +304,11 @@ check_ts_subdir_readmes() {
         fi
 
         [[ $dir_ok -eq 1 ]] && log_v "  ${GREEN}OK${NC}         $rel/"
-    done < <(find "$TS_SRC_DIR" -mindepth 1 -type d | grep -v "node_modules" | sort)
+    # `types/generated/` is ts-rs output: a hand-written README describing it
+    # would be a second source of truth for something whose first source is the
+    # Rust. What it is and how to regenerate it is documented once, in
+    # `src/types/README.md`, beside the module that imports from it.
+    done < <(find "$TS_SRC_DIR" -mindepth 1 -type d | grep -v "node_modules" | grep -v "types/generated" | sort)
 
     if [[ $any_fail -eq 0 ]]; then
         log "  ${GREEN}PASS${NC}: all TypeScript src/ subdir READMEs present and complete"

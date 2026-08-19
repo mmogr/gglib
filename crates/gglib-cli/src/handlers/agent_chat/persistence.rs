@@ -44,7 +44,8 @@ impl<'a> Conversation<'a> {
 
     /// Resume an existing conversation for continued persistence.
     ///
-    /// Loads the existing message count so [`save_new`] only persists the delta.
+    /// Loads the existing message count so [`Conversation::save_new`] only
+    /// persists the delta.
     pub(crate) async fn resume(
         service: &'a ChatHistoryService,
         id: i64,

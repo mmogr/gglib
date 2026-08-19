@@ -237,6 +237,7 @@ pub async fn fetch_props(client: &Client, base_url: &str) -> PropsReading {
 /// One field's answer to "does this build still default to what ADR 0003
 /// measured?".
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "verdict", rename_all = "snake_case")]
 pub enum BaselineVerdict {
     /// The build agrees with the recorded table.
@@ -281,6 +282,7 @@ pub enum BaselineVerdict {
 
 /// One field of [`check_baseline`]'s answer.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct BaselineField {
     /// Wire name of the parameter.
     pub field: &'static str,
@@ -402,6 +404,7 @@ fn verdict_for(
 /// every field was compared, not that every field agreed, so surfaces check
 /// [`BaselineReport::drifted`] first and coverage second.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "coverage", rename_all = "snake_case")]
 pub enum BaselineCoverage {
     /// Every field in [`UPSTREAM_DEFAULTS`] was compared against the recorded
@@ -475,6 +478,7 @@ impl BaselineCoverage {
 
 /// The whole baseline reading, ready to surface.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct BaselineReport {
     /// Per-field verdicts, in [`UPSTREAM_DEFAULTS`] order.
     pub fields: Vec<BaselineField>,
@@ -523,6 +527,7 @@ impl BaselineReport {
 /// prevent, one level down from where it was being prevented: the slot half
 /// carried `Blind { reason }` from the start, and the baseline half did not.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum BaselineState {
     /// No `/props` read has completed for the running model yet. The ordinary

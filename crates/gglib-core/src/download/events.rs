@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// A summary of a download in the queue (for snapshots and API responses).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct DownloadSummary {
     /// Canonical ID string (`model_id:quantization` or just `model_id`).
     pub id: String,
@@ -16,18 +17,22 @@ pub struct DownloadSummary {
     /// Position in queue (1 = currently downloading, 2+ = waiting).
     pub position: u32,
     /// Error message if status is Failed.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// Group ID for sharded downloads (all shards share the same `group_id`).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_id: Option<String>,
     /// Shard information if this is part of a sharded model.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shard_info: Option<ShardInfo>,
 }
 
 /// Status of a download.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadStatus {
     /// Waiting in the queue.
@@ -113,9 +118,10 @@ impl DownloadStatus {
 /// download that has just started has no meaningful rate yet. Renderers must
 /// show a placeholder for the absent case rather than substituting `0`, and
 /// must never compute a rate of their own from successive `downloaded` values;
-/// the manager's `RateEstimator` is the only source. The mirrored TypeScript
-/// declaration lives in `src/services/transport/types/events.ts`.
+/// the manager's `RateEstimator` is the only source. TypeScript reads this
+/// type through its generated binding; there is no mirror to keep in step.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DownloadEvent {
     /// Snapshot of the entire queue state.
@@ -131,9 +137,11 @@ pub enum DownloadEvent {
         /// Canonical ID of the download.
         id: String,
         /// Current shard index (0-based), present only for sharded downloads.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         shard_index: Option<u32>,
         /// Total number of shards, present only for sharded downloads.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         total_shards: Option<u32>,
     },
@@ -143,17 +151,21 @@ pub enum DownloadEvent {
         /// Canonical ID of the download.
         id: String,
         /// Bytes downloaded so far.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         downloaded: u64,
         /// Total bytes to download.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         total: u64,
         /// Current download speed in bytes per second.
         ///
         /// Absent until the estimator has warmed up. This is deliberately not
         /// `0.0`: zero is a real reading meaning "stalled", and conflating the
         /// two is what rendered `ETA: 0s` on a healthy download.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         speed_bps: Option<f64>,
         /// Estimated time remaining in seconds; absent when not yet known.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         eta_seconds: Option<f64>,
         /// Progress percentage (0.0 - 100.0).
@@ -171,19 +183,25 @@ pub enum DownloadEvent {
         /// Filename of the current shard.
         shard_filename: String,
         /// Bytes downloaded for current shard.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         shard_downloaded: u64,
         /// Total bytes for current shard.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         shard_total: u64,
         /// Aggregate bytes downloaded across all shards.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         aggregate_downloaded: u64,
         /// Aggregate total bytes across all shards.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         aggregate_total: u64,
         /// Current download speed in bytes per second; absent until known.
         ///
         /// Measured across the whole shard group, not reset per shard.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         speed_bps: Option<f64>,
         /// Estimated time remaining in seconds; absent when not yet known.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         eta_seconds: Option<f64>,
         /// Aggregate progress percentage (0.0 - 100.0).
@@ -195,6 +213,7 @@ pub enum DownloadEvent {
         /// Canonical ID of the download.
         id: String,
         /// Optional success message.
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
         #[serde(skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },

@@ -12,34 +12,38 @@
 
 import { FC, useCallback, useEffect, useState } from "react";
 import { getSettings, updateSettings } from "../../services/transport/api/settings";
-import type { InferenceConfig, InferenceProfile } from "../../types";
+import type { SparseInferenceConfig, SparseInferenceProfile } from "../../types";
+import { INFERENCE_CONFIG_KEYS } from "../../constants/inferenceDefaults";
+import { PARAM_LABELS } from "../../utils/samplingProvenance";
 import { Button } from "../ui/Button";
 import { Banner } from '../ui/Banner';
 import { Stack, EmptyState } from "../primitives";
 import { InferenceProfileEditor } from "./InferenceProfileEditor";
 
-/** Human-readable summary of the parameters a profile actually sets. */
-function summarize(config: InferenceConfig): string {
-  const labels: Record<string, string> = {
-    temperature: "temperature",
-    topP: "top-p",
-    topK: "top-k",
-    maxTokens: "max-tokens",
-    repeatPenalty: "repeat-penalty",
-    presencePenalty: "presence-penalty",
-    minP: "min-p",
-    dryMultiplier: "dry-multiplier",
-    dryBase: "dry-base",
-    dryAllowedLength: "dry-allowed-length",
-    dryPenaltyLastN: "dry-penalty-last-n",
-  };
-  const parts = Object.entries(labels)
-    .filter(([key]) => {
-      const value = config[key as keyof InferenceConfig];
-      return value !== undefined && value !== null;
-    })
-    .map(([key, label]) => `${label}=${config[key as keyof InferenceConfig]}`);
+/**
+ * Human-readable summary of the parameters a profile actually sets.
+ *
+ * Iterates `INFERENCE_CONFIG_KEYS` rather than a label table of its own. This
+ * was the second hand-kept list of the same eleven names — so a profile that
+ * set `topNSigma` from the CLI displayed as though it had set nothing, which
+ * is the same silence that let the editor drop the field on save.
+ */
+function summarize(config: SparseInferenceConfig): string {
+  const parts = INFERENCE_CONFIG_KEYS.filter((key) => {
+    const value = config[key];
+    return value !== undefined && value !== null;
+  }).map((key) => `${wireLabel(key)}=${config[key]}`);
   return parts.length ? parts.join("  ") : "no parameters set";
+}
+
+/**
+ * `PARAM_LABELS` in the hyphenated lower case this list has always used —
+ * "Top P" reads as `top-p` here, matching how the CLI prints a profile.
+ * Derived rather than tabulated so there is one place a label is written.
+ */
+function wireLabel(key: (typeof INFERENCE_CONFIG_KEYS)[number]): string {
+  const label = (PARAM_LABELS as Record<string, string | undefined>)[key];
+  return label ? label.toLowerCase().replace(/\s+/g, "-") : key;
 }
 
 /**
@@ -50,7 +54,7 @@ function summarize(config: InferenceConfig): string {
  * override per-model tuning. Drift is guarded by a contract test that reads
  * the Rust source.
  */
-export const STARTER_PROFILES: InferenceProfile[] = [
+export const STARTER_PROFILES: SparseInferenceProfile[] = [
   {
     name: 'coding',
     description: 'Low-variance sampling for code generation and tool use.',
@@ -72,7 +76,7 @@ export const STARTER_PROFILES: InferenceProfile[] = [
 ];
 
 export const InferenceProfiles: FC = () => {
-  const [profiles, setProfiles] = useState<InferenceProfile[]>([]);
+  const [profiles, setProfiles] = useState<SparseInferenceProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +105,7 @@ export const InferenceProfiles: FC = () => {
    * rejection is surfaced verbatim and local state is left untouched rather
    * than optimistically showing something that was not saved.
    */
-  const persist = useCallback(async (next: InferenceProfile[]) => {
+  const persist = useCallback(async (next: SparseInferenceProfile[]) => {
     setSaving(true);
     setError(null);
     try {
@@ -116,7 +120,7 @@ export const InferenceProfiles: FC = () => {
   }, []);
 
   const handleSave = useCallback(
-    (profile: InferenceProfile) => {
+    (profile: SparseInferenceProfile) => {
       const index = profiles.findIndex((p) => p.name === editing);
       const next =
         index >= 0

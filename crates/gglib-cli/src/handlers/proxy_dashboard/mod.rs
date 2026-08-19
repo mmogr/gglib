@@ -3,7 +3,8 @@
 //! ## Redraw strategy: cursor movement, not raw mode
 //!
 //! Earlier CLI work in this crate (see
-//! [`crate::handlers::model::download::interactive`]) already established
+//! [`crate::handlers::model::download::run_interactive_monitor`]) already
+//! established
 //! that `crossterm::terminal::enable_raw_mode()` breaks `println!`-based
 //! redraws (it disables `OPOST`, so `\n` stops returning the cursor to column
 //! 0). This module never touches raw mode. Instead, each frame after the

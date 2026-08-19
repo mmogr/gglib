@@ -1,6 +1,7 @@
 import { FC } from 'react';
 import { Box, Plus, Zap } from 'lucide-react';
-import { GgufModel, ServerInfo } from '../../types';
+import { GgufModel } from '../../types';
+import type { ServerViewModel } from '../../hooks/useServers';
 import { formatParamCount } from '../../utils/format';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
@@ -14,7 +15,7 @@ interface ModelsListContentProps {
   selectedModelId: number | null;
   onSelectModel: (id: number | null) => void;
   loading: boolean;
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   onSwitchToAddTab?: () => void;
 }
 

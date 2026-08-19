@@ -75,7 +75,9 @@ pub(crate) async fn test_connection(
 
 /// Request body for calling an MCP tool (includes server ID).
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct CallToolRequest {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub server_id: i64,
     #[serde(flatten)]
     pub call: McpToolCallRequest,

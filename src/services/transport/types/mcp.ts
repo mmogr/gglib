@@ -13,54 +13,34 @@ export type McpServerType = 'stdio' | 'sse';
 /**
  * MCP server status.
  */
-export type McpServerStatus = 'stopped' | 'starting' | 'running' | { error: string };
+import type { McpServerStatusDto as McpServerStatus } from '../../../types/generated/McpServerStatusDto';
+export type { McpServerStatus };
 
 /**
  * Environment variable entry for MCP server.
  */
-export interface McpEnvEntry {
-  key: string;
-  value: string;
-}
+import type { McpEnvEntryDto as McpEnvEntry } from '../../../types/generated/McpEnvEntryDto';
+export type { McpEnvEntry };
 
 /**
  * MCP server configuration.
  */
-export interface McpServerConfig {
-  /** Command/basename to resolve (e.g., "npx" or "/usr/local/bin/python3") */
-  command?: string;
-  /** Cached absolute path (auto-resolved from command) */
-  resolved_path_cache?: string;
-  /** Command-line arguments */
-  args?: string[];
-  /** Working directory (must be absolute if specified) */
-  working_dir?: string;
-  /** Additional PATH entries for child process */
-  path_extra?: string;
-  /** URL for SSE connection (required for sse servers) */
-  url?: string;
-}
+import type { McpServerConfigDto as McpServerConfig } from '../../../types/generated/McpServerConfigDto';
+export type { McpServerConfig };
 
-export type McpLifecycle = 'eager' | 'lazy' | 'manual';
+import type { McpLifecycle } from '../../../types/generated/McpLifecycle';
+export type { McpLifecycle };
 
 /**
  * MCP server entity.
+ *
+ * `server_type` is narrowed back by intersection: Rust stores it as a plain
+ * `String`, but the two values it can hold are the two transports the config
+ * union already models, and the editor switches on them. `string & Union`
+ * collapses to the union.
  */
-export interface McpServer {
-  id: McpServerId;
-  name: string;
-  server_type: McpServerType;
-  config: McpServerConfig;
-  enabled: boolean;
-  lifecycle: McpLifecycle;
-  env: McpEnvEntry[];
-  created_at: string;
-  last_connected_at?: string;
-  /** Whether server configuration is valid */
-  is_valid: boolean;
-  /** Last validation or runtime error */
-  last_error?: string;
-}
+import type { McpServerDto } from '../../../types/generated/McpServerDto';
+export type McpServer = McpServerDto & { server_type: McpServerType };
 
 /**
  * Parameters for creating a new MCP server.
@@ -92,32 +72,36 @@ export interface UpdateMcpServer {
  */
 export interface McpTool {
   name: string;
-  description?: string;
-  input_schema?: Record<string, unknown>;
-  /** Optional JSON Schema describing the tool's output. Present only when the
-   * MCP server declares it. Used to auto-generate a structured result renderer. */
-  output_schema?: Record<string, unknown>;
+  /**
+   * Optional *and* nullable, because two Rust types feed this one shape and
+   * they disagree. `McpToolInfo` (`/api/mcp/servers`, `…/test`) carries
+   * `skip_serializing_if` on `title` alone, so it always emits this key —
+   * `null` when there is nothing to say. `gglib_core::McpTool`
+   * (`/api/builtin/tools`) carries it on all three and omits the key instead.
+   */
+  description?: string | null;
+  /** Always present as `null` from the server routes; omitted by the builtin
+   *  route — see {@link description}. */
+  input_schema?: Record<string, unknown> | null;
   /** Human-readable display title from MCP annotations.title (spec 2025-03-26). */
   title?: string;
 }
 
 /**
- * MCP server with runtime info.
+ * MCP server with runtime info — what every server route answers with.
  */
-export interface McpServerInfo {
-  server: McpServer;
-  status: McpServerStatus;
-  tools: McpTool[];
-}
+import type { McpServerInfo as McpServerInfoDto } from '../../../types/generated/McpServerInfo';
+export type McpServerInfo = Omit<McpServerInfoDto, 'server'> & { server: McpServer };
 
 /**
  * Result of calling an MCP tool.
+ *
+ * `error` is a required nullable, not an optional key: the handler builds the
+ * field on both paths, so a successful call sends `"error": null` rather than
+ * omitting it.
  */
-export interface McpToolResult {
-  success: boolean;
-  data?: unknown;
-  error?: string;
-}
+import type { McpToolCallResponse } from '../../../types/generated/McpToolCallResponse';
+export type McpToolResult = McpToolCallResponse;
 
 /**
  * Resolution attempt for diagnostics.
@@ -155,19 +139,19 @@ export interface McpTransport {
   listMcpServers(): Promise<McpServerInfo[]>;
 
   /** Add a new MCP server configuration. */
-  addMcpServer(server: NewMcpServer): Promise<McpServer>;
+  addMcpServer(server: NewMcpServer): Promise<McpServerInfo>;
 
   /** Update an existing MCP server configuration. */
-  updateMcpServer(id: McpServerId, updates: UpdateMcpServer): Promise<McpServer>;
+  updateMcpServer(id: McpServerId, updates: UpdateMcpServer): Promise<McpServerInfo>;
 
   /** Remove an MCP server configuration. */
   removeMcpServer(id: McpServerId): Promise<void>;
 
-  /** Start an MCP server and return its available tools. */
-  startMcpServer(id: McpServerId): Promise<McpTool[]>;
+  /** Start an MCP server, answering with its info and advertised tools. */
+  startMcpServer(id: McpServerId): Promise<McpServerInfo>;
 
-  /** Stop an MCP server. */
-  stopMcpServer(id: McpServerId): Promise<void>;
+  /** Stop an MCP server, answering with its info in the stopped state. */
+  stopMcpServer(id: McpServerId): Promise<McpServerInfo>;
 
   /** Call an MCP tool on a specific server. */
   callMcpTool(serverId: McpServerId, toolName: string, args: Record<string, unknown>): Promise<McpToolResult>;
@@ -185,10 +169,5 @@ export interface McpTransport {
  * A failed connection is a result, not an error: a wrong command is the
  * ordinary case this diagnoses, so `ok: false` carries the reason.
  */
-export interface McpTestResult {
-  ok: boolean;
-  /** Why it failed. Absent when `ok`. */
-  error?: string | null;
-  /** What the server offered. Empty unless `ok`. */
-  tools: McpTool[];
-}
+import type { McpTestResult } from '../../../types/generated/McpTestResult';
+export type { McpTestResult };

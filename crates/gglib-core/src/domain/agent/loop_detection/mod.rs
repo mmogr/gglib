@@ -83,7 +83,7 @@ fn stable_repr_inner(v: &Value, depth: usize) -> String {
 ///
 /// Format: `"{name}:{fnv1a_64(canonical_args_json):016x}"`
 ///
-/// Arguments are serialised via [`canonical_json`] before hashing so that
+/// Arguments are serialised via [`stable_repr`] before hashing so that
 /// logically identical arguments always hash identically regardless of JSON
 /// key ordering.
 fn tool_signature(call: &ToolCall) -> String {

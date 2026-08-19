@@ -203,6 +203,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         // actually running.
         runtime: Arc::clone(&runtime),
         gguf_parser,
+        emitter: Arc::clone(&emitter),
     }));
 
     let servers = Arc::new(ServerOps::new(ServerDeps {

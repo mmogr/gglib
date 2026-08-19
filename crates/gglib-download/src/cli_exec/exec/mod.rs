@@ -18,7 +18,8 @@ use crate::resolver::HfQuantizationResolver;
 /// Execute a download request and return the result.
 ///
 /// Used internally by [`update_model`] for the force-redownload path.
-/// Interactive CLI downloads now route through [`DownloadManagerPort::queue_smart`]
+/// Interactive CLI downloads now route through
+/// [`DownloadManagerPort::queue_smart`](gglib_core::ports::DownloadManagerPort::queue_smart)
 /// instead of calling this function directly.
 pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadResult> {
     let quant = request.quantization.as_ref().ok_or_else(|| {

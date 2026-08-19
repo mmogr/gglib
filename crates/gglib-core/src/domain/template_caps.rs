@@ -133,6 +133,7 @@ impl TemplateCapsState {
 /// [`Default`] is [`Self::Unknown`], which is the only safe default there is —
 /// a client omitting the field must never be read as a positive "no".
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum Support {
     /// The observed template positively reads the variable.

@@ -14,6 +14,7 @@ use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 /// Proxy status response.
 /// Matches Tauri's `ProxyStatus` for frontend compatibility.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ProxyStatus {
     pub running: bool,
     pub port: Option<u16>,
@@ -26,10 +27,12 @@ pub(crate) struct ProxyStatus {
 
 /// Optional configuration for starting the proxy.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct StartProxyConfig {
     pub host: Option<String>,
     pub port: Option<u16>,
     pub llama_base_port: Option<u16>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_context: Option<u64>,
     /// Enable KV cache session persistence (disk slot save/restore),
     /// mirroring `gglib serve`/`gglib proxy --cache`. Omitted or `None`
@@ -48,6 +51,7 @@ pub(crate) struct StartProxyConfig {
     pub pinned: Option<gglib_core::ports::PinnedSpec>,
     /// Byte budget in GiB for the on-disk slot eviction sweep
     /// (`--cache-disk-gb`). Omitted auto-sizes from free disk space.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     #[serde(default)]
     pub cache_disk_gb: Option<u64>,
     /// Operator sampling overrides applied above the client's own request
@@ -71,7 +75,9 @@ pub(crate) struct StartProxyConfig {
 /// bare `/api/servers/start` body; `proxy` the snake_case form of
 /// `/api/proxy/start`.
 #[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct StartPinnedBody {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     #[serde(default)]
     pub options: gglib_app_services::types::StartServerRequest,

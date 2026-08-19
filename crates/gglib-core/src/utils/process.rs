@@ -10,6 +10,12 @@
 
 use std::ffi::OsStr;
 
+/// `CREATE_NO_WINDOW` — the process-creation flag that stops a child from
+/// getting a console window. Named once here so the two spawn helpers below
+/// cannot drift apart on the value.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Create a [`std::process::Command`] that will not open a console window on Windows.
 ///
 /// Identical to `std::process::Command::new(program)` on macOS and Linux.
@@ -27,7 +33,7 @@ pub fn cmd(program: impl AsRef<OsStr>) -> std::process::Command {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        c.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        c.creation_flags(CREATE_NO_WINDOW);
     }
     c
 }
@@ -48,8 +54,9 @@ pub fn async_cmd(program: impl AsRef<OsStr>) -> tokio::process::Command {
     let mut c = tokio::process::Command::new(program);
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        c.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // No `CommandExt` import here: unlike `std`, tokio puts `creation_flags`
+        // directly on its own `Command`, so importing the trait warns as unused.
+        c.creation_flags(CREATE_NO_WINDOW);
     }
     c
 }

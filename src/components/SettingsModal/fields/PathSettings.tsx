@@ -37,9 +37,9 @@ export const PathSettings: FC<PathSettingsProps> = ({
     label="Models Directory"
     description={sourceDescription}
     action={
-      info?.defaultPath && (
+      info?.default_path && (
         <Button type="button" variant="link" size="sm" onClick={onReset}>
-          Reset to defaults
+          Reset to default
         </Button>
       )
     }

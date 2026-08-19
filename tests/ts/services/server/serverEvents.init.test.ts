@@ -16,6 +16,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import type { ServerWireEvent } from '../../../../src/services/transport/types/events';
+import type { ServerInfo } from '../../../../src/types';
+
 const subscribe = vi.fn();
 const listServers = vi.fn();
 const ingestServerEvent = vi.fn();
@@ -67,16 +70,33 @@ describe('initServerEvents', () => {
     cleanupServerEvents();
   });
 
+  /**
+   * The fixture is the shape `GET /api/servers` really returns — snake_case,
+   * with a `pid`. It used to be camelCase, and the assertion used to stop at
+   * `{ type: 'snapshot' }`, so between them the test passed on an empty
+   * snapshot: it could not fail for the reason it exists.
+   */
   it('hydrates from the server list so a page load sees what is already running', async () => {
-    listServers.mockResolvedValue([{ modelId: 1, port: 8080 }]);
+    listServers.mockResolvedValue([
+      { model_id: 1, model_name: 'Loaded', pid: 4242, port: 8080, started_at: 1_700_000_000 },
+    ]);
 
     const { initServerEvents, cleanupServerEvents } = await loadFresh();
     initServerEvents();
     await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalled());
 
-    expect(ingestServerEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'snapshot' }),
-    );
+    expect(ingestServerEvent).toHaveBeenCalledWith({
+      type: 'snapshot',
+      servers: [
+        {
+          modelId: '1',
+          modelName: 'Loaded',
+          status: 'running',
+          port: 8080,
+          updatedAt: 1_700_000_000_000,
+        },
+      ],
+    });
 
     cleanupServerEvents();
   });
@@ -86,15 +106,20 @@ describe('initServerEvents', () => {
    * the snapshot afterwards would resurrect a server that had just stopped.
    */
   it('drops hydration that a live event has already overtaken', async () => {
-    let deliver: ((payload: unknown) => void) | undefined;
-    subscribe.mockImplementation((_channel: string, cb: (p: unknown) => void) => {
+    // Typed on both sides deliberately. `ServerWireEvent` and `ServerInfo` are
+    // otherwise read by nothing in a checked position — the subscription hands
+    // its payload to a normalizer taking `unknown` — so corrupting either
+    // passed typecheck and the whole suite. These two fixtures are what make
+    // them load-bearing.
+    let deliver: ((payload: ServerWireEvent) => void) | undefined;
+    subscribe.mockImplementation((_channel: string, cb: (p: ServerWireEvent) => void) => {
       deliver = cb;
       return () => {};
     });
 
-    let resolveList: (v: unknown[]) => void = () => {};
+    let resolveList: (v: ServerInfo[]) => void = () => {};
     listServers.mockReturnValue(
-      new Promise<unknown[]>((resolve) => {
+      new Promise<ServerInfo[]>((resolve) => {
         resolveList = resolve;
       }),
     );
@@ -102,8 +127,12 @@ describe('initServerEvents', () => {
     const { initServerEvents, cleanupServerEvents } = await loadFresh();
     initServerEvents();
 
-    deliver?.({ type: 'server_stopped', modelId: 1, port: 8080 });
-    resolveList([{ modelId: 1, port: 8080 }]);
+    // `server_stopped` carries no port — the Rust variant has `modelId` and
+    // `modelName` only.
+    deliver?.({ type: 'server_stopped', modelId: 1, modelName: 'Loaded' });
+    resolveList([
+      { model_id: 1, model_name: 'Loaded', pid: null, port: 8080, started_at: 1_700_000_000 },
+    ]);
     await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalled());
 
     expect(ingestServerEvent).toHaveBeenCalledTimes(1);

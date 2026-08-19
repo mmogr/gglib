@@ -5,7 +5,9 @@ import '@testing-library/jest-dom';
 
 import { InferenceProfiles } from '../../../src/components/SettingsModal/InferenceProfiles';
 import { profileNameError } from '../../../src/components/SettingsModal/InferenceProfileEditor';
-import type { AppSettings, InferenceProfile } from '../../../src/types';
+import type { AppSettings, InferenceProfile, SparseInferenceProfile } from '../../../src/types';
+import { resolvedConfig } from '../fixtures/inference';
+import { appSettings } from '../fixtures/settings';
 
 const getSettings = vi.fn();
 const updateSettings = vi.fn();
@@ -19,22 +21,26 @@ function coding(overrides: Partial<InferenceProfile> = {}): InferenceProfile {
   return {
     name: 'coding',
     description: 'Low-variance sampling',
-    config: { temperature: 0.2, topP: 0.9 },
+    config: resolvedConfig({ temperature: 0.2, topP: 0.9 }),
     listInModels: false,
     ...overrides,
   };
 }
 
 function settings(profiles: InferenceProfile[]): AppSettings {
-  return { inferenceProfiles: profiles };
+  return appSettings({ inferenceProfiles: profiles });
 }
 
 beforeEach(() => {
   getSettings.mockReset();
   updateSettings.mockReset();
   getSettings.mockResolvedValue(settings([coding()]));
-  updateSettings.mockImplementation((req: { inferenceProfiles: InferenceProfile[] }) =>
-    Promise.resolve(settings(req.inferenceProfiles)),
+  // The backend stores a resolved profile, so the echo fills the config out
+  // the way a real save does rather than handing the sparse request back.
+  updateSettings.mockImplementation((req: { inferenceProfiles: SparseInferenceProfile[] }) =>
+    Promise.resolve(
+      settings(req.inferenceProfiles.map((p) => ({ ...p, config: resolvedConfig(p.config) }))),
+    ),
   );
 });
 
@@ -96,7 +102,7 @@ describe('InferenceProfiles', () => {
 
     await waitFor(() => expect(updateSettings).toHaveBeenCalled());
     const sent = updateSettings.mock.calls[0][0].inferenceProfiles;
-    expect(sent.map((p: InferenceProfile) => p.name)).toEqual(['chat']);
+    expect(sent.map((p: SparseInferenceProfile) => p.name)).toEqual(['chat']);
   });
 
   /**
@@ -113,6 +119,53 @@ describe('InferenceProfiles', () => {
     await user.click(screen.getByRole('button', { name: /delete/i }));
 
     expect(await screen.findByText(/invalid inference profile/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The edit path had no coverage at all, which is how the editor came to
+   * drop seven of `InferenceConfig`'s eighteen fields on save: it rebuilt the
+   * config from an eleven-name list, so anything set out of band — by
+   * `gglib config profile set`, which accepts all seventeen the CLI exposes —
+   * was gone the first time somebody opened the form and pressed Save.
+   */
+  it('keeps parameters its own form did not used to offer', async () => {
+    const user = userEvent.setup();
+    getSettings.mockResolvedValue(
+      settings([
+        coding({
+          config: resolvedConfig({
+            temperature: 0.2,
+            topNSigma: 3,
+            frequencyPenalty: 0.1,
+            dynatempRange: 0.5,
+            reasoningBudgetTokens: 8192,
+            reasoningEffort: 'high',
+          }),
+        }),
+      ]),
+    );
+
+    render(<InferenceProfiles />);
+    await screen.findByText('coding');
+    await user.click(screen.getByRole('button', { name: /^edit$/i }));
+
+    // Change only the description, the way somebody tidying a profile would.
+    const description = await screen.findByLabelText(/description/i);
+    await user.clear(description);
+    await user.type(description, 'tidied');
+    await user.click(screen.getByRole('button', { name: /save profile/i }));
+
+    const saved = updateSettings.mock.calls[0][0].inferenceProfiles[0];
+    expect(saved.config).toMatchObject({
+      temperature: 0.2,
+      topNSigma: 3,
+      frequencyPenalty: 0.1,
+      dynatempRange: 0.5,
+      reasoningBudgetTokens: 8192,
+      reasoningEffort: 'high',
+    });
+    // And `seed` still does not appear, which is the one deliberate omission.
+    expect(saved.config).not.toHaveProperty('seed');
   });
 });
 

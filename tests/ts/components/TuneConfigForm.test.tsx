@@ -22,15 +22,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { TuneConfigForm } from '../../../src/components/Benchmark/Tune/TuneConfigForm';
-import type { GgufModel } from '../../../src/types';
+import { guiModel } from '../fixtures/model';
 
-const model: GgufModel = {
-  id: 1,
+const model = guiModel({
   name: 'Qwen3-8B',
   filePath: '/models/Qwen3-8B-Q4_K_M.gguf',
   paramCountB: 8,
   addedAt: '2026-01-01T00:00:00Z',
-};
+});
 
 describe('TuneConfigForm', () => {
   it('omits weights from the submitted config', () => {

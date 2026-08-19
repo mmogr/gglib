@@ -21,28 +21,13 @@ import type {
   ActiveConnectionSnapshot,
   DashboardSnapshot,
 } from '../../../src/services/transport/types/dashboard';
+import { activeConnection, dashboardSnapshot, slotSnapshot } from '../fixtures/dashboard';
 
-function connection(overrides: Partial<ActiveConnectionSnapshot> = {}): ActiveConnectionSnapshot {
-  return {
-    id: 'c1',
-    model_name: 'qwen3-coder',
-    started_at_secs: 0,
-    is_streaming: true,
-    phase: 'generating',
-    ...overrides,
-  };
-}
+const connection = (overrides: Partial<ActiveConnectionSnapshot> = {}): ActiveConnectionSnapshot =>
+  activeConnection({ id: 'c1', model_name: 'qwen3-coder', is_streaming: true, ...overrides });
 
-function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot {
-  return {
-    active_connections: [],
-    slots: [],
-    slots_available: false,
-    slots_status: 'Slot metrics unavailable.',
-    total_requests: 0,
-    ...overrides,
-  } as DashboardSnapshot;
-}
+const snapshot = (overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot =>
+  dashboardSnapshot(overrides);
 
 describe('ProxyStatusPill', () => {
   it('reads Running when the proxy is up', () => {
@@ -190,9 +175,14 @@ describe('InferenceSlotsSection', () => {
       <InferenceSlotsSection
         snapshot={snapshot({
           slots_available: true,
+          // `dashboard.rs` derives both from one match: `Available` gives
+          // `true` with no status line, and either unavailable arm gives
+          // `false` with one. Setting only the flag builds a frame the proxy
+          // cannot send.
+          slots_status: null,
           slots: [
-            { id: 0, is_processing: true, n_ctx: 4096 },
-            { id: 1, is_processing: false, n_ctx: 4096 },
+            slotSnapshot({ id: 0, is_processing: true, n_ctx: 4096 }),
+            slotSnapshot({ id: 1, is_processing: false, n_ctx: 4096 }),
           ],
         })}
       />,

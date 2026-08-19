@@ -70,6 +70,14 @@ Inline arbitrary values like `bg-[rgba(239,68,68,0.15)]` or `text-[#ef4444]` are
 
 **Tailwind is the default for layout and component composition.**
 
+The CSS-module half of this section is a standing permission rather than a
+description: `find src -name '*.module.css'` returns nothing, and has for some
+time. The three plain stylesheets that do exist (`ConsoleLogPanel`,
+`InferenceParametersForm`, `RangeSlider`) sit beside their components and are
+imported directly. Kept because the rule still decides what to do when a
+component genuinely needs scoped CSS — but nothing in the tree exercises it, so
+do not read the examples below as a survey of what is here.
+
 ### When to Use Tailwind
 
 ✅ **Default choice for:**
@@ -167,7 +175,7 @@ Inline arbitrary values like `bg-[rgba(239,68,68,0.15)]` or `text-[#ef4444]` are
 │       Platform Adapter Interface               │
 │        (src/services/platform)                 │
 │                                                │
-│  • Platform detection (isTauri, isWeb)         │
+│  • Platform detection (isDesktop)              │
 │  • File dialogs                                │
 │  • Native menus                                │
 │  • External URL opening                        │
@@ -204,27 +212,30 @@ All platform-specific implementations must live in:
 
 **`src/services/platform/`**
 
-Example files:
+The files there:
 - `detect.ts` - Platform detection utilities
 - `fileDialogs.ts` - Native file picker (Tauri) vs HTML input (Web)
-- `llamaBinary.ts` - llama.cpp binary management (Tauri only)
-- `menu.ts` - Native menu integration (Tauri only)
+- `llamaInstall.ts` - llama.cpp install and build management
+- `menuEvents.ts` / `menuSync.ts` - Native menu integration
 - `openUrl.ts` - External URL opening
-- `serverLogs.ts` - Log streaming (Tauri events vs SSE)
+- `serverLogs.ts` - Log streaming
+- `logging/` - The app logger
+- `index.ts` - The barrel every consumer imports from
 
 ### TRANSPORT_EXCEPTION Marker
 
-Use `// TRANSPORT_EXCEPTION` comments to mark code where platform-specific behavior is unavoidable:
+Use `// TRANSPORT_EXCEPTION` comments to mark the few places where
+platform-specific behaviour is unavoidable — the marker exists so those places
+are enumerable, and `scripts/check_transport_branching.sh` fails on an
+unmarked one.
 
-```typescript
-// TRANSPORT_EXCEPTION: Tauri uses native events, Web uses SSE
-if (isTauri()) {
-  await listen('llama-stdout', handleLog);
-} else {
-  const eventSource = new EventSource('/api/logs');
-  eventSource.onmessage = handleLog;
-}
-```
+Note what this is *not* for. The transport itself does not branch: the GUI
+talks HTTP to the daemon in both builds, and the `if (isTauri())` fork that
+used to pick between a Tauri event and an `EventSource` is gone — see the
+header of `src/services/serverEvents.ts`. A new `isTauri()` branch around a
+data path is the thing the check was written to catch, not an example to
+follow. What legitimately carries the marker is genuine OS integration: a
+native file dialog, a menu, opening a URL in the system browser.
 
 ### Testing Platform Parity
 
@@ -305,7 +316,6 @@ src/
 │   │   ├── Icon.tsx
 │   │   └── Modal.tsx
 │   ├── AddModel.tsx           # Feature components
-│   ├── AddModel.module.css    # Collocated CSS Module (if needed)
 │   └── Header.tsx
 ├── pages/                     # Route/page components
 ├── contexts/                  # React contexts
@@ -316,16 +326,17 @@ src/
 ├── styles/
 │   ├── base/
 │   │   ├── variables.css      # Design tokens (source of truth)
-│   │   ├── reset.css
-│   │   └── typography.css
-│   ├── components/            # Global component CSS (legacy, will be deleted)
-│   │   ├── buttons.css        # ❌ Delete in Phase 1
-│   │   ├── forms.css          # ❌ Delete in Phase 2
-│   │   └── modals.css         # ✅ Used by Modal.tsx (Phase 2 migration)
-│   ├── tailwind.css           # Tailwind v4 configuration
-│   └── main.css               # Global application styles
+│   │   └── hljs.css           # Syntax highlighting theme
+│   └── tailwind.css           # Tailwind v4 configuration
 └── types/                     # TypeScript types
 ```
+
+`src/styles/` really is those three files. The `reset.css`, `typography.css`
+and `main.css` this section used to list, and the whole `components/`
+directory with them, were deleted by the phases below — `tailwind.css` notes
+where the reset went. The three `.css` files left outside `styles/` are plain
+stylesheets collocated with the components that import them
+(`ConsoleLogPanel`, `InferenceParametersForm`, `RangeSlider`).
 
 ### Import Conventions
 
@@ -343,10 +354,10 @@ import { Plus, Check, X } from 'lucide-react';
 // Platform adapters
 import { isTauri } from '../services/platform/detect';
 import { openFileDialog } from '../services/platform/fileDialogs';
-
-// Styles
-import styles from './Component.module.css';
 ```
+
+There is no CSS-module import line, because the repo has no `*.module.css`.
+See §2 — the policy permits them; nothing has needed one.
 
 ---
 
@@ -355,18 +366,16 @@ import styles from './Component.module.css';
 | Phase | Focus | Status | Issue |
 |-------|-------|--------|-------|
 | **Phase 0** | Contracts, token fixes, platform parity docs | ✅ Complete | [#14](https://github.com/mmogr/gglib/issues/14) |
-| **Phase 1** | Button + Icon primitives migration, delete `buttons.css` | 🔄 Blocked | [#16](https://github.com/mmogr/gglib/issues/16) |
-| **Phase 2** | Input/Form primitives migration, delete `forms.css` | 🔄 Blocked | [#13](https://github.com/mmogr/gglib/issues/13) |
-| **Phase 3** | Layout primitives, decompose god components | 🔄 Blocked | [#18](https://github.com/mmogr/gglib/issues/18) |
-| **Phase 4** | Token hygiene, no raw hex colors | 🔄 Blocked | [#15](https://github.com/mmogr/gglib/issues/15) |
-| **Phase 5** | Final cleanup, add guardrails, parity smoke tests | 🔄 Blocked | [#17](https://github.com/mmogr/gglib/issues/17) |
+| **Phase 1** | Button + Icon primitives migration, delete `buttons.css` | ✅ Complete | [#16](https://github.com/mmogr/gglib/issues/16) |
+| **Phase 2** | Input/Form primitives migration, delete `forms.css` | ✅ Complete | [#13](https://github.com/mmogr/gglib/issues/13) |
+| **Phase 3** | Layout primitives, decompose god components | ✅ Complete | [#18](https://github.com/mmogr/gglib/issues/18) |
+| **Phase 4** | Token hygiene, no raw hex colors | ✅ Complete | [#15](https://github.com/mmogr/gglib/issues/15) |
+| **Phase 5** | Final cleanup, add guardrails, parity smoke tests | ✅ Complete | [#17](https://github.com/mmogr/gglib/issues/17) |
 
-**Dependency order:**
-- Phase 0 unblocks all phases
-- Phase 1 blocks Phase 2
-- Phases 1-2 unblock Phase 3
-- Phase 4 runs alongside Phases 1-3
-- Phase 5 is final (cleanup and enforcement)
+Every phase has landed. The status column said "🔄 Blocked" for all five long
+after `buttons.css`, `forms.css` and `modals.css` were gone and §1 and §3 had
+been rewritten around their absence — the roadmap outlived the work it
+described, which is the failure this table is kept short to avoid.
 
 ---
 
@@ -377,14 +386,38 @@ import styles from './Component.module.css';
 - **Code review checklist**: PR reviewers verify compliance with contracts
 - **Self-check before commit**: Does this follow Tailwind-first? Are CSS variables used? Is platform code isolated?
 
-### Automated Enforcement (Phase 5)
+### Automated Enforcement
 
-- [x] ESLint rule: No direct `@tauri-apps/*` imports in `src/components` or `src/pages` (eslint.config.js platform-boundary block)
-- [x] ESLint rule: No raw `<button>` or native checkbox inputs outside `src/components/ui` and `src/components/primitives` (justified exceptions opt out per line)
-- [ ] ESLint rule: No raw hex colors in TSX files (use CSS variables)
-- [ ] Stylelint rule: No undefined CSS variables
-- [ ] Pre-commit hook: Run `complexity_hotspots.sh` to flag >200 LOC files
-- [ ] CI check: Verify `buttons.css` and `forms.css` deleted after Phase 2
+What `eslint.config.js` actually enforces, all as errors:
+
+- [x] No direct `@tauri-apps/*` imports in `src/components` or `src/pages`
+      (the platform-boundary block)
+- [x] No raw `<button>` or native checkbox inputs outside
+      `src/components/ui` and `src/components/primitives` — justified
+      exceptions opt out per line with a reason
+- [x] No `.btn` class names, scoped to `className` attributes so a
+      `data-testid` containing "btn" does not trip it
+- [x] **No emoji or dingbat glyphs** in JSX text or string literals. They
+      render as full-colour, double-width system glyphs beside lucide's thin
+      monochrome strokes, and cannot inherit `currentColor`. Use
+      `<Icon icon={...} />`. The ranges deliberately exclude U+2190–U+21FF
+      (← ↑ → ↓ ↵), which are legitimate in diff summaries and keyboard hints
+
+Not enforced, and deliberately so:
+
+- **Colour-role allocation** — red only for destructive, one primary per
+  screen, green as dot-not-fill — is a contract *this document* carries, and
+  `eslint.config.js` says so where the rule would otherwise go.
+  `no-restricted-syntax` carries one severity per file, and the rules above
+  are errors; a warn-level colour regex cannot coexist with them, and this
+  repo has a recorded history of className-regex false positives. **So this
+  section is the only place the colour contract exists. It cannot be deleted
+  without deleting the contract.**
+
+Still open, and unclaimed by anything:
+
+- [ ] No raw hex colours in TSX files (use CSS variables)
+- [ ] Stylelint: no undefined CSS variables
 
 ---
 

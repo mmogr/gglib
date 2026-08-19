@@ -11,12 +11,14 @@ use gglib_core::services::{UpdateCheckResult, VerificationReport};
 
 /// Response from verify endpoint.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct VerifyResponse {
     pub report: VerificationReport,
 }
 
 /// Response from check updates endpoint.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct CheckUpdatesResponse {
     pub result: UpdateCheckResult,
     pub message: String,
@@ -24,6 +26,7 @@ pub(crate) struct CheckUpdatesResponse {
 
 /// Request body for repair endpoint.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct RepairRequest {
     /// Optional list of shard indices to repair. If None, repairs all corrupt shards.
     pub shards: Option<Vec<usize>>,
@@ -31,6 +34,7 @@ pub(crate) struct RepairRequest {
 
 /// Response from repair endpoint.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct RepairResponse {
     pub message: String,
 }

@@ -11,6 +11,14 @@
 
 set -euo pipefail
 
+# Row order comes from glob expansion below, and glob expansion is sorted by
+# the collation of the current locale. macOS and the ubuntu runner disagree
+# about where `_` sorts relative to letters, so the same tree produced two
+# different row orders and `--check` could not be green on both — it passed
+# locally and failed in CI on nineteen READMEs the moment the gate was wired
+# in. Pinned to C so the output is a function of the tree alone.
+export LC_ALL=C
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CRATES_DIR="$PROJECT_ROOT/crates"

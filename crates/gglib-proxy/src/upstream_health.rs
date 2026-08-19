@@ -80,10 +80,12 @@ pub enum StreamVerdict {
 /// Surfaced in the proxy dashboard so the degradation this crate guards
 /// against is diagnosable at a glance instead of only in logs.
 #[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct UpstreamHealthSnapshot {
     /// Current consecutive-strike streak (resets on any healthy response).
     pub consecutive_strikes: u32,
     /// Total empty responses observed since the proxy started.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_empty_responses: u64,
     /// Total turns that died upstream mid-generation since the proxy started.
     ///
@@ -91,8 +93,10 @@ pub struct UpstreamHealthSnapshot {
     /// different illnesses: an empty turn is a model that produced nothing, a
     /// stream error is a model server that fell over. Both strike, but folding
     /// them together would report a crashing server as a quiet one.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_upstream_errors: u64,
     /// Total first-byte deadline expiries since the proxy started.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_first_byte_timeouts: u64,
     /// Total client disconnects that ended a turn before any output, since the
     /// proxy started.
@@ -100,8 +104,10 @@ pub struct UpstreamHealthSnapshot {
     /// Recorded for observability only — these deliberately do not strike. A
     /// rising count next to a flat strike count is the signal that people are
     /// cancelling, not that the upstream is sick.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_client_aborts: u64,
     /// Total proactive recycles triggered since the proxy started.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_recycles: u64,
     /// Of those, how many could not actually be carried out because stopping
     /// the model server failed.
@@ -109,6 +115,7 @@ pub struct UpstreamHealthSnapshot {
     /// A non-zero value here means the watchdog is firing and being ignored —
     /// a different problem from a healthy upstream, and one that is otherwise
     /// invisible because the request that triggered it proceeds regardless.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_recycle_failures: u64,
 }
 

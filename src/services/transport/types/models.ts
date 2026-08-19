@@ -65,7 +65,7 @@ export interface UpdateModelParams {
   name?: string;
   quantization?: string;
   filePath?: string;
-  inferenceDefaults?: import('../../../types').InferenceConfig;
+  inferenceDefaults?: import('../../../types').SparseInferenceConfig;
   serverDefaults?: import('../../../types').ServerConfig | null;
 }
 

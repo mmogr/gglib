@@ -27,6 +27,8 @@
 //! iteration via `tokio::select!`, identical to `compare.rs`.  The `llama-bench`
 //! child process is not killed on cancellation — the current model finishes,
 //! and the *next* model check is where cancellation is honoured.
+//!
+//! [`ModelRuntimePort`]: gglib_core::ports::ModelRuntimePort
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;

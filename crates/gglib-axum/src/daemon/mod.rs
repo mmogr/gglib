@@ -90,7 +90,7 @@ pub(crate) fn discover_static_dir() -> Option<PathBuf> {
 /// 1. Take the machine-wide [`DaemonLock`] — refusing with the running
 ///    daemon's pid/address if there is one.
 /// 2. Sweep orphaned llama-server pidfiles left by a crashed daemon.
-/// 3. [`bootstrap`](crate::bootstrap::bootstrap) the one `AxumContext` —
+/// 3. [`bootstrap`] the one `AxumContext` —
 ///    and with it the one `ProcessManager` on this machine.
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
 ///    non-loopback binds — then bind `{host}:{DAEMON_PORT}` and serve the

@@ -25,7 +25,16 @@
  * half is capability-gated in the UI.
  */
 
-/** Every level, weakest first. The order is the ladder's, not alphabetical. */
+import type { ReasoningEffort } from '../types/generated/ReasoningEffort';
+
+/**
+ * Every level, weakest first. The order is the ladder's, not alphabetical, and
+ * it is load-bearing: this array *is* the dropdown order.
+ *
+ * `satisfies` rather than a type annotation, so the literal tuple survives and
+ * `ReasoningEffortLevel` stays a union of the six rather than widening to
+ * `ReasoningEffort`. It catches a level invented here that Rust does not have.
+ */
 export const REASONING_EFFORT_LEVELS = [
   'minimal',
   'low',
@@ -33,7 +42,26 @@ export const REASONING_EFFORT_LEVELS = [
   'high',
   'xhigh',
   'max',
-] as const;
+] as const satisfies readonly ReasoningEffort[];
 
 /** One rung of {@link REASONING_EFFORT_LEVELS}. */
 export type ReasoningEffortLevel = (typeof REASONING_EFFORT_LEVELS)[number];
+
+/**
+ * The other direction: a rung Rust gained that this array has not.
+ *
+ * `satisfies` above cannot see that — an array of six valid levels satisfies
+ * `readonly ReasoningEffort[]` whether or not a seventh exists. Without this,
+ * a new Rust variant reaches the wire and the control silently never offers
+ * it, which is the same shape of silence the model-event lane sat in.
+ *
+ * Written as a *constraint* rather than a conditional. `T extends Unlisted ?
+ * never : T` over a naked parameter distributes, and distribution over `never`
+ * yields `never`, so the conditional form passes whatever it is given.
+ * Exported because `noUnusedLocals` is on and an unused type alias is not
+ * exempt.
+ */
+type AssertNoUnlistedLevels<T extends never> = T;
+export type ReasoningLadderIsComplete = AssertNoUnlistedLevels<
+  Exclude<ReasoningEffort, ReasoningEffortLevel>
+>;

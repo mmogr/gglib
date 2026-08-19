@@ -31,5 +31,6 @@ stream a browser tab does.
 |------|------|
 | `index.ts` | Factory; returns the SSE event bus |
 | `sse.ts` | Single SSE connection with reconnect, backoff, and subscriber demultiplexing |
+| `category.ts` | Wire-tag → category routing; a tag with no arm here is dropped silently |
 
 <!-- module-docs:end -->

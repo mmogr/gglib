@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useModels } from '../../../src/hooks/useModels';
 import { GgufModel } from '../../../src/types';
+import { guiModel } from '../fixtures/model';
 
 const transport = vi.hoisted(() => ({
   listModels: vi.fn(),
@@ -28,26 +29,23 @@ vi.mock('../../../src/services/platform', () => ({
 
 
 const mockModels: GgufModel[] = [
-  {
+  guiModel({
     id: 1,
     name: 'llama-7b',
     filePath: '/models/llama-7b.gguf',
-    paramCountB: 7.0,
     architecture: 'llama',
     quantization: 'Q4_K_M',
     contextLength: 4096,
-    addedAt: '2024-01-01T00:00:00Z',
-  },
-  {
+  }),
+  guiModel({
     id: 2,
     name: 'mistral-7b',
     filePath: '/models/mistral-7b.gguf',
-    paramCountB: 7.0,
     architecture: 'mistral',
     quantization: 'Q5_K_S',
     contextLength: 8192,
     addedAt: '2024-01-02T00:00:00Z',
-  },
+  }),
 ];
 
 describe('useModels', () => {
@@ -264,5 +262,38 @@ describe('useModels', () => {
     });
 
     expect(listModels).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Reloads used to arrive only from awaited, sequential mutation handlers.
+   * They now also arrive from library events, so two can overlap — and a slow
+   * first response landing after a fast second one would overwrite fresh
+   * state with stale. Nothing would correct it, because no further event is
+   * coming.
+   */
+  it('ignores a stale response that lands after a newer one', async () => {
+    const stale: GgufModel[] = [mockModels[0]];
+    const fresh: GgufModel[] = mockModels;
+
+    let releaseStale: (v: GgufModel[]) => void = () => {};
+    const stalePending = new Promise<GgufModel[]>((resolve) => {
+      releaseStale = resolve;
+    });
+
+    // First call hangs; second resolves immediately with the newer truth.
+    vi.mocked(listModels)
+      .mockReturnValueOnce(stalePending)
+      .mockResolvedValueOnce(fresh);
+
+    const { result } = renderHook(() => useModels());
+
+    await act(async () => {
+      const first = result.current.loadModels();
+      const second = result.current.loadModels();
+      releaseStale(stale);
+      await Promise.all([first, second]);
+    });
+
+    expect(result.current.models).toEqual(fresh);
   });
 });

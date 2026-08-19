@@ -13,10 +13,15 @@ default = []
 # They link the crate as an external consumer, so `#[cfg(test)]` does not
 # reach them — mirrors `gglib-db`'s `test-utils`.
 test-support = []
+# Emit TypeScript for the dashboard/audit records the GUI reads. Optional
+# dependency, so the default graph is unchanged and
+# `#![deny(unused_crate_dependencies)]` stays satisfied with the feature off.
+ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
 
 [dependencies]
 # Core domain types and ports (NO runtime, NO sqlx)
 gglib-core = { path = "../gglib-core" }
+ts-rs = { workspace = true, optional = true }
 
 # MCP service for tool gateway
 gglib-mcp = { path = "../gglib-mcp" }
@@ -92,6 +97,11 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tempfile = { workspace = true }
 serde_json = "1.0"
+
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
 
 [lints.rust]
 # This crate had no `[lints]` section, so it inherited and enforced nothing.

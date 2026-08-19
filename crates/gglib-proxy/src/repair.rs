@@ -31,13 +31,12 @@
 //! repair pass. It was removed because the case never arose — the repair path
 //! does not call `apply`, so every caller passed `Initial` and the other
 //! branch was unreachable. The hazard is real but structural, and is pinned
-//! by [`the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`]
-//! rather than by a flag nobody sets.
+//! by this module's `the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`
+//! test rather than by a flag nobody sets.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
 //! [`docs/tool-call-repair.md`]: https://github.com/mmogr/gglib/blob/main/docs/tool-call-repair.md
-//! [`the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`]: tests::the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it
 
 use bytes::Bytes;
 use gglib_core::LlmStreamEvent;

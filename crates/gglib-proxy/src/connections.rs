@@ -31,7 +31,7 @@
 //! ## It also carries the admission lease
 //!
 //! [`ConnectionGuard::holding`] attaches the
-//! [`AdmissionLease`](gglib_core::ports::AdmissionLease) the runtime issued
+//! [`AdmissionLease`] the runtime issued
 //! when it admitted this request. The two want identical lifetimes — both must
 //! survive until the response is finished, including across the streaming
 //! path's spawned task — and this guard already travels everywhere that
@@ -46,7 +46,7 @@
 //! ## And the sampling intent
 //!
 //! [`ConnectionGuard::record_sampling`] attaches the
-//! [`SamplingDecision`](gglib_core::request_pipeline::SamplingDecision) the
+//! [`SamplingDecision`] the
 //! request pipeline resolved for this request, for the same reason and by the
 //! same argument as the lease: identical lifetime, guard already travels it.
 //!
@@ -64,8 +64,8 @@
 //! parameters differed would force the audit to abstain (see
 //! [`crate::sampling_audit::compare_poll`]) while nothing was actually
 //! ambiguous. Model-change invalidation falls out for free too:
-//! [`Self::in_flight_sampling`] filters by model name, so a swap needs no
-//! explicit clearing step.
+//! [`ActiveConnectionsRegistry::in_flight_sampling`] filters by model name, so
+//! a swap needs no explicit clearing step.
 //!
 //! ## Concurrency design
 //!
@@ -89,6 +89,7 @@ use uuid::Uuid;
 
 /// Lifecycle phase of an active connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionPhase {
     /// Registered; waiting for llama.cpp to assign a slot and begin prefill.
@@ -106,16 +107,24 @@ pub enum ConnectionPhase {
 
 /// Point-in-time, serializable view of one active connection.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ActiveConnectionSnapshot {
     /// Unique id assigned at registration.
+    ///
+    /// A `uuid::Uuid`, which serializes as its hyphenated string form; ts-rs
+    /// has no `uuid` impl enabled in this workspace, so the substitute names
+    /// the wire shape rather than the Rust type.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     pub id: Uuid,
     /// Name of the model serving this connection.
     pub model_name: String,
     /// Unix timestamp (seconds since epoch) when the connection was registered.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub started_at_secs: u64,
     /// `true` for a streaming (SSE) request, `false` for non-streaming.
     pub is_streaming: bool,
     /// Effective context size in use, when known.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub num_ctx: Option<u64>,
     /// Current lifecycle phase.
     pub phase: ConnectionPhase,
@@ -126,6 +135,7 @@ pub struct ActiveConnectionSnapshot {
     /// Tokens served from the KV cache, from the most recent progress frame.
     pub prompt_cached: Option<u32>,
     /// Wall-clock milliseconds elapsed, from the most recent progress frame.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub prompt_time_ms: Option<u64>,
 }
 

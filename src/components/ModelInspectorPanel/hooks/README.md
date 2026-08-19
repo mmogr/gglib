@@ -16,6 +16,8 @@ Custom hooks encapsulating stateful logic for the model inspector panel.
 | `useServeModal.ts` | Serve modal open/close state and all serve option values |
 | `useDeleteModal.ts` | Delete confirmation modal state |
 | `useServerActions.ts` | Orchestrates `serveModel()` / `stopServer()` calls with error boundaries |
+| `useInspectorModals.ts` | Modal state the panel opens reactively, chiefly the llama-server install prompt after a failed start |
+| `useSamplingExplanation.ts` | Fetches the resolved sampling explanation for the selected model |
 | `useRetagModel.ts` | Re-derives capability tags from the GGUF: confirm on a destructive rebuild, then toast and reload |
 
 <!-- module-docs:end -->
