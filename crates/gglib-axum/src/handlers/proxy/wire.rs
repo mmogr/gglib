@@ -55,7 +55,7 @@ pub(crate) struct StartProxyConfig {
     #[serde(default)]
     pub cache_disk_gb: Option<u64>,
     /// Operator sampling overrides applied above the client's own request
-    /// parameters (`gglib proxy --temperature …`).
+    /// parameters (`gglib proxy --temperature …`, `gglib serve --temperature …`).
     #[serde(default)]
     pub inference_override: Option<gglib_core::domain::InferenceConfig>,
     /// Bearer token demanded on `/v1/*` (`--api-key`). Omitted falls through

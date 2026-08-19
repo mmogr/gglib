@@ -36,6 +36,14 @@ pub struct ProxyGlobals {
     pub slot_dir: Option<PathBuf>,
     pub api_key: Option<String>,
     pub allowed_hosts: Vec<String>,
+    /// Sampling the operator stated on the command line, applied above every
+    /// client's own request parameters.
+    ///
+    /// Reaches `SamplingLayers::cli_override` through the proxy config. It is
+    /// deliberately *not* a launch flag: gglib emits no sampler flags at all
+    /// (`llama::args::sampling::sampler_flags` is empty, per ADR 0003/0004),
+    /// so a value that does not travel this way does not reach llama.cpp.
+    pub inference_override: Option<InferenceConfig>,
 }
 
 /// Everything a pinned start needs, resolved once.
@@ -96,6 +104,7 @@ pub fn plan_pinned_launch(
         slot_dir: globals.slot_dir,
         api_key: globals.api_key,
         allowed_hosts: globals.allowed_hosts,
+        inference_override: globals.inference_override,
         ..Default::default()
     };
     if let Some(host) = globals.host {

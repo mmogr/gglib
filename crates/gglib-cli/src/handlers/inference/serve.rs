@@ -69,7 +69,7 @@ pub(crate) async fn execute(
             reasoning_format: None,
             mtp_draft_n_max: mtp.mtp_draft_n_max,
             mtp_draft_p_min: mtp.mtp_draft_p_min,
-            inference_params: Some(sampling.into_inference_config()),
+            inference_params: Some(sampling.clone().into_inference_config()),
             mlock: context.mlock,
         },
         ProxyGlobals {
@@ -83,9 +83,19 @@ pub(crate) async fn execute(
             slot_dir: cache.slot_dir.clone(),
             api_key: access.api_key.clone(),
             allowed_hosts: access.allowed_hosts.clone(),
+            // The live path. gglib emits no sampler flags to llama-server
+            // (ADR 0003/0004), so a value that does not travel as a
+            // proxy-wide override does not reach the model at all — which is
+            // exactly what used to happen to every `serve` sampling flag.
+            inference_override: sampling.clone().into_override(),
         },
     );
-    let inference_config = plan.inference.clone();
+    // Only what was passed, not the full resolution. The resolution printed
+    // here is the five-rung stored ladder; what a request actually gets is the
+    // proxy's six-rung one, which additionally has the client's own rung and
+    // the agentic ceiling above it. Printing the former as if it were the
+    // latter states values no request is guaranteed to see.
+    let stated_sampling = sampling.into_override();
     let mtp_args = plan.mtp.clone();
     let effective_ctx = plan.effective_ctx;
 
@@ -94,7 +104,10 @@ pub(crate) async fn execute(
     eprintln!("  File: {}", model.file_path.display());
     eprintln!("  Context size: {} (resolved)", effective_ctx);
     log_mlock_info(context.mlock);
-    log_inference_info(&inference_config);
+    if let Some(ref stated) = stated_sampling {
+        log_inference_info(stated);
+        warn_client_budgets_are_capped(stated);
+    }
     if options.jinja {
         eprintln!("  Jinja templates: enabled");
     }
@@ -127,12 +140,15 @@ pub(crate) async fn execute(
             // has already had the `cache_enabled` master switch applied and
             // the default directory filled in.
             slot_dir: proxy_config.slot_dir,
-            // Sampling rides the pinned model's launch options rather than a
-            // proxy-wide override, so it lands on the llama-server command
-            // line exactly as every other launch surface applies it.
             pinned: Some(plan.pinned),
             cache_disk_gb: cache.cache_disk_gb,
-            inference_override: None,
+            // Sampling rides the proxy-wide override, not the pinned model's
+            // launch options. The comment that used to stand here claimed the
+            // opposite and was wrong in a way nothing caught: the launch
+            // options write to `ServerConfig::inference_config`, which is
+            // documented as read by nobody, so every `serve` sampling flag was
+            // resolved, printed, and discarded.
+            inference_override: proxy_config.inference_override.clone(),
             api_key: proxy_config.api_key,
             allowed_hosts: proxy_config.allowed_hosts,
         })
@@ -145,3 +161,35 @@ pub(crate) async fn execute(
 #[cfg(test)]
 #[path = "serve_tests.rs"]
 mod serve_tests;
+
+/// Say so when a `serve` flag will override a client's own token budget.
+///
+/// `max_tokens` and `reasoning_budget_tokens` are the two values gglib lets an
+/// untrusted client keep — the trust gate drops everything else it sends but
+/// deliberately honours its budgets, because a budget states what the *client*
+/// can afford rather than how the model should sample. An operator flag rides
+/// the rung above, so naming either one here silently caps every client on
+/// this endpoint, including the BYOK clients `serve` exists for.
+///
+/// Not a refusal: it is the operator's server and `cli_override` is exactly
+/// the rung that says so. But it is a consequence worth stating to the person
+/// who chose it, and unlike the coupling rule this needs no resolution
+/// preview — it reads only which flags were typed, so it cannot be wrong.
+fn warn_client_budgets_are_capped(stated: &gglib_core::domain::InferenceConfig) {
+    let capped: Vec<&str> = [
+        stated.max_tokens.map(|_| "--max-tokens"),
+        stated
+            .reasoning_budget_tokens
+            .map(|_| "--reasoning-budget-tokens"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    if !capped.is_empty() {
+        eprintln!(
+            "  Note: {} overrides each client's own budget on this endpoint.",
+            capped.join(" and ")
+        );
+    }
+}

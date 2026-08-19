@@ -104,8 +104,8 @@ pub struct ProxyConfig {
     /// Byte budget for the on-disk slot cache eviction sweep. Only consulted
     /// when `cache_enabled` is `true`.
     pub disk_budget: DiskBudget,
-    /// Operator overrides supplied on this process's command line
-    /// (`gglib proxy --temperature …`), applied above the client's own request
+    /// Operator overrides from the command line (`gglib proxy`/`serve
+    /// --temperature …`), applied above the client's own request
     /// parameters. `None` means the client and the stored layers decide.
     pub inference_override: Option<InferenceConfig>,
     /// Bearer token demanded on `/v1/*` and `/mcp`, as supplied by `--api-key`

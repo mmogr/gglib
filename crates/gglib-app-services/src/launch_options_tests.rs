@@ -184,3 +184,44 @@ fn default_globals_bind_loopback() {
     );
     assert_eq!(plan.unified.to_proxy_config().host, "127.0.0.1");
 }
+
+/// The pin's `inference_params` are written to `ServerConfig::inference_config`,
+/// which is read by nobody — gglib emits no sampler flags to llama-server at
+/// all (ADR 0003/0004). So sampling only reaches a request if it travels as
+/// the proxy-wide override, and this pins that it does.
+#[test]
+fn stated_sampling_reaches_the_proxy_override() {
+    let plan = plan_pinned_launch(
+        &model(),
+        &Settings::default(),
+        &request(),
+        ProxyGlobals {
+            inference_override: Some(InferenceConfig {
+                temperature: Some(0.2),
+                ..Default::default()
+            }),
+            ..ProxyGlobals::default()
+        },
+    );
+
+    let override_ = plan
+        .unified
+        .to_proxy_config()
+        .inference_override
+        .expect("the operator's sampling must survive the cascade");
+    assert_eq!(override_.temperature, Some(0.2));
+}
+
+/// The regression this arc exists for: with no override supplied, nothing is
+/// invented. Guards against a later change that defaults the rung to the
+/// resolved ladder and thereby outranks every client on the endpoint.
+#[test]
+fn no_stated_sampling_leaves_the_override_empty() {
+    let plan = plan_pinned_launch(
+        &model(),
+        &Settings::default(),
+        &request(),
+        ProxyGlobals::default(),
+    );
+    assert!(plan.unified.to_proxy_config().inference_override.is_none());
+}
