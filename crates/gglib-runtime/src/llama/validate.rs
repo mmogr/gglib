@@ -118,6 +118,9 @@ pub async fn handle_status() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // `tempdir` is used by the always-compiled tests; `fs` only by the
+    // `#[cfg(unix)]` one that sets a file's permission bits.
+    #[cfg(unix)]
     use std::fs;
     use tempfile::tempdir;
 

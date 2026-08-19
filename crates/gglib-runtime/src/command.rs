@@ -354,7 +354,13 @@ impl ServerLogSinkPort for NoopLogSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Only the two `#[cfg(unix)]` tests below write an executable stub to
+    // disk, so on Windows these read as unused — the same reason
+    // `PermissionsExt` was already gated.
+    #[cfg(unix)]
     use std::fs;
+    #[cfg(unix)]
     use tempfile::TempDir;
 
     #[cfg(unix)]

@@ -117,13 +117,16 @@ async fn kill_pid_windows(_pid: u32) -> io::Result<()> {
     ))
 }
 
-#[cfg(test)]
+// Gated on `unix` as well as `test`: every test here drives a real signal at a
+// real PID, which `kill_pid` only implements on unix — on Windows it returns
+// `ErrorKind::Unsupported`. Gating the module rather than each test is what
+// keeps the imports from reading as unused there.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use tokio::process::Command;
 
     #[tokio::test]
-    #[cfg(unix)]
     async fn kill_pid_handles_already_gone() {
         // Use a PID that's very unlikely to exist
         let result = kill_pid(999999).await;
@@ -131,7 +134,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(unix)]
     async fn kill_pid_terminates_process() {
         // Spawn a long-running process
         let mut child = Command::new("sleep")
