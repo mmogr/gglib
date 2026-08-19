@@ -99,15 +99,17 @@ describe('starter profiles mirror builtin_templates()', () => {
    * has changed: the GUI's `InferenceConfig` now carries `reasoningEffort` and
    * `reasoningBudgetTokens`, so the blocker is no longer the type.
    *
-   * It is `InferenceProfileEditor`. That form rebuilds a profile's config from
-   * its own `PARAMS` list on every save and drops every key not on it — nine
-   * of `InferenceConfig`'s fields today, both reasoning controls included. So
-   * seeding a `high` profile here would install something the first edit
-   * silently empties. Teaching the editor the two fields is what unblocks the
-   * transcription, and it is a change of its own.
+   * Nor is it `InferenceProfileEditor` any more. That form used to rebuild a
+   * profile's config from its own eleven-name `PARAMS` list and drop every
+   * key not on it — seven of `InferenceConfig`'s eighteen fields, both
+   * reasoning controls included — so seeding a `high` profile here would have
+   * installed something the first edit silently emptied. The editor now
+   * derives its list from `INFERENCE_CONFIG_KEYS` and renders the effort
+   * control, so that blocker is gone.
    *
-   * Left as a guard rather than a comment because the guard is what fails when
-   * somebody transcribes the family without noticing the editor.
+   * What remains is simply that nobody has transcribed the family. The guard
+   * stays: it is what fails when somebody does, so the pairing of effort with
+   * budget gets checked against the Rust rather than assumed.
    */
   it('defines a reasoning family the GUI does not transcribe yet', () => {
     const rungs = [...REASONING.matchAll(/\("([a-z]+)", ReasoningEffort::/g)].map((m) => m[1]);
@@ -127,10 +129,18 @@ describe('starter profiles mirror builtin_templates()', () => {
     }
   });
 
-  it('drops any config key its own PARAMS list omits, which is why', () => {
-    // The claim the comment above rests on, checked rather than asserted: the
-    // editor builds `config` by iterating PARAMS, so a key absent from that
-    // list cannot survive a save.
+  it('rebuilds a profile from a list it cannot silently shorten', () => {
+    // This used to assert the opposite — that the editor iterated a hand-kept
+    // `PARAMS` and therefore dropped everything else. That was true and it
+    // was the bug: eleven of `InferenceConfig`'s eighteen fields were listed,
+    // so `gglib config profile set --top-n-sigma 3` followed by an edit in
+    // the GUI silently emptied the field.
+    //
+    // The list is now derived from `INFERENCE_CONFIG_KEYS`, and
+    // `ProfileParamsAreComplete` fails the build if a new `InferenceConfig`
+    // field is neither a `SamplingParamKey` nor one of the two named
+    // exclusions. The type is the real guard; this checks the mechanism is
+    // still the one in place.
     const editor = readFileSync(
       // Resolved against this file, not the cwd, for the reason `rustSource`
       // states: an IDE runner invoked elsewhere would ENOENT instead of
@@ -139,8 +149,16 @@ describe('starter profiles mirror builtin_templates()', () => {
       'utf8',
     );
 
-    expect(editor).toContain('for (const { key } of PARAMS)');
-    expect(editor).not.toContain('reasoningEffort');
+    expect(editor).toContain('INFERENCE_CONFIG_KEYS.filter');
+    expect(editor).toContain('ProfileParamsAreComplete');
+    expect(editor).toContain('for (const key of PROFILE_PARAM_KEYS)');
+    // `seed` stays out, and deliberately: a profile is reused across every
+    // request that selects it, so a seed would pin them all to one output.
+    // `crates/gglib-cli/.../profiles.rs` hard-codes `seed: None` for the same
+    // reason and offers no `--seed` flag.
+    expect(editor).toContain('"seed"');
+    // The enum cannot ride the numeric loop — `Number()` would make it NaN.
+    expect(editor).toContain('config.reasoningEffort = reasoningEffort');
   });
 });
 

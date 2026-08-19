@@ -10,7 +10,7 @@
  * against a literal it constructed two lines earlier, so it could not have
  * caught drift on the Rust side at all.
  *
- * Three things are pinned here, all of which that test missed:
+ * Four things are pinned here, all of which that test missed:
  *
  *   1. **Every field, not the convenient ones.** `toStartServerRequest`
  *      returns eight keys; the old assertions named five. Vitest's `toEqual`
@@ -30,18 +30,19 @@
  *
  *   3. **No `inferenceParams` key the backend would silently drop.**
  *
- * What is deliberately *not* pinned: that the GUI sends every
- * `InferenceConfig` field. It sends 9 of 18 — `frequency_penalty`,
- * `dynatemp_*`, `top_n_sigma`, the four `dry_*` and `seed` are omitted — and
- * each is `Option`, so omitting them is well-formed.
+ *   4. **Every `InferenceConfig` field the wire accepts, forwarded.**
  *
- * Nine of those omissions are *not* well-formed as UX, which is worth writing
- * down rather than leaving as an unexplained subset: the serve modal renders
- * `InferenceParametersForm`, which offers `frequency_penalty`, the `dynatemp_*`
- * pair, `top_n_sigma` and all four `dry_*` fields — controls a user can set and
- * this mapper then drops on the floor. Only `seed` has no control. That gap
- * predates the reasoning controls and is left as it is here; the two reasoning
- * fields were added to the mapper precisely so they would not join it.
+ * That fourth one used to be the opposite. This header recorded, accurately,
+ * that the mapper sent 9 of 18 — `frequency_penalty`, `dynatemp_*`,
+ * `top_n_sigma`, the four `dry_*` and `seed` omitted — and that eight of those
+ * nine were controls the serve modal renders and this mapper then dropped on
+ * the floor, `seed` alone having no control. Each field is `Option`, so the
+ * omission was well-formed on the wire and only wrong as UX, which is why
+ * nothing failed.
+ *
+ * Both hand-kept lists are gone — the mapper's and the one in
+ * `handleStartServer` that fed it — so the gap is closed and pinned rather
+ * than described.
  *
  * Note the asymmetry, because it sets what this guard is worth: nothing on
  * this path sets `deny_unknown_fields`, so an unknown key is *ignored*, not
@@ -242,5 +243,76 @@ describe('POST /api/servers/start request body', () => {
     // `mlock` is the one non-Option field on the Rust side, so an absent
     // value is a deserialisation error rather than a default.
     expect(toStartServerRequest({ id: 1 }).mlock).toBe(false);
+  });
+
+  // `ServeConfig` extends `SparseInferenceConfig`, so a field can be `null` as
+  // well as absent. Rust reads the two identically — `InferenceConfig`'s
+  // fields are bare `Option<T>`, which serde fills with `None` either way —
+  // so the mapper must too. `!== undefined` read a null as a chosen value and
+  // built an object of nothing but nulls, which is a different spelling of
+  // the same request rather than a different request; the point is that the
+  // client should not invent a distinction the wire does not have.
+  it('treats an explicit null as unset, not as a value the user chose', () => {
+    const cleared = toStartServerRequest({
+      id: 1,
+      temperature: null,
+      topP: null,
+      topK: null,
+      maxTokens: null,
+      repeatPenalty: null,
+      presencePenalty: null,
+      minP: null,
+      reasoningEffort: null,
+      reasoningBudgetTokens: null,
+    });
+
+    expect(cleared.inferenceParams).toBeUndefined();
+  });
+
+  it('still builds the object when one real value sits among the nulls', () => {
+    const one = toStartServerRequest({ id: 1, temperature: null, topK: 40 });
+
+    expect(one.inferenceParams?.topK).toBe(40);
+  });
+
+  // `ServeConfig` was a hand-kept subset of `InferenceConfig`, and the mapper
+  // was a second hand-kept list on top of it. Both named nine of eighteen, so
+  // the other nine could be typed into a form, accepted by the endpoint, and
+  // discarded in between with nothing to say so.
+  //
+  // Asserted against the *Rust struct*, not against `INFERENCE_CONFIG_KEYS`.
+  // The mapper iterates that list, so comparing its output to it is a
+  // tautology — both sides move together and the test passes on any subset.
+  // What the wire accepts is the independent fact, and it is the one worth
+  // pinning. (The list's own completeness is a compile-time assertion,
+  // `InferenceConfigKeysAreComplete`, which is a stronger guard than a test.)
+  it('forwards every InferenceConfig field the wire accepts', () => {
+    const accepted = camelCaseWireFields(INFERENCE_RS, 'InferenceConfig');
+    expect(accepted).toContain('dryBase'); // extractor sanity check
+
+    const everything = Object.fromEntries(
+      accepted.map((key) => [key, key === 'reasoningEffort' ? 'high' : 1]),
+    ) as unknown as ServeConfig;
+
+    const sent = toStartServerRequest({ ...everything, id: 1 }).inferenceParams ?? {};
+
+    expect(Object.keys(sent).sort()).toEqual([...accepted].sort());
+  });
+
+  // The nine named, so a regression reads as a list rather than a count.
+  it.each([
+    'frequencyPenalty',
+    'dynatempRange',
+    'dynatempExponent',
+    'topNSigma',
+    'dryMultiplier',
+    'dryBase',
+    'dryAllowedLength',
+    'dryPenaltyLastN',
+    'seed',
+  ])('no longer drops %s on the way to the launch', (field) => {
+    const sent = toStartServerRequest({ id: 1, [field]: 1 }).inferenceParams;
+
+    expect(sent).toEqual({ [field]: 1 });
   });
 });

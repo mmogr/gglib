@@ -9,7 +9,7 @@ import { Modal } from '../../ui/Modal';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import { JinjaModeField } from './JinjaModeField';
 import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
-import type { GgufModel, AppSettings, InferenceConfig, TemplateSupport } from '../../../types';
+import type { GgufModel, AppSettings, SparseInferenceConfig, TemplateSupport } from '../../../types';
 import { formatParamCount } from '../../../utils/format';
 
 interface ServeModalProps {
@@ -26,7 +26,7 @@ interface ServeModalProps {
   mtpNMaxOverride: number | null;
   /** null = use default 0.75 */
   mtpPMinOverride: number | null;
-  inferenceParams: InferenceConfig | undefined;
+  inferenceParams: SparseInferenceConfig | undefined;
   /**
    * Whether this model's template reads `reasoning_effort`, from the model
    * detail. Absent reads as `unknown` — the launch this modal configures is
@@ -42,7 +42,7 @@ interface ServeModalProps {
   onJinjaReset: () => void;
   onMtpNMaxChange: (value: number | null) => void;
   onMtpPMinChange: (value: number | null) => void;
-  onInferenceParamsChange: (params: InferenceConfig) => void;
+  onInferenceParamsChange: (params: SparseInferenceConfig) => void;
   onPinProxyChange: (pin: boolean) => void;
   onClose: () => void;
   onStart: () => void;

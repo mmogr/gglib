@@ -18,7 +18,9 @@ import {
   fallbackCaption,
   type InferenceFallback,
 } from '../../../src/components/InferenceParametersForm/fallbackCaption';
-import type { DefaultsOriginName, SamplingExplanation } from '../../../src/types';
+import type { DefaultsOriginName } from '../../../src/types';
+import { resolvedConfig } from '../fixtures/inference';
+import { samplingExplanation } from '../fixtures/explain';
 
 /**
  * An explanation attributing temperature to the auto-detected rung.
@@ -34,14 +36,11 @@ const explaining = (defaultsOrigin?: DefaultsOriginName | null): InferenceFallba
   resolution: {
     isLoading: false,
     hasError: false,
-    explanation: {
-      resolved: { temperature: 1.2 },
+    explanation: samplingExplanation({
+      resolved: resolvedConfig({ temperature: 1.2 }),
       sources: [{ param: 'temperature', kind: 'layer', layer: 'modelAutoDetected' }],
-      profile: null,
-      isReasoning: false,
-      trustClientSampling: false,
-      defaultsOrigin,
-    } satisfies SamplingExplanation,
+      defaultsOrigin: defaultsOrigin ?? null,
+    }),
   },
 });
 

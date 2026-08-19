@@ -76,18 +76,17 @@ export interface ModelPerfResult {
   created_at: string;
 }
 
-export interface ModelBenchmarkSummary {
-  model_id: number;
-  best_tg_tps?: number | null;
-  best_pp_tps?: number | null;
-  latest_tg_tps?: number | null;
-  latest_pp_tps?: number | null;
-  latest_backend?: string | null;
-  perf_run_count: number;
-  compare_run_count: number;
-  last_benchmarked_at: string;
-  updated_at: string;
-}
+/**
+ * A model's cached benchmark headline — the `benchmarkSummary` on a library
+ * row and a model detail.
+ *
+ * Five fields are required nullables rather than optional keys — the four
+ * `*_tps` figures and `latest_backend`. The row is built from a query that
+ * names every column, so a model benchmarked only one way sends `null` for
+ * the other rather than omitting the key.
+ */
+import type { ModelBenchmarkSummary } from './generated/ModelBenchmarkSummary';
+export type { ModelBenchmarkSummary };
 
 // ─── Request Configs ─────────────────────────────────────────────────────────
 

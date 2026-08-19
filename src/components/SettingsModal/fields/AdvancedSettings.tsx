@@ -4,7 +4,7 @@ import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
-import type { InferenceConfig } from '../../../types';
+import type { SparseInferenceConfig } from '../../../types';
 import type { AgentGuardSettingsValues } from '../useAgentGuardSettings';
 import { Label } from '../../primitives';
 import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
@@ -20,8 +20,8 @@ interface AdvancedSettingsProps {
   setMaxToolIterationsInput: (value: string) => void;
   titlePromptInput: string;
   setTitlePromptInput: (value: string) => void;
-  inferenceDefaultsInput: InferenceConfig | undefined;
-  setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
+  inferenceDefaultsInput: SparseInferenceConfig | undefined;
+  setInferenceDefaultsInput: (value: SparseInferenceConfig | undefined) => void;
   trustClientSampling: boolean;
   setTrustClientSampling: (value: boolean) => void;
   proxyLoopDetection: boolean;
@@ -157,20 +157,6 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           capped to 0.3 — but only over a value nobody deliberately chose, and never
           on a reasoning-tagged model, whose thinking block shares one sampler with
           its tool call. Anything set by a person stands.
-        </ToggleField>
-
-        <ToggleField
-          id="tool-call-repair-input"
-          label="Tool call repair"
-          checked={agentGuards.toolCallRepair}
-          onChange={(value) => setAgentGuardSetting('toolCallRepair', value)}
-          disabled={saving}
-        >
-          On by default: a tool call that fails its schema is re-issued once with
-          <code className="font-mono"> tool_choice: &quot;required&quot;</code>, which makes
-          llama.cpp&apos;s own grammar non-lazy from the first token — so a malformed call is
-          usually repaired rather than forwarded to the client as a broken turn. Turn this off
-          when you are measuring what a model actually produces, rather than using it.
         </ToggleField>
 
         <ToggleField

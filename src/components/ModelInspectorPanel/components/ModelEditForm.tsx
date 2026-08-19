@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { ExternalLink, Undo2, X } from 'lucide-react';
-import type { GgufModel, InferenceConfig, ServerConfig, TemplateSupport } from '../../../types';
+import type { GgufModel, SparseInferenceConfig, ServerConfig, TemplateSupport } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
@@ -15,7 +15,7 @@ interface ModelEditFormProps {
   model: GgufModel;
   editedQuantization: string;
   editedFilePath: string;
-  editedInferenceDefaults: InferenceConfig | undefined;
+  editedInferenceDefaults: SparseInferenceConfig | undefined;
   editedServerDefaults: ServerConfig | null | undefined;
   /**
    * Whether this model's template reads `reasoning_effort`, from the model
@@ -26,7 +26,7 @@ interface ModelEditFormProps {
   reasoningEffortSupport?: TemplateSupport;
   onQuantizationChange: (quant: string) => void;
   onFilePathChange: (path: string) => void;
-  onInferenceDefaultsChange: (config: InferenceConfig) => void;
+  onInferenceDefaultsChange: (config: SparseInferenceConfig) => void;
   onServerDefaultsChange: (config: ServerConfig | null) => void;
 }
 
@@ -89,9 +89,19 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                   label={editedServerDefaults === null ? "Revert 'clear' action" : "Clear override"}
                   size="sm"
                   onClick={() => {
-                    // Toggle: null (clear) ↔ object with current model value (revert to model default)
+                    // Toggle: null (clear) ↔ an object, which is what puts the
+                    // model's own value back.
+                    //
+                    // The fallback has to be a *non-null* object, and that is
+                    // the whole subtlety: the only way to reach this branch is
+                    // to have typed a value and then cleared it, and most
+                    // models store no `serverDefaults` at all — so reverting
+                    // on the ordinary model reverts to the fallback, and a
+                    // `null` fallback would leave the state exactly where it
+                    // was. The button would render an undo that undoes
+                    // nothing, and the save would persist the clear.
                     if (editedServerDefaults === null) {
-                      onServerDefaultsChange(model.serverDefaults ?? {});
+                      onServerDefaultsChange(model.serverDefaults ?? { contextLength: null });
                     } else {
                       onServerDefaultsChange(null);
                     }

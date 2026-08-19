@@ -6,7 +6,6 @@
 import { get, post, put, del } from './client';
 import type { McpServerId } from '../types/ids';
 import type {
-  McpServer,
   NewMcpServer,
   UpdateMcpServer,
   McpServerInfo,
@@ -25,7 +24,7 @@ export async function listMcpServers(): Promise<McpServerInfo[]> {
 /**
  * Add a new MCP server configuration.
  */
-export async function addMcpServer(server: NewMcpServer): Promise<McpServer> {
+export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo> {
   // Convert NewMcpServer to CreateMcpServerRequest format expected by backend
   const request = {
     name: server.name,
@@ -38,7 +37,7 @@ export async function addMcpServer(server: NewMcpServer): Promise<McpServer> {
     env: server.env.map(e => [e.key, e.value] as [string, string]),
     lifecycle: server.lifecycle,
   };
-  return post<McpServer>('/api/mcp/servers', request);
+  return post<McpServerInfo>('/api/mcp/servers', request);
 }
 
 /**
@@ -47,7 +46,7 @@ export async function addMcpServer(server: NewMcpServer): Promise<McpServer> {
 export async function updateMcpServer(
   id: McpServerId,
   updates: UpdateMcpServer
-): Promise<McpServer> {
+): Promise<McpServerInfo> {
   // Convert UpdateMcpServer to UpdateMcpServerRequest format expected by backend
   const request: Record<string, unknown> = {};
   if (updates.name !== undefined) request.name = updates.name;
@@ -62,7 +61,7 @@ export async function updateMcpServer(
   if (updates.enabled !== undefined) request.enabled = updates.enabled;
   if (updates.lifecycle !== undefined) request.lifecycle = updates.lifecycle;
   
-  return put<McpServer>(`/api/mcp/servers/${id}`, request);
+  return put<McpServerInfo>(`/api/mcp/servers/${id}`, request);
 }
 
 /**
@@ -115,14 +114,21 @@ export async function callMcpTool(
     return {
       success: true,
       data: result,
-      error: undefined,
+      // `null`, not `undefined`: the handler builds this field on both paths,
+      // so a successful call sends `"error": null` and the client's own
+      // success value has to look like the one the wire produces.
+      error: null,
     };
   } catch (error) {
     // Network or HTTP error - convert to McpToolResult format
     const message = error instanceof Error ? error.message : String(error);
     return {
       success: false,
-      data: undefined,
+      // `null` for the same reason `error` is on the success path: the handler
+      // builds both fields on both paths, so a real failure carries
+      // `"data": null`. `undefined` serialises to an absent key — a third
+      // shape neither side describes.
+      data: null,
       error: message,
     };
   }

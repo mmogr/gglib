@@ -81,9 +81,19 @@ export const formatNumber = (num: number): string => {
 
 /**
  * Format model parameter count (e.g., "7.0B", "500M")
- * For MoE models, show total with active count if available.
+ *
+ * For MoE models this names the expert topology — "30.0B · 8/128 experts" —
+ * rather than deriving an active-parameter count from it. Active parameters
+ * are not computable from what the wire carries: `paramCount` is the whole
+ * model, and attention, embeddings and any always-resident shared experts stay
+ * active whichever experts route. Scaling the total by the routed fraction
+ * read as a measurement and was ~40% low on every real MoE model — it rendered
+ * Qwen3-30B-A3B (30.5B, 8 of 128) as 1.9B against a true ~3.3B. Doing it
+ * properly needs `expert_feed_forward_length`, which the GGUF parser does not
+ * read; until it does, the topology is what gglib actually knows.
+ *
  * @param paramCount - Parameter count in billions (total for MoE)
- * @param expertUsedCount - Number of experts used (for MoE models)
+ * @param expertUsedCount - Number of experts activated per token (MoE models)
  * @param expertCount - Total number of experts (for MoE models)
  */
 export const formatParamCount = (
@@ -91,17 +101,13 @@ export const formatParamCount = (
   expertUsedCount?: number,
   expertCount?: number
 ): string => {
-  const baseFormat = paramCount >= 1 
-    ? `${paramCount.toFixed(1)}B` 
+  const baseFormat = paramCount >= 1
+    ? `${paramCount.toFixed(1)}B`
     : `${(paramCount * 1000).toFixed(0)}M`;
 
-  // For MoE models, calculate and show active parameters
+  // For MoE models, name the topology rather than deriving a figure from it.
   if (expertCount && expertCount > 1 && expertUsedCount && expertUsedCount > 0) {
-    const activeParams = (expertUsedCount / expertCount) * paramCount;
-    const activeFormat = activeParams >= 1
-      ? `${activeParams.toFixed(1)}B`
-      : `${(activeParams * 1000).toFixed(0)}M`;
-    return `${baseFormat} (Active: ${activeFormat})`;
+    return `${baseFormat} · ${expertUsedCount}/${expertCount} experts`;
   }
 
   return baseFormat;

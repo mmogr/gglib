@@ -4,29 +4,13 @@
  */
 
 import type { ModelId } from './ids';
-import type { OverallHealth } from './events';
 
 /** Health status of an individual shard */
-export type ShardHealth =
-  | { type: 'healthy' }
-  | { type: 'corrupt'; expected: string; actual: string }
-  | { type: 'missing' }
-  | { type: 'no_oid' };
-
-/** Health report for a single shard */
-export interface ShardHealthReport {
-  index: number;
-  file_path: string;
-  health: ShardHealth;
-}
-
-/** Complete verification report */
-export interface VerificationReport {
-  model_id: number;
-  overall_health: OverallHealth;
-  shards: ShardHealthReport[];
-  verified_at: string;
-}
+export type { ShardHealth } from '../../../types/generated/ShardHealth';
+export type { ShardHealthReport } from '../../../types/generated/ShardHealthReport';
+// Imported too, because the transport interface below names it.
+import type { VerificationReport } from '../../../types/generated/VerificationReport';
+export type { VerificationReport };
 
 /** Result of checking for updates */
 export interface UpdateCheckResult {

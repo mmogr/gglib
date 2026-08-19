@@ -39,6 +39,7 @@ const {
   stopMcpServer,
 } = transport;
 import { syncAllMcpTools } from '../../../src/services/tools';
+import { mcpServer, mcpServerInfo } from '../fixtures/mcp';
 
 // ==========================================================================
 // Test Fixtures
@@ -370,7 +371,9 @@ describe('useMcpServers', () => {
   describe('error handling', () => {
     it('throws on first failure and succeeds on second call', async () => {
       vi.mocked(addMcpServer).mockRejectedValueOnce(new Error('First error'));
-      vi.mocked(addMcpServer).mockResolvedValueOnce({ id: 2, name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
+      vi.mocked(addMcpServer).mockResolvedValueOnce(
+        mcpServerInfo({ server: mcpServer({ id: 2, name: 'New' }) }),
+      );
 
       const { result } = renderHook(() => useMcpServers());
 
@@ -388,7 +391,7 @@ describe('useMcpServers', () => {
       // Second call succeeds
       await act(async () => {
         const server = await result.current.addServer({ name: 'New', server_type: 'stdio', config: {}, enabled: true, lifecycle: 'lazy' as const, env: [] });
-        expect(server.id).toBe(2);
+        expect(server.server.id).toBe(2);
       });
     });
   });

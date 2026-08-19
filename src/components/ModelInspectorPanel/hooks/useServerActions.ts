@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
-import type { GgufModel, ServeConfig, AppSettings, InferenceConfig } from '../../../types';
+import type { GgufModel, ServeConfig, AppSettings, SparseInferenceConfig } from '../../../types';
 import type { ServerViewModel } from '../../../hooks/useServers';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
@@ -16,7 +16,7 @@ export interface ServerActionsConfig {
   editedName: string;
   editedQuantization: string;
   editedFilePath: string;
-  editedInferenceDefaults: InferenceConfig | undefined;
+  editedInferenceDefaults: SparseInferenceConfig | undefined;
   // Serve modal state
   customContext: string;
   customPort: string;
@@ -25,14 +25,14 @@ export interface ServerActionsConfig {
   hasMtpTag: boolean;
   mtpNMaxOverride: number | null;
   mtpPMinOverride: number | null;
-  inferenceParams: InferenceConfig | undefined;
+  inferenceParams: SparseInferenceConfig | undefined;
   /** Serve as a pinned proxy instead of a bare model start. */
   pinProxy: boolean;
   editedServerDefaults: import('../../../types').ServerConfig | null | undefined;
   // Callbacks
   onStopServer: (modelId: number) => Promise<void>;
   onRemoveModel: (id: number, force: boolean) => void;
-  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
+  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: SparseInferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
   onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerViewModel) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
@@ -125,6 +125,18 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       }
 
       const serveConfig: ServeConfig = {
+        // The sampling half, spread rather than named field by field. The
+        // modal renders the whole `InferenceParametersForm`, which offers
+        // seventeen of the eighteen — every one but `seed`, which has no
+        // control. Naming nine of them dropped eight the surface had just
+        // offered, and `seed` along with them.
+        //
+        // First, so the launch fields below win. `ServeConfig` extends
+        // `SparseInferenceConfig`, which shares no key with them, so this is
+        // belt-and-braces rather than a live conflict — but the launch half is
+        // computed from explicit modal state and should not be overridable by
+        // whatever happens to be in the form's object.
+        ...inferenceParams,
         id: model.id,
         contextLength: contextLength,
         port,
@@ -133,16 +145,6 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         // MTP: null = auto-detect from tag; 0 = disable; >0 = explicit token count
         specDraftNMax: mtpNMaxOverride !== null ? mtpNMaxOverride : (hasMtpTag ? undefined : undefined),
         specDraftPMin: mtpPMinOverride !== null ? mtpPMinOverride : undefined,
-        // Inference parameters for this session
-        temperature: inferenceParams?.temperature,
-        topP: inferenceParams?.topP,
-        topK: inferenceParams?.topK,
-        maxTokens: inferenceParams?.maxTokens,
-        repeatPenalty: inferenceParams?.repeatPenalty,
-        presencePenalty: inferenceParams?.presencePenalty,
-        minP: inferenceParams?.minP,
-        reasoningEffort: inferenceParams?.reasoningEffort,
-        reasoningBudgetTokens: inferenceParams?.reasoningBudgetTokens,
       };
 
       if (pinProxy) {
@@ -243,7 +245,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
   const handleSave = useCallback(async () => {
     if (!model?.id) return;
     try {
-      const updates: { name?: string; quantization?: string; filePath?: string; inferenceDefaults?: InferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null } = {};
+      const updates: { name?: string; quantization?: string; filePath?: string; inferenceDefaults?: SparseInferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null } = {};
       
       if (editedName !== model.name) {
         updates.name = editedName;

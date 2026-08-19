@@ -76,28 +76,21 @@ export interface StartPinnedRequest {
 
 /**
  * Proxy server status.
+ *
+ * Two things the generated type states as `T | null` without saying why, and
+ * which a reader needs:
+ *
+ * - `running` is the guard for `port`. The daemon sets a port exactly when it
+ *   sets `running: true` — a stopped proxy and a crashed one report
+ *   identically, neither having a port to hand out — so a truthy `running`
+ *   means `port` is a number. TypeScript cannot express that pairing across
+ *   two fields, so the narrowing has to be written at each call site.
+ * - `current_model` and `model_port` are always `null` today. The daemon
+ *   hard-codes both rather than reporting the swapping proxy's current
+ *   upstream; the keys are on the wire, the answers are not.
  */
-export interface ProxyStatus {
-  running: boolean;
-  /**
-   * `null` whenever the proxy is not running — a stopped and a crashed proxy
-   * report identically, neither having a port to hand out.
-   *
-   * `running` is the guard: the daemon sets a port exactly when it sets
-   * `running: true`, so a truthy `running` means this is a number.
-   */
-  port: number | null;
-  /**
-   * Always `null` today. The daemon hard-codes both this and
-   * {@link model_port} rather than reporting the swapping proxy's current
-   * upstream; the keys are on the wire, the answers are not.
-   */
-  current_model: string | null;
-  /** Always `null` today — see {@link current_model}. */
-  model_port: number | null;
-  /** The model this proxy run is pinned to; `null` for the auto-swapping proxy. */
-  pinned_model: string | null;
-}
+import type { ProxyStatus } from '../../../types/generated/ProxyStatus';
+export type { ProxyStatus };
 
 /**
  * Proxy transport operations.

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { GgufModel, InferenceConfig, ServerConfig } from '../types';
+import { GgufModel, SparseInferenceConfig, ServerConfig } from '../types';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
@@ -69,7 +69,7 @@ export function useModels() {
     name?: string;
     quantization?: string;
     filePath?: string;
-    inferenceDefaults?: InferenceConfig;
+    inferenceDefaults?: SparseInferenceConfig;
     serverDefaults?: ServerConfig | null;
   }) => {
     await getTransport().updateModel({ 

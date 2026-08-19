@@ -18,13 +18,13 @@ import { InferenceParametersForm } from '../../../src/components/InferenceParame
 import type { InferenceFallback } from '../../../src/components/InferenceParametersForm/fallbackCaption';
 import { ReasoningSupport } from '../../../src/components/ModelInspectorPanel/components/ReasoningSupport';
 import { JinjaModeField } from '../../../src/components/ModelInspectorPanel/components/JinjaModeField';
-import type { InferenceConfig, TemplateSupport } from '../../../src/types';
+import type { SparseInferenceConfig, TemplateSupport } from '../../../src/types';
 
 const FLOOR: InferenceFallback = { kind: 'floor' };
 
 function renderForm(
   capabilities?: { reasoningEffort: TemplateSupport },
-  value?: InferenceConfig,
+  value?: SparseInferenceConfig,
 ) {
   const onChange = vi.fn();
   render(

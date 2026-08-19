@@ -18,7 +18,7 @@ crates/gglib-app-services/src/sampling_explain.rs 463
 crates/gglib-app-services/src/servers.rs 965
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
-crates/gglib-app-services/src/types.rs 1047
+crates/gglib-app-services/src/types.rs 1054
 crates/gglib-axum/src/bootstrap.rs 332
 crates/gglib-axum/src/chat_api.rs 735
 crates/gglib-axum/src/handlers/config/setup.rs 310
@@ -55,7 +55,7 @@ crates/gglib-core/src/domain/inference.rs 1954
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 524
 crates/gglib-core/src/domain/model_sampling.rs 674
-crates/gglib-core/src/domain/model.rs 341
+crates/gglib-core/src/domain/model.rs 343
 crates/gglib-core/src/domain/query.rs 432
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 414

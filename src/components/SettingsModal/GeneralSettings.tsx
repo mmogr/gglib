@@ -1,5 +1,5 @@
 import { FC, FormEvent } from "react";
-import type { ModelsDirectoryInfo, GgufModel, InferenceConfig } from "../../types";
+import type { ModelsDirectoryInfo, GgufModel, SparseInferenceConfig } from "../../types";
 import {
   PathSettings,
   ModelDefaults,
@@ -73,8 +73,8 @@ interface GeneralSettingsProps {
   setTitlePromptInput: (value: string) => void;
 
   // Inference defaults
-  inferenceDefaultsInput: InferenceConfig | undefined;
-  setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
+  inferenceDefaultsInput: SparseInferenceConfig | undefined;
+  setInferenceDefaultsInput: (value: SparseInferenceConfig | undefined) => void;
   trustClientSampling: boolean;
   setTrustClientSampling: (value: boolean) => void;
   proxyLoopDetection: boolean;

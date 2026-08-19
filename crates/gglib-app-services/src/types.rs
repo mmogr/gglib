@@ -255,13 +255,20 @@ impl From<Model> for GuiModel {
 
 /// Complete model details for the inspect view.
 ///
-/// This is a superset of [`GuiModel`] that includes all fields from the domain
-/// [`Model`], including raw GGUF metadata, MoE topology, and full HuggingFace
-/// provenance.  It is the single shared contract consumed by:
+/// Carries the domain [`Model`] in full — raw GGUF metadata, MoE topology and
+/// HuggingFace provenance, none of which the list endpoint sends. It is the
+/// single shared contract consumed by:
 ///
 /// - CLI: `gglib model inspect` (human-readable or `--json`)
 /// - Axum: `GET /api/models/:id/detail`
 /// - GUI frontend: model detail panel
+///
+/// # Not a superset of [`GuiModel`]
+///
+/// It was described as one for a long time, and a TypeScript mirror was
+/// written to match by extending the list row — which advertised
+/// `server_defaults` and `benchmark_summary` on a response that has never
+/// carried either. The two shapes overlap; neither contains the other.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]

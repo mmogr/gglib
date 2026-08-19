@@ -24,7 +24,7 @@
  * what a parameter actually resolves to.
  */
 
-import type { SamplingParamKey } from '../types';
+import type { InferenceConfig, SamplingParamKey } from '../types';
 
 /** Fallback and bounds for one sampling parameter. */
 export interface InferenceParamSpec {
@@ -177,3 +177,45 @@ export const INFERENCE_PARAMS: Record<SamplingParamKey, InferenceParamSpec> = {
    */
   reasoningBudgetTokens: { default: null, min: -1, max: 32768, step: 1 },
 };
+
+/**
+ * Every field of the wire's `InferenceConfig`, in one runtime list.
+ *
+ * A superset of `INFERENCE_PARAMS`' keys, which is why it is a separate
+ * constant rather than `Object.keys` over that table: `INFERENCE_PARAMS`
+ * describes only the parameters with a checkable numeric range, and two
+ * fields have none — `reasoningEffort` is an enum, and `seed` is an arbitrary
+ * u32 with no floor worth publishing. Both still cross the wire.
+ *
+ * The `satisfies` pins every entry to a real field, and the assertion below
+ * pins the list to *all* of them: adding a field in Rust regenerates
+ * `InferenceConfig`, and this fails to compile until it is listed here. That
+ * is the whole point — the nine fields the serve request used to drop were
+ * dropped because a hand-kept list had no way to notice them.
+ */
+export const INFERENCE_CONFIG_KEYS = [
+  'temperature',
+  'topP',
+  'topK',
+  'maxTokens',
+  'repeatPenalty',
+  'presencePenalty',
+  'minP',
+  'frequencyPenalty',
+  'dynatempRange',
+  'dynatempExponent',
+  'topNSigma',
+  'dryMultiplier',
+  'dryBase',
+  'dryAllowedLength',
+  'dryPenaltyLastN',
+  'reasoningEffort',
+  'reasoningBudgetTokens',
+  'seed',
+] as const satisfies readonly (keyof InferenceConfig)[];
+
+type AssertNoUnlistedFields<T extends never> = T;
+/** Fails to compile if `InferenceConfig` grows a field this list omits. */
+export type InferenceConfigKeysAreComplete = AssertNoUnlistedFields<
+  Exclude<keyof InferenceConfig, (typeof INFERENCE_CONFIG_KEYS)[number]>
+>;
