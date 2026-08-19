@@ -111,7 +111,10 @@ pub(crate) async fn compose(
     //    Look up the model so model-level defaults can be applied.  When the
     //    identifier is unknown (external port reuse with no catalog entry) the
     //    sampling is forwarded as-is.
-    let resolved_sampling = match ctx
+    //    The provenance travels with the values so a later stage can say which
+    //    rung supplied each one; an unknown identifier yields none, because no
+    //    ladder was run.
+    let (resolved_sampling, _sources) = match ctx
         .app
         .models()
         .find_by_identifier(&params.model_identifier)
@@ -119,9 +122,11 @@ pub(crate) async fn compose(
         .ok()
     {
         Some(model) => {
-            Some(resolve_inference_config(ctx, sampling.unwrap_or_default(), &model).await?)
+            let (resolved, sources) =
+                resolve_inference_config(ctx, sampling.unwrap_or_default(), &model).await?;
+            (Some(resolved), Some(sources))
         }
-        None => sampling,
+        None => (sampling, None),
     };
 
     // 3. Initialise MCP servers (CLI bootstrap intentionally skips this).

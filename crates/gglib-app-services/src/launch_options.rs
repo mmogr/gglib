@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use gglib_core::domain::{InferenceConfig, ModelSamplingContext};
+use gglib_core::domain::{FieldSources, InferenceConfig, ModelSamplingContext};
 use gglib_core::ports::PinnedSpec;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::{Model, Settings};
@@ -48,6 +48,11 @@ pub struct PinnedLaunch {
     pub pinned: PinnedSpec,
     /// Sampling after the full merge hierarchy — what the CLI banner prints.
     pub inference: InferenceConfig,
+    /// Which rung supplied each of those values.
+    ///
+    /// Carried so a caller can tell a flag that won from one the coupling rule
+    /// discarded — the two are indistinguishable in `inference` alone.
+    pub sources: FieldSources,
     /// MTP resolution (explicit overrides layered over model tags).
     pub mtp: MtpResolution,
     /// The context size the model will actually get.
@@ -68,11 +73,12 @@ pub fn plan_pinned_launch(
     globals: ProxyGlobals,
 ) -> PinnedLaunch {
     let model_ctx = ModelSamplingContext::for_model(model);
-    let inference = request
+    let (inference, sources) = request
         .inference_params
         .clone()
         .unwrap_or_default()
-        .resolve_with_defaults(
+        .resolve_with_profile_explained(
+            None,
             model.inference_defaults.as_ref(),
             settings.inference_defaults.as_ref(),
             model_ctx,
@@ -131,6 +137,7 @@ pub fn plan_pinned_launch(
         },
         unified,
         inference,
+        sources,
         mtp,
         effective_ctx,
     }

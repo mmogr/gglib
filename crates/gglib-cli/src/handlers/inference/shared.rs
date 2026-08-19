@@ -7,8 +7,8 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use gglib_core::Settings;
-use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
+use gglib_core::domain::{FieldSources, InferenceConfig};
 
 /// Resolve inference parameters via the full merge hierarchy.
 ///
@@ -20,14 +20,20 @@ use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
 ///
 /// `gglib model explain <id>` prints the outcome of this resolution for any
 /// model, naming the layer each parameter came from.
+///
+/// Returns the provenance alongside the values. Nothing in this crate could
+/// previously say *why* a parameter ended up where it did — only `gglib model
+/// explain` could, on a different code path — so a flag the coupling rule
+/// discarded looked identical to one that was never passed.
 pub(crate) async fn resolve_inference_config(
     ctx: &CliContext,
     config: InferenceConfig,
     model: &gglib_core::Model,
-) -> Result<InferenceConfig> {
+) -> Result<(InferenceConfig, FieldSources)> {
     let settings = ctx.app.settings().get().await?;
     let model_ctx = gglib_core::domain::ModelSamplingContext::for_model(model);
-    Ok(config.resolve_with_defaults(
+    Ok(config.resolve_with_profile_explained(
+        None,
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),
         model_ctx,
