@@ -2,6 +2,7 @@
 pub mod apply;
 pub(crate) mod constrain;
 pub(crate) mod effort_gate;
+pub mod explain;
 pub(crate) mod messages;
 pub(crate) mod model_context;
 pub mod profile_route;
@@ -16,6 +17,7 @@ pub mod validate;
 pub use apply::{PipelineReport, apply};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
+pub use explain::explain_stored;
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use profile_route::{ModelRoute, resolve_route};

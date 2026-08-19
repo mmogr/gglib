@@ -3,15 +3,13 @@
 //! Resolves a model's sampling parameters through the same hierarchy the
 //! proxy uses and prints each one beside the layer that supplied it.
 //!
-//! The resolution is [`InferenceConfig::resolve_with_profile_explained`] —
+//! The resolution is [`gglib_core::request_pipeline::explain_stored`] —
 //! the identical call the plain resolution makes, returning the provenance it
 //! otherwise discards. Nothing here re-implements the ladder, so this command
 //! cannot describe a hierarchy that differs from the one that runs.
 
 use anyhow::{Result, anyhow};
-use gglib_core::domain::{
-    InferenceConfig, InferenceProfile, ModelSamplingContext, ModelSamplingDefaults,
-};
+use gglib_core::domain::{InferenceProfile, ModelSamplingContext, ModelSamplingDefaults};
 use gglib_core::request_pipeline;
 
 use super::resolver;
@@ -41,11 +39,12 @@ pub(crate) async fn execute(
 
     // An empty request layer: this command explains the stored configuration,
     // so there are no per-request parameters to occupy the top rung.
-    let (mut resolved, mut sources) = InferenceConfig::default().resolve_with_profile_explained(
-        selected.as_ref().map(|p| &p.config),
+    let (resolved, sources, effort_suppressed) = request_pipeline::explain_stored(
+        selected.as_ref(),
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),
         model_ctx,
+        &model.template_caps,
     );
 
     // The request pipeline's stage 5b, applied to the resolution rather than to
@@ -56,8 +55,6 @@ pub(crate) async fn execute(
     // A no-op unless this model's recorded template caps positively say the
     // template does not read `reasoning_effort`. On the common model — never
     // launched, so never probed — the answer is `Unknown` and the level stands.
-    let effort_suppressed =
-        request_pipeline::suppress_stored_effort(&mut resolved, &mut sources, &model.template_caps);
 
     explain_display::print_explanation(
         &model.name,
@@ -97,6 +94,8 @@ fn find_profile(name: &str, profiles: Option<&[InferenceProfile]>) -> Result<Inf
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use gglib_core::domain::InferenceConfig;
 
     fn profile(name: &str) -> InferenceProfile {
         InferenceProfile {
