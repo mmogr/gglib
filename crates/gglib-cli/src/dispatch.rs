@@ -60,6 +60,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             context,
             system_prompt,
             sampling,
+            profile,
             retry,
             no_tools,
             port,
@@ -86,6 +87,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     context,
                     system_prompt,
                     sampling,
+                    profile: profile.profile,
                     retry_policy: retry.into_policy(),
                     no_tools,
                     port,
@@ -113,6 +115,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             verbose,
             quiet,
             sampling,
+            profile,
             no_tools,
             port,
             max_iterations,
@@ -144,6 +147,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 verbose,
                 quiet,
                 sampling,
+                profile: profile.profile,
                 context,
             };
             handlers::inference::agent_question::execute(ctx, args).await?;

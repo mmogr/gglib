@@ -49,6 +49,13 @@ pub(crate) struct AgentSessionParams {
     /// Budget for retrying transient upstream failures, already resolved from
     /// `--no-retry` and the `GGLIB_LLM_RETRY_*` overrides.
     pub retry_policy: gglib_core::retry::RetryPolicy,
+    /// The selected sampling profile, already resolved from either
+    /// `--profile` or a `{model}:{profile}` suffix.
+    ///
+    /// Resolved by the caller rather than here, because `model_identifier`
+    /// must already have any suffix stripped by the time `resolve_port` asks
+    /// the daemon to start it.
+    pub profile: Option<gglib_core::domain::InferenceProfile>,
 }
 
 /// Display metadata for the server-startup info banner.
@@ -81,6 +88,7 @@ impl From<&ChatArgs> for AgentSessionParams {
             tools,
             model_name: args.model.clone(),
             retry_policy: args.retry_policy,
+            profile: None,
         }
     }
 }
@@ -123,9 +131,11 @@ pub(crate) async fn compose(
     {
         Some(model) => {
             let named = sampling.clone().unwrap_or_default();
-            let (resolved, sources) = resolve_inference_config(ctx, named.clone(), &model).await?;
+            let (resolved, sources) =
+                resolve_inference_config(ctx, named.clone(), params.profile.as_ref(), &model)
+                    .await?;
             if !banner.quiet {
-                warn_discarded_flags(&named, &resolved, &sources);
+                super::sampling_warning::warn_discarded_flags(&named, &resolved, &sources);
             }
             (Some(resolved), Some(sources))
         }
@@ -254,42 +264,4 @@ fn print_sampling_lines(s: &InferenceConfig) {
     if let Some(v) = s.repeat_penalty {
         eprintln!("  Repeat penalty: {v}");
     }
-}
-
-/// Say so when the ladder passed over a sampling flag the caller passed.
-///
-/// The case that motivates it: `--profile chat --presence-penalty 1.2` with no
-/// `--temperature`. The profile claims the temperature, so the coupled trio
-/// comes only from the profile and the penalty is silently gone — see
-/// [`gglib_core::domain::sampling_discards`]. It predates profiles, though:
-/// any model with stored `inference_defaults` naming a temperature eats a bare
-/// `--presence-penalty` the same way, which is why this warns on every
-/// discard rather than only the profile case.
-///
-/// Never called under `-Q`. `renderer` documents that quiet "suppresses all
-/// stderr output … ideal for scripting and piped output", and a warning that
-/// broke that contract would be a worse bug than the one it reports.
-fn warn_discarded_flags(
-    named: &InferenceConfig,
-    resolved: &InferenceConfig,
-    sources: &gglib_core::domain::FieldSources,
-) {
-    /// The request occupies rung 0 of the stored ladder — see
-    /// `InferenceConfig::resolve_with_profile`.
-    const REQUEST_RUNG: usize = 0;
-
-    let discarded = gglib_core::domain::discarded_from_rung(named, resolved, sources, REQUEST_RUNG);
-    if discarded.is_empty() {
-        return;
-    }
-
-    let flags: Vec<String> = discarded
-        .iter()
-        .map(|field| format!("--{}", field.replace('_', "-")))
-        .collect();
-    eprintln!(
-        "  Warning: {} did not take effect. Sampling penalties travel with \
-         whichever layer sets the temperature; pass --temperature to set them together.",
-        flags.join(", ")
-    );
 }

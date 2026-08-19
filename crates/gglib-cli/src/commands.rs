@@ -12,6 +12,7 @@ use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
+use crate::profile_args::ProfileArgs;
 use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
@@ -118,6 +119,8 @@ pub enum Commands {
         #[command(flatten)]
         sampling: SamplingArgs,
         #[command(flatten)]
+        profile: ProfileArgs,
+        #[command(flatten)]
         retry: RetryArgs,
         /// Disable tool access (plain LLM chat without filesystem or MCP tools)
         #[arg(long = "no-tools")]
@@ -188,6 +191,8 @@ pub enum Commands {
         quiet: bool,
         #[command(flatten)]
         sampling: SamplingArgs,
+        #[command(flatten)]
+        profile: ProfileArgs,
         /// Disable tool access (plain LLM question without filesystem or MCP tools)
         #[arg(long = "no-tools")]
         no_tools: bool,

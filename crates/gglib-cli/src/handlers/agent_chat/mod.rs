@@ -5,6 +5,7 @@ mod markdown;
 pub(crate) mod persistence;
 pub(crate) mod renderer;
 pub(crate) mod repl;
+pub(crate) mod sampling_warning;
 mod thinking_dispatch;
 mod tool_format;
 
@@ -71,7 +72,22 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
             None
         },
     };
-    let params = config::AgentSessionParams::from(&args);
+    // Resolve `--profile` or a `{model}:{profile}` suffix first: the stripped
+    // name is what `resolve_port` hands the daemon, so the suffix must never
+    // reach model lookup.
+    let settings = ctx.app.settings().get().await?;
+    let selection = crate::handlers::inference::profile_selection::select(
+        ctx.catalog.as_ref(),
+        settings.inference_profiles.as_deref().unwrap_or_default(),
+        &args.identifier,
+        args.profile.as_deref(),
+    )
+    .await?;
+    let params = config::AgentSessionParams {
+        model_identifier: selection.model,
+        profile: selection.profile,
+        ..config::AgentSessionParams::from(&args)
+    };
     let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
 
     // The llama-server belongs to the daemon and stays warm for the next

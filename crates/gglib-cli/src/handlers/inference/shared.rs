@@ -28,12 +28,13 @@ use gglib_core::domain::{FieldSources, InferenceConfig};
 pub(crate) async fn resolve_inference_config(
     ctx: &CliContext,
     config: InferenceConfig,
+    profile: Option<&gglib_core::domain::InferenceProfile>,
     model: &gglib_core::Model,
 ) -> Result<(InferenceConfig, FieldSources)> {
     let settings = ctx.app.settings().get().await?;
     let model_ctx = gglib_core::domain::ModelSamplingContext::for_model(model);
     Ok(config.resolve_with_profile_explained(
-        None,
+        profile.map(|selected| &selected.config),
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),
         model_ctx,

@@ -113,8 +113,8 @@ impl ModelService {
         }
     }
 
-    /// Find a model by identifier (id, name, or HF ID).
-    /// Returns error if not found.
+    /// Find a model by identifier — a numeric id, then an exact name (not an
+    /// HF id, despite what this said for a long time). Errors if not found.
     pub async fn find_by_identifier(&self, identifier: &str) -> Result<Model, CoreError> {
         self.get(identifier)
             .await?

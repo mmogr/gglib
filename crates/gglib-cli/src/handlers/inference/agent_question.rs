@@ -50,6 +50,8 @@ pub(crate) struct QuestionArgs {
     pub verbose: bool,
     pub quiet: bool,
     pub sampling: SamplingArgs,
+    /// Named sampling profile, the flag form of a `{model}:{profile}` suffix.
+    pub profile: Option<String>,
     pub context: ContextArgs,
 }
 
@@ -69,6 +71,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         verbose,
         quiet,
         sampling,
+        profile,
         context,
     } = args;
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
@@ -81,6 +84,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         model_name: model_arg.clone(),
         // `gglib q` takes no retry flag; the environment defaults apply.
         retry_policy: gglib_core::retry::RetryPolicy::from_env(),
+        // Filled in below, once settings have supplied the profile list.
+        profile: None,
     };
 
     // If no model was specified, look up the default from settings
@@ -90,6 +95,22 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         .get()
         .await
         .map_err(|e| anyhow!("failed to load settings: {e}"))?;
+
+    // Resolve `--profile` or a `{model}:{profile}` suffix before anything asks
+    // the daemon to start `model_identifier` — the suffix must not reach lookup.
+    let selection = super::profile_selection::select(
+        ctx.catalog.as_ref(),
+        settings.inference_profiles.as_deref().unwrap_or_default(),
+        &params.model_identifier,
+        profile.as_deref(),
+    )
+    .await?;
+    let params = AgentSessionParams {
+        model_identifier: selection.model,
+        model_name: params.model_name.clone(),
+        profile: selection.profile,
+        ..params
+    };
 
     let params = if params.model_identifier.is_empty() {
         let default_id = settings.default_model_id.ok_or_else(|| {

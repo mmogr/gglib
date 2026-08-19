@@ -54,6 +54,7 @@ futures-util = { workspace = true }
 mdns-sd = "0.20"
 
 [dev-dependencies]
+async-trait = { workspace = true }
 tempfile = { workspace = true }
 tokio-test = { workspace = true }
 
