@@ -355,16 +355,9 @@ impl ServerLogSinkPort for NoopLogSink {
 mod tests {
     use super::*;
 
-    // Only the two `#[cfg(unix)]` tests below write an executable stub to
-    // disk, so on Windows these read as unused — the same reason
-    // `PermissionsExt` was already gated.
+    // Only the `#[cfg(unix)]` tests below write an executable stub to disk.
     #[cfg(unix)]
-    use std::fs;
-    #[cfg(unix)]
-    use tempfile::TempDir;
-
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
+    use {std::fs, std::os::unix::fs::PermissionsExt, tempfile::TempDir};
 
     #[test]
     fn is_truthy_flag_recognises_on_values() {
