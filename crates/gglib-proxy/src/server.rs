@@ -26,7 +26,7 @@ use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
-use gglib_core::request_pipeline::SamplingLayers;
+use gglib_core::request_pipeline::{ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
@@ -39,7 +39,7 @@ use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelsResponse};
-use crate::profiles::{ModelRoute, configured_names, resolve_route, variant_entries};
+use crate::profiles::{configured_names, variant_entries};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};

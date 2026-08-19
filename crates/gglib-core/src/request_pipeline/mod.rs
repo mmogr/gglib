@@ -4,6 +4,7 @@ pub(crate) mod constrain;
 pub(crate) mod effort_gate;
 pub(crate) mod messages;
 pub(crate) mod model_context;
+pub mod profile_route;
 pub(crate) mod request_shape;
 pub mod resolve;
 pub(crate) mod sampling;
@@ -17,6 +18,7 @@ pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
+pub use profile_route::{ModelRoute, resolve_route};
 pub use request_shape::carries_tools;
 pub use resolve::resolve;
 pub use sampling::{
