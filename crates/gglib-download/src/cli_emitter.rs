@@ -51,7 +51,8 @@ const TICK_INTERVAL: Duration = Duration::from_millis(120);
 ///
 /// Wraps an `indicatif` [`MultiProgress`] and maintains one [`ProgressBar`] per
 /// active download, keyed by the canonical download ID string. Events emitted by
-/// the [`DownloadManagerPort`] are translated into bar updates synchronously (the
+/// the [`DownloadManagerPort`](gglib_core::ports::DownloadManagerPort) are
+/// translated into bar updates synchronously (the
 /// `emit` method does not block on I/O).
 ///
 /// The inner [`MultiProgress`] is shared via [`Arc`] so the interactive monitor
@@ -380,7 +381,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
 /// Routes the CLI emitter through the unified `AppEventEmitter` pipeline.
 ///
 /// This impl exists so the CLI bootstrap can pass an `Arc<dyn AppEventEmitter>`
-/// to [`gglib_bootstrap::CoreBootstrap::build`] just like Axum and Tauri do.
+/// to `gglib_bootstrap::CoreBootstrap::build` just like Axum and Tauri do.
 /// The shared bootstrap wraps it in `AppEventBridge`, which converts
 /// `DownloadEvent` → `AppEvent::Download { event }`. Here we unwrap that
 /// variant and forward the inner `DownloadEvent` to the indicatif renderer.

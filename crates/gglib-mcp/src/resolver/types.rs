@@ -23,6 +23,11 @@ pub(crate) struct Attempt {
 }
 
 /// Possible outcomes when checking if a candidate path is a valid executable.
+///
+/// The last three arise only from the Unix permission check in
+/// `fs::SystemFs::check_executable`; on Windows executability is inferred
+/// from `PATHEXT`, so nothing there constructs them.
+#[cfg_attr(windows, allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AttemptOutcome {
     /// File was found and is executable (success case).

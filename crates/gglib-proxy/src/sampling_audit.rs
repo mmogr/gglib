@@ -1040,7 +1040,7 @@ pub struct SamplingAuditSnapshot {
     /// snapshot reports a comparison between gglib's intent and llama-server's
     /// echo; there is no echo for these two (see the module docs), so this is
     /// gglib's own account, carried with
-    /// [`WIRE_BLIND_REASON`](crate::audit_records::WIRE_BLIND_REASON) so no
+    /// [`WIRE_BLIND_REASON`] so no
     /// surface can render it as a confirmed reading.
     pub reasoning: ReasoningReadback,
     /// Which client field names were dropped, and how often each.
@@ -1108,7 +1108,7 @@ pub struct PublishedOverrideField {
 
 /// The verdict arm of [`PublishedOverrideField`].
 ///
-/// Mirrors [`SamplingOverride`](gglib_core::domain::SamplingOverride) minus its
+/// Mirrors [`SamplingOverride`] minus its
 /// `NotPublished` arm — a field with nothing published is absent from
 /// [`PublishedOverrides::fields`] rather than carried as an empty verdict.
 #[derive(Debug, Clone, PartialEq, Serialize)]

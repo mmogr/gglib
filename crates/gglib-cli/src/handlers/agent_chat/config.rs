@@ -7,6 +7,8 @@
 //! this process never spawns or stops one, and a model left warm after the
 //! session is a feature, not a leak. [`AgentConfig`] is built inline by the
 //! caller from the same args.
+//!
+//! [`AgentConfig`]: gglib_core::domain::agent::AgentConfig
 
 use std::path::PathBuf;
 use std::sync::Arc;

@@ -6,7 +6,7 @@
 //! [`crate::cli_emitter::CliDownloadEventEmitter`] instead.
 //!
 //! Both renderers get their speed and ETA from
-//! [`RateEstimator`](gglib_core::download::RateEstimator) and format them with
+//! [`RateEstimator`] and format them with
 //! the shared [`format_rate`] / [`format_duration`]. This module owns no rate
 //! math of its own — an earlier private exponentially-weighted average here
 //! was one of three competing implementations that disagreed with each other.

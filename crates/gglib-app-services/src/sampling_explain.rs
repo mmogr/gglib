@@ -121,7 +121,7 @@ pub struct SuppressedEffortDto {
 
 /// What gglib does with one field's published recommendation.
 ///
-/// The wire form of [`SamplingOverride`](gglib_core::domain::SamplingOverride),
+/// The wire form of [`SamplingOverride`],
 /// minus its `NotPublished` arm — a field with nothing published is omitted
 /// from [`SamplingExplanationDto::published`] rather than carried as an empty
 /// verdict.

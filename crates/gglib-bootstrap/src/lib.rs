@@ -16,9 +16,9 @@
 //! # Hexagonal boundary
 //!
 //! This crate depends **only** on pure infrastructure crates
-//! (`gglib-core`, `gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`,
-//! `gglib-runtime`). It does **not** depend on adapter crates (`gglib-mcp`,
-//! `gglib-axum`, `gglib-tauri`, `gglib-cli`, `gglib-app-services`).
+//! (`gglib-core`, `gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`).
+//! It does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`,
+//! `gglib-tauri`, `gglib-cli`, `gglib-app-services`).
 //!
 //! # Example
 //!

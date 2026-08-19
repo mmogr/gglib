@@ -1,9 +1,9 @@
 //! Streaming LLM response collector.
 //!
-//! Consumes a [`LlmCompletionPort`] stream, forwarding text deltas and
-//! reasoning deltas to the caller's [`AgentEvent`] channel **as they arrive**
-//! and accumulating incremental tool-call deltas in memory until the stream
-//! terminates.
+//! Consumes a [`LlmCompletionPort`](gglib_core::ports::LlmCompletionPort)
+//! stream, forwarding text deltas and reasoning deltas to the caller's
+//! [`AgentEvent`] channel **as they arrive** and accumulating incremental
+//! tool-call deltas in memory until the stream terminates.
 //!
 //! Reasoning deltas ([`LlmStreamEvent::ReasoningDelta`]) are forwarded live
 //! as [`AgentEvent::ReasoningDelta`] and accumulated in a separate buffer; they
@@ -40,12 +40,12 @@ use crate::util::emit_error_event;
 /// while still protecting against malformed streams.
 ///
 /// Note the distinction between this constant and
-/// [`AgentConfig::max_parallel_tools`]:
+/// [`AgentConfig::max_parallel_tools`](gglib_core::AgentConfig::max_parallel_tools):
 ///
 /// | Concern | Enforced by |
 /// |---------|-------------|
 /// | Streaming slot index `DoS` protection | `MAX_TOOL_CALL_INDEX` (this constant, checked inside `collect_stream`) |
-/// | Runtime concurrency cap for tool execution | [`AgentConfig::max_parallel_tools`] (checked by the agent loop *after* `collect_stream` returns) |
+/// | Runtime concurrency cap for tool execution | [`AgentConfig::max_parallel_tools`](gglib_core::AgentConfig::max_parallel_tools) (checked by the agent loop *after* `collect_stream` returns) |
 ///
 /// Setting `max_parallel_tools` to a value smaller than `MAX_TOOL_CALL_INDEX`
 /// does **not** prevent a model from emitting more tool-call slots in the
@@ -156,7 +156,8 @@ struct PartialToolCall {
 ///   see [`CollectedResponse::tool_calls_truncated`]. The guard still bounds
 ///   the `partials` Vec, which is all it was ever for; it no longer destroys
 ///   the turn to do it. Tool-call *concurrency* remains a separate concern —
-///   the caller (agent loop) enforces [`AgentConfig::max_parallel_tools`]
+///   the caller (agent loop) enforces
+///   [`AgentConfig::max_parallel_tools`](gglib_core::AgentConfig::max_parallel_tools)
 ///   after this function returns, and already recovers from an oversized
 ///   batch by telling the model to retry with a smaller one.
 /// - Malformed tool-call arguments (not valid JSON) cause `collect_stream` to

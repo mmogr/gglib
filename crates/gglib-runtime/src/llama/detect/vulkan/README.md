@@ -21,7 +21,7 @@ pre-flight check.
 
 # Platform scope
 
-Vulkan probing ([`probe`]) is compiled only on Linux and Windows.
+Vulkan probing (the `probe` submodule) is compiled only on Linux and Windows.
 On macOS, [`vulkan_status`] returns [`VulkanStatus::absent`] — not
 an error, but the canonical signal that Metal is the native GPU API
 and Vulkan is not applicable on this platform.

@@ -242,10 +242,11 @@ impl McpOps {
     /// Test a configured server end to end — `gglib mcp test`.
     ///
     /// Starts a throwaway instance of the stored configuration, lists what it
-    /// offers, then stops it. Distinct from [`Self::list_tools`], which needs
-    /// the server already running and so says nothing about whether it *can*
-    /// start. This is the answer to "is this config right?", and without it
-    /// the only way to find out is a chat that silently has no tools.
+    /// offers, then stops it. Distinct from the `tools` that [`Self::list`]
+    /// reports, which are filled in only for a server that is already running
+    /// and so say nothing about whether it *can* start. This is the answer to
+    /// "is this config right?", and without it the only way to find out is a
+    /// chat that silently has no tools.
     pub async fn test_connection(&self, id: i64) -> Result<McpTestResult, GuiError> {
         // Resolve the executable first, exactly as the start path does. Without
         // this a freshly-added stdio server — whose resolved_path_cache is

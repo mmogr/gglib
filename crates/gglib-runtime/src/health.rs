@@ -1,10 +1,11 @@
 //! Health checking for the monitor, which needs to know *why* a check failed.
 //!
-//! There is a second `check_http_health` in [`crate::process::health`], and
-//! the difference between them is deliberate rather than accidental. That one
-//! returns a bare `bool` and documents that any failure — refused, timed out,
-//! non-2xx — is reported identically, because its caller is the request fast
-//! path and cannot act on the distinction. This one returns `Result<bool>` so
+//! There is a second [`check_http_health`](crate::process::check_http_health)
+//! in the private `crate::process::health` module, and the difference between
+//! them is deliberate rather than accidental. That one returns a bare `bool`
+//! and documents that any failure — refused, timed out, non-2xx — is reported
+//! identically, because its caller is the request fast path and cannot act on
+//! the distinction. This one returns `Result<bool>` so
 //! [`crate::health_monitor`] can turn a timeout, a refused connection and a
 //! non-success status into three different `ServerHealthStatus` values.
 //!

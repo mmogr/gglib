@@ -14,14 +14,16 @@
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //!
-//! The streaming path runs every response through a [`ToolCallParser`] via
+//! The streaming path runs every response through a
+//! [`ToolCallParser`](super::parser::ToolCallParser) via
 //! [`super::stream::NormalizingStream`]; a `stream: false` request gets the
 //! same model, the same dialect, and — until this module — none of the
 //! normalization. A Qwen-XML tool call in a non-streaming reply reached the
 //! client as raw `<tool_call>` text.
 //!
 //! [`normalize_chat_completion_body`] closes that gap: it drives the exact
-//! same parser (one full-content push, then [`ToolCallParser::finish`]) over
+//! same parser (one full-content push, then
+//! [`ToolCallParser::finish`](super::parser::ToolCallParser::finish)) over
 //! each choice's `message.content` and rewrites the body in place — content
 //! stripped of markup, extracted calls appended to `message.tool_calls` in
 //! the `OpenAI` non-streaming shape, reasoning routed to `reasoning_content`.

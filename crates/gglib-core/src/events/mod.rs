@@ -208,17 +208,17 @@ impl AppEvent {
 }
 
 impl AppEvent {
-    /// Create a [`ProxyStarted`] event.
+    /// Create a [`AppEvent::ProxyStarted`] event.
     pub const fn proxy_started(port: u16) -> Self {
         Self::ProxyStarted { port }
     }
 
-    /// Create a [`ProxyStopped`] event.
+    /// Create a [`AppEvent::ProxyStopped`] event.
     pub const fn proxy_stopped() -> Self {
         Self::ProxyStopped
     }
 
-    /// Create a [`ProxyCrashed`] event.
+    /// Create a [`AppEvent::ProxyCrashed`] event.
     pub const fn proxy_crashed() -> Self {
         Self::ProxyCrashed
     }

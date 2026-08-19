@@ -20,7 +20,7 @@ handler only forwards already-typed [`AgentEvent`]s.
 
 When the HTTP client disconnects (browser tab closed, `curl` killed, etc.),
 Axum drops the SSE response and therefore the [`guard::AgentTaskGuard`] stream
-wrapper. Its [`Drop`] impl calls [`JoinHandle::abort`], which cancels the
+wrapper. Its [`Drop`] impl calls [`tokio::task::JoinHandle::abort`], which cancels the
 spawned `AgentLoop` task at its next `await` point — immediately stopping
 LLM token generation and any in-flight tool calls without leaking compute
 or resources.

@@ -136,7 +136,7 @@ pub struct Recommendation {
 ///
 /// Byte sizes are the `Q4_K_M` files on Hugging Face as published; KV shapes
 /// are `num_hidden_layers × num_key_value_heads × head_dim` from each model's
-/// `config.json`. Both are verified by [`tests::shortlist_is_internally_consistent`]
+/// `config.json`. Both are verified by `tests::shortlist_is_internally_consistent`
 /// only for self-consistency — the figures themselves have to be re-checked
 /// against the repositories when this table is edited.
 static SHORTLIST: &[ModelCandidate] = &[

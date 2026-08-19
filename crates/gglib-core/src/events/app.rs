@@ -49,7 +49,8 @@ impl ModelSummary {
 
 /// Borrow a stored model as the lightweight summary events carry.
 ///
-/// Every emit site wants the same five fields off a [`Model`] it already has,
+/// Every emit site wants the same five fields off a [`Model`](crate::domain::Model)
+/// it already has,
 /// so the mapping lives here rather than being spelled out per call site.
 impl From<&crate::domain::Model> for ModelSummary {
     fn from(model: &crate::domain::Model) -> Self {

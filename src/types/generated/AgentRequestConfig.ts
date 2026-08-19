@@ -23,17 +23,20 @@
 export type AgentRequestConfig = { 
 /**
  * Maximum number of LLM→tool→LLM iterations.
- * Clamped to [`MAX_ITERATIONS_CEILING`] server-side.
+ * Clamped to [`MAX_ITERATIONS_CEILING`](gglib_core::domain::agent::config::MAX_ITERATIONS_CEILING)
+ * server-side.
  */
 max_iterations: number | null, 
 /**
  * Maximum number of tool calls dispatched in parallel per iteration.
- * Clamped to [`MAX_PARALLEL_TOOLS_CEILING`] server-side.
+ * Clamped to [`MAX_PARALLEL_TOOLS_CEILING`](gglib_core::domain::agent::config::MAX_PARALLEL_TOOLS_CEILING)
+ * server-side.
  */
 max_parallel_tools: number | null, 
 /**
  * Per-tool execution timeout in milliseconds.
- * Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`] server-side.
+ * Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`](gglib_core::domain::agent::config::MAX_TOOL_TIMEOUT_MS_CEILING)
+ * server-side.
  */
 tool_timeout_ms: number | null, 
 /**

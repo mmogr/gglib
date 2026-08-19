@@ -98,6 +98,11 @@ http-body-util = "0.1"
 tempfile = { workspace = true }
 serde_json = "1.0"
 
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
+
 [lints.rust]
 # This crate had no `[lints]` section, so it inherited and enforced nothing.
 # Locks in the visibility this crate was just given. Declared per-crate

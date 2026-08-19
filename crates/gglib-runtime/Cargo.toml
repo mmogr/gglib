@@ -61,6 +61,11 @@ nix = { version = "0.30", features = ["signal", "process"] }
 tokio-test = { workspace = true }
 tempfile = { workspace = true }
 
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
+
 [lints.rust]
 unsafe_code = "deny"
 # Locks in the visibility this crate was just given. Declared per-crate

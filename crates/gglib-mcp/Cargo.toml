@@ -10,8 +10,10 @@ publish = false
 # Core domain types and ports only - no sqlx
 gglib-core = { path = "../gglib-core" }
 
-# Async runtime
-tokio = { workspace = true, features = ["io-util", "sync", "time"] }
+# Async runtime. `macros` is for `tokio::join!` in `combined.rs`; without it
+# this crate only compiles when something else in the build graph turns the
+# feature on, so `cargo check -p gglib-mcp` alone fails.
+tokio = { workspace = true, features = ["io-util", "macros", "sync", "time"] }
 
 # Async trait
 async-trait = { workspace = true }

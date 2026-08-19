@@ -73,6 +73,13 @@ jobs:
         # Exclude gglib-app (Tauri desktop) as it requires the web_ui directory to be built.
         # gglib-app has minimal API documentation (6 items) and is not the primary doc target.
         # gglib-core (119 items) is the comprehensive library documentation.
+        #
+        # `-D warnings` so a broken intra-doc link cannot be published. This is
+        # the backstop, not the gate: ci.yml runs the same build on every PR,
+        # which is where a regression should be caught. By the time a release
+        # is being cut it is too late to be useful.
+        env:
+          RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
 
       - name: Create index.html redirect

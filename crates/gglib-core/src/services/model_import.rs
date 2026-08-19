@@ -100,8 +100,10 @@ fn merge_tags(gguf_tags: Vec<String>, hf_tags: &[String]) -> Vec<String> {
 
 /// Fetch the model author's published sampling recipe, if one can be found.
 ///
-/// Tries each repo [`generation_config_candidates`] names, in order, and stops
-/// at the first that yields a usable recipe.
+/// Tries each repo name [`generation_config_candidates`] yields, in order, and
+/// stops at the first that gives back a usable recipe.
+///
+/// [`generation_config_candidates`]: crate::domain::generation_config_candidates
 ///
 /// # Every failure is the same failure
 ///

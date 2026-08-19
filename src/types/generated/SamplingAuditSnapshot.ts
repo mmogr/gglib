@@ -67,7 +67,7 @@ effort_suppressed: EffortSuppressions,
  * snapshot reports a comparison between gglib's intent and llama-server's
  * echo; there is no echo for these two (see the module docs), so this is
  * gglib's own account, carried with
- * [`WIRE_BLIND_REASON`](crate::audit_records::WIRE_BLIND_REASON) so no
+ * [`WIRE_BLIND_REASON`] so no
  * surface can render it as a confirmed reading.
  */
 reasoning: ReasoningReadback, 

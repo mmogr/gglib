@@ -118,7 +118,7 @@ pub enum AgentMessage {
 impl AgentMessage {
     /// Estimate the Unicode scalar-value count of this message.
     ///
-    /// Uses [`str::chars().count()`] rather than [`str::len`] (byte count) so
+    /// Uses `str::chars().count()` rather than [`str::len`] (byte count) so
     /// that multi-byte characters are counted as one unit, matching how LLMs
     /// typically measure context length.
     ///

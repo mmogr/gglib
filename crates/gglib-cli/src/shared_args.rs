@@ -212,7 +212,7 @@ pub struct CacheArgs {
     /// every launch whether or not this flag is set (see `--cache-ram-mb`).
     #[arg(long)]
     pub cache: bool,
-    /// Directory for KV cache slot files (defaults to <app-data-dir>/slots if --cache is set and this is omitted)
+    /// Directory for KV cache slot files (defaults to `<app-data-dir>/slots` if --cache is set and this is omitted)
     #[arg(long)]
     pub slot_dir: Option<std::path::PathBuf>,
     /// Byte budget, in GiB, for the on-disk KV cache slot file eviction

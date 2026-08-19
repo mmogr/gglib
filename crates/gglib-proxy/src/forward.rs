@@ -5,7 +5,7 @@
 //!
 //! The request-shaping transforms live in [`gglib_core::request_pipeline`],
 //! which owns their order and its rationale, and the proxy runs the whole of
-//! it with a single [`apply`](gglib_core::request_pipeline::apply) call — the
+//! it with a single [`apply`](gglib_core::request_pipeline::apply()) call — the
 //! same call the in-process agent path makes, so the two cannot drift.  What
 //! is proxy-specific, and therefore still here, is exactly two things:
 //! the `Bytes` ⇄ `Value` conversion at the HTTP boundary
@@ -20,7 +20,7 @@
 //! a better one available.
 //!
 //! Capabilities are resolved with a **single** catalog lookup per request
-//! (via [`gglib_core::request_pipeline::resolve`]) that yields both the
+//! (via [`gglib_core::request_pipeline::resolve()`]) that yields both the
 //! `ModelCapabilities` bitfield (used for request preprocessing) and the
 //! `format:*` tags (used for response-stream parser selection).  No second
 //! lookup is made.  That resolution is shared with every non-proxy surface,
@@ -494,7 +494,8 @@ pub(crate) struct ForwardRequest<'a> {
     /// Live context size (tokens) the target llama-server was launched
     /// with. Converted to a character budget (`× CHARS_PER_TOKEN_APPROX`)
     /// for the history-truncation hard-abort; floored at the historical
-    /// default inside [`truncate_history`].
+    /// default inside
+    /// [`truncate_history`](gglib_core::request_pipeline::truncate_history).
     pub effective_ctx: u64,
     /// This model's stored capabilities and tags, resolved once by
     /// `chat_completions` before the model was ensured running.

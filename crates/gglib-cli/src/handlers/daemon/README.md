@@ -4,7 +4,7 @@
 
 Handlers for the `gglib daemon` command group.
 
-`run` hosts [`gglib_axum::daemon::run_daemon`] in the foreground — the same
+`run` hosts [`gglib_axum::run_daemon`] in the foreground — the same
 composition every auto-launched daemon runs, plus the LAN mode
 (`--share-lan`: wildcard bind, relaxed CORS, mDNS advertising, and a loud
 warning). `status` combines the health probe, the lock file's recorded

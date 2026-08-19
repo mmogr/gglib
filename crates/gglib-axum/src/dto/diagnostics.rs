@@ -3,10 +3,7 @@
 //! `gglib config check-deps` / `paths` / `fast-downloads status` print
 //! directly from types that live in `gglib-core` and `gglib-download` and
 //! carry no `Serialize`. Rather than derive serde onto domain types for the
-//! benefit of one HTTP route, this mirrors them here — the same boundary
-//! [`VulkanStatusDto`] already draws.
-//!
-//! [`VulkanStatusDto`]: super::system::VulkanStatusDto
+//! benefit of one HTTP route, this mirrors them here.
 
 use gglib_core::paths::{ModelsDirSource, ResolvedPaths};
 use gglib_core::utils::system::{Dependency, DependencyStatus};

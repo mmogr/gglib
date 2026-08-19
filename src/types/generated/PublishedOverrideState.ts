@@ -3,7 +3,7 @@
 /**
  * The verdict arm of [`PublishedOverrideField`].
  *
- * Mirrors [`SamplingOverride`](gglib_core::domain::SamplingOverride) minus its
+ * Mirrors [`SamplingOverride`] minus its
  * `NotPublished` arm — a field with nothing published is absent from
  * [`PublishedOverrides::fields`] rather than carried as an empty verdict.
  */

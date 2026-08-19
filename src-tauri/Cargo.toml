@@ -57,5 +57,10 @@ default = []
 # enforced nothing. `gglib-app` is a single binary target with no lib and no
 # workspace consumer, which makes every `pub` in it reachable by nobody — the
 # state this PR just cleared. Denying the lint keeps it cleared.
+[lints.rustdoc]
+# Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
+# declares its own lint keys. Read the rationale there before changing this.
+private_intra_doc_links = "allow"
+
 [lints.rust]
 unreachable_pub = "deny"

@@ -52,13 +52,13 @@ pub struct LlmCompletionAdapter {
     /// The caller's own sampling parameters — the top layer of the hierarchy,
     /// equivalent to what an external client sends the proxy. Written into the
     /// body by [`body::build_chat_body`] and read back out by
-    /// [`request_pipeline::apply`], which resolves the layers beneath them.
+    /// [`request_pipeline::apply()`], which resolves the layers beneath them.
     sampling: Option<InferenceConfig>,
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
     /// The resolved per-model facts, from
-    /// [`gglib_core::request_pipeline::resolve`].  Drives request shaping
+    /// [`gglib_core::request_pipeline::resolve()`].  Drives request shaping
     /// (capabilities, inference defaults) and response-parser selection
     /// (`format:*` tags).  [`ModelContext::passthrough`] — the default —
     /// makes every transform a no-op and selects the identity parser.
@@ -73,7 +73,7 @@ pub struct LlmCompletionAdapter {
     /// process with no dashboard.
     usage_sink: Option<Arc<dyn UsageSink>>,
     /// Bounds on retrying a transient upstream failure — see
-    /// [`retry`](self::retry) for why that is safe to do here.
+    /// [`retry`] for why that is safe to do here.
     ///
     /// The default budget is deliberately modest: the proxy already absorbs
     /// `ModelLoading` server-side, so what reaches this adapter is startup
@@ -189,7 +189,7 @@ impl LlmCompletionAdapter {
     }
 
     /// Set the resolved per-model context, from
-    /// [`gglib_core::request_pipeline::resolve`].
+    /// [`gglib_core::request_pipeline::resolve()`].
     ///
     /// This is what gives the in-process agent path the same per-model handling
     /// the proxy has always had: capability-aware message coalescing, the

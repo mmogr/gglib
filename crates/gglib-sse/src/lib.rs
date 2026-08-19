@@ -103,7 +103,7 @@ where
     /// Subscribe to the live event stream only (no hydration event).
     ///
     /// The stream never ends on its own. Behind
-    /// [`axum::serve`]'s `with_graceful_shutdown`, which waits for every
+    /// [`axum::serve()`]'s `with_graceful_shutdown`, which waits for every
     /// in-flight connection to close, that means one subscriber is enough to
     /// stop the server ever shutting down — prefer [`Self::subscribe_until`]
     /// on any server that shuts down gracefully.

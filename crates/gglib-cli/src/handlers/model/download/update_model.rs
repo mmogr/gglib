@@ -6,6 +6,9 @@
 //! implementation consumed by this CLI, the Axum WebUI and the Tauri app.
 //! What stays here is what only a terminal has: the plan, the prompt and the
 //! printed result.
+//!
+//! [`ModelOps::check_upgrade`]: gglib_app_services::ModelOps::check_upgrade
+//! [`ModelOps::apply_upgrade`]: gglib_app_services::ModelOps::apply_upgrade
 
 use anyhow::Result;
 

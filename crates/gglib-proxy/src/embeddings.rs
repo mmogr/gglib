@@ -28,7 +28,7 @@
 //! It is fixed from two directions, neither of them here: requests for the same
 //! model are batched so one swap serves a burst, and an embedding model small
 //! enough to co-reside takes the second slot and stops swapping altogether. See
-//! [admission](gglib_runtime::process::admission) for both.
+//! `gglib_runtime::process::admission` for both.
 
 use axum::Json;
 use axum::body::Bytes;
