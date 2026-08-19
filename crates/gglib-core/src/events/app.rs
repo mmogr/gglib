@@ -43,6 +43,22 @@ impl ModelSummary {
     }
 }
 
+/// Borrow a stored model as the lightweight summary events carry.
+///
+/// Every emit site wants the same five fields off a [`Model`] it already has,
+/// so the mapping lives here rather than being spelled out per call site.
+impl From<&crate::domain::Model> for ModelSummary {
+    fn from(model: &crate::domain::Model) -> Self {
+        Self {
+            id: model.id,
+            name: model.name.clone(),
+            file_path: model.file_path.to_string_lossy().into_owned(),
+            architecture: model.architecture.clone(),
+            quantization: model.quantization.clone(),
+        }
+    }
+}
+
 impl AppEvent {
     /// Create a model added event.
     pub const fn model_added(model: ModelSummary) -> Self {

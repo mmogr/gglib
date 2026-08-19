@@ -13,10 +13,10 @@ src/components/VerificationModal.tsx 454
 src/hooks/useDownloadManager.ts 451
 src/hooks/useGglibRuntime/streamAgentChat.ts 399
 src/pages/ChatPage.tsx 475
-src/pages/ModelControlCenterPage.tsx 318
+src/pages/ModelControlCenterPage.tsx 325
 src/services/tools/registry.ts 432
 src/services/transport/api/client.ts 361
-src/services/transport/events/sse.ts 353
+src/services/transport/events/sse.ts 342
 src/services/transport/types/dashboard.ts 559
 src/styles/tailwind.css 402
 src/types/benchmark.ts 539

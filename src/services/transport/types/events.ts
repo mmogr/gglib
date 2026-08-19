@@ -144,6 +144,37 @@ export interface LogEntry {
 export type LogEvent = LogEntry;
 
 // ============================================================================
+// Model Events
+// ============================================================================
+
+/**
+ * The lightweight model shape library events carry — deliberately not the full
+ * model row, since a listener's job is to notice the change, not to render
+ * from the notification.
+ *
+ * Mirrors `gglib_core::events::ModelSummary` (camelCase).
+ */
+export interface ModelEventSummary {
+  id: number;
+  name: string;
+  filePath: string;
+  architecture?: string;
+  quantization?: string;
+}
+
+/**
+ * Library changes, broadcast to every client attached to the daemon.
+ *
+ * These let a second window or browser tab reach a list that would otherwise
+ * refresh only when its own tab made the edit. A `gglib model add` in a
+ * terminal is a separate process and does not reach here.
+ */
+export type ModelEvent =
+  | { type: 'model_added'; model: ModelEventSummary }
+  | { type: 'model_updated'; model: ModelEventSummary }
+  | { type: 'model_removed'; modelId: number };
+
+// ============================================================================
 // Verification Events
 // ============================================================================
 
@@ -191,6 +222,7 @@ export interface AppEventMap {
   'server': ServerEvent;
   'download': { type: 'download'; event: DownloadEvent };
   'log': LogEvent;
+  'model': ModelEvent;
   'verification': VerificationEvent;
   'proxy': ProxyEvent;
 }

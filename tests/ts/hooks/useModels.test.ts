@@ -265,4 +265,37 @@ describe('useModels', () => {
 
     expect(listModels).toHaveBeenCalledTimes(2);
   });
+
+  /**
+   * Reloads used to arrive only from awaited, sequential mutation handlers.
+   * They now also arrive from library events, so two can overlap — and a slow
+   * first response landing after a fast second one would overwrite fresh
+   * state with stale. Nothing would correct it, because no further event is
+   * coming.
+   */
+  it('ignores a stale response that lands after a newer one', async () => {
+    const stale: GgufModel[] = [mockModels[0]];
+    const fresh: GgufModel[] = mockModels;
+
+    let releaseStale: (v: GgufModel[]) => void = () => {};
+    const stalePending = new Promise<GgufModel[]>((resolve) => {
+      releaseStale = resolve;
+    });
+
+    // First call hangs; second resolves immediately with the newer truth.
+    vi.mocked(listModels)
+      .mockReturnValueOnce(stalePending)
+      .mockResolvedValueOnce(fresh);
+
+    const { result } = renderHook(() => useModels());
+
+    await act(async () => {
+      const first = result.current.loadModels();
+      const second = result.current.loadModels();
+      releaseStale(stale);
+      await Promise.all([first, second]);
+    });
+
+    expect(result.current.models).toEqual(fresh);
+  });
 });

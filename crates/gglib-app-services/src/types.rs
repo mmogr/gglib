@@ -139,6 +139,19 @@ pub struct GuiModel {
     pub architecture: Option<String>,
     pub quantization: Option<String>,
     pub context_length: Option<u64>,
+    // ── MoE topology (omitted for dense models) ───────────────────────────────
+    // The list view renders *active* parameters from these, the same way the
+    // inspector does off [`ModelDetailDto`]; without them it silently shows the
+    // total instead.
+    /// Total number of experts (MoE models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expert_count: Option<u32>,
+    /// Experts activated per token (MoE models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expert_used_count: Option<u32>,
+    /// Shared experts that are always active (MoE models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expert_shared_count: Option<u32>,
     pub added_at: String,
     pub hf_repo_id: Option<String>,
     #[serde(default)]
@@ -181,6 +194,9 @@ impl GuiModel {
             architecture: model.architecture,
             quantization: model.quantization,
             context_length: model.context_length,
+            expert_count: model.expert_count,
+            expert_used_count: model.expert_used_count,
+            expert_shared_count: model.expert_shared_count,
             added_at: model.added_at.format("%Y-%m-%d %H:%M:%S").to_string(),
             hf_repo_id: model.hf_repo_id,
             tags: model.tags,
@@ -681,6 +697,8 @@ pub struct UpdateSettingsRequest {
     // Proxy loop guard; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_loop_detection: Option<Option<bool>>,
+    // Proxy tool-call repair; explicit `null` re-enables (see `gglib_core::Settings`)
+    #[serde(default, with = "serde_with::rust::double_option")]
     pub tool_call_repair: Option<Option<bool>>,
     // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
     #[serde(
@@ -883,3 +901,7 @@ pub use gglib_runtime::ServerLogEntry;
 #[cfg(test)]
 #[path = "types_tests.rs"]
 mod types_tests;
+
+#[cfg(test)]
+#[path = "types_model_dto_tests.rs"]
+mod types_model_dto_tests;

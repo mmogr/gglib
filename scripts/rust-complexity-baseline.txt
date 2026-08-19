@@ -10,14 +10,15 @@ crates/gglib-app-services/src/benchmark/tune/scoring.rs 352
 crates/gglib-app-services/src/downloads.rs 375
 crates/gglib-app-services/src/launch_options.rs 327
 crates/gglib-app-services/src/mcp.rs 396
-crates/gglib-app-services/src/models.rs 1110
+crates/gglib-app-services/src/models_tests.rs 886
+crates/gglib-app-services/src/models.rs 576
 crates/gglib-app-services/src/proxy.rs 455
 crates/gglib-app-services/src/sampling_explain_tests.rs 694
 crates/gglib-app-services/src/sampling_explain.rs 477
 crates/gglib-app-services/src/servers.rs 965
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
-crates/gglib-app-services/src/types.rs 885
+crates/gglib-app-services/src/types.rs 907
 crates/gglib-axum/src/bootstrap.rs 332
 crates/gglib-axum/src/chat_api.rs 708
 crates/gglib-axum/src/handlers/config/setup.rs 309

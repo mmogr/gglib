@@ -12,10 +12,7 @@
 //!
 //! All terminal rendering lives in `presentation/inspect_display.rs`.
 
-use std::sync::Arc;
-
 use anyhow::Result;
-use gglib_app_services::{ModelDeps, ModelOps};
 
 use crate::bootstrap::CliContext;
 use crate::presentation::inspect_display;
@@ -46,11 +43,7 @@ pub(crate) async fn execute(
     // to this single invocation would never have anything running in it
     // regardless — this makes that explicit instead of asking a real runner
     // a question it can only ever answer "no" to.
-    let ops = ModelOps::new(ModelDeps {
-        core: ctx.app.clone(),
-        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
-        gguf_parser: ctx.gguf_parser.clone(),
-    });
+    let ops = super::one_shot_model_ops(ctx);
     let dto = ops.get_detail(model.id).await?;
 
     if json {

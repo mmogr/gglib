@@ -3,6 +3,7 @@ import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
+import { useModelLibraryEvents } from '../hooks/useModelLibraryEvents';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import { useToastContext } from '../contexts/ToastContext';
 import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
@@ -61,6 +62,12 @@ export default function ModelControlCenterPage({
     await Promise.all([loadModels(), refreshFilterOptions(), loadTags()]);
   }, [loadModels, refreshFilterOptions, loadTags]);
   
+  // Another client's edits. Mounted here rather than inside `useModels`
+  // because a library change moves more than the list: a new architecture or
+  // tag has to reach the filter options too, or the user can see the model
+  // that appeared but cannot filter to it.
+  useModelLibraryEvents(handleRefreshAll);
+
   // Download completion effects - batches completions, triggers refresh, shows toast
   const { onCompleted } = useDownloadCompletionEffects({
     refreshModels: handleRefreshAll,
