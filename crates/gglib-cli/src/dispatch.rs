@@ -130,14 +130,13 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 tools
             };
 
-            handlers::inference::agent_question::execute(
-                ctx,
+            let args = handlers::inference::agent_question::QuestionArgs {
                 question,
-                model,
+                model_arg: model,
                 file,
                 port,
                 max_iterations,
-                effective_tools,
+                tools: effective_tools,
                 tool_timeout_ms,
                 max_parallel,
                 observation_tools,
@@ -146,8 +145,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 quiet,
                 sampling,
                 context,
-            )
-            .await?;
+            };
+            handlers::inference::agent_question::execute(ctx, args).await?;
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────

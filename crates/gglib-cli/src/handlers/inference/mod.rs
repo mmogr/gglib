@@ -2,5 +2,6 @@
 pub(crate) mod agent_question;
 pub(crate) mod chat;
 pub(crate) mod proxy;
+pub(crate) mod question_input;
 pub(crate) mod serve;
 pub(crate) mod shared;
