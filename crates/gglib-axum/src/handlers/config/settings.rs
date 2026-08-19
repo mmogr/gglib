@@ -42,6 +42,7 @@ pub(crate) async fn models_directory(
 
 /// Update request for models directory.
 #[derive(serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct UpdateModelsDirectoryRequest {
     pub path: String,
 }

@@ -24,6 +24,7 @@ use crate::domain::residency::SecondarySlotDecision;
 
 /// One model resident in VRAM.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ResidentSlotSnapshot {
     /// Slot index. `0` is the primary.
     pub slot: usize,
@@ -42,11 +43,13 @@ pub struct ResidentSlotSnapshot {
     /// llama.cpp `/slots` poller follow.
     pub is_primary: bool,
     /// Seconds this model has been resident.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub resident_for_secs: u64,
 }
 
 /// Requests waiting for one model that is not currently resident.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct QueuedModelSnapshot {
     /// The model they are waiting for.
     pub model_name: String,
@@ -56,11 +59,13 @@ pub struct QueuedModelSnapshot {
     /// is the sign of a model that never goes idle long enough to be swapped
     /// out — see the runtime's `admission` module for why that is bounded by a
     /// deadline rather than by preemption.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub oldest_wait_ms: u64,
 }
 
 /// Why the second VRAM slot is or is not in use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct SecondarySlotStatus {
     /// Stable machine-readable label, for styling. One of `resident`,
     /// `available`, `too_large`, `no_headroom`, `unknown_footprint`,
@@ -146,6 +151,7 @@ impl SecondarySlotStatus {
 
 /// Everything the admission queue and resident set look like right now.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct AdmissionSnapshot {
     /// Models resident in VRAM, primary first. Empty before anything has been
     /// launched.
@@ -156,8 +162,10 @@ pub struct AdmissionSnapshot {
     /// Requests that have waited in the queue since the runtime started.
     /// Compare against [`Self::total_swaps`]: a large ratio is the queue doing
     /// its job, batching many requests behind one swap.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_queued: u64,
     /// Model swaps performed since the runtime started.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_swaps: u64,
     /// Why the second slot is or is not in use.
     pub secondary_slot: SecondarySlotStatus,

@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// Summary of a HuggingFace model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfModelSummary {
     /// Model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
     pub id: String,
@@ -22,8 +23,10 @@ pub struct HfModelSummary {
     /// Author/organization (e.g., "TheBloke")
     pub author: Option<String>,
     /// Total download count
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub downloads: u64,
     /// Like count
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub likes: u64,
     /// Last modified timestamp
     pub last_modified: Option<String>,
@@ -38,6 +41,7 @@ pub struct HfModelSummary {
 
 /// Sort field options for HuggingFace model search.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum HfSortField {
     #[default]
@@ -51,6 +55,7 @@ pub enum HfSortField {
 
 /// Request for searching HuggingFace models.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfSearchRequest {
     pub query: Option<String>,
     pub min_params_b: Option<f64>,
@@ -79,18 +84,22 @@ impl Default for HfSearchRequest {
 
 /// Response from HuggingFace model search.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfSearchResponse {
     pub models: Vec<HfModelSummary>,
     pub has_more: bool,
     pub page: u32,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub total_count: Option<u64>,
 }
 
 /// Information about a specific quantization variant.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfQuantization {
     pub name: String,
     pub file_path: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub size_bytes: u64,
     pub size_mb: f64,
     pub is_sharded: bool,
@@ -99,6 +108,7 @@ pub struct HfQuantization {
 
 /// Response containing available quantizations for a model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfQuantizationsResponse {
     pub model_id: String,
     pub quantizations: Vec<HfQuantization>,
@@ -108,6 +118,7 @@ pub struct HfQuantizationsResponse {
 ///
 /// Used for both HuggingFace model metadata and local running server queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ToolSupportResponse {
     pub supports_tool_calls: bool,
     pub confidence: f32,
@@ -130,26 +141,32 @@ impl From<gglib_core::ports::ToolSupportDetection> for ToolSupportResponse {
 
 /// Frontend-friendly model structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct GuiModel {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     pub name: String,
     pub file_path: String,
     pub param_count_b: f64,
     pub architecture: Option<String>,
     pub quantization: Option<String>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_length: Option<u64>,
     // ── MoE topology (omitted for dense models) ───────────────────────────────
     // The list view renders *active* parameters from these, the same way the
     // inspector does off [`ModelDetailDto`]; without them it silently shows the
     // total instead.
     /// Total number of experts (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_count: Option<u32>,
     /// Experts activated per token (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_used_count: Option<u32>,
     /// Shared experts that are always active (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
     pub added_at: String,
@@ -158,15 +175,19 @@ pub struct GuiModel {
     pub tags: Vec<String>,
     #[serde(default)]
     pub is_serving: bool,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
     /// Whether [`Self::inference_defaults`] was set by the user or
     /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,
     /// Per-model server defaults (port, URL overrides, etc.).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_defaults: Option<gglib_core::domain::ServerConfig>,
     /// Capability flags stored for this model.
@@ -174,11 +195,17 @@ pub struct GuiModel {
     /// Serialized as a `u32` bit-field.  The frontend receives this value
     /// and may display individual flags; the `PATCH /api/models/{id}/capabilities`
     /// endpoint lets the user override them.
+    ///
+    /// A `bitflags` newtype over `u32`, so it crosses the wire as a bare
+    /// number and cannot derive `TS` itself — TypeScript reads it through the
+    /// `CAPABILITY_FLAGS` bitmask.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default)]
     pub capabilities: gglib_core::ModelCapabilities,
     /// Denormalised benchmark summary (speed badges).
     ///
     /// `None` if the model has never been benchmarked.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub benchmark_summary: Option<gglib_core::domain::benchmark::ModelBenchmarkSummary>,
 }
@@ -236,10 +263,12 @@ impl From<Model> for GuiModel {
 /// - Axum: `GET /api/models/:id/detail`
 /// - GUI frontend: model detail panel
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct ModelDetailDto {
     // ── Core identity ─────────────────────────────────────────────────────────
     /// Database ID of the model.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     /// Human-readable name.
     pub name: String,
@@ -248,38 +277,49 @@ pub struct ModelDetailDto {
     /// Parameter count in billions.
     pub param_count_b: f64,
     /// Model architecture (e.g. `"llama"`, `"mistral"`).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub architecture: Option<String>,
     /// Quantization type (e.g. `"Q4_K_M"`, `"F16"`).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quantization: Option<String>,
     /// Maximum context length in tokens.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<u64>,
     // ── MoE topology (omitted for non-MoE models) ─────────────────────────────
     /// Total number of experts (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_count: Option<u32>,
     /// Experts activated per token (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_used_count: Option<u32>,
     /// Shared experts that are always active (MoE models only).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
     // ── HuggingFace provenance ────────────────────────────────────────────────
     /// HuggingFace repository ID (e.g. `"bartowski/Llama-3.1-8B-GGUF"`).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_repo_id: Option<String>,
     /// Original filename on HuggingFace Hub.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_filename: Option<String>,
     /// Git commit SHA from HuggingFace Hub.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_commit_sha: Option<String>,
     /// When the model was downloaded from HuggingFace (`"%Y-%m-%d %H:%M:%S"`).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub download_date: Option<String>,
     /// Last time an update check was performed (`"%Y-%m-%d %H:%M:%S"`).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_update_check: Option<String>,
     // ── Organisation ──────────────────────────────────────────────────────────
@@ -287,14 +327,20 @@ pub struct ModelDetailDto {
     #[serde(default)]
     pub tags: Vec<String>,
     /// Capability flags serialized as a `u32` bit-field.
+    ///
+    /// A `bitflags` newtype, so it crosses the wire as a bare number and
+    /// cannot derive `TS` itself — see [`GuiModel::capabilities`].
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default)]
     pub capabilities: gglib_core::ModelCapabilities,
     // ── Inference defaults ────────────────────────────────────────────────────
     /// Per-model inference parameter overrides.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
     /// Whether [`Self::inference_defaults`] was set by the user or
     /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,
     /// Whether this model's chat template reads `reasoning_effort`, as
@@ -337,6 +383,7 @@ pub struct ModelDetailDto {
     #[serde(default)]
     pub is_serving: bool,
     /// Port the model is served on, if currently serving.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
     // ── Raw GGUF key-value pairs ──────────────────────────────────────────────
@@ -399,8 +446,10 @@ impl ModelDetailDto {
 
 /// Request body for starting a server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct StartServerRequest {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_length: Option<u64>,
     pub port: Option<u16>,
     #[serde(default)]
@@ -428,6 +477,7 @@ pub struct StartServerRequest {
 
 /// Response for starting a server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct StartServerResponse {
     pub port: u16,
     pub message: String,
@@ -435,11 +485,14 @@ pub struct StartServerResponse {
 
 /// Information about a running model server (GUI DTO).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ServerInfo {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     pub model_name: String,
     pub pid: Option<u32>,
     pub port: u16,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub started_at: u64,
 }
 
@@ -462,12 +515,14 @@ impl ServerInfo {
 
 /// Request body for adding a model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct AddModelRequest {
     pub file_path: String,
 }
 
 /// Request body for removing a model.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoveModelRequest {
     #[serde(default)]
     pub force: bool,
@@ -475,6 +530,7 @@ pub struct RemoveModelRequest {
 
 /// Request body for updating a model.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateModelRequest {
     pub name: Option<String>,
@@ -485,6 +541,19 @@ pub struct UpdateModelRequest {
     /// - Some(Some(config)) — set/replace the model's server defaults
     /// - Some(None) — clear the override (NULL in DB, revert to global default)
     /// - None — don't touch this field (key omitted from payload)
+    ///
+    /// ts-rs cannot read a nested `Option`, so the three states are spelled
+    /// out by hand: absent, `null`, or a value.
+    // `as` rather than `type`: ts-rs registers a field's dependencies from its
+    // Rust type, and a `type = "…"` override replaces the type without
+    // registering anything, so the emitted file names `ServerConfig` and never
+    // imports it. `as` states a substitute type, which is both rendered and
+    // followed for imports. `optional = nullable` then gives `field?: T | null`
+    // — the same three states, with the import.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<gglib_core::domain::ServerConfig>", optional = nullable)
+    )]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
 }
@@ -504,6 +573,7 @@ pub struct UpdateModelRequest {
 /// { "requiresStrictTurns": true }
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct SetCapabilitiesRequest {
     /// Override whether the model supports a `system` role in the chat template.
@@ -519,6 +589,7 @@ pub struct SetCapabilitiesRequest {
 /// What a retag pass changed. Mirrors `gglib_core::services::RetagDiff`,
 /// with `changed` folded in so the wire needs no method call.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct RetagResponse {
     pub changed: bool,
@@ -534,6 +605,7 @@ pub struct RetagResponse {
 /// baseline to compare against), so callers should present a missing
 /// baseline distinctly rather than as a genuine new revision.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeCheck {
     pub has_update: bool,
@@ -543,6 +615,7 @@ pub struct UpgradeCheck {
 
 /// The outcome of applying an upgrade.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeOutcome {
     /// False when the model was already at the latest revision.
@@ -558,6 +631,7 @@ pub struct UpgradeOutcome {
 
 /// Current configuration for the models directory shown in settings UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelsDirectoryInfo {
     pub path: String,
     pub source: String,
@@ -572,9 +646,11 @@ pub struct ModelsDirectoryInfo {
 /// for a fresh install with no saved values, which is what callers resolving
 /// their own fallbacks need to test against.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub default_download_path: Option<String>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_context_size: Option<u64>,
     pub proxy_port: Option<u16>,
     pub llama_base_port: Option<u16>,
@@ -583,6 +659,7 @@ pub struct AppSettings {
     pub max_tool_iterations: Option<u32>,
     pub max_stagnation_steps: Option<u32>,
     /// Default model ID for quick commands (e.g., `gglib question`).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_model_id: Option<i64>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
     /// Named sampling profiles, selectable per request as `{model}:{profile}`.
@@ -650,57 +727,89 @@ impl From<gglib_core::Settings> for AppSettings {
 /// omitted key (leave unchanged) — the same pattern used by
 /// [`UpdateModelRequest::server_defaults`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSettingsRequest {
+    // Every field below is a `double_option`, which ts-rs cannot read through:
+    // the nested `Option` needs an explicit type, spelled `T | null` with
+    // `optional` so the emitted `field?: T | null` carries all three states —
+    // absent leaves the setting alone, `null` clears it, a value sets it.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_download_path: Option<Option<String>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_context_size: Option<Option<u64>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_port: Option<Option<u16>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub llama_base_port: Option<Option<u16>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_download_queue_size: Option<Option<u32>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub show_memory_fit_indicators: Option<Option<bool>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_tool_iterations: Option<Option<u32>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub max_stagnation_steps: Option<Option<u32>>,
     /// Default model ID for quick commands (e.g., `gglib question`).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_model_id: Option<Option<i64>>,
+    // `as` rather than `type`, for the import — see `server_defaults` above.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<gglib_core::domain::InferenceConfig>", optional = nullable)
+    )]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub inference_defaults: Option<Option<gglib_core::domain::InferenceConfig>>,
     /// Replaces the whole profile list. `null` clears it; an omitted key leaves
     /// it untouched, so a client updating an unrelated setting cannot drop
     /// profiles it never knew about.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<Vec<gglib_core::domain::InferenceProfile>>", optional = nullable)
+    )]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub inference_profiles: Option<Option<Vec<gglib_core::domain::InferenceProfile>>>,
     // Setup wizard
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub setup_completed: Option<Option<bool>>,
     // Title generation
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub title_generation_prompt: Option<Option<String>>,
     // Network binding (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub bind_host: Option<Option<String>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub share_lan: Option<Option<bool>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_api_key: Option<Option<String>>,
     // Sampling authority (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub trust_client_sampling: Option<Option<bool>>,
     // Proxy loop guard; explicit `null` re-enables (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_loop_detection: Option<Option<bool>>,
     // Proxy tool-call repair; explicit `null` re-enables (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub tool_call_repair: Option<Option<bool>>,
     // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(
         default,
         alias = "toolCallFloor",
@@ -708,10 +817,13 @@ pub struct UpdateSettingsRequest {
     )]
     pub agentic_sampling: Option<Option<bool>>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_autostart: Option<Option<bool>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub close_to_tray: Option<Option<bool>>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub start_at_login: Option<Option<bool>>,
 }
@@ -752,7 +864,9 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
 
 /// MCP server DTO for serialization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpServerDto {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     pub name: String,
     pub server_type: String,
@@ -761,39 +875,49 @@ pub struct McpServerDto {
     pub lifecycle: McpLifecycle,
     pub env: Vec<McpEnvEntryDto>,
     pub created_at: String,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_connected_at: Option<String>,
     /// Whether the server configuration is valid
     pub is_valid: bool,
     /// Last validation or runtime error
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
 }
 
 /// MCP server configuration DTO.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpServerConfigDto {
     /// Command/basename to resolve (e.g., "npx" or "/usr/local/bin/python3")
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     /// Cached absolute path (auto-resolved from command)
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_path_cache: Option<String>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<String>>,
     /// Working directory (must be absolute if specified)
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_dir: Option<String>,
     /// Additional PATH entries for child process
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path_extra: Option<String>,
     /// URL for SSE connection (required for sse)
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
 /// MCP environment variable DTO.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpEnvEntryDto {
     pub key: String,
     pub value: String,
@@ -801,6 +925,7 @@ pub struct McpEnvEntryDto {
 
 /// MCP server status DTO.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum McpServerStatusDto {
     Stopped,
@@ -811,6 +936,7 @@ pub enum McpServerStatusDto {
 
 /// MCP server info for GUI display (nested structure matching TS expectations).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpServerInfo {
     pub server: McpServerDto,
     pub status: McpServerStatusDto,
@@ -820,6 +946,7 @@ pub struct McpServerInfo {
 
 /// Request to create a new MCP server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct CreateMcpServerRequest {
     pub name: String,
     pub server_type: String,
@@ -837,6 +964,7 @@ pub struct CreateMcpServerRequest {
 
 /// Request to update an MCP server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct UpdateMcpServerRequest {
     pub name: Option<String>,
     pub command: Option<String>,
@@ -851,11 +979,16 @@ pub struct UpdateMcpServerRequest {
 
 /// MCP tool information for GUI display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpToolInfo {
     pub name: String,
     pub description: Option<String>,
+    /// Raw JSON Schema, passed through verbatim from the MCP server. Opaque
+    /// here, so it crosses as unstructured JSON rather than a named type.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, unknown> | null"))]
     pub input_schema: Option<serde_json::Value>,
     /// Human-readable display title from MCP `annotations.title`.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 }
@@ -867,6 +1000,7 @@ pub struct McpToolInfo {
 /// the ordinary case this exists to diagnose, so `ok: false` carries the
 /// reason rather than the request failing.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct McpTestResult {
     pub ok: bool,
@@ -878,15 +1012,21 @@ pub struct McpTestResult {
 
 /// Request to call an MCP tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpToolCallRequest {
     pub tool_name: String,
+    /// Tool arguments, shaped by the tool's own schema and opaque here.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, unknown>"))]
     pub arguments: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Response from an MCP tool call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpToolCallResponse {
     pub success: bool,
+    /// Whatever the tool returned. Opaque here, as in [`McpToolInfo`].
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown"))]
     pub data: Option<serde_json::Value>,
     pub error: Option<String>,
 }

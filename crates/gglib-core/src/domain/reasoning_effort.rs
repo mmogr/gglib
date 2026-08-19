@@ -54,6 +54,7 @@ use serde::{Deserialize, Serialize};
 /// [`InferenceConfig::reasoning_effort`]: super::InferenceConfig#structfield.reasoning_effort
 /// [`InferenceConfig::reasoning_budget_tokens`]: super::InferenceConfig#structfield.reasoning_budget_tokens
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
     /// The least thinking the template offers.

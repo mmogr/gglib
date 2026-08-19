@@ -10,6 +10,7 @@ use gglib_core::download::QueueSnapshot;
 
 /// Request to queue a download.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct QueueDownloadRequest {
     pub model_id: String,
     /// Quantization to download. Accepts both "quant" and "quantization" field names
@@ -21,6 +22,7 @@ pub(crate) struct QueueDownloadRequest {
 /// Response from queue_download.
 /// Canonical shape returned to all clients - never a tuple.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct QueueDownloadResponse {
     /// Position in the queue (0 = downloading now).
     pub position: usize,
@@ -30,6 +32,7 @@ pub(crate) struct QueueDownloadResponse {
 
 /// Request to reorder a single download.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ReorderRequest {
     pub model_id: String,
     pub position: usize,
@@ -37,6 +40,7 @@ pub(crate) struct ReorderRequest {
 
 /// Request to reorder the entire queue.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ReorderFullRequest {
     pub ids: Vec<String>,
 }

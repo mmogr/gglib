@@ -301,6 +301,7 @@ impl std::fmt::Display for EvalArm {
 
 /// One arm's aggregate scores across the task suite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ArmScores {
     /// Mean AST-style tool-call match score, `0.0`–`1.0`.
     pub tool_accuracy: f64,
@@ -334,10 +335,12 @@ pub struct ArmScores {
     /// model-specific in a way that would make a single blended score
     /// incomparable across machines.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub total_completion_tokens: Option<u64>,
     /// Total wall-clock milliseconds across every task in the suite,
     /// unfiltered — the honest cost of running it.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_wall_ms: u64,
     /// Mean time to the first tool call, over the tasks that made one. `None`
     /// when no task in the arm called a tool.
@@ -374,6 +377,7 @@ const fn one() -> usize {
 
 /// Per-axis difference, `gglib − raw`. Positive means gglib scored higher.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ArmDelta {
     /// Tool-accuracy difference.
     pub tool_accuracy: f64,
@@ -413,6 +417,7 @@ pub struct ArmDelta {
 /// the other is a different finding from one that passes 3/3 versus 0/3, and
 /// both render as "passed / failed" once the per-seed detail is gone.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct AgenticTaskComparison {
     /// Task identifier from the suite.
     pub task_id: String,
@@ -454,6 +459,7 @@ impl AgenticTaskComparison {
 
 /// The complete A/B report — the leaderboard interchange format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct AgenticEvalReport {
     /// Model name as stored in the catalog.
     pub model_name: String,
@@ -462,6 +468,7 @@ pub struct AgenticEvalReport {
     /// Parameter count in billions.
     pub param_count_b: f64,
     /// Context size both arms ran at, in tokens.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub ctx_size: u64,
     /// Aggregate scores under the raw arm.
     pub raw: ArmScores,
@@ -856,6 +863,7 @@ impl AgenticEvalReport {
 /// [`AgenticTaskComparison::pass_counts`]; folding them in here would double
 /// count, since the match score is most of what decides `passed`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct PairedEffect {
     /// Matched `(task, seed)` pairs in which both arms produced a real
     /// observation.

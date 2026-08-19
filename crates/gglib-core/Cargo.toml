@@ -24,6 +24,13 @@ tracing-appender = { workspace = true }
 sha2 = "0.10"
 futures-core = "0.3"
 url = "2.5"
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# Emit TypeScript for the domain types that cross the wire. See this crate's
+# `domain` module docs for which do and why. Enabled transitively by the
+# adapter crates' own `ts-bindings`, never on its own in an ordinary build.
+ts-bindings = ["dep:ts-rs"]
 
 [dev-dependencies]
 mockall = { workspace = true }

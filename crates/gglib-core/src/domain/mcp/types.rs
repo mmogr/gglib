@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Controls when gglib automatically starts the server process.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum McpLifecycle {
     /// Start the server at host initialisation (proxy startup, GUI launch, web server boot).

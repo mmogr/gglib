@@ -97,15 +97,18 @@ impl ServerEvents for NoopServerEvents {
 
 /// Entry in a server snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct ServerSnapshotEntry {
     /// Model ID being served.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     /// Model name.
     pub model_name: String,
     /// Port the server is listening on.
     pub port: u16,
     /// Unix timestamp (seconds) when started.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub started_at: u64,
     /// Whether the server is healthy.
     pub healthy: bool,

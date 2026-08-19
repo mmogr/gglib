@@ -8,8 +8,10 @@ use serde::{Deserialize, Serialize};
 /// Upserted in the same transaction as each new result so that the model list
 /// query can LEFT JOIN this table and show speed badges without extra round-trips.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelBenchmarkSummary {
     /// Foreign key → `models.id`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     /// Best token-generation throughput across all perf runs.
     pub best_tg_tps: Option<f64>,
@@ -22,8 +24,10 @@ pub struct ModelBenchmarkSummary {
     /// Backend reported by the most recent perf run.
     pub latest_backend: Option<String>,
     /// Total number of perf runs recorded for this model.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub perf_run_count: i64,
     /// Total number of compare runs recorded for this model.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub compare_run_count: i64,
     /// UTC timestamp of the most recent benchmark (either type).
     pub last_benchmarked_at: DateTime<Utc>,

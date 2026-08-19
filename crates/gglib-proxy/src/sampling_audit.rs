@@ -189,6 +189,7 @@ const FLOAT_EPSILON: f64 = 1e-6;
 /// keys on the pinned build; the rest are not gglib's business and naming
 /// them would invent an obligation to keep up with them.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct SlotParams {
     /// `temperature` as llama-server parsed it.
     #[serde(default, deserialize_with = "tolerant_f64")]
@@ -273,6 +274,7 @@ where
 /// ([`crate::dashboard::DashboardSnapshot`]): `field` is a `&'static str`
 /// because the names are gglib's own, and nothing reads these back into Rust.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct Divergence {
     /// Wire name of the parameter.
     pub field: &'static str,
@@ -290,6 +292,7 @@ pub struct Divergence {
 ///
 /// Deliberately not a bare count — see the module docs on `Blind`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum AuditState {
     /// The poller is running but no in-flight request has been caught yet.
@@ -309,8 +312,10 @@ pub enum AuditState {
     Comparing {
         /// Requests *observed in flight* — never requests sent. See the
         /// module docs: this instrument samples.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         comparisons: u64,
         /// How many of those disagreed on at least one field.
+        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
         divergences: u64,
     },
 }
@@ -902,6 +907,7 @@ fn resolved_reasoning(
 /// the rung's name here, at the one point where
 /// [`SamplingDecision::layer_names`] is still in hand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct SuppressedEffortRecord {
     /// The level the ladder resolved and llama-server never saw.
     pub level: ReasoningEffort,
@@ -932,8 +938,10 @@ pub struct SuppressedEffortRecord {
 /// meanings. A surface rendering this must say what it is beside, not present
 /// the count alone.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct EffortSuppressions {
     /// Requests on which a resolved level was deleted before sending.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
     /// The most recent suppression, or `None` if there has been none.
     ///
@@ -989,6 +997,7 @@ fn compare_published(
 /// Serializable view of [`SamplingAuditStore`], carried on the dashboard
 /// snapshot.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct SamplingAuditSnapshot {
     /// Whether the organ is observing, blind, or simply has not seen a
     /// request yet. Never collapse this to its counts when rendering.
@@ -1000,10 +1009,13 @@ pub struct SamplingAuditSnapshot {
     /// does. A large count here next to zero comparisons means the traffic is
     /// too heterogeneous to attribute, which is a different problem from
     /// blindness and wants a different fix.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub skipped_ambiguous: u64,
     /// Client sampling fields that could not be read as sent.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub client_fields_rejected: u64,
     /// Client sampling fields dropped by the trust gate.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub client_fields_discarded: u64,
     /// Most recent field-level disagreements, oldest first.
     pub recent_divergences: Vec<Divergence>,
@@ -1056,6 +1068,7 @@ pub struct SamplingAuditSnapshot {
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct PublishedOverrides {
     /// Resolved intents folded in since this model launched.
     ///
@@ -1063,6 +1076,7 @@ pub struct PublishedOverrides {
     /// [`AuditState`]'s rule applied to this section: the fields below are
     /// empty both when a model publishes nothing and when no request has been
     /// resolved yet, and those license opposite conclusions.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub intents: u64,
     /// One entry per field this model publishes, in
     /// [`MODEL_SAMPLING_KEYS`](gglib_core::domain::MODEL_SAMPLING_KEYS) order.
@@ -1081,6 +1095,7 @@ pub struct PublishedOverrides {
 ///
 /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct PublishedOverrideField {
     /// gglib's wire name for the parameter.
     pub field: &'static str,
@@ -1097,6 +1112,7 @@ pub struct PublishedOverrideField {
 /// `NotPublished` arm — a field with nothing published is absent from
 /// [`PublishedOverrides::fields`] rather than carried as an empty verdict.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum PublishedOverrideState {
     /// gglib names nothing, so llama.cpp applies the model author's value.

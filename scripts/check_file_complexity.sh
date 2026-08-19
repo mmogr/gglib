@@ -32,8 +32,12 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 current_sizes() {
+  # `types/generated/` is ts-rs output. The budget exists to prompt a split,
+  # and there is nothing to split — the file is however long the Rust type is,
+  # and the only way to shorten it is to change the wire. Rust's own ratchet
+  # already covers the source these are generated from.
   find "$ROOT_DIR/src" \( -name "*.ts" -o -name "*.tsx" -o -name "*.css" \) \
-    -not -path "*/node_modules/*" -exec wc -l {} + \
+    -not -path "*/node_modules/*" -not -path "*/types/generated/*" -exec wc -l {} + \
     | awk -v root="$ROOT_DIR/" '$2 != "total" && $1 > '"$THRESHOLD"' {
         path = $2; sub(root, "", path); print path" "$1
       }' \

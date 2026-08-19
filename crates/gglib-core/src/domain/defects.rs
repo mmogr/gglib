@@ -42,16 +42,21 @@ use std::sync::Mutex;
 
 /// Cumulative defect counts for one model.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelDefectCounts {
     /// Requests the proxy forwarded (or would have, but for a guard) for
     /// this model — every rate's denominator.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
     /// Requests the loop/stagnation guard rejected before dispatch.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub loop_guard_trips: u64,
     /// Turns whose tool call failed schema validation and was re-issued
     /// with `tool_choice: "required"`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repairs_attempted: u64,
     /// Of those, the re-issues that produced a conformant call.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repairs_succeeded: u64,
     /// Streaming turns that died on an *upstream* mid-stream failure — an
     /// error event the model server emitted mid-generation, or the byte
@@ -67,6 +72,7 @@ pub struct ModelDefectCounts {
     ///
     /// Client disconnects are deliberately not in here: hanging up is a
     /// person's action, not a model defect.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub stream_errors: u64,
     /// Turns the model server cut off at the token ceiling
     /// (`finish_reason == "length"`).
@@ -75,8 +81,10 @@ pub struct ModelDefectCounts {
     /// allowed to be long — but a *rising* rate is how a runaway generation
     /// looks before anything else notices, and it is the cheapest evidence
     /// that a context budget is mis-sized.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub truncated_generations: u64,
     /// Turns that produced nothing a client can render.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub empty_responses: u64,
     /// Of those, the ones that produced reasoning and nothing else.
     ///
@@ -85,9 +93,11 @@ pub struct ModelDefectCounts {
     /// distinction is *why*. A model stranding its whole answer in
     /// `reasoning_content` is a prompt/template problem; one producing
     /// nothing at all is not.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub reasoning_only: u64,
     /// Turns where dialect markup survived normalization into client-visible
     /// output — the drift alarm, per model rather than fleet-wide.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub dialect_residue: u64,
     /// Turns whose tool call could not be validated at all, so repair never
     /// had an opinion to act on.
@@ -96,9 +106,11 @@ pub struct ModelDefectCounts {
     /// `anyOf` gets zero repair coverage *and*, until now, zero evidence of
     /// that fact. A high rate here means the repair rate below it is
     /// measuring a much smaller slice of traffic than it appears to.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub unvalidatable_schemas: u64,
     /// Turns whose normalization discarded a malformed dialect tool call and
     /// surfaced the raw body as visible text instead.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub normalization_errors: u64,
 }
 

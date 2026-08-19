@@ -30,12 +30,23 @@ use super::tool_types::ToolCall;
 /// Custom `Serialize` and `Deserialize` impls are in
 /// [`super::messages_serde`].
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct AssistantContent {
     /// Optional text content from the model.  `None` when the model produced
     /// only tool calls with no text preamble.
+    ///
+    /// Both annotations below restate what [`super::messages_serde`]'s
+    /// hand-written impls do, because ts-rs reads *fields* and cannot see a
+    /// manual `Serialize`. Without them the binding claims a `text` key that
+    /// no payload has ever carried. The table above is the contract.
+    #[cfg_attr(feature = "ts-bindings", ts(rename = "content", optional))]
     pub text: Option<String>,
     /// Tool calls requested by the model.  Empty when the model produced a
     /// text-only response (final answer).
+    ///
+    /// `as Option<…>` because the impl omits the key entirely for an empty
+    /// vec, which is a state a bare `Vec` cannot express in TypeScript.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<ToolCall>>", optional))]
     pub tool_calls: Vec<ToolCall>,
 }
 
@@ -69,6 +80,7 @@ impl AssistantContent {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "lowercase")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum AgentMessage {
     /// A system-level instruction that sets the model's persona and constraints.
     System {

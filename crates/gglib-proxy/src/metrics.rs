@@ -33,6 +33,7 @@ const MAX_SNAPSHOTS: usize = 50;
 
 /// A single per-request observation recorded after the truncation pass.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ContextSnapshot {
     /// Name of the model that was targeted by the request.
     pub model_name: String,
@@ -64,10 +65,15 @@ pub struct ContextSnapshot {
     /// HTTP 400 instead of forwarding it (see `loop_guard`).
     pub loop_guard_tripped: bool,
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub recorded_at_secs: u64,
     /// Per-store sequence number assigned by [`ContextMetricsStore::record`].
     /// Identifies this snapshot for post-stream back-patching; callers pass
     /// `0` and the store overwrites it. Not part of the wire contract.
+    ///
+    /// `#[serde(skip)]` keeps it off the wire, and ts-rs honours that through
+    /// its serde compatibility layer — so it is absent from the binding too,
+    /// with no numeric override needed.
     #[serde(skip)]
     pub seq: u64,
 }

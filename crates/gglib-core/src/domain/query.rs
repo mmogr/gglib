@@ -17,6 +17,7 @@ use crate::domain::Model;
 /// The field to sort the model list by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum ModelSortBy {
     /// Sort by when the model was added (most recent first by default).
     #[default]
@@ -32,6 +33,7 @@ pub enum ModelSortBy {
 /// Direction for sorting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum SortOrder {
     /// Largest / most-recent first.
     #[default]

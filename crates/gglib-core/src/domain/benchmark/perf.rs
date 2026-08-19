@@ -44,28 +44,37 @@ impl Default for PerfConfig {
 
 /// Result of running `llama-bench` on a single model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelPerfResult {
     /// Database ID of this result row (set after persistence).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub id: Option<i64>,
     /// Foreign key → `models.id`.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub model_id: i64,
     /// Foreign key → `benchmark_runs.id` (nullable; SET NULL on run delete).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub run_id: Option<i64>,
     /// Prompt-processing throughput (tokens/sec).
     pub pp_tps: f64,
     /// Token-generation throughput (tokens/sec).
     pub tg_tps: f64,
     /// Number of prompt tokens used in the benchmark.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub pp_tokens: i64,
     /// Number of generation tokens used in the benchmark.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub tg_tokens: i64,
     /// Backend reported by llama-bench (e.g. "Metal", "CUDA", "CPU").
     pub backend: Option<String>,
     /// Number of GPU layers offloaded.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub ngl: Option<i64>,
     /// Context size used.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub context_size: Option<i64>,
     /// Number of repetitions averaged.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repetitions: i64,
     /// UTC timestamp of this result.
     pub created_at: DateTime<Utc>,

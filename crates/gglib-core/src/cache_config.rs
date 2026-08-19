@@ -42,6 +42,7 @@ pub enum CacheRamSetting {
 /// hard-errors at startup otherwise — see `resolve_kv_cache_types` in
 /// `gglib-runtime` for the escape hatches).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum KvCacheType {
     F32,
     F16,

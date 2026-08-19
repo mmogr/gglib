@@ -239,6 +239,79 @@ enforce: ## Run the architecture enforcement checks
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.
 	@./scripts/check_workflow_yaml.sh
+	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
+	@# between the generated bindings and a new class of lie: i64 becomes a
+	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
+	@# required nullable rather than an optional. Neither fails to compile.
+	@./scripts/check_ts_bindings.sh
+
+##@ Bindings
+
+BINDINGS_DIR := src/types/generated
+BINDINGS_LOG := target/bindings-export.log
+
+# An unqualified `--features ts-bindings` under `--workspace` reaches every
+# package that defines it — measured, not assumed — and keeps reaching any
+# crate that declares it later, which a hand-maintained package list would
+# not.
+#
+# `export` rather than a command-prefix assignment, and this is not style.
+# `$(CARGO)` expands to `. $$HOME/.cargo/env && …cargo`, so
+# `VAR=x $(CARGO) test` prefixes the `.` builtin, not cargo — and that
+# assignment survives in macOS `/bin/sh` but is DROPPED by both bash and dash.
+# `/bin/sh` is dash on ubuntu, so in CI the variable never arrived, ts-rs fell
+# back to its default `./bindings`, and the `git diff` below then inspected an
+# untouched tree and passed on every input.
+bindings bindings-check: export TS_RS_EXPORT_DIR := $(CURDIR)/$(BINDINGS_DIR)
+
+# Regenerate the TypeScript the frontend imports, from the Rust that defines it.
+#
+# The directory is emptied first so a lost export directory cannot look like
+# success: every file returns as a deletion, `bindings-check` fails loudly, and
+# the count below has nothing to count.
+bindings: ## Regenerate src/types/generated from the Rust wire types
+	@mkdir -p target
+	@rm -rf $(BINDINGS_DIR)
+	@$(CARGO) test --workspace --features ts-bindings export_bindings_ \
+		> $(BINDINGS_LOG) 2>&1 || { cat $(BINDINGS_LOG); exit 1; }
+	@ran=$$(grep -cE 'export_bindings_[a-z0-9_]+ \.\.\. ok' $(BINDINGS_LOG) || true); \
+	 if [ "$$ran" -lt 1 ]; then \
+		echo "✗ no export tests ran — the ts-bindings feature did not take."; \
+		cat $(BINDINGS_LOG); \
+		exit 1; \
+	 fi; \
+	 if [ ! -d "$(BINDINGS_DIR)" ]; then \
+		echo "✗ $$ran export tests ran but $(BINDINGS_DIR) does not exist —"; \
+		echo "  TS_RS_EXPORT_DIR did not reach cargo. Check the shell it runs under."; \
+		exit 1; \
+	 fi; \
+	 echo "✓ bindings regenerated ($$ran types)"
+
+# Regenerates first, then compares against HEAD — so this asks "do the
+# committed bindings match the Rust?", which is the question that matters. A
+# hand-edit of a generated file is not caught here so much as undone: the
+# regeneration overwrites it, and if it was committed, the overwrite is the
+# diff. Against HEAD rather than the index, so a staged edit cannot hide.
+bindings-check: bindings ## Fail if the committed bindings are stale
+	@git diff HEAD --exit-code -- $(BINDINGS_DIR) || { \
+		echo ""; \
+		echo "✗ $(BINDINGS_DIR) is out of date with the Rust."; \
+		echo "  Run 'make bindings' and commit the result."; \
+		exit 1; \
+	}
+	@# An orphan: a type deleted from Rust leaves its binding behind, and a
+	@# regenerate-and-diff cannot see it, because nothing rewrites a file that
+	@# no longer has a source. `git status` does, now that the directory is
+	@# emptied first.
+	@untracked=$$(git status --porcelain -- $(BINDINGS_DIR)); \
+	 if [ -n "$$untracked" ]; then \
+		echo "$$untracked"; \
+		echo ""; \
+		echo "✗ $(BINDINGS_DIR) has files git does not know about."; \
+		echo "  Usually a type that was renamed or deleted in Rust. Commit or remove them."; \
+		exit 1; \
+	 fi
+	@echo "✓ bindings match the Rust they are generated from"
 
 ##@ Cleaning
 

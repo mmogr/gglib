@@ -8,18 +8,22 @@ use super::AppEvent;
 ///
 /// This is a lightweight representation for events — not the full `Model`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct ModelSummary {
     /// Database ID of the model.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     /// Human-readable model name.
     pub name: String,
     /// File path to the model.
     pub file_path: String,
     /// Model architecture (e.g., "llama").
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub architecture: Option<String>,
     /// Quantization type (e.g., "`Q4_0`").
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quantization: Option<String>,
 }
