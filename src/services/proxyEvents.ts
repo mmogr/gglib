@@ -48,7 +48,11 @@ export function initProxyEvents(): void {
       // Drop stale hydration if a real event already arrived
       if (eventVersion !== versionBeforeFetch) return;
 
-      if (status.running) {
+      // A running proxy always reports a port — `to_api_status` sets the two
+      // together — but they are separate fields, so narrow on the one being
+      // read rather than trusting the pair. The impossible case skips
+      // hydration, which live events would correct anyway.
+      if (status.running && status.port !== null) {
         ingestProxyEvent({ type: 'proxy_started', port: status.port });
       }
     })

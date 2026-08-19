@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
-import type { GgufModel, ServeConfig, ServerInfo, AppSettings, InferenceConfig } from '../../../types';
+import type { GgufModel, ServeConfig, AppSettings, InferenceConfig } from '../../../types';
+import type { ServerViewModel } from '../../../hooks/useServers';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
 import { getTransport } from '../../../services/transport';
@@ -10,7 +11,7 @@ import { formatError } from '../../../utils/errors';
 export interface ServerActionsConfig {
   model: GgufModel | null;
   settings: AppSettings | null;
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   // Edit mode state
   editedName: string;
   editedQuantization: string;
@@ -33,7 +34,7 @@ export interface ServerActionsConfig {
   onRemoveModel: (id: number, force: boolean) => void;
   onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
   onStartServer: () => void;
-  onServerStarted?: (serverInfo: ServerInfo) => void;
+  onServerStarted?: (serverInfo: ServerViewModel) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
   // State setters
   setIsServing: (serving: boolean) => void;

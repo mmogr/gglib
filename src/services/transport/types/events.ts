@@ -5,27 +5,55 @@
 
 import type { Unsubscribe, EventHandler } from './common';
 import type { DownloadId } from './ids';
-import type { RuntimeErrorInfo } from '../../../types';
+import type { RuntimeErrorInfo, ServerHealthStatus } from '../../../types';
 
 // ============================================================================
 // Server Events
 // ============================================================================
 
-export type ServerStatus = 'running' | 'stopping' | 'stopped' | 'crashed';
-
-export interface ServerStateInfo {
-  modelId: string;
-  status: ServerStatus;
-  port?: number;
-  updatedAt: number;
+/**
+ * One running server in a `server_snapshot` frame.
+ *
+ * Mirrors `gglib_core::events::ServerSnapshotEntry` (camelCase). `startedAt`
+ * is Unix **seconds**, unlike the millisecond `timestamp` on
+ * `server_health_changed` — the normalizer converts.
+ */
+export interface ServerSnapshotEntry {
+  modelId: number;
+  modelName: string;
+  port: number;
+  startedAt: number;
+  healthy: boolean;
 }
 
-export type ServerEvent =
-  | { type: 'snapshot'; servers: ServerStateInfo[] }
-  | { type: 'running'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'stopping'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'stopped'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number; error?: RuntimeErrorInfo };
+/**
+ * The server frames `/api/events` actually carries.
+ *
+ * These are `AppEvent`'s server variants as serde writes them — snake_case
+ * tags, camelCase fields, `modelId` a *number*. Deliberately not the shape
+ * consumers work with: `serverEvents.normalize` turns these into the
+ * registry's `ServerEvent`, which is keyed by string and speaks in
+ * running/stopping/stopped/crashed. Two shapes, because there really are two.
+ */
+export type ServerWireEvent =
+  | { type: 'server_started'; modelId: number; modelName: string; port: number }
+  | { type: 'server_stopped'; modelId: number; modelName: string }
+  // `modelId` is null when the runtime could not attribute the failure, and is
+  // always present — the Rust field carries no `skip_serializing_if`.
+  | { type: 'server_error'; modelId: number | null; modelName: string; error: RuntimeErrorInfo }
+  | { type: 'server_snapshot'; servers: ServerSnapshotEntry[] }
+  | {
+      type: 'server_health_changed';
+      serverId: number;
+      modelId: number;
+      // Nested, not flat: `ServerHealthStatus` is internally tagged on `status`
+      // and the field is also named `status`, so the wire reads
+      // `"status": { "status": "healthy" }`.
+      status: ServerHealthStatus;
+      detail?: string;
+      /** Unix milliseconds. */
+      timestamp: number;
+    };
 
 // ============================================================================
 // Download Events
@@ -131,19 +159,6 @@ export type DownloadEvent =
   | { type: 'queue_run_complete'; summary: QueueRunSummary };
 
 // ============================================================================
-// Log Events
-// ============================================================================
-
-export interface LogEntry {
-  timestamp: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  message: string;
-  source?: string;
-}
-
-export type LogEvent = LogEntry;
-
-// ============================================================================
 // Model Events
 // ============================================================================
 
@@ -219,9 +234,8 @@ export type ProxyEvent =
  * to preserve all details including shard progress.
  */
 export interface AppEventMap {
-  'server': ServerEvent;
+  'server': ServerWireEvent;
   'download': { type: 'download'; event: DownloadEvent };
-  'log': LogEvent;
   'model': ModelEvent;
   'verification': VerificationEvent;
   'proxy': ProxyEvent;

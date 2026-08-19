@@ -33,6 +33,20 @@ describe('getEventCategory', () => {
   });
 
   /**
+   * There is no `log` family on this stream and never was.
+   *
+   * `AppEvent` is the only type `/api/events` carries, and none of its
+   * fourteen tags begins with `log`. Server logs are real, but they are a
+   * different route — `/api/servers/{port}/logs/stream`, framing bare
+   * `ServerLogEntry` objects that carry no `type` at all and never reach this
+   * function.
+   */
+  it('claims no log family, which this stream does not carry', () => {
+    expect(getEventCategory('log')).toBeNull();
+    expect(getEventCategory('log_line')).toBeNull();
+  });
+
+  /**
    * `model` is a prefix of nothing else on the wire, but the guard is cheap
    * and the `server_`/`server_snapshot` pair shows how easily a prefix arm
    * swallows a sibling family.

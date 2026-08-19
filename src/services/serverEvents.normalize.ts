@@ -12,8 +12,8 @@
  * arrive through `normalizeServerEventFromAppEvent`.
  */
 
-import type { ServerEvent } from './serverRegistry';
-import type { RuntimeErrorInfo } from '../types';
+import type { ServerEvent, ServerStateInfo } from './serverRegistry';
+import type { RuntimeErrorInfo, ServerInfo } from '../types';
 
 function toRecord(payload: unknown): Record<string, unknown> | null {
   if (typeof payload !== 'object' || payload === null) return null;
@@ -44,6 +44,32 @@ function coerceUnixTimeToMs(value: unknown): number | null {
   return Math.floor(value * 1000); // seconds -> ms
 }
 
+/**
+ * One `snapshot` entry, from the fields both producers supply under their own
+ * spellings. Shared so the two entry points below cannot drift on how a
+ * server becomes a registry row — only on how they read one off the wire.
+ */
+function snapshotEntry(fields: {
+  modelId: unknown;
+  modelName?: string;
+  port?: number;
+  startedAt?: number;
+}): ServerStateInfo | null {
+  const modelId = coerceModelId(fields.modelId);
+  if (!modelId) return null;
+
+  return {
+    modelId,
+    // Both producers list only running servers.
+    status: 'running',
+    port: fields.port,
+    updatedAt: coerceUnixTimeToMs(fields.startedAt) ?? Date.now(),
+    modelName: fields.modelName,
+  };
+}
+
+const present = <T,>(x: T | null): x is T => x !== null;
+
 function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
   const servers = data.servers;
   if (!Array.isArray(servers)) return null;
@@ -55,38 +81,59 @@ function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
         if (typeof s !== 'object' || s === null) return null;
         const entry = s as Record<string, unknown>;
 
-        const modelId = coerceModelId(entry.modelId ?? entry.model_id);
-        if (!modelId) return null;
-
-        const port = typeof entry.port === 'number' ? entry.port : undefined;
-        const modelName = typeof entry.modelName === 'string' ? entry.modelName
-          : typeof entry.model_name === 'string' ? entry.model_name
-          : undefined;
-
-        const startedAtRaw =
-          typeof entry.startedAt === 'number'
-            ? entry.startedAt
-            : typeof entry.started_at === 'number'
-              ? entry.started_at
-              : undefined;
-
-        const updatedAt =
-          coerceUnixTimeToMs(startedAtRaw) ??
-          (typeof entry.updatedAt === 'number'
-            ? entry.updatedAt
-            : typeof entry.updated_at === 'number'
-              ? entry.updated_at
-              : Date.now());
-
-        // Snapshot only lists running servers.
-        return { modelId, status: 'running' as const, port, updatedAt, modelName };
+        return snapshotEntry({
+          modelId: entry.modelId,
+          modelName: typeof entry.modelName === 'string' ? entry.modelName : undefined,
+          port: typeof entry.port === 'number' ? entry.port : undefined,
+          startedAt: typeof entry.startedAt === 'number' ? entry.startedAt : undefined,
+        });
       })
-      .filter((x): x is NonNullable<typeof x> => x !== null),
+      .filter(present),
+  };
+}
+
+/**
+ * Hydration from `GET /api/servers`.
+ *
+ * A separate entry point rather than a snake_case fallback inside
+ * [`normalizeServerEventFromAppEvent`], because this is not an `AppEvent` and
+ * never was — it is a REST list the caller re-wrapped to look like one. The
+ * two producers really do disagree: `ServerSnapshotEntry` is camelCase with a
+ * `healthy` flag, `ServerInfo` is snake_case with a `pid`. Naming both paths
+ * is what lets each read exactly the shape its own producer sends, instead of
+ * one tolerant reader accepting either and documenting neither.
+ *
+ * Total, not `null`-returning: there is no whole-payload failure to report,
+ * only individual entries — malformed, or with an id that will not coerce —
+ * and those are dropped as they are on the event path.
+ */
+export function normalizeServerSnapshotFromList(
+  servers: ServerInfo[],
+): Extract<ServerEvent, { type: 'snapshot' }> {
+  return {
+    type: 'snapshot',
+    servers: servers
+      .map((s) =>
+        // `ServerInfo[]` is what the endpoint promises, not what it
+        // guarantees — the fetch behind it is an unchecked cast. A null entry
+        // would throw on property access, and the caller swallows rejections,
+        // so one bad row would silently cost the whole hydration. The event
+        // path drops the row and keeps the rest; so does this.
+        toRecord(s) === null
+          ? null
+          : snapshotEntry({
+              modelId: s.model_id,
+              modelName: s.model_name,
+              port: s.port,
+              startedAt: s.started_at,
+            }),
+      )
+      .filter(present),
   };
 }
 
 function normalizeHealthChanged(data: Record<string, unknown>): ServerEvent | null {
-  const modelId = coerceModelId(data.modelId ?? data.model_id);
+  const modelId = coerceModelId(data.modelId);
   if (!modelId) return null;
 
   const status = data.status as Record<string, unknown> | undefined;
@@ -94,14 +141,9 @@ function normalizeHealthChanged(data: Record<string, unknown>): ServerEvent | nu
 
   const detail = typeof data.detail === 'string' ? data.detail : undefined;
 
-  const updatedAt =
-    typeof data.timestamp === 'number'
-      ? (coerceUnixTimeToMs(data.timestamp) ?? Date.now())
-      : typeof data.updatedAt === 'number'
-        ? data.updatedAt
-        : typeof data.updated_at === 'number'
-          ? data.updated_at
-          : Date.now();
+  // `timestamp` is a non-optional `u64` on the Rust variant, so it is always
+  // there; `Date.now()` covers only a malformed frame.
+  const updatedAt = coerceUnixTimeToMs(data.timestamp) ?? Date.now();
 
   return {
     type: 'server_health_changed',
@@ -131,20 +173,15 @@ function normalizeLifecycle(
   kind: 'running' | 'stopped' | 'crashed',
   data: Record<string, unknown>
 ): ServerEvent | null {
-  const modelId = coerceModelId(data.modelId ?? data.model_id);
+  const modelId = coerceModelId(data.modelId);
   if (!modelId) return null;
 
   const port = typeof data.port === 'number' ? data.port : undefined;
-  const modelName = typeof data.modelName === 'string' ? data.modelName
-    : typeof data.model_name === 'string' ? data.model_name
-    : undefined;
+  const modelName = typeof data.modelName === 'string' ? data.modelName : undefined;
 
-  const updatedAt =
-    typeof data.updatedAt === 'number'
-      ? data.updatedAt
-      : typeof data.updated_at === 'number'
-        ? data.updated_at
-        : Date.now();
+  // No server lifecycle variant carries a timestamp of its own — arrival time
+  // is the only clock there is for these.
+  const updatedAt = Date.now();
 
   if (kind === 'running') return { type: 'running', modelId, port, updatedAt, modelName };
   if (kind === 'stopped') return { type: 'stopped', modelId, port, updatedAt, modelName };

@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { normalizeServerEventFromAppEvent } from '../../../../src/services/serverEvents.normalize';
+import {
+  normalizeServerEventFromAppEvent,
+  normalizeServerSnapshotFromList,
+} from '../../../../src/services/serverEvents.normalize';
 import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../../fixtures/ports';
+import type { ServerInfo } from '../../../../src/types';
 
 describe('serverEvents.normalize', () => {
   beforeEach(() => {
@@ -13,7 +17,7 @@ describe('serverEvents.normalize', () => {
     vi.useRealTimers();
   });
 
-  it('normalizes server_snapshot with started_at seconds -> updatedAt ms', () => {
+  it('normalizes server_snapshot with startedAt seconds -> updatedAt ms', () => {
     const evt = normalizeServerEventFromAppEvent({
       type: 'server_snapshot',
       servers: [
@@ -21,7 +25,7 @@ describe('serverEvents.normalize', () => {
           modelId: 1,
           modelName: 'M',
           port: MOCK_PROXY_PORT,
-          started_at: 1_700_000_000,
+          startedAt: 1_700_000_000,
           healthy: true,
         },
       ],
@@ -128,18 +132,25 @@ describe('serverEvents.normalize', () => {
     });
   });
 
-  it('normalizes a snake_case snapshot (older backend schema)', () => {
-    const evt = normalizeServerEventFromAppEvent({
-      type: 'server_snapshot',
-      servers: [
-        {
-          model_id: 4,
-          model_name: 'SnakeModel',
-          port: MOCK_BASE_PORT,
-          started_at: 1_700_000_000,
-        },
-      ],
-    });
+  /**
+   * The hydration path, and the reason there are two entry points.
+   *
+   * `GET /api/servers` reports the same running servers as the SSE snapshot,
+   * in a different shape: snake_case keys, a `pid` the registry has no use
+   * for, and no `healthy`. It is the current schema, not a legacy one — this
+   * test used to claim otherwise while being the only cover for the branch
+   * that made startup hydration work.
+   */
+  it('normalizes the REST server list, which is snake_case', () => {
+    const evt = normalizeServerSnapshotFromList([
+      {
+        model_id: 4,
+        model_name: 'SnakeModel',
+        pid: 4242,
+        port: MOCK_BASE_PORT,
+        started_at: 1_700_000_000,
+      },
+    ]);
 
     expect(evt).toEqual({
       type: 'snapshot',
@@ -153,6 +164,45 @@ describe('serverEvents.normalize', () => {
         },
       ],
     });
+  });
+
+  /**
+   * The array is typed, but the fetch producing it is an unchecked cast, and
+   * the caller swallows rejections — so a null row throwing on property
+   * access would cost the whole hydration rather than itself.
+   */
+  it('drops a malformed REST entry without losing the snapshot', () => {
+    const evt = normalizeServerSnapshotFromList([
+      null as unknown as ServerInfo,
+      { model_id: 9, model_name: 'Good', pid: null, port: 2, started_at: 1_700_000_000 },
+    ]);
+
+    expect(evt.servers).toHaveLength(1);
+    expect(evt.servers[0]).toMatchObject({ modelId: '9' });
+  });
+
+  it('drops REST entries whose id will not coerce, keeping the rest', () => {
+    const evt = normalizeServerSnapshotFromList([
+      { model_id: NaN, model_name: 'Bad', pid: null, port: 1, started_at: 1_700_000_000 },
+      { model_id: 9, model_name: 'Good', pid: null, port: 2, started_at: 1_700_000_000 },
+    ]);
+
+    expect(evt.servers).toHaveLength(1);
+    expect(evt.servers[0]).toMatchObject({ modelId: '9', modelName: 'Good' });
+  });
+
+  /**
+   * The SSE snapshot is camelCase throughout — `ServerSnapshotEntry` carries
+   * `rename_all = "camelCase"`, so `startedAt` is the only spelling that
+   * arrives on this path.
+   */
+  it('no longer accepts snake_case on the SSE snapshot path', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_snapshot',
+      servers: [{ model_id: 4, model_name: 'SnakeModel', port: MOCK_BASE_PORT, started_at: 1 }],
+    });
+
+    expect(evt).toEqual({ type: 'snapshot', servers: [] });
   });
 
   it('drops snapshot entries whose id is missing or non-numeric', () => {

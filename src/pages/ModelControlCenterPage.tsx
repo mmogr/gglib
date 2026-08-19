@@ -18,7 +18,8 @@ import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
 const ChatPage = lazy(() => import('./ChatPage'));
 // Lazy load BenchmarkPage to keep initial bundle small
 const BenchmarkPage = lazy(() => import('./BenchmarkPage'));
-import { ServerInfo, HfModelSummary } from '../types';
+import { HfModelSummary } from '../types';
+import type { ServerViewModel } from '../hooks/useServers';
 import { SidebarTabId } from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import { getTransport } from '../services/transport';
@@ -31,7 +32,7 @@ interface ChatSession {
 }
 
 interface ModelControlCenterPageProps {
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;
   onRegisterMenuActions?: (actions: {
@@ -206,7 +207,7 @@ export default function ModelControlCenterPage({
   };
 
   // Handler for when server starts - opens chat view
-  const handleServerStarted = async (serverInfo: ServerInfo) => {
+  const handleServerStarted = async (serverInfo: ServerViewModel) => {
     // Server started, open chat
     setChatSession({
       serverPort: serverInfo.port,

@@ -1,6 +1,6 @@
 import { FC, useState, useRef } from "react";
 import { Library, Menu, Monitor, Settings, X } from "lucide-react";
-import { ServerInfo } from "../types";
+import type { ServerViewModel } from "../hooks/useServers";
 import { RunsPopover } from "./RunsPopover";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { Button } from "./ui/Button";
@@ -9,7 +9,7 @@ import { cn } from "../utils/cn";
 
 interface HeaderProps {
   onOpenSettings: () => void;
-  servers: ServerInfo[];
+  servers: ServerViewModel[];
   onStopServer: (modelId: number) => Promise<void>;
   onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
   onRefreshServers?: () => void;

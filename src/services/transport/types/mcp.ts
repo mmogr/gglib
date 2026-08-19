@@ -92,11 +92,17 @@ export interface UpdateMcpServer {
  */
 export interface McpTool {
   name: string;
-  description?: string;
-  input_schema?: Record<string, unknown>;
-  /** Optional JSON Schema describing the tool's output. Present only when the
-   * MCP server declares it. Used to auto-generate a structured result renderer. */
-  output_schema?: Record<string, unknown>;
+  /**
+   * Optional *and* nullable, because two Rust types feed this one shape and
+   * they disagree. `McpToolInfo` (`/api/mcp/servers`, `…/test`) carries
+   * `skip_serializing_if` on `title` alone, so it always emits this key —
+   * `null` when there is nothing to say. `gglib_core::McpTool`
+   * (`/api/builtin/tools`) carries it on all three and omits the key instead.
+   */
+  description?: string | null;
+  /** Always present as `null` from the server routes; omitted by the builtin
+   *  route — see {@link description}. */
+  input_schema?: Record<string, unknown> | null;
   /** Human-readable display title from MCP annotations.title (spec 2025-03-26). */
   title?: string;
 }

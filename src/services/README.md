@@ -66,7 +66,7 @@ belongs here.
 |------|-------------|
 | `serverRegistry.ts` | External store for server lifecycle state. Uses `useSyncExternalStore` for reactive React integration. |
 | `serverEvents.ts` | Subscribes to the daemon's SSE stream and ingests server lifecycle events into the registry |
-| `serverEvents.normalize.ts` | Normalises the wire's mixed-casing event payloads before ingestion |
+| `serverEvents.normalize.ts` | Two named readers, one per producer: `normalizeServerEventFromAppEvent` for the camelCase `AppEvent` frames on `/api/events`, `normalizeServerSnapshotFromList` for the snake_case `GET /api/servers` list. Neither accepts the other's spelling |
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |
 | `createEventStore.ts` | Shared factory behind both registries — subscribe-before-fetch with an `eventVersion` guard |
@@ -87,7 +87,16 @@ it needs streaming or a non-backend origin. Everything else goes through the
 
 Events are the source of truth for server state. They arrive from the daemon
 over SSE (`/api/events`) — one path, desktop and web alike — and are normalized
-into the registry's union by `serverEvents.normalize.ts`:
+into the registry's union by `serverEvents.normalize.ts`.
+
+There are two ingestion paths, not one. `server_snapshot` is emitted at daemon
+boot and never replayed, so a client connecting later never sees it; `initServerEvents`
+hydrates from `GET /api/servers` instead. That list is a REST DTO, snake_case,
+and has its own reader — writing `model_id` into an `AppEvent` fixture, or
+`modelId` into a REST one, yields a silently empty registry rather than an error.
+Note that camelCase on `AppEvent` is per-field `#[serde(rename)]`, not a
+container rule: snake_case is serde's default here, so a newly added field is
+snake_case unless someone remembers otherwise.
 
 | `AppEvent` type | Description |
 |-------|-------------|
