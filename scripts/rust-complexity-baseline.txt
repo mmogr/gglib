@@ -13,8 +13,8 @@ crates/gglib-app-services/src/mcp.rs 396
 crates/gglib-app-services/src/models_tests.rs 886
 crates/gglib-app-services/src/models.rs 576
 crates/gglib-app-services/src/proxy.rs 455
-crates/gglib-app-services/src/sampling_explain_tests.rs 694
-crates/gglib-app-services/src/sampling_explain.rs 477
+crates/gglib-app-services/src/sampling_explain_tests.rs 757
+crates/gglib-app-services/src/sampling_explain.rs 453
 crates/gglib-app-services/src/servers.rs 965
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351

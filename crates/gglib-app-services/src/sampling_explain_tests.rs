@@ -339,6 +339,69 @@ fn auto_detected_model_defaults_rank_below_global_settings() {
     );
 }
 
+/// Every surface that reports this column spells its values the same way.
+///
+/// `Model.defaults_origin` is one value in one database column, and three
+/// separately-declared DTOs serialize it across four routes: [`GuiModel`] for
+/// the library list, [`ModelDetailDto`] for the inspector, and
+/// [`SamplingExplanationDto`] here. The last used to re-spell it through a DTO
+/// that differed from the domain enum in nothing but its casing, so a client
+/// holding two replies for the same stored model read `auto_detected` from one
+/// and `autoDetected` from the other, and could not compare them without first
+/// knowing which route each had come from.
+///
+/// Each surface is checked against the domain enum's own [`Display`], not
+/// against the other surfaces. Comparing them to each other looks equivalent
+/// and is not: `Value::Index` yields `Null` for a key that is absent, so
+/// mutual comparison holds just as well when *every* surface has dropped the
+/// field as when they agree on it — and it pins no spelling at all, leaving a
+/// change that re-camelCased all three green.
+///
+/// [`Display`]: std::fmt::Display
+#[test]
+fn every_surface_spells_an_origin_the_same_way() {
+    for origin in [
+        DefaultsOrigin::User,
+        DefaultsOrigin::AutoDetected,
+        DefaultsOrigin::Published,
+        DefaultsOrigin::Measured,
+    ] {
+        let stored = Model {
+            dialect_spec: None,
+            defaults_origin: Some(origin),
+            ..model()
+        };
+        let expected = serde_json::Value::String(origin.to_string());
+
+        let surfaces = [
+            (
+                "the explain endpoint",
+                serde_json::to_value(explain(&stored, &Settings::with_defaults(), None)).unwrap(),
+            ),
+            (
+                "the library list",
+                serde_json::to_value(crate::types::GuiModel::from_domain(stored.clone())).unwrap(),
+            ),
+            (
+                "the model inspector",
+                serde_json::to_value(crate::types::ModelDetailDto::from_model(
+                    stored.clone(),
+                    false,
+                    None,
+                ))
+                .unwrap(),
+            ),
+        ];
+
+        for (surface, payload) in surfaces {
+            assert_eq!(
+                payload["defaultsOrigin"], expected,
+                "{surface} does not spell {origin:?} the way the domain enum does"
+            );
+        }
+    }
+}
+
 /// The tag changes both the flag the client renders and the floor the
 /// coupled set falls back to.
 #[test]

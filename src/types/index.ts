@@ -268,7 +268,7 @@ export interface SamplingExplanation {
   /**
    * Where the model's stored defaults came from.
    *
-   * `published` and `autoDetected` share a ladder rung — both are unreviewed,
+   * `published` and `auto_detected` share a ladder rung — both are unreviewed,
    * so both rank below global settings — which means `ParamProvenance.layer`
    * alone cannot name its own source. Without this, a recipe fetched from the
    * model author renders as gglib's reasoning-tag guess.
@@ -295,11 +295,15 @@ export interface SamplingExplanation {
  * Where a model's stored `inferenceDefaults` came from.
  *
  * - `user` — set by a person. Outranks global settings.
- * - `autoDetected` — gglib's `reasoning`-tag guess. Ranks below.
+ * - `auto_detected` — gglib's `reasoning`-tag guess. Ranks below.
  * - `published` — the author's `generation_config.json`, read at import. Ranks
- *   exactly where `autoDetected` does; what differs is the evidence.
+ *   exactly where `auto_detected` does; what differs is the evidence.
+ * - `measured` — a tune sweep's winner on this hardware, ranked with those two.
+ *
+ * Snake_case: this mirrors `gglib_core::domain::DefaultsOrigin` itself, which
+ * is the one spelling every endpoint reporting the column now uses.
  */
-export type DefaultsOriginName = 'user' | 'autoDetected' | 'published' | 'measured';
+export type DefaultsOriginName = 'user' | 'auto_detected' | 'published' | 'measured';
 
 /**
  * What gglib does with one field's published recommendation.
@@ -376,12 +380,12 @@ export interface GgufModel {
   // Inference defaults
   inferenceDefaults?: InferenceConfig;
   /**
-   * Whether `inferenceDefaults` was set by the user or auto-detected at
-   * import time from the model's `reasoning` tag. Auto-detected values rank
-   * below the global inference defaults in the resolution hierarchy — see
-   * the `InferenceConfig` doc comment above.
+   * Where `inferenceDefaults` came from — see {@link DefaultsOriginName}.
+   *
+   * Everything but `user` ranks below the global inference defaults in the
+   * resolution hierarchy; see the `InferenceConfig` doc comment above.
    */
-  defaultsOrigin?: 'user' | 'auto_detected' | null;
+  defaultsOrigin?: DefaultsOriginName | null;
   // Per-model server defaults (overrides global settings for launch params)
   serverDefaults?: ServerConfig;
   // Benchmark summary (cached from benchmark_summaries table)

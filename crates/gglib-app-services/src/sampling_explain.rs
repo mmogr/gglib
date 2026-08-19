@@ -68,8 +68,12 @@ pub struct SamplingExplanationDto {
     /// [`ParamProvenanceDto::layer`] alone cannot name its own source. Without
     /// this, a recipe fetched from the model author renders as gglib's
     /// reasoning-tag guess.
+    ///
+    /// The domain enum itself, not a re-spelling of it: the library list
+    /// reports this same column, and a wire form that differed from it in
+    /// casing alone meant one stored value reached a client under two names.
     #[serde(default)]
-    pub defaults_origin: Option<DefaultsOriginDto>,
+    pub defaults_origin: Option<DefaultsOrigin>,
     /// The `reasoning_effort` this model's template would ignore, when the
     /// stored configuration resolves one it does not read.
     ///
@@ -109,34 +113,6 @@ pub struct SuppressedEffortDto {
     /// floor names an effort.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<SamplingLayerDto>,
-}
-
-/// The wire form of [`DefaultsOrigin`](gglib_core::domain::DefaultsOrigin).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DefaultsOriginDto {
-    /// Set by a person. Outranks global settings.
-    User,
-    /// gglib's own `reasoning`-tag guess. Ranks below global settings.
-    AutoDetected,
-    /// Read from the model author's `generation_config.json` at import.
-    /// Ranks below global settings, exactly where `AutoDetected` does.
-    Published,
-    /// A tune sweep's winner, measured on this installation. Ranks below
-    /// global settings like the other two — and unlike them, the agentic
-    /// ceiling never caps it.
-    Measured,
-}
-
-impl From<DefaultsOrigin> for DefaultsOriginDto {
-    fn from(origin: DefaultsOrigin) -> Self {
-        match origin {
-            DefaultsOrigin::User => Self::User,
-            DefaultsOrigin::AutoDetected => Self::AutoDetected,
-            DefaultsOrigin::Published => Self::Published,
-            DefaultsOrigin::Measured => Self::Measured,
-        }
-    }
 }
 
 /// What gglib does with one field's published recommendation.
@@ -425,7 +401,7 @@ pub(crate) fn explain(
         is_reasoning: model_ctx.is_reasoning,
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
         published,
-        defaults_origin: model.defaults_origin.map(DefaultsOriginDto::from),
+        defaults_origin: model.defaults_origin,
         effort_suppressed,
     }
 }
