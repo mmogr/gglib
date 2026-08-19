@@ -63,12 +63,11 @@ fn detect_nvidia_hardware() -> bool {
         if let Ok(output) = cmd("wmic")
             .args(["path", "win32_VideoController", "get", "name"])
             .output()
+            && output.status.success()
         {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                if stdout.to_lowercase().contains("nvidia") {
-                    return true;
-                }
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if stdout.to_lowercase().contains("nvidia") {
+                return true;
             }
         }
     }

@@ -130,7 +130,7 @@ fn check_vulkan_headers() -> bool {
     {
         if let Some(sdk) = vulkan_sdk_dir() {
             let include = sdk.join("Include");
-            if include.join(REL).exists() {
+            if header_exists_in(&[include.as_path()], REL) {
                 return true;
             }
         }
@@ -176,7 +176,9 @@ fn check_spirv_headers() -> bool {
     {
         if let Some(sdk) = vulkan_sdk_dir() {
             let include = sdk.join("Include");
-            if include.join(REL_PRIMARY).exists() || include.join(REL_ALTERNATE).exists() {
+            if header_exists_in(&[include.as_path()], REL_PRIMARY)
+                || header_exists_in(&[include.as_path()], REL_ALTERNATE)
+            {
                 return true;
             }
         }
