@@ -132,9 +132,8 @@ const AuditStateLine: FC<{ audit: SamplingAuditSnapshot }> = ({ audit }) => {
 
 /** The `/props` baseline check: has this build's own default table moved? */
 const BaselineRows: FC<{ baseline?: SamplingBaselineState | null }> = ({ baseline }) => {
-  // A proxy that predates the field sends nothing; a current one always sends
-  // a state, and `not_yet_read` is the honest answer only when no read has
-  // been attempted.
+  // The `!baseline` arm is defence against a malformed frame, not an old
+  // proxy: the field is unconditional. `not_yet_read` is the real case.
   if (!baseline || baseline.state === 'not_yet_read') {
     return (
       <p className="text-sm text-text-muted">
@@ -272,8 +271,9 @@ const ReasonList: FC<{ report: SamplingBaselineReport }> = ({ report }) => {
  * zero rather than being collapsed into silence.
  */
 const PublishedRows: FC<{ published?: SamplingPublishedOverrides | null }> = ({ published }) => {
-  // A proxy that predates the field sends nothing. Distinct from a current
-  // proxy reporting zero intents, which is a statement about traffic.
+  // Defensive, not a shape the wire sends: `published` is unconditional but
+  // arrives through an unchecked cast, and `.fields` off a missing one takes
+  // the panel down. Distinct from zero intents, which is about traffic.
   if (!published) {
     return null;
   }

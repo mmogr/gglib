@@ -3,18 +3,10 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ProxySamplingPanel, { formatValue } from '../../../src/components/ProxySamplingPanel';
 import type { SamplingAuditSnapshot } from '../../../src/services/transport/types/dashboard';
+import { samplingAudit } from '../fixtures/dashboard';
 
-function audit(overrides: Partial<SamplingAuditSnapshot> = {}): SamplingAuditSnapshot {
-  return {
-    state: { state: 'not_yet_observed' },
-    skipped_ambiguous: 0,
-    client_fields_rejected: 0,
-    client_fields_discarded: 0,
-    recent_divergences: [],
-    baseline: { state: 'not_yet_read' },
-    ...overrides,
-  };
-}
+const audit = (overrides: Partial<SamplingAuditSnapshot> = {}): SamplingAuditSnapshot =>
+  samplingAudit(overrides);
 
 describe('ProxySamplingPanel', () => {
   // The rule the whole Tier C contract rests on. A blind organ and a healthy
@@ -440,8 +432,17 @@ describe('ProxySamplingPanel', () => {
       expect(screen.queryByText(/gglib is overriding/i)).not.toBeInTheDocument();
     });
 
-    it('renders nothing at all on a proxy that predates the field', () => {
-      render(<ProxySamplingPanel audit={audit({ published: null })} />);
+    // `published` is unconditional on the wire, so the snapshot type no longer
+    // admits a missing one — but `PublishedRows` still guards, because the
+    // value arrives through an unchecked cast over parsed JSON and rendering
+    // `undefined.fields` would take the panel down. The cast here builds the
+    // malformed frame the guard is for.
+    it('renders nothing rather than throwing when the field is missing', () => {
+      render(
+        <ProxySamplingPanel
+          audit={audit({ published: undefined as unknown as SamplingAuditSnapshot['published'] })}
+        />,
+      );
       expect(screen.queryByText(/no request resolved yet/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/publishes no sampler defaults/i)).not.toBeInTheDocument();
     });

@@ -12,11 +12,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tokensInUse, type SlotSnapshot } from '../../../../src/services/transport/types/dashboard';
+import { tokensInUse } from '../../../../src/services/transport/slotTokens';
+import type { SlotSnapshot } from '../../../../src/services/transport/types/dashboard';
+import { slotSnapshot } from '../../fixtures/dashboard';
 
-function slot(overrides: Partial<SlotSnapshot>): SlotSnapshot {
-  return { id: 0, is_processing: false, ...overrides };
-}
+const slot = (overrides: Partial<SlotSnapshot>): SlotSnapshot => slotSnapshot(overrides);
 
 describe('tokensInUse', () => {
   it('prefers n_past when present', () => {
