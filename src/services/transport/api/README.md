@@ -36,5 +36,7 @@ Axum backend (HTTP response) → typed result
 | `verification.ts` | Model verification |
 | `proxy.ts` | OpenAI-compatible proxy management |
 | `models/` | Local and HuggingFace model APIs |
+| `setup.ts` | First-run setup and dependency probes |
+| `sse.ts` | The server-sent-events endpoint this transport subscribes to |
 
 <!-- module-docs:end -->

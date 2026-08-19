@@ -1,0 +1,42 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+
+  // Two entries, not one: `index.html` loads `main.tsx` and `tray.html` loads
+  // `tray-main.tsx` (see `rolldownOptions.input` in vite.config.ts). knip does
+  // not follow the root-relative `/src/...` in those HTML files, so naming the
+  // modules directly is what keeps the whole tray tree from reading as dead.
+  "entry": [
+    "src/main.tsx",
+    "src/tray-main.tsx",
+    "vite.config.ts",
+    "eslint.config.js",
+    "tests/ts/**/*.test.{ts,tsx}",
+    "tests/ts/setup.ts"
+  ],
+
+  "project": ["src/**/*.{ts,tsx}", "tests/ts/**/*.{ts,tsx}"],
+
+  // Generated from Rust by `make bindings`; what is unused there is a question
+  // for the Rust side, and `make bindings-check` already governs the contents.
+  "ignore": ["src/types/generated/**"],
+
+  // knip does not follow imports out of `.css`, so anything reached only from
+  // a stylesheet reads as unused. Each of these has a real consumer:
+  //
+  //   @fontsource-variable/ibm-plex-sans  src/styles/tailwind.css @font-face
+  //   @fontsource/ibm-plex-mono           src/styles/tailwind.css @import
+  //   tailwindcss                         src/styles/tailwind.css `@import "tailwindcss"`
+  //   highlight.js                        arrives via rehype-highlight; the
+  //                                       classes it emits are themed by
+  //                                       src/styles/base/hljs.css
+  //
+  // Re-check these if the stylesheet stops importing them — nothing else will.
+  "ignoreDependencies": [
+    "@fontsource-variable/ibm-plex-sans",
+    "@fontsource/ibm-plex-mono",
+    "tailwindcss",
+    "highlight.js"
+  ],
+
+  "ignoreExportsUsedInFile": true
+}

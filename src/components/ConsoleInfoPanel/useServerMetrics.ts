@@ -32,7 +32,7 @@ export function parsePrometheusMetrics(text: string): ServerMetrics {
  *
  * Uses setTimeout recursion + AbortController. On fetch failure the local loop
  * stops and the metrics clear without touching global state; polling resumes
- * automatically when `isRunning` flips back via the server:started event.
+ * automatically when `isRunning` flips back via the `server_started` frame.
  *
  * Each poll stores a freshly parsed object, so the returned value's identity
  * changes once per poll — consumers use it directly as the metric-history tick.

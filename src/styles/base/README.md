@@ -12,6 +12,7 @@ Root CSS custom-property design token system establishing the application's comp
 | File | Role |
 |------|------|
 | `variables.css` | All `:root` CSS custom properties; organized into semantic sections |
+| `hljs.css` | highlight.js theme expressed in those tokens, replacing the stock github-dark stylesheet |
 
 ## Token Categories
 

@@ -11,7 +11,7 @@ Custom hooks for the chat messages panel: thread hydration, message deletion, li
 
 | File | Role |
 |------|------|
-| `useChatPersistence.ts` | Hydrates the thread from the DB when the conversation changes; maintains the position -> DB ID map |
+| `useThreadHydration.ts` | Hydrates the thread from the DB when the conversation changes; maintains the position -> DB ID map |
 | `buildThreadMessages.ts` | Turns DB rows into runtime messages — shared by hydration and the post-delete reload so both fold tool rows identically |
 | `useMessageDeletion.ts` | Cascade delete with confirmation modal; reloads and resets the thread afterwards |
 | `useSharedTicker.ts` | Shared 1-second tick counter running only during active streaming; consumed by `ThinkingTimingContext` |

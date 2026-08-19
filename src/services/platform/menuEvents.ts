@@ -26,7 +26,6 @@ export const MENU_EVENTS = {
   START_PROXY: 'menu:start-proxy',
 } as const;
 
-export type MenuEventType = typeof MENU_EVENTS[keyof typeof MENU_EVENTS];
 
 export interface MenuEventHandlers {
   [MENU_EVENTS.OPEN_SETTINGS]?: () => void;

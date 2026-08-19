@@ -159,48 +159,6 @@ export class TauriTracingTransport implements ILogTransport {
 }
 
 // =============================================================================
-// Multi Transport
-// =============================================================================
-
-/**
- * Multi-transport logger - writes to multiple transports.
- * 
- * Useful for combining console logging (dev) with file logging (production).
- * Failures in one transport don't affect others.
- */
-export class MultiTransport implements ILogTransport {
-  /**
-   * @param transports - Array of transports to write to
-   */
-  constructor(private readonly transports: ILogTransport[]) {}
-  
-  write(entry: LogEntry): void {
-    for (const transport of this.transports) {
-      try {
-        // Call write without awaiting - each transport handles async internally
-        transport.write(entry);
-      } catch (error) {
-        // Don't let one transport failure break others
-        // In dev mode, this might appear in console
-        if (import.meta.env.DEV) {
-          console.error('[MultiTransport] Transport write failed:', error);
-        }
-      }
-    }
-  }
-  
-  async flush(): Promise<void> {
-    // Flush all transports that support it
-    const flushPromises = this.transports
-      .filter((t) => t.flush)
-      .map((t) => t.flush!());
-    
-    // Wait for all flushes, but don't fail if some fail
-    await Promise.allSettled(flushPromises);
-  }
-}
-
-// =============================================================================
 // Type Augmentation for Tauri
 // =============================================================================
 

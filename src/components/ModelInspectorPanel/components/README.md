@@ -19,6 +19,14 @@ Presentational sub-components for the model inspector panel, each scoped to a si
 | `JinjaModeField.tsx` | Off / On / Defer as three options, because a launch has three states and a checkbox held two |
 | `ReasoningSupport.tsx` | Whether this model's template reads `reasoning_effort`, and a re-measurement when the answer is stale |
 | `DeleteModal.tsx` | Confirmation dialog for permanent model removal |
-| `InspectorActions.tsx` | Action button row: Serve, Edit, Delete, Benchmark |
+| `InspectorHeader.tsx` | Model name, sync and trust badges, and the header actions |
+| `InspectorFooter.tsx` | Action row: serve or stop, edit, save, cancel, delete, benchmark |
+| `InspectorCapabilities.tsx` | gglib's own editable shaping flags, over `CAPABILITY_FLAGS` |
+| `InspectorTags.tsx` | `TagChips` plus the add control, as one editable tag section |
+| `InspectorModals.tsx` | The panel's modals in one place, including the llama-server-not-installed path |
+| `InspectorEmptyState.tsx` | Placeholder shown when no model is selected |
+| `InfoRow.tsx` | One label/value row, the unit the metadata grid is built from |
+| `MetadataSection.tsx` | Groups `InfoRow`s under a heading |
+| `SamplingProvenanceSection.tsx` | Each resolved sampling parameter and the layer that supplied it |
 
 <!-- module-docs:end -->

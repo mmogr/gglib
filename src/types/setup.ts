@@ -47,19 +47,6 @@ export interface LlamaInstallProgress {
   total: number;
 }
 
-/** Distro-specific install command for a missing Vulkan component. */
-export interface InstallHint {
-  distro: string;
-  command: string;
-}
-
-/** A missing Vulkan build component with install hints. */
-export interface MissingPackage {
-  id: string;
-  label: string;
-  installHints: InstallHint[];
-}
-
 
 /** What gglib recorded when it built the binary. Absent for a prebuilt install. */
 export interface LlamaBuildInfo {

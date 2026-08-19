@@ -3,7 +3,7 @@
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
         test check fmt lint doc doc-check dev pre-commit release \
-        lint-web typecheck-web test-web boundaries enforce \
+        lint-web typecheck-web deadcode-web test-web boundaries enforce \
         bindings bindings-check \
         clean clean-gui clean-llama clean-db clean-all \
         check-deps check-deps-bootstrap check-deps-verify check-rust \
@@ -228,6 +228,13 @@ typecheck-web: ## Type-check src, tests and the build config
 	@echo "Type-checking web UI..."
 	npm run typecheck
 
+deadcode-web: ## Find TypeScript files nothing imports, and undeclared imports
+	@echo "Checking for dead files..."
+	@# Neither tsc nor eslint can see this: a file nothing imports still
+	@# compiles, and eslint judges one file at a time. Scoped to files and
+	@# dependencies; the export-level classes are not gated yet.
+	npm run deadcode
+
 test-web: ## Run the frontend test suite
 	@echo "Running frontend tests..."
 	npm run test:run
@@ -266,6 +273,10 @@ enforce: ## Run the architecture enforcement checks
 	@# ran it, so a new module simply never reached the tables unless someone
 	@# remembered to regenerate them.
 	@./scripts/generate_module_tables.sh --check
+	@# The Rust tables above are generated and cannot drift. The TypeScript
+	@# ones are written by hand, and nothing compared them to the directories
+	@# they describe — only that the README existed and had its markers.
+	@./scripts/check_readme_tables.py
 
 ##@ Bindings
 
@@ -508,11 +519,11 @@ dev: fmt lint test ## Format, lint and test
 # Pre-commit checks.
 #
 # These are exactly the jobs ci-success requires, in the same order: fmt,
-# clippy, cargo test, the eslint/tsc gate, the frontend suite, the boundary
-# and architecture scripts, the binding staleness gate and rustdoc. It used to
-# be `fmt lint check test` — all Cargo — which meant a clean local run could
-# still fail CI on eslint, on a type error in a test file, or on any of the
-# five shell checks.
+# clippy, cargo test, the eslint/tsc gate, the unimported-file check, the
+# frontend suite, the boundary and architecture scripts, the binding staleness
+# gate and rustdoc. It used to be `fmt lint check test` — all Cargo — which
+# meant a clean local run could still fail CI on eslint, on a type error in a
+# test file, or on any of the five shell checks.
 #
 # `bindings-check` earns its place for the same reason `doc-check` did: the
 # `test` job runs it, so a stale binding fails CI, and `enforce`'s
@@ -521,7 +532,7 @@ dev: fmt lint test ## Format, lint and test
 # Without it, adding a Rust wire field and forgetting `make bindings` passed
 # a target whose help text reads "everything CI requires" and then cost a
 # full Rust CI leg to discover.
-pre-commit: fmt lint check test lint-web typecheck-web test-web boundaries enforce bindings-check doc-check ## Run everything CI requires
+pre-commit: fmt lint check test lint-web typecheck-web deadcode-web test-web boundaries enforce bindings-check doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow

@@ -13,7 +13,8 @@ Low-level layout and display primitives built on Tailwind design tokens. These a
 |------|------|
 | `Stack.tsx` | Vertical flex container; `gap`, `align`, `justify` props |
 | `Row.tsx` | Horizontal flex container; same props as `Stack` |
-| `Card.tsx` | Surface container; variants: `default`, `elevated`, `outlined`; configurable padding |
+| `Readout.tsx` | Label, value and quiet unit; `intent` colours the value only |
+| `Sparkline.tsx` | Inline trend line over a series of numbers; configurable width and height |
 | `Label.tsx` | Semantic `<label>` or `<span>`; sizes: `xs`, `sm`, `base`; `muted` for secondary text |
 | `EmptyState.tsx` | Centred placeholder with icon slot, title, description, optional action |
 | `Skeleton.tsx` | Shimmer-animated placeholder; variants: `text`, `rect`, `circle`; `count` for multiples |

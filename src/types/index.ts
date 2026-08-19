@@ -3,7 +3,7 @@ import type { ProvenanceParamKey } from './reasoning';
 // The reasoning-control wire shapes live in their own module — see its header
 // for why — and are re-exported here so every caller keeps importing from
 // `../types`.
-export type { ProvenanceParamKey, SuppressedEffort, TemplateSupport } from './reasoning';
+export type { ProvenanceParamKey, TemplateSupport } from './reasoning';
 
 // ============================================================================
 // Inference Configuration

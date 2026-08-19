@@ -36,6 +36,7 @@ React Context providers for shared application state across the gglib GUI.
 |---------|-------------|
 | [`SettingsContext.tsx`](SettingsContext.tsx) | Application settings (paths, ports, preferences) with persistence |
 | [`ToastContext.tsx`](ToastContext.tsx) | Toast notification system for user feedback |
+| [`ConfirmContext.tsx`](ConfirmContext.tsx) | `confirm(opts)` returning a promise that settles when the user answers the dialog |
 
 ## Usage
 

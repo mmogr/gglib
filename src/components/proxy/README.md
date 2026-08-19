@@ -19,6 +19,7 @@ The tray popover shows the same information as the in-app dashboard, so without 
 | `SlotCard.tsx` | One llama.cpp inference slot as a context-usage donut; `size` shrinks it for the popover |
 | `ProxyMetricsGrid.tsx` | `ActiveConnectionsSection` and `InferenceSlotsSection`, plus `ProxyMetricsGrid` composing both. The modal uses the sections individually because its cache panels sit between them; the popover uses the pair. `compact` renders at popover scale |
 | `ProxyToggleButton.tsx` | Start/stop control, so the destructive styling always tracks the destructive action |
+| `RequestThroughput.tsx` | Requests per second as a `Readout` and a `Sparkline`, over `useMetricHistory`'s rate mode |
 
 Cache reporting lives in `ProxyCachePanel` (one level up) rather than here — it is consumed only by the dashboard modal, which has room for it.
 
