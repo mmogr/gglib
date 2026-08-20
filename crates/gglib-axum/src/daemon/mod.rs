@@ -185,15 +185,7 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     }
 
     // 6. Serve until signalled, then tear down in order.
-    let graceful = {
-        let token = shutdown_token.clone();
-        async move {
-            tokio::select! {
-                () = shutdown::shutdown_signal() => info!("shutdown signal received"),
-                () = token.cancelled() => info!("shutdown requested over the API"),
-            }
-        }
-    };
+    let graceful = shutdown::await_shutdown(shutdown::shutdown_signal(), shutdown_token.clone());
 
     axum::serve(listener, app)
         .with_graceful_shutdown(graceful)

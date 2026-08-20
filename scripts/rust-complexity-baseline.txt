@@ -18,7 +18,7 @@ crates/gglib-app-services/src/servers.rs 965
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
 crates/gglib-app-services/src/types.rs 1055
-crates/gglib-axum/src/bootstrap.rs 332
+crates/gglib-axum/src/bootstrap.rs 333
 crates/gglib-axum/src/chat_api.rs 735
 crates/gglib-axum/src/handlers/config/setup.rs 310
 crates/gglib-axum/src/routes.rs 469
@@ -167,6 +167,6 @@ crates/gglib-runtime/src/process/residency/mod.rs 523
 crates/gglib-runtime/src/proxy/supervisor.rs 763
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 491
-crates/gglib-sse/src/lib.rs 332
+crates/gglib-sse/src/lib.rs 325
 src-tauri/src/daemon/mod.rs 341
 src-tauri/src/main.rs 303

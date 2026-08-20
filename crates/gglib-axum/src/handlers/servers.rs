@@ -94,11 +94,18 @@ pub(crate) async fn get_logs(
 ///
 /// Subscribes to the global log broadcast and filters by port.
 /// Includes keep-alive pings every 30 seconds to prevent proxy timeouts.
+///
+/// Ends on the daemon's shutdown token. The broadcast sender lives in a
+/// `LazyLock` static, so it never drops and this stream would not end on its
+/// own; under `with_graceful_shutdown`, which waits for in-flight connections
+/// to drain, that keeps the daemon from returning. `None` outside the daemon,
+/// where there is no graceful shutdown to block.
 pub(crate) async fn stream_logs(
     State(state): State<AppState>,
     Path(port): Path<u16>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let receiver = state.servers.subscribe_logs();
+    let shutdown = state.daemon_shutdown.clone();
 
     let stream = BroadcastStream::new(receiver).filter_map(move |result| {
         match result {
@@ -123,6 +130,16 @@ pub(crate) async fn stream_logs(
             }
         }
     });
+
+    let stream = futures_util::StreamExt::take_until(
+        stream,
+        Box::pin(async move {
+            match shutdown {
+                Some(token) => token.cancelled_owned().await,
+                None => std::future::pending::<()>().await,
+            }
+        }),
+    );
 
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()

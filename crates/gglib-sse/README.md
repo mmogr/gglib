@@ -46,7 +46,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete w
 │  │                       lib.rs                            │   │
 │  │  Broadcaster<T>   - generic broadcast::Sender<T> wrapper│   │
 │  │  SseOptions       - keep-alive interval/text config      │   │
-│  │  subscribe()              - live events only             │   │
+│  │  subscribe_until()        - live events only             │   │
 │  │  subscribe_with_hydration_until() - snapshot + live       │   │
 │  └────────────────────────────────────────────────────────┘   │
 └───────────────────────────────────────────────────────────────┘
@@ -65,7 +65,7 @@ struct MyEvent { message: String }
 let broadcaster = Arc::new(Broadcaster::<MyEvent>::new(256));
 
 // In an Axum handler:
-// broadcaster.clone().subscribe(SseOptions::default())
+// broadcaster.clone().subscribe_until(SseOptions::default(), shutdown)
 // or, to send a full-state snapshot before streaming live updates:
 // broadcaster.clone().subscribe_with_hydration_until(current_snapshot, SseOptions::default(), shutdown)
 
