@@ -12,7 +12,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check_file_complexity.sh](#check_file_complexitysh) | TypeScript/CSS file-size ratchet | CI |
 | [check_rust_complexity.sh](#check_rust_complexitysh) | Rust file-size ratchet | CI |
 | [check_param_source_exhaustive.sh](#check_param_source_exhaustivesh) | No catch-all arm over `ParamSource` | CI |
-| [check_workflow_yaml.sh](#check_workflow_yamlsh) | No duplicate keys in workflow YAML | CI |
+| [check_workflow_yaml.sh](#check_workflow_yamlsh) | Workflow sanity: duplicate YAML keys, and badges.yml module paths | CI |
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
 | [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
@@ -125,6 +125,17 @@ adding a variant a silent behaviour change instead of a compile error.
 ```
 
 ### `check_workflow_yaml.sh`
+
+Two checks over `.github/workflows/`:
+
+1. no duplicate mapping keys;
+2. every module and coverage path named in `badges.yml` still resolves to a
+   directory or file under `crates/`.
+
+The second lives here rather than in `badges.yml` because the two jobs that
+extract test and coverage badges check out the `badges` branch, not the source,
+so they cannot see `crates/`. This script runs under `make enforce`, where the
+source is present.
 
 Fails on duplicate mapping keys in `.github/workflows/`. GitHub rejects such a
 file outright — the run is marked "failed because of a workflow file issue" and
