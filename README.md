@@ -72,7 +72,9 @@ OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model open
 ```
 
 Requests naming `qwen3.6:coding` select a sampling profile on top of the same
-model — see [Sampling resolution](docs/sampling.md#inference-profiles-modelprofile).
+model. `gglib chat`, `gglib q` and `gglib serve` take the same suffix, or a
+`--profile` flag — see
+[Sampling resolution](docs/sampling.md#inference-profiles-modelprofile).
 
 ## What the proxy does to every request
 

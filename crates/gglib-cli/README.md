@@ -317,6 +317,9 @@ gglib serve 1 --port 8080
 # Same, with KV cache session persistence on disk
 gglib serve 1 --cache --slot-dir ~/.gglib/slots
 
+# By name, with a default inference profile for bare-model requests
+gglib serve qwen3.6 --profile chat
+
 # Search HuggingFace
 gglib model search "llama 3 GGUF"
 
