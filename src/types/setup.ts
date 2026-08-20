@@ -3,6 +3,11 @@
  * Types for the first-run system setup status and provisioning endpoints.
  */
 
+import type { DependencyDto } from './generated/DependencyDto';
+import type { DiagnosticsDto } from './generated/DiagnosticsDto';
+import type { RecommendationDto } from './generated/RecommendationDto';
+import type { ResolvedPathsDto } from './generated/ResolvedPathsDto';
+
 /** GPU detection results. */
 export interface GpuInfo {
   hasMetal: boolean;
@@ -127,54 +132,62 @@ export type BuildEvent =
   | { type: 'completed'; version: string; acceleration: string }
   | { type: 'failed'; message: string };
 
+/*
+ * The diagnostics bundle behind the System tab, and the recommendation `gglib
+ * up` offers on a first run, are generated from their Rust DTOs.
+ *
+ * Three fields are `String` in Rust with the union written only in a doc
+ * comment, so ts-rs renders them as `string`. Each is intersected back over
+ * the generated shape, the form `src/types/README.md` prescribes for a
+ * narrowing — `X & { field: Union }`, so the narrowed member is the one that
+ * survives.
+ */
+
 /** One system dependency's state, from `gglib config check-deps`. */
-export interface DependencyInfo {
-  name: string;
+export type DependencyInfo = DependencyDto & {
   status: 'present' | 'missing' | 'optional';
-  /** Present only when `status` is `'present'`. */
-  version?: string | null;
-  description: string;
-  required: boolean;
-  installHint?: string | null;
-}
+};
 
 /** Where everything resolves to — `gglib config paths`. */
-export interface ResolvedPaths {
-  dataRoot: string;
-  resourceRoot: string;
-  databasePath: string;
-  llamaServerPath: string;
-  modelsDir: string;
-  /** How the models directory was chosen. */
+export type ResolvedPaths = ResolvedPathsDto & {
   modelsSource: 'explicit' | 'envVar' | 'default';
-}
+};
 
 /**
- * What acceleration a build would use. Detection refuses to fall back to CPU,
- * so a failure here is an answer with install hints, not a broken request.
+ * The full diagnostics bundle behind the System tab.
+ *
+ * `dependencies` is replaced rather than intersected: in
+ * `DependencyDto[] & DependencyInfo[]`, `.map` and `.filter` type their
+ * callback's element from the first constituent, so the panel's rows would see
+ * the generated `status` and lose the union. `src/types/README.md` allows
+ * `Omit` here because `DiagnosticsDto` is a plain object type, not a union of
+ * arms. `paths` needs no such treatment — it is not an array, so intersecting
+ * it narrows `modelsSource` correctly.
  */
-export interface AccelerationInfo {
-  detected?: string | null;
-  detectionError?: string | null;
-}
-
-/** The optional hf_xet download accelerator. Downloads work without it. */
-export interface FastDownloadsInfo {
-  provisioned: boolean;
-  envDir: string;
-  legacyPath: boolean;
-  builder?: string | null;
-  availableBuilder: string;
-  error?: string | null;
-}
-
-/** The full diagnostics bundle behind the System tab. */
-export interface Diagnostics {
+export type Diagnostics = Omit<DiagnosticsDto, 'dependencies'> & {
   dependencies: DependencyInfo[];
   paths: ResolvedPaths;
-  acceleration: AccelerationInfo;
-  fastDownloads: FastDownloadsInfo;
-}
+};
+
+type AssertNoUnlistedFields<T extends never> = T;
+/**
+ * Fails to compile if the wrapper's keys and `DiagnosticsDto`'s keys ever
+ * differ in either direction: a narrowed field renamed or dropped in Rust, or
+ * one added here that the generated shape does not carry. A field *added* to
+ * `DiagnosticsDto` is not drift — `Omit` propagates it — so it stays quiet.
+ * `Omit<T, K>` constrains `K` to `keyof any`, not `keyof T`, so the
+ * key above cannot drift-check itself: a Rust rename would leave a phantom
+ * field here and an un-narrowed one beside it, with the bindings still
+ * matching their Rust.
+ *
+ * Unreferenced by design, and exported because `noUnusedLocals` is on and an
+ * unused type alias is not exempt — the same shape as
+ * `InferenceConfigKeysAreComplete` and `ReasoningLadderIsComplete`.
+ */
+export type DiagnosticsKeysAreComplete = AssertNoUnlistedFields<
+  | Exclude<keyof Diagnostics, keyof DiagnosticsDto>
+  | Exclude<keyof DiagnosticsDto, keyof Diagnostics>
+>;
 
 /**
  * A hardware-sized model suggestion — the shortlist `gglib up` picks from.
@@ -182,15 +195,6 @@ export interface Diagnostics {
  * The route returns `null` when nothing fits, which is a real answer: a
  * machine too small for the smallest candidate should be told so.
  */
-export interface ModelRecommendation {
-  repo: string;
-  quantization: string;
-  /** Why this model, in the user's terms. */
-  rationale: string;
-  /** Weights plus KV cache at the candidate's context. */
-  requiredBytes: number;
-  budgetBytes: number;
+export type ModelRecommendation = RecommendationDto & {
   budgetSource: 'vram' | 'unifiedMemory' | 'systemRam';
-  headroomBytes: number;
-  context: number;
-}
+};
