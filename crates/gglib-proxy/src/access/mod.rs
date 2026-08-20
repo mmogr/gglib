@@ -9,6 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use gglib_core::ProxyAccessConfig;
+use gglib_core::access::constant_time_eq;
 use tracing::warn;
 
 use crate::models::ErrorResponse;
@@ -99,43 +100,4 @@ pub(crate) async fn bearer_guard(
         )),
     )
         .into_response()
-}
-
-/// Compare two byte strings without an early exit on the first difference.
-///
-/// A `==` on the token would return as soon as two bytes differ, and the time
-/// that takes is a function of how many leading bytes the attacker guessed
-/// right — enough, over many requests, to recover the token one byte at a time.
-/// Folding every byte into a single accumulator makes the comparison take the
-/// same time whatever the input.
-///
-/// The length check is a deliberate exception: it leaks only the token's
-/// length, which is not the secret, and comparing unequal-length slices has no
-/// meaningful definition.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn constant_time_eq_agrees_with_equality() {
-        assert!(constant_time_eq(b"Bearer abc", b"Bearer abc"));
-        assert!(constant_time_eq(b"", b""));
-        assert!(!constant_time_eq(b"Bearer abc", b"Bearer abd"));
-        assert!(!constant_time_eq(b"Bearer abc", b"Bearer ab"));
-        assert!(!constant_time_eq(b"", b"x"));
-    }
-
-    /// A prefix match must not pass — the failure mode a naive `starts_with`
-    /// would introduce.
-    #[test]
-    fn constant_time_eq_rejects_a_prefix() {
-        assert!(!constant_time_eq(b"Bearer secret", b"Bearer secret-extra"));
-    }
 }

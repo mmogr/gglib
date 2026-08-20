@@ -27,6 +27,26 @@ pub enum ApiKeySource {
     None,
 }
 
+/// Compare two byte strings without an early exit on the first difference, so
+/// response timing does not leak how many leading bytes of a secret a caller
+/// guessed right.
+///
+/// The length check is a deliberate exception: it leaks only the secret's
+/// length, which is not the secret, and comparing unequal-length slices has no
+/// meaningful definition.
+///
+/// Lives here because both `gglib-axum` and `gglib-proxy` guard bearer tokens
+/// and each had a byte-identical private copy. `normalize_host`, which both
+/// guards also call, already lived here. A hardening change to one private copy
+/// would not have been reported against the other by any lint.
+#[must_use]
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 /// Mint a bearer token for an endpoint that is about to be exposed off
 /// loopback.
 ///
@@ -137,6 +157,24 @@ impl ProxyAccessConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The proxy's superset of the two former private copies: it also covers the
+    /// empty-vs-nonempty case, which the axum copy did not.
+    #[test]
+    fn constant_time_eq_agrees_with_equality() {
+        assert!(constant_time_eq(b"Bearer abc", b"Bearer abc"));
+        assert!(constant_time_eq(b"", b""));
+        assert!(!constant_time_eq(b"Bearer abc", b"Bearer abd"));
+        assert!(!constant_time_eq(b"Bearer abc", b"Bearer ab"));
+        assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    /// A prefix match must not pass — the failure mode a naive `starts_with`
+    /// would introduce.
+    #[test]
+    fn constant_time_eq_rejects_a_prefix() {
+        assert!(!constant_time_eq(b"Bearer secret", b"Bearer secret-extra"));
+    }
 
     #[test]
     fn no_api_key_means_no_expected_header() {
