@@ -106,8 +106,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     )
     .await?;
     let params = AgentSessionParams {
+        // Both, from the stripped name: `model_name` is what goes in the
+        // request body, and a `{model}:{profile}` suffix there would ask the
+        // upstream for a model that does not exist.
+        model_name: params.model_name.as_ref().map(|_| selection.model.clone()),
         model_identifier: selection.model,
-        model_name: params.model_name.clone(),
         profile: selection.profile,
         ..params
     };

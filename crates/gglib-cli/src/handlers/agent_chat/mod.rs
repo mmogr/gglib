@@ -5,6 +5,7 @@ mod markdown;
 pub(crate) mod persistence;
 pub(crate) mod renderer;
 pub(crate) mod repl;
+pub(crate) mod resume_settings;
 pub(crate) mod sampling_warning;
 mod thinking_dispatch;
 mod tool_format;
@@ -12,12 +13,10 @@ mod tool_format;
 use anyhow::{Result, bail};
 
 use gglib_core::domain::agent::AgentMessage;
-use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
-use crate::presentation::style;
 
 use self::persistence::Conversation;
 
@@ -41,6 +40,29 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         if args.max_stagnation_steps.is_none() {
             args.max_stagnation_steps = settings.max_stagnation_steps.map(|v| v as usize);
         }
+    }
+
+    // Strip any `{model}:{profile}` suffix before a conversation is created:
+    // the identifier is persisted, and a stored suffix would come back on
+    // every resume as a profile the user did not type this time — colliding
+    // with their `--profile` and making the session unresumable.
+    let profile_settings = ctx.app.settings().get().await?;
+    let configured_profiles = profile_settings
+        .inference_profiles
+        .as_deref()
+        .unwrap_or_default();
+    let typed_this_invocation = !args.identifier.is_empty();
+    let mut selected_profile = None;
+    if typed_this_invocation {
+        let selection = crate::handlers::inference::profile_selection::select(
+            ctx.catalog.as_ref(),
+            configured_profiles,
+            &args.identifier,
+            args.profile.as_deref(),
+        )
+        .await?;
+        args.identifier = selection.model;
+        selected_profile = selection.profile;
     }
 
     let (persistence, prior_messages) = if let Some(conv_id) = args.continue_id {
@@ -72,20 +94,23 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
             None
         },
     };
-    // Resolve `--profile` or a `{model}:{profile}` suffix first: the stripped
-    // name is what `resolve_port` hands the daemon, so the suffix must never
-    // reach model lookup.
-    let settings = ctx.app.settings().get().await?;
-    let selection = crate::handlers::inference::profile_selection::select(
-        ctx.catalog.as_ref(),
-        settings.inference_profiles.as_deref().unwrap_or_default(),
-        &args.identifier,
-        args.profile.as_deref(),
-    )
-    .await?;
+    // On a resume the identifier came from storage, not from this command
+    // line. An explicit `--profile` is therefore the only thing the user
+    // actually typed, and it wins over any suffix an older conversation
+    // recorded rather than colliding with it.
+    if !typed_this_invocation {
+        selected_profile = crate::handlers::inference::profile_selection::resume_profile(
+            ctx.catalog.as_ref(),
+            configured_profiles,
+            &mut args.identifier,
+            args.profile.as_deref(),
+        )
+        .await?;
+    }
+
     let params = config::AgentSessionParams {
-        model_identifier: selection.model,
-        profile: selection.profile,
+        model_identifier: args.identifier.clone(),
+        profile: selected_profile,
         ..config::AgentSessionParams::from(&args)
     };
     let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
@@ -151,11 +176,11 @@ async fn resume_conversation<'a>(
     if msg_count == 0 {
         println!("Conversation #{conv_id} has no messages — starting fresh.");
     } else {
-        print_memory_jogger(&db_messages, &conv.title);
+        resume_settings::print_memory_jogger(&db_messages, &conv.title);
     }
 
     // Merge saved settings into a copy of the current args.
-    let merged = apply_saved_settings(args, &conv.system_prompt, &conv.settings);
+    let merged = resume_settings::apply_saved_settings(args, &conv.system_prompt, &conv.settings);
 
     if merged.identifier.is_empty() {
         bail!(
@@ -181,114 +206,4 @@ async fn resume_conversation<'a>(
     let persistence = Conversation::resume(history, conv_id, msg_count).await;
 
     Ok((merged, persistence, prior_messages))
-}
-
-/// Merge saved [`ConversationSettings`] into [`ChatArgs`].
-///
-/// CLI-provided values always win; saved settings fill in blanks.
-fn apply_saved_settings(
-    args: &ChatArgs,
-    saved_system_prompt: &Option<String>,
-    saved_settings: &Option<ConversationSettings>,
-) -> ChatArgs {
-    let mut merged = args.clone();
-
-    // Restore system prompt if the user didn't supply one on the CLI.
-    if merged.system_prompt.is_none() {
-        merged.system_prompt.clone_from(saved_system_prompt);
-    }
-
-    let Some(saved) = saved_settings else {
-        return merged;
-    };
-
-    // Model identifier: CLI wins if non-empty, otherwise use saved.
-    if merged.identifier.is_empty()
-        && let Some(ref name) = saved.model_name
-    {
-        merged.identifier = name.clone();
-    }
-
-    // Sampling parameters — only fill if CLI left them as None.
-    if merged.sampling.temperature.is_none() {
-        merged.sampling.temperature = saved.temperature;
-    }
-    if merged.sampling.top_p.is_none() {
-        merged.sampling.top_p = saved.top_p;
-    }
-    if merged.sampling.top_k.is_none() {
-        merged.sampling.top_k = saved.top_k;
-    }
-    if merged.sampling.max_tokens.is_none() {
-        merged.sampling.max_tokens = saved.max_tokens;
-    }
-    if merged.sampling.repeat_penalty.is_none() {
-        merged.sampling.repeat_penalty = saved.repeat_penalty;
-    }
-
-    // Context args
-    if merged.context.ctx_size.is_none() {
-        merged.context.ctx_size.clone_from(&saved.ctx_size);
-    }
-    if !merged.context.mlock {
-        merged.context.mlock = saved.mlock.unwrap_or(false);
-    }
-
-    // Tools — only restore if the user didn't provide any on the CLI.
-    if merged.tools.is_empty() {
-        merged.tools.clone_from(&saved.tools);
-    }
-    if !merged.no_tools {
-        merged.no_tools = saved.no_tools.unwrap_or(false);
-    }
-
-    // Agent loop params — fill if the user didn't override.
-    if merged.max_iterations.is_none()
-        && let Some(saved_max) = saved.max_iterations
-    {
-        merged.max_iterations = Some(saved_max);
-    }
-    if merged.tool_timeout_ms.is_none() {
-        merged.tool_timeout_ms = saved.tool_timeout_ms;
-    }
-    if merged.max_parallel.is_none() {
-        merged.max_parallel = saved.max_parallel;
-    }
-
-    merged
-}
-
-/// Print the last user/assistant exchange as a memory jogger when resuming.
-fn print_memory_jogger(db_messages: &[gglib_core::domain::chat::Message], title: &str) {
-    use gglib_core::domain::chat::MessageRole;
-
-    println!("\n{}Resuming: {}{}\n", style::INFO, title, style::RESET,);
-
-    // Find last user message and last assistant message
-    let last_user = db_messages
-        .iter()
-        .rev()
-        .find(|m| m.role == MessageRole::User);
-    let last_assistant = db_messages
-        .iter()
-        .rev()
-        .find(|m| m.role == MessageRole::Assistant);
-
-    if let Some(user_msg) = last_user {
-        let content = if user_msg.content.len() > 200 {
-            format!("{}…", &user_msg.content[..200])
-        } else {
-            user_msg.content.clone()
-        };
-        println!("{}  You: {}{}", style::DIM, content, style::RESET);
-    }
-    if let Some(asst_msg) = last_assistant {
-        let content = if asst_msg.content.len() > 200 {
-            format!("{}…", &asst_msg.content[..200])
-        } else {
-            asst_msg.content.clone()
-        };
-        println!("{}  Assistant: {}{}", style::DIM, content, style::RESET);
-    }
-    println!();
 }

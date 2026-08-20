@@ -23,7 +23,7 @@
 //! pool and cannot be built in a unit test. The narrow signature is what makes
 //! the conflict and not-found paths testable at all.
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 
 use gglib_core::domain::InferenceProfile;
 use gglib_core::ports::ModelCatalogPort;
@@ -55,10 +55,18 @@ pub(crate) async fn select(
     let route = resolve_route(identifier, profiles, catalog).await;
 
     if let Some(name) = flag {
-        if matches!(route, ModelRoute::Profiled { .. }) {
-            bail!(
+        match route {
+            ModelRoute::Profiled { .. } => bail!(
                 "'{identifier}' already names a profile; drop either the suffix or --profile {name}"
-            );
+            ),
+            // The suffix is not a profile and the base is a real model, so
+            // carrying the whole id forward would ask the catalog for
+            // something `resolve_route` already proved is not there — and
+            // report it as a missing *model*. Name the real problem.
+            ModelRoute::ProfileNotFound { suffix, .. } => {
+                bail!("{}", not_found_message(suffix, profiles))
+            }
+            ModelRoute::Bare(_) => {}
         }
         let Some(profile) = profiles.iter().find(|p| p.name == name) else {
             bail!("{}", not_found_message(name, profiles));
@@ -84,6 +92,52 @@ pub(crate) async fn select(
         ModelRoute::ProfileNotFound { suffix, .. } => {
             bail!("{}", not_found_message(suffix, profiles))
         }
+    }
+}
+
+/// Resolve the profile for a resumed conversation, stripping any suffix the
+/// stored identifier carries.
+///
+/// Differs from [`select`] in the one way that matters on a resume: the
+/// identifier was not typed this time, it was replayed from storage. So a
+/// stored suffix is *not* a conflict with an explicit `--profile` — the flag
+/// is the only thing the user actually said, and it wins.
+///
+/// A stored profile that has since been deleted degrades to unprofiled with a
+/// warning rather than erroring: the alternative is a conversation nobody can
+/// ever resume again, which is a steep price for a profile the user may not
+/// even want any more.
+pub(crate) async fn resume_profile(
+    catalog: &dyn ModelCatalogPort,
+    profiles: &[InferenceProfile],
+    identifier: &mut String,
+    flag: Option<&str>,
+) -> Result<Option<InferenceProfile>> {
+    let stored = match resolve_route(identifier, profiles, catalog).await {
+        ModelRoute::Bare(model) => (model.to_owned(), None),
+        ModelRoute::Profiled { model, profile } => (model.to_owned(), Some(profile.clone())),
+        ModelRoute::ProfileNotFound { requested, suffix } => {
+            eprintln!(
+                "  Warning: this conversation was started with profile '{suffix}', which no \
+                 longer exists. Resuming without it."
+            );
+            let base = requested
+                .rsplit_once(':')
+                .map_or(requested, |(base, _)| base)
+                .to_owned();
+            (base, None)
+        }
+    };
+    *identifier = stored.0;
+
+    match flag {
+        Some(name) => profiles
+            .iter()
+            .find(|p| p.name == name)
+            .cloned()
+            .map(Some)
+            .ok_or_else(|| anyhow!("{}", not_found_message(name, profiles))),
+        None => Ok(stored.1),
     }
 }
 

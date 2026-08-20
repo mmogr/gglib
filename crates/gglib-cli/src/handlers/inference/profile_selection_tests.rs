@@ -163,3 +163,74 @@ async fn an_unknown_suffix_on_a_real_model_is_an_error() {
     .to_string();
     assert!(err.contains("coding"), "unexpected message: {err}");
 }
+
+/// A flag beside a suffix that is not a profile must report the bad *suffix*,
+/// not carry the whole id into model lookup and call it a missing model.
+#[tokio::test]
+async fn a_flag_beside_an_unknown_suffix_reports_the_suffix() {
+    let err = select(
+        &NamedCatalog::new(&["qwen"]),
+        &profiles(),
+        "qwen:codign",
+        Some("coding"),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("codign"), "unexpected message: {err}");
+    assert!(
+        !err.contains("already names a profile"),
+        "should not report a conflict: {err}"
+    );
+}
+
+/// A resume replays a stored identifier the user did not type this time, so a
+/// stored suffix must not collide with the flag they did type.
+#[tokio::test]
+async fn a_resume_lets_the_flag_beat_a_stored_suffix() {
+    let mut identifier = "qwen:coding".to_owned();
+    let profiles = vec![
+        profiles().remove(0),
+        InferenceProfile {
+            name: "chat".to_owned(),
+            description: None,
+            config: InferenceConfig {
+                temperature: Some(0.8),
+                ..Default::default()
+            },
+            list_in_models: false,
+        },
+    ];
+
+    let selected = resume_profile(
+        &NamedCatalog::new(&["qwen"]),
+        &profiles,
+        &mut identifier,
+        Some("chat"),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(identifier, "qwen", "the stored suffix must be stripped");
+    assert_eq!(selected.unwrap().name, "chat", "the typed flag wins");
+}
+
+/// A conversation whose profile was deleted must stay resumable.
+#[tokio::test]
+async fn a_resume_survives_a_deleted_stored_profile() {
+    let mut identifier = "qwen:gone".to_owned();
+    let selected = resume_profile(
+        &NamedCatalog::new(&["qwen"]),
+        &profiles(),
+        &mut identifier,
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(identifier, "qwen");
+    assert!(
+        selected.is_none(),
+        "degrades rather than bricking the resume"
+    );
+}

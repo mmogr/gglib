@@ -661,10 +661,15 @@ gglib chat 7 --profile chat --presence-penalty 1.2
 # warning: --presence-penalty did not take effect …
 ```
 
-Pass `--temperature` as well to set them together. The CLI warns whenever a
-flag is passed over this way — including without a profile, since a model with
-stored `inference_defaults` naming a temperature does the same thing. The
-warning is suppressed under `gglib q -Q`, which promises silence on stderr.
+Pass `--temperature` as well to set them together. `gglib chat` and `gglib q`
+warn whenever a flag is passed over this way — including without a profile,
+since a model with stored `inference_defaults` naming a temperature does the
+same thing. The warning is suppressed under `gglib q -Q`, which promises
+silence on stderr.
+
+`gglib serve` does not warn: its flags are resolved per request by the proxy,
+against a settings snapshot the CLI cannot see at launch, so any warning it
+printed would be a guess that goes stale the moment a profile is edited.
 
 Profiles are **global** — one `coding` profile applies to every model — and
 deliberately **sparse**: only the parameters you set override anything, and the
