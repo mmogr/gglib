@@ -45,15 +45,54 @@ pub fn discarded_from_rung(
 ) -> Vec<&'static str> {
     let requested = named.to_openai_json_patch();
     let survived = resolved.to_openai_json_patch();
+    let unsendable = non_finite_fields(named);
 
     sources
         .iter()
-        .filter(|(field, _)| requested.contains_key(*field))
         .filter(|(field, source)| {
-            !won(*source, rung) && requested.get(*field) != survived.get(*field)
+            // A non-finite value the caller named never reaches the wire at
+            // all, whichever rung "won" — JSON has no NaN or infinity, so
+            // `to_openai_json_patch` drops it. Reported unconditionally,
+            // because the alternative is the exact silence this whole helper
+            // exists to break, and because it is absent from `requested` and
+            // so would otherwise fall out of the membership test below.
+            if unsendable.contains(field) {
+                return true;
+            }
+            requested.contains_key(*field)
+                && !won(*source, rung)
+                && requested.get(*field) != survived.get(*field)
         })
         .map(|(field, _)| field)
         .collect()
+}
+
+/// Float fields the caller set to a value JSON cannot carry.
+///
+/// Listed explicitly rather than derived, because the derivation would have to
+/// go through the very serialisation that loses them. The drift risk that
+/// creates is covered by `every_float_field_is_checked_for_non_finiteness`,
+/// which fails if a new float field is added and not named here.
+fn non_finite_fields(c: &InferenceConfig) -> Vec<&'static str> {
+    [
+        ("temperature", c.temperature),
+        ("top_p", c.top_p),
+        ("presence_penalty", c.presence_penalty),
+        ("repeat_penalty", c.repeat_penalty),
+        ("min_p", c.min_p),
+        ("frequency_penalty", c.frequency_penalty),
+        ("dynatemp_range", c.dynatemp_range),
+        ("dynatemp_exponent", c.dynatemp_exponent),
+        ("top_n_sigma", c.top_n_sigma),
+        ("dry_multiplier", c.dry_multiplier),
+        ("dry_base", c.dry_base),
+    ]
+    .into_iter()
+    .filter_map(|(field, value)| match value {
+        Some(v) if !v.is_finite() => Some(field),
+        _ => None,
+    })
+    .collect()
 }
 
 /// Whether the value at `rung` is the one that reached the resolution.
@@ -82,3 +121,7 @@ const fn won(source: ParamSource, rung: usize) -> bool {
 #[cfg(test)]
 #[path = "sampling_discards_tests.rs"]
 mod sampling_discards_tests;
+
+#[cfg(test)]
+#[path = "sampling_discards_non_finite_tests.rs"]
+mod sampling_discards_non_finite_tests;
