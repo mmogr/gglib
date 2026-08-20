@@ -100,21 +100,14 @@ where
         self.raw_stream(None)
     }
 
-    /// Subscribe to the live event stream only (no hydration event).
-    ///
-    /// The stream never ends on its own. Behind
-    /// [`axum::serve()`]'s `with_graceful_shutdown`, which waits for every
-    /// in-flight connection to close, that means one subscriber is enough to
-    /// stop the server ever shutting down — prefer [`Self::subscribe_until`]
-    /// on any server that shuts down gracefully.
-    pub fn subscribe(
-        self: Arc<Self>,
-        opts: SseOptions,
-    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-        self.subscribe_until(opts, std::future::pending())
-    }
-
     /// Subscribe to live events, ending the stream when `shutdown` resolves.
+    ///
+    /// This is the only live-stream entry point. An unbounded `subscribe` used to
+    /// sit beside it, delegating here with `std::future::pending()`; it was
+    /// removed once its last caller moved across, because a door whose own
+    /// documentation says "prefer the other one" is a trap rather than an API.
+    /// A caller that genuinely has no shutdown signal can still pass
+    /// `std::future::pending()` — and should be able to say why.
     ///
     /// An SSE stream is a connection that never closes by itself, so a server
     /// using `with_graceful_shutdown` cannot finish shutting down while one is
@@ -152,7 +145,7 @@ where
 
     /// Raw, unencoded event stream: optionally prefixed with one `initial`
     /// event, then the live broadcast stream with lagged/closed receivers
-    /// silently skipped. Kept separate from [`Self::subscribe`] so the
+    /// silently skipped. Kept separate from [`Self::subscribe_until`] so the
     /// hydration-ordering and lag-handling behavior can be unit tested
     /// without going through Axum's SSE/`Event` types.
     fn raw_stream(&self, initial: Option<T>) -> impl Stream<Item = T> + Send + 'static + use<T> {

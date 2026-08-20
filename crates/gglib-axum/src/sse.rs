@@ -10,6 +10,7 @@
 //! glue in the adapter layer where it belongs.
 
 use std::convert::Infallible;
+use std::future::Future;
 use std::sync::Arc;
 
 use axum::response::sse::{Event, Sse};
@@ -55,14 +56,27 @@ impl SseBroadcaster {
         Self::new(256)
     }
 
-    /// Create an SSE stream for a new client connection.
+    /// Create an SSE stream for a new client connection, ending it when
+    /// `shutdown` resolves.
     ///
-    /// Returns an Axum SSE response that streams events to the client.
-    /// Includes a keep-alive ping every 30 seconds to prevent proxy timeouts.
-    pub fn subscribe(
+    /// Returns an Axum SSE response that streams events to the client, with a
+    /// keep-alive ping every 30 seconds to prevent proxy timeouts.
+    ///
+    /// There is deliberately no unbounded variant. An SSE stream never closes by
+    /// itself, so under `axum::serve().with_graceful_shutdown()` — which waits for
+    /// in-flight connections to drain — a single unbounded subscriber is enough to
+    /// stop the server ever returning. Callers without a token can pass
+    /// `std::future::pending()` and should be able to say why.
+    pub fn subscribe_until<F>(
         &self,
-    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static + use<>> {
-        self.inner.clone().subscribe(SseOptions::default())
+        shutdown: F,
+    ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static + use<F>>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        self.inner
+            .clone()
+            .subscribe_until(SseOptions::default(), shutdown)
     }
 
     /// Get the number of active subscribers.

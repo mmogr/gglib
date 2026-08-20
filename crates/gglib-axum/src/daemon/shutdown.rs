@@ -7,13 +7,41 @@
 //! sequence runs under a force-exit watchdog so a wedged child (D-state on
 //! a blocked CUDA ioctl) cannot keep the daemon alive forever.
 
+use std::future::Future;
 use std::time::Duration;
 
 use crate::state::AppState;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// How long the whole teardown may take before the watchdog force-exits.
 const SHUTDOWN_WATCHDOG: Duration = Duration::from_secs(10);
+
+/// Resolve when *either* trigger fires, then cancel the token so both converge.
+///
+/// The cancel is the whole point, and its absence was a real bug. The daemon has
+/// two ways to stop — a signal, or `POST /api/daemon/shutdown` — and the select
+/// alone only *observed* the token. On the signal path the token therefore stayed
+/// live, so anything bounded by it never ended: `/api/events` streams held
+/// `with_graceful_shutdown` open, `perform_shutdown` never ran, and the liveness
+/// watchdog force-exited later. Ctrl-C, `systemctl stop` and `kill` all take
+/// that path; `POST /api/daemon/shutdown` cancels the token itself and so was
+/// unaffected.
+///
+/// `CancellationToken::cancel` is idempotent, so firing it on the API path too
+/// costs nothing. gglib-proxy avoids this shape entirely by passing one token to
+/// both sides (`gglib-proxy/src/server.rs`); the daemon needs a select because
+/// only one of its two triggers is a token.
+pub(crate) async fn await_shutdown<S>(signal: S, token: CancellationToken)
+where
+    S: Future<Output = ()>,
+{
+    tokio::select! {
+        () = signal => info!("shutdown signal received"),
+        () = token.cancelled() => info!("shutdown requested over the API"),
+    }
+    token.cancel();
+}
 
 /// Resolve when the process is asked to stop.
 ///
@@ -108,3 +136,7 @@ pub(super) async fn perform_shutdown(state: &AppState) {
     completed.store(true, Ordering::Release);
     info!("daemon shutdown complete");
 }
+
+#[cfg(test)]
+#[path = "shutdown_tests.rs"]
+mod shutdown_tests;

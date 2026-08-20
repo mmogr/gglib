@@ -132,9 +132,10 @@ pub struct AxumContext {
     /// capabilities, tags and inference defaults; resolving them through this
     /// port is what keeps those surfaces in step with the proxy.
     pub catalog: Arc<dyn ModelCatalogPort>,
-    /// Cancellation token that stops the daemon when this context is hosted
-    /// by [`run_daemon`](crate::daemon::run_daemon). `None` in every other
-    /// host (tests, embedded), where `POST /api/daemon/shutdown` answers 409.
+    /// Cancellation token that stops the daemon when this context is hosted by
+    /// [`run_daemon`](crate::daemon::run_daemon), and bounds `/api/events`.
+    /// `None` in every other host (tests, embedded), where there is no graceful
+    /// shutdown to block and `POST /api/daemon/shutdown` answers 409.
     pub daemon_shutdown: Option<tokio_util::sync::CancellationToken>,
 }
 
