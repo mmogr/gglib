@@ -9,13 +9,11 @@
  */
 
 import { createSseEvents } from './sse';
-import type { EventsTransport } from '../types/events';
 
 /**
- * Create EventBus for the current environment.
- * Returns object matching EventsTransport interface.
+ * Create the EventBus for the current environment.
  */
-export function createEventBus(): EventsTransport {
+export function createEventBus() {
   return createSseEvents();
 }
 

@@ -100,7 +100,7 @@ When adding a new long-running operation:
 
 **Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
-**Frontend transport is unified.** The frontend client modules must not branch on `isTauriApp`. If you find yourself writing `if (isTauriApp()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. The transport abstraction layer handles that distinction.
+**Frontend transport is unified.** The frontend client modules must not branch on `isTauriApp`. If you find yourself writing `if (isTauriApp()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. `services/platform/` is where that distinction is absorbed: `detect.ts` is the one module that reads `isTauriApp`, exposing it as `isDesktop()`, and its sibling modules that reach for OS APIs carry a `TRANSPORT_EXCEPTION:` comment saying why.
 
 ---
 

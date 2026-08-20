@@ -328,7 +328,7 @@ export function subscribeSseEvent<K extends AppEventType>(
 
 /**
  * Create SSE-based event system.
- * Returns object with subscribe method matching EventsTransport interface.
+ * Returns an object with a `subscribe` method.
  */
 export function createSseEvents() {
   function subscribe<K extends AppEventType>(

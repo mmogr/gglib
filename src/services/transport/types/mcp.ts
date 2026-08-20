@@ -1,9 +1,8 @@
 /**
- * MCP (Model Context Protocol) transport sub-interface.
+ * MCP (Model Context Protocol) transport types.
  * Handles MCP server lifecycle and tool invocation.
  */
 
-import type { McpServerId } from './ids';
 
 /**
  * MCP server type.
@@ -129,38 +128,6 @@ export interface ResolutionStatus {
   error_message?: string | null;
   /** Suggested command to run to find the executable */
   suggested_fix?: string | null;
-}
-
-/**
- * MCP transport operations.
- */
-export interface McpTransport {
-  /** List all configured MCP servers with their status. */
-  listMcpServers(): Promise<McpServerInfo[]>;
-
-  /** Add a new MCP server configuration. */
-  addMcpServer(server: NewMcpServer): Promise<McpServerInfo>;
-
-  /** Update an existing MCP server configuration. */
-  updateMcpServer(id: McpServerId, updates: UpdateMcpServer): Promise<McpServerInfo>;
-
-  /** Remove an MCP server configuration. */
-  removeMcpServer(id: McpServerId): Promise<void>;
-
-  /** Start an MCP server, answering with its info and advertised tools. */
-  startMcpServer(id: McpServerId): Promise<McpServerInfo>;
-
-  /** Stop an MCP server, answering with its info in the stopped state. */
-  stopMcpServer(id: McpServerId): Promise<McpServerInfo>;
-
-  /** Call an MCP tool on a specific server. */
-  callMcpTool(serverId: McpServerId, toolName: string, args: Record<string, unknown>): Promise<McpToolResult>;
-
-  /** Resolve MCP server executable path (for diagnostics/auto-fix). */
-  resolveMcpServerPath(id: McpServerId): Promise<ResolutionStatus>;
-
-  /** Start a throwaway instance to check the config, then stop it. */
-  testMcpServer(id: McpServerId): Promise<McpTestResult>;
 }
 
 /**

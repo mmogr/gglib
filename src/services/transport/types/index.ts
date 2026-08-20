@@ -1,6 +1,5 @@
 /**
- * Composed Transport interface.
- * Combines all domain sub-interfaces into a single unified transport.
+ * Barrel for the per-domain type modules.
  */
 
 // Re-export ID types
@@ -9,10 +8,8 @@ export * from './ids';
 // Re-export common types
 export * from './common';
 
-// Re-export sub-interface types
-export * from './builtin';
+// Re-export the per-domain shapes
 export * from './models';
-export * from './tags';
 export * from './settings';
 export * from './servers';
 export * from './proxy';
@@ -21,38 +18,3 @@ export * from './mcp';
 export * from './events';
 export * from './chat';
 export * from './verification';
-
-// Import sub-interfaces for composition
-import type { ModelsTransport } from './models';
-import type { TagsTransport } from './tags';
-import type { SettingsTransport } from './settings';
-import type { ServersTransport } from './servers';
-import type { ProxyTransport } from './proxy';
-import type { DownloadsTransport } from './downloads';
-import type { McpTransport } from './mcp';
-import type { EventsTransport } from './events';
-import type { ChatTransport } from './chat';
-import type { VerificationTransport } from './verification';
-import type { BuiltinTransport } from './builtin';
-
-/**
- * Unified transport interface.
- * 
- * This is the primary abstraction between frontend domain logic and the
- * daemon it talks to over HTTP and SSE.
- *
- * Composition happens once at the root via `getTransport()`.
- * Domain clients and hooks should never import transport implementations directly.
- */
-export interface Transport
-  extends ModelsTransport,
-    TagsTransport,
-    SettingsTransport,
-    ServersTransport,
-    ProxyTransport,
-    DownloadsTransport,
-    McpTransport,
-    EventsTransport,
-    ChatTransport,
-    VerificationTransport,
-    BuiltinTransport {}

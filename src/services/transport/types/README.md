@@ -5,42 +5,23 @@
 
 <!-- module-docs:start -->
 
-All TypeScript types, interfaces, and DTOs forming the contract between the frontend and backend. Defines the composed `Transport` interface (which extends all domain sub-interfaces), branded ID types, common utility types, and per-domain request/response shapes.
-
-## Interface Hierarchy
-
-```
-Transport
-    extends ModelsTransport       (models.ts)
-    extends ChatTransport         (chat.ts)
-    extends ServersTransport      (servers.ts)
-    extends DownloadsTransport    (downloads.ts)
-    extends EventsTransport       (events.ts)
-    extends McpTransport          (mcp.ts)
-    extends SettingsTransport     (settings.ts)
-    extends ProxyTransport        (proxy.ts)
-    extends TagsTransport         (tags.ts)
-    extends BuiltinTransport      (builtin.ts)
-    extends VerificationTransport (verification.ts)
-```
+All TypeScript types and DTOs forming the contract between the frontend and backend: branded ID types, common utility types, and per-domain request and response shapes. Most are re-exports of the ts-rs bindings under `src/types/generated/`.
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `index.ts` | Composes all domain sub-interfaces into the unified `Transport` type |
+| `index.ts` | Barrel over the per-domain modules |
 | `ids.ts` | Brand-tagged ID types: `ModelId`, `ConversationId`, `DownloadId`, `McpServerId`, etc. |
 | `common.ts` | `Unsubscribe`, `EventHandler`, base error types |
-| `models.ts` | Model shapes and `ModelsTransport` interface |
-| `chat.ts` | `ConversationSummary`, `ChatMessage`, `SaveMessageParams`, `ChatTransport` |
-| `servers.ts` | `ServeConfig`, `ServerInfo`, `ServeResponse`, `ServersTransport` |
-| `downloads.ts` | Download queue types and `DownloadsTransport` |
-| `events.ts` | `ServerWireEvent`, `DownloadEvent`, `EventsTransport` |
-| `settings.ts` | Application settings shapes and `SettingsTransport` |
-| `tags.ts` | Tag shapes and `TagsTransport` |
-| `mcp.ts` | MCP server and tool shapes, and `McpTransport` |
-| `builtin.ts` | Built-in tool shapes |
-| `verification.ts` | Model verification shapes and `VerificationTransport` |
+| `models.ts` | Model shapes |
+| `chat.ts` | `ConversationSummary`, `ChatMessage`, `SaveMessageParams` |
+| `servers.ts` | `ServeConfig`, `ServerInfo`, `ServeResponse` |
+| `downloads.ts` | Download queue types |
+| `events.ts` | `ServerWireEvent`, `DownloadEvent`, `AppEventMap` |
+| `settings.ts` | Application settings shapes |
+| `mcp.ts` | MCP server and tool shapes |
+| `verification.ts` | Model verification shapes |
 | `proxy.ts` | Proxy status and configuration shapes |
 | `dashboard.ts` | The proxy dashboard snapshot graph |
 | `admission.ts` | Slot admission and residency shapes |

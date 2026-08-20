@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Clients that own real request logic of their own. Each one exists because it does something `getTransport()` cannot: parse a streaming response by hand, or talk to a server that is not the app's own backend. Everything else — plain request/response against the backend — belongs on the transport interface and is called directly as `getTransport().method()`. There is no facade layer in between.
+Clients that own real request logic of their own. Each one exists because it does something `getTransport()` cannot: parse a streaming response by hand, or talk to a server that is not the app's own backend. Everything else — plain request/response against the backend — belongs in a `transport/api/` module and is called directly as `getTransport().method()`. There is no facade layer in between.
 
 ## Architecture
 
@@ -38,7 +38,7 @@ Clients that own real request logic of their own. Each one exists because it doe
 
 ## Contract
 
-A module belongs here only if it needs streaming or a non-backend origin. If a new operation is a plain call against the app's backend, add it to the `Transport` interface and call `getTransport()` from the consumer — do not add a wrapper module here.
+A module belongs here only if it needs streaming or a non-backend origin. If a new operation is a plain call against the app's backend, add it to the matching `transport/api/` module and call `getTransport()` from the consumer — do not add a wrapper module here.
 
 No client may import a *transport* from `platform/` — what platform difference remains is absorbed inside `transport/api/client.ts`. `proxyDashboard.ts` imports `appLogger` from there, which is a log sink rather than a way of reaching the backend.
 

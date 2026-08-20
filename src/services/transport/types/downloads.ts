@@ -1,5 +1,5 @@
 /**
- * Downloads transport sub-interface.
+ * Downloads transport types.
  * Handles download queue management.
  */
 
@@ -80,33 +80,4 @@ export interface DownloadCompletionInfo {
   displayName?: string;
   /** Source of the download for potential future handling differentiation */
   source: 'huggingface' | 'local' | 'unknown';
-}
-
-/**
- * Downloads transport operations.
- */
-export interface DownloadsTransport {
-  /** Get current download queue status. */
-  getDownloadQueue(): Promise<DownloadQueueStatus>;
-
-  /** Queue a new download from HuggingFace. */
-  queueDownload(params: QueueDownloadParams): Promise<QueueDownloadResponse>;
-
-  /** Cancel an active or queued download. */
-  cancelDownload(id: DownloadId): Promise<void>;
-
-  /** Remove a download from the queue (for failed/completed items). */
-  removeFromQueue(id: DownloadId): Promise<void>;
-
-  /** Clear all failed downloads from the queue. */
-  clearFailedDownloads(): Promise<void>;
-
-  /** Cancel all shards in a download group. */
-  cancelShardGroup(groupId: string): Promise<void>;
-
-  /** Reorder downloads in the queue. */
-  reorderQueue(ids: DownloadId[]): Promise<void>;
-
-  /** Reorder a single download to a specific position. */
-  reorderQueueItem(id: DownloadId, position: number): Promise<number>;
 }

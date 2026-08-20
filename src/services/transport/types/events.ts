@@ -1,9 +1,8 @@
 /**
- * Events transport sub-interface.
+ * Events transport types.
  * Handles real-time event subscriptions.
  */
 
-import type { Unsubscribe, EventHandler } from './common';
 
 // ============================================================================
 // Server Events
@@ -156,17 +155,3 @@ export type AppEventType = keyof AppEventMap;
 // ============================================================================
 // Events Transport Interface
 // ============================================================================
-
-/**
- * Events transport operations.
- */
-export interface EventsTransport {
-  /**
-   * Subscribe to an event stream.
-   * Returns an unsubscribe function.
-   */
-  subscribe<K extends AppEventType>(
-    event: K,
-    handler: EventHandler<AppEventMap[K]>
-  ): Unsubscribe;
-}
