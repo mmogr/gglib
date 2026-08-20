@@ -104,15 +104,6 @@ impl ModelService {
         }
     }
 
-    /// Get a model by name.
-    pub async fn get_by_name(&self, name: &str) -> Result<Option<Model>, CoreError> {
-        match self.repo.get_by_name(name).await {
-            Ok(model) => Ok(Some(model)),
-            Err(RepositoryError::NotFound(_)) => Ok(None),
-            Err(e) => Err(CoreError::from(e)),
-        }
-    }
-
     /// Find a model by identifier — a numeric id, then an exact name (not an
     /// HF id, despite what this said for a long time). Errors if not found.
     pub async fn find_by_identifier(&self, identifier: &str) -> Result<Model, CoreError> {
@@ -1165,7 +1156,7 @@ mod tests {
         let created = service.add(new_model).await.unwrap();
         assert_eq!(created.name, "test-model");
 
-        let found = service.get_by_name("test-model").await.unwrap();
+        let found = service.get("test-model").await.unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, created.id);
     }

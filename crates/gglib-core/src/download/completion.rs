@@ -156,14 +156,24 @@ impl AttemptCounts {
     }
 
     /// Total number of attempts across all kinds.
+    ///
+    /// Test-only: where production wants these summed it reads the three
+    /// fields directly — `gglib-download`'s `calculate_total_attempts` folds
+    /// them into `QueueRunSummary`'s own `total_attempts_*` fields. Gated so
+    /// `dead_code` keeps telling the truth about production reach.
+    #[cfg(test)]
     #[must_use]
-    pub const fn total(&self) -> u32 {
+    pub(crate) const fn total(&self) -> u32 {
         self.downloaded + self.failed + self.cancelled
     }
 
     /// Check if there were any retry attempts (more than one total attempt).
+    ///
+    /// Test-only, and gated for the same reason as [`Self::total`]: nothing in
+    /// production asks an `AttemptCounts` whether it retried.
+    #[cfg(test)]
     #[must_use]
-    pub const fn has_retries(&self) -> bool {
+    pub(crate) const fn has_retries(&self) -> bool {
         self.total() > 1
     }
 }
@@ -234,24 +244,10 @@ pub struct QueueRunSummary {
 }
 
 impl QueueRunSummary {
-    /// Total number of unique models across all result kinds.
-    #[must_use]
-    pub const fn total_unique_models(&self) -> u32 {
-        self.unique_models_downloaded + self.unique_models_failed + self.unique_models_cancelled
-    }
-
     /// Total number of attempts across all result kinds.
     #[must_use]
     pub const fn total_attempts(&self) -> u32 {
         self.total_attempts_downloaded + self.total_attempts_failed + self.total_attempts_cancelled
-    }
-
-    /// Check if any models had retry attempts.
-    #[must_use]
-    pub fn has_retries(&self) -> bool {
-        self.items
-            .iter()
-            .any(|item| item.attempt_counts.has_retries())
     }
 }
 
@@ -557,108 +553,5 @@ mod tests {
         };
 
         assert_eq!(summary.total_attempts(), 6);
-        assert_eq!(summary.total_unique_models(), 4);
-    }
-
-    #[test]
-    fn test_queue_run_summary_has_retries() {
-        // FALSE scenario: all items have exactly 1 attempt — no retries
-        let single_attempt_detail = CompletionDetail {
-            key: CompletionKey::HfFile {
-                repo_id: "model-a".to_string(),
-                revision: "main".to_string(),
-                filename_canon: "a.gguf".to_string(),
-                quantization: None,
-            },
-            display_name: "model-a".to_string(),
-            last_result: CompletionKind::Downloaded,
-            last_completed_at_ms: 1000,
-            download_ids: vec![DownloadId::from_model("model-a")],
-            attempt_counts: AttemptCounts::from_kind(CompletionKind::Downloaded),
-        };
-
-        let no_retry_summary = QueueRunSummary {
-            run_id: Uuid::nil(),
-            started_at_ms: 0,
-            completed_at_ms: 1000,
-            total_attempts_downloaded: 3,
-            total_attempts_failed: 0,
-            total_attempts_cancelled: 0,
-            unique_models_downloaded: 3,
-            unique_models_failed: 0,
-            unique_models_cancelled: 0,
-            items: vec![
-                single_attempt_detail.clone(),
-                single_attempt_detail.clone(),
-                single_attempt_detail.clone(),
-            ],
-            truncated: false,
-        };
-        assert!(
-            !no_retry_summary.has_retries(),
-            "should be false when all items have exactly 1 attempt"
-        );
-
-        // TRUE scenario: one item has 3 attempts (2 failures + 1 success)
-        let mut retried_counts = AttemptCounts::default();
-        retried_counts.increment(CompletionKind::Failed);
-        retried_counts.increment(CompletionKind::Failed);
-        retried_counts.increment(CompletionKind::Downloaded);
-
-        let retried_detail = CompletionDetail {
-            key: CompletionKey::HfFile {
-                repo_id: "model-b".to_string(),
-                revision: "main".to_string(),
-                filename_canon: "b.gguf".to_string(),
-                quantization: None,
-            },
-            display_name: "model-b".to_string(),
-            last_result: CompletionKind::Downloaded,
-            last_completed_at_ms: 2000,
-            download_ids: vec![
-                DownloadId::from_model("model-b"),
-                DownloadId::from_model("model-b"),
-                DownloadId::from_model("model-b"),
-            ],
-            attempt_counts: retried_counts,
-        };
-
-        let retry_summary = QueueRunSummary {
-            run_id: Uuid::nil(),
-            started_at_ms: 0,
-            completed_at_ms: 2000,
-            // 3 unique models downloaded, but 5 total attempts (one was retried)
-            total_attempts_downloaded: 4,
-            total_attempts_failed: 2,
-            total_attempts_cancelled: 0,
-            unique_models_downloaded: 3,
-            unique_models_failed: 0,
-            unique_models_cancelled: 0,
-            items: vec![
-                single_attempt_detail.clone(),
-                retried_detail.clone(),
-                single_attempt_detail,
-            ],
-            truncated: false,
-        };
-        assert!(
-            retry_summary.has_retries(),
-            "should be true when at least one item has >1 attempt"
-        );
-
-        // Verify unique-vs-attempts distinction: 3 unique models but 6 total attempts
-        assert_eq!(retry_summary.total_unique_models(), 3);
-        assert_eq!(retry_summary.total_attempts(), 6);
-        assert_ne!(
-            retry_summary.total_unique_models(),
-            retry_summary.total_attempts(),
-            "unique models should differ from total attempts when retries occurred"
-        );
-
-        // Verify the retried item specifically
-        assert_eq!(retried_detail.attempt_counts.failed, 2);
-        assert_eq!(retried_detail.attempt_counts.downloaded, 1);
-        assert_eq!(retried_detail.attempt_counts.total(), 3);
-        assert!(retried_detail.attempt_counts.has_retries());
     }
 }

@@ -381,14 +381,6 @@ impl DownloadEvent {
         Self::DownloadCancelled { id: id.into() }
     }
 
-    /// Create a status-changed event for non-terminal lifecycle transitions.
-    pub fn status_changed(id: impl Into<String>, status: DownloadStatus) -> Self {
-        Self::DownloadStatusChanged {
-            id: id.into(),
-            status,
-        }
-    }
-
     /// Create a queue run complete event.
     pub const fn queue_run_complete(summary: QueueRunSummary) -> Self {
         Self::QueueRunComplete { summary }

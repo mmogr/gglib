@@ -11,7 +11,7 @@ pub(crate) mod types;
 pub use completion::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, QueueRunSummary,
 };
-pub use errors::{DownloadError, DownloadResult};
+pub use errors::DownloadError;
 pub use events::{DownloadEvent, DownloadStatus, DownloadSummary};
 pub use format::{format_duration, format_rate};
 pub use queue::{FailedDownload, QueueSnapshot, QueuedDownload};

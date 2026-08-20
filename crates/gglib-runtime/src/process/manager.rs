@@ -13,7 +13,6 @@
 //! sequence that mutates it.
 
 use super::core::GuiProcessCore;
-use super::types::ServerInfo;
 use anyhow::Result;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
@@ -22,7 +21,6 @@ use gglib_core::ports::{
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
 
 use crate::process::residency::ResidentSet;
 
@@ -156,51 +154,11 @@ impl ProcessManager {
         self.residency.stop_primary(&self.core).await
     }
 
-    /// Stop a running server by model ID
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the process could not be stopped.
-    pub async fn stop_server(&self, model_id: u32) -> Result<()> {
-        let mut core = self.core.write().await;
-        core.kill(model_id).await
-    }
-
-    /// Stop all running servers
-    ///
-    /// # Errors
-    ///
-    /// Never returns an error; individual failures are logged.
-    pub async fn stop_all(&self) -> Result<()> {
-        let mut core = self.core.write().await;
-        core.kill_all().await;
-        Ok(())
-    }
-
-    /// Check if a model is being served
-    pub async fn is_serving(&self, model_id: u32) -> bool {
-        let core = self.core.read().await;
-        core.is_running(model_id)
-    }
-
-    /// Get info for a running server
-    pub async fn get_server_info(&self, model_id: u32) -> Option<ServerInfo> {
-        let core = self.core.read().await;
-        core.get_info(model_id).cloned()
-    }
-
-    /// List all running servers
-    pub async fn list_servers(&self) -> Vec<ServerInfo> {
-        let core = self.core.read().await;
-        core.list_all().into_iter().cloned().collect()
-    }
-
     /// List running servers as [`ProcessHandle`]s.
     ///
-    /// The same processes [`Self::list_servers`] reports, projected onto the
-    /// port type so callers that already speak `ProcessHandle` — the GUI
-    /// server list and its health monitor — can consume a manager-backed
-    /// runtime without a second shape to handle.
+    /// The core's own records, projected onto the port type so callers that
+    /// already speak `ProcessHandle` can consume a manager-backed runtime
+    /// without a second shape to handle.
     pub async fn list_running(&self) -> Vec<ProcessHandle> {
         let core = self.core.read().await;
         core.list_all()
@@ -215,17 +173,6 @@ impl ProcessManager {
                 )
             })
             .collect()
-    }
-
-    /// Graceful shutdown
-    ///
-    /// # Errors
-    ///
-    /// Never returns an error; individual failures are logged.
-    pub async fn shutdown(&self) -> Result<()> {
-        info!("Shutting down process manager");
-        self.residency.forget_all();
-        self.stop_all().await
     }
 
     /// The single model this manager is pinned to, if any.
@@ -394,29 +341,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_is_serving() {
-        assert!(!manager().is_serving(1).await);
-    }
-
-    #[tokio::test]
-    async fn test_list_servers_empty() {
-        assert_eq!(manager().list_servers().await.len(), 0);
-    }
-
-    #[tokio::test]
     async fn list_running_is_empty_with_no_servers() {
         assert!(manager().list_running().await.is_empty());
-    }
-
-    /// Both listings project the same underlying process set, so they must
-    /// never disagree on how many servers are up.
-    #[tokio::test]
-    async fn list_running_agrees_with_list_servers() {
-        let manager = manager();
-        assert_eq!(
-            manager.list_running().await.len(),
-            manager.list_servers().await.len()
-        );
     }
 
     #[tokio::test]
