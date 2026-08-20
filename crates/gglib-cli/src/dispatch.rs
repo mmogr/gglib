@@ -42,16 +42,26 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
 
         // ── Inference (top-level for ergonomic access) ──────────────────────
         Commands::Serve {
-            id,
+            identifier,
             context,
             options,
             sampling,
+            profile,
             mtp,
             cache,
             access,
         } => {
             handlers::inference::serve::execute(
-                ctx, id, context, options, sampling, mtp, cache, access, verbose,
+                ctx,
+                identifier,
+                context,
+                options,
+                sampling,
+                profile.profile,
+                mtp,
+                cache,
+                access,
+                verbose,
             )
             .await?;
         }

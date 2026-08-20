@@ -29,10 +29,11 @@ use super::shared::{log_inference_info, log_mlock_info};
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
     ctx: &CliContext,
-    id: u32,
+    identifier: String,
     context: ContextArgs,
     options: ServeOptions,
     sampling: SamplingArgs,
+    profile_flag: Option<String>,
     mtp: MtpArgs,
     cache: CacheArgs,
     access: AccessArgs,
@@ -41,14 +42,29 @@ pub(crate) async fn execute(
     // Ensure llama.cpp is installed before the daemon needs it.
     ensure_llama_initialized(&CliPrompt::new()).await?;
 
+    let settings = ctx.app.settings().get().await?;
+
+    // Resolve `--profile` or a `{model}:{profile}` suffix before model lookup:
+    // the suffix names a profile, not a model, and must not reach the catalog.
+    let selection = super::profile_selection::select(
+        ctx.catalog.as_ref(),
+        settings.inference_profiles.as_deref().unwrap_or_default(),
+        &identifier,
+        profile_flag.as_deref(),
+    )
+    .await?;
+
     let model = ctx
         .app
         .models()
-        .get_by_id(i64::from(id))
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Model with ID {} not found", id))?;
-
-    let settings = ctx.app.settings().get().await?;
+        .find_by_identifier(&selection.model)
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "Model '{}' not found. Use 'gglib model list' to see what is available.",
+                selection.model
+            )
+        })?;
 
     // The raw `--ctx-size` flag is shape-validated at parse time, before the
     // model is known; resolving it here against the model's GGUF context
@@ -149,7 +165,9 @@ pub(crate) async fn execute(
             // documented as read by nobody, so every `serve` sampling flag was
             // resolved, printed, and discarded.
             inference_override: proxy_config.inference_override.clone(),
-            default_profile: proxy_config.default_profile.clone(),
+            // The profile is carried by name: the proxy re-reads its list per
+            // request, so an edit takes effect without restarting this endpoint.
+            default_profile: selection.profile.as_ref().map(|p| p.name.clone()),
             api_key: proxy_config.api_key,
             allowed_hosts: proxy_config.allowed_hosts,
         })

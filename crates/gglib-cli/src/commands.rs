@@ -16,7 +16,6 @@ use crate::profile_args::ProfileArgs;
 use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
-
 pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand};
 
 /// Top-level commands for the GGUF library management tool.
@@ -79,24 +78,25 @@ pub enum Commands {
     /// makes it the right choice for clients that cannot switch models via
     /// `/v1/models` — VS Code Copilot's BYOK endpoint, for one.
     ///
-    /// Being the proxy, it also brings the dashboard (`/v1/proxy/status` and
-    /// its SSE stream), KV cache reuse, prompt-cache auto-sizing, request
-    /// normalization and upstream health monitoring.
+    /// Being the proxy, it also brings the dashboard, KV cache reuse,
+    /// prompt-cache auto-sizing, request normalization and health monitoring.
     ///
-    /// `--port` is the endpoint clients connect to; `--llama-port` is the
-    /// upstream llama-server behind it. `--host` defaults to loopback; widening
-    /// it generates an API key and prints it, and any host clients will reach
-    /// the endpoint by must be named with `--allowed-host`.
+    /// `--port` is the endpoint clients connect to; the daemon allocates the
+    /// upstream llama-server port. `--host` defaults to loopback; widening it
+    /// generates an API key and prints it, and any host clients reach the
+    /// endpoint by must be named with `--allowed-host`.
     #[command(display_order = 10)]
     Serve {
-        /// ID of the model to serve
-        id: u32,
+        /// Name or ID of the model to serve, optionally with a ':profile' suffix
+        identifier: String,
         #[command(flatten)]
         context: ContextArgs,
         #[command(flatten)]
         options: ServeOptions,
         #[command(flatten)]
         sampling: SamplingArgs,
+        #[command(flatten)]
+        profile: ProfileArgs,
         #[command(flatten)]
         mtp: MtpArgs,
         #[command(flatten)]

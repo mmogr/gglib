@@ -45,6 +45,10 @@ use flag_surface::{assert_both_expose, long_flags, long_flags_at, owned, samplin
 /// only assertion that can see an extra sampling flag.
 const SERVE_NON_SAMPLING: &[&str] = &[
     "allowed-host",
+    // Selects a named profile; not itself a sampling parameter. Deliberately
+    // absent from PROXY_NON_SAMPLING: an unpinned proxy has no model in scope
+    // for a default to attach to.
+    "profile",
     "api-key",
     "cache",
     "cache-disk-gb",
