@@ -24,7 +24,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{is_loopback_host, normalize_host};
+use gglib_core::access::{constant_time_eq, is_loopback_host, normalize_host};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use serde_json::json;
 use tracing::warn;
@@ -159,28 +159,9 @@ pub(crate) async fn bearer_guard(
         .into_response()
 }
 
-/// Compare two byte strings without an early exit on the first difference,
-/// so response timing does not leak how many leading bytes of the token a
-/// caller guessed right. The length check leaks only the token's length,
-/// which is not the secret.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn constant_time_eq_agrees_with_equality() {
-        assert!(constant_time_eq(b"Bearer abc", b"Bearer abc"));
-        assert!(constant_time_eq(b"", b""));
-        assert!(!constant_time_eq(b"Bearer abc", b"Bearer abd"));
-        assert!(!constant_time_eq(b"Bearer abc", b"Bearer ab"));
-    }
 
     /// Loopback binds keep the proxy's strict policy: no IP-literal
     /// exemption, no foreign hostnames.
