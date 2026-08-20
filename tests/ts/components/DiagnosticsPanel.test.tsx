@@ -26,15 +26,30 @@ vi.mock('../../../src/services/transport/api/setup', () => ({
 
 const base: Diagnostics = {
   dependencies: [
-    { name: 'cmake', status: 'present', version: '3.28.1', description: 'Build', required: true },
+    {
+      name: 'cmake',
+      status: 'present',
+      version: '3.28.1',
+      description: 'Build',
+      required: true,
+      installHint: null,
+    },
     {
       name: 'git',
       status: 'missing',
+      version: null,
       description: 'Version control',
       required: true,
       installHint: 'brew install git',
     },
-    { name: 'python3', status: 'missing', description: 'Optional helper', required: false },
+    {
+      name: 'python3',
+      status: 'missing',
+      version: null,
+      description: 'Optional helper',
+      required: false,
+      installHint: null,
+    },
   ],
   paths: {
     dataRoot: '/home/u/.local/share/gglib',
@@ -44,12 +59,14 @@ const base: Diagnostics = {
     modelsDir: '/models',
     modelsSource: 'envVar',
   },
-  acceleration: { detected: 'Metal' },
+  acceleration: { detected: 'Metal', detectionError: null },
   fastDownloads: {
     provisioned: false,
     envDir: '/home/u/.local/share/gglib/py',
     legacyPath: false,
+    builder: null,
     availableBuilder: 'uv',
+    error: null,
   },
 };
 
@@ -72,8 +89,22 @@ describe('DiagnosticsPanel', () => {
     mockGet.mockResolvedValue({
       ...base,
       dependencies: [
-        { name: 'git', status: 'missing', description: 'a', required: true, installHint: 'apt install build-essential' },
-        { name: 'cmake', status: 'missing', description: 'b', required: true, installHint: 'apt install build-essential' },
+        {
+          name: 'git',
+          status: 'missing',
+          version: null,
+          description: 'a',
+          required: true,
+          installHint: 'apt install build-essential',
+        },
+        {
+          name: 'cmake',
+          status: 'missing',
+          version: null,
+          description: 'b',
+          required: true,
+          installHint: 'apt install build-essential',
+        },
       ],
     });
 

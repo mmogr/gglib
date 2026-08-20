@@ -8,6 +8,7 @@ import type { ModelId } from '../types/ids';
 import type {
   VerificationReport,
   UpdateCheckResult,
+  CheckUpdatesResponse,
 } from '../types/verification';
 
 /**
@@ -26,9 +27,7 @@ export async function verifyModel(modelId: ModelId): Promise<VerificationReport>
  * Check if updates are available for a model on HuggingFace.
  */
 export async function checkModelUpdates(modelId: ModelId): Promise<UpdateCheckResult> {
-  const response = await get<{ result: UpdateCheckResult; message: string }>(
-    `/api/models/${modelId}/updates`
-  );
+  const response = await get<CheckUpdatesResponse>(`/api/models/${modelId}/updates`);
   return response.result;
 }
 
