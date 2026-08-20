@@ -22,15 +22,8 @@ mod resolver;
 // rather than a fixed tick and so needs its own emission rate limit.
 pub use progress::ProgressThrottle;
 
-// Re-export queue types needed by consumers
-pub use queue::ShardGroupId;
-
-// Re-export resolver for CLI usage
-pub use resolver::HfQuantizationResolver;
-
 // Quantization selection service
 mod quant_selector;
-pub use quant_selector::{QuantizationSelection, QuantizationSelector, SelectionError};
 
 // CLI execution module (list_quantizations + Python bridge helpers)
 pub mod cli_exec;
@@ -42,7 +35,4 @@ pub use cli_emitter::{CliDownloadEventEmitter, rate_suffix, total_bytes_key};
 // Public API - modular download manager
 mod manager;
 
-pub use manager::{
-    CompletedJob, DownloadDestination, DownloadJob, DownloadManagerDeps, DownloadManagerImpl,
-    ProgressUpdate, QueueAutoResult, WorkerDeps, build_download_manager,
-};
+pub use manager::{DownloadManagerDeps, build_download_manager};

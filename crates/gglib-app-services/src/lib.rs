@@ -34,17 +34,17 @@ pub mod types;
 pub use error::GuiError;
 
 // Domain ops + their Deps
-pub use benchmark::{BenchmarkDeps, BenchmarkOps};
-pub use downloads::{DownloadDeps, DownloadOps};
-pub use mcp::{McpDeps, McpOps};
+pub use benchmark::BenchmarkOps;
+pub use downloads::DownloadOps;
+pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
-pub use proxy::{ProxyDeps, ProxyOps};
+pub use proxy::ProxyOps;
 pub use sampling_explain::{
     ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,
 };
-pub use servers::{ServerDeps, ServerOps};
+pub use servers::ServerOps;
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
-pub use settings::{SettingsDeps, SettingsOps};
+pub use settings::SettingsOps;
 pub use setup::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
 
 // Re-export commonly used types from gglib-core for convenience

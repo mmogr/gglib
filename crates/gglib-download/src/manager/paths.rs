@@ -9,7 +9,7 @@ use gglib_core::download::{DownloadError, DownloadId};
 
 /// A planned download destination.
 #[derive(Debug, Clone)]
-pub struct DownloadDestination {
+pub(crate) struct DownloadDestination {
     /// The model directory where files will be stored.
     pub model_dir: PathBuf,
     /// The files to download (relative paths within the model dir).
@@ -24,7 +24,7 @@ impl DownloadDestination {
     /// * `models_directory` - Base directory for all models
     /// * `id` - Download ID used to derive the subdirectory name
     /// * `files` - List of files to download
-    pub fn plan(models_directory: &Path, id: &DownloadId, files: Vec<String>) -> Self {
+    pub(crate) fn plan(models_directory: &Path, id: &DownloadId, files: Vec<String>) -> Self {
         // Convert repo ID to a safe directory name (replace / with _)
         let dir_name = id.model_id().replace('/', "_");
         let model_dir = models_directory.join(dir_name);
@@ -33,7 +33,7 @@ impl DownloadDestination {
     }
 
     /// Ensure the model directory exists, creating it if necessary.
-    pub fn ensure_dir(&self) -> Result<(), DownloadError> {
+    pub(crate) fn ensure_dir(&self) -> Result<(), DownloadError> {
         if !self.model_dir.exists() {
             std::fs::create_dir_all(&self.model_dir)
                 .map_err(|e| DownloadError::io("create_dir", e.to_string()))?;
@@ -42,12 +42,12 @@ impl DownloadDestination {
     }
 
     /// Get the primary file path (first file in the list).
-    pub fn primary_path(&self) -> Option<PathBuf> {
+    pub(crate) fn primary_path(&self) -> Option<PathBuf> {
         self.files.first().map(|f| self.model_dir.join(f))
     }
 
     /// Get all file paths.
-    pub fn all_paths(&self) -> Vec<PathBuf> {
+    pub(crate) fn all_paths(&self) -> Vec<PathBuf> {
         self.files.iter().map(|f| self.model_dir.join(f)).collect()
     }
 }

@@ -34,7 +34,7 @@ const DEFAULT_QUANT_PREFERENCE: &[&str] = &["Q5_K_M", "Q4_K_M", "Q5_K_S", "Q4_K_
 
 /// Result of quantization selection.
 #[derive(Debug, Clone)]
-pub struct QuantizationSelection {
+pub(crate) struct QuantizationSelection {
     /// The selected quantization.
     pub quantization: Quantization,
     /// Whether this was auto-selected (vs. explicitly requested).
@@ -115,13 +115,13 @@ impl From<SelectionError> for DownloadError {
 /// Quantization selection service.
 ///
 /// Uses a resolver to list available quantizations and applies selection rules.
-pub struct QuantizationSelector {
+pub(crate) struct QuantizationSelector {
     resolver: Arc<dyn QuantizationResolver>,
 }
 
 impl QuantizationSelector {
     /// Create a new selector with the given resolver.
-    pub fn new(resolver: Arc<dyn QuantizationResolver>) -> Self {
+    pub(crate) fn new(resolver: Arc<dyn QuantizationResolver>) -> Self {
         Self { resolver }
     }
 
@@ -141,7 +141,7 @@ impl QuantizationSelector {
     /// - `NoQuantizationsAvailable` if the repo has no GGUF files
     /// - `QuantizationNotFound` if the requested quant doesn't exist
     /// - `SelectionRequired` if multiple quants exist but none match defaults
-    pub async fn select(
+    pub(crate) async fn select(
         &self,
         repo_id: &str,
         requested: Option<&str>,

@@ -27,11 +27,7 @@ pub use gglib_core::{
     McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
     McpToolResult, NewMcpServer,
 };
-// Re-export DTOs from core ports
-pub use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
-
 // Re-export this crate's public types
 pub use builtin::BuiltinToolExecutorAdapter;
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
-pub use tool_executor::McpToolExecutorAdapter;
