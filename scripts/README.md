@@ -76,9 +76,19 @@ Enforces "HTTP-first, OS-glue-only" Tauri command policy:
 
 ### `check_transport_branching.sh`
 
-Ensures platform-specific code (`isTauriApp`) never appears in client modules:
-- Frontend transport should be unified (HTTP for both web and Tauri)
-- Platform branching only allowed in designated platform layer files
+Three rules over `src/`:
+
+1. no `isTauriApp` inside `src/services/clients/`;
+2. a client module may import `transport/api/client` (the base-URL/auth
+   primitive) and `transport/types/*` (declarations), but not a transport
+   *domain* API — needing one means the module should not be a client;
+3. remaining `isTauriApp` uses carry a `TRANSPORT_EXCEPTION:` comment (warning
+   only).
+
+Rule 2 self-tests against known-bad and known-good fixtures before the real scan,
+and fails when zero client modules are scanned. Both guards exist because the
+rule it replaced could never fail: it grepped for four identifiers that had never
+existed as code, and an empty scan is indistinguishable from a clean one.
 
 ```bash
 ./scripts/check_transport_branching.sh
