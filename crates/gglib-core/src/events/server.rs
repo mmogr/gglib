@@ -21,8 +21,6 @@ pub struct ServerSummary {
     pub model_name: String,
     /// Port the server is listening on.
     pub port: u16,
-    /// Health status (None = unknown/pending).
-    pub healthy: Option<bool>,
 }
 
 /// Port for emitting server lifecycle events.
@@ -110,8 +108,6 @@ pub struct ServerSnapshotEntry {
     /// Unix timestamp (seconds) when started.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub started_at: u64,
-    /// Whether the server is healthy.
-    pub healthy: bool,
 }
 
 impl AppEvent {
@@ -181,7 +177,6 @@ impl AppEvent {
                 model_name: s.model_name.clone(),
                 port: s.port,
                 started_at,
-                healthy: s.healthy.unwrap_or(false),
             })
             .collect();
         Self::server_snapshot(entries)
@@ -198,7 +193,6 @@ mod tests {
             model_id: model_id.to_string(),
             model_name: name.to_string(),
             port,
-            healthy: Some(true),
         }
     }
 

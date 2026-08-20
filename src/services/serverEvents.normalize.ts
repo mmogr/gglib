@@ -98,10 +98,11 @@ function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
  * A separate entry point rather than a snake_case fallback inside
  * [`normalizeServerEventFromAppEvent`], because this is not an `AppEvent` and
  * never was — it is a REST list the caller re-wrapped to look like one. The
- * two producers really do disagree: `ServerSnapshotEntry` is camelCase with a
- * `healthy` flag, `ServerInfo` is snake_case with a `pid`. Naming both paths
- * is what lets each read exactly the shape its own producer sends, instead of
- * one tolerant reader accepting either and documenting neither.
+ * two producers really do disagree: `ServerSnapshotEntry` is camelCase, while
+ * `ServerInfo` is snake_case and carries a `pid` the registry has no use for.
+ * Naming both paths is what lets each read exactly the shape its own producer
+ * sends, instead of one tolerant reader accepting either and documenting
+ * neither.
  *
  * Total, not `null`-returning: there is no whole-payload failure to report,
  * only individual entries — malformed, or with an id that will not coerce —

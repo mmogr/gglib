@@ -246,7 +246,6 @@ impl ServerOps {
                     model_id: id.to_string(),
                     model_name: model.name.clone(),
                     port: 0, // No port on failure
-                    healthy: Some(false),
                 };
                 self.deps.server_events.error(&error_summary, &e);
                 map_runtime_error(&e)
@@ -259,7 +258,6 @@ impl ServerOps {
             model_id: id.to_string(),
             model_name: model.name.clone(),
             port: target.port,
-            healthy: Some(true), // Assume healthy on successful start
         };
         self.deps.server_events.started(&summary);
 
@@ -357,7 +355,6 @@ impl ServerOps {
             model_id: id.to_string(),
             model_name: model.name.clone(),
             port: running.port,
-            healthy: None, // Unknown during shutdown
         };
         self.deps.server_events.stopping(&summary);
 
@@ -431,7 +428,6 @@ impl ServerOps {
                         model_id: server.model_id.to_string(),
                         model_name: model.name,
                         port: server.port,
-                        healthy: None,
                     });
                 }
                 Ok(None) => {
@@ -440,7 +436,6 @@ impl ServerOps {
                         model_id: server.model_id.to_string(),
                         model_name: format!("Model {}", server.model_id),
                         port: server.port,
-                        healthy: None,
                     });
                 }
                 Err(_) => continue,
@@ -795,7 +790,6 @@ mod tests {
             model_id: "42".to_string(),
             model_name: "TestModel".to_string(),
             port: 8080,
-            healthy: Some(true),
         };
 
         recorder.started(&summary);

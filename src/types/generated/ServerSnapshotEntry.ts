@@ -19,8 +19,4 @@ port: number,
 /**
  * Unix timestamp (seconds) when started.
  */
-startedAt: number, 
-/**
- * Whether the server is healthy.
- */
-healthy: boolean, };
+startedAt: number, };

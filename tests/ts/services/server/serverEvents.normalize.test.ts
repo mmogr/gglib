@@ -26,7 +26,6 @@ describe('serverEvents.normalize', () => {
           modelName: 'M',
           port: MOCK_PROXY_PORT,
           startedAt: 1_700_000_000,
-          healthy: true,
         },
       ],
     });
@@ -136,10 +135,10 @@ describe('serverEvents.normalize', () => {
    * The hydration path, and the reason there are two entry points.
    *
    * `GET /api/servers` reports the same running servers as the SSE snapshot,
-   * in a different shape: snake_case keys, a `pid` the registry has no use
-   * for, and no `healthy`. It is the current schema, not a legacy one — this
-   * test used to claim otherwise while being the only cover for the branch
-   * that made startup hydration work.
+   * in a different shape: snake_case keys and a `pid` the registry has no use
+   * for. It is the current schema, not a legacy one — this test used to claim
+   * otherwise while being the only cover for the branch that made startup
+   * hydration work.
    */
   it('normalizes the REST server list, which is snake_case', () => {
     const evt = normalizeServerSnapshotFromList([
