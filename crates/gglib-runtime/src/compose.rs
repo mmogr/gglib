@@ -5,8 +5,9 @@
 //!
 //! 1. `LlmCompletionAdapter::with_client(…)` — wrap `reqwest::Client` as an
 //!    [`LlmCompletionPort`].
-//! 2. `McpToolExecutorAdapter::new(…)` — wrap [`McpService`] as a
-//!    [`ToolExecutorPort`].
+//! 2. `CombinedToolExecutor::{new, with_sandbox}(…)` — wrap [`McpService`] as a
+//!    [`ToolExecutorPort`], routing qualified names to MCP and bare ones to the
+//!    built-ins.
 //! 3. `AgentLoop::build(llm, tool_executor, tool_filter)` — compose both
 //!    ports into an [`AgentLoopPort`], optionally filtering the tool set.
 //!

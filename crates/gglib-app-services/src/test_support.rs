@@ -273,7 +273,7 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
             CacheRamSetting::Auto,
         ))));
 
-    let proxy = Arc::new(crate::ProxyOps::new(crate::ProxyDeps {
+    let proxy = Arc::new(crate::proxy::ProxyOps::new(crate::proxy::ProxyDeps {
         supervisor: Arc::new(ProxySupervisor::new()),
         model_repo: repos.models.clone(),
         mcp: Arc::new(McpService::new(repos.mcp_servers.clone())),

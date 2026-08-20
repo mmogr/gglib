@@ -8,7 +8,7 @@ use gglib_core::download::{
     CompletionKey, DownloadError, DownloadId, DownloadStatus, QueueSnapshot, ShardInfo,
 };
 
-pub use shard_group::ShardGroupId;
+pub(crate) use shard_group::ShardGroupId;
 pub(crate) use types::{FailedItem, QueuedItem};
 
 /// Saturating conversion from usize to u32 for queue positions.

@@ -36,8 +36,8 @@ use crate::resolver::HfQuantizationResolver;
 
 use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
 
-pub use paths::DownloadDestination;
-pub use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
+pub(crate) use paths::DownloadDestination;
+pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 
 /// How often the progress bridge samples the worker and emits an event.
 ///
@@ -238,8 +238,8 @@ where
 
 /// Concrete implementation of the download manager.
 ///
-/// This struct is public but adapters should typically use
-/// `Arc<dyn DownloadManagerPort>` instead of depending on this type directly.
+/// Produced by [`build_download_manager`] and consumed as
+/// `Arc<dyn DownloadManagerPort>`; it is no longer nameable outside this crate.
 pub struct DownloadManagerImpl {
     /// Model registrar for completed downloads.
     model_registrar: Arc<dyn ModelRegistrarPort>,

@@ -11,28 +11,33 @@ use gglib_core::download::DownloadId;
 /// (cancel all, fail all, retry all). The group ID contains the download ID
 /// plus a unique suffix to distinguish different download attempts.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ShardGroupId(String);
+pub(crate) struct ShardGroupId(String);
 
 impl ShardGroupId {
     /// Create a new shard group ID from a string.
-    pub fn new(id: impl Into<String>) -> Self {
+    pub(crate) fn new(id: impl Into<String>) -> Self {
         Self(id.into())
+    }
+
+    /// Get the inner string reference.
+    ///
+    /// Test-only: production reads this type through its [`fmt::Display`] impl.
+    /// Kept rather than deleted so the tests below need not hand-roll it, and
+    /// gated so `dead_code` keeps telling the truth about production reach.
+    #[cfg(test)]
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
     }
 
     /// Generate a unique group ID for a download.
     ///
     /// Uses a simple counter-based approach instead of UUID to avoid
     /// the dependency on uuid crate in this module.
-    pub fn generate(download_id: &DownloadId) -> Self {
+    pub(crate) fn generate(download_id: &DownloadId) -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
         Self(format!("{download_id}:{seq}"))
-    }
-
-    /// Get the inner string reference.
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 

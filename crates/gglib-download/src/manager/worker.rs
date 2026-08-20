@@ -37,7 +37,7 @@ use super::paths::DownloadDestination;
 /// completion state the manager sequences. Progress and terminal events
 /// still flow exclusively through the watch channel and `finalize_job`.
 #[derive(Clone)]
-pub struct WorkerDeps {
+pub(crate) struct WorkerDeps {
     /// Configuration (models directory, HF token, etc.).
     pub config: DownloadManagerConfig,
     /// Event sink for [`DownloadEvent::DownloadNotice`] only.
@@ -48,7 +48,7 @@ pub struct WorkerDeps {
 ///
 /// This is a value type containing all information needed to execute
 /// a download, with no references back to the manager.
-pub struct DownloadJob {
+pub(crate) struct DownloadJob {
     /// The download ID.
     pub id: DownloadId,
     /// Planned destination (model directory + files).
@@ -70,7 +70,7 @@ pub struct DownloadJob {
 
 /// Progress update sent through the watch channel.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ProgressUpdate {
+pub(crate) struct ProgressUpdate {
     /// Bytes downloaded so far.
     pub downloaded: u64,
     /// Total bytes to download.
@@ -80,8 +80,11 @@ pub struct ProgressUpdate {
 }
 
 impl ProgressUpdate {
-    /// Create a new progress update with a sequence number.
-    pub const fn new(downloaded: u64, total: u64, seq: u64) -> Self {
+    /// Test-only: production seeds the watch channel with `default()` and moves
+    /// it forward with `send_modify`, never constructing one this way. Gated so
+    /// `dead_code` keeps telling the truth about production reach.
+    #[cfg(test)]
+    pub(crate) const fn new(downloaded: u64, total: u64, seq: u64) -> Self {
         Self {
             downloaded,
             total,
@@ -92,9 +95,7 @@ impl ProgressUpdate {
 
 /// Result of a successful download.
 #[derive(Debug, Clone)]
-pub struct CompletedJob {
-    /// The download ID.
-    pub id: DownloadId,
+pub(crate) struct CompletedJob {
     /// Path to the primary downloaded file.
     pub primary_path: PathBuf,
     /// All downloaded file paths.
@@ -184,7 +185,6 @@ pub(crate) async fn run_job(
     );
 
     Ok(CompletedJob {
-        id: job.id,
         primary_path,
         all_paths,
         repo_id,

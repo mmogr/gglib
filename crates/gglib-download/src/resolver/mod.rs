@@ -7,13 +7,13 @@ use gglib_core::download::{DownloadError, Quantization};
 use gglib_core::ports::{HfClientPort, QuantizationResolver, Resolution, ResolvedFile};
 
 /// Resolver that uses the `HuggingFace` client port.
-pub struct HfQuantizationResolver {
+pub(crate) struct HfQuantizationResolver {
     hf_client: Arc<dyn HfClientPort>,
 }
 
 impl HfQuantizationResolver {
     /// Create a new resolver with the given HF client.
-    pub fn new(hf_client: Arc<dyn HfClientPort>) -> Self {
+    pub(crate) fn new(hf_client: Arc<dyn HfClientPort>) -> Self {
         Self { hf_client }
     }
 }

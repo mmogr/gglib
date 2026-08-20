@@ -13,7 +13,7 @@ server process rather than through an external MCP child process.
 # Tool-name format
 
 Names are qualified with `"builtin:"` (e.g. `"builtin:get_current_time"`),
-matching the convention used by [`crate::McpToolExecutorAdapter`] where names
+matching the convention used by [`crate::tool_executor::McpToolExecutorAdapter`] where names
 are qualified with the numeric server id (e.g. `"3:read_file"`).
 [`crate::CombinedToolExecutor`] routes calls with the `"builtin:"` prefix here.
 

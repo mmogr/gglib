@@ -15,13 +15,20 @@
 //!
 //! # Wiring
 //!
-//! Entrypoint crates (`gglib-axum`, `gglib-cli`) construct this adapter at the
-//! composition root:
+//! This adapter is not constructed by the entrypoint crates. It is wrapped by
+//! [`crate::combined::CombinedToolExecutor`], which `gglib-runtime`'s
+//! `compose::compose_agent_loop_inner` builds:
 //!
 //! ```rust,ignore
-//! let executor: Arc<dyn ToolExecutorPort> =
-//!     Arc::new(McpToolExecutorAdapter::new(Arc::clone(&mcp_service)));
+//! let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
+//!     Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
+//!     None => Arc::new(CombinedToolExecutor::new(mcp)),
+//! };
 //! ```
+//!
+//! The previous version of this note named `gglib-axum` and `gglib-cli` as the
+//! constructing crates. Neither names this type; the crate-root re-export of it
+//! had no consumer to lose.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -50,13 +57,13 @@ use crate::service::McpService;
 /// (`"{server_id}:{bare_name}"`) to route the call directly.  No list scan
 /// is required; the server-id is encoded in the name itself.
 #[derive(Clone)]
-pub struct McpToolExecutorAdapter {
+pub(crate) struct McpToolExecutorAdapter {
     mcp: Arc<McpService>,
 }
 
 impl McpToolExecutorAdapter {
     /// Wrap an existing `McpService` handle.
-    pub const fn new(mcp: Arc<McpService>) -> Self {
+    pub(crate) const fn new(mcp: Arc<McpService>) -> Self {
         Self { mcp }
     }
 }
