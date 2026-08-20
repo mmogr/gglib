@@ -497,11 +497,6 @@ impl ResidentSet {
         }
         Ok(())
     }
-
-    /// Forget every resident, for shutdown.
-    pub(super) fn forget_all(&self) -> Vec<Resident> {
-        self.queue.evict_all()
-    }
 }
 
 /// Project a resident onto the routing type callers outside this crate speak.

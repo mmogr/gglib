@@ -41,10 +41,10 @@ pub use models::{
 pub use pids::pids_dir;
 
 // Directory operations
-pub use ensure::{DirectoryCreationStrategy, ensure_directory, verify_writable};
+pub use ensure::{DirectoryCreationStrategy, ensure_directory};
 
 // Configuration persistence
-pub use config::{env_file_path, persist_env_value, persist_models_dir};
+pub use config::persist_models_dir;
 
 // Pure resolver for testing and CLI
 pub use resolver::ResolvedPaths;

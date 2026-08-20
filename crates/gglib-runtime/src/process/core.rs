@@ -99,14 +99,7 @@ impl GuiProcessCore {
             .unwrap()
             .as_secs();
 
-        let info = ServerInfo::new(
-            model_id,
-            config.model_name,
-            pid,
-            port,
-            now,
-            config.context_size,
-        );
+        let info = ServerInfo::new(model_id, config.model_name, pid, port, now);
         let running = RunningProcess::new(info, child);
         self.processes.insert(model_id, running);
 
@@ -157,58 +150,29 @@ impl GuiProcessCore {
         Ok(())
     }
 
-    /// Get information about a running process
-    pub fn get_info(&self, model_id: u32) -> Option<&ServerInfo> {
-        self.processes.get(&model_id).map(|p| &p.info)
-    }
-
     /// List all running processes
     pub fn list_all(&self) -> Vec<&ServerInfo> {
         debug!(process_count = %self.processes.len(), "GuiProcessCore: list_all called");
         self.processes.values().map(|p| &p.info).collect()
     }
 
-    /// Check if a model is running
-    pub fn is_running(&self, model_id: u32) -> bool {
+    /// Check if a model is running.
+    ///
+    /// Test-only: its production caller was `ProcessManager::is_serving`,
+    /// removed in this commit. Gated so `dead_code` keeps telling the truth
+    /// about production reach.
+    #[cfg(test)]
+    pub(crate) fn is_running(&self, model_id: u32) -> bool {
         self.processes.contains_key(&model_id)
     }
 
-    /// Get count of running processes
-    pub fn count(&self) -> usize {
+    /// Get count of running processes.
+    ///
+    /// Test-only, and already so before this commit — nothing outside the test
+    /// below calls it. Gated for the same reason as [`Self::is_running`].
+    #[cfg(test)]
+    pub(crate) fn count(&self) -> usize {
         self.processes.len()
-    }
-
-    /// Kill all running processes in parallel.
-    /// Errors are logged but do not abort the shutdown of other processes.
-    pub async fn kill_all(&mut self) {
-        let model_ids: Vec<u32> = self.processes.keys().copied().collect();
-
-        // Remove all from HashMap and collect RunningProcess structs
-        let mut processes_to_kill = Vec::new();
-        for model_id in &model_ids {
-            if let Some(running) = self.processes.remove(model_id) {
-                processes_to_kill.push((*model_id, running));
-            }
-        }
-
-        // Kill all in parallel
-        let kill_futures: Vec<_> = processes_to_kill.into_iter().map(|(model_id, running)| {
-            async move {
-                let pid = running.info.pid;
-                debug!(model_id = %model_id, pid = %pid, port = %running.info.port, "Stopping process");
-
-                // Use graceful shutdown with SIGTERM → SIGKILL
-                let _ = shutdown_child(running.child).await;
-
-                // Remove PID file
-                if let Err(e) = delete_pidfile(model_id as i64) {
-                    debug!("Failed to delete PID file: {}", e);
-                }
-            }
-        }).collect();
-
-        // Execute all kills in parallel - cannot fail (errors are logged inside)
-        futures_util::future::join_all(kill_futures).await;
     }
 
     /// Remove dead processes from tracking and clean PID files
@@ -244,8 +208,9 @@ impl GuiProcessCore {
     }
 }
 
-// Note: Drop is not async, so we can't use shutdown_child here.
-// Caller should explicitly call kill_all() before dropping if graceful shutdown is needed.
+// Note: Drop is not async, so the SIGTERM-then-SIGKILL sequence `kill` uses
+// cannot run here. This is a backstop that kills outright; anything wanting a
+// graceful stop has to go through `kill` before the core is dropped.
 impl Drop for GuiProcessCore {
     fn drop(&mut self) {
         // Best effort: just kill the child handles

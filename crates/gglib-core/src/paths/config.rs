@@ -11,7 +11,7 @@ use super::error::PathError;
 use super::platform::data_root;
 
 /// Location of the `.env` file that stores user overrides.
-pub fn env_file_path() -> Result<PathBuf, PathError> {
+fn env_file_path() -> Result<PathBuf, PathError> {
     Ok(data_root()?.join(".env"))
 }
 
@@ -19,7 +19,7 @@ pub fn env_file_path() -> Result<PathBuf, PathError> {
 ///
 /// If the key already exists, its value is updated.
 /// If the key doesn't exist, it is appended to the file.
-pub fn persist_env_value(key: &str, value: &str) -> Result<(), PathError> {
+fn persist_env_value(key: &str, value: &str) -> Result<(), PathError> {
     let env_path = env_file_path()?;
 
     let lines: Vec<String> = if env_path.exists() {

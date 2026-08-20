@@ -28,7 +28,7 @@ use gglib_core::domain::{AdmissionSnapshot, SecondarySlotDecision};
 use gglib_core::ports::{AdmissionLease, AdmissionRelease};
 use tokio::sync::Notify;
 
-use super::state::{AdmissionDecision, QueueState, Resident, SLOT_COUNT, Ticket};
+use super::state::{AdmissionDecision, QueueState, Resident, Ticket};
 
 /// The admission queue: who is resident, who is waiting, and whose turn it is.
 ///
@@ -167,18 +167,6 @@ impl AdmissionQueue {
         let previous = self.lock().evict(slot);
         self.notify();
         previous
-    }
-
-    /// Empty every slot, returning what was there.
-    pub fn evict_all(&self) -> Vec<Resident> {
-        let evicted = {
-            let mut state = self.lock();
-            (0..SLOT_COUNT)
-                .filter_map(|slot| state.evict(slot))
-                .collect()
-        };
-        self.notify();
-        evicted
     }
 
     /// The primary slot's resident.

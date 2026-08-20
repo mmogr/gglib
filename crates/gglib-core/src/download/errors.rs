@@ -227,9 +227,6 @@ impl DownloadError {
     }
 }
 
-/// Convenience result type for download operations.
-pub type DownloadResult<T> = Result<T, DownloadError>;
-
 #[cfg(test)]
 mod tests {
     use super::*;

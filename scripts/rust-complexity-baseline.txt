@@ -14,7 +14,7 @@ crates/gglib-app-services/src/models.rs 576
 crates/gglib-app-services/src/proxy.rs 463
 crates/gglib-app-services/src/sampling_explain_tests.rs 757
 crates/gglib-app-services/src/sampling_explain.rs 454
-crates/gglib-app-services/src/servers.rs 965
+crates/gglib-app-services/src/servers.rs 959
 crates/gglib-app-services/src/settings.rs 404
 crates/gglib-app-services/src/setup.rs 351
 crates/gglib-app-services/src/types.rs 1055
@@ -58,8 +58,8 @@ crates/gglib-core/src/domain/query.rs 432
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 414
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
-crates/gglib-core/src/download/completion.rs 664
-crates/gglib-core/src/download/events.rs 486
+crates/gglib-core/src/download/completion.rs 557
+crates/gglib-core/src/download/events.rs 478
 crates/gglib-core/src/download/queue.rs 548
 crates/gglib-core/src/download/rate.rs 378
 crates/gglib-core/src/download/types.rs 752
@@ -76,7 +76,7 @@ crates/gglib-core/src/request_pipeline/validate.rs 790
 crates/gglib-core/src/server_config.rs 627
 crates/gglib-core/src/services/model_import.rs 689
 crates/gglib-core/src/services/model_registrar.rs 336
-crates/gglib-core/src/services/model_service.rs 1508
+crates/gglib-core/src/services/model_service.rs 1499
 crates/gglib-core/src/services/model_verification.rs 806
 crates/gglib-core/src/settings_tests.rs 452
 crates/gglib-core/src/settings.rs 698
@@ -160,9 +160,9 @@ crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 342
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 358
 crates/gglib-runtime/src/process/admission/queue_tests.rs 973
 crates/gglib-runtime/src/process/admission/state.rs 736
-crates/gglib-runtime/src/process/manager.rs 441
+crates/gglib-runtime/src/process/manager.rs 367
 crates/gglib-runtime/src/process/residency/launch.rs 445
-crates/gglib-runtime/src/process/residency/mod.rs 523
+crates/gglib-runtime/src/process/residency/mod.rs 518
 crates/gglib-runtime/src/proxy/supervisor.rs 763
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 491

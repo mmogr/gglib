@@ -54,7 +54,7 @@ pub fn ensure_directory(path: &Path, strategy: DirectoryCreationStrategy) -> Res
 }
 
 /// Verify a directory is writable by attempting to create a test file.
-pub fn verify_writable(path: &Path) -> Result<(), PathError> {
+fn verify_writable(path: &Path) -> Result<(), PathError> {
     let test_file = path.join(".gglib_write_test");
     let result = OpenOptions::new()
         .create(true)
