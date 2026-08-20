@@ -1,7 +1,6 @@
 //! Health check utilities for llama-server processes.
 
 use anyhow::Result;
-use sysinfo::{Pid, ProcessStatus, System};
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
@@ -123,41 +122,4 @@ pub async fn check_http_health(port: u16) -> bool {
         client.get(&health_url).send().await,
         Ok(response) if response.status().is_success()
     )
-}
-
-/// Check if a process is alive and healthy using sysinfo
-pub fn check_process_health(pid: u32) -> bool {
-    let mut system = System::new_all();
-    system.refresh_processes(sysinfo::ProcessesToUpdate::All, false);
-
-    let pid = Pid::from_u32(pid);
-    if let Some(process) = system.process(pid) {
-        matches!(
-            process.status(),
-            ProcessStatus::Run | ProcessStatus::Sleep | ProcessStatus::Idle
-        )
-    } else {
-        false
-    }
-}
-
-/// Update health status for multiple processes
-pub fn update_health_batch(pids: &[(u32, bool)]) -> Vec<(u32, bool)> {
-    let mut system = System::new_all();
-    system.refresh_processes(sysinfo::ProcessesToUpdate::All, false);
-
-    pids.iter()
-        .map(|(pid, _)| {
-            let pid_val = Pid::from_u32(*pid);
-            let healthy = if let Some(process) = system.process(pid_val) {
-                matches!(
-                    process.status(),
-                    ProcessStatus::Run | ProcessStatus::Sleep | ProcessStatus::Idle
-                )
-            } else {
-                false
-            };
-            (*pid, healthy)
-        })
-        .collect()
 }

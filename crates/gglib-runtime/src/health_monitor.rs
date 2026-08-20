@@ -69,17 +69,34 @@ impl ServerHealthChecker {
     }
 
     /// Check if a process is alive by PID.
+    ///
+    /// Delegates to [`crate::pidfile::pid_exists`], which asks the kernel with a
+    /// null signal instead of reading `/proc`. This function used to do the
+    /// latter under `cfg(unix)` — but macOS is `cfg(unix)` and has no `/proc`, so
+    /// on macOS every live `llama-server` *would* have read as dead, and
+    /// [`Self::check_combined`] would have returned `ProcessDied` without ever
+    /// attempting the HTTP check.
+    ///
+    /// The bug was latent rather than observed: the only production caller of
+    /// [`ServerHealthMonitor`] builds its `ProcessHandle` with `pid: None`
+    /// (`gglib-app-services/src/servers.rs`), and [`Self::check_process`] returns
+    /// `Healthy` on that branch without consulting this function at all. Supplying
+    /// a real PID — which the public API permits — was all it would have taken.
     #[cfg(unix)]
     fn is_process_alive(pid: u32) -> bool {
-        // Check if process exists by looking at /proc/<pid> on Linux
-        // or using ps command output parsing as fallback
-        std::path::Path::new(&format!("/proc/{}", pid)).exists()
+        crate::pidfile::pid_exists(pid)
     }
 
+    /// On non-Unix we cannot check cheaply, so assume alive and let the HTTP
+    /// check detect failures.
+    ///
+    /// Deliberately **not** delegating to `pidfile::pid_exists`: its
+    /// `cfg(not(unix))` arm returns `false` ("not implemented"), which would
+    /// report every Windows server *that supplied a PID* as `ProcessDied` —
+    /// reintroducing there the exact bug this change removes from macOS.
+    /// `x86_64-pc-windows-msvc` is a release target.
     #[cfg(not(unix))]
     fn is_process_alive(_pid: u32) -> bool {
-        // On non-Unix, we can't reliably check, so assume alive
-        // and let HTTP checks detect failures
         true
     }
 
@@ -183,98 +200,5 @@ impl ServerHealthMonitor {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use futures_util::StreamExt;
-    use std::time::Duration;
-
-    #[tokio::test]
-    async fn test_health_checker_http_unreachable() {
-        // Check a port that's definitely not in use
-        let status = ServerHealthChecker::check_http(65432).await;
-        assert!(matches!(status, ServerHealthStatus::Unreachable { .. }));
-    }
-
-    #[test]
-    fn test_process_check_with_invalid_pid() {
-        // PID 999999 should not exist
-        let handle = ProcessHandle::new(1, "test".to_string(), Some(999999), 8080, 0);
-        let status = ServerHealthChecker::check_process(&handle);
-        assert_eq!(status, ServerHealthStatus::ProcessDied);
-    }
-
-    #[test]
-    fn test_process_check_without_pid() {
-        // No PID means we can't check, should return Healthy (HTTP will catch issues)
-        let handle = ProcessHandle::new(1, "test".to_string(), None, 8080, 0);
-        let status = ServerHealthChecker::check_process(&handle);
-        assert_eq!(status, ServerHealthStatus::Healthy);
-    }
-
-    #[tokio::test]
-    async fn test_monitor_cancellation() {
-        // Create a monitor for an unused port (will be unreachable)
-        let handle = ProcessHandle::new(1, "test".to_string(), None, 65433, 0);
-        let cancel_token = CancellationToken::new();
-
-        let monitor =
-            ServerHealthMonitor::new(handle, Duration::from_millis(50), cancel_token.clone());
-
-        let mut stream = Box::pin(monitor.monitor());
-
-        // Cancel immediately
-        cancel_token.cancel();
-
-        // Stream should complete after cancellation
-        // Give it a moment to process
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // The stream should not yield any more after cancellation
-        // (first tick may have already happened before cancellation)
-        let result = tokio::time::timeout(Duration::from_millis(200), stream.next()).await;
-
-        // Either timed out (stream completed) or got one last item then completed
-        match result {
-            Ok(Some(_)) => {
-                // Got one item, next should be None (stream completed)
-                let next = tokio::time::timeout(Duration::from_millis(100), stream.next()).await;
-                assert!(next.is_err() || next.unwrap().is_none());
-            }
-            Ok(None) => {} // Stream completed, good
-            Err(_) => {}   // Timeout, stream is done, good
-        }
-    }
-
-    #[tokio::test]
-    async fn test_monitor_emits_initial_status() {
-        // Create a monitor for an unused port
-        let handle = ProcessHandle::new(1, "test".to_string(), None, 65434, 0);
-        let cancel_token = CancellationToken::new();
-
-        let monitor =
-            ServerHealthMonitor::new(handle, Duration::from_millis(10), cancel_token.clone());
-
-        let mut stream = Box::pin(monitor.monitor());
-
-        // Should get an initial status on first tick.
-        //
-        // The budget is deliberately far larger than the 10 ms poll interval:
-        // this asserts *liveness* (the stream emits at all), not latency. Under
-        // `cargo test --workspace` every crate's test binary runs concurrently,
-        // and this test's `current_thread` runtime can wait a long time to be
-        // scheduled — a tight budget here fails on contention rather than on
-        // anything the monitor did wrong.
-        let first_status = tokio::time::timeout(Duration::from_secs(10), stream.next()).await;
-
-        cancel_token.cancel();
-
-        assert!(first_status.is_ok());
-        let status = first_status.unwrap();
-        assert!(status.is_some());
-        // Should be unreachable since nothing is listening on that port
-        assert!(matches!(
-            status.unwrap(),
-            ServerHealthStatus::Unreachable { .. }
-        ));
-    }
-}
+#[path = "health_monitor_tests.rs"]
+mod health_monitor_tests;
