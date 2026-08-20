@@ -113,7 +113,7 @@ All tests are inline `#[cfg(test)]` blocks living alongside their respective imp
 
 ### Test harness
 
-Use `setup_test_database()` (feature-gated under `test-utils`) rather than `TestDb::new()`.
+Use `setup_test_database()` (feature-gated under `test-utils`) for the test harness.
 `setup_test_database()` creates an in-memory `SQLite` database and runs the full production schema
 via `create_schema()`, so every test exercises the real schema including all columns and CHECK
 constraints.

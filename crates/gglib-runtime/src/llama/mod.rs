@@ -14,7 +14,6 @@ mod ensure;
 pub mod error;
 #[cfg(feature = "cli")]
 mod install;
-pub mod progress;
 pub mod prompt;
 pub mod runtime_probe;
 mod server_availability;
@@ -39,8 +38,7 @@ pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama
 // held for the run — see `runtime_probe` for why arbitration is static.
 pub use runtime_probe::probe as probe_runtime_capabilities;
 
-// Progress and prompt traits
-pub use progress::{NoopProgress, ProgressReporter};
+// Prompt traits
 pub use prompt::{AutoConfirmPrompt, InstallPrompt, NonInteractivePrompt};
 
 // Build pipeline event types
@@ -48,9 +46,6 @@ pub use build_events::{BuildEvent, BuildPhase};
 
 #[cfg(feature = "cli")]
 pub use deps::{check_dependencies, check_disk_space};
-
-#[cfg(feature = "cli")]
-pub use progress::CliProgress;
 
 #[cfg(feature = "cli")]
 pub use prompt::CliPrompt;

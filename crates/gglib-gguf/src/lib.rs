@@ -10,7 +10,6 @@ mod error;
 mod format;
 mod parser;
 mod reader;
-mod validation;
 
 // =============================================================================
 // Public API: Parser + Core Re-exports (minimal surface)
@@ -25,6 +24,3 @@ pub use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserP
 
 // Re-export tool support detector
 pub use capabilities::tool_calling::ToolSupportDetector;
-
-// Re-export validation primitives
-pub use validation::{ValidationError, compute_gguf_sha256, validate_gguf_quick};
