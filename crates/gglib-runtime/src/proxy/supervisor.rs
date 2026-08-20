@@ -39,6 +39,17 @@ struct ProxyHandle {
     join_handle: JoinHandle<AnyResult<()>>,
     /// Address the proxy is bound to.
     bound_addr: SocketAddr,
+    /// The operator sampling override this run was started with.
+    ///
+    /// Recorded because `AppState` reads it once at startup, so a re-invocation
+    /// asking for a *different* one cannot be honoured without a restart —
+    /// and the caller deserves to be told that rather than have its flags
+    /// silently ignored. An identical re-invocation is still idempotent
+    /// success, which is what the detach/re-attach flow relies on.
+    inference_override: Option<InferenceConfig>,
+    /// The default profile this run was started with, recorded for the same
+    /// reason and compared the same way.
+    default_profile: Option<String>,
 }
 
 /// Status of the proxy server.
@@ -364,6 +375,8 @@ impl ProxySupervisor {
         let disk_budget = config.disk_budget;
         let inference_override = config.inference_override;
         let default_profile = config.default_profile;
+        let started_override = inference_override.clone();
+        let started_default_profile = default_profile.clone();
         let agent_metrics = Arc::clone(&self.agent_metrics);
         let defects = Arc::clone(&self.defects);
         let exit_tx = self.exit_tx.clone();
@@ -412,6 +425,8 @@ impl ProxySupervisor {
             cancel_token,
             join_handle,
             bound_addr,
+            inference_override: started_override,
+            default_profile: started_default_profile,
         });
 
         Ok(ProxyBind {
@@ -504,6 +519,23 @@ impl ProxySupervisor {
                 address: handle.bound_addr,
             }
         }
+    }
+}
+
+impl ProxySupervisor {
+    /// The sampling override and default profile the running proxy was started
+    /// with, or `None` when nothing is running.
+    ///
+    /// Exists so a re-invocation can tell "the same request again" — which is
+    /// idempotent success, and what re-attaching after a detach does — from
+    /// "a different request that this run cannot adopt", which must be refused
+    /// rather than silently ignored.
+    pub async fn started_sampling(&self) -> Option<(Option<InferenceConfig>, Option<String>)> {
+        self.handle
+            .lock()
+            .await
+            .as_ref()
+            .map(|h| (h.inference_override.clone(), h.default_profile.clone()))
     }
 }
 

@@ -74,8 +74,6 @@ pub struct GlobalDefaults {
     /// Operator-supplied sampling overrides for this process
     /// (`gglib proxy --temperature …`). Sits below the explicit tier.
     pub inference_override: Option<InferenceConfig>,
-    /// Profile applied to requests naming the model without a suffix.
-    pub default_profile: Option<String>,
     /// Bearer token demanded of clients (`--api-key` / `GGLIB_API_KEY`).
     /// `None` defers to the stored setting, then to generating one for a
     /// non-loopback bind.
@@ -97,9 +95,12 @@ impl Default for GlobalDefaults {
             slot_dir,
             disk_budget,
             inference_override,
-            default_profile,
             api_key,
             allowed_hosts,
+            // Set per-caller on the start body, not inherited as a tier-3
+            // default: `serve` takes it from the resolved profile selection
+            // and the GUI from its own request.
+            default_profile: _,
             // The proxy's fallback context is derived per-model by
             // `to_proxy_config`, so its default is not a tier-3 input.
             default_context: _,
@@ -114,7 +115,6 @@ impl Default for GlobalDefaults {
             slot_dir,
             disk_budget,
             inference_override,
-            default_profile,
             api_key,
             allowed_hosts,
         }
@@ -196,7 +196,7 @@ impl UnifiedServerConfig {
             slot_dir: self.resolved_slot_dir(),
             disk_budget: self.globals.disk_budget,
             inference_override: self.globals.inference_override.clone(),
-            default_profile: self.globals.default_profile.clone(),
+            default_profile: None,
             api_key: self.globals.api_key.clone(),
             allowed_hosts: self.globals.allowed_hosts.clone(),
         }

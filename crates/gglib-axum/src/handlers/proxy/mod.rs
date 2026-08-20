@@ -99,16 +99,25 @@ pub(crate) async fn start(
                 return Err(http);
             }
 
-            // A running proxy's `inference_override` is fixed for the life of
-            // the run — `AppState` reads it once at startup. Treating this as
-            // idempotent success would print the operator's sampling back at
-            // them and apply none of it, which is the precise failure the
-            // override was just wired up to fix. Refuse instead, and name the
-            // one action that resolves it.
-            if cfg.inference_override.is_some() {
+            // A running proxy's sampling override and default profile are
+            // fixed for the life of the run — `AppState` reads both once at
+            // startup. Asking for *different* ones would print the operator's
+            // flags back at them and apply none of them, which is the precise
+            // failure the override was wired up to fix.
+            //
+            // Compared rather than merely detected, because "the same request
+            // again" is legitimate and common: re-running the identical
+            // command is how an operator re-attaches after a detach, and with
+            // `proxy_autostart` the daemon has already started an unpinned
+            // proxy before the first `gglib proxy --temperature …` ever runs.
+            // Refusing on presence alone broke both.
+            if let Some((running_override, running_profile)) = state.proxy.started_sampling().await
+                && (cfg.inference_override != running_override
+                    || cfg.default_profile != running_profile)
+            {
                 return Err(HttpError::Conflict(
-                    "the proxy is already running; its sampling override is fixed for the life \
-                     of the run — stop it first (`gglib proxy stop`)"
+                    "the proxy is already running with different sampling — that is fixed for \
+                     the life of the run, so stop it first (`gglib proxy stop`)"
                         .to_string(),
                 ));
             }

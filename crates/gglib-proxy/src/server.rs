@@ -91,6 +91,9 @@ pub(crate) struct AppState {
     /// own request parameters when resolving sampling.
     inference_override: Option<gglib_core::domain::InferenceConfig>,
     default_profile: Option<String>,
+    /// Whether the missing-default-profile warning has already been emitted
+    /// this run, so it is said once rather than on every completion.
+    default_profile_missing_logged: Arc<AtomicBool>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
     pub(crate) cache_enabled: bool,
     /// Resolved slot directory path (Some only when cache_enabled).
@@ -317,6 +320,7 @@ pub async fn serve(
         calibration: Arc::new(TokenCalibration::new()),
         inference_override,
         default_profile,
+        default_profile_missing_logged: Arc::new(AtomicBool::new(false)),
         cache_enabled,
         slot_dir,
         slot_gate,
@@ -768,20 +772,28 @@ async fn chat_completions(
         // `ProfileNotFound` arm.
         //
         // `Bare` is also route case 5 — nothing resolved — so an id like
-        // `no-such-model:typo` reaches here and would take the default. That
-        // is contained only because admission compares the *full* requested id
-        // against the pin by exact string equality (`residency::check_pinned`),
-        // which such an id never matches, so the request dies before this
-        // config is used. Containment in another crate, noted so a change
-        // there does not quietly turn this into a real path.
+        // `no-such-model:typo` reaches here and would take the default. It is
+        // contained because case 5 returns the id *with its suffix intact*
+        // (`profile_route`'s final arm), and that id then fails model
+        // resolution. The guarantee therefore lives in the router, not in
+        // admission: a change there that stripped the suffix in case 5 would
+        // open this path, so it is named here rather than assumed.
         ModelRoute::Bare(model) => {
             let default = state.default_profile.as_deref().and_then(|name| {
                 let found = configured_profiles.iter().find(|p| p.name == name);
-                if found.is_none() {
+                // Once per run, not once per request: the operator needs to be
+                // told, and a WARN on every completion for the life of the run
+                // buries the rest of the log. Same discipline as the
+                // restart-detection path below.
+                if found.is_none()
+                    && !state
+                        .default_profile_missing_logged
+                        .swap(true, AtomicOrdering::Relaxed)
+                {
                     warn!(
                         profile = %name,
                         "the endpoint's default profile is no longer configured; \
-                         serving this request unprofiled"
+                         serving bare-model requests unprofiled until it is restored"
                     );
                 }
                 found

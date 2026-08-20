@@ -59,9 +59,13 @@ pub(crate) async fn execute(
         .models()
         .find_by_identifier(&selection.model)
         .await
-        .map_err(|_| {
+        .map_err(|e| {
+            // Absence and failure read differently: a missing model is the
+            // user's typo, a repository error is not, and telling someone to
+            // run `gglib model list` when the pool is down wastes their time.
             anyhow::anyhow!(
-                "Model '{}' not found. Use 'gglib model list' to see what is available.",
+                "could not resolve model '{}': {e}. If it is missing, \
+                 'gglib model list' shows what is available.",
                 selection.model
             )
         })?;

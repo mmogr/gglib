@@ -58,28 +58,26 @@ pub(crate) fn log_mlock_info(mlock: bool) {
     }
 }
 
-/// Log resolved inference parameters to stderr.
+/// Log the sampling parameters the operator stated, to stderr.
+///
+/// Reads [`InferenceConfig::to_openai_json_patch`] rather than naming fields,
+/// because that patch *is* what gglib puts on the wire. A hand-written list
+/// covered seven of the eighteen `SamplingArgs` can set, so
+/// `--frequency-penalty 0.5` printed an empty "Inference parameters:" header
+/// while still overriding every client on the endpoint — a banner that
+/// under-reports what it applies is the same class of bug as one that
+/// over-reports it.
 pub(crate) fn log_inference_info(config: &InferenceConfig) {
+    let patch = config.to_openai_json_patch();
+    if patch.is_empty() {
+        return;
+    }
+
     eprintln!("  Inference parameters:");
-    if let Some(temp) = config.temperature {
-        eprintln!("    Temperature: {}", temp);
-    }
-    if let Some(top_p) = config.top_p {
-        eprintln!("    Top-p: {}", top_p);
-    }
-    if let Some(top_k) = config.top_k {
-        eprintln!("    Top-k: {}", top_k);
-    }
-    if let Some(max_tokens) = config.max_tokens {
-        eprintln!("    Max tokens: {}", max_tokens);
-    }
-    if let Some(repeat_penalty) = config.repeat_penalty {
-        eprintln!("    Repeat penalty: {}", repeat_penalty);
-    }
-    if let Some(presence_penalty) = config.presence_penalty {
-        eprintln!("    Presence penalty: {}", presence_penalty);
-    }
-    if let Some(min_p) = config.min_p {
-        eprintln!("    Min-p: {}", min_p);
+    // Sorted so two runs of the same command print the same order.
+    let mut fields: Vec<_> = patch.iter().collect();
+    fields.sort_by_key(|(field, _)| *field);
+    for (field, value) in fields {
+        eprintln!("    {}: {value}", field.replace('_', "-"));
     }
 }
