@@ -18,10 +18,6 @@ gglib-core = { path = "../gglib-core" }
 # Logging
 tracing = { workspace = true }
 
-# Validation
-sha2 = "0.10"
-thiserror = "1.0"
-
 # Template render-and-diff dialect derivation (capabilities::template_probe).
 # Adapter-specific deps stay local to this crate per the workspace policy.
 minijinja = { version = "2", features = ["json", "loop_controls"] }
@@ -30,9 +26,6 @@ serde_json = { workspace = true }
 
 # Memory-mapped file reading (optional, default enabled)
 memmap2 = { version = "0.9", optional = true }
-
-[dev-dependencies]
-tempfile = "3.8"
 
 [lints]
 workspace = true
