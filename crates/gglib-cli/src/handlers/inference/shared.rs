@@ -78,6 +78,63 @@ pub(crate) fn log_inference_info(config: &InferenceConfig) {
     let mut fields: Vec<_> = patch.iter().collect();
     fields.sort_by_key(|(field, _)| *field);
     for (field, value) in fields {
-        eprintln!("    {}: {value}", field.replace('_', "-"));
+        eprintln!("    {}: {}", field.replace('_', "-"), render(value));
+    }
+}
+
+/// Render one patch value the way the user typed it.
+///
+/// Every sampling parameter gglib models as a float is an `f32`, and the patch
+/// carries them as JSON numbers — i.e. `f64`. Printing that directly shows
+/// `0.1` as `0.10000000149011612`: the f64 nearest to the f32 nearest to 0.1,
+/// which is accurate, useless, and not what anyone typed. Narrowing back to
+/// `f32` before formatting restores the shortest representation that
+/// round-trips, so `--temperature 0.1` prints `0.1`.
+fn render(value: &serde_json::Value) -> String {
+    match value.as_f64() {
+        // Integral values print without a synthetic ".0" — `max-tokens: 512`,
+        // not `512.0`.
+        Some(n) if n.fract() == 0.0 => format!("{n}"),
+        Some(n) => format!("{}", n as f32),
+        None => value.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The regression: an `f32` widened through JSON printed its f64 shadow.
+    #[test]
+    fn a_float_prints_as_the_user_typed_it() {
+        let patch = InferenceConfig {
+            temperature: Some(0.1),
+            top_p: Some(0.95),
+            ..Default::default()
+        }
+        .to_openai_json_patch();
+
+        assert_eq!(render(&patch["temperature"]), "0.1");
+        assert_eq!(render(&patch["top_p"]), "0.95");
+    }
+
+    /// Counts stay counts: no synthetic decimal point.
+    #[test]
+    fn an_integral_value_prints_without_a_fraction() {
+        let patch = InferenceConfig {
+            max_tokens: Some(512),
+            top_k: Some(40),
+            ..Default::default()
+        }
+        .to_openai_json_patch();
+
+        assert_eq!(render(&patch["max_tokens"]), "512");
+        assert_eq!(render(&patch["top_k"]), "40");
+    }
+
+    /// Non-numeric fields (the reasoning effort level) pass through unharmed.
+    #[test]
+    fn a_non_numeric_value_falls_back_to_its_own_rendering() {
+        assert_eq!(render(&serde_json::json!("high")), "\"high\"");
     }
 }
