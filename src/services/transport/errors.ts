@@ -1,8 +1,14 @@
 /**
  * Transport error handling.
  * 
- * Both TauriTransport and HttpTransport throw only TransportError.
- * This ensures consistent error handling across platforms.
+ * `readData` below maps HTTP-status failures and body-decode failures to
+ * TransportError. Errors from other sources — a `fetch` rejection, a failed
+ * Tauri `invoke` — are rethrown unchanged by `api/client.ts`, so a caller can
+ * still receive a plain `Error`. Note `TransportErrorCode` declares `NETWORK`,
+ * which nothing in this directory constructs.
+ *
+ * This header previously described two classes, `TauriTransport` and
+ * `HttpTransport`. Neither appears anywhere in the tree.
  */
 
 import { appLogger } from '../platform';
