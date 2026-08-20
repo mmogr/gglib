@@ -28,6 +28,8 @@ pub(crate) struct ChatArgs {
     pub verbose: bool,
     /// Optional model-name override for llama-server routing.
     pub model: Option<String>,
+    /// Named sampling profile, the flag form of a `{model}:{profile}` suffix.
+    pub profile: Option<String>,
     /// Resume a previous conversation by ID.
     pub continue_id: Option<i64>,
     /// Observation-tool name patterns for the dual-threshold loop guard.

@@ -311,6 +311,14 @@ impl ProxyOps {
         self.runtime.pinned_model()
     }
 
+    /// What the running proxy was started with, for callers deciding whether a
+    /// re-invocation asks for something this run can still honour.
+    pub async fn started_sampling(
+        &self,
+    ) -> Option<(Option<gglib_core::domain::InferenceConfig>, Option<String>)> {
+        self.supervisor.started_sampling().await
+    }
+
     /// The agent-path prompt-cache reuse sink shared with the proxy dashboard.
     ///
     /// Handlers that run agent loops in this process (GUI chat) record their

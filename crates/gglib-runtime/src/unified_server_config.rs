@@ -97,6 +97,10 @@ impl Default for GlobalDefaults {
             inference_override,
             api_key,
             allowed_hosts,
+            // Set per-caller on the start body, not inherited as a tier-3
+            // default: `serve` takes it from the resolved profile selection
+            // and the GUI from its own request.
+            default_profile: _,
             // The proxy's fallback context is derived per-model by
             // `to_proxy_config`, so its default is not a tier-3 input.
             default_context: _,
@@ -192,6 +196,7 @@ impl UnifiedServerConfig {
             slot_dir: self.resolved_slot_dir(),
             disk_budget: self.globals.disk_budget,
             inference_override: self.globals.inference_override.clone(),
+            default_profile: None,
             api_key: self.globals.api_key.clone(),
             allowed_hosts: self.globals.allowed_hosts.clone(),
         }

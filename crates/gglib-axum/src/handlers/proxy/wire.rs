@@ -55,9 +55,14 @@ pub(crate) struct StartProxyConfig {
     #[serde(default)]
     pub cache_disk_gb: Option<u64>,
     /// Operator sampling overrides applied above the client's own request
-    /// parameters (`gglib proxy --temperature …`).
+    /// parameters (`gglib proxy --temperature …`, `gglib serve --temperature …`).
     #[serde(default)]
     pub inference_override: Option<gglib_core::domain::InferenceConfig>,
+    /// Profile applied to requests that name the model without a
+    /// `{model}:{profile}` suffix. Carried by name rather than resolved: the
+    /// proxy re-reads profiles per request, so a name tracks live edits.
+    #[serde(default)]
+    pub default_profile: Option<String>,
     /// Bearer token demanded on `/v1/*` (`--api-key`). Omitted falls through
     /// to the stored setting.
     #[serde(default)]
@@ -150,6 +155,7 @@ pub(super) fn to_runtime_config(
         slot_dir,
         disk_budget: gglib_runtime::proxy::resolve_disk_budget(cfg.cache_disk_gb),
         inference_override: cfg.inference_override.clone(),
+        default_profile: cfg.default_profile.clone(),
         api_key: cfg.api_key.clone(),
         allowed_hosts: cfg.allowed_hosts.clone(),
     }

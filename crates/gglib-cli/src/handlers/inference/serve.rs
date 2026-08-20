@@ -29,10 +29,11 @@ use super::shared::{log_inference_info, log_mlock_info};
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
     ctx: &CliContext,
-    id: u32,
+    identifier: String,
     context: ContextArgs,
     options: ServeOptions,
     sampling: SamplingArgs,
+    profile_flag: Option<String>,
     mtp: MtpArgs,
     cache: CacheArgs,
     access: AccessArgs,
@@ -41,14 +42,33 @@ pub(crate) async fn execute(
     // Ensure llama.cpp is installed before the daemon needs it.
     ensure_llama_initialized(&CliPrompt::new()).await?;
 
+    let settings = ctx.app.settings().get().await?;
+
+    // Resolve `--profile` or a `{model}:{profile}` suffix before model lookup:
+    // the suffix names a profile, not a model, and must not reach the catalog.
+    let selection = super::profile_selection::select(
+        ctx.catalog.as_ref(),
+        settings.inference_profiles.as_deref().unwrap_or_default(),
+        &identifier,
+        profile_flag.as_deref(),
+    )
+    .await?;
+
     let model = ctx
         .app
         .models()
-        .get_by_id(i64::from(id))
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Model with ID {} not found", id))?;
-
-    let settings = ctx.app.settings().get().await?;
+        .find_by_identifier(&selection.model)
+        .await
+        .map_err(|e| {
+            // Absence and failure read differently: a missing model is the
+            // user's typo, a repository error is not, and telling someone to
+            // run `gglib model list` when the pool is down wastes their time.
+            anyhow::anyhow!(
+                "could not resolve model '{}': {e}. If it is missing, \
+                 'gglib model list' shows what is available.",
+                selection.model
+            )
+        })?;
 
     // The raw `--ctx-size` flag is shape-validated at parse time, before the
     // model is known; resolving it here against the model's GGUF context
@@ -69,7 +89,7 @@ pub(crate) async fn execute(
             reasoning_format: None,
             mtp_draft_n_max: mtp.mtp_draft_n_max,
             mtp_draft_p_min: mtp.mtp_draft_p_min,
-            inference_params: Some(sampling.into_inference_config()),
+            inference_params: Some(sampling.clone().into_inference_config()),
             mlock: context.mlock,
         },
         ProxyGlobals {
@@ -83,9 +103,19 @@ pub(crate) async fn execute(
             slot_dir: cache.slot_dir.clone(),
             api_key: access.api_key.clone(),
             allowed_hosts: access.allowed_hosts.clone(),
+            // The live path. gglib emits no sampler flags to llama-server
+            // (ADR 0003/0004), so a value that does not travel as a
+            // proxy-wide override does not reach the model at all — which is
+            // exactly what used to happen to every `serve` sampling flag.
+            inference_override: sampling.clone().into_override(),
         },
     );
-    let inference_config = plan.inference.clone();
+    // Only what was passed, not the full resolution. The resolution printed
+    // here is the five-rung stored ladder; what a request actually gets is the
+    // proxy's six-rung one, which additionally has the client's own rung and
+    // the agentic ceiling above it. Printing the former as if it were the
+    // latter states values no request is guaranteed to see.
+    let stated_sampling = sampling.into_override();
     let mtp_args = plan.mtp.clone();
     let effective_ctx = plan.effective_ctx;
 
@@ -94,7 +124,10 @@ pub(crate) async fn execute(
     eprintln!("  File: {}", model.file_path.display());
     eprintln!("  Context size: {} (resolved)", effective_ctx);
     log_mlock_info(context.mlock);
-    log_inference_info(&inference_config);
+    if let Some(ref stated) = stated_sampling {
+        log_inference_info(stated);
+        warn_client_budgets_are_capped(stated);
+    }
     if options.jinja {
         eprintln!("  Jinja templates: enabled");
     }
@@ -127,12 +160,18 @@ pub(crate) async fn execute(
             // has already had the `cache_enabled` master switch applied and
             // the default directory filled in.
             slot_dir: proxy_config.slot_dir,
-            // Sampling rides the pinned model's launch options rather than a
-            // proxy-wide override, so it lands on the llama-server command
-            // line exactly as every other launch surface applies it.
             pinned: Some(plan.pinned),
             cache_disk_gb: cache.cache_disk_gb,
-            inference_override: None,
+            // Sampling rides the proxy-wide override, not the pinned model's
+            // launch options. The comment that used to stand here claimed the
+            // opposite and was wrong in a way nothing caught: the launch
+            // options write to `ServerConfig::inference_config`, which is
+            // documented as read by nobody, so every `serve` sampling flag was
+            // resolved, printed, and discarded.
+            inference_override: proxy_config.inference_override.clone(),
+            // The profile is carried by name: the proxy re-reads its list per
+            // request, so an edit takes effect without restarting this endpoint.
+            default_profile: selection.profile.as_ref().map(|p| p.name.clone()),
             api_key: proxy_config.api_key,
             allowed_hosts: proxy_config.allowed_hosts,
         })
@@ -143,173 +182,37 @@ pub(crate) async fn execute(
 }
 
 #[cfg(test)]
-mod tests {
-    use gglib_core::server_config::{
-        CtxSizeArg, ServerConfigOptions, parse_ctx_size_flag, resolve_context_size,
-    };
-    use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
-    use std::path::PathBuf;
+#[path = "serve_tests.rs"]
+mod serve_tests;
 
-    /// Mirrors how `execute` assembles its config, minus the I/O.
-    fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedServerConfig {
-        UnifiedServerConfig { explicit, globals }
-    }
+/// Say so when a `serve` flag will override a client's own token budget.
+///
+/// `max_tokens` and `reasoning_budget_tokens` are the two values gglib lets an
+/// untrusted client keep — the trust gate drops everything else it sends but
+/// deliberately honours its budgets, because a budget states what the *client*
+/// can afford rather than how the model should sample. An operator flag rides
+/// the rung above, so naming either one here silently caps every client on
+/// this endpoint, including the BYOK clients `serve` exists for.
+///
+/// Not a refusal: it is the operator's server and `cli_override` is exactly
+/// the rung that says so. But it is a consequence worth stating to the person
+/// who chose it, and unlike the coupling rule this needs no resolution
+/// preview — it reads only which flags were typed, so it cannot be wrong.
+fn warn_client_budgets_are_capped(stated: &gglib_core::domain::InferenceConfig) {
+    let capped: Vec<&str> = [
+        stated.max_tokens.map(|_| "--max-tokens"),
+        stated
+            .reasoning_budget_tokens
+            .map(|_| "--reasoning-budget-tokens"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
-    /// `--ctx-size max` resolves against the model's GGUF context length,
-    /// which is only known after the model is fetched — hence the deferred
-    /// parse the handler performs.
-    #[test]
-    fn ctx_size_max_resolves_against_model_metadata() {
-        let arg = parse_ctx_size_flag(Some("max")).unwrap();
-        assert_eq!(arg, Some(CtxSizeArg::Max));
-
-        let cfg = unified(
-            ServerConfigOptions {
-                context_size: arg.and_then(|a| a.resolve(Some(131_072))),
-                ..Default::default()
-            },
-            GlobalDefaults::default(),
+    if !capped.is_empty() {
+        eprintln!(
+            "  Note: {} overrides each client's own budget on this endpoint.",
+            capped.join(" and ")
         );
-
-        assert_eq!(resolve_context_size(&cfg.resolved_options()), 131_072);
-    }
-
-    /// An omitted `--ctx-size` must fall through the cascade rather than
-    /// pinning the context to a hardcoded value.
-    #[test]
-    fn omitted_ctx_size_falls_through_to_the_global_default() {
-        let cfg = unified(
-            ServerConfigOptions::default(),
-            GlobalDefaults {
-                default_ctx: Some(8192),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(resolve_context_size(&cfg.resolved_options()), 8192);
-    }
-
-    /// An absent `--mlock` must stay `None`, not `Some(false)`: the flag's
-    /// absence is "no opinion", which lets lower tiers still apply.
-    #[test]
-    fn absent_mlock_flag_expresses_no_opinion() {
-        let cfg = unified(
-            ServerConfigOptions {
-                mlock: false.then_some(true),
-                ..Default::default()
-            },
-            GlobalDefaults::default(),
-        );
-
-        assert_eq!(cfg.resolved_options().mlock, None);
-    }
-
-    #[test]
-    fn mlock_flag_reaches_the_resolved_options() {
-        let cfg = unified(
-            ServerConfigOptions {
-                mlock: true.then_some(true),
-                ..Default::default()
-            },
-            GlobalDefaults::default(),
-        );
-
-        assert_eq!(cfg.resolved_options().mlock, Some(true));
-    }
-
-    /// `--port` is the proxy's listener and `--llama-port` the upstream. They
-    /// must stay distinct or the proxy would try to bind the port its own
-    /// llama-server is on.
-    #[test]
-    fn proxy_and_llama_ports_are_carried_separately() {
-        let cfg = unified(
-            ServerConfigOptions::default(),
-            GlobalDefaults {
-                proxy_port: 8080,
-                llama_base_port: 5500,
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(cfg.to_proxy_config().port, 8080);
-        assert_eq!(cfg.globals.llama_base_port, 5500);
-    }
-
-    /// Serve binds loopback by default — the security gap that motivated
-    /// routing this command through the proxy stack in the first place.
-    #[test]
-    fn serve_binds_loopback_by_default() {
-        let cfg = unified(ServerConfigOptions::default(), GlobalDefaults::default());
-        assert_eq!(cfg.to_proxy_config().host, "127.0.0.1");
-    }
-
-    /// `--host` must reach the proxy config — otherwise there is no way to
-    /// serve a pinned endpoint to another machine on a trusted network.
-    #[test]
-    fn explicit_host_overrides_the_loopback_default() {
-        let cfg = unified(
-            ServerConfigOptions::default(),
-            GlobalDefaults {
-                host: "0.0.0.0".to_string(),
-                ..Default::default()
-            },
-        );
-        assert_eq!(cfg.to_proxy_config().host, "0.0.0.0");
-    }
-
-    // ---------------------------------------------------------------
-    // Cache flags (#633 — parity with `gglib proxy`)
-    // ---------------------------------------------------------------
-
-    /// Without `--cache`, no `--slot-save-path` may reach llama-server even
-    /// when a directory was named: the master switch outranks the directory,
-    /// so "cache off" means byte-for-byte no cache flags.
-    #[test]
-    fn slot_dir_without_cache_flag_emits_no_slot_path() {
-        let cfg = unified(
-            ServerConfigOptions::default(),
-            GlobalDefaults {
-                cache_enabled: false,
-                slot_dir: Some(PathBuf::from("/custom/slots")),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(cfg.resolved_options().slot_save_path, None);
-        assert_eq!(cfg.to_proxy_config().slot_dir, None);
-    }
-
-    /// `--cache --slot-dir` must reach the pinned model's launch options —
-    /// the path by which disk KV-slot persistence works on `serve` at all.
-    #[test]
-    fn cache_flag_carries_the_slot_dir_into_launch_options() {
-        let cfg = unified(
-            ServerConfigOptions::default(),
-            GlobalDefaults {
-                cache_enabled: true,
-                slot_dir: Some(PathBuf::from("/custom/slots")),
-                ..Default::default()
-            },
-        );
-
-        assert_eq!(
-            cfg.resolved_options().slot_save_path,
-            Some(PathBuf::from("/custom/slots"))
-        );
-    }
-
-    /// `--cache` with no directory falls back to the default rather than
-    /// silently disabling persistence.
-    #[test]
-    fn cache_flag_without_slot_dir_uses_the_default_directory() {
-        let cfg = unified(
-            ServerConfigOptions::default(),
-            GlobalDefaults {
-                cache_enabled: true,
-                ..Default::default()
-            },
-        );
-
-        assert!(cfg.resolved_options().slot_save_path.is_some());
     }
 }

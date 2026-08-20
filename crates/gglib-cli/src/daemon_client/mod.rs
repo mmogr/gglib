@@ -5,11 +5,9 @@ pub(crate) mod sse;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use serde::{Deserialize, Serialize};
 
 use gglib_core::DAEMON_PORT;
 use gglib_core::download::QueueSnapshot;
-use gglib_core::ports::PinnedSpec;
 
 /// How long one identity probe may take. The daemon answers `/health` from
 /// memory; anything slower than this is not a healthy daemon.
@@ -196,45 +194,9 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
 
 // ─── Typed calls ─────────────────────────────────────────────────────────────
 
-/// Body for `POST /api/proxy/start` — the daemon-side twin of
-/// `gglib_axum::handlers::proxy::StartProxyConfig`.
-#[derive(Debug, Clone, Default, Serialize)]
-pub(crate) struct StartProxyBody {
-    pub host: Option<String>,
-    pub port: Option<u16>,
-    pub default_context: Option<u64>,
-    pub cache: Option<bool>,
-    pub slot_dir: Option<std::path::PathBuf>,
-    pub pinned: Option<PinnedSpec>,
-    pub cache_disk_gb: Option<u64>,
-    pub inference_override: Option<gglib_core::domain::InferenceConfig>,
-    pub api_key: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub allowed_hosts: Vec<String>,
-}
+pub(crate) mod wire;
 
-/// `GET /api/proxy/status` / start / stop response.
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ProxyStatusDto {
-    pub running: bool,
-    pub port: Option<u16>,
-    #[serde(default)]
-    pub pinned_model: Option<String>,
-}
-
-/// `POST /api/servers/start` response.
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct StartServerDto {
-    pub port: u16,
-}
-
-/// `POST /api/models/downloads/queue` request body.
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct QueueDownloadBody {
-    pub model_id: String,
-    /// `None` leaves the quantization choice to the daemon.
-    pub quant: Option<String>,
-}
+pub(crate) use wire::{ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerDto};
 
 impl DaemonHandle {
     /// One absolute URL on the daemon.

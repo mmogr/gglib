@@ -30,25 +30,50 @@ You are an expert code analyst. You have access to filesystem tools \
 directory. Use them to explore the codebase and answer the question \
 thoroughly. Be direct and concise.";
 
+/// Arguments for the question command.
+///
+/// A bag rather than a parameter list, matching how `chat` already passes
+/// [`ChatArgs`](super::chat::ChatArgs): fifteen positional arguments made
+/// every call site a counting exercise and needed
+/// `#[allow(clippy::too_many_arguments)]` to compile clean.
+pub(crate) struct QuestionArgs {
+    pub question: String,
+    pub model_arg: Option<String>,
+    pub file: Option<String>,
+    pub port: Option<u16>,
+    pub max_iterations: Option<usize>,
+    pub tools: Vec<String>,
+    pub tool_timeout_ms: Option<u64>,
+    pub max_parallel: Option<usize>,
+    pub observation_tools: Vec<String>,
+    pub max_observation_steps: Option<usize>,
+    pub verbose: bool,
+    pub quiet: bool,
+    pub sampling: SamplingArgs,
+    /// Named sampling profile, the flag form of a `{model}:{profile}` suffix.
+    pub profile: Option<String>,
+    pub context: ContextArgs,
+}
+
 /// Run a single-turn agentic question, with optional continuation into chat.
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn execute(
-    ctx: &CliContext,
-    question: String,
-    model_arg: Option<String>,
-    file: Option<String>,
-    port: Option<u16>,
-    max_iterations: Option<usize>,
-    tools: Vec<String>,
-    tool_timeout_ms: Option<u64>,
-    max_parallel: Option<usize>,
-    observation_tools: Vec<String>,
-    max_observation_steps: Option<usize>,
-    verbose: bool,
-    quiet: bool,
-    sampling: SamplingArgs,
-    context: ContextArgs,
-) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> {
+    let QuestionArgs {
+        question,
+        model_arg,
+        file,
+        port,
+        max_iterations,
+        tools,
+        tool_timeout_ms,
+        max_parallel,
+        observation_tools,
+        max_observation_steps,
+        verbose,
+        quiet,
+        sampling,
+        profile,
+        context,
+    } = args;
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
     let params = AgentSessionParams {
@@ -59,6 +84,8 @@ pub(crate) async fn execute(
         model_name: model_arg.clone(),
         // `gglib q` takes no retry flag; the environment defaults apply.
         retry_policy: gglib_core::retry::RetryPolicy::from_env(),
+        // Filled in below, once settings have supplied the profile list.
+        profile: None,
     };
 
     // If no model was specified, look up the default from settings
@@ -68,6 +95,25 @@ pub(crate) async fn execute(
         .get()
         .await
         .map_err(|e| anyhow!("failed to load settings: {e}"))?;
+
+    // Resolve `--profile` or a `{model}:{profile}` suffix before anything asks
+    // the daemon to start `model_identifier` — the suffix must not reach lookup.
+    let selection = super::profile_selection::select(
+        ctx.catalog.as_ref(),
+        settings.inference_profiles.as_deref().unwrap_or_default(),
+        &params.model_identifier,
+        profile.as_deref(),
+    )
+    .await?;
+    let params = AgentSessionParams {
+        // Both, from the stripped name: `model_name` is what goes in the
+        // request body, and a `{model}:{profile}` suffix there would ask the
+        // upstream for a model that does not exist.
+        model_name: params.model_name.as_ref().map(|_| selection.model.clone()),
+        model_identifier: selection.model,
+        profile: selection.profile,
+        ..params
+    };
 
     let params = if params.model_identifier.is_empty() {
         let default_id = settings.default_model_id.ok_or_else(|| {
@@ -131,7 +177,8 @@ pub(crate) async fn execute(
     }];
 
     // Construct user message with optional piped/file context
-    let user_content = build_user_message(&question, file.as_deref(), verbose)?;
+    let user_content =
+        super::question_input::build_user_message(&question, file.as_deref(), verbose)?;
     messages.push(AgentMessage::User {
         content: user_content,
     });
@@ -244,55 +291,4 @@ fn ask_continue() -> Result<bool> {
 
     let answer = input.trim();
     Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
-}
-
-/// Build the user message, incorporating piped stdin or `--file` content.
-fn build_user_message(question: &str, file: Option<&str>, verbose: bool) -> Result<String> {
-    use std::io::{self, IsTerminal, Read};
-
-    // --file takes precedence over piped stdin.
-    let context = if let Some(path) = file {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| anyhow!("failed to read file '{}': {e}", path))?;
-        if content.is_empty() {
-            None
-        } else {
-            Some(content)
-        }
-    } else {
-        let stdin = io::stdin();
-        if !stdin.is_terminal() {
-            let mut buffer = String::new();
-            stdin
-                .lock()
-                .read_to_string(&mut buffer)
-                .map_err(|e| anyhow!("failed to read from stdin: {e}"))?;
-            if buffer.is_empty() {
-                None
-            } else {
-                Some(buffer)
-            }
-        } else {
-            None
-        }
-    };
-
-    let user_message = match context {
-        Some(input) => {
-            if question.contains("{}") {
-                question.replace("{}", &input)
-            } else {
-                format!("<context>\n{}\n</context>\n\n{}", input.trim(), question)
-            }
-        }
-        None => question.to_string(),
-    };
-
-    if verbose {
-        eprintln!("─── User Message ───");
-        eprintln!("{user_message}");
-        eprintln!("─── End ───\n");
-    }
-
-    Ok(user_message)
 }

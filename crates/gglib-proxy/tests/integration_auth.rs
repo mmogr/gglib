@@ -56,6 +56,7 @@ async fn spawn_proxy(access: ProxyAccessConfig) -> (String, u16, CancellationTok
             cancel_clone,
             Arc::new(MockSettingsRepo),
             None,  // inference_override
+            None,  // default_profile
             false, // cache_enabled
             None,  // slot_dir
             gglib_proxy::slot_eviction::DiskBudget::Auto,

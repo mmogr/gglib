@@ -96,7 +96,7 @@ fn serve_parses_the_cache_and_sampling_flags() {
     .expect("serve should accept the full cache and sampling flag set");
 
     let Some(Commands::Serve {
-        id,
+        identifier,
         cache,
         sampling,
         ..
@@ -105,7 +105,7 @@ fn serve_parses_the_cache_and_sampling_flags() {
         panic!("expected a Serve command");
     };
 
-    assert_eq!(id, 1);
+    assert_eq!(identifier, "1");
     assert!(cache.cache);
     assert_eq!(
         cache.slot_dir.as_deref(),
@@ -208,4 +208,31 @@ fn model_explain_leaves_the_profile_unset_when_omitted() {
     };
 
     assert_eq!(profile, None);
+}
+
+/// `serve` took a bare `u32` until profiles arrived, which made it the only
+/// command that could not name a model. Widening the positional to a string
+/// keeps every existing invocation working and adds the two forms the other
+/// commands already accept.
+#[test]
+fn serve_accepts_a_name_or_an_id_or_a_profile_suffix() {
+    for arg in ["1", "qwen3.6", "1:coding", "qwen3.6:coding"] {
+        let cli = Cli::try_parse_from(["gglib", "serve", arg])
+            .unwrap_or_else(|e| panic!("serve should accept {arg}: {e}"));
+        let Some(Commands::Serve { identifier, .. }) = cli.command else {
+            panic!("expected a Serve command");
+        };
+        assert_eq!(identifier, arg);
+    }
+}
+
+/// The flag form, for parity with `chat` and `q`.
+#[test]
+fn serve_parses_the_profile_flag() {
+    let cli = Cli::try_parse_from(["gglib", "serve", "1", "--profile", "coding"])
+        .expect("serve should accept --profile");
+    let Some(Commands::Serve { profile, .. }) = cli.command else {
+        panic!("expected a Serve command");
+    };
+    assert_eq!(profile.profile.as_deref(), Some("coding"));
 }

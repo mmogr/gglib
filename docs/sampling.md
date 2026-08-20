@@ -614,6 +614,63 @@ A client then selects it as part of the model name:
 { "model": "qwen3.6:coding", "messages": [...] }
 ```
 
+### Selecting one from the CLI
+
+`chat`, `q` and `serve` accept both forms — the suffix, so a model id can be
+pasted from a client config unchanged, and a `--profile` flag, which is the
+only form available when there is no identifier to suffix:
+
+```bash
+gglib chat qwen3.6:coding
+gglib chat 7:coding                     # ids take a suffix too
+gglib q --model qwen3.6 --profile coding "explain this"
+gglib chat --continue 42 --profile chat # a resume names no model
+```
+
+Passing both is an error rather than a precedence rule, on the same reasoning
+as the 404 below: an ambiguous profile should fail where it is cheap to
+diagnose.
+
+On `serve`, `--profile` sets a **default for the endpoint** — requests naming
+the bare pinned model resolve as if they had asked for `{model}:chat`:
+
+```bash
+gglib serve qwen3.6 --profile chat
+```
+
+It is sent to the daemon by name, not as resolved numbers, so editing the
+profile afterwards takes effect without restarting the endpoint. A client can
+still override per request with `qwen3.6:coding`. If the default profile is
+later deleted, bare requests degrade to unprofiled and the proxy logs a
+warning — the client never named it and cannot fix it, whereas a suffix the
+*client* got wrong still 404s.
+
+`gglib proxy` deliberately has no `--profile`. It serves every model, so a
+single default has no model in scope to attach to; its clients name
+`{model}:{profile}` per request.
+
+### `--profile` and the coupled trio
+
+`presence_penalty`, `repeat_penalty` and `min_p` travel with whichever layer
+sets `temperature` (see [Temperature coupling](#temperature-coupling)). So a
+profile that sets a temperature claims the whole trio, and a bare
+`--presence-penalty` beside it is discarded:
+
+```bash
+gglib chat 7 --profile chat --presence-penalty 1.2
+# warning: --presence-penalty did not take effect …
+```
+
+Pass `--temperature` as well to set them together. `gglib chat` and `gglib q`
+warn whenever a flag is passed over this way — including without a profile,
+since a model with stored `inference_defaults` naming a temperature does the
+same thing. The warning is suppressed under `gglib q -Q`, which promises
+silence on stderr.
+
+`gglib serve` does not warn: its flags are resolved per request by the proxy,
+against a settings snapshot the CLI cannot see at launch, so any warning it
+printed would be a guess that goes stale the moment a profile is edited.
+
 Profiles are **global** — one `coding` profile applies to every model — and
 deliberately **sparse**: only the parameters you set override anything, and the
 rest fall through to that model's own defaults. That is what makes a single

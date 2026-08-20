@@ -49,6 +49,13 @@ pub(crate) struct AgentSessionParams {
     /// Budget for retrying transient upstream failures, already resolved from
     /// `--no-retry` and the `GGLIB_LLM_RETRY_*` overrides.
     pub retry_policy: gglib_core::retry::RetryPolicy,
+    /// The selected sampling profile, already resolved from either
+    /// `--profile` or a `{model}:{profile}` suffix.
+    ///
+    /// Resolved by the caller rather than here, because `model_identifier`
+    /// must already have any suffix stripped by the time `resolve_port` asks
+    /// the daemon to start it.
+    pub profile: Option<gglib_core::domain::InferenceProfile>,
 }
 
 /// Display metadata for the server-startup info banner.
@@ -81,6 +88,7 @@ impl From<&ChatArgs> for AgentSessionParams {
             tools,
             model_name: args.model.clone(),
             retry_policy: args.retry_policy,
+            profile: None,
         }
     }
 }
@@ -111,7 +119,10 @@ pub(crate) async fn compose(
     //    Look up the model so model-level defaults can be applied.  When the
     //    identifier is unknown (external port reuse with no catalog entry) the
     //    sampling is forwarded as-is.
-    let resolved_sampling = match ctx
+    //    The provenance travels with the values so a later stage can say which
+    //    rung supplied each one; an unknown identifier yields none, because no
+    //    ladder was run.
+    let (resolved_sampling, _sources) = match ctx
         .app
         .models()
         .find_by_identifier(&params.model_identifier)
@@ -119,9 +130,16 @@ pub(crate) async fn compose(
         .ok()
     {
         Some(model) => {
-            Some(resolve_inference_config(ctx, sampling.unwrap_or_default(), &model).await?)
+            let named = sampling.clone().unwrap_or_default();
+            let (resolved, sources) =
+                resolve_inference_config(ctx, named.clone(), params.profile.as_ref(), &model)
+                    .await?;
+            if !banner.quiet {
+                super::sampling_warning::warn_discarded_flags(&named, &resolved, &sources);
+            }
+            (Some(resolved), Some(sources))
         }
-        None => sampling,
+        None => (sampling, None),
     };
 
     // 3. Initialise MCP servers (CLI bootstrap intentionally skips this).

@@ -364,27 +364,18 @@ pub(crate) fn explain(
     // The two facts about the model that change how resolution behaves.
     let model_ctx = ModelSamplingContext::for_model(model);
 
-    // An empty request layer: this explains the stored configuration, so there
-    // are no per-request parameters to occupy the top rung.
-    let (mut resolved, mut sources) = InferenceConfig::default().resolve_with_profile_explained(
-        profile.map(|selected| &selected.config),
+    // The ladder plus stage 5b's effort gate, both from the shared kernel the
+    // CLI's `gglib model explain` also calls. Not a copy of either rule: an
+    // explanation that re-derived them could only drift into a confident
+    // account of a resolution that does not happen.
+    let (resolved, sources, effort_suppressed) = gglib_core::request_pipeline::explain_stored(
+        profile,
         model.inference_defaults.as_ref(),
         settings.inference_defaults.as_ref(),
         model_ctx,
-    );
-
-    // Stage 5b's rule, applied to the resolution rather than to a request. The
-    // shared predicate, not a copy of it: an explanation that re-derived the
-    // condition could only ever disagree with the gate it is describing, and
-    // would then be a confident account of something that does not happen. A
-    // no-op on every model whose caps were never read — which is most of them,
-    // and is `Unknown`, not `No`.
-    let effort_suppressed = gglib_core::request_pipeline::suppress_stored_effort(
-        &mut resolved,
-        &mut sources,
         &model.template_caps,
-    )
-    .map(|suppressed| SuppressedEffortDto {
+    );
+    let effort_suppressed = effort_suppressed.map(|suppressed| SuppressedEffortDto {
         level: suppressed.level,
         layer: layer_of(suppressed.source),
     });

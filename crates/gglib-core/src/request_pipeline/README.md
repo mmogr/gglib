@@ -17,6 +17,21 @@ does either.
 
 ## Module map
 
+**Routing — which model the request names**
+
+- [`profile_route`] — [`resolve_route()`], which reads a `{model}:{profile}`
+  suffix off a requested id and decides whether it names a model outright, a
+  model plus a configured profile, or a profile that does not exist.
+
+  This one runs *before* the pipeline rather than inside it. Every stage of
+  [`apply()`] shapes a request already known to belong to some model;
+  [`resolve()`] cannot even build a [`ModelContext`] until the base name is
+  known, and stripping the suffix is what produces that name. So the order for
+  a caller that supports profiles is: route, then resolve the base name it
+  returns, then apply. A caller that does not support profiles skips straight
+  to [`resolve()`], which is why this is a separate entry point rather than a
+  stage — and why an id with no `:` costs no catalog access at all.
+
 **Resolution — what the model is**
 
 - [`model_context`] — [`ModelContext`], the resolved per-model facts
@@ -112,8 +127,11 @@ costs the request itself.
 | [`effort_gate.rs`](effort_gate.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate-coverage.json) |
 | [`effort_gate_stored_tests.rs`](effort_gate_stored_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate_stored_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate_stored_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate_stored_tests-coverage.json) |
 | [`effort_gate_tests.rs`](effort_gate_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-effort_gate_tests-coverage.json) |
+| [`explain.rs`](explain.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-explain-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-explain-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-explain-coverage.json) |
 | [`messages.rs`](messages.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-messages-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-messages-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-messages-coverage.json) |
 | [`model_context.rs`](model_context.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-model_context-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-model_context-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-model_context-coverage.json) |
+| [`profile_route.rs`](profile_route.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-profile_route-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-profile_route-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-profile_route-coverage.json) |
+| [`profile_route_tests.rs`](profile_route_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-profile_route_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-profile_route_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-profile_route_tests-coverage.json) |
 | [`request_shape.rs`](request_shape.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-request_shape-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-request_shape-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-request_shape-coverage.json) |
 | [`resolve.rs`](resolve.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-resolve-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-resolve-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-resolve-coverage.json) |
 | [`sampling.rs`](sampling.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-sampling-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-sampling-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-sampling-coverage.json) |

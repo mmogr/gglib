@@ -43,8 +43,8 @@ use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, P
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SamplingLayers {
     /// Operator-supplied overrides from the process's own command line
-    /// (`gglib proxy --temperature …`), applied *above* the client's request
-    /// parameters.
+    /// (`gglib proxy --temperature …`, `gglib serve --temperature …`), applied
+    /// *above* the client's request parameters.
     ///
     /// Above the client deliberately: this is the person running the server
     /// stating what the server does, which cannot be true if any client can

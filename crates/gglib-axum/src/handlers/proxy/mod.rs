@@ -32,6 +32,7 @@ pub(crate) async fn start_pinned(
         slot_dir: body.proxy.slot_dir.clone(),
         api_key: body.proxy.api_key.clone(),
         allowed_hosts: body.proxy.allowed_hosts.clone(),
+        inference_override: body.proxy.inference_override.clone(),
     };
 
     let plan = state
@@ -47,9 +48,12 @@ pub(crate) async fn start_pinned(
         pinned: Some(plan.pinned),
         slot_dir: proxy_config.slot_dir,
         default_context: Some(proxy_config.default_context),
-        // Sampling rides the pinned model's launch options, exactly as the
-        // CLI sends it — never a proxy-wide override.
-        inference_override: None,
+        // Sampling rides the proxy-wide override, exactly as the CLI sends
+        // it. It cannot ride the pinned model's launch options: gglib emits
+        // no sampler flags to llama-server at all (ADR 0003/0004), so the
+        // field those options write to is read by nobody. Hardcoding `None`
+        // here was why a GUI pinned start discarded its own sampling.
+        inference_override: proxy_config.inference_override,
         ..body.proxy
     };
     start(State(state), Json(Some(cfg))).await
@@ -93,6 +97,29 @@ pub(crate) async fn start(
             // that named the port and what to do about it.
             if !fetch_status(&state).await.running {
                 return Err(http);
+            }
+
+            // A running proxy's sampling override and default profile are
+            // fixed for the life of the run — `AppState` reads both once at
+            // startup. Asking for *different* ones would print the operator's
+            // flags back at them and apply none of them, which is the precise
+            // failure the override was wired up to fix.
+            //
+            // Compared rather than merely detected, because "the same request
+            // again" is legitimate and common: re-running the identical
+            // command is how an operator re-attaches after a detach, and with
+            // `proxy_autostart` the daemon has already started an unpinned
+            // proxy before the first `gglib proxy --temperature …` ever runs.
+            // Refusing on presence alone broke both.
+            if let Some((running_override, running_profile)) = state.proxy.started_sampling().await
+                && (cfg.inference_override != running_override
+                    || cfg.default_profile != running_profile)
+            {
+                return Err(HttpError::Conflict(
+                    "the proxy is already running with different sampling — that is fixed for \
+                     the life of the run, so stop it first (`gglib proxy stop`)"
+                        .to_string(),
+                ));
             }
 
             let requested = cfg.pinned.as_ref().map(|p| p.name.clone());

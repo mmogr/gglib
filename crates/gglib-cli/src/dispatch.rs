@@ -42,16 +42,26 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
 
         // ── Inference (top-level for ergonomic access) ──────────────────────
         Commands::Serve {
-            id,
+            identifier,
             context,
             options,
             sampling,
+            profile,
             mtp,
             cache,
             access,
         } => {
             handlers::inference::serve::execute(
-                ctx, id, context, options, sampling, mtp, cache, access, verbose,
+                ctx,
+                identifier,
+                context,
+                options,
+                sampling,
+                profile.profile,
+                mtp,
+                cache,
+                access,
+                verbose,
             )
             .await?;
         }
@@ -60,6 +70,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             context,
             system_prompt,
             sampling,
+            profile,
             retry,
             no_tools,
             port,
@@ -86,6 +97,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     context,
                     system_prompt,
                     sampling,
+                    profile: profile.profile,
                     retry_policy: retry.into_policy(),
                     no_tools,
                     port,
@@ -113,6 +125,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             verbose,
             quiet,
             sampling,
+            profile,
             no_tools,
             port,
             max_iterations,
@@ -130,14 +143,13 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 tools
             };
 
-            handlers::inference::agent_question::execute(
-                ctx,
+            let args = handlers::inference::agent_question::QuestionArgs {
                 question,
-                model,
+                model_arg: model,
                 file,
                 port,
                 max_iterations,
-                effective_tools,
+                tools: effective_tools,
                 tool_timeout_ms,
                 max_parallel,
                 observation_tools,
@@ -145,9 +157,10 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 verbose,
                 quiet,
                 sampling,
+                profile: profile.profile,
                 context,
-            )
-            .await?;
+            };
+            handlers::inference::agent_question::execute(ctx, args).await?;
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────

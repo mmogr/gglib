@@ -1053,6 +1053,7 @@ pub(crate) async fn spawn_proxy_with_settings(
             cancel_clone,
             settings_repo,
             None, // inference_override
+            None, // default_profile
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
@@ -1106,6 +1107,7 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
             cancel_clone,
             Arc::new(MockSettingsRepo),
             None, // inference_override
+            None, // default_profile
             true, // cache_enabled
             Some(slot_dir),
             gglib_proxy::slot_eviction::DiskBudget::Auto,
