@@ -149,6 +149,7 @@ pub(crate) async fn execute(
             // documented as read by nobody, so every `serve` sampling flag was
             // resolved, printed, and discarded.
             inference_override: proxy_config.inference_override.clone(),
+            default_profile: proxy_config.default_profile.clone(),
             api_key: proxy_config.api_key,
             allowed_hosts: proxy_config.allowed_hosts,
         })

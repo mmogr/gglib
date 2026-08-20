@@ -78,6 +78,7 @@ async fn spawn_proxy(
             cancel_clone,
             Arc::new(fixtures::common::MockSettingsRepo),
             None, // inference_override
+            None, // default_profile
             cache_enabled,
             slot_dir,
             gglib_proxy::slot_eviction::DiskBudget::Auto,

@@ -47,6 +47,9 @@ pub(crate) async fn execute(
             pinned: None,
             cache_disk_gb: cache.cache_disk_gb,
             inference_override: sampling.into_override(),
+            // `gglib proxy` serves every model; a single default profile has no
+            // model in scope to attach to. Its clients name `{model}:{profile}`.
+            default_profile: None,
             api_key: access.api_key.clone(),
             allowed_hosts: access.allowed_hosts.clone(),
         })

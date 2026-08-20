@@ -38,6 +38,7 @@ async fn start_proxy() -> (String, CancellationToken) {
             cancel_clone,
             Arc::new(MockSettingsRepo),
             None, // inference_override
+            None, // default_profile
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,

@@ -31,9 +31,15 @@ pinned: PinnedSpec | null,
 cache_disk_gb: number | null, 
 /**
  * Operator sampling overrides applied above the client's own request
- * parameters (`gglib proxy --temperature …`).
+ * parameters (`gglib proxy --temperature …`, `gglib serve --temperature …`).
  */
 inference_override: InferenceConfig | null, 
+/**
+ * Profile applied to requests that name the model without a
+ * `{model}:{profile}` suffix. Carried by name rather than resolved: the
+ * proxy re-reads profiles per request, so a name tracks live edits.
+ */
+default_profile: string | null, 
 /**
  * Bearer token demanded on `/v1/*` (`--api-key`). Omitted falls through
  * to the stored setting.

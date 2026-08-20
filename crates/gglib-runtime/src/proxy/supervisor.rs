@@ -108,6 +108,8 @@ pub struct ProxyConfig {
     /// --temperature …`), applied above the client's own request
     /// parameters. `None` means the client and the stored layers decide.
     pub inference_override: Option<InferenceConfig>,
+    /// Profile applied to requests naming the model without a suffix.
+    pub default_profile: Option<String>,
     /// Bearer token demanded on `/v1/*` and `/mcp`, as supplied by `--api-key`
     /// or `GGLIB_API_KEY`. `None` falls through to the stored setting, and then
     /// to generating one when the bind is not loopback — see
@@ -129,6 +131,7 @@ impl Default for ProxyConfig {
             slot_dir: None,
             disk_budget: DiskBudget::Auto,
             inference_override: None,
+            default_profile: None,
             api_key: None,
             allowed_hosts: Vec::new(),
         }
@@ -360,6 +363,7 @@ impl ProxySupervisor {
         let slot_dir = config.slot_dir;
         let disk_budget = config.disk_budget;
         let inference_override = config.inference_override;
+        let default_profile = config.default_profile;
         let agent_metrics = Arc::clone(&self.agent_metrics);
         let defects = Arc::clone(&self.defects);
         let exit_tx = self.exit_tx.clone();
@@ -382,6 +386,7 @@ impl ProxySupervisor {
                 cancel_clone,
                 settings_repo,
                 inference_override,
+                default_profile,
                 cache_enabled,
                 slot_dir,
                 disk_budget,

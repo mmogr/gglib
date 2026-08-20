@@ -90,6 +90,7 @@ pub(crate) struct AppState {
     /// Operator overrides from the command line, applied above the client's
     /// own request parameters when resolving sampling.
     inference_override: Option<gglib_core::domain::InferenceConfig>,
+    default_profile: Option<String>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
     pub(crate) cache_enabled: bool,
     /// Resolved slot directory path (Some only when cache_enabled).
@@ -190,6 +191,7 @@ pub async fn serve(
     // Operator overrides from this process's command line, applied above the
     // client's own request parameters. See `SamplingLayers::cli_override`.
     inference_override: Option<gglib_core::domain::InferenceConfig>,
+    default_profile: Option<String>,
     cache_enabled: bool,
     slot_dir: Option<PathBuf>,
     disk_budget: crate::slot_eviction::DiskBudget,
@@ -314,6 +316,7 @@ pub async fn serve(
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
         inference_override,
+        default_profile,
         cache_enabled,
         slot_dir,
         slot_gate,
@@ -755,7 +758,36 @@ async fn chat_completions(
     )
     .await
     {
-        ModelRoute::Bare(model) => (model.to_owned(), None),
+        // A bare name takes the endpoint's default profile, if one was set.
+        // Applied here rather than at the two `SamplingLayers` constructions
+        // below, which would drift the moment a third one appears.
+        //
+        // A default whose profile has since been deleted degrades to
+        // unprofiled rather than 404ing: the client never named it and cannot
+        // fix it. An explicitly named suffix still fails loudly — see the
+        // `ProfileNotFound` arm.
+        //
+        // `Bare` is also route case 5 — nothing resolved — so an id like
+        // `no-such-model:typo` reaches here and would take the default. That
+        // is contained only because admission compares the *full* requested id
+        // against the pin by exact string equality (`residency::check_pinned`),
+        // which such an id never matches, so the request dies before this
+        // config is used. Containment in another crate, noted so a change
+        // there does not quietly turn this into a real path.
+        ModelRoute::Bare(model) => {
+            let default = state.default_profile.as_deref().and_then(|name| {
+                let found = configured_profiles.iter().find(|p| p.name == name);
+                if found.is_none() {
+                    warn!(
+                        profile = %name,
+                        "the endpoint's default profile is no longer configured; \
+                         serving this request unprofiled"
+                    );
+                }
+                found
+            });
+            (model.to_owned(), default.map(|p| p.config.clone()))
+        }
         ModelRoute::Profiled { model, profile } => (model.to_owned(), Some(profile.config.clone())),
         ModelRoute::ProfileNotFound { requested, suffix } => {
             return (

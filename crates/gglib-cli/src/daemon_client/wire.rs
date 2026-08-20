@@ -26,6 +26,8 @@ pub(crate) struct StartProxyBody {
     pub pinned: Option<PinnedSpec>,
     pub cache_disk_gb: Option<u64>,
     pub inference_override: Option<gglib_core::domain::InferenceConfig>,
+    /// Profile applied to requests naming the pinned model bare.
+    pub default_profile: Option<String>,
     pub api_key: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub allowed_hosts: Vec<String>,

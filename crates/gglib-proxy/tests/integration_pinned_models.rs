@@ -55,6 +55,7 @@ async fn spawn(
             proxy_cancel,
             settings,
             None, // inference_override
+            None, // default_profile
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,

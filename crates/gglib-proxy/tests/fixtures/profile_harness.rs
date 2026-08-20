@@ -73,6 +73,25 @@ pub(crate) async fn spawn(
     model_defaults: Option<InferenceConfig>,
     trust_client_sampling: bool,
 ) -> Harness {
+    spawn_with_default_profile(
+        profiles,
+        catalog_names,
+        model_defaults,
+        trust_client_sampling,
+        None,
+    )
+    .await
+}
+
+/// As [`spawn`], with a default profile applied to bare model names — what
+/// `gglib serve --profile` configures.
+pub(crate) async fn spawn_with_default_profile(
+    profiles: Vec<InferenceProfile>,
+    catalog_names: &[&str],
+    model_defaults: Option<InferenceConfig>,
+    trust_client_sampling: bool,
+    default_profile: Option<String>,
+) -> Harness {
     let forwarded: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
     let cancel = CancellationToken::new();
 
@@ -136,6 +155,7 @@ pub(crate) async fn spawn(
                 trust_client_sampling,
             }),
             None, // inference_override
+            default_profile,
             false,
             None,
             gglib_proxy::slot_eviction::DiskBudget::Auto,
