@@ -17,9 +17,7 @@ pub use admission::{AdmissionQueue, PRIMARY_SLOT, Resident, SLOT_COUNT};
 pub use broadcaster::{ServerEventBroadcaster, get_event_broadcaster};
 pub use core::GuiProcessCore;
 pub use events::{ServerEvent, ServerStateInfo, ServerStatus};
-pub use health::{
-    check_http_health, check_process_health, update_health_batch, wait_for_http_health,
-};
+pub use health::{check_http_health, wait_for_http_health};
 pub use logs::{LogManagerSink, ServerLogEntry, ServerLogManager, get_log_manager};
 pub use manager::ProcessManager;
 pub use residency::ResidentSet;
