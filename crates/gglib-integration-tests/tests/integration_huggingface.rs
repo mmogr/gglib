@@ -199,24 +199,24 @@ async fn test_sharded_file_pattern_detection() {
 async fn test_file_size_parsing() {
     // Test handling of file sizes from HuggingFace API
     let size_test_cases = vec![
-        (1_048_576u64, "1.0 MB"),
-        (1_073_741_824u64, "1024.0 MB"),
-        (5_368_709_120u64, "5120.0 MB"),
-        (10_737_418_240u64, "10240.0 MB"),
-        (1_000_000u64, "1.0 MB"), // Approximately
+        (1_048_576u64, "1.0 MiB"),
+        (1_073_741_824u64, "1024.0 MiB"),
+        (5_368_709_120u64, "5120.0 MiB"),
+        (10_737_418_240u64, "10240.0 MiB"),
+        (1_000_000u64, "1.0 MiB"), // Approximately
     ];
 
     for (size_bytes, _expected_approx) in size_test_cases {
-        let size_mb = size_bytes as f64 / 1_048_576.0;
-        let formatted = format!("{size_mb:.1} MB");
+        let size_mib = size_bytes as f64 / 1_048_576.0;
+        let formatted = format!("{size_mib:.1} MiB");
 
         // Test that we can format sizes consistently
-        assert!(formatted.contains("MB"));
+        assert!(formatted.contains("MiB"));
         assert!(formatted.contains('.'));
 
         // For larger files, verify they're in the expected range
         if size_bytes > 1_073_741_824 {
-            assert!(size_mb > 1000.0, "Large files should show >1000 MB");
+            assert!(size_mib > 1000.0, "Large files should show >1000 MiB");
         }
     }
 }

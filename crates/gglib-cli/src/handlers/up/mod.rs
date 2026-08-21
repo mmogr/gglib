@@ -178,14 +178,14 @@ mod tests {
 
     #[test]
     fn a_note_renders_in_parentheses_after_the_value() {
-        let lines = render_row("VRAM", "24.0 GB", Some("nvidia-smi"), false);
-        assert_eq!(lines[0], "    VRAM      24.0 GB  (nvidia-smi)");
+        let lines = render_row("VRAM", "24.0 GiB", Some("nvidia-smi"), false);
+        assert_eq!(lines[0], "    VRAM      24.0 GiB  (nvidia-smi)");
     }
 
     #[test]
     fn a_row_without_a_note_stops_after_the_value() {
-        let lines = render_row("RAM", "64.0 GB", None, false);
-        assert_eq!(lines[0], "    RAM       64.0 GB");
+        let lines = render_row("RAM", "64.0 GiB", None, false);
+        assert_eq!(lines[0], "    RAM       64.0 GiB");
     }
 
     /// Values must form a column, as they do in the launch narration.
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn no_ansi_escapes_when_color_is_off() {
-        let lines = render_row("VRAM", "24.0 GB", Some("probe"), false);
+        let lines = render_row("VRAM", "24.0 GiB", Some("probe"), false);
         assert!(!lines[0].contains('\u{1b}'));
     }
 

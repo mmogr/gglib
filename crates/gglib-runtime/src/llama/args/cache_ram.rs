@@ -11,6 +11,7 @@
 //! footprint at the launch context size.
 
 use crate::system::is_truthy_flag;
+use gglib_core::domain::format_gib;
 use gglib_core::server_config::{
     CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, CacheRamSetting, compute_auto_cache_ram_mb,
 };
@@ -153,11 +154,6 @@ fn resolve_cache_ram_inner(
     }
 }
 
-/// Format bytes as GiB with one decimal, for the human-facing breakdown.
-fn gib(bytes: u64) -> String {
-    format!("{:.1} GiB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-}
-
 impl CacheRamResolution {
     /// A one-line, human-readable explanation of an auto-sized budget.
     ///
@@ -177,19 +173,19 @@ impl CacheRamResolution {
         if mb == 0 {
             return Some(format!(
                 "auto-sized llama-server RAM cache: disabled — model {} + {} {} at {} ctx leave no room in {}",
-                gib(self.model_bytes),
+                format_gib(self.model_bytes),
                 kv_label,
-                gib(self.kv_bytes),
+                format_gib(self.kv_bytes),
                 self.context_size,
-                gib(self.total_ram_bytes),
+                format_gib(self.total_ram_bytes),
             ));
         }
         Some(format!(
             "auto-sized llama-server RAM cache: {mb} MiB (total {} − model {} − {} {} at {} ctx − headroom) — override with --cache-ram-mb, disable with GGLIB_DISABLE_CACHE_AUTOSIZE=1",
-            gib(self.total_ram_bytes),
-            gib(self.model_bytes),
+            format_gib(self.total_ram_bytes),
+            format_gib(self.model_bytes),
             kv_label,
-            gib(self.kv_bytes),
+            format_gib(self.kv_bytes),
             self.context_size,
         ))
     }

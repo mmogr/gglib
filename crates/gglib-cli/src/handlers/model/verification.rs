@@ -55,15 +55,15 @@ pub(crate) async fn execute_verify(
                     bytes_processed,
                     total_bytes,
                 } => {
-                    let mb_processed = *bytes_processed as f64 / 1024.0 / 1024.0;
-                    let mb_total = *total_bytes as f64 / 1024.0 / 1024.0;
+                    let mib_processed = *bytes_processed as f64 / 1024.0 / 1024.0;
+                    let mib_total = *total_bytes as f64 / 1024.0 / 1024.0;
                     println!(
-                        "  Shard {}/{}: Hashing... {}% ({:.1} MB / {:.1} MB)",
+                        "  Shard {}/{}: Hashing... {}% ({:.1} MiB / {:.1} MiB)",
                         progress.shard_index + 1,
                         progress.total_shards,
                         percent,
-                        mb_processed,
-                        mb_total
+                        mib_processed,
+                        mib_total
                     );
                 }
                 ShardProgress::Completed { health } => {

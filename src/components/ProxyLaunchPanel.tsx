@@ -30,7 +30,7 @@ function formatWeights(bytes: number): string {
 }
 
 /**
- * The model identity line: `qwen3-30b-a3b · Q4_K_M · 17.2 GB`.
+ * The model identity line: `qwen3-30b-a3b · Q4_K_M · 17.2 GiB`.
  *
  * Unknown quantization and unknown size drop out rather than rendering as
  * filler, mirroring `LaunchNarration::headline` on the backend.

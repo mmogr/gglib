@@ -150,7 +150,7 @@ crates/gglib-proxy/tests/integration_proxy_pipeline.rs 645
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 615
 crates/gglib-runtime/src/command.rs 736
 crates/gglib-runtime/src/launch_narration.rs 695
-crates/gglib-runtime/src/llama/args/cache_ram.rs 344
+crates/gglib-runtime/src/llama/args/cache_ram.rs 340
 crates/gglib-runtime/src/llama/build/mod.rs 418
 crates/gglib-runtime/src/llama/detect/cuda.rs 304
 crates/gglib-runtime/src/llama/download/mod.rs 1313

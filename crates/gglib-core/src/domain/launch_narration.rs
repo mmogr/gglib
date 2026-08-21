@@ -48,7 +48,7 @@ pub struct LaunchDecision {
     /// Stable because the GUI and the CLI dashboard both key styling off it;
     /// treat it as part of the wire contract rather than a display string.
     pub label: String,
-    /// Display-ready value, e.g. `32768` or `q8_0 -> 2.1 GB, f16 would be 4.2 GB`.
+    /// Display-ready value, e.g. `32768` or `q8_0 -> 2.1 GiB, f16 would be 4.2 GiB`.
     pub value: String,
     /// Where the value came from, rendered in parentheses by every consumer.
     ///
@@ -100,7 +100,7 @@ pub struct LaunchNarration {
     /// Quantization label (`Q4_K_M`), when the catalog recorded one.
     pub quantization: Option<String>,
     /// On-disk weight size in bytes, summed across shards. `0` when unknown —
-    /// rendered as absent rather than as "0 GB".
+    /// rendered as absent rather than as "0 GiB".
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub weights_bytes: u64,
     /// The decisions, in the order they should be displayed.
@@ -129,10 +129,10 @@ impl LaunchNarration {
         self.decisions.push(decision);
     }
 
-    /// The identity line: `qwen3-30b-a3b · Q4_K_M · 17.2 GB`.
+    /// The identity line: `qwen3-30b-a3b · Q4_K_M · 17.2 GiB`.
     ///
     /// Unknown quantization and unknown size are dropped rather than rendered
-    /// as `unknown` or `0 GB` — a banner that pads itself with non-answers
+    /// as `unknown` or `0 GiB` — a banner that pads itself with non-answers
     /// reads as broken.
     #[must_use]
     pub fn headline(&self) -> String {
@@ -153,16 +153,17 @@ impl LaunchNarration {
     }
 }
 
-/// Format a byte count as GiB with one decimal, e.g. `17.2 GB`.
+/// Format a byte count as GiB with one decimal, e.g. `17.2 GiB`.
 ///
-/// Deliberately GiB-not-GB: it matches how every other memory figure in the
-/// launch path is computed, and a banner whose numbers disagree with the
-/// `--cache-ram` budget beside them is worse than no banner.
+/// GiB rather than GB, because the division is by 1024^3: it matches how every
+/// other memory figure in the launch path is computed, and a banner whose
+/// numbers disagree with the `--cache-ram` budget beside them is worse than no
+/// banner.
 #[must_use]
 pub fn format_gib(bytes: u64) -> String {
     #[allow(clippy::cast_precision_loss)]
     let gib = bytes as f64 / 1_073_741_824.0;
-    format!("{gib:.1} GB")
+    format!("{gib:.1} GiB")
 }
 
 /// Format a MiB count as GiB with one decimal, for the RAM cache budget.
@@ -170,7 +171,7 @@ pub fn format_gib(bytes: u64) -> String {
 pub fn format_mib_as_gib(mib: u64) -> String {
     #[allow(clippy::cast_precision_loss)]
     let gib = mib as f64 / 1024.0;
-    format!("{gib:.1} GB")
+    format!("{gib:.1} GiB")
 }
 
 #[cfg(test)]
@@ -180,7 +181,7 @@ mod tests {
     #[test]
     fn headline_joins_the_three_identity_parts() {
         let n = LaunchNarration::new("qwen3-30b-a3b", Some("Q4_K_M".to_string()), 18_476_297_420);
-        assert_eq!(n.headline(), "qwen3-30b-a3b \u{b7} Q4_K_M \u{b7} 17.2 GB");
+        assert_eq!(n.headline(), "qwen3-30b-a3b \u{b7} Q4_K_M \u{b7} 17.2 GiB");
     }
 
     /// Unknown quant and unknown size drop out rather than rendering as
@@ -194,7 +195,7 @@ mod tests {
     #[test]
     fn headline_keeps_size_when_only_quantization_is_unknown() {
         let n = LaunchNarration::new("mystery", None, 1_073_741_824);
-        assert_eq!(n.headline(), "mystery \u{b7} 1.0 GB");
+        assert_eq!(n.headline(), "mystery \u{b7} 1.0 GiB");
     }
 
     #[test]
@@ -210,6 +211,6 @@ mod tests {
 
     #[test]
     fn format_mib_as_gib_scales_by_1024() {
-        assert_eq!(format_mib_as_gib(6144), "6.0 GB");
+        assert_eq!(format_mib_as_gib(6144), "6.0 GiB");
     }
 }
