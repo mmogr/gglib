@@ -52,7 +52,7 @@ belongs here.
 
 | Directory | Description |
 |-----------|-------------|
-| [`clients/`](clients/) | The two clients that cannot go through `Transport`: streaming, or a non-backend origin |
+| [`clients/`](clients/) | The two clients that cannot go through `getTransport()`: streaming, or a non-backend origin |
 | [`transport/`](transport/) | Transport layer — HTTP for requests, SSE for events — with type mappers |
 | [`platform/`](platform/) | Platform-specific utilities (file dialogs, URL opening, menu sync) |
 | [`tools/`](tools/) | MCP tool integration and builtin tool registry |
@@ -75,8 +75,8 @@ belongs here.
 ## Clients
 
 The `clients/` directory is deliberately small: a module belongs there only if
-it needs streaming or a non-backend origin. Everything else goes through the
-`Transport` interface.
+it needs streaming or a non-backend origin. Everything else goes through
+`getTransport()`.
 
 | Client | Description |
 |--------|-------------|

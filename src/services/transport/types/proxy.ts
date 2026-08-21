@@ -1,5 +1,5 @@
 /**
- * Proxy transport sub-interface.
+ * Proxy transport types.
  * Handles multi-model proxy server management.
  */
 
@@ -68,28 +68,3 @@ export type StartPinnedRequest = Pick<StartPinnedBody, 'model_id'> &
  */
 import type { ProxyStatus } from '../../../types/generated/ProxyStatus';
 export type { ProxyStatus };
-
-/**
- * Proxy transport operations.
- */
-export interface ProxyTransport {
-  /** Get current proxy status. */
-  getProxyStatus(): Promise<ProxyStatus>;
-
-  /** Start the multi-model proxy server. */
-  startProxy(config?: Partial<ProxyConfig>): Promise<ProxyStatus>;
-
-  /** Start the proxy pinned to one model — the GUI counterpart of `gglib serve`. */
-  startPinnedProxy(request: StartPinnedRequest): Promise<ProxyStatus>;
-
-  /** Stop the proxy server. */
-  stopProxy(): Promise<void>;
-
-  /**
-   * Shut the daemon down — `gglib daemon stop`.
-   *
-   * Stops every running inference server with it, and the app loses its
-   * backend until the daemon is started again. Confirm before calling.
-   */
-  shutdownDaemon(): Promise<void>;
-}

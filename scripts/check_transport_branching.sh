@@ -103,7 +103,7 @@ EOF
 cat > "$SELFTEST_DIR/known_good.ts" <<'EOF'
 import { get, getAuthenticatedFetchConfig } from '../transport/api/client';
 import type { DashboardSnapshot } from '../transport/types/dashboard';
-import type { Transport } from '../transport/types';
+import type { ProxyStatus } from '../transport/types';
 import { appLogger } from '../platform';
 EOF
 SELFTEST_BAD=$(transport_import_violations "$SELFTEST_DIR" | grep -c "known_bad" || true)

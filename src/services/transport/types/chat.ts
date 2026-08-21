@@ -1,5 +1,5 @@
 /**
- * Chat transport sub-interface.
+ * Chat transport types.
  * Handles conversations and messages for the chat feature.
  */
 
@@ -120,38 +120,3 @@ export const DEFAULT_TITLE_GENERATION_PROMPT =
 // ============================================================================
 // Transport Interface
 // ============================================================================
-
-/**
- * Chat transport operations.
- */
-export interface ChatTransport {
-  /** List all conversations. */
-  listConversations(): Promise<ConversationSummary[]>;
-
-  /** Create a new conversation. Returns the new conversation ID. */
-  createConversation(params: CreateConversationParams): Promise<ConversationId>;
-
-  /** Update a conversation's title. */
-  updateConversationTitle(id: ConversationId, title: string): Promise<void>;
-
-  /** Update a conversation's system prompt. */
-  updateConversationSystemPrompt(id: ConversationId, systemPrompt: string | null): Promise<void>;
-
-  /** Delete a conversation. */
-  deleteConversation(id: ConversationId): Promise<void>;
-
-  /** Get all messages for a conversation. */
-  getMessages(conversationId: ConversationId): Promise<ChatMessage[]>;
-
-  /** Save a new message. Returns the new message ID. */
-  saveMessage(params: SaveMessageParams): Promise<MessageId>;
-
-  /** Update a message's content and/or metadata. */
-  updateMessage(id: MessageId, params: UpdateMessageParams): Promise<void>;
-
-  /** Delete a message and all subsequent messages. */
-  deleteMessage(id: MessageId): Promise<DeleteMessageResult>;
-
-  /** Generate a chat title using the served LLM. */
-  generateChatTitle(params: GenerateTitleParams): Promise<string>;
-}

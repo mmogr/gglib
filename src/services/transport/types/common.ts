@@ -1,5 +1,5 @@
 /**
- * Common utility types shared across transport sub-interfaces.
+ * Common utility types shared across the transport type modules.
  */
 
 /**
