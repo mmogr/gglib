@@ -21,7 +21,7 @@ model_name: string,
 quantization: string | null, 
 /**
  * On-disk weight size in bytes, summed across shards. `0` when unknown —
- * rendered as absent rather than as "0 GB".
+ * rendered as absent rather than as "0 GiB".
  */
 weights_bytes: number, 
 /**

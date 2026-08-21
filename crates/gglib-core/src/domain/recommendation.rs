@@ -92,8 +92,8 @@ impl ModelCandidate {
 
 /// Which pool of memory the recommendation was sized against.
 ///
-/// Worth carrying rather than inferring at the print site: "24.0 GB VRAM" and
-/// "24.0 GB system RAM" lead to very different expectations, and the
+/// Worth carrying rather than inferring at the print site: "24.0 GiB VRAM" and
+/// "24.0 GiB system RAM" lead to very different expectations, and the
 /// [`SystemRam`](Self::SystemRam) case is frequently a *fallback* rather than a
 /// CPU-only machine — see [`recommend`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

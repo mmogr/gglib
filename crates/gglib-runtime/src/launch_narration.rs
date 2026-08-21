@@ -142,7 +142,7 @@ fn native_summary(flags: RuntimeFlags) -> String {
 /// The KV line, including what quantization actually bought.
 ///
 /// The `f16 would be N` comparison is the point: `q8_0` alone means nothing
-/// to a user, while "2.1 GB, and f16 would be 4.2" is the reason the default
+/// to a user, while "2.1 GiB, and f16 would be 4.2" is the reason the default
 /// exists. Omitted when the model's metadata didn't yield a per-token
 /// estimate, rather than shown against a fabricated one.
 fn kv_decision(inputs: &NarrationInputs<'_>, ctx: u64) -> LaunchDecision {
@@ -486,7 +486,7 @@ mod tests {
         let cache = n.decision("cache").unwrap();
         assert_eq!(
             cache.value,
-            "6.0 GB RAM of 31.0 GB free \u{b7} disk slots on"
+            "6.0 GiB RAM of 31.0 GiB free \u{b7} disk slots on"
         );
         assert_eq!(cache.source.as_deref(), Some("auto-sized"));
     }

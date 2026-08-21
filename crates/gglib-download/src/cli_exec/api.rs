@@ -65,8 +65,8 @@ pub async fn list_quantizations(
                                 String::new()
                             };
                             #[allow(clippy::cast_precision_loss)]
-                            let size_mb = quant.total_size as f64 / 1_048_576.0;
-                            println!("  {} ({:.1} MB){}", quant.name, size_mb, shard_info);
+                            let size_mib = quant.total_size as f64 / 1_048_576.0;
+                            println!("  {} ({:.1} MiB){}", quant.name, size_mib, shard_info);
                         }
 
                         println!("\nTo download a specific quantization, use:");
@@ -149,8 +149,8 @@ async fn fallback_file_search(
                         || "size unknown".to_string(),
                         |bytes| {
                             #[allow(clippy::cast_precision_loss)]
-                            let mb = bytes as f64 / 1_048_576.0;
-                            format!("{mb:.1} MB")
+                            let mib = bytes as f64 / 1_048_576.0;
+                            format!("{mib:.1} MiB")
                         },
                     );
                 println!("  ✓ {pattern} ({size_info})");

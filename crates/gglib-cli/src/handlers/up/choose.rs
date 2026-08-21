@@ -112,7 +112,7 @@ async fn download_recommended(
 /// State the choice and the arithmetic behind it.
 ///
 /// The size and headroom are the part that earns trust: a bare model name is a
-/// guess, whereas "18.9 GB of 24.0 GB VRAM" is a claim the user can check.
+/// guess, whereas "18.9 GiB of 24.0 GiB VRAM" is a claim the user can check.
 fn print_recommendation(rec: &Recommendation) {
     let c = rec.candidate;
     println!();

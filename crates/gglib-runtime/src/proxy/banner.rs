@@ -111,7 +111,7 @@ mod tests {
         let lines = render_launch_narration(&narration(), false);
         assert_eq!(
             lines[1].trim(),
-            "qwen3-30b-a3b \u{b7} Q4_K_M \u{b7} 17.2 GB"
+            "qwen3-30b-a3b \u{b7} Q4_K_M \u{b7} 17.2 GiB"
         );
     }
 

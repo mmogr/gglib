@@ -17,7 +17,7 @@ export type LaunchDecision = {
  */
 label: string, 
 /**
- * Display-ready value, e.g. `32768` or `q8_0 -> 2.1 GB, f16 would be 4.2 GB`.
+ * Display-ready value, e.g. `32768` or `q8_0 -> 2.1 GiB, f16 would be 4.2 GiB`.
  */
 value: string, 
 /**
