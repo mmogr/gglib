@@ -118,10 +118,10 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `list` | List all models with metadata |
 | `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata) |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
-| `remove <id>` | Remove a model from the library |
-| `serve <id>` | Start llama-server for a model (respects per-model server_defaults from DB, overridable with `--ctx-size`) |
-| `chat <id>` | Start interactive llama-cli chat |
-| `chat <id> --continue <N>` | Resume a previous conversation by ID |
+| `remove <id\|name>` | Remove a model from the library |
+| `serve <id\|name>` | Start llama-server for a model (respects per-model server_defaults from DB, overridable with `--ctx-size`) |
+| `chat <id\|name>` | Start interactive llama-cli chat |
+| `chat <id\|name> --continue <N>` | Resume a previous conversation by ID |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `chat history` | List past conversations with message counts |
@@ -130,7 +130,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
-| `config default <id>` | Set/show/clear the default model |
+| `config default <id\|name>` | Set/show/clear the default model |
 | `config profile list` | List named sampling profiles |
 | `config profile show <name>` | Show one profile's parameters |
 | `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |

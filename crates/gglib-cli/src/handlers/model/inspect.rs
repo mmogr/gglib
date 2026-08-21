@@ -5,7 +5,7 @@
 //! inference defaults, and timestamps.
 //!
 //! This handler is intentionally thin:
-//! - Flexible identifier resolution via `AppCore::models().get()` (name **or** ID)
+//! - Flexible identifier resolution via [`resolver::resolve_model_identifier`] (name **or** ID)
 //! - Serving-status-aware DTO via `ModelOps::get_detail()` (same path as the Axum route)
 //! - `--json` → serialize `ModelDetailDto` to stdout
 //! - human mode → delegate to [`inspect_display::print_model_detail`]
@@ -14,6 +14,7 @@
 
 use anyhow::Result;
 
+use super::resolver;
 use crate::bootstrap::CliContext;
 use crate::presentation::inspect_display;
 
@@ -24,15 +25,8 @@ pub(crate) async fn execute(
     show_metadata: bool,
     json: bool,
 ) -> Result<()> {
-    // Step 1: resolve name-or-id via the flexible core service.
-    let model = match ctx.app.models().get(identifier).await? {
-        Some(m) => m,
-        None => {
-            eprintln!("No model found matching: '{identifier}'");
-            eprintln!("Use 'gglib model list' to see available models.");
-            return Ok(());
-        }
-    };
+    // Step 1: resolve name-or-id through the one door.
+    let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     // Step 2: fetch the full DTO via ModelOps so serving status is included.
     // This mirrors exactly what the Axum detail route does, ensuring CLI and

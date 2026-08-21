@@ -343,13 +343,6 @@ impl ModelService {
         self.repo.delete(id).await.map_err(CoreError::from)
     }
 
-    /// Remove a model by identifier. Returns the removed model.
-    pub async fn remove(&self, identifier: &str) -> Result<Model, CoreError> {
-        let model = self.find_by_identifier(identifier).await?;
-        self.repo.delete(model.id).await.map_err(CoreError::from)?;
-        Ok(model)
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // Tag Operations
     // ─────────────────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 //! Model identifier resolver.
 //!
-//! Provides a single entry-point for resolving a user-supplied identifier
-//! (either a numeric ID or a model name) to a [`Model`] record.  All model
-//! command handlers use this instead of calling `get_by_id` directly, giving
-//! every command consistent name-or-id resolution and error messaging.
+//! The one entry-point for resolving a user-supplied identifier (either a
+//! numeric ID or a model name) to a [`Model`] record. Every `gglib model`
+//! subcommand that takes an identifier goes through it, so all of them fail
+//! the same way: one message, on stderr, with a non-zero exit.
 //!
 //! [`Model`]: gglib_core::domain::Model
 
