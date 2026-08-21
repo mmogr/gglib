@@ -32,6 +32,7 @@ What stays in `mod` is the routing and two idempotency decisions:
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`wire.rs`](wire.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-proxy-wire-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-proxy-wire-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-proxy-wire-coverage.json) |
+| [`wire_tests.rs`](wire_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-proxy-wire_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-proxy-wire_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-proxy-wire_tests-coverage.json) |
 <!-- module-table:end -->
 
 </details>
