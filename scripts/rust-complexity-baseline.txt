@@ -30,7 +30,7 @@ crates/gglib-cli/src/handlers/config/llama_install.rs 341
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 436
 crates/gglib-cli/src/handlers/config/settings/settings_display.rs 404
 crates/gglib-cli/src/handlers/model/download/interactive.rs 426
-crates/gglib-cli/src/handlers/model/update.rs 630
+crates/gglib-cli/src/handlers/model/update.rs 626
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 632
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 447
 crates/gglib-cli/src/model_commands.rs 403
@@ -76,7 +76,7 @@ crates/gglib-core/src/request_pipeline/validate.rs 790
 crates/gglib-core/src/server_config.rs 627
 crates/gglib-core/src/services/model_import.rs 689
 crates/gglib-core/src/services/model_registrar.rs 336
-crates/gglib-core/src/services/model_service.rs 1499
+crates/gglib-core/src/services/model_service.rs 1492
 crates/gglib-core/src/services/model_verification.rs 806
 crates/gglib-core/src/settings_tests.rs 452
 crates/gglib-core/src/settings.rs 698

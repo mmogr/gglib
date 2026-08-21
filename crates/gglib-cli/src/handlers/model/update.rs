@@ -11,6 +11,7 @@ use gglib_core::{
     domain::{DefaultsOrigin, InferenceConfig, ReasoningEffort},
 };
 
+use super::resolver;
 use crate::bootstrap::CliContext;
 use crate::sampling_params::clear_param;
 
@@ -65,12 +66,7 @@ pub(crate) struct UpdateArgs {
 /// Returns `Result<()>` indicating the success or failure of the operation.
 pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     // Get the existing model by name or ID
-    let existing_model = ctx
-        .app
-        .models()
-        .get(&args.identifier)
-        .await?
-        .ok_or_else(|| anyhow!("No model found matching: '{}'", args.identifier))?;
+    let existing_model = resolver::resolve_model_identifier(ctx, &args.identifier).await?;
 
     // Verify the file still exists
     if !existing_model.file_path.exists() && !args.force {

@@ -11,6 +11,7 @@
 
 use anyhow::{Context, Result};
 
+use super::resolver;
 use crate::bootstrap::CliContext;
 
 /// Execute the retag command.
@@ -32,10 +33,7 @@ pub(crate) async fn execute(
             .map(|m| (m.id, m.name))
             .collect::<Vec<_>>()
     } else if let Some(id) = identifier {
-        let m = models
-            .find_by_identifier(&id)
-            .await
-            .context("failed to look up model")?;
+        let m = resolver::resolve_model_identifier(ctx, &id).await?;
         vec![(m.id, m.name)]
     } else {
         anyhow::bail!("specify a model identifier or pass --all");

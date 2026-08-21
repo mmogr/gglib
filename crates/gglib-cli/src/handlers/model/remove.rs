@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 
+use super::resolver;
 use crate::bootstrap::CliContext;
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
 use crate::utils::input;
@@ -33,14 +34,7 @@ use crate::utils::input;
 /// - Database removal operation fails
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     // First, try to find the model to show it to the user
-    let model = match ctx.app.models().get(identifier).await? {
-        Some(m) => m,
-        None => {
-            println!("No model found matching: '{identifier}'");
-            println!("Use 'gglib model list' to see available models.");
-            return Ok(());
-        }
-    };
+    let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     if !force {
         display_model_summary(&model, ModelSummaryOpts::for_removal());
@@ -55,8 +49,11 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
         }
     }
 
-    // Remove the model
-    let removed = ctx.app.models().remove(identifier).await?;
+    // Delete by the id resolved above rather than handing the raw identifier
+    // to a second lookup: the confirmation prompt sits between the two, so
+    // they can disagree, and the second one reports in core's vocabulary.
+    ctx.app.models().delete(model.id).await?;
+    let removed = &model;
 
     println!(
         "✓ Model '{}' (ID {}) successfully removed from database.",
