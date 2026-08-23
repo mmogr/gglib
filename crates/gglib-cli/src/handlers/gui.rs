@@ -1,7 +1,8 @@
 //! GUI launch handler.
 //!
-//! Handles launching the Tauri desktop application bundle on macOS and Linux.
-//! Falls back with helpful build instructions when no built artifact is found.
+//! Handles launching the Tauri desktop application bundle on macOS, Linux and
+//! Windows. Falls back with helpful build instructions when no built artifact
+//! is found.
 
 use anyhow::Result;
 
@@ -68,9 +69,20 @@ fn find_repo_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
     repo_root.join("target/release/gglib-app")
 }
 
+/// Locate the Windows GUI artifact in the repo build output.
+///
+/// The bare binary rather than the NSIS output under `bundle/nsis`: that is an
+/// installer to run once, not something to launch in place. Mirrors the Linux
+/// fallback above.
+#[cfg(target_os = "windows")]
+fn find_repo_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
+    repo_root.join("target/release/gglib-app.exe")
+}
+
 /// Launch the GUI from a prebuilt standalone binary.
 ///
-/// Looks for an AppImage or `gglib-app` binary next to the running executable.
+/// Looks for the `.app` bundle (macOS), an AppImage or `gglib-app` (Linux), or
+/// `gglib-app.exe` (Windows) next to the running executable.
 fn launch_prebuilt() -> Result<()> {
     let exe_dir = std::env::current_exe()
         .and_then(|p| p.canonicalize())
@@ -119,7 +131,19 @@ fn launch_prebuilt() -> Result<()> {
         }
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "windows")]
+    {
+        let artifact = exe_dir.join("gglib-app.exe");
+        if artifact.exists() {
+            println!("Launching GGLib GUI...");
+            return match std::process::Command::new(&artifact).spawn() {
+                Ok(_child) => Ok(()),
+                Err(e) => Err(e.into()),
+            };
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     let _ = exe_dir;
 
     println!("Desktop GUI is not included in this release.");
@@ -181,7 +205,24 @@ fn launch_from_repo(repo_root: &std::path::Path) -> Result<()> {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "windows")]
+    {
+        let artifact = find_repo_gui_artifact(repo_root);
+        if artifact.exists() {
+            println!("Launching GGLib GUI...");
+            return match std::process::Command::new(&artifact).spawn() {
+                Ok(_child) => Ok(()),
+                Err(e) => Err(e.into()),
+            };
+        }
+        println!("Desktop GUI not found at: {}", artifact.display());
+        println!();
+        println!("To build the GUI, run: make build-tauri");
+        println!("Or: npm run tauri:build");
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         let _ = repo_root;
         anyhow::bail!("gglib gui is not supported on this OS yet")
@@ -225,5 +266,31 @@ mod tests {
         let root = make_temp_dir("gglib_cli_gui");
         let chosen = find_repo_gui_artifact(&root);
         assert_eq!(chosen, root.join("target/release/gglib-app"));
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_tests {
+    use super::find_repo_gui_artifact;
+
+    /// The Windows lookup must name the executable with its extension. Before
+    /// this arm existed, `gglib gui` on Windows printed "Desktop GUI is not
+    /// included in this release" even with `gglib-app.exe` sitting beside it,
+    /// because there was no Windows branch at all.
+    ///
+    /// This runs nowhere in CI — `cli-cross-os` is `cargo test --no-run` and
+    /// `clippy-cross-os` only lints — so it is compiled and linted rather than
+    /// executed. That still catches the errors those jobs exist for.
+    #[test]
+    fn windows_repo_artifact_is_the_exe() {
+        let root = std::path::Path::new("C:\\repo");
+        let chosen = find_repo_gui_artifact(root);
+
+        assert_eq!(chosen, root.join("target/release/gglib-app.exe"));
+        assert!(
+            chosen.to_string_lossy().ends_with(".exe"),
+            "{} should name a Windows executable",
+            chosen.display()
+        );
     }
 }
