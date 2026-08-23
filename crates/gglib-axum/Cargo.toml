@@ -41,6 +41,15 @@ futures-core = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
 ts-rs = { workspace = true, optional = true }
 
+# The dashboard, compiled into the binary. See `src/ui.rs`.
+#
+# `mime-guess` (hyphen) is rust-embed's own feature: it bakes each file's
+# content type into the generated `Metadata` at compile time. The similarly
+# named `mime_guess` (underscore) feature would instead add mime_guess as a
+# direct dependency of this crate, which `#![deny(unused_crate_dependencies)]`
+# would then require us to name in code. One dependency, not two.
+rust-embed = { version = "8.12", features = ["mime-guess"] }
+
 [features]
 # Emit TypeScript for this crate's HTTP wire types. Optional dependency, so
 # nothing enters the build graph with the feature off and

@@ -42,6 +42,7 @@ pub(crate) mod handlers;
 pub(crate) mod routes;
 pub(crate) mod sse;
 pub(crate) mod state;
+pub(crate) mod ui;
 
 // Re-export primary types
 pub use access::DaemonAccess;
@@ -51,3 +52,4 @@ pub use error::HttpError;
 pub use gglib_core::CorsConfig;
 pub use routes::{create_router, create_spa_router};
 pub use state::AppState;
+pub use ui::{create_embedded_spa_router, has_embedded_ui};

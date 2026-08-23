@@ -49,8 +49,12 @@ pub struct DaemonOptions {
     pub host: String,
     /// CORS policy for `/api`.
     pub cors: CorsConfig,
-    /// Directory with a built frontend to serve as an SPA. `None` means
-    /// auto-discover; `Some` is an explicit location.
+    /// Directory with a built frontend to serve as an SPA. `None` — the only
+    /// value anything in this workspace sets — means serve the dashboard
+    /// compiled into this binary. `Some` overrides it with a directory, which
+    /// is how a frontend developer points a release build at a local `npm run
+    /// build`. Nothing sets it implicitly, so the working directory can no
+    /// longer decide what is served.
     pub static_dir: Option<PathBuf>,
     /// `Host` header values accepted in addition to loopback (and, on a
     /// non-loopback bind, IP literals). The mDNS name and `--allowed-host`
@@ -67,20 +71,6 @@ impl Default for DaemonOptions {
             allowed_hosts: Vec::new(),
         }
     }
-}
-
-/// Locate a built frontend next to the working directory.
-///
-/// The same candidate list `gglib web` has always used; the first directory
-/// containing an `index.html` wins. `None` means the daemon serves the API
-/// only — every route still works, there is just no dashboard page.
-#[must_use]
-pub(crate) fn discover_static_dir() -> Option<PathBuf> {
-    let candidates = ["./web_ui/dist", "./dist", "./web_ui/assets", "./web_ui"];
-    candidates
-        .iter()
-        .map(std::path::Path::new)
-        .find_map(|p| p.join("index.html").exists().then(|| p.to_path_buf()))
 }
 
 /// Run the gglib daemon until a shutdown signal or `/api/daemon/shutdown`.
@@ -139,14 +129,27 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
         opts.allowed_hosts.clone(),
     ));
 
-    // Router — SPA when a frontend build exists, API-only otherwise.
-    let static_dir = opts.static_dir.clone().or_else(discover_static_dir);
-    let app = match &static_dir {
-        Some(dir) => {
-            info!("serving dashboard from {}", dir.display());
-            crate::routes::create_spa_router(Arc::clone(&state), dir, &opts.cors, access)
-        }
-        None => crate::routes::create_router(Arc::clone(&state), &opts.cors, access),
+    // Router. The dashboard is compiled in (see `crate::ui`); a directory is
+    // only ever an explicit override. This used to probe the *working
+    // directory* for `./web_ui` and friends, which meant a release tarball run
+    // from anywhere but its own extract directory silently served no
+    // dashboard — and because the daemon is a singleton, whichever client
+    // started it decided that for everyone.
+    let app = if let Some(dir) = opts.static_dir.clone() {
+        info!(
+            "serving dashboard from {} (explicit override)",
+            dir.display()
+        );
+        crate::routes::create_spa_router(Arc::clone(&state), &dir, &opts.cors, access)
+    } else if crate::ui::has_embedded_ui() {
+        info!("serving the dashboard compiled into this binary");
+        crate::ui::create_embedded_spa_router(Arc::clone(&state), &opts.cors, access)
+    } else {
+        warn!(
+            "this binary carries no dashboard — it was built without `npm run build`. \
+             Serving the API only; every route works, there is just no dashboard page."
+        );
+        crate::routes::create_router(Arc::clone(&state), &opts.cors, access)
     };
 
     let addr = format!("{}:{}", opts.host, DAEMON_PORT);
