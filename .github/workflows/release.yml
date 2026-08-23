@@ -401,6 +401,34 @@ jobs:
           7z a ..\dist\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe web_ui
           cd ..
 
+      # Hashed here, on the runner that produced the bytes, rather than by
+      # reading the assets back from the release: uploaded assets pass through
+      # state "starting" before "uploaded", so a later job that lists and
+      # downloads them can hit a listed-but-not-yet-servable asset and 404.
+      # Hashing the distributor's copy would also attest to the distributor,
+      # not to this build.
+      #
+      # shell: bash on all three runners — Windows git-bash provides sha256sum
+      # with LF output, so there is nothing to normalise. macOS has shasum only.
+      - name: Hash release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256() {
+            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
+            else shasum -a 256 "$@"; fi
+          }
+          mkdir -p sums
+          ( cd dist && sha256 * ) > "sums/cli-${{ matrix.target }}.sha256"
+          cat "sums/cli-${{ matrix.target }}.sha256"
+
+      - name: Upload checksum fragment
+        uses: actions/upload-artifact@v7
+        with:
+          name: sums-cli-${{ matrix.target }}
+          path: sums/cli-${{ matrix.target }}.sha256
+          retention-days: 1
+
       - name: Upload binary to release
         if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v3
@@ -694,6 +722,27 @@ jobs:
           7z a ..\dist\gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip *
           cd ..
 
+      # See the matching step in the `build` job for why hashing happens here
+      # and not by reading the assets back off the release.
+      - name: Hash release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256() {
+            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
+            else shasum -a 256 "$@"; fi
+          }
+          mkdir -p sums
+          ( cd dist && sha256 * ) > "sums/gui-${{ matrix.target }}.sha256"
+          cat "sums/gui-${{ matrix.target }}.sha256"
+
+      - name: Upload checksum fragment
+        uses: actions/upload-artifact@v7
+        with:
+          name: sums-gui-${{ matrix.target }}
+          path: sums/gui-${{ matrix.target }}.sha256
+          retention-days: 1
+
       - name: Upload GUI assets to release
         if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v3
@@ -701,3 +750,58 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: dist/*
+  checksums:
+    name: Publish SHA256SUMS
+    runs-on: ubuntu-latest
+    needs: [check-version, create-release, build, build-gui]
+    # Requires success from both build jobs, not just "not failure". A partial
+    # manifest is worse than none: `sha256sum -c --ignore-missing` passes
+    # cleanly against a SHA256SUMS that omits the Windows assets, so a Windows
+    # user would be told their download verified when nothing was checked.
+    #
+    # The job itself runs on test versions and test_run dispatches; only the
+    # upload is guarded. Gating the whole job would mean the hashing, sorting
+    # and validation below were never exercised until a real release.
+    if: >-
+      !cancelled()
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && needs.check-version.outputs.version-changed == 'true'
+      && needs.build.result == 'success'
+      && needs.build-gui.result == 'success'
+      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
+    steps:
+      - name: Collect checksum fragments
+        uses: actions/download-artifact@v7
+        with:
+          pattern: sums-*
+          merge-multiple: true
+          path: sums
+
+      - name: Build SHA256SUMS
+        run: |
+          set -euo pipefail
+          # LC_ALL=C so the ordering is byte-wise and reproducible. With
+          # fail-fast: false the matrix legs finish in arbitrary order, and an
+          # unsorted manifest would churn between releases for no reason —
+          # locale-dependent ordering has already bitten this repo once.
+          # tr -d '\r' guards against a fragment ever being produced by pwsh.
+          cat sums/*.sha256 | tr -d '\r' | LC_ALL=C sort -k2 > SHA256SUMS
+          echo "::group::SHA256SUMS"; cat SHA256SUMS; echo "::endgroup::"
+
+          # Refuse to publish a manifest `sha256sum -c` cannot consume.
+          if grep -nvE '^[0-9a-f]{64}  [^/[:space:]][^/]*$' SHA256SUMS; then
+            echo "::error::malformed, path-bearing or space-bearing line in SHA256SUMS"
+            exit 1
+          fi
+          if [ "$(wc -l < SHA256SUMS)" -ne "$(LC_ALL=C sort -u -k2 SHA256SUMS | wc -l)" ]; then
+            echo "::error::duplicate filenames in SHA256SUMS"
+            exit 1
+          fi
+
+      - name: Upload SHA256SUMS to release
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ needs.check-version.outputs.new-version }}
+          files: SHA256SUMS
