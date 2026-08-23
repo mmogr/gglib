@@ -517,6 +517,11 @@ jobs:
     if: always() && needs.ci-success.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      # A called workflow cannot exceed the caller's grant, so release.yml's own
+      # `attestations: write` is capped here. Without this line the provenance
+      # step fails on the real release path (push to main) while still working
+      # on a direct workflow_dispatch — which is the worst way to find out.
+      attestations: write
       issues: write
       pull-requests: write
       pages: write
