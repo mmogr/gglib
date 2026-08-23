@@ -30,12 +30,11 @@ fn find_sibling_gui_artifact(exe_dir: &std::path::Path) -> Option<std::path::Pat
     let candidates = std::fs::read_dir(exe_dir).ok()?;
     for entry in candidates.flatten() {
         let path = entry.path();
-        if path.is_file() {
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name.ends_with(".AppImage") || name == "gglib-app" {
-                    return Some(path);
-                }
-            }
+        if path.is_file()
+            && let Some(name) = path.file_name().and_then(|s| s.to_str())
+            && (name.ends_with(".AppImage") || name == "gglib-app")
+        {
+            return Some(path);
         }
     }
     None
