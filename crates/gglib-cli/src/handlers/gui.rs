@@ -81,9 +81,7 @@ fn launch_prebuilt() -> Result<()> {
     let exe_dir = match exe_dir {
         Some(d) => d,
         None => {
-            anyhow::bail!(
-                "Could not determine the directory of the running executable"
-            );
+            anyhow::bail!("Could not determine the directory of the running executable");
         }
     };
 
