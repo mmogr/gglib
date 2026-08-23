@@ -17,6 +17,9 @@ on:
 
 permissions:
   contents: write
+  # Lets the build jobs record signed build provenance for each release asset.
+  # id-token: write below already supplies the OIDC identity the signing uses.
+  attestations: write
   issues: write
   pull-requests: write
   pages: write
@@ -429,6 +432,20 @@ jobs:
           path: sums/cli-${{ matrix.target }}.sha256
           retention-days: 1
 
+      # Binds each artifact's digest to this workflow, commit and runner via
+      # keyless Sigstore signing — no private key to store or leak. Verified by
+      # a user with:
+      #   gh attestation verify <file> --repo ${{ github.repository }}
+      #
+      # This is provenance, not code signing: it does not affect macOS
+      # Gatekeeper or Windows SmartScreen, which still need a Developer ID and
+      # Authenticode respectively.
+      - name: Attest build provenance
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*
+
       - name: Upload binary to release
         if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v3
@@ -742,6 +759,20 @@ jobs:
           name: sums-gui-${{ matrix.target }}
           path: sums/gui-${{ matrix.target }}.sha256
           retention-days: 1
+
+      # Binds each artifact's digest to this workflow, commit and runner via
+      # keyless Sigstore signing — no private key to store or leak. Verified by
+      # a user with:
+      #   gh attestation verify <file> --repo ${{ github.repository }}
+      #
+      # This is provenance, not code signing: it does not affect macOS
+      # Gatekeeper or Windows SmartScreen, which still need a Developer ID and
+      # Authenticode respectively.
+      - name: Attest build provenance
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*
 
       - name: Upload GUI assets to release
         if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
