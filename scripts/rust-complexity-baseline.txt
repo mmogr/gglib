@@ -167,5 +167,4 @@ crates/gglib-runtime/src/proxy/supervisor.rs 763
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 491
 crates/gglib-sse/src/lib.rs 325
-src-tauri/src/daemon/mod.rs 341
 src-tauri/src/main.rs 303

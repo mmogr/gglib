@@ -3,9 +3,11 @@
 //! Everything the app needs from the backend goes through the daemon's HTTP
 //! API; this module is the one place that knows the base URL.
 
+mod launch;
 mod snapshot;
 mod watch;
 
+use launch::spawn_external_daemon;
 pub(crate) use snapshot::DaemonSnapshot;
 pub(crate) use watch::{Refresh, spawn as watch};
 
@@ -288,54 +290,4 @@ async fn wait_until_healthy(client: &reqwest::Client) -> Result<(), String> {
             ));
         }
     }
-}
-
-/// Spawn `gglib daemon run` detached: sibling binary first, then `$PATH`.
-fn spawn_external_daemon() -> Result<(), String> {
-    let candidate = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join("gglib")))
-        .filter(|p| p.exists());
-
-    let program = match candidate {
-        Some(path) => path,
-        None => which_gglib().ok_or("no `gglib` binary next to the app or on PATH")?,
-    };
-
-    let log = daemon_log_file().map_err(|e| format!("opening daemon log: {e}"))?;
-
-    let mut cmd = std::process::Command::new(program);
-    cmd.args(["daemon", "run"])
-        .stdin(std::process::Stdio::null())
-        .stdout(log.try_clone().map_err(|e| e.to_string())?)
-        .stderr(log);
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
-    }
-
-    cmd.spawn().map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Locate `gglib` on `$PATH` without shelling out.
-fn which_gglib() -> Option<std::path::PathBuf> {
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths)
-        .map(|dir| dir.join("gglib"))
-        .find(|candidate| candidate.is_file())
-}
-
-/// The log file an auto-launched daemon writes to.
-fn daemon_log_file() -> std::io::Result<std::fs::File> {
-    let dir = gglib_core::paths::data_root()
-        .map_err(|e| std::io::Error::other(e.to_string()))?
-        .join("logs");
-    std::fs::create_dir_all(&dir)?;
-    std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(dir.join("daemon.log"))
 }
