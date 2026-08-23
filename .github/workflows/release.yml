@@ -272,8 +272,25 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: [check-version]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true'
+    needs: [check-version, create-release]
+    # `softprops/action-gh-release` creates a release when none exists for the
+    # tag. Without a dependency on create-release these jobs race it, and if
+    # create-release fails the first upload to finish publishes a release with
+    # no notes and prerelease: false — even for an -alpha, defeating the
+    # is-prerelease output above. It also leaves create-release's own
+    # `git tag && git push` failing against a tag that now exists, which takes
+    # deploy-docs down with it.
+    #
+    # create-release is deliberately skipped for test versions and test_run
+    # while these jobs still run, so this cannot be a bare `needs:` — a job
+    # depending on a skipped job is itself skipped unless its `if:` contains a
+    # status function. `!cancelled()` supplies that; `always()` would be wrong
+    # because it also pushes on through a cancelled run.
+    if: >-
+      !cancelled()
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && needs.check-version.outputs.version-changed == 'true'
+      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
@@ -394,8 +411,25 @@ jobs:
   build-gui:
     name: Build GUI ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: [check-version]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true'
+    needs: [check-version, create-release]
+    # `softprops/action-gh-release` creates a release when none exists for the
+    # tag. Without a dependency on create-release these jobs race it, and if
+    # create-release fails the first upload to finish publishes a release with
+    # no notes and prerelease: false — even for an -alpha, defeating the
+    # is-prerelease output above. It also leaves create-release's own
+    # `git tag && git push` failing against a tag that now exists, which takes
+    # deploy-docs down with it.
+    #
+    # create-release is deliberately skipped for test versions and test_run
+    # while these jobs still run, so this cannot be a bare `needs:` — a job
+    # depending on a skipped job is itself skipped unless its `if:` contains a
+    # status function. `!cancelled()` supplies that; `always()` would be wrong
+    # because it also pushes on through a cancelled run.
+    if: >-
+      !cancelled()
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && needs.check-version.outputs.version-changed == 'true'
+      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
