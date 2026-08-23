@@ -358,41 +358,38 @@ jobs:
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} -p gglib-cli
 
+      # Everything that ships lands in dist/. One staging directory means the
+      # upload is `files: dist/*` rather than a per-OS list, and it gives the
+      # checksum step a directory to hash whose contents are exactly the
+      # release assets — not whatever else is lying around the checkout.
       - name: Package binary (Unix)
         if: matrix.os != 'windows-2022'
         run: |
-          mkdir -p package
+          set -euo pipefail
+          mkdir -p package dist
           cp target/${{ matrix.target }}/release/gglib package/
           cp -r web_ui package/
-          cd package
-          tar czf ../gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz gglib web_ui
-          cd ..
+          tar czf dist/gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz \
+            -C package gglib web_ui
 
       - name: Package binary (Windows)
         if: matrix.os == 'windows-2022'
         run: |
           mkdir package
+          mkdir dist
           copy target\${{ matrix.target }}\release\gglib.exe package\
           xcopy web_ui package\web_ui\ /E /I /Y
           cd package
-          7z a ..\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe web_ui
+          7z a ..\dist\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe web_ui
           cd ..
 
-      - name: Upload binary to release (Unix)
-        if: matrix.os != 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+      - name: Upload binary to release
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz
-
-      - name: Upload binary to release (Windows)
-        if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip
+          files: dist/*
 
   build-gui:
     name: Build GUI ${{ matrix.target }}
@@ -590,37 +587,82 @@ jobs:
         run: |
           mkdir gui-release
           copy target\${{ matrix.target }}\release\gglib-app.exe gui-release\
-          # Also copy the MSI installer if it was built
-          if (Test-Path "target\${{ matrix.target }}\release\bundle\msi\*.msi") {
-            copy target\${{ matrix.target }}\release\bundle\msi\*.msi gui-release\
+
+      # The installers below were built by the step above and then discarded:
+      # nothing copied them out of target/, so no release has ever carried an
+      # AppImage, deb, rpm, dmg or NSIS setup. The Windows branch looked for
+      # `bundle\msi\*.msi` while the build asked for `--bundles nsis`, so it
+      # could never match.
+      #
+      # tauri-bundler derives these filenames from productName ("GGLib GUI"),
+      # which contains a space, and the exact separators and casing it applies
+      # per format are decided inside the bundler. Glob for each one and rename
+      # to a predictable, space-free asset name instead of hard-coding what we
+      # guess it emits — and fail loudly on no match, because a silent no-match
+      # is precisely the bug being fixed here.
+      - name: Stage GUI installers (Unix)
+        if: matrix.os != 'windows-2022'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bundle="target/${{ matrix.target }}/release/bundle"
+          stem="gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}"
+
+          stage() {
+            dir="$bundle/$1"; ext="$2"; dest="dist/${stem}.$2"
+            found=$(find "$dir" -maxdepth 1 -type f -name "*.${ext}" 2>/dev/null | sort | head -n1)
+            if [ -z "$found" ]; then
+              echo "::error::no *.${ext} in ${dir} — bundler did not produce it, or renamed it"
+              exit 1
+            fi
+            mv "$found" "$dest"
+            echo "staged $(basename "$found") -> $(basename "$dest")"
           }
 
-      - name: Package GUI binary (Unix)
-        if: startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'macos')
-        run: |
-          cd gui-release
-          tar czf ../gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz *
-          cd ..
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            stage appimage AppImage
+            stage deb deb
+            stage rpm rpm
+          else
+            stage dmg dmg
+          fi
 
-      - name: Package GUI binary (Windows)
+      - name: Stage GUI installers (Windows)
+        if: matrix.os == 'windows-2022'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bundle="target/${{ matrix.target }}/release/bundle"
+          dest="dist/gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}-setup.exe"
+          found=$(find "$bundle/nsis" -maxdepth 1 -type f -name "*.exe" 2>/dev/null | sort | head -n1)
+          if [ -z "$found" ]; then
+            echo "::error::no NSIS installer in ${bundle}/nsis — bundler did not produce it, or renamed it"
+            exit 1
+          fi
+          mv "$found" "$dest"
+          echo "staged $(basename "$found") -> $(basename "$dest")"
+
+      - name: Package GUI archive (Unix)
+        if: matrix.os != 'windows-2022'
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar czf dist/gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz \
+            -C gui-release .
+
+      - name: Package GUI archive (Windows)
         if: matrix.os == 'windows-2022'
         run: |
           cd gui-release
-          7z a ..\gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip *
+          7z a ..\dist\gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip *
           cd ..
 
-      - name: Upload GUI binary to release (Unix)
-        if: (startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'macos')) && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+      - name: Upload GUI assets to release
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz
-
-      - name: Upload GUI binary to release (Windows)
-        if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip
+          files: dist/*
