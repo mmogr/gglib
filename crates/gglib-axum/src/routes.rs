@@ -355,8 +355,8 @@ fn config_routes() -> Router<AppState> {
 /// The Host guard is *not* applied here — each public constructor layers it
 /// last, after any fallback service, so it wraps everything the router will
 /// ever serve.
-fn base_router(state: AppState, cors_config: &CorsConfig, access: &Arc<DaemonAccess>) -> Router {
-    let cors = build_cors_layer(cors_config);
+pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<DaemonAccess>) -> Router {
+    let cors = build_cors_layer(cfg);
 
     let mut api = api_routes().with_state(state);
     // The bearer layer exists only when a token is configured, so the

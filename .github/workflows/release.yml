@@ -376,6 +376,13 @@ jobs:
           npm ci
           npm run build
 
+      # The dashboard is compiled into the binary now (crates/gglib-axum/src/ui.rs).
+      # A release built from a tree where the frontend step silently failed
+      # would ship an API with no dashboard, and nothing downstream would say
+      # so. Fail here instead.
+      - name: Assert the dashboard is present before it is embedded
+        run: test -f web_ui/index.html
+
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} -p gglib-cli
 
@@ -389,9 +396,8 @@ jobs:
           set -euo pipefail
           mkdir -p package dist
           cp target/${{ matrix.target }}/release/gglib package/
-          cp -r web_ui package/
           tar czf dist/gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz \
-            -C package gglib web_ui
+            -C package gglib
 
       - name: Package binary (Windows)
         if: matrix.os == 'windows-2022'
@@ -399,9 +405,8 @@ jobs:
           mkdir package
           mkdir dist
           copy target\${{ matrix.target }}\release\gglib.exe package\
-          xcopy web_ui package\web_ui\ /E /I /Y
           cd package
-          7z a ..\dist\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe web_ui
+          7z a ..\dist\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe
           cd ..
 
       # Hashed here, on the runner that produced the bytes, rather than by
