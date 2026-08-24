@@ -491,6 +491,9 @@ Badges in crate READMEs are **not** static images. They are shields.io endpoint 
 
 ```
 CI run (ci.yml)
+  └─ cargo test --no-run --message-format=json   (builds, and names each binary's crate)
+  └─ cargo test --no-fail-fast | tee rust-test-output.txt
+  └─ scripts/split_test_output.py                (divides that output per crate)
   └─ uploads artifacts: test-results, boundary-status.json, ts-test-results.json
         │
         ▼
@@ -504,6 +507,23 @@ coverage.yml (runs on push to main)
   └─ triggers badges.yml (coverage variant)
   └─ per-crate and per-module coverage JSONs pushed to 'badges' branch
 ```
+
+### Where the per-crate test numbers come from
+
+`badges.yml` counts tests out of one `rust-test-<crate>.txt` per crate. Those files used to
+come from running `cargo test -p <crate>` fifteen times after the aggregate run — 23m15s of a
+57m job, and wrong besides: naming a crate with `-p` changes feature unification, so
+`cargo test -p gglib-runtime` ran 329 tests where the workspace build runs 352.
+
+They now come from `scripts/split_test_output.py`, which divides the single workspace run's
+output by the package each test binary belongs to. Two consequences worth knowing:
+
+* **The crate list is no longer hand-kept.** Every package with test targets gets a file. If
+  you add a crate, its badge works as soon as you add its name to `ALL_CRATES` in
+  `badges.yml` — nothing needs adding to `ci.yml`.
+* **Do not add `--all-targets` to the test run.** It would silently drop the doctests, which
+  that run is now the only thing executing. `split_test_output.py` fails a green run that
+  produced no `Doc-tests` sections, so the mistake is caught rather than absorbed.
 
 Shields.io resolves badge URLs like:
 ```
