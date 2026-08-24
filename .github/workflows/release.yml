@@ -58,8 +58,14 @@ jobs:
             echo "is-test=false" >> $GITHUB_OUTPUT
           fi
           
-          # Check if version is a prerelease (-alpha or -beta suffix)
-          if [[ "$CURRENT_VERSION" == *"-alpha"* ]] || [[ "$CURRENT_VERSION" == *"-beta"* ]]; then
+          # A prerelease is any version carrying a -alpha, -beta or -rc suffix.
+          #
+          # `-rc` was missing until now, which made it the most dangerous
+          # spelling of the three: `1.0.0-rc.1` fell through to the else branch
+          # and shipped as a full release, marked latest, with deploy-docs
+          # running against it. The two spellings that were handled are the two
+          # nobody reaches for when cutting a release candidate.
+          if [[ "$CURRENT_VERSION" == *"-alpha"* ]] || [[ "$CURRENT_VERSION" == *"-beta"* ]] || [[ "$CURRENT_VERSION" == *"-rc"* ]]; then
             echo "is-prerelease=true" >> $GITHUB_OUTPUT
             echo "::notice::📦 Prerelease version detected: v$CURRENT_VERSION"
           else
