@@ -18,8 +18,11 @@ The split is not what it looks like from the outside. It is not "GUI versus
 CLI": both are clients of a single daemon, and the daemon is the product.
 
 - `gglib-app` calls `Daemon::connect_or_launch` (`src-tauri/src/daemon/mod.rs`),
-  which probes `127.0.0.1:9887`, then spawns a detached `gglib daemon run`, and
-  only hosts the composition in-process if no external binary can be found.
+  which probes `127.0.0.1:9887`, then spawns `gglib daemon run`, and only hosts
+  the composition in-process if no external binary can be found. The spawn is
+  detached on Unix only — `src-tauri/src/daemon/launch.rs` calls
+  `process_group(0)` under `#[cfg(unix)]` and sets no Windows creation flags,
+  so on Windows the daemon stays in the launcher's process group.
 - `gglib gui` (`crates/gglib-cli/src/handlers/gui.rs`) launches whichever GUI
   artifact sits beside the running executable.
 
@@ -40,8 +43,18 @@ CLI output from a merged binary would go nowhere. The usual workaround,
 `AttachConsole(ATTACH_PARENT_PROCESS)`, returns the shell prompt immediately
 and interleaves output with it — and here it is worse than merely awkward:
 `unsafe_code = "deny"` is set in `[workspace.lints.rust]` and re-declared in
-both `crates/gglib-cli/Cargo.toml` and `src-tauri/Cargo.toml`, so a raw FFI call
-would need an explicit exemption in a workspace that currently has none.
+`crates/gglib-cli/Cargo.toml`, so a raw FFI call in the CLI would need an
+explicit exemption in a workspace that currently has none.
+
+That last point is weaker than it first looks, and the weakness runs against
+this ADR's own conclusion, so it is recorded rather than glossed:
+`src-tauri/Cargo.toml` declares its own `[lints.rust]` carrying only
+`unreachable_pub = "deny"`, and declaring that table blocks inheritance of
+`[workspace.lints.rust]` — the crate's neighbouring `[lints.rustdoc]` comment
+says exactly that. So `gglib-app`, the only plausible host for a merged binary,
+is not under the deny at all, and an `AttachConsole` call there would need no
+exemption. The subsystem constraint stands on its own; the lint does not
+reinforce it.
 
 The inverse — a console-subsystem binary that calls `FreeConsole` when launched
 as a GUI — trades the problem for a console window that flashes on every
@@ -150,9 +163,14 @@ lean — not one binary for everything.
   `externalBin` sidecar would reduce this to one and is not yet done.
 - Each binary must locate the other on disk, which is a lookup that can be
   wrong per platform — and was, on Windows, in both directions.
-- The dashboard is embedded in both binaries, so its bytes ship twice. This is
-  deliberate: `gglib-app` hosts the daemon in-process when no external `gglib`
-  is found, and that daemon should serve a dashboard.
+- The dashboard's bytes ship three times across the two binaries, not twice.
+  `gglib-cli` carries one copy through `gglib-axum`'s `rust-embed`; `gglib-app`
+  carries two — the same `gglib-axum` copy, plus Tauri's own from
+  `frontendDist: "../web_ui"`. Only the third is redundant, and removing it
+  would mean teaching the desktop webview to load from the embed instead of
+  from Tauri's asset protocol. The `gglib-axum` copy in `gglib-app` is wanted:
+  that binary hosts the daemon in-process when no external `gglib` is found,
+  and that daemon should serve a dashboard.
 
 **Stated plainly, because it surprises people:**
 
