@@ -148,7 +148,7 @@ pub enum Commands {
         #[arg(long)]
         model: Option<String>,
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
-        #[arg(long = "continue", alias = "c")]
+        #[arg(long = "continue")]
         continue_id: Option<i64>,
         /// Observation-only tool name patterns for the dual-threshold loop guard.
         /// A tool whose name ends with or contains any pattern is classified as
