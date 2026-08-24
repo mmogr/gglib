@@ -370,12 +370,6 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
             DownloadEvent::QueueSnapshot { .. } | DownloadEvent::QueueRunComplete { .. } => {}
         }
     }
-
-    fn clone_box(&self) -> Box<dyn DownloadEventEmitterPort> {
-        // CliDownloadEventEmitter is not Clone (Mutex), so we return a NoopDownloadEmitter
-        // for the rare code path that needs a boxed clone. The real emitter is shared via Arc.
-        Box::new(gglib_core::ports::NoopDownloadEmitter::new())
-    }
 }
 
 /// Routes the CLI emitter through the unified `AppEventEmitter` pipeline.
@@ -394,12 +388,6 @@ impl AppEventEmitter for CliDownloadEventEmitter {
         if let AppEvent::Download { event } = event {
             <Self as DownloadEventEmitterPort>::emit(self, event);
         }
-    }
-
-    fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-        // See DownloadEventEmitterPort::clone_box above — the real emitter
-        // is shared via Arc; this fallback is for the rare boxed-clone path.
-        Box::new(gglib_core::ports::NoopEmitter::new())
     }
 }
 

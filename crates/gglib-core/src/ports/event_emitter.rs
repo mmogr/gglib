@@ -30,12 +30,6 @@ pub trait AppEventEmitter: Send + Sync {
     /// Implementations should handle the event asynchronously or buffer it.
     /// This method should not block.
     fn emit(&self, event: AppEvent);
-
-    /// Clone this emitter into a boxed trait object.
-    ///
-    /// This enables cloning of `Arc<dyn AppEventEmitter>` without requiring
-    /// the underlying type to implement Clone.
-    fn clone_box(&self) -> Box<dyn AppEventEmitter>;
 }
 
 /// A no-op event emitter for tests and CLI contexts.
@@ -58,10 +52,6 @@ impl AppEventEmitter for NoopEmitter {
     fn emit(&self, _event: AppEvent) {
         // Intentionally do nothing
     }
-
-    fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-        Box::new(self.clone())
-    }
 }
 
 #[cfg(test)]
@@ -75,12 +65,6 @@ mod tests {
 
         // Should not panic
         emitter.emit(AppEvent::model_removed(1));
-    }
-
-    #[test]
-    fn test_noop_emitter_clone_box() {
-        let emitter = NoopEmitter::new();
-        let _boxed: Box<dyn AppEventEmitter> = emitter.clone_box();
     }
 
     #[test]

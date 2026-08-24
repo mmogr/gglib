@@ -33,16 +33,6 @@ impl AppEventEmitter for RecordingEmitter {
     fn emit(&self, event: AppEvent) {
         self.events.lock().expect("emitter lock").push(event);
     }
-
-    /// Deliberately unimplemented rather than snapshotting.
-    ///
-    /// A snapshot would give the clone its own `Mutex`, so anything emitted
-    /// through it would vanish from the assertions — a recorder that quietly
-    /// stops recording. Nothing calls this today; if something starts, it
-    /// should fail loudly rather than let a test pass by losing evidence.
-    fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-        unimplemented!("RecordingEmitter cannot be cloned without splitting its record")
-    }
 }
 
 fn make_ops(core: Arc<AppCore>) -> ModelOps {

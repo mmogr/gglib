@@ -29,12 +29,6 @@ pub trait DownloadEventEmitterPort: Send + Sync {
     /// Implementations should handle the event asynchronously or buffer it.
     /// This method should not block.
     fn emit(&self, event: DownloadEvent);
-
-    /// Clone this emitter into a boxed trait object.
-    ///
-    /// This enables cloning of `Arc<dyn DownloadEventEmitterPort>` without
-    /// requiring the underlying type to implement Clone.
-    fn clone_box(&self) -> Box<dyn DownloadEventEmitterPort>;
 }
 
 /// A no-op download event emitter for tests and CLI contexts.
@@ -57,10 +51,6 @@ impl NoopDownloadEmitter {
 impl DownloadEventEmitterPort for NoopDownloadEmitter {
     fn emit(&self, _event: DownloadEvent) {
         // Intentionally do nothing
-    }
-
-    fn clone_box(&self) -> Box<dyn DownloadEventEmitterPort> {
-        Box::new(self.clone())
     }
 }
 
@@ -106,10 +96,6 @@ impl DownloadEventEmitterPort for AppEventBridge {
         let app_event = Self::map_event(event);
         self.inner.emit(app_event);
     }
-
-    fn clone_box(&self) -> Box<dyn DownloadEventEmitterPort> {
-        Box::new(self.clone())
-    }
 }
 
 #[cfg(test)]
@@ -126,12 +112,6 @@ mod tests {
             shard_index: None,
             total_shards: None,
         });
-    }
-
-    #[test]
-    fn test_noop_emitter_clone_box() {
-        let emitter = NoopDownloadEmitter::new();
-        let _boxed: Box<dyn DownloadEventEmitterPort> = emitter.clone_box();
     }
 
     #[test]
@@ -153,7 +133,6 @@ mod tests {
         use std::sync::Mutex;
 
         // Mock AppEventEmitter that captures emitted events
-        #[derive(Clone)]
         struct MockEmitter {
             captured: Arc<Mutex<Vec<AppEvent>>>,
         }
@@ -161,10 +140,6 @@ mod tests {
         impl AppEventEmitter for MockEmitter {
             fn emit(&self, event: AppEvent) {
                 self.captured.lock().unwrap().push(event);
-            }
-
-            fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-                Box::new(self.clone())
             }
         }
 
