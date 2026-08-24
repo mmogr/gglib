@@ -24,10 +24,10 @@ use gglib_core::download::{
     DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, RateEstimator,
     ShardInfo,
 };
+use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
-    DownloadStateRepositoryPort, HfClientPort, ModelRegistrarPort, QuantizationResolver,
-    ResolvedFile,
+    AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, DownloadRequest, HfClientPort,
+    ModelRegistrarPort, QuantizationResolver, ResolvedFile,
 };
 
 use crate::quant_selector::QuantizationSelector;
@@ -44,6 +44,14 @@ pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 /// Speed and ETA smoothing live in [`RateEstimator`], not here; this is purely
 /// the display cadence. The GUI does not re-throttle on top of it.
 const PROGRESS_TICK: Duration = Duration::from_millis(250);
+
+/// Wrap a download event for the application-wide emitter.
+///
+/// Downloads reach every surface as `AppEvent::Download`; this is the whole
+/// of the translation, and the only place in the crate that performs it.
+const fn app_event(event: DownloadEvent) -> AppEvent {
+    AppEvent::Download { event }
+}
 
 /// Lease ID for tracking active downloads.
 ///
@@ -195,21 +203,13 @@ impl QueueRunState {
 ///
 /// This struct bundles all the ports and configuration needed
 /// to construct a `DownloadManagerImpl`.
-pub struct DownloadManagerDeps<R, D, H, E>
-where
-    R: ModelRegistrarPort + 'static,
-    D: DownloadStateRepositoryPort + 'static,
-    H: HfClientPort + 'static,
-    E: DownloadEventEmitterPort + 'static,
-{
+pub struct DownloadManagerDeps {
     /// Port for registering completed downloads as models.
-    pub model_registrar: Arc<R>,
-    /// Port for persisting download queue state.
-    pub download_repo: Arc<D>,
+    pub model_registrar: Arc<dyn ModelRegistrarPort>,
     /// Port for `HuggingFace` API access.
-    pub hf_client: Arc<H>,
-    /// Port for emitting download events.
-    pub event_emitter: Arc<E>,
+    pub hf_client: Arc<dyn HfClientPort>,
+    /// Sink for the application events downloads produce.
+    pub event_emitter: Arc<dyn AppEventEmitter>,
     /// Configuration for the download manager.
     pub config: DownloadManagerConfig,
 }
@@ -218,18 +218,9 @@ where
 ///
 /// Returns an implementation of `DownloadManagerPort` that can be
 /// stored as `Arc<dyn DownloadManagerPort>` in adapters.
-pub fn build_download_manager<R, D, H, E>(
-    deps: DownloadManagerDeps<R, D, H, E>,
-) -> DownloadManagerImpl
-where
-    R: ModelRegistrarPort + 'static,
-    D: DownloadStateRepositoryPort + 'static,
-    H: HfClientPort + 'static,
-    E: DownloadEventEmitterPort + 'static,
-{
+pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl {
     DownloadManagerImpl::new(
         deps.model_registrar,
-        deps.download_repo,
         deps.hf_client,
         deps.event_emitter,
         deps.config,
@@ -243,14 +234,12 @@ where
 pub struct DownloadManagerImpl {
     /// Model registrar for completed downloads.
     model_registrar: Arc<dyn ModelRegistrarPort>,
-    /// Repository for persisting queue state (reserved for future persistence).
-    _download_repo: Arc<dyn DownloadStateRepositoryPort>,
     /// Event emitter for download events.
-    event_emitter: Arc<dyn DownloadEventEmitterPort>,
+    event_emitter: Arc<dyn AppEventEmitter>,
     /// `HuggingFace` client for fetching model metadata (e.g. tags at registration time).
     hf_client: Arc<dyn HfClientPort>,
-    /// File resolver.
-    resolver: HfQuantizationResolver,
+    /// File resolver, shared with [`QuantizationSelector`].
+    resolver: Arc<HfQuantizationResolver>,
     /// Quantization selector for choosing best quantization.
     selector: QuantizationSelector,
     /// Queue state (protected by `RwLock` for async access).
@@ -284,30 +273,20 @@ pub struct DownloadManagerImpl {
 
 impl DownloadManagerImpl {
     /// Create a new download manager.
-    fn new<R, D, H, E>(
-        model_registrar: Arc<R>,
-        download_repo: Arc<D>,
-        hf_client: Arc<H>,
-        event_emitter: Arc<E>,
+    fn new(
+        model_registrar: Arc<dyn ModelRegistrarPort>,
+        hf_client: Arc<dyn HfClientPort>,
+        event_emitter: Arc<dyn AppEventEmitter>,
         config: DownloadManagerConfig,
-    ) -> Self
-    where
-        R: ModelRegistrarPort + 'static,
-        D: DownloadStateRepositoryPort + 'static,
-        H: HfClientPort + 'static,
-        E: DownloadEventEmitterPort + 'static,
-    {
-        let hf_client_dyn: Arc<dyn HfClientPort> = hf_client;
-        let resolver = HfQuantizationResolver::new(Arc::clone(&hf_client_dyn));
-        let resolver_arc: Arc<dyn QuantizationResolver> =
-            Arc::new(HfQuantizationResolver::new(Arc::clone(&hf_client_dyn)));
-        let selector = QuantizationSelector::new(resolver_arc);
+    ) -> Self {
+        let resolver = Arc::new(HfQuantizationResolver::new(Arc::clone(&hf_client)));
+        let selector =
+            QuantizationSelector::new(Arc::clone(&resolver) as Arc<dyn QuantizationResolver>);
 
         Self {
             model_registrar,
-            _download_repo: download_repo,
-            event_emitter: event_emitter as Arc<dyn DownloadEventEmitterPort>,
-            hf_client: hf_client_dyn,
+            event_emitter,
+            hf_client,
             resolver,
             selector,
             queue: RwLock::new(DownloadQueue::new(config.max_queue_size)),
@@ -506,16 +485,21 @@ impl DownloadManagerImpl {
         }
     }
 
+    /// Emit one download event through the application-wide emitter.
+    fn emit(&self, event: DownloadEvent) {
+        self.event_emitter.emit(app_event(event));
+    }
+
     /// Emit a `DownloadStarted` event, including shard info when available.
     fn emit_started_event(&self, item: &QueuedItem) {
         if let Some(shard) = &item.shard_info {
-            self.event_emitter.emit(DownloadEvent::started_shard(
+            self.emit(DownloadEvent::started_shard(
                 item.id.to_string(),
                 shard.shard_index,
                 shard.total_shards,
             ));
         } else {
-            self.event_emitter.emit(DownloadEvent::DownloadStarted {
+            self.emit(DownloadEvent::DownloadStarted {
                 id: item.id.to_string(),
                 shard_index: None,
                 total_shards: None,
@@ -825,7 +809,7 @@ impl DownloadManagerImpl {
         self.record_completion_in_run(item, CompletionKind::Cancelled)
             .await;
 
-        self.event_emitter.emit(DownloadEvent::DownloadCancelled {
+        self.emit(DownloadEvent::DownloadCancelled {
             id: item.id.to_string(),
         });
     }
@@ -871,11 +855,10 @@ impl DownloadManagerImpl {
         // Phase 1 of finalization: bytes are on disk, we are about to gather
         // metadata (HF tags etc.). Emit a status transition so the UI shows
         // "Finalizing" instead of looking frozen at 100%.
-        self.event_emitter
-            .emit(DownloadEvent::DownloadStatusChanged {
-                id: event_id.clone(),
-                status: gglib_core::download::DownloadStatus::Finalizing,
-            });
+        self.emit(DownloadEvent::DownloadStatusChanged {
+            id: event_id.clone(),
+            status: gglib_core::download::DownloadStatus::Finalizing,
+        });
 
         // Fetch HF model tags (nice-to-have metadata). Bounded by a strict
         // 5-second timeout: a stalled/slow connection must never delay the
@@ -922,11 +905,10 @@ impl DownloadManagerImpl {
         };
 
         // Phase 2 of finalization: writing the model row to the database.
-        self.event_emitter
-            .emit(DownloadEvent::DownloadStatusChanged {
-                id: event_id.clone(),
-                status: gglib_core::download::DownloadStatus::Registering,
-            });
+        self.emit(DownloadEvent::DownloadStatusChanged {
+            id: event_id.clone(),
+            status: gglib_core::download::DownloadStatus::Registering,
+        });
 
         // Register model (soft-fail)
         match self.model_registrar.register_model(&completed).await {
@@ -939,7 +921,7 @@ impl DownloadManagerImpl {
                 );
 
                 // Emit completion event
-                self.event_emitter.emit(DownloadEvent::DownloadCompleted {
+                self.emit(DownloadEvent::DownloadCompleted {
                     id: event_id,
                     message: Some(format!(
                         "Downloaded {} to {}",
@@ -960,7 +942,7 @@ impl DownloadManagerImpl {
                 );
                 // Surface the failure as a terminal event so the UI doesn't
                 // sit on "Registering" forever when registration soft-fails.
-                self.event_emitter.emit(DownloadEvent::DownloadFailed {
+                self.emit(DownloadEvent::DownloadFailed {
                     id: event_id,
                     error: format!("Registration failed: {e}"),
                 });
@@ -1105,7 +1087,7 @@ impl DownloadManagerImpl {
             "Emitting QueueSnapshot event",
         );
 
-        self.event_emitter.emit(DownloadEvent::QueueSnapshot {
+        self.emit(DownloadEvent::QueueSnapshot {
             items,
             max_size: snapshot.max_size,
         });
@@ -1150,8 +1132,7 @@ impl DownloadManagerImpl {
             "Queue run complete"
         );
 
-        self.event_emitter
-            .emit(DownloadEvent::QueueRunComplete { summary });
+        self.emit(DownloadEvent::QueueRunComplete { summary });
     }
 
     fn get_current_timestamp_ms() -> u64 {
@@ -1220,7 +1201,7 @@ impl DownloadManagerImpl {
 
 /// Everything the progress bridge needs, independent of the manager.
 struct ProgressBridge {
-    event_emitter: Arc<dyn DownloadEventEmitterPort>,
+    event_emitter: Arc<dyn AppEventEmitter>,
     /// Canonical download ID, as it appears on emitted events.
     id: String,
     shard_info: Option<ShardInfo>,
@@ -1405,7 +1386,7 @@ fn build_active_dto(
 ///
 /// Emits `ShardProgress` if `shard_info` is present, otherwise `DownloadProgress`.
 fn emit_progress(
-    emitter: &Arc<dyn DownloadEventEmitterPort>,
+    emitter: &Arc<dyn AppEventEmitter>,
     id: &str,
     shard_info: Option<&ShardInfo>,
     progress: &ProgressUpdate,
@@ -1416,7 +1397,7 @@ fn emit_progress(
         let (aggregate_downloaded, aggregate_total) =
             aggregate_progress(shard, progress.downloaded, progress.total);
 
-        emitter.emit(DownloadEvent::shard_progress(
+        emitter.emit(app_event(DownloadEvent::shard_progress(
             id,
             shard.shard_index,
             shard.total_shards,
@@ -1427,16 +1408,16 @@ fn emit_progress(
             aggregate_total,
             speed_bps,
             eta_seconds,
-        ));
+        )));
     } else {
         // Non-sharded download: emit regular progress
-        emitter.emit(DownloadEvent::progress(
+        emitter.emit(app_event(DownloadEvent::progress(
             id,
             progress.downloaded,
             progress.total,
             speed_bps,
             eta_seconds,
-        ));
+        )));
     }
 }
 
@@ -1987,7 +1968,7 @@ mod tests {
 
     fn test_bridge(cancel: CancellationToken, finished: CancellationToken) -> ProgressBridge {
         ProgressBridge {
-            event_emitter: Arc::new(gglib_core::ports::NoopDownloadEmitter::new()),
+            event_emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
             id: "owner/repo:Q4_K_M".to_string(),
             shard_info: None,
             estimator: Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now()))),

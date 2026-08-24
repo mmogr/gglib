@@ -101,11 +101,10 @@ pub struct CliContext {
 /// variants), the MCP service, and the shared HTTP client.
 pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     // CLI terminal emitter — renders indicatif progress bars and exposes
-    // the MultiProgress handle for interactive suspend/resume. Implements
-    // both `DownloadEventEmitterPort` (for the indicatif renderer) and
-    // `AppEventEmitter` (so it plugs into the shared bootstrap event
-    // pipeline like Axum/Tauri); non-download AppEvent variants are
-    // ignored — the CLI has no UI surface for them.
+    // the MultiProgress handle for interactive suspend/resume. It is an
+    // `AppEventEmitter` like Axum's and Tauri's, so it plugs straight into
+    // the shared bootstrap event pipeline; non-download AppEvent variants
+    // are ignored — the CLI has no UI surface for them.
     let download_emitter = Arc::new(CliDownloadEventEmitter::new());
     let emitter: Arc<dyn AppEventEmitter> = Arc::clone(&download_emitter) as _;
 

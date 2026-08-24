@@ -406,27 +406,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
-    // Create download_queue table for persistent download state
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS download_queue (
-            id TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            repo_id TEXT NOT NULL,
-            filename TEXT NOT NULL,
-            quantization TEXT,
-            target_path TEXT NOT NULL,
-            total_bytes INTEGER,
-            downloaded_bytes INTEGER NOT NULL DEFAULT 0,
-            error_message TEXT,
-            created_at TEXT NOT NULL,
-            started_at TEXT,
-            completed_at TEXT
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
+    // The download queue lives in memory; reclaim the table that shadowed it.
+    // Nothing ever wrote a row, so there is nothing to migrate.
+    sqlx::query("DROP TABLE IF EXISTS download_queue")
+        .execute(pool)
+        .await?;
 
     // The council/orchestrator feature was removed; reclaim its tables.
     // Events first — it holds the ON DELETE CASCADE foreign key into runs.

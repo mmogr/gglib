@@ -6,14 +6,11 @@
 
 use super::*;
 use async_trait::async_trait;
-use gglib_core::download::{DownloadStatus, QueuedDownload};
 use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
-use gglib_core::ports::{
-    CompletedDownload, DownloadStateRepositoryPort, ModelRegistrarPort, NoopDownloadEmitter,
-};
+use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, NoopEmitter};
 use gglib_core::{Model, RepositoryError};
 
 const REPO: &str = "owner/repo";
@@ -71,44 +68,11 @@ impl ModelRegistrarPort for NoRegistrar {
     }
 }
 
-struct NoRepo;
-
-#[async_trait]
-impl DownloadStateRepositoryPort for NoRepo {
-    async fn enqueue(&self, _download: &QueuedDownload) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn update_status(
-        &self,
-        _id: &DownloadId,
-        _status: DownloadStatus,
-    ) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn load_queue(&self) -> Result<Vec<QueuedDownload>, RepositoryError> {
-        Ok(Vec::new())
-    }
-    async fn mark_failed(
-        &self,
-        _id: &DownloadId,
-        _error_message: &str,
-    ) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn remove(&self, _id: &DownloadId) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-    async fn prune_completed(&self, _older_than_days: u32) -> Result<u32, RepositoryError> {
-        Ok(0)
-    }
-}
-
 fn test_manager() -> DownloadManagerImpl {
     DownloadManagerImpl::new(
         Arc::new(NoRegistrar),
-        Arc::new(NoRepo),
         Arc::new(OneQuantHf),
-        Arc::new(NoopDownloadEmitter::new()),
+        Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
     )
 }

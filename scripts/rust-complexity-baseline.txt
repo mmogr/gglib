@@ -87,7 +87,6 @@ crates/gglib-core/src/utils/system/packages.rs 591
 crates/gglib-db/src/repositories/row_mappers.rs 317
 crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 830
 crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 438
-crates/gglib-db/src/repositories/sqlite_download_state_repository.rs 361
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1065
 crates/gglib-db/src/setup.rs 1001

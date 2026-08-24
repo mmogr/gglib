@@ -1,6 +1,6 @@
 //! CLI download event emitter.
 //!
-//! Implements [`DownloadEventEmitterPort`] using `indicatif` [`MultiProgress`] bars,
+//! Implements [`AppEventEmitter`] using `indicatif` [`MultiProgress`] bars,
 //! rendering live download progress in the terminal. This is the concrete emitter
 //! wired into the download manager when running as a CLI process.
 //!
@@ -16,7 +16,7 @@ use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressState, ProgressS
 
 use gglib_core::download::{DownloadEvent, format_duration, format_rate};
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
+use gglib_core::ports::AppEventEmitter;
 
 // ─── Style constants ─────────────────────────────────────────────────────────
 
@@ -266,8 +266,9 @@ impl Default for CliDownloadEventEmitter {
     }
 }
 
-impl DownloadEventEmitterPort for CliDownloadEventEmitter {
-    fn emit(&self, event: DownloadEvent) {
+impl CliDownloadEventEmitter {
+    /// Render one download event onto the terminal's progress bars.
+    fn render(&self, event: DownloadEvent) {
         match event {
             DownloadEvent::DownloadStarted {
                 id,
@@ -370,21 +371,14 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
             DownloadEvent::QueueSnapshot { .. } | DownloadEvent::QueueRunComplete { .. } => {}
         }
     }
-
-    fn clone_box(&self) -> Box<dyn DownloadEventEmitterPort> {
-        // CliDownloadEventEmitter is not Clone (Mutex), so we return a NoopDownloadEmitter
-        // for the rare code path that needs a boxed clone. The real emitter is shared via Arc.
-        Box::new(gglib_core::ports::NoopDownloadEmitter::new())
-    }
 }
 
 /// Routes the CLI emitter through the unified `AppEventEmitter` pipeline.
 ///
 /// This impl exists so the CLI bootstrap can pass an `Arc<dyn AppEventEmitter>`
 /// to `gglib_bootstrap::CoreBootstrap::build` just like Axum and Tauri do.
-/// The shared bootstrap wraps it in `AppEventBridge`, which converts
-/// `DownloadEvent` → `AppEvent::Download { event }`. Here we unwrap that
-/// variant and forward the inner `DownloadEvent` to the indicatif renderer.
+/// The download manager emits `AppEvent::Download { event }`; here we unwrap
+/// that variant and hand the inner `DownloadEvent` to the indicatif renderer.
 ///
 /// Non-download `AppEvent` variants (server lifecycle, model lifecycle,
 /// verification, proxy) are deliberately ignored — the CLI has no UI surface
@@ -392,14 +386,8 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
 impl AppEventEmitter for CliDownloadEventEmitter {
     fn emit(&self, event: AppEvent) {
         if let AppEvent::Download { event } = event {
-            <Self as DownloadEventEmitterPort>::emit(self, event);
+            self.render(event);
         }
-    }
-
-    fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-        // See DownloadEventEmitterPort::clone_box above — the real emitter
-        // is shared via Arc; this fallback is for the rare boxed-clone path.
-        Box::new(gglib_core::ports::NoopEmitter::new())
     }
 }
 
@@ -429,7 +417,7 @@ mod tests {
     #[test]
     fn download_started_creates_a_bar_with_no_length() {
         let emitter = CliDownloadEventEmitter::new();
-        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+        emitter.render(DownloadEvent::started("test/model"));
 
         assert_eq!(bar_for(&emitter, "test/model").length(), None);
     }
@@ -437,11 +425,8 @@ mod tests {
     #[test]
     fn progress_event_sets_the_length_once_a_real_total_arrives() {
         let emitter = CliDownloadEventEmitter::new();
-        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
-        DownloadEventEmitterPort::emit(
-            &emitter,
-            DownloadEvent::progress("test/model", 10, 100, None, None),
-        );
+        emitter.render(DownloadEvent::started("test/model"));
+        emitter.render(DownloadEvent::progress("test/model", 10, 100, None, None));
 
         let bar = bar_for(&emitter, "test/model");
         assert_eq!(bar.length(), Some(100));
@@ -454,18 +439,12 @@ mod tests {
     #[test]
     fn download_notice_updates_message_without_touching_progress() {
         let emitter = CliDownloadEventEmitter::new();
-        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
-        DownloadEventEmitterPort::emit(
-            &emitter,
-            DownloadEvent::progress("test/model", 10, 100, None, None),
-        );
-        DownloadEventEmitterPort::emit(
-            &emitter,
-            DownloadEvent::DownloadNotice {
-                id: "test/model".to_string(),
-                message: "preparing fast downloader…".to_string(),
-            },
-        );
+        emitter.render(DownloadEvent::started("test/model"));
+        emitter.render(DownloadEvent::progress("test/model", 10, 100, None, None));
+        emitter.render(DownloadEvent::DownloadNotice {
+            id: "test/model".to_string(),
+            message: "preparing fast downloader…".to_string(),
+        });
 
         let bar = bar_for(&emitter, "test/model");
         assert_eq!(bar.length(), Some(100));
@@ -488,7 +467,7 @@ mod tests {
         footer.set_message("[a] queue another  [q] quit");
         emitter.set_footer(&footer);
 
-        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("test/model"));
+        emitter.render(DownloadEvent::started("test/model"));
 
         let registered = emitter.bars.lock().unwrap().contains_key("test/model");
         assert!(registered);
@@ -501,12 +480,9 @@ mod tests {
     #[test]
     fn console_println_during_active_bar_does_not_panic() {
         let emitter = CliDownloadEventEmitter::new();
-        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("probe/model"));
+        emitter.render(DownloadEvent::started("probe/model"));
         for i in 0..50 {
-            DownloadEventEmitterPort::emit(
-                &emitter,
-                DownloadEvent::progress("probe/model", i, 100, None, None),
-            );
+            emitter.render(DownloadEvent::progress("probe/model", i, 100, None, None));
             gglib_core::telemetry::console_println(&format!("log line {i}"));
         }
     }
@@ -519,7 +495,7 @@ mod tests {
     #[test]
     fn dropping_the_emitter_is_fine() {
         let emitter = CliDownloadEventEmitter::new();
-        DownloadEventEmitterPort::emit(&emitter, DownloadEvent::started("probe/model"));
+        emitter.render(DownloadEvent::started("probe/model"));
         drop(emitter);
 
         // The hook is still installed (nothing clears it), but its `Weak`

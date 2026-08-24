@@ -19,11 +19,11 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{DownloadError, DownloadEvent, DownloadId, Quantization};
-use gglib_core::ports::{DownloadEventEmitterPort, DownloadManagerConfig};
+use gglib_core::ports::{AppEventEmitter, DownloadManagerConfig};
 
 use crate::executor::{DownloadPlan, download_files};
 
-use super::paths::DownloadDestination;
+use super::{app_event, paths::DownloadDestination};
 
 /// Dependencies for the download worker.
 ///
@@ -41,7 +41,7 @@ pub(crate) struct WorkerDeps {
     /// Configuration (models directory, HF token, etc.).
     pub config: DownloadManagerConfig,
     /// Event sink for [`DownloadEvent::DownloadNotice`] only.
-    pub event_emitter: Arc<dyn DownloadEventEmitterPort>,
+    pub event_emitter: Arc<dyn AppEventEmitter>,
 }
 
 /// A download job to be executed by the worker.
@@ -222,10 +222,10 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     let notice_id = job.id.to_string();
     let notice_emitter = Arc::clone(&deps.event_emitter);
     let notice_callback: crate::cli_exec::NoticeCallback = Arc::new(move |message: &str| {
-        notice_emitter.emit(DownloadEvent::DownloadNotice {
+        notice_emitter.emit(app_event(DownloadEvent::DownloadNotice {
             id: notice_id.clone(),
             message: message.to_string(),
-        });
+        }));
     });
 
     // Build download plan

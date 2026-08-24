@@ -90,10 +90,6 @@ impl AppEventEmitter for SseBroadcaster {
     fn emit(&self, event: AppEvent) {
         self.inner.send(event);
     }
-
-    fn clone_box(&self) -> Box<dyn AppEventEmitter> {
-        Box::new(self.clone())
-    }
 }
 
 /// Axum adapter for server lifecycle events via SSE.
