@@ -14,6 +14,7 @@ mod ensure;
 pub mod error;
 #[cfg(feature = "cli")]
 mod install;
+pub mod install_events;
 pub mod prompt;
 pub mod runtime_probe;
 mod server_availability;
@@ -43,6 +44,9 @@ pub use prompt::{AutoConfirmPrompt, InstallPrompt, NonInteractivePrompt};
 
 // Build pipeline event types
 pub use build_events::{BuildEvent, BuildPhase};
+
+// Prebuilt install pipeline event types
+pub use install_events::{InstallPhase, LlamaProgressEvent};
 
 #[cfg(feature = "cli")]
 pub use deps::{check_dependencies, check_disk_space};
