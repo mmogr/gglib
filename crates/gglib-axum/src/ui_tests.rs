@@ -199,3 +199,49 @@ async fn an_empty_embed_serves_nothing() {
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// An unmatched path under `/api` must 404, never hand back the shell.
+///
+/// axum nests no fallback for the API router and passes the fallback the
+/// original un-stripped URI, so without the guard in [`respond`] a typo'd
+/// endpoint answers `200 text/html`. The CLI's `expect_ok` treats any 2xx as
+/// success, so the caller then reports a JSON parse failure rather than a
+/// missing route.
+#[tokio::test]
+async fn an_unmatched_api_path_is_404_not_the_shell() {
+    for path in [
+        "/api",
+        "/api/",
+        "/api/nonexistent",
+        "/api/proxy/statuss",
+        "/api/config/settings/typo",
+    ] {
+        let (status, headers, body) = parts(respond::<fixture::Ui>(path, &HeaderMap::new())).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path} should be 404");
+        assert!(
+            !header(&headers, header::CONTENT_TYPE).starts_with("text/html"),
+            "{path} must not be answered with the SPA shell"
+        );
+        assert!(
+            !body.contains("FIXTURE_SHELL"),
+            "{path} must not be answered with the SPA shell"
+        );
+    }
+}
+
+/// The API guard keys on the path prefix, not a substring: a client route that
+/// merely starts with the same letters still reaches the shell.
+#[tokio::test]
+async fn the_api_guard_does_not_over_match() {
+    for path in ["/apiary", "/api-docs", "/settings/api"] {
+        let (status, _, body) = parts(respond::<fixture::Ui>(path, &HeaderMap::new())).await;
+
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{path} should still reach the shell"
+        );
+        assert!(body.contains("FIXTURE_SHELL"), "{path} should be the shell");
+    }
+}

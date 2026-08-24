@@ -116,6 +116,22 @@ fn respond<E: RustEmbed>(path: &str, headers: &HeaderMap) -> Response {
         return response;
     }
 
+    // An unmatched path under the API prefix is a 404, never the shell. axum
+    // does not nest a fallback for `/api` (that router sets none, so
+    // `default_fallback` stays true), and it hands the fallback the *original*
+    // un-stripped URI — so without this, `GET /api/proxy/statuss` answers 200
+    // text/html. `expect_ok` in the CLI's daemon client treats any 2xx as
+    // success and then fails parsing the shell as JSON, which reports a
+    // deserialisation error instead of "no such route".
+    //
+    // The directory-backed router has always had this shape, but it used to be
+    // reached only when the working-directory probe happened to find `web_ui`;
+    // now the embedded router is unconditional, so what was rare became
+    // universal. Hence the guard here rather than in the frontend.
+    if rel == "api" || rel.starts_with("api/") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
     // A miss whose last segment looks like a filename is a 404, not the SPA
     // shell. Handing `index.html` back for a stale `/assets/main-a1b2c3.js`
     // produces a confusing MIME-type console error instead of a clean 404.
