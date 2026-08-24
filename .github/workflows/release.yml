@@ -455,6 +455,23 @@ jobs:
           path: sums/cli-${{ matrix.target }}.sha256
           retention-days: 1
 
+      # A dry run's whole purpose is to put the real artifact in someone's
+      # hands before a tag exists. Without this the binaries die with the
+      # runner and the run proves only that three platforms compile — which
+      # the CLI Check matrix in ci.yml already proves.
+      #
+      # That gap is not hypothetical: #904 (GUI path resolved against the CI
+      # workspace) and #907 (GUI and CLI could not find each other on Windows)
+      # both reached a tagged release, because neither is visible until the
+      # built binary is run.
+      - name: Upload binaries for a dry run
+        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: dryrun-cli-${{ matrix.target }}
+          path: dist/*
+          retention-days: 7
+
       # Binds each artifact's digest to this workflow, commit and runner via
       # keyless Sigstore signing — no private key to store or leak. Verified by
       # a user with:
@@ -789,6 +806,17 @@ jobs:
           name: sums-gui-${{ matrix.target }}
           path: sums/gui-${{ matrix.target }}.sha256
           retention-days: 1
+
+      # Same reasoning as the CLI job above: on a dry run the installers are
+      # the thing most worth having, since #906 shipped a release whose
+      # installers were built and then never attached.
+      - name: Upload installers for a dry run
+        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: dryrun-gui-${{ matrix.target }}
+          path: dist/*
+          retention-days: 7
 
       # Binds each artifact's digest to this workflow, commit and runner via
       # keyless Sigstore signing — no private key to store or leak. Verified by
