@@ -134,6 +134,14 @@ until a second boot re-ran the migration.
 `is_unique_violation()` is the sanctioned shape of tolerance — one error code,
 named, with every other one propagated.
 
+**Nothing here deletes user data.** `create_schema()` drops a table only when
+that table is the tombstone of a removed feature and provably never held a row
+(`download_queue`, the orchestrator pair). A schema this build cannot correctly
+write to is refused instead: if `chat_messages` predates the `'tool'` role, setup
+fails and names the database file, leaving every conversation where it is. That
+branch used to DROP both chat tables — silently, at boot, on a substring match
+against a stored CREATE statement.
+
 There is deliberately no `PRAGMA user_version` ladder over the column set.
 `CANONICAL_PATH_SCHEMA_VERSION` is already load-bearing for the canonical-path
 backfill (a blocking syscall per row, paid once per library), and the

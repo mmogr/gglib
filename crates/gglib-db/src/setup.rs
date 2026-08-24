@@ -336,23 +336,33 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Guard: drop chat tables if the schema is out of date (missing 'tool' role).
-    // No backwards-compat needed — tables are recreated below.
-    let needs_recreate: bool = sqlx::query_scalar::<_, String>(
+    // A `chat_messages` table predating the 'tool' role cannot store a
+    // tool-role message: its CHECK constraint rejects the insert. This used to
+    // DROP both chat tables and let the CREATEs below rebuild them — deleting
+    // the user's entire chat history, silently, at boot, on the strength of a
+    // substring match against a stored CREATE statement.
+    //
+    // The role has been in that CREATE since #362 (2026-04-03), so the branch
+    // is dead for any database a build from the last four months has opened.
+    // Dead is not the same as harmless: what it did when it fired was destroy
+    // data with no prompt, no backup and no log line, and that is not a thing
+    // to carry into a schema freeze. It refuses now, naming the file, and the
+    // user decides what happens to their own history.
+    let chat_messages_sql: Option<String> = sqlx::query_scalar(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='chat_messages'",
     )
     .fetch_optional(pool)
-    .await?
-    .is_some_and(|sql| !sql.contains("'tool'"));
-
-    if needs_recreate {
-        // Drop messages first (FK child), then conversations.
-        sqlx::query("DROP TABLE IF EXISTS chat_messages")
-            .execute(pool)
-            .await?;
-        sqlx::query("DROP TABLE IF EXISTS chat_conversations")
-            .execute(pool)
-            .await?;
+    .await?;
+    if chat_messages_sql.is_some_and(|sql| !sql.contains("'tool'")) {
+        let file = pool.connect_options().get_filename().display().to_string();
+        anyhow::bail!(
+            "the chat_messages table in {file} predates the 'tool' role and cannot \
+             store tool-role messages, so this build will not run against it.\n\
+             Nothing has been changed. Either move that file aside, in which case \
+             gglib creates a fresh database, or drop the two chat tables yourself \
+             if the history is expendable:\n  \
+             sqlite3 {file} 'DROP TABLE chat_messages; DROP TABLE chat_conversations;'"
+        );
     }
 
     // Create chat conversations table
@@ -1035,6 +1045,87 @@ mod tests {
             err.to_string().contains("no such table"),
             "the real cause must reach the caller, got: {err}"
         );
+    }
+
+    /// A chat schema too old to write to must stop the boot, not be deleted.
+    ///
+    /// The guard this replaces DROPped both chat tables — every conversation
+    /// and every message the user had — on a substring match against a stored
+    /// CREATE statement, with no prompt and no log line. The refusal names the
+    /// file and leaves the data where it is.
+    #[tokio::test]
+    async fn an_out_of_date_chat_schema_is_refused_rather_than_dropped() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        // The pre-#362 shape: no 'tool' in the role CHECK.
+        sqlx::query(
+            "CREATE TABLE chat_conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO chat_conversations (title) VALUES ('Yesterday')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO chat_messages (conversation_id, role, content) \
+             VALUES (1, 'user', 'do not delete me')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let err = create_schema(&pool)
+            .await
+            .expect_err("a chat schema this build cannot write to must stop the boot");
+        assert!(
+            err.to_string().contains("chat_messages"),
+            "the message must name what is wrong, got: {err}"
+        );
+
+        let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_messages")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let conversations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_conversations")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(messages, 1, "the history must survive the refusal");
+        assert_eq!(conversations, 1, "the history must survive the refusal");
+    }
+
+    /// The current shape is not refused — the check has to stay off the path
+    /// every real database takes, or it is just an outage.
+    #[tokio::test]
+    async fn a_current_chat_schema_is_left_alone() {
+        let pool = setup_test_database().await.unwrap();
+        sqlx::query("INSERT INTO chat_conversations (title) VALUES ('Today')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        create_schema(&pool).await.unwrap();
+
+        let conversations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_conversations")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(conversations, 1);
     }
 
     /// The `template_caps` migration on a database created **before** the
