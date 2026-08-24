@@ -745,6 +745,51 @@
 			}
 		},
 		{
+			"label": "🧪 Release Dry Run (build, publish nothing)",
+			"detail": "Builds every platform exactly like a real release, tags nothing. Use before bumping the version.",
+			"type": "shell",
+			"command": "gh workflow run release.yml -f test_run=true && echo 'Dispatched — waiting for the run to register…' && sleep 8 && gh run watch \"$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')\"",
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": true,
+				"clear": true
+			}
+		},
+		{
+			"label": "📥 Fetch Dry Run Artifacts",
+			"detail": "Downloads the last dry run's binaries and installers into target/dry-run/ so you can install and run them.",
+			"type": "shell",
+			"command": "gh run download \"$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')\" --pattern 'dryrun-*' --dir target/dry-run && echo '' && echo 'Artifacts in target/dry-run/:' && find target/dry-run -type f",
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": true,
+				"clear": true
+			}
+		},
+		{
+			"label": "🚦 Release Pre-flight (dry run + fetch)",
+			"detail": "The whole loop: build a real release without tagging, then pull the artifacts down. Install them before you bump the version.",
+			"dependsOn": [
+				"🧪 Release Dry Run (build, publish nothing)",
+				"📥 Fetch Dry Run Artifacts"
+			],
+			"dependsOrder": "sequence",
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": true,
+				"clear": true
+			}
+		},
+		{
 			"label": "🔄 Sync Versions",
 			"type": "shell",
 			"command": "python3",
