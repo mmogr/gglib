@@ -289,10 +289,17 @@ jobs:
     # depending on a skipped job is itself skipped unless its `if:` contains a
     # status function. `!cancelled()` supplies that; `always()` would be wrong
     # because it also pushes on through a cancelled run.
+    #
+    # `|| inputs.test_run == true` because version-changed only means "there is
+    # no tag for this version yet". A test_run dispatch is normally fired at
+    # the version already sitting on main, so without this the builds it exists
+    # to exercise are skipped and the run does nothing at all. Nothing gets
+    # published either way — every upload and attestation step below is guarded
+    # on its own.
     if: >-
       !cancelled()
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && needs.check-version.outputs.version-changed == 'true'
+      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
       && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     strategy:
       fail-fast: false
@@ -481,10 +488,17 @@ jobs:
     # depending on a skipped job is itself skipped unless its `if:` contains a
     # status function. `!cancelled()` supplies that; `always()` would be wrong
     # because it also pushes on through a cancelled run.
+    #
+    # `|| inputs.test_run == true` because version-changed only means "there is
+    # no tag for this version yet". A test_run dispatch is normally fired at
+    # the version already sitting on main, so without this the builds it exists
+    # to exercise are skipped and the run does nothing at all. Nothing gets
+    # published either way — every upload and attestation step below is guarded
+    # on its own.
     if: >-
       !cancelled()
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && needs.check-version.outputs.version-changed == 'true'
+      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
       && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     strategy:
       fail-fast: false
@@ -803,10 +817,18 @@ jobs:
     # The job itself runs on test versions and test_run dispatches; only the
     # upload is guarded. Gating the whole job would mean the hashing, sorting
     # and validation below were never exercised until a real release.
+    #
+    # That holds for a -test version, which is untagged and so has
+    # version-changed true. It did not hold for a test_run dispatch until the
+    # `|| inputs.test_run == true` below: such a dispatch normally runs at the
+    # version already on main, leaving version-changed false and this job
+    # skipped. The same allowance is on build and build-gui, and it is needed
+    # in all three — this job consumes their fragments, so gating it alone open
+    # would only leave it waiting on artifacts that were never produced.
     if: >-
       !cancelled()
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && needs.check-version.outputs.version-changed == 'true'
+      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
       && needs.build.result == 'success'
       && needs.build-gui.result == 'success'
       && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
@@ -829,9 +851,16 @@ jobs:
           cat sums/*.sha256 | tr -d '\r' | LC_ALL=C sort -k2 > SHA256SUMS
           echo "::group::SHA256SUMS"; cat SHA256SUMS; echo "::endgroup::"
 
-          # Refuse to publish a manifest `sha256sum -c` cannot consume.
+          # Canonical form only: 64 lowercase hex, two spaces, then a bare
+          # filename carrying no directory component and no leading whitespace.
+          #
+          # This is deliberately stricter than `sha256sum -c`, which also reads
+          # the ' *' binary-mode form and a path-bearing name quite happily. The
+          # point is one stable shape, so the manifest stays diffable between
+          # releases and a consumer splitting on whitespace gets the name it
+          # expects — not that the other forms are unreadable.
           if grep -nvE '^[0-9a-f]{64}  [^/[:space:]][^/]*$' SHA256SUMS; then
-            echo "::error::malformed, path-bearing or space-bearing line in SHA256SUMS"
+            echo "::error::non-canonical, path-bearing or leading-space line in SHA256SUMS"
             exit 1
           fi
           if [ "$(wc -l < SHA256SUMS)" -ne "$(LC_ALL=C sort -u -k2 SHA256SUMS | wc -l)" ]; then
