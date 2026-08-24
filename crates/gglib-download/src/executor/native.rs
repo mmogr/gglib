@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::cli_exec::ProgressCallback;
-use crate::progress::ProgressThrottle;
+use gglib_core::download::ProgressThrottle;
 
 /// Suffix for the in-progress file that sits beside the final destination.
 const PART_SUFFIX: &str = ".part";

@@ -4,6 +4,7 @@ pub(crate) mod fast_downloads;
 pub(crate) mod llama;
 pub(crate) mod llama_detect;
 pub(crate) mod llama_install;
+pub(crate) mod llama_prebuilt;
 pub(crate) mod paths;
 pub(crate) mod settings;
 

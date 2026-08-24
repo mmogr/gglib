@@ -1,8 +1,6 @@
 #![doc = include_str!("README.md")]
 #[cfg(feature = "prebuilt")]
 use anyhow::{Context, Result, bail};
-#[cfg(feature = "cli")]
-use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(feature = "prebuilt")]
 use reqwest::Client;
 #[cfg(feature = "prebuilt")]
@@ -13,25 +11,25 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 #[cfg(feature = "prebuilt")]
 use std::path::Path;
+#[cfg(feature = "prebuilt")]
+use std::time::Instant;
+#[cfg(feature = "prebuilt")]
+use tokio::sync::mpsc;
 
+#[cfg(feature = "prebuilt")]
+use gglib_core::download::{ProgressThrottle, RateEstimator};
 #[cfg(feature = "prebuilt")]
 use gglib_core::paths::data_root;
 use gglib_core::paths::llama_server_path;
+
+#[cfg(feature = "prebuilt")]
+use super::install_events::{InstallPhase, LlamaProgressEvent};
 
 // Helper to convert PathError to anyhow::Error
 #[cfg(feature = "prebuilt")]
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
     r.map_err(|e| anyhow::anyhow!("{}", e))
 }
-
-/// Progress callback type for llama.cpp downloads.
-/// Called with (`downloaded_bytes`, `total_bytes`).
-#[cfg(feature = "prebuilt")]
-pub type LlamaProgressCallback<'a> = &'a dyn Fn(u64, u64);
-
-/// Thread-safe progress callback for async contexts.
-#[cfg(feature = "prebuilt")]
-pub type LlamaProgressCallbackBoxed = Box<dyn Fn(u64, u64) + Send + Sync>;
 
 /// Check if llama.cpp binaries are installed.
 /// Returns true if llama-server exists.
@@ -100,14 +98,6 @@ impl ReleaseSelector {
             }
         }
     }
-
-    /// How this selector reads in console output.
-    fn describe(&self) -> String {
-        match self {
-            Self::Tag(tag) => format!("pinned release {tag}"),
-            Self::Latest => "latest release".to_owned(),
-        }
-    }
 }
 
 /// Interpret a raw [`LLAMA_RELEASE_ENV`] value.
@@ -153,7 +143,6 @@ struct GitHubRelease {
 struct GitHubAsset {
     name: String,
     browser_download_url: String,
-    size: u64,
 }
 
 /// Result of checking pre-built binary availability
@@ -330,103 +319,39 @@ fn find_platform_asset<'a>(
         .find(|asset| asset.name.contains(asset_pattern))
 }
 
-/// Download a file with progress bar (CLI version).
+/// Emit `PhaseStarted` for `phase`, ignoring a receiver that has gone away.
+///
+/// A dropped receiver means the surface stopped watching — a cancelled CLI, a
+/// closed SSE connection. That is not a reason to abandon an install that is
+/// already writing to disk.
 #[cfg(feature = "prebuilt")]
-async fn download_with_progress(client: &Client, url: &str, dest: &Path) -> Result<()> {
-    download_with_callback_internal(client, url, dest, None).await
+async fn started(tx: &mpsc::Sender<LlamaProgressEvent>, phase: InstallPhase) {
+    let _ = tx.send(LlamaProgressEvent::PhaseStarted { phase }).await;
 }
 
-/// Download a file with progress callback (GUI version).
+/// Emit `PhaseCompleted` for `phase`. See [`started`].
 #[cfg(feature = "prebuilt")]
-async fn download_with_callback(
+async fn completed(tx: &mpsc::Sender<LlamaProgressEvent>, phase: InstallPhase) {
+    let _ = tx.send(LlamaProgressEvent::PhaseCompleted { phase }).await;
+}
+
+/// Stream `url` to `dest`, reporting bytes, rate and ETA on `tx`.
+///
+/// Throughput is measured here and only here, by the same
+/// `gglib_core::download::RateEstimator` the model-download path uses. The
+/// estimator sees every chunk — ticks where nothing moved are how a stall
+/// pulls the reported rate down — while its sibling `ProgressThrottle`
+/// rate-limits the *emission*, so a fast link cannot flood a 64-slot channel.
+///
+/// Neither name is linked: both are behind `feature = "prebuilt"` here, so a
+/// bare link breaks without the feature and an explicit target is redundant
+/// with it.
+#[cfg(feature = "prebuilt")]
+async fn download_archive(
     client: &Client,
     url: &str,
     dest: &Path,
-    callback: LlamaProgressCallback<'_>,
-) -> Result<()> {
-    download_with_callback_internal(client, url, dest, Some(callback)).await
-}
-
-/// Internal download implementation supporting both CLI progress bar and GUI callback.
-#[cfg(feature = "prebuilt")]
-async fn download_with_callback_internal(
-    client: &Client,
-    url: &str,
-    dest: &Path,
-    callback: Option<LlamaProgressCallback<'_>>,
-) -> Result<()> {
-    let response = client
-        .get(url)
-        .header("User-Agent", "gglib")
-        .send()
-        .await
-        .context("Failed to start download")?;
-
-    if !response.status().is_success() {
-        bail!("Download failed: HTTP {}", response.status());
-    }
-
-    let total_size = response.content_length().unwrap_or(0);
-
-    // Use progress bar only when no callback provided AND cli feature enabled (CLI mode)
-    #[cfg(feature = "cli")]
-    let pb = if callback.is_none() {
-        let pb = ProgressBar::new(total_size);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})")
-                .unwrap()
-                .progress_chars("█▓░"),
-        );
-        Some(pb)
-    } else {
-        None
-    };
-
-    #[cfg(not(feature = "cli"))]
-    let _pb: Option<()> = None;
-
-    // Ensure parent directory exists
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).context("Failed to create download directory")?;
-    }
-
-    let mut file = File::create(dest).context("Failed to create download file")?;
-
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-
-    use futures_util::StreamExt;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.context("Error reading download stream")?;
-        file.write_all(&chunk)
-            .context("Error writing to download file")?;
-        downloaded += chunk.len() as u64;
-
-        #[cfg(feature = "cli")]
-        if let Some(ref pb) = pb {
-            pb.set_position(downloaded);
-        }
-        if let Some(ref cb) = callback {
-            cb(downloaded, total_size);
-        }
-    }
-
-    #[cfg(feature = "cli")]
-    if let Some(pb) = pb {
-        pb.finish_with_message("Download complete");
-    }
-
-    Ok(())
-}
-
-/// Download a file with boxed progress callback (thread-safe for async contexts).
-#[cfg(feature = "prebuilt")]
-async fn download_with_boxed_callback(
-    client: &Client,
-    url: &str,
-    dest: &Path,
-    callback: &LlamaProgressCallbackBoxed,
+    tx: &mpsc::Sender<LlamaProgressEvent>,
 ) -> Result<()> {
     let response = client
         .get(url)
@@ -439,7 +364,7 @@ async fn download_with_boxed_callback(
         bail!("Download failed: HTTP {}", response.status());
     }
 
-    let total_size = response.content_length().unwrap_or(0);
+    let total = response.content_length().unwrap_or(0);
 
     // Ensure parent directory exists
     if let Some(parent) = dest.parent() {
@@ -448,6 +373,8 @@ async fn download_with_boxed_callback(
 
     let mut file = File::create(dest).context("Failed to create download file")?;
 
+    let mut estimator = RateEstimator::new(Instant::now());
+    let mut throttle = ProgressThrottle::default();
     let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
 
@@ -457,8 +384,29 @@ async fn download_with_boxed_callback(
         file.write_all(&chunk)
             .context("Error writing to download file")?;
         downloaded += chunk.len() as u64;
-        callback(downloaded, total_size);
+
+        estimator.record(downloaded, total, Instant::now());
+
+        if throttle.should_emit() {
+            let _ = tx.try_send(LlamaProgressEvent::Progress {
+                downloaded,
+                total,
+                rate_bps: estimator.rate_bps(),
+                eta_seconds: estimator.eta_seconds(),
+            });
+        }
     }
+
+    // The throttle will usually have swallowed the last chunk, and the final
+    // byte count is the one a progress bar has to land on.
+    let _ = tx
+        .send(LlamaProgressEvent::Progress {
+            downloaded,
+            total,
+            rate_bps: estimator.rate_bps(),
+            eta_seconds: estimator.eta_seconds(),
+        })
+        .await;
 
     Ok(())
 }
@@ -489,8 +437,6 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
     use flate2::read::GzDecoder;
     use tar::Archive;
 
-    println!("Extracting binaries and libraries...");
-
     let file = File::open(archive_path).context("Failed to open downloaded archive")?;
     let gz = GzDecoder::new(file);
     let mut archive = Archive::new(gz);
@@ -499,7 +445,6 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
 
     let required_binaries = ["llama-server"];
     let mut extracted_binaries = 0;
-    let mut extracted_libs = 0;
 
     for entry in archive.entries().context("Failed to read tar archive")? {
         let mut entry = entry.context("Failed to read archive entry")?;
@@ -550,10 +495,7 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
         }
 
         if required_binaries.contains(&file_name.as_str()) {
-            println!("  ✓ Extracted {}", file_name);
             extracted_binaries += 1;
-        } else {
-            extracted_libs += 1;
         }
     }
 
@@ -565,16 +507,12 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
         );
     }
 
-    println!("  ✓ Extracted {} shared libraries", extracted_libs);
-
     Ok(())
 }
 
 /// Extract binaries from a zip archive (Windows).
 #[cfg(feature = "prebuilt")]
 fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
-    println!("Extracting binaries and libraries...");
-
     let file = File::open(zip_path).context("Failed to open downloaded archive")?;
     let mut archive = zip::ZipArchive::new(file).context("Failed to read zip archive")?;
 
@@ -586,7 +524,6 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
     let required_binaries = ["llama-server"];
 
     let mut extracted_binaries = 0;
-    let mut extracted_libs = 0;
 
     for i in 0..archive.len() {
         let mut entry = archive
@@ -633,10 +570,7 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
         }
 
         if required_binaries.contains(&file_name) {
-            println!("  ✓ Extracted {}", file_name);
             extracted_binaries += 1;
-        } else {
-            extracted_libs += 1;
         }
     }
 
@@ -647,8 +581,6 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             required_binaries.len()
         );
     }
-
-    println!("  ✓ Extracted {} shared libraries", extracted_libs);
 
     Ok(())
 }
@@ -670,19 +602,10 @@ async fn download_cuda_runtime(
         .iter()
         .find(|asset| asset.name.contains(CUDART_PATTERN));
 
-    let cudart_asset = match cudart_asset {
-        Some(asset) => asset,
-        None => {
-            // Not a fatal error - user might have CUDA installed
-            println!("  ⚠ CUDA runtime package not found (optional if CUDA is installed)");
-            return Ok(());
-        }
+    // A missing package is not fatal — the user may have CUDA installed.
+    let Some(cudart_asset) = cudart_asset else {
+        return Ok(());
     };
-
-    println!(
-        "  Downloading CUDA runtime DLLs ({:.1} MB)...",
-        cudart_asset.size as f64 / 1_000_000.0
-    );
 
     let cudart_zip_path = download_dir.join(&cudart_asset.name);
 
@@ -694,8 +617,8 @@ async fn download_cuda_runtime(
         .await
         .context("Failed to download CUDA runtime")?;
 
+    // Same reasoning as a missing package: optional when CUDA is installed.
     if !response.status().is_success() {
-        println!("  ⚠ Failed to download CUDA runtime (optional if CUDA is installed)");
         return Ok(());
     }
 
@@ -720,7 +643,6 @@ async fn download_cuda_runtime(
             let dest_path = bin_dir.join(file_name);
             let mut dest_file = File::create(&dest_path)?;
             io::copy(&mut entry, &mut dest_file)?;
-            println!("  ✓ Extracted {}", file_name);
         }
     }
 
@@ -730,43 +652,40 @@ async fn download_cuda_runtime(
     Ok(())
 }
 
-/// Download and install pre-built llama.cpp binaries.
+/// Download and install pre-built llama.cpp binaries, streaming progress.
 ///
-/// This is the main entry point for downloading pre-built binaries.
-/// It fetches the latest release from GitHub, downloads the appropriate
-/// platform-specific archive, and extracts the binaries.
+/// Resolves the pinned llama.cpp release, downloads this platform's archive,
+/// extracts `llama-server` and its shared libraries, records the install and
+/// verifies the binary landed where the launcher looks for it. Every stage is
+/// bracketed by [`LlamaProgressEvent::PhaseStarted`] and
+/// [`LlamaProgressEvent::PhaseCompleted`] on `tx`; the download itself also
+/// reports bytes, rate and ETA.
 ///
-/// Returns `Ok(())` on success, or an error if download/extraction fails.
+/// Success ends with [`LlamaProgressEvent::Completed`]. Failure returns `Err`
+/// *without* emitting [`LlamaProgressEvent::Failed`] — the surface that owns
+/// the channel decides how a failure is worded, exactly as the source-build
+/// pipeline leaves it.
+///
+/// This function knows nothing about terminals, HTTP responses or WebViews.
+/// The three copies it replaced each knew about one.
 #[cfg(feature = "prebuilt")]
-pub async fn download_prebuilt_binaries() -> Result<()> {
-    // Check platform availability
-    let availability = check_prebuilt_availability();
-    let (asset_pattern, description) = match availability {
+pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) -> Result<()> {
+    started(&tx, InstallPhase::CheckAvailability).await;
+    let (asset_pattern, description) = match check_prebuilt_availability() {
         PrebuiltAvailability::Available {
             asset_pattern,
             description,
         } => (asset_pattern, description),
         PrebuiltAvailability::NotAvailable { reason } => {
-            bail!("Pre-built binaries not available: {}", reason);
+            bail!("Pre-built binaries not available: {reason}");
         }
     };
-
-    println!();
-    println!(
-        "Downloading pre-built llama.cpp binaries for {}...",
-        description
-    );
-    println!();
+    completed(&tx, InstallPhase::CheckAvailability).await;
 
     let client = Client::new();
 
-    // Fetch latest release
-    let selector = resolve_release_selector();
-    println!("Fetching {} information...", selector.describe());
-    let release = fetch_release(&client, &selector).await?;
-    println!("  Found release: {}", release.tag_name);
-
-    // Find matching asset
+    started(&tx, InstallPhase::FetchRelease).await;
+    let release = fetch_release(&client, &resolve_release_selector()).await?;
     let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
         anyhow::anyhow!(
             "No matching asset found for pattern '{}' in release {}",
@@ -774,34 +693,31 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
             release.tag_name
         )
     })?;
+    completed(&tx, InstallPhase::FetchRelease).await;
 
-    println!(
-        "  Asset: {} ({:.1} MB)",
-        asset.name,
-        asset.size as f64 / 1_000_000.0
-    );
-    println!();
-
-    // Prepare paths
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
-    let zip_path = download_dir.join(&asset.name);
+    let archive_path = download_dir.join(&asset.name);
     let bin_dir = gglib_dir.join(".llama").join("bin");
 
-    // Download the archive
-    download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
-    println!();
+    started(&tx, InstallPhase::Download).await;
+    download_archive(&client, &asset.browser_download_url, &archive_path, &tx).await?;
+    completed(&tx, InstallPhase::Download).await;
 
-    // Extract binaries; capture result so the downloads dir is cleaned up on
-    // both success and failure paths.
+    // Capture the result so the downloads dir is cleaned up on both the
+    // success and the failure path.
     let post_download_result = async {
-        extract_binaries(&zip_path, &bin_dir)?;
+        started(&tx, InstallPhase::Extract).await;
+        extract_binaries(&archive_path, &bin_dir)?;
+        completed(&tx, InstallPhase::Extract).await;
 
         // Windows + CUDA only: also download the CUDA runtime DLLs.
         // Vulkan builds bundle everything they need inside the main zip.
         #[cfg(target_os = "windows")]
         if asset_pattern.contains("cuda") {
+            started(&tx, InstallPhase::CudaRuntime).await;
             download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+            completed(&tx, InstallPhase::CudaRuntime).await;
         }
 
         Ok::<_, anyhow::Error>(())
@@ -815,189 +731,20 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
 
     post_download_result?;
 
-    // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
 
-    // Verify installation
+    started(&tx, InstallPhase::Verify).await;
     let server_path = path_err(llama_server_path())?;
-
     if !server_path.exists() {
         bail!("Installation verification failed: binaries not found after extraction");
     }
+    completed(&tx, InstallPhase::Verify).await;
 
-    println!();
-    println!("✓ llama.cpp installed successfully!");
-    println!("  Server: {}", server_path.display());
-    println!("  Version: {}", release.tag_name);
-    println!("  Type: Pre-built ({})", description);
-    println!();
-    println!("You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.");
-
-    Ok(())
-}
-
-/// Download and install pre-built llama.cpp binaries with progress callback.
-///
-/// This is the GUI-friendly version that accepts a progress callback instead
-/// of printing to stdout. Used by Tauri GUI for showing download progress.
-///
-/// The callback receives (`downloaded_bytes`, `total_bytes`).
-#[cfg(feature = "prebuilt")]
-pub async fn download_prebuilt_binaries_with_callback(
-    progress_callback: Option<LlamaProgressCallback<'_>>,
-) -> Result<()> {
-    // Check platform availability
-    let availability = check_prebuilt_availability();
-    let (asset_pattern, description) = match availability {
-        PrebuiltAvailability::Available {
-            asset_pattern,
-            description,
-        } => (asset_pattern, description),
-        PrebuiltAvailability::NotAvailable { reason } => {
-            bail!("Pre-built binaries not available: {}", reason);
-        }
-    };
-
-    let client = Client::new();
-
-    // Fetch the pinned release (or whatever GGLIB_LLAMA_RELEASE names)
-    let release = fetch_release(&client, &resolve_release_selector()).await?;
-
-    // Find matching asset
-    let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No matching asset found for pattern '{}' in release {}",
-            asset_pattern,
-            release.tag_name
-        )
-    })?;
-
-    // Prepare paths
-    let gglib_dir = path_err(data_root())?;
-    let download_dir = gglib_dir.join("downloads");
-    let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join(".llama").join("bin");
-
-    // Download the archive
-    if let Some(callback) = progress_callback {
-        download_with_callback(&client, &asset.browser_download_url, &zip_path, callback).await?;
-    } else {
-        download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
-    }
-
-    // Extract binaries; capture result so the downloads dir is cleaned up on
-    // both success and failure paths.
-    let post_download_result = async {
-        extract_binaries(&zip_path, &bin_dir)?;
-
-        // Windows + CUDA only: also download the CUDA runtime DLLs.
-        // Vulkan builds bundle everything they need inside the main zip.
-        #[cfg(target_os = "windows")]
-        if asset_pattern.contains("cuda") {
-            download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
-        }
-
-        Ok::<_, anyhow::Error>(())
-    }
-    .await;
-
-    // Always remove the entire downloads directory regardless of outcome.
-    let _ = fs::remove_dir_all(&download_dir);
-
-    post_download_result?;
-
-    // Save a simple config indicating this was a pre-built install
-    save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
-
-    // Verify installation
-    let server_path = path_err(llama_server_path())?;
-
-    if !server_path.exists() {
-        bail!("Installation verification failed: binaries not found after extraction");
-    }
-
-    Ok(())
-}
-
-/// Download and install pre-built llama.cpp binaries with thread-safe progress callback.
-///
-/// This version is designed for use in async contexts where the callback needs to be
-/// Send + Sync (like Tauri commands). The callback receives (`downloaded_bytes`, `total_bytes`).
-#[cfg(feature = "prebuilt")]
-pub async fn download_prebuilt_binaries_with_boxed_callback(
-    progress_callback: LlamaProgressCallbackBoxed,
-) -> Result<()> {
-    // Check platform availability
-    let availability = check_prebuilt_availability();
-    let (asset_pattern, _description) = match availability {
-        PrebuiltAvailability::Available {
-            asset_pattern,
-            description,
-        } => (asset_pattern, description),
-        PrebuiltAvailability::NotAvailable { reason } => {
-            bail!("Pre-built binaries not available: {}", reason);
-        }
-    };
-
-    let client = Client::new();
-
-    // Fetch the pinned release (or whatever GGLIB_LLAMA_RELEASE names)
-    let release = fetch_release(&client, &resolve_release_selector()).await?;
-
-    // Find matching asset
-    let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No matching asset found for pattern '{}' in release {}",
-            asset_pattern,
-            release.tag_name
-        )
-    })?;
-
-    // Prepare paths
-    let gglib_dir = path_err(data_root())?;
-    let download_dir = gglib_dir.join("downloads");
-    let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join(".llama").join("bin");
-
-    // Download the archive with boxed callback
-    download_with_boxed_callback(
-        &client,
-        &asset.browser_download_url,
-        &zip_path,
-        &progress_callback,
-    )
-    .await?;
-
-    // Extract binaries; capture result so the downloads dir is cleaned up on
-    // both success and failure paths.
-    let post_download_result = async {
-        extract_binaries(&zip_path, &bin_dir)?;
-
-        // Windows + CUDA only: also download the CUDA runtime DLLs.
-        // Vulkan builds bundle everything they need inside the main zip.
-        #[cfg(target_os = "windows")]
-        if asset_pattern.contains("cuda") {
-            download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
-        }
-
-        Ok::<_, anyhow::Error>(())
-    }
-    .await;
-
-    // Always remove the entire downloads directory regardless of outcome.
-    let _ = fs::remove_dir_all(&download_dir);
-
-    post_download_result?;
-
-    // Save a simple config indicating this was a pre-built install
-    save_prebuilt_config(&gglib_dir, &release.tag_name, &_description)?;
-
-    // Verify installation
-    let server_path = path_err(llama_server_path())?;
-
-    if !server_path.exists() {
-        bail!("Installation verification failed: binaries not found after extraction");
-    }
+    let _ = tx
+        .send(LlamaProgressEvent::Completed {
+            version: release.tag_name,
+        })
+        .await;
 
     Ok(())
 }

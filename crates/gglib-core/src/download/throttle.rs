@@ -1,6 +1,12 @@
 //! Progress throttling.
 //!
-//! Rate-limits progress updates to avoid overwhelming UIs with events.
+//! Rate-limits progress *emission* so a fast transfer cannot flood a channel
+//! or a redraw loop with events nobody can read.
+//!
+//! Deliberately beside [`RateEstimator`](super::rate::RateEstimator): the two
+//! are always used together and the pairing is load-bearing. Feed the
+//! estimator every tick and throttle only what you send — throttling the
+//! measurement is what makes a reported rate drift.
 
 use std::time::{Duration, Instant};
 

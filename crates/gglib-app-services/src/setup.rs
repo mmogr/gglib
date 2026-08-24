@@ -196,14 +196,14 @@ impl SetupOps {
         })
     }
 
-    /// Install llama.cpp pre-built binaries with a progress callback.
+    /// Install llama.cpp pre-built binaries, streaming progress on `tx`.
     ///
     /// Returns an error if pre-built binaries are not available for this platform.
     pub async fn install_llama(
         &self,
-        progress_callback: gglib_runtime::llama::LlamaProgressCallbackBoxed,
+        tx: tokio::sync::mpsc::Sender<gglib_runtime::llama::LlamaProgressEvent>,
     ) -> Result<(), GuiError> {
-        gglib_runtime::llama::download_prebuilt_binaries_with_boxed_callback(progress_callback)
+        gglib_runtime::llama::download_prebuilt_binaries(tx)
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
     }

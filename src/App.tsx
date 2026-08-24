@@ -72,14 +72,14 @@ function AppContent() {
 
   // Close modal when installation completes
   useEffect(() => {
-    if (installProgress?.status === 'completed') {
+    if (installProgress?.type === 'completed') {
       setTimeout(() => {
         setShowLlamaModal(false);
         // Sync menu state after llama installation
         syncMenuStateSilent();
       }, 2000);
     }
-  }, [installProgress?.status]);
+  }, [installProgress?.type]);
 
   // Menu event listeners (desktop only - via platform helper)
   useEffect(() => {
