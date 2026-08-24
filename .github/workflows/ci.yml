@@ -131,13 +131,13 @@ jobs:
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest
-    # Deliberately chained to `clippy` even though there is no logical
-    # dependency. Both jobs restore/save actions/cache under the same
-    # `${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}` key, so running
-    # after clippy means this job restores the target dir clippy just populated.
-    # Unchaining would make both cold-build the workspace in parallel: more
-    # runner minutes, and probably a slower `test` leg.
-    needs: [clippy]
+    # No `needs:`. This was chained to `clippy` so it would restore the target
+    # dir clippy had just populated — but clippy builds `--all-features` and
+    # this job builds default features, so on run 32705784511 it inherited
+    # 2.57 GB and got 49 of 630 units fresh. Five minutes of serialization for
+    # a cache that was 92% inapplicable. Each job has its own shared-key now,
+    # so each warms from its own history instead of the other's.
+    #
     # Every test step below pipes into `tee` so the output survives as an
     # artifact, and a pipeline reports its *last* command's status — `tee`'s,
     # which is always 0. GitHub's default shell is `bash -e` without pipefail,
@@ -153,6 +153,11 @@ jobs:
       run:
         shell: bash
     steps:
+      # `large-packages` is off: measured on run 32705784511 it spent 77 of this
+      # step's 232 seconds to reclaim 1.79 GB, and among what it purged were
+      # libgl1, libglx-mesa0 and libdbusmenu-gtk3-4 — which `Install system
+      # dependencies` immediately pulls back as appindicator dependencies. The
+      # android/dotnet/haskell removals stay: 20 GB in 155 seconds.
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -160,7 +165,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
@@ -185,16 +190,24 @@ jobs:
           cargo metadata --locked --format-version 1 > /dev/null
           cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Swatinem/rust-cache, as release.yml already uses, with a shared-key
+      # per build configuration. The raw actions/cache this replaces used one
+      # key for every job: clippy runs --all-features and saved it, test runs
+      # default features and restored it, and got 49 of 630 units fresh. And
+      # because test hit the key exactly, actions/cache never saved — test's
+      # own artifacts were discarded every run, permanently.
+      #
+      # It also prunes. Those two Linux entries were 2.69 and 2.24 GB of a
+      # repo cache budget that had reached 10.09 GB against GitHub's 10 GB
+      # ceiling, so the cross-OS entries were being evicted: the Windows leg
+      # logged `Cache not found for input keys: Windows-cargo-…, Windows-cargo-`
+      # and cold-built the workspace every run. release.yml's rust-cache
+      # entries are 0.55-0.80 GB for comparable graphs.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-test"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -245,33 +258,6 @@ jobs:
         if: always()
         run: ./scripts/split_test_output.py cargo-test-artifacts.json rust-test-output.txt
 
-      # The frontend's wire types are generated from these Rust types, and the
-      # generated output is committed so the GUI build needs no cargo. That
-      # only stays honest if something regenerates and compares — otherwise a
-      # changed Rust field ships against a stale TypeScript mirror, which is
-      # the whole class of drift the generation exists to end.
-      #
-      # Here rather than in `enforcement`: the cargo cache is warm in this job,
-      # and this step needs a build. It checks staleness only — the annotations
-      # themselves are checked by `check_ts_bindings.sh` in `enforcement`,
-      # because a missing annotation regenerates consistently and leaves this
-      # diff clean.
-      - name: Check generated TypeScript bindings are current
-        run: make bindings-check
-
-      # The same invocation `docs.yml` and `release.yml` deploy with, run on
-      # every PR so a broken link is caught by the change that breaks it
-      # rather than by whoever next cuts a release. Both of those only fire on
-      # a published release or a manual dispatch, so until now nothing checked
-      # rustdoc on the way in, and the workspace had drifted accordingly.
-      #
-      # Here rather than in `enforcement` for the same reason as the step
-      # above — it needs a build, and this job's cargo cache is warm.
-      - name: Check rustdoc has no warnings
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
-
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: always()
@@ -285,6 +271,143 @@ jobs:
           # cannot drift.
           path: rust-test-*.txt
           retention-days: 30
+
+  bindings:
+    name: Bindings Freshness
+    runs-on: ubuntu-latest
+    # Its own job rather than a step on `test`, which is where it lived on the
+    # stated grounds that "the cargo cache is warm in this job". It was not:
+    # this builds `--features ts-bindings`, a different feature unification
+    # from the one `test` had just produced, and the log shows it recompiling
+    # accordingly. Three minutes seventeen of critical path buying nothing that
+    # a job running in parallel does not buy for free.
+    #
+    # The frontend's wire types are generated from the Rust types, and the
+    # generated output is committed so the GUI build needs no cargo. That only
+    # stays honest if something regenerates and compares — otherwise a changed
+    # Rust field ships against a stale TypeScript mirror, which is the whole
+    # class of drift the generation exists to end.
+    #
+    # Staleness only. The annotations themselves are checked by
+    # `check_ts_bindings.sh` in `enforcement`, because a missing annotation
+    # regenerates consistently and leaves this diff clean.
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-bindings"
+          cache-on-failure: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # `crates/gglib-axum/src/ui.rs` embeds `../../web_ui` through rust-embed
+      # with `debug-embed`, so the crate does not compile without it — this is
+      # not optional even though nothing here serves a page.
+      - name: Build Web UI
+        run: |
+          npm ci
+          npm run build
+
+      - name: Check generated TypeScript bindings are current
+        run: make bindings-check
+
+  rustdoc:
+    name: Rustdoc
+    runs-on: ubuntu-latest
+    # Off `test` for the same reason as `bindings` above: it sat there for a
+    # cargo cache that did not apply to it. rustdoc builds its own artifacts
+    # and the job log shows 137 crates recompiling, so the four and a half
+    # minutes it took were four and a half minutes of critical path.
+    #
+    # The same invocation `docs.yml` and `release.yml` deploy with, run on
+    # every PR so a broken link is caught by the change that breaks it rather
+    # than by whoever next cuts a release. Both of those only fire on a
+    # published release or a manual dispatch, so nothing checked rustdoc on the
+    # way in until this existed, and the workspace had drifted accordingly.
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-rustdoc"
+          cache-on-failure: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # `crates/gglib-axum/src/ui.rs` embeds `../../web_ui` through rust-embed
+      # with `debug-embed`, so the crate does not compile without it — this is
+      # not optional even though nothing here serves a page.
+      - name: Build Web UI
+        run: |
+          npm ci
+          npm run build
+
+
+      - name: Check rustdoc has no warnings
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
 
   test-frontend:
     name: Test (Frontend)
@@ -333,9 +456,11 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    # No `needs:` — clippy is the long pole and it warms the cargo cache that
-    # `test` and the Linux `cli-cross-os` leg restore, so it should start at
-    # t=0 rather than after three sub-minute jobs.
+    # No `needs:` — clippy is a long pole and nothing gates it. It no longer
+    # warms anyone else's cache: it builds `--all-features`, which is not what
+    # `test` or `cli-cross-os` build, and the shared key that pretended
+    # otherwise cost `test` five minutes of waiting for artifacts it could not
+    # use.
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -344,7 +469,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
@@ -364,16 +489,14 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-clippy"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -393,6 +516,11 @@ jobs:
     name: CLI Check (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'pull_request'
+    # Same reason as `clippy-cross-os` below, and no longer any other: these
+    # legs take 7-13 minutes each on three runners, and there is no sense
+    # spending them on a tree ubuntu clippy has already rejected. It was never
+    # about the cache here either — the key is per-OS, so the Linux leg was the
+    # only one that could ever have shared, and it does not now.
     needs: [clippy]
     strategy:
       fail-fast: false
@@ -411,16 +539,14 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-cli-${{ matrix.target }}"
+          cache-on-failure: true
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -472,16 +598,14 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-clippy-${{ matrix.target }}"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -501,7 +625,7 @@ jobs:
     name: CI Success
     runs-on: ubuntu-latest
     if: always()
-    needs: [boundaries, enforcement, quality, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
+    needs: [boundaries, bindings, enforcement, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
     steps:
       - name: Check all jobs succeeded
         run: |
