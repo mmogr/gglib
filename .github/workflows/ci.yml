@@ -229,7 +229,11 @@ jobs:
       # One failure should not hide the state of everything after it.
       #
       # No `--verbose`: nothing parses the per-rustc lines and they were 5324
-      # of this step's log.
+      # of this step's log. And no `--all-targets`, ever — it would silently
+      # drop the doctests, which this step is the only thing running now that
+      # the separate `cargo test --doc` step is gone. split_test_output.py
+      # fails a green run that produced no Doc-tests sections, which is the
+      # standing guard for that.
       - name: Run Rust tests
         run: cargo test --no-fail-fast 2>&1 | tee rust-test-output.txt
 
@@ -240,9 +244,6 @@ jobs:
       - name: Split test output per crate
         if: always()
         run: ./scripts/split_test_output.py cargo-test-artifacts.json rust-test-output.txt
-
-      - name: Run doctests
-        run: cargo test --doc --verbose
 
       # The frontend's wire types are generated from these Rust types, and the
       # generated output is committed so the GUI build needs no cargo. That
