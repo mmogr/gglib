@@ -51,10 +51,15 @@ pub struct DaemonOptions {
     pub cors: CorsConfig,
     /// Directory with a built frontend to serve as an SPA. `None` — the only
     /// value anything in this workspace sets — means serve the dashboard
-    /// compiled into this binary. `Some` overrides it with a directory, which
-    /// is how a frontend developer points a release build at a local `npm run
-    /// build`. Nothing sets it implicitly, so the working directory can no
-    /// longer decide what is served.
+    /// compiled into this binary. Nothing sets it implicitly, so the working
+    /// directory can no longer decide what is served.
+    ///
+    /// `Some` overrides the embed with a directory. Note that no CLI flag or
+    /// env var reaches this today: it is settable only by constructing
+    /// `DaemonOptions` directly. It is kept because pointing a release build at
+    /// a local `npm run build` is the obvious thing to want, and wiring a flag
+    /// is a small change — but until one exists, calling it "the frontend
+    /// developer's override" overstates what is here.
     pub static_dir: Option<PathBuf>,
     /// `Host` header values accepted in addition to loopback (and, on a
     /// non-loopback bind, IP literals). The mDNS name and `--allowed-host`

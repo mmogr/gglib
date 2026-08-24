@@ -293,8 +293,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 
 /// Start the web server on the specified port.
 ///
-/// If `config.static_dir` is set, serves static assets with SPA fallback.
-/// Otherwise, serves only the API endpoints.
+/// Dashboard resolution matches [`crate::run_daemon`]: explicit
+/// `config.static_dir`, then the copy compiled in, then API-only.
 pub async fn start_server(config: ServerConfig) -> Result<()> {
     use tokio::net::TcpListener;
     use tracing::info;
@@ -311,10 +311,12 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
         Vec::new(),
     ));
 
-    // Choose router based on whether static serving is configured
     let app = if let Some(ref static_dir) = config.static_dir {
         info!("Serving static assets from: {}", static_dir.display());
         crate::routes::create_spa_router(state, static_dir, &config.cors, access)
+    } else if crate::ui::has_embedded_ui() {
+        info!("serving the dashboard compiled into this binary");
+        crate::ui::create_embedded_spa_router(state, &config.cors, access)
     } else {
         crate::routes::create_router(state, &config.cors, access)
     };
@@ -322,7 +324,7 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
     let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr).await?;
 
-    if config.static_dir.is_some() {
+    if config.static_dir.is_some() || crate::ui::has_embedded_ui() {
         info!("gglib web server (with UI) listening on http://{}", addr);
     } else {
         info!("gglib web server (API only) listening on http://{}", addr);
