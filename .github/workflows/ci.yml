@@ -153,6 +153,11 @@ jobs:
       run:
         shell: bash
     steps:
+      # `large-packages` is off: measured on run 32705784511 it spent 77 of this
+      # step's 232 seconds to reclaim 1.79 GB, and among what it purged were
+      # libgl1, libglx-mesa0 and libdbusmenu-gtk3-4 — which `Install system
+      # dependencies` immediately pulls back as appindicator dependencies. The
+      # android/dotnet/haskell removals stay: 20 GB in 155 seconds.
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -160,7 +165,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
@@ -290,7 +295,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
@@ -354,7 +359,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
@@ -460,7 +465,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: true
+          large-packages: false
           docker-images: true
           swap-storage: true
 
