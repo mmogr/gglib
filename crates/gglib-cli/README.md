@@ -219,8 +219,8 @@ echo "Paris, London, Tokyo" | gglib q "List these cities: {}"
 # Pipe command output
 git diff | gglib q "Explain these changes"
 
-# Debug: see the constructed prompt
-gglib q --verbose --file CODE.rs "Explain this"
+# Debug: see the constructed prompt (-v is the global debug-logging flag)
+gglib q --show-prompt --file CODE.rs "Explain this"
 
 # Cleaner output for scripting (no prompt echo, no timings)
 gglib q -Q "What is 2+2?"

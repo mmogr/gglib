@@ -122,7 +122,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             model,
             file,
             context,
-            verbose,
+            show_prompt,
             quiet,
             sampling,
             profile,
@@ -154,7 +154,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 max_parallel,
                 observation_tools,
                 max_observation_steps,
-                verbose,
+                show_prompt,
+                verbose, // global flag forwarded here, as on `chat`
                 quiet,
                 sampling,
                 profile: profile.profile,

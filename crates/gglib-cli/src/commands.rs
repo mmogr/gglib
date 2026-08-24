@@ -184,8 +184,8 @@ pub enum Commands {
         #[command(flatten)]
         context: ContextArgs,
         /// Show the constructed prompt before sending
-        #[arg(long)]
-        verbose: bool,
+        #[arg(long = "show-prompt")]
+        show_prompt: bool,
         /// Cleaner output for scripting (no tool progress, no reasoning tokens)
         #[arg(long, short = 'Q')]
         quiet: bool,
