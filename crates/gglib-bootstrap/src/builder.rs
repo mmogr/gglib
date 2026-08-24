@@ -6,8 +6,8 @@ use anyhow::Result;
 
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
-    AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort,
-    HfClientPort, ModelRegistrarPort, ModelRepository,
+    AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
+    ModelRegistrarPort, ModelRepository,
 };
 use gglib_core::services::{AppCore, ModelVerificationService};
 use gglib_db::{CoreFactory, ModelFilesRepository, setup_database};
@@ -97,14 +97,12 @@ impl CoreBootstrap {
         };
 
         // 9. Download manager — `DownloadManagerDeps<R,..>` requires R: Sized,
-        //    so we pass the concrete registrar. The emitter is bridged from the
-        //    adapter's AppEventEmitter to satisfy DownloadEventEmitterPort.
-        let download_emitter = Arc::new(AppEventBridge::new(Arc::clone(&emitter)));
+        //    so we pass the concrete registrar.
         let downloads: Arc<dyn DownloadManagerPort> =
             Arc::new(build_download_manager(DownloadManagerDeps {
                 model_registrar: model_registrar_concrete,
                 hf_client: hf_client_concrete,
-                event_emitter: download_emitter,
+                event_emitter: Arc::clone(&emitter),
                 config: download_config,
             }));
 

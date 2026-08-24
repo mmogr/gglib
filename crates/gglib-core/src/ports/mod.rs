@@ -3,7 +3,6 @@ pub(crate) mod agent;
 pub(crate) mod benchmark;
 pub mod chat_history;
 pub(crate) mod download;
-pub(crate) mod download_event_emitter;
 pub(crate) mod download_manager;
 pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
@@ -40,7 +39,6 @@ pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT
 pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
-pub use download_event_emitter::{AppEventBridge, DownloadEventEmitterPort, NoopDownloadEmitter};
 pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{

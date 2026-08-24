@@ -161,8 +161,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         "Axum bootstrap resolved paths"
     );
 
-    // 1. SSE broadcaster — doubles as AppEventEmitter for the shared bootstrap
-    //    and feeds DownloadEvents through AppEventBridge to the download manager.
+    // 1. SSE broadcaster — doubles as AppEventEmitter for the shared bootstrap,
+    //    which is also the sink the download manager emits into.
     let sse = Arc::new(SseBroadcaster::with_defaults());
 
     // 2. Shared infrastructure via gglib-bootstrap.

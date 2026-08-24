@@ -10,7 +10,7 @@ use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
-use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, NoopDownloadEmitter};
+use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, NoopEmitter};
 use gglib_core::{Model, RepositoryError};
 
 const REPO: &str = "owner/repo";
@@ -72,7 +72,7 @@ fn test_manager() -> DownloadManagerImpl {
     DownloadManagerImpl::new(
         Arc::new(NoRegistrar),
         Arc::new(OneQuantHf),
-        Arc::new(NoopDownloadEmitter::new()),
+        Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
     )
 }
