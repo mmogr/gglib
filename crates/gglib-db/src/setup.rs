@@ -691,7 +691,7 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
 /// Left alone, `gglib model add <shard-2>` against a sharded model already in
 /// the library matches nothing, so the add proceeds and appends a second row
 /// for a model that is already there. Unlike the key backfill this needs no
-/// `--force` to reach: it is the plain add path.
+/// `--reimport` to reach: it is the plain add path.
 ///
 /// Applies to every row with a shard list, not only `local:` ones — a
 /// downloaded sharded model keeps its `hf:` key but had its paths written the

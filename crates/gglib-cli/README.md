@@ -306,7 +306,7 @@ gglib model add ~/models/llama-2-7b.Q4_K_M.gguf
 
 # Re-import one already in the library, refreshing its derived metadata
 # (capabilities, quantization, context length, expert counts, tags, spec)
-gglib model add --force ~/models/llama-2-7b.Q4_K_M.gguf
+gglib model add --reimport ~/models/llama-2-7b.Q4_K_M.gguf
 
 # List all models
 gglib model list

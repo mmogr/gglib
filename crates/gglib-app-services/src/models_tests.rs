@@ -127,7 +127,7 @@ async fn adding_a_file_already_in_the_library_is_a_conflict() {
     );
 }
 
-/// **The duplicate `--force` used to create.** A downloaded model is keyed
+/// **The duplicate `--reimport` used to create.** A downloaded model is keyed
 /// `hf:<repo>@<sha>#<file>`, but re-importing its file computes a
 /// `local:<hash>` key. Nothing conflicted, `file_path` carries no unique
 /// index, and the refresh appended a *second* row for one file — the exact
@@ -171,7 +171,7 @@ async fn forcing_a_downloaded_model_refreshes_it_rather_than_duplicating_it() {
         .models()
         .import_from_file(&gguf_path, &NoopGgufParser, None, ImportMode::Refresh)
         .await
-        .expect("--force must refresh rather than fail");
+        .expect("--reimport must refresh rather than fail");
 
     assert_eq!(
         refreshed.id, original.id,
@@ -187,7 +187,7 @@ async fn forcing_a_downloaded_model_refreshes_it_rather_than_duplicating_it() {
 /// **A refresh must not repoint a sharded model at the wrong file.**
 ///
 /// `find_by_path` matches a sharded model through its sibling paths, so
-/// `--force` on shard 2 finds the row keyed to shard 1. Landing on it and
+/// `--reimport` on shard 2 finds the row keyed to shard 1. Landing on it and
 /// assigning `file_path = excluded.file_path` would repoint the model at
 /// the shard-2 file — which llama.cpp cannot open a split GGUF from, so
 /// the model would stop launching. Appending a stray row (the behaviour

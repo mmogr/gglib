@@ -664,7 +664,7 @@ mod tests {
     ///
     /// `file_paths_json`, `download_date` and `last_update_check` were plain
     /// assignments in `DO UPDATE SET`, and a local re-import populates none of
-    /// them — so `--force` on a downloaded model wiped its shard list (taking
+    /// them — so `--reimport` on a downloaded model wiped its shard list (taking
     /// the sibling lookup with it) and made it read as never-downloaded and
     /// never-update-checked, which the update-check workflow keys on.
     #[tokio::test]

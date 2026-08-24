@@ -23,7 +23,7 @@ use gglib_core::utils::validation;
 ///
 /// * `ctx` - The CLI context providing access to AppCore and parser
 /// * `file_path` - Path to the GGUF file to add
-/// * `force` - Re-import a file already in the library, overwriting its row
+/// * `reimport` - Re-import a file already in the library, overwriting its row
 ///
 /// # Returns
 ///
@@ -34,9 +34,9 @@ use gglib_core::utils::validation;
 /// This function will return an error if:
 /// - File validation fails
 /// - GGUF metadata extraction fails
-/// - The file is already in the library and `force` was not passed
+/// - The file is already in the library and `reimport` was not passed
 /// - Database operations fail
-pub(crate) async fn execute(ctx: &CliContext, file_path: &str, force: bool) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, file_path: &str, reimport: bool) -> Result<()> {
     let path = PathBuf::from(file_path);
 
     // Validate the GGUF file and extract metadata for CLI preview
@@ -48,10 +48,10 @@ pub(crate) async fn execute(ctx: &CliContext, file_path: &str, force: bool) -> R
     // database — but reaching it costs the user a parameter-count prompt
     // first, and answering questions about a model only to be told it was
     // already there reads as a bug even though the refusal is correct.
-    if !force && let Some(existing) = ctx.app.models().find_by_path(&path).await? {
+    if !reimport && let Some(existing) = ctx.app.models().find_by_path(&path).await? {
         anyhow::bail!(
             "'{}' is already in the library as \"{}\" (id {}).\n\
-             Pass --force to re-import it and refresh its derived metadata.",
+             Pass --reimport to re-import it and refresh its derived metadata.",
             path.display(),
             existing.name,
             existing.id
@@ -77,13 +77,13 @@ pub(crate) async fn execute(ctx: &CliContext, file_path: &str, force: bool) -> R
 
     // Prompt for parameter count override (CLI-specific interactive UX).
     //
-    // Skipped entirely under --force. `param_count_b` is not among the columns
+    // Skipped entirely under --reimport. `param_count_b` is not among the columns
     // the upsert refreshes, so on this path the answer could only be collected
     // and then thrown away — the very thing moving the duplicate check above
     // the prompts was meant to stop.
-    let param_count_override = if force {
+    let param_count_override = if reimport {
         println!(
-            "\nSkipping the parameter-count prompt: --force refreshes derived \
+            "\nSkipping the parameter-count prompt: --reimport refreshes derived \
              metadata only and leaves the stored parameter count alone."
         );
         None
@@ -100,7 +100,7 @@ pub(crate) async fn execute(ctx: &CliContext, file_path: &str, force: bool) -> R
     };
 
     // Delegate to shared core logic for model import
-    let mode = if force {
+    let mode = if reimport {
         ImportMode::Refresh
     } else {
         ImportMode::Fresh
@@ -112,14 +112,14 @@ pub(crate) async fn execute(ctx: &CliContext, file_path: &str, force: bool) -> R
         .await?;
 
     // Display clean summary using shared presentation
-    if force {
+    if reimport {
         println!("\nRe-derived from file:");
     } else {
         println!("\nModel successfully created:");
     }
     display_model_summary(&saved_model, ModelSummaryOpts::with_title(""));
 
-    if force {
+    if reimport {
         // Be precise about what moved. The row is re-read after the upsert, so
         // the name shown above is the stored one — announcing a blanket
         // "refreshed" over it would tell the user something the database did

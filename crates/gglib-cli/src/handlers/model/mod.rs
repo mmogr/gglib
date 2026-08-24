@@ -42,8 +42,11 @@ pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
 /// Dispatch a `model` subcommand to its handler.
 pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
     match command {
-        ModelCommand::Add { file_path, force } => {
-            add::execute(ctx, &file_path, force).await?;
+        ModelCommand::Add {
+            file_path,
+            reimport,
+        } => {
+            add::execute(ctx, &file_path, reimport).await?;
         }
         ModelCommand::List {
             sort,

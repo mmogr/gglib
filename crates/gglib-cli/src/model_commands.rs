@@ -37,8 +37,8 @@ pub enum ModelCommand {
         /// The model keeps its id, and its name, parameter count and
         /// architecture are left exactly as stored — those columns are not
         /// part of the upsert at all.
-        #[arg(long)]
-        force: bool,
+        #[arg(long = "reimport", alias = "force")]
+        reimport: bool,
     },
 
     /// List GGUF models in the database
