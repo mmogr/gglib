@@ -239,20 +239,6 @@ jobs:
       - name: Run doctests
         run: cargo test --doc --verbose
 
-      # The frontend's wire types are generated from these Rust types, and the
-      # generated output is committed so the GUI build needs no cargo. That
-      # only stays honest if something regenerates and compares — otherwise a
-      # changed Rust field ships against a stale TypeScript mirror, which is
-      # the whole class of drift the generation exists to end.
-      #
-      # Here rather than in `enforcement`: the cargo cache is warm in this job,
-      # and this step needs a build. It checks staleness only — the annotations
-      # themselves are checked by `check_ts_bindings.sh` in `enforcement`,
-      # because a missing annotation regenerates consistently and leaves this
-      # diff clean.
-      - name: Check generated TypeScript bindings are current
-        run: make bindings-check
-
       # The same invocation `docs.yml` and `release.yml` deploy with, run on
       # every PR so a broken link is caught by the change that breaks it
       # rather than by whoever next cuts a release. Both of those only fire on
@@ -289,6 +275,76 @@ jobs:
             rust-test-gglib-tauri.txt
             rust-test-gglib-integration-tests.txt
           retention-days: 30
+
+  bindings:
+    name: Bindings Freshness
+    runs-on: ubuntu-latest
+    # Its own job rather than a step on `test`, which is where it lived on the
+    # stated grounds that "the cargo cache is warm in this job". It was not:
+    # this builds `--features ts-bindings`, a different feature unification
+    # from the one `test` had just produced, and the log shows it recompiling
+    # accordingly. Three minutes seventeen of critical path buying nothing that
+    # a job running in parallel does not buy for free.
+    #
+    # The frontend's wire types are generated from the Rust types, and the
+    # generated output is committed so the GUI build needs no cargo. That only
+    # stays honest if something regenerates and compares — otherwise a changed
+    # Rust field ships against a stale TypeScript mirror, which is the whole
+    # class of drift the generation exists to end.
+    #
+    # Staleness only. The annotations themselves are checked by
+    # `check_ts_bindings.sh` in `enforcement`, because a missing annotation
+    # regenerates consistently and leaves this diff clean.
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-bindings"
+          cache-on-failure: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # `crates/gglib-axum/src/ui.rs` embeds `../../web_ui` through rust-embed
+      # with `debug-embed`, so the crate does not compile without it — this is
+      # not optional even though nothing here serves a page.
+      - name: Build Web UI
+        run: |
+          npm ci
+          npm run build
+
+      - name: Check generated TypeScript bindings are current
+        run: make bindings-check
 
   test-frontend:
     name: Test (Frontend)
@@ -506,7 +562,7 @@ jobs:
     name: CI Success
     runs-on: ubuntu-latest
     if: always()
-    needs: [boundaries, enforcement, quality, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
+    needs: [boundaries, bindings, enforcement, quality, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
     steps:
       - name: Check all jobs succeeded
         run: |
