@@ -89,7 +89,7 @@ crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 830
 crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 438
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1065
-crates/gglib-db/src/setup.rs 1001
+crates/gglib-db/src/setup.rs 1104
 crates/gglib-download/src/cli_emitter.rs 530
 crates/gglib-download/src/cli_exec/exec/progress.rs 330
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 379
