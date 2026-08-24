@@ -99,6 +99,13 @@ jobs:
       - name: Check every setting has a surface
         run: ./scripts/check_settings_surfaces.sh
 
+      # `let _ = sqlx::query(…)` discards a locked database and a missing table
+      # on the same terms as the duplicate column it claims to be ignoring.
+      # #796 shipped that way and nothing reported it, because the discard is
+      # what removes the evidence.
+      - name: Check no sqlx error is swallowed
+        run: ./scripts/check_swallowed_db_errors.sh
+
       # Added to `make enforce` but not here, so it only ever ran locally —
       # which is the same decorative enforcement it was written to end.
       - name: Check the Rust file-size ratchet

@@ -107,6 +107,51 @@ async fn example() {
 2. **No Domain Logic** — Pure data access; business logic stays in `gglib-core::services`
 3. **Pooled Connections** — All adapters share a connection pool for efficiency
 
+## Schema Migrations
+
+There is no migration runner. `create_schema()` is `CREATE TABLE IF NOT EXISTS`
+for the current shape, plus one `add_column_if_missing()` call per column that
+was added after the fact, and it is safe to run against a database of any
+vintage.
+
+**An `ALTER` that fails is a failure.** `add_column_if_missing()` reads `PRAGMA
+table_info`, returns without doing anything if the column is already there, and
+otherwise runs the `ALTER` with `?` — so the idempotence comes from
+introspection and every error still surfaces. Those six migrations used to be
+written the other way round:
+
+```text
+let _ = sqlx::query("ALTER TABLE …").execute(pool).await;
+// Ignore error if column already exists
+```
+
+which absorbed `no such table`, `database is locked` and `database or disk is
+full` on exactly the same terms as the duplicate column it named. #796 is what
+that cost: an `ALTER` placed above the `CREATE` that makes its table failed
+silently, so every fresh install ran without `benchmark_runs.applied_json`
+until a second boot re-ran the migration.
+
+`is_unique_violation()` is the sanctioned shape of tolerance — one error code,
+named, with every other one propagated.
+`scripts/check_swallowed_db_errors.sh` fails the build if the discarded form
+comes back.
+
+**Nothing here deletes user data.** `create_schema()` drops a table only when
+that table is the tombstone of a removed feature and provably never held a row
+(`download_queue`, the orchestrator pair). A schema this build cannot correctly
+write to is refused instead: if `chat_messages` predates the `'tool'` role, setup
+fails and names the database file, leaving every conversation where it is. That
+branch used to DROP both chat tables — silently, at boot, on a substring match
+against a stored CREATE statement.
+
+There is deliberately no `PRAGMA user_version` ladder over the column set.
+`CANONICAL_PATH_SCHEMA_VERSION` is already load-bearing for the canonical-path
+backfill (a blocking syscall per row, paid once per library), and the
+`template_caps` column post-dates the stamp — so a version-gated `ALTER` that
+propagated errors would abort startup with `duplicate column name` on real
+installs. A ladder can be layered on after v1 at no cost, because `PRAGMA
+table_info` keeps the shape introspectable either way.
+
 ## Testing
 
 All tests are inline `#[cfg(test)]` blocks living alongside their respective implementations.

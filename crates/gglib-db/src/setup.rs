@@ -32,6 +32,63 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
     )
 }
 
+/// Adds `column` to `table`, unless the table already has it.
+///
+/// Every migration below used to be a `let _ = sqlx::query("ALTER TABLE …")`
+/// under a comment reading "ignore error if column already exists". That
+/// discard is unconditional: `duplicate column name` — the one outcome it was
+/// meant to absorb — reads identically to `no such table`, a locked database
+/// and a full disk.
+///
+/// #796 is what that cost. The `benchmark_runs.applied_json` ALTER sat above
+/// the CREATE that makes the table, so on a fresh database it failed with `no
+/// such table`, the error went into `_`, and the CREATE that ran afterwards
+/// carried no such column. Every fresh install was unable to store an apply
+/// record until a second boot re-ran the migration, and nothing anywhere said
+/// so.
+///
+/// So the idempotence is bought by asking the database what shape it is —
+/// `PRAGMA table_info`, the same introspection this module's own tests use —
+/// and the ALTER itself runs with `?`. A column already present is a skip; a
+/// missing table is an error, which is #796 arriving at boot rather than in a
+/// bug report.
+///
+/// **Deliberately not a `PRAGMA user_version` ladder**, and that is worth
+/// writing down so the next reader does not redo the analysis. The
+/// `template_caps` ALTER (#862, 2026-08-17) landed *after* the `user_version
+/// = 1` stamp (#850, 2026-08-15), so a field database stamped `1` may or may
+/// not carry that column depending on which build last opened it — a
+/// version-gated ALTER that propagates errors would abort startup with
+/// `duplicate column name` on real installs. `CANONICAL_PATH_SCHEMA_VERSION`
+/// also gates the path backfill, which its own comment describes as a
+/// blocking syscall per row, so bumping it re-runs that for every user. A real
+/// version ladder can be layered on after v1 at no cost, precisely because
+/// `PRAGMA table_info` keeps the shape introspectable either way.
+///
+/// The identifiers are interpolated rather than bound: `SQLite` accepts no
+/// parameters in DDL. Every caller passes a literal.
+async fn add_column_if_missing(
+    pool: &SqlitePool,
+    table: &str,
+    column: &str,
+    decl: &str,
+) -> Result<()> {
+    let present: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?")
+            .bind(table)
+            .bind(column)
+            .fetch_one(pool)
+            .await?;
+    if present > 0 {
+        return Ok(());
+    }
+
+    sqlx::query(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Sets up the `SQLite` database connection and ensures the schema exists.
 ///
 /// This function:
@@ -183,20 +240,14 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // for those from `inference_defaults` itself on every read instead (see
     // `row_mappers::resolve_defaults_origin`), so a backfill pass would only
     // duplicate work every row already gets for free.
-    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN defaults_origin TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
+    add_column_if_missing(pool, "models", "defaults_origin", "TEXT").await?;
 
     // Migration: add dialect_spec to models — the structured tool-call
     // dialect detected at import/retag time (JSON-serialized
     // `gglib_core::domain::DialectSpec`). No backfill: rows without a spec
     // fall back to their `format:*` tag at context-resolution time, and
     // `gglib model retag` re-derives the spec from persisted metadata.
-    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN dialect_spec TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
+    add_column_if_missing(pool, "models", "dialect_spec", "TEXT").await?;
 
     // Migration: add template_caps to models — llama-server's per-template
     // capability self-report (`chat_template_caps` from GET /props),
@@ -205,10 +256,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // a fact about the binary–model pair that only a launch can learn, and a
     // NULL here *is* the tri-state's "never observed" — manufacturing a
     // value would collapse it into an answer nobody measured.
-    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN template_caps TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
+    add_column_if_missing(pool, "models", "template_caps", "TEXT").await?;
 
     // Index on file path for lookups (no longer unique)
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
@@ -288,23 +336,33 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Guard: drop chat tables if the schema is out of date (missing 'tool' role).
-    // No backwards-compat needed — tables are recreated below.
-    let needs_recreate: bool = sqlx::query_scalar::<_, String>(
+    // A `chat_messages` table predating the 'tool' role cannot store a
+    // tool-role message: its CHECK constraint rejects the insert. This used to
+    // DROP both chat tables and let the CREATEs below rebuild them — deleting
+    // the user's entire chat history, silently, at boot, on the strength of a
+    // substring match against a stored CREATE statement.
+    //
+    // The role has been in that CREATE since #362 (2026-04-03), so the branch
+    // is dead for any database a build from the last four months has opened.
+    // Dead is not the same as harmless: what it did when it fired was destroy
+    // data with no prompt, no backup and no log line, and that is not a thing
+    // to carry into a schema freeze. It refuses now, naming the file, and the
+    // user decides what happens to their own history.
+    let chat_messages_sql: Option<String> = sqlx::query_scalar(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='chat_messages'",
     )
     .fetch_optional(pool)
-    .await?
-    .is_some_and(|sql| !sql.contains("'tool'"));
-
-    if needs_recreate {
-        // Drop messages first (FK child), then conversations.
-        sqlx::query("DROP TABLE IF EXISTS chat_messages")
-            .execute(pool)
-            .await?;
-        sqlx::query("DROP TABLE IF EXISTS chat_conversations")
-            .execute(pool)
-            .await?;
+    .await?;
+    if chat_messages_sql.is_some_and(|sql| !sql.contains("'tool'")) {
+        let file = pool.connect_options().get_filename().display().to_string();
+        anyhow::bail!(
+            "the chat_messages table in {file} predates the 'tool' role and cannot \
+             store tool-role messages, so this build will not run against it.\n\
+             Nothing has been changed. Either move that file aside, in which case \
+             gglib creates a fresh database, or drop the two chat tables yourself \
+             if the history is expendable:\n  \
+             sqlite3 {file} 'DROP TABLE chat_messages; DROP TABLE chat_conversations;'"
+        );
     }
 
     // Create chat conversations table
@@ -349,16 +407,10 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .await?;
 
     // Migration: Add metadata column for tool usage, etc.
-    let _ = sqlx::query(r#"ALTER TABLE chat_messages ADD COLUMN metadata TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
+    add_column_if_missing(pool, "chat_messages", "metadata", "TEXT").await?;
 
     // Migration: Add settings column for session parameter persistence.
-    let _ = sqlx::query(r#"ALTER TABLE chat_conversations ADD COLUMN settings TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
+    add_column_if_missing(pool, "chat_conversations", "settings", "TEXT").await?;
 
     // Create MCP servers table
     sqlx::query(
@@ -455,11 +507,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // the models migration block, before benchmark_runs existed on a fresh
     // database — where "no such table" was silently swallowed and the CREATE
     // (which then lacked the column) left every fresh install unable to
-    // store an apply record until a second boot re-ran the migration.
-    let _ = sqlx::query(r#"ALTER TABLE benchmark_runs ADD COLUMN applied_json TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
+    // store an apply record until a second boot re-ran the migration. That
+    // ordering is still load-bearing, but it is no longer the only thing
+    // standing between this line and #796: the ALTER propagates now, so the
+    // same mistake fails the boot it is made on.
+    add_column_if_missing(pool, "benchmark_runs", "applied_json", "TEXT").await?;
 
     // Per-model compare results: real inference quality + real-world timing.
     // Timing fields are nullable — llama-server may omit the timings object.
@@ -908,14 +960,172 @@ mod tests {
             .unwrap();
     }
 
-    /// How many times `column` appears in `models` — 1 proves the migration
+    /// How many times `column` appears in `table` — 1 proves the migration
     /// landed exactly once, 0 that it never ran.
-    async fn models_column_count(pool: &SqlitePool, column: &str) -> i64 {
-        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('models') WHERE name = ?")
+    async fn column_count(pool: &SqlitePool, table: &str, column: &str) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?")
+            .bind(table)
             .bind(column)
             .fetch_one(pool)
             .await
             .unwrap()
+    }
+
+    /// A column the table does not have is added, and the value a
+    /// pre-migration row reads back is NULL rather than an error.
+    #[tokio::test]
+    async fn add_column_if_missing_adds_an_absent_column() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO t (id) VALUES (1)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(column_count(&pool, "t", "note").await, 0);
+
+        add_column_if_missing(&pool, "t", "note", "TEXT")
+            .await
+            .unwrap();
+
+        assert_eq!(column_count(&pool, "t", "note").await, 1);
+        let note: Option<String> = sqlx::query_scalar("SELECT note FROM t WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(note, None);
+    }
+
+    /// A column that is already there is a skip, not an error. This is the
+    /// idempotence the swallowed ALTER used to buy by discarding `duplicate
+    /// column name` — bought here by introspection instead, so it costs no
+    /// other error.
+    #[tokio::test]
+    async fn add_column_if_missing_skips_a_column_that_is_present() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE t (id INTEGER PRIMARY KEY, note TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO t (id, note) VALUES (1, 'kept')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        add_column_if_missing(&pool, "t", "note", "TEXT")
+            .await
+            .unwrap();
+        add_column_if_missing(&pool, "t", "note", "TEXT")
+            .await
+            .unwrap();
+
+        assert_eq!(column_count(&pool, "t", "note").await, 1);
+        let note: String = sqlx::query_scalar("SELECT note FROM t WHERE id = 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(note, "kept", "the existing column must not be rewritten");
+    }
+
+    /// The #796 case. The `applied_json` ALTER once ran before the CREATE that
+    /// makes `benchmark_runs`; `no such table` went into `_` and every fresh
+    /// install shipped without the column. It must fail the boot it is made
+    /// on, not skip.
+    #[tokio::test]
+    async fn add_column_if_missing_fails_when_the_table_does_not_exist() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        let err = add_column_if_missing(&pool, "benchmark_runs", "applied_json", "TEXT")
+            .await
+            .expect_err("an ALTER against a table that does not exist must surface");
+
+        assert!(
+            err.to_string().contains("no such table"),
+            "the real cause must reach the caller, got: {err}"
+        );
+    }
+
+    /// A chat schema too old to write to must stop the boot, not be deleted.
+    ///
+    /// The guard this replaces DROPped both chat tables — every conversation
+    /// and every message the user had — on a substring match against a stored
+    /// CREATE statement, with no prompt and no log line. The refusal names the
+    /// file and leaves the data where it is.
+    #[tokio::test]
+    async fn an_out_of_date_chat_schema_is_refused_rather_than_dropped() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        // The pre-#362 shape: no 'tool' in the role CHECK.
+        sqlx::query(
+            "CREATE TABLE chat_conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO chat_conversations (title) VALUES ('Yesterday')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO chat_messages (conversation_id, role, content) \
+             VALUES (1, 'user', 'do not delete me')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let err = create_schema(&pool)
+            .await
+            .expect_err("a chat schema this build cannot write to must stop the boot");
+        assert!(
+            err.to_string().contains("chat_messages"),
+            "the message must name what is wrong, got: {err}"
+        );
+
+        let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_messages")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let conversations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_conversations")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(messages, 1, "the history must survive the refusal");
+        assert_eq!(conversations, 1, "the history must survive the refusal");
+    }
+
+    /// The current shape is not refused — the check has to stay off the path
+    /// every real database takes, or it is just an outage.
+    #[tokio::test]
+    async fn a_current_chat_schema_is_left_alone() {
+        let pool = setup_test_database().await.unwrap();
+        sqlx::query("INSERT INTO chat_conversations (title) VALUES ('Today')")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        create_schema(&pool).await.unwrap();
+
+        let conversations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat_conversations")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(conversations, 1);
     }
 
     /// The `template_caps` migration on a database created **before** the
@@ -958,11 +1168,11 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        assert_eq!(models_column_count(&pool, "template_caps").await, 0);
+        assert_eq!(column_count(&pool, "models", "template_caps").await, 0);
 
         create_schema(&pool).await.unwrap();
 
-        assert_eq!(models_column_count(&pool, "template_caps").await, 1);
+        assert_eq!(column_count(&pool, "models", "template_caps").await, 1);
         let caps: Option<String> =
             sqlx::query_scalar("SELECT template_caps FROM models WHERE name = 'Old'")
                 .fetch_one(&pool)
@@ -976,10 +1186,10 @@ mod tests {
     #[tokio::test]
     async fn template_caps_migration_is_idempotent_on_an_existing_database() {
         let pool = setup_test_database().await.unwrap();
-        assert_eq!(models_column_count(&pool, "template_caps").await, 1);
+        assert_eq!(column_count(&pool, "models", "template_caps").await, 1);
 
         create_schema(&pool).await.unwrap();
 
-        assert_eq!(models_column_count(&pool, "template_caps").await, 1);
+        assert_eq!(column_count(&pool, "models", "template_caps").await, 1);
     }
 }

@@ -251,6 +251,11 @@ enforce: ## Run the architecture enforcement checks
 	@# compiles perfectly — the failure is an absence. tool_call_repair sat that
 	@# way for months while `config settings show` printed it.
 	@./scripts/check_settings_surfaces.sh
+	@# `let _ = sqlx::query(…)` tolerates a locked database and a missing table
+	@# on the same terms as the duplicate column its comment named. #796 shipped
+	@# exactly that: an ALTER failed with "no such table", said nothing, and left
+	@# every fresh install without the column until a second boot.
+	@./scripts/check_swallowed_db_errors.sh
 	@# The repo's "small files" constraint was enforced only over src/ (TS and
 	@# CSS); Rust was never checked, and 175 files are already over the same
 	@# budget. A ratchet rather than a threshold, so the rule can bite today
