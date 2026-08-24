@@ -203,15 +203,11 @@ impl QueueRunState {
 ///
 /// This struct bundles all the ports and configuration needed
 /// to construct a `DownloadManagerImpl`.
-pub struct DownloadManagerDeps<R, H>
-where
-    R: ModelRegistrarPort + 'static,
-    H: HfClientPort + 'static,
-{
+pub struct DownloadManagerDeps {
     /// Port for registering completed downloads as models.
-    pub model_registrar: Arc<R>,
+    pub model_registrar: Arc<dyn ModelRegistrarPort>,
     /// Port for `HuggingFace` API access.
-    pub hf_client: Arc<H>,
+    pub hf_client: Arc<dyn HfClientPort>,
     /// Sink for the application events downloads produce.
     pub event_emitter: Arc<dyn AppEventEmitter>,
     /// Configuration for the download manager.
@@ -222,11 +218,7 @@ where
 ///
 /// Returns an implementation of `DownloadManagerPort` that can be
 /// stored as `Arc<dyn DownloadManagerPort>` in adapters.
-pub fn build_download_manager<R, H>(deps: DownloadManagerDeps<R, H>) -> DownloadManagerImpl
-where
-    R: ModelRegistrarPort + 'static,
-    H: HfClientPort + 'static,
-{
+pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl {
     DownloadManagerImpl::new(
         deps.model_registrar,
         deps.hf_client,
@@ -246,8 +238,8 @@ pub struct DownloadManagerImpl {
     event_emitter: Arc<dyn AppEventEmitter>,
     /// `HuggingFace` client for fetching model metadata (e.g. tags at registration time).
     hf_client: Arc<dyn HfClientPort>,
-    /// File resolver.
-    resolver: HfQuantizationResolver,
+    /// File resolver, shared with [`QuantizationSelector`].
+    resolver: Arc<HfQuantizationResolver>,
     /// Quantization selector for choosing best quantization.
     selector: QuantizationSelector,
     /// Queue state (protected by `RwLock` for async access).
@@ -281,26 +273,20 @@ pub struct DownloadManagerImpl {
 
 impl DownloadManagerImpl {
     /// Create a new download manager.
-    fn new<R, H>(
-        model_registrar: Arc<R>,
-        hf_client: Arc<H>,
+    fn new(
+        model_registrar: Arc<dyn ModelRegistrarPort>,
+        hf_client: Arc<dyn HfClientPort>,
         event_emitter: Arc<dyn AppEventEmitter>,
         config: DownloadManagerConfig,
-    ) -> Self
-    where
-        R: ModelRegistrarPort + 'static,
-        H: HfClientPort + 'static,
-    {
-        let hf_client_dyn: Arc<dyn HfClientPort> = hf_client;
-        let resolver = HfQuantizationResolver::new(Arc::clone(&hf_client_dyn));
-        let resolver_arc: Arc<dyn QuantizationResolver> =
-            Arc::new(HfQuantizationResolver::new(Arc::clone(&hf_client_dyn)));
-        let selector = QuantizationSelector::new(resolver_arc);
+    ) -> Self {
+        let resolver = Arc::new(HfQuantizationResolver::new(Arc::clone(&hf_client)));
+        let selector =
+            QuantizationSelector::new(Arc::clone(&resolver) as Arc<dyn QuantizationResolver>);
 
         Self {
             model_registrar,
             event_emitter,
-            hf_client: hf_client_dyn,
+            hf_client,
             resolver,
             selector,
             queue: RwLock::new(DownloadQueue::new(config.max_queue_size)),

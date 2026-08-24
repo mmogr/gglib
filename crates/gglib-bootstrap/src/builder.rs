@@ -58,8 +58,6 @@ impl CoreBootstrap {
         // 4. Model-files repository (used by registrar + verification service)
         let model_files_repo = Arc::new(ModelFilesRepository::new(pool.clone()));
 
-        // Keep the concrete registrar type so it satisfies the Sized bound in
-        // DownloadManagerDeps<R, ..>; erased to a trait object only in BuiltCore.
         // 5. HuggingFace client. Built before the registrar because the
         //    registrar uses it to look up a model author's published sampling
         //    recipe at import time.
@@ -68,15 +66,14 @@ impl CoreBootstrap {
         //    Gemma, routinely — can answer that lookup for a user who has
         //    configured one. Without it the lookup 401s and the import falls
         //    back to the tag guess, which is the designed degradation.
-        let hf_client_concrete = Arc::new(DefaultHfClient::new(
+        let hf_client: Arc<dyn HfClientPort> = Arc::new(DefaultHfClient::new(
             &HfClientConfig::default().with_optional_token(config.hf_token.clone()),
         ));
-        let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
 
         // 6. Model registrar — composes model repository + GGUF parser so
         //    that both GUI and CLI download paths use the identical
         //    registration logic.
-        let model_registrar_concrete = Arc::new(
+        let model_registrar: Arc<dyn ModelRegistrarPort> = Arc::new(
             ModelRegistrar::new(
                 repos.models.clone(),
                 gguf_parser.clone(),
@@ -85,7 +82,6 @@ impl CoreBootstrap {
             )
             .with_hf_client(hf_client.clone()),
         );
-        let model_registrar: Arc<dyn ModelRegistrarPort> = model_registrar_concrete.clone();
 
         // 7. Download manager configuration
         let download_config = {
@@ -96,13 +92,12 @@ impl CoreBootstrap {
             cfg
         };
 
-        // 9. Download manager — `DownloadManagerDeps<R,..>` requires R: Sized,
-        //    so we pass the concrete registrar.
+        // 9. Download manager
         let downloads: Arc<dyn DownloadManagerPort> =
             Arc::new(build_download_manager(DownloadManagerDeps {
-                model_registrar: model_registrar_concrete,
-                hf_client: hf_client_concrete,
-                event_emitter: Arc::clone(&emitter),
+                model_registrar: Arc::clone(&model_registrar),
+                hf_client: Arc::clone(&hf_client),
+                event_emitter: emitter,
                 config: download_config,
             }));
 
