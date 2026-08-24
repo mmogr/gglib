@@ -149,9 +149,9 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<
         }
         ModelCommand::Verify {
             identifier,
-            verbose,
+            per_shard,
         } => {
-            verification::execute_verify(ctx, &identifier, verbose).await?;
+            verification::execute_verify(ctx, &identifier, per_shard).await?;
         }
         ModelCommand::Repair {
             identifier,

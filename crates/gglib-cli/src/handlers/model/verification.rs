@@ -13,10 +13,15 @@ use crate::bootstrap::CliContext;
 ///
 /// Verifies model integrity by computing SHA256 hashes and comparing against
 /// stored OIDs from HuggingFace.
+///
+/// `per_shard` prints a line per shard as it is hashed. It is deliberately not
+/// spelled `--verbose`: that id belongs to the global logging flag, and a
+/// local one by the same name stops the global from ever reaching this
+/// command.
 pub(crate) async fn execute_verify(
     ctx: &CliContext,
     identifier: &str,
-    verbose: bool,
+    per_shard: bool,
 ) -> Result<()> {
     // Get verification service
     let verification = ctx
@@ -40,7 +45,7 @@ pub(crate) async fn execute_verify(
 
     // Process progress updates
     while let Some(progress) = progress_rx.recv().await {
-        if verbose {
+        if per_shard {
             use gglib_core::services::ShardProgress;
             match &progress.shard_progress {
                 ShardProgress::Starting => {

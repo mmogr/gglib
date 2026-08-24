@@ -217,8 +217,8 @@ pub enum ModelCommand {
         /// Name or ID of the model to verify
         identifier: String,
         /// Show detailed progress for each shard
-        #[arg(short, long)]
-        verbose: bool,
+        #[arg(long = "per-shard")]
+        per_shard: bool,
     },
 
     /// Repair a corrupt model by re-downloading failed shards
