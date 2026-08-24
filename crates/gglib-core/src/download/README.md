@@ -27,6 +27,8 @@ system. No I/O, networking, or runtime dependencies allowed.
   Decays bytes and elapsed time separately so `hf-xet`'s bursty on-disk writes
   do not spike the reported rate. Renderers display what it produces and must
   never re-derive a rate from byte deltas.
+- `throttle` - `ProgressThrottle`, the emission rate limiter that runs with
+  the estimator. Feed `RateEstimator` every tick; throttle only what you send.
 - `format` - `format_rate` / `format_duration`. Rates are **decimal**
   (`1 MB/s` = 1,000,000 B/s) to match what a system network monitor reports;
   sizes stay binary and are rendered by `indicatif`'s `HumanBytes`. Mirrored
@@ -46,6 +48,7 @@ system. No I/O, networking, or runtime dependencies allowed.
 | [`format.rs`](format.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-format-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-format-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-format-coverage.json) |
 | [`queue.rs`](queue.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-queue-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-queue-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-queue-coverage.json) |
 | [`rate.rs`](rate.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-rate-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-rate-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-rate-coverage.json) |
+| [`throttle.rs`](throttle.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-throttle-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-throttle-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-throttle-coverage.json) |
 | [`types.rs`](types.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-types-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-types-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-download-types-coverage.json) |
 <!-- module-table:end -->
 

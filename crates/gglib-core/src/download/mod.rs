@@ -5,6 +5,7 @@ pub(crate) mod events;
 pub(crate) mod format;
 pub mod queue;
 pub(crate) mod rate;
+pub(crate) mod throttle;
 pub(crate) mod types;
 
 // Re-export commonly used types
@@ -16,4 +17,5 @@ pub use events::{DownloadEvent, DownloadStatus, DownloadSummary};
 pub use format::{format_duration, format_rate};
 pub use queue::{FailedDownload, QueueSnapshot, QueuedDownload};
 pub use rate::RateEstimator;
+pub use throttle::ProgressThrottle;
 pub use types::{DownloadId, Quantization, ShardInfo};

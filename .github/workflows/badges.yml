@@ -172,7 +172,7 @@ jobs:
           
           # gglib-download modules
           DL_TEST="$(find artifacts -name 'rust-test-gglib-download.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in queue executor progress resolver cli_exec; do
+          for MODULE in queue executor resolver cli_exec; do
             extract_module_tests "$DL_TEST" "$MODULE" "gglib-download-$MODULE"
           done
           
@@ -467,7 +467,7 @@ jobs:
           
           # gglib-download modules
           DL_LCOV="$(find artifacts -name 'gglib-download-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in queue executor progress resolver cli_exec; do
+          for MODULE in queue executor resolver cli_exec; do
             extract_module_cov "$DL_LCOV" "src/$MODULE/" "gglib-download-$MODULE"
           done
           
@@ -789,7 +789,7 @@ jobs:
           # =============================================================================
           # Per-module badges for gglib-download
           # =============================================================================
-          for MODULE in queue executor progress resolver cli_exec; do
+          for MODULE in queue executor resolver cli_exec; do
             if [ -d "crates/gglib-download/src/$MODULE" ]; then
               SCC_DATA=$(scc "crates/gglib-download/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
               LOC=$(echo "$SCC_DATA" | jq '.Code // 0')

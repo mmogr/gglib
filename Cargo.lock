@@ -2074,7 +2074,6 @@ dependencies = [
  "gglib-axum",
  "gglib-build-info",
  "gglib-core",
- "gglib-download",
  "gglib-runtime",
  "gglib-tauri",
  "gtk",

@@ -1,8 +1,7 @@
 //! llama.cpp installation and status commands.
 
 use crate::app::events::{emit_or_log, names};
-use gglib_core::download::{RateEstimator, format_duration, format_rate};
-use gglib_download::ProgressThrottle;
+use gglib_core::download::{ProgressThrottle, RateEstimator, format_duration, format_rate};
 use gglib_runtime::llama::{
     PrebuiltAvailability, check_llama_installed, check_prebuilt_availability,
     download_prebuilt_binaries_with_boxed_callback,
