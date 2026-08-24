@@ -15,6 +15,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check_workflow_yaml.sh](#check_workflow_yamlsh) | Workflow sanity: duplicate YAML keys, and badges.yml module paths | CI |
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
 | [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
+| [check_swallowed_db_errors.sh](#check_swallowed_db_errorssh) | No `sqlx` query has its `Result` discarded | CI |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
 | [install-llama.sh](#install-llamash) | Install llama.cpp with GPU detection | `make llama-install-auto` |
 | [generate_module_tables.sh](#generate_module_tablessh) | Update README badge tables | Manual |
@@ -164,6 +165,33 @@ exemption claims the field is written by something other than a person.
 ./scripts/check_settings_surfaces.sh
 ```
 
+### `check_swallowed_db_errors.sh`
+
+Fails if a `sqlx` query's `Result` is discarded — `let _ = sqlx::query(…)`, or
+`.ok();` on an awaited query.
+
+`gglib-db/src/setup.rs` carried six of these, each under a comment reading
+"Ignore error if column already exists". The comment names one error; the code
+discards every error, so `no such table`, `database is locked` and `database or
+disk is full` all read as success. #796 is what that cost: an `ALTER` placed
+above the `CREATE` that makes its table failed silently, and every fresh install
+ran without `benchmark_runs.applied_json` until a second boot.
+
+Tolerating a *named* error is fine, and `setup.rs::is_unique_violation` is the
+shape for it. What this bans is tolerating all of them by writing none of them
+down.
+
+A `let _` alongside `?`, `.unwrap()` or `.expect(` is cleared — that discards
+the row, not the error. `row.try_get("col").ok()` in the row mappers is out of
+scope by design and the script says so.
+
+Self-tests against a known-bad and a known-good fixture before scanning, and
+fails if it finds no queries at all.
+
+```bash
+./scripts/check_swallowed_db_errors.sh
+```
+
 ---
 
 ## Development Utility Scripts
@@ -282,7 +310,7 @@ The main CI workflows that use these scripts:
 | Workflow | Job | Scripts Used |
 |----------|-----|--------------|
 | `ci.yml` | `boundaries` | `check_boundaries.sh` |
-| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` |
+| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` |
 | `ci.yml` | `quality` | `check_workflow_yaml.sh` |
 | `check-issue-form.yml` | — | `check_issue_form_mapping.mjs` |
 | `bump-version.yml` | — | `sync_versions.py` |

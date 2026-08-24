@@ -680,7 +680,7 @@ Every PR must pass the following gates in order. They are not advisory.
 |---|---|---|
 | **Format** | `cargo fmt --all -- --check` | Consistent code style |
 | **Boundaries** | `./scripts/check_boundaries.sh` | Layer dependency rules |
-| **Architecture** | `./scripts/check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` | Tauri policy; no IPC in product routes; no frontend transport branching; no catch-all over `ParamSource`; every setting reachable; the two file-size ratchets |
+| **Architecture** | `./scripts/check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` | Tauri policy; no IPC in product routes; no frontend transport branching; no catch-all over `ParamSource`; every setting reachable; no discarded `sqlx` error; the two file-size ratchets |
 | **Clippy** | `cargo clippy --all-targets --all-features -- -D warnings` | No warnings, ever |
 | **Rust tests** | `cargo test` (aggregate + per-crate) | Correctness |
 | **Doc tests** | `cargo test --doc --verbose` | Doc examples compile and run |

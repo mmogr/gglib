@@ -133,6 +133,8 @@ until a second boot re-ran the migration.
 
 `is_unique_violation()` is the sanctioned shape of tolerance — one error code,
 named, with every other one propagated.
+`scripts/check_swallowed_db_errors.sh` fails the build if the discarded form
+comes back.
 
 **Nothing here deletes user data.** `create_schema()` drops a table only when
 that table is the tombstone of a removed feature and provably never held a row
