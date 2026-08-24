@@ -826,7 +826,27 @@ jobs:
           # unsorted manifest would churn between releases for no reason —
           # locale-dependent ordering has already bitten this repo once.
           # tr -d '\r' guards against a fragment ever being produced by pwsh.
-          cat sums/*.sha256 | tr -d '\r' | LC_ALL=C sort -k2 > SHA256SUMS
+          #
+          # A GNU checksum line is a digest, one space, an input-mode flag
+          # ('*' for binary, ' ' for text), then the name. coreutils takes the
+          # default flag from the compile-time O_BINARY macro, which is 0 on
+          # GNU/Linux but not on the MSYS2 build git-bash provides, so the
+          # windows-2022 legs emit '*' where ubuntu and macOS emit ' '. The
+          # flag also sits inside the `sort -k2` key, so it has to be
+          # normalised before the sort — do it after and every Windows entry
+          # herds to the bottom of the manifest regardless of its filename.
+          #
+          # Normalising the separator rather than passing --text/-t to the
+          # hashing step: on Windows text mode is not a no-op and can change
+          # the digest, which would publish a hash matching nothing we ship.
+          #
+          # awk 1 rather than cat: it terminates a fragment that arrives
+          # without a trailing newline, so two legs can never be joined onto
+          # a single line.
+          awk 1 sums/*.sha256 \
+            | tr -d '\r' \
+            | sed -E 's/^([0-9a-f]{64}) \*/\1  /' \
+            | LC_ALL=C sort -k2 > SHA256SUMS
           echo "::group::SHA256SUMS"; cat SHA256SUMS; echo "::endgroup::"
 
           # Refuse to publish a manifest `sha256sum -c` cannot consume.
