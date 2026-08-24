@@ -207,29 +207,43 @@ jobs:
           npm ci
           npm run build
 
-      - name: Run Rust tests (aggregate)
-        run: cargo test --verbose 2>&1 | tee rust-test-output.txt
+      # One build, then one run over it. The fifteen-crate loop this replaces
+      # cost 23m15s of a 57m job, and it was not merely repeating work: naming
+      # a crate with `-p` changes feature unification, so `cargo test -p
+      # gglib-runtime` ran 329 tests where the workspace build runs 352. The 23
+      # in llama::{build,config,deps,download,update} sit behind features
+      # gglib-cli turns on, so the loop tested a configuration no real build
+      # uses and the badge was 23 tests short of the truth.
+      #
+      # `--no-run` first for two reasons: a compile failure stays
+      # distinguishable from a test failure, and the JSON is where the
+      # binary-to-package map comes from. It cannot come from the text —
+      # `integration_guards` belongs to gglib-agent and says so nowhere.
+      - name: Build test binaries
+        run: cargo test --no-run --message-format=json > cargo-test-artifacts.json
 
-      - name: Run per-crate Rust tests
-        run: |
-          cargo test -p gglib-core --verbose 2>&1 | tee rust-test-gglib-core.txt
-          cargo test -p gglib-db --verbose 2>&1 | tee rust-test-gglib-db.txt
-          cargo test -p gglib-gguf --verbose 2>&1 | tee rust-test-gglib-gguf.txt
-          cargo test -p gglib-hf --verbose 2>&1 | tee rust-test-gglib-hf.txt
-          cargo test -p gglib-download --verbose 2>&1 | tee rust-test-gglib-download.txt
-          cargo test -p gglib-mcp --verbose 2>&1 | tee rust-test-gglib-mcp.txt
-          cargo test -p gglib-agent --verbose 2>&1 | tee rust-test-gglib-agent.txt
-          cargo test -p gglib-proxy --verbose 2>&1 | tee rust-test-gglib-proxy.txt
-          cargo test -p gglib-runtime --verbose 2>&1 | tee rust-test-gglib-runtime.txt
-          cargo test -p gglib-app-services --verbose 2>&1 | tee rust-test-gglib-app-services.txt
-          cargo test -p gglib-bootstrap --verbose 2>&1 | tee rust-test-gglib-bootstrap.txt
-          cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
-          cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
-          cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
-          cargo test -p gglib-integration-tests --verbose 2>&1 | tee rust-test-gglib-integration-tests.txt
+      # `--no-fail-fast` is a deliberate change, not a transcription. Without
+      # it cargo stops at the first failing binary, so on a red run every later
+      # crate's file is never written — and because badges.yml keeps files it
+      # cannot regenerate, those badges go on serving their last green value.
+      # One failure should not hide the state of everything after it.
+      #
+      # No `--verbose`: nothing parses the per-rustc lines and they were 5324
+      # of this step's log. And no `--all-targets`, ever — it would silently
+      # drop the doctests, which this step is the only thing running now that
+      # the separate `cargo test --doc` step is gone. split_test_output.py
+      # fails a green run that produced no Doc-tests sections, which is the
+      # standing guard for that.
+      - name: Run Rust tests
+        run: cargo test --no-fail-fast 2>&1 | tee rust-test-output.txt
 
-      - name: Run doctests
-        run: cargo test --doc --verbose
+      # badges.yml counts per-crate and per-module tests out of
+      # rust-test-<crate>.txt. Those used to come from the loop above; they now
+      # come from dividing the one run's output by the package each binary
+      # belongs to. `always()` so a red suite still publishes what it did run.
+      - name: Split test output per crate
+        if: always()
+        run: ./scripts/split_test_output.py cargo-test-artifacts.json rust-test-output.txt
 
       # The frontend's wire types are generated from these Rust types, and the
       # generated output is committed so the GUI build needs no cargo. That
@@ -263,23 +277,13 @@ jobs:
         if: always()
         with:
           name: test-results
-          path: |
-            rust-test-output.txt
-            rust-test-gglib-core.txt
-            rust-test-gglib-db.txt
-            rust-test-gglib-gguf.txt
-            rust-test-gglib-hf.txt
-            rust-test-gglib-download.txt
-            rust-test-gglib-mcp.txt
-            rust-test-gglib-agent.txt
-            rust-test-gglib-proxy.txt
-            rust-test-gglib-runtime.txt
-            rust-test-gglib-app-services.txt
-            rust-test-gglib-bootstrap.txt
-            rust-test-gglib-cli.txt
-            rust-test-gglib-axum.txt
-            rust-test-gglib-tauri.txt
-            rust-test-gglib-integration-tests.txt
+          # A glob, not a list. The list this replaces named fifteen crates
+          # while badges.yml's ALL_CRATES names sixteen, and the two had
+          # already drifted: gglib-sse and gglib-build-info have badges that
+          # nothing ever wrote a file for, and gglib-integration-tests had a
+          # file nothing reads. Deriving the set from what was actually built
+          # cannot drift.
+          path: rust-test-*.txt
           retention-days: 30
 
   test-frontend:
