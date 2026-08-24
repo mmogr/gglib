@@ -139,7 +139,6 @@ mod tests {
 |---|---|
 | `SqliteModelRepository` | insert/list, get_by_id, get_by_name, update, delete, not-found errors, upsert dedup |
 | `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
-| `SqliteDownloadStateRepository` | enqueue, update status, mark failed, remove, prune completed |
 | `SqliteMcpRepository` | insert/get/list/update/delete servers, SSE server, duplicate name conflict |
 | `SqliteSettingsRepository` | load empty, save and load, clear individual fields |
 

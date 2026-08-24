@@ -5,7 +5,6 @@ pub mod chat_history;
 pub(crate) mod download;
 pub(crate) mod download_event_emitter;
 pub(crate) mod download_manager;
-pub(crate) mod download_state;
 pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
 pub mod huggingface;
@@ -43,7 +42,6 @@ pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
 pub use download_event_emitter::{AppEventBridge, DownloadEventEmitterPort, NoopDownloadEmitter};
 pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
-pub use download_state::DownloadStateRepositoryPort;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,

@@ -8,7 +8,7 @@ pub use gglib_core::download::{
 };
 pub use gglib_core::ports::{
     CompletedDownload, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
-    DownloadStateRepositoryPort, ModelRegistrarPort,
+    ModelRegistrarPort,
 };
 
 // Internal modules (pub(crate) to keep implementation private)

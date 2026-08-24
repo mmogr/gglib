@@ -11,8 +11,8 @@ use gglib_core::Repos;
 use gglib_core::services::AppCore;
 
 use crate::repositories::{
-    SqliteChatHistoryRepository, SqliteDownloadStateRepository, SqliteMcpRepository,
-    SqliteModelRepository, SqliteSettingsRepository,
+    SqliteChatHistoryRepository, SqliteMcpRepository, SqliteModelRepository,
+    SqliteSettingsRepository,
 };
 
 /// Factory for creating repository instances with `SQLite` backends.
@@ -75,11 +75,6 @@ impl CoreFactory {
     /// Create an MCP server repository from a pool.
     pub fn mcp_repository(pool: SqlitePool) -> Arc<SqliteMcpRepository> {
         Arc::new(SqliteMcpRepository::new(pool))
-    }
-
-    /// Create a download state repository from a pool.
-    pub fn download_state_repository(pool: SqlitePool) -> Arc<SqliteDownloadStateRepository> {
-        Arc::new(SqliteDownloadStateRepository::new(pool))
     }
 
     /// Build a `ModelRegistrar` for tests.

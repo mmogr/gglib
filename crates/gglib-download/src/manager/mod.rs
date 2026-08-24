@@ -26,8 +26,7 @@ use gglib_core::download::{
 };
 use gglib_core::ports::{
     DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
-    DownloadStateRepositoryPort, HfClientPort, ModelRegistrarPort, QuantizationResolver,
-    ResolvedFile,
+    HfClientPort, ModelRegistrarPort, QuantizationResolver, ResolvedFile,
 };
 
 use crate::quant_selector::QuantizationSelector;
@@ -195,17 +194,14 @@ impl QueueRunState {
 ///
 /// This struct bundles all the ports and configuration needed
 /// to construct a `DownloadManagerImpl`.
-pub struct DownloadManagerDeps<R, D, H, E>
+pub struct DownloadManagerDeps<R, H, E>
 where
     R: ModelRegistrarPort + 'static,
-    D: DownloadStateRepositoryPort + 'static,
     H: HfClientPort + 'static,
     E: DownloadEventEmitterPort + 'static,
 {
     /// Port for registering completed downloads as models.
     pub model_registrar: Arc<R>,
-    /// Port for persisting download queue state.
-    pub download_repo: Arc<D>,
     /// Port for `HuggingFace` API access.
     pub hf_client: Arc<H>,
     /// Port for emitting download events.
@@ -218,18 +214,14 @@ where
 ///
 /// Returns an implementation of `DownloadManagerPort` that can be
 /// stored as `Arc<dyn DownloadManagerPort>` in adapters.
-pub fn build_download_manager<R, D, H, E>(
-    deps: DownloadManagerDeps<R, D, H, E>,
-) -> DownloadManagerImpl
+pub fn build_download_manager<R, H, E>(deps: DownloadManagerDeps<R, H, E>) -> DownloadManagerImpl
 where
     R: ModelRegistrarPort + 'static,
-    D: DownloadStateRepositoryPort + 'static,
     H: HfClientPort + 'static,
     E: DownloadEventEmitterPort + 'static,
 {
     DownloadManagerImpl::new(
         deps.model_registrar,
-        deps.download_repo,
         deps.hf_client,
         deps.event_emitter,
         deps.config,
@@ -243,8 +235,6 @@ where
 pub struct DownloadManagerImpl {
     /// Model registrar for completed downloads.
     model_registrar: Arc<dyn ModelRegistrarPort>,
-    /// Repository for persisting queue state (reserved for future persistence).
-    _download_repo: Arc<dyn DownloadStateRepositoryPort>,
     /// Event emitter for download events.
     event_emitter: Arc<dyn DownloadEventEmitterPort>,
     /// `HuggingFace` client for fetching model metadata (e.g. tags at registration time).
@@ -284,16 +274,14 @@ pub struct DownloadManagerImpl {
 
 impl DownloadManagerImpl {
     /// Create a new download manager.
-    fn new<R, D, H, E>(
+    fn new<R, H, E>(
         model_registrar: Arc<R>,
-        download_repo: Arc<D>,
         hf_client: Arc<H>,
         event_emitter: Arc<E>,
         config: DownloadManagerConfig,
     ) -> Self
     where
         R: ModelRegistrarPort + 'static,
-        D: DownloadStateRepositoryPort + 'static,
         H: HfClientPort + 'static,
         E: DownloadEventEmitterPort + 'static,
     {
@@ -305,7 +293,6 @@ impl DownloadManagerImpl {
 
         Self {
             model_registrar,
-            _download_repo: download_repo,
             event_emitter: event_emitter as Arc<dyn DownloadEventEmitterPort>,
             hf_client: hf_client_dyn,
             resolver,

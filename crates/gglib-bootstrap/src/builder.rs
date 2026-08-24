@@ -96,9 +96,6 @@ impl CoreBootstrap {
             cfg
         };
 
-        // 8. Download state repository
-        let download_repo = CoreFactory::download_state_repository(pool.clone());
-
         // 9. Download manager — `DownloadManagerDeps<R,..>` requires R: Sized,
         //    so we pass the concrete registrar. The emitter is bridged from the
         //    adapter's AppEventEmitter to satisfy DownloadEventEmitterPort.
@@ -106,7 +103,6 @@ impl CoreBootstrap {
         let downloads: Arc<dyn DownloadManagerPort> =
             Arc::new(build_download_manager(DownloadManagerDeps {
                 model_registrar: model_registrar_concrete,
-                download_repo,
                 hf_client: hf_client_concrete,
                 event_emitter: download_emitter,
                 config: download_config,

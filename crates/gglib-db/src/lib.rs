@@ -11,8 +11,7 @@ pub use factory::CoreFactory;
 // Re-export repository implementations
 pub use repositories::{
     ModelFilesRepository, SqliteBenchmarkRepository, SqliteChatHistoryRepository,
-    SqliteDownloadStateRepository, SqliteMcpRepository, SqliteModelRepository,
-    SqliteSettingsRepository,
+    SqliteMcpRepository, SqliteModelRepository, SqliteSettingsRepository,
 };
 
 // Re-export setup functions for convenient access
