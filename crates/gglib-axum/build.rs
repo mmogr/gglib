@@ -31,8 +31,11 @@ fn main() {
     // set — so a guarded line would never be registered on the run where
     // `web_ui/` first appears, and the build would keep an empty asset set
     // permanently rather than for one build. The cost of leaving it unguarded
-    // is that a missing path reads as always-dirty, so this crate rebuilds on
-    // every `cargo check` in a tree with no frontend. That is compile time
-    // only: with no `web_ui/` there is nothing to be stale about.
+    // is that a missing path reads as always-dirty. Measured: with no
+    // `web_ui/`, every `cargo check` reports `Dirty gglib-axum: the file
+    // .../web_ui is missing` and re-runs rustc for this crate *and* for both
+    // reverse dependencies that link it — `gglib-cli` and `gglib-app` — which
+    // is three rustc units per invocation, never converging. It is compile
+    // time only: with no `web_ui/` there is nothing to be stale about.
     println!("cargo::rerun-if-changed=../../web_ui");
 }

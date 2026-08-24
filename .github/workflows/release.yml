@@ -380,7 +380,12 @@ jobs:
       # A release built from a tree where the frontend step silently failed
       # would ship an API with no dashboard, and nothing downstream would say
       # so. Fail here instead.
+      # `shell: bash` for the same reason the checksum step below sets it: the
+      # Windows leg otherwise runs under pwsh, where `test` resolves only via
+      # Git-for-Windows' `usr\bin` being on the runner's PATH. That happens to
+      # hold today, but it is the runner image's choice, not ours.
       - name: Assert the dashboard is present before it is embedded
+        shell: bash
         run: test -f web_ui/index.html
 
       - name: Build binary
