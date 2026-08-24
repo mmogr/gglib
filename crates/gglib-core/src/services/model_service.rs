@@ -24,7 +24,7 @@ pub enum ImportMode {
     /// Re-derive the model's *detected* metadata from the file, updating the
     /// stored row in place and keeping its database id.
     ///
-    /// This is what `gglib model add --force` asks for, and what re-importing
+    /// This is what `gglib model add --reimport` asks for, and what re-importing
     /// did unconditionally before [`ModelService::import_from_file`] began
     /// guarding it. It refreshes tags, capabilities, quantization, context
     /// length, the expert counts and the dialect spec — wider than `model
@@ -293,7 +293,7 @@ impl ModelService {
         //    carries no HuggingFace metadata and the row would be keyed
         //    `local:<hash>`. A downloaded model is keyed `hf:<repo>@<sha>#<file>`.
         //    Nothing would conflict, `file_path` carries no unique index, and
-        //    `--force` on a downloaded model would append a *second* row for
+        //    `--reimport` on a downloaded model would append a *second* row for
         //    one file — the precise outcome this whole change exists to
         //    prevent, reintroduced by the flag added to serve it.
         //
@@ -832,7 +832,7 @@ mod tests {
         );
     }
 
-    /// `--force` is the documented way to refresh a model's derived columns
+    /// `--reimport` is the documented way to refresh a model's derived columns
     /// from the file. The guard above blocks the workflow `docs/tags.md`
     /// describes, so `Refresh` has to restore it: same file, same row, no
     /// conflict.
@@ -863,7 +863,7 @@ mod tests {
                 ImportMode::Refresh,
             )
             .await
-            .expect("--force re-imports rather than refusing");
+            .expect("--reimport re-imports rather than refusing");
 
         assert_eq!(
             refreshed.id, first.id,

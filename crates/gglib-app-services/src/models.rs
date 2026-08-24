@@ -185,7 +185,7 @@ impl ModelOps {
         // Delegate to shared core logic for model import with full metadata
         // extraction. Always `Fresh`: the HTTP surface has no way to ask for
         // the destructive re-import, so a duplicate is always a 409 here. The
-        // refresh workflow is `gglib model add --force`, which is explicit
+        // refresh workflow is `gglib model add --reimport`, which is explicit
         // about overwriting a row the caller already has.
         let model = self
             .deps

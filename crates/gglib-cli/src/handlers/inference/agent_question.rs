@@ -47,6 +47,8 @@ pub(crate) struct QuestionArgs {
     pub max_parallel: Option<usize>,
     pub observation_tools: Vec<String>,
     pub max_observation_steps: Option<usize>,
+    /// `--show-prompt`: echo the assembled user message before sending.
+    pub show_prompt: bool,
     pub verbose: bool,
     pub quiet: bool,
     pub sampling: SamplingArgs,
@@ -68,6 +70,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         max_parallel,
         observation_tools,
         max_observation_steps,
+        show_prompt,
         verbose,
         quiet,
         sampling,
@@ -178,7 +181,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
 
     // Construct user message with optional piped/file context
     let user_content =
-        super::question_input::build_user_message(&question, file.as_deref(), verbose)?;
+        super::question_input::build_user_message(&question, file.as_deref(), show_prompt)?;
     messages.push(AgentMessage::User {
         content: user_content,
     });

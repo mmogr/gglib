@@ -193,22 +193,24 @@ gglib model retag qwen3-30b
 
 Re-registering a model also re-derives the spec, overwriting the stored one —
 the same semantics as `--full`. Re-downloading does this implicitly;
-re-importing a file already in the library needs `--force`, because adding a
-file that is already there is otherwise a conflict rather than a silent
+re-importing a file already in the library needs `--reimport`, because adding
+a file that is already there is otherwise a conflict rather than a silent
 overwrite:
 
 ```bash
 # Re-derive the detected metadata: tags and dialect spec, plus the columns
 # `retag` does not touch — capabilities, quantization, context length,
 # expert counts
-gglib model add --force ~/models/qwen3-30b.gguf
+gglib model add --reimport ~/models/qwen3-30b.gguf
 ```
 
-Without `--force` the command reports the model already present and changes
-nothing.
+Without `--reimport` the command reports the model already present and changes
+nothing. `--force` is kept as an alias, but it is the odd one out: every other
+`--force` in the CLI skips a confirmation prompt, and this one rewrites stored
+metadata.
 
-`--force` refreshes what was *detected*, not the whole row, and the columns it
-touches do not all behave alike:
+`--reimport` refreshes what was *detected*, not the whole row, and the columns
+it touches do not all behave alike:
 
 | Column | On refresh |
 |---|---|

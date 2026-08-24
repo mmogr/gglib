@@ -9,10 +9,14 @@
 use anyhow::{Result, anyhow};
 
 /// Build the user message, incorporating piped stdin or `--file` content.
+///
+/// `show_prompt` echoes the assembled message to stderr. It used to be the
+/// local `--verbose`, whose arg id collided with the global one and so left
+/// `gglib q` with no way to turn on debug logging at all.
 pub(crate) fn build_user_message(
     question: &str,
     file: Option<&str>,
-    verbose: bool,
+    show_prompt: bool,
 ) -> Result<String> {
     use std::io::{self, IsTerminal, Read};
 
@@ -54,7 +58,7 @@ pub(crate) fn build_user_message(
         None => question.to_string(),
     };
 
-    if verbose {
+    if show_prompt {
         eprintln!("─── User Message ───");
         eprintln!("{user_message}");
         eprintln!("─── End ───\n");

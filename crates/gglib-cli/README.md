@@ -219,8 +219,8 @@ echo "Paris, London, Tokyo" | gglib q "List these cities: {}"
 # Pipe command output
 git diff | gglib q "Explain these changes"
 
-# Debug: see the constructed prompt
-gglib q --verbose --file CODE.rs "Explain this"
+# Debug: see the constructed prompt (-v is the global debug-logging flag)
+gglib q --show-prompt --file CODE.rs "Explain this"
 
 # Cleaner output for scripting (no prompt echo, no timings)
 gglib q -Q "What is 2+2?"
@@ -306,7 +306,7 @@ gglib model add ~/models/llama-2-7b.Q4_K_M.gguf
 
 # Re-import one already in the library, refreshing its derived metadata
 # (capabilities, quantization, context length, expert counts, tags, spec)
-gglib model add --force ~/models/llama-2-7b.Q4_K_M.gguf
+gglib model add --reimport ~/models/llama-2-7b.Q4_K_M.gguf
 
 # List all models
 gglib model list

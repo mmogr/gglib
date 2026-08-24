@@ -81,3 +81,24 @@ fn sorted_long_flags(cmd: &Command) -> Vec<String> {
     flags.sort();
     flags
 }
+
+/// Every subcommand in the tree, paired with the path that reaches it —
+/// `("gglib model verify", &cmd)`.
+///
+/// Reads the *unbuilt* command. `Command::build()` would first propagate every
+/// `global = true` arg down into the subcommands, at which point a locally
+/// declared clash and an inherited global are indistinguishable — and the
+/// clash is precisely what a caller here wants to see.
+pub(crate) fn descendants(root: &Command) -> Vec<(String, &Command)> {
+    let mut out = Vec::new();
+    collect(root, root.get_name(), &mut out);
+    out
+}
+
+fn collect<'a>(cmd: &'a Command, path: &str, out: &mut Vec<(String, &'a Command)>) {
+    for sub in cmd.get_subcommands() {
+        let sub_path = format!("{path} {}", sub.get_name());
+        collect(sub, &sub_path, out);
+        out.push((sub_path, sub));
+    }
+}
