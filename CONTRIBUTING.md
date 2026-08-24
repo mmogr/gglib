@@ -88,8 +88,15 @@ Concrete examples of established patterns:
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
-| llama install | `LlamaProgressEvent` | progress bar | SSE at `POST /api/config/system/install-llama` | `llama-install-progress` |
+| llama install | `LlamaProgressEvent` | spinner + progress bar via `consume_install_events_cli` | SSE at `POST /api/config/system/install-llama` | `llama-install-progress` |
 | llama build | `BuildEvent` | spinner + progress bar | none — #834 removed the route as dead | none — removed with it |
+
+Every row is a claim about code that exists. The `llama install` row was not
+one for a long time: the event type was declared private inside `gglib-axum`,
+the runtime took a `Box<dyn Fn(u64, u64)>` that could not express a phase, and
+the CLI consumer named here had never been written. Three surfaces each
+invented their own statuses on top of two byte counts, which is what a missing
+event type costs. Check a row before you copy it as precedent.
 
 When adding a new long-running operation:
 
@@ -376,25 +383,29 @@ If part of a streaming pipeline, a table of consumers.
 <!-- module-table:end -->
 ```
 
-**Example** (`crates/gglib-download/src/progress/README.md`):
+**Example** (`crates/gglib-runtime/src/llama/download/README.md`):
 
 ```markdown
-# Progress
+# download
 
 ![LOC](https://img.shields.io/endpoint?url=...)
 ![Complexity](https://img.shields.io/endpoint?url=...)
 
 <!-- module-docs:start -->
 
-Download progress events for the pre-built binary pipeline.
+Pre-built llama.cpp binary download support.
 
-[`DownloadEvent`] is produced by [`download_prebuilt_binaries`] and consumed by:
+`download_prebuilt_binaries` emits [`LlamaProgressEvent`] on a
+`tokio::sync::mpsc::Sender` and is consumed by:
 
-| Consumer | Output                                        |
-|----------|-----------------------------------------------|
-| CLI      | `indicatif` progress bar                      |
-| Axum     | SSE stream at `POST /api/config/system/install-llama` |
-| Tauri    | `llama-install-progress` event to WebView     |
+| Consumer | Output                                                 |
+|----------|--------------------------------------------------------|
+| CLI      | `indicatif` progress bar                               |
+| Axum     | SSE stream at `POST /api/config/system/install-llama`  |
+| Tauri    | `llama-install-progress` event to the WebView          |
+
+It is **not** responsible for rendering: no `println!`, no progress bar, no
+knowledge of a terminal, an HTTP response or a WebView.
 
 <!-- module-docs:end -->
 

@@ -29,6 +29,9 @@ system. No I/O, networking, or runtime dependencies allowed.
   never re-derive a rate from byte deltas.
 - `throttle` - `ProgressThrottle`, the emission rate limiter that runs with
   the estimator. Feed `RateEstimator` every tick; throttle only what you send.
+  Two callers: the native download executor in `gglib-download`, and the
+  llama.cpp pre-built install pipeline in `gglib-runtime`, which rate-limits
+  its `LlamaProgressEvent` channel the same way.
 - `format` - `format_rate` / `format_duration`. Rates are **decimal**
   (`1 MB/s` = 1,000,000 B/s) to match what a system network monitor reports;
   sizes stay binary and are rendered by `indicatif`'s `HumanBytes`. Mirrored
