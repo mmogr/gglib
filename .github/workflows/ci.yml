@@ -131,13 +131,13 @@ jobs:
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest
-    # Deliberately chained to `clippy` even though there is no logical
-    # dependency. Both jobs restore/save actions/cache under the same
-    # `${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}` key, so running
-    # after clippy means this job restores the target dir clippy just populated.
-    # Unchaining would make both cold-build the workspace in parallel: more
-    # runner minutes, and probably a slower `test` leg.
-    needs: [clippy]
+    # No `needs:`. This was chained to `clippy` so it would restore the target
+    # dir clippy had just populated — but clippy builds `--all-features` and
+    # this job builds default features, so on run 32705784511 it inherited
+    # 2.57 GB and got 49 of 630 units fresh. Five minutes of serialization for
+    # a cache that was 92% inapplicable. Each job has its own shared-key now,
+    # so each warms from its own history instead of the other's.
+    #
     # Every test step below pipes into `tee` so the output survives as an
     # artifact, and a pipeline reports its *last* command's status — `tee`'s,
     # which is always 0. GitHub's default shell is `bash -e` without pipefail,
@@ -337,9 +337,11 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    # No `needs:` — clippy is the long pole and it warms the cargo cache that
-    # `test` and the Linux `cli-cross-os` leg restore, so it should start at
-    # t=0 rather than after three sub-minute jobs.
+    # No `needs:` — clippy is a long pole and nothing gates it. It no longer
+    # warms anyone else's cache: it builds `--all-features`, which is not what
+    # `test` or `cli-cross-os` build, and the shared key that pretended
+    # otherwise cost `test` five minutes of waiting for artifacts it could not
+    # use.
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -395,6 +397,11 @@ jobs:
     name: CLI Check (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'pull_request'
+    # Same reason as `clippy-cross-os` below, and no longer any other: these
+    # legs take 7-13 minutes each on three runners, and there is no sense
+    # spending them on a tree ubuntu clippy has already rejected. It was never
+    # about the cache here either — the key is per-OS, so the Linux leg was the
+    # only one that could ever have shared, and it does not now.
     needs: [clippy]
     strategy:
       fail-fast: false
