@@ -48,7 +48,17 @@ ts-rs = { workspace = true, optional = true }
 # named `mime_guess` (underscore) feature would instead add mime_guess as a
 # direct dependency of this crate, which `#![deny(unused_crate_dependencies)]`
 # would then require us to name in code. One dependency, not two.
-rust-embed = { version = "8.12", features = ["mime-guess"] }
+#
+# `debug-embed` makes every profile use the `include_bytes!` implementation.
+# Without it rust-embed gates that on `#[cfg(not(debug_assertions))]` and debug
+# builds get a *filesystem* implementation that walks an absolute path baked in
+# at compile time. That split is worse than it sounds: no CI job and no test
+# builds with `--release`, so the code that actually ships would first compile
+# on a release runner at tag time, and `cargo build && rm -rf web_ui` would
+# reproduce the very "dashboard silently missing" failure this module exists to
+# remove — keyed to the build profile instead of the working directory. The
+# cost is that a debug binary carries the assets too.
+rust-embed = { version = "8.12", features = ["mime-guess", "debug-embed"] }
 
 [features]
 # Emit TypeScript for this crate's HTTP wire types. Optional dependency, so
