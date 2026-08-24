@@ -14,7 +14,7 @@ use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
     check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
-    download_prebuilt_binaries, run_llama_source_build, vulkan_status,
+    run_llama_source_build, vulkan_status,
 };
 
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -61,7 +61,7 @@ pub(crate) async fn handle_install(
     if !should_build {
         // Try downloading pre-built binaries
         println!("Attempting to download pre-built llama.cpp binaries...");
-        match download_prebuilt_binaries().await {
+        match super::llama_prebuilt::install().await {
             Ok(()) => return Ok(()),
             Err(e) => {
                 println!();

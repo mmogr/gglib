@@ -1,8 +1,9 @@
 import { FC, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2, XCircle } from 'lucide-react';
 import { appLogger } from '../services/platform';
-import { LlamaInstallProgress } from '../hooks/useLlamaStatus';
-import { formatBytes } from '../utils/format';
+import { LlamaProgressEvent } from '../hooks/useLlamaStatus';
+import { INSTALL_PHASE_LABELS } from '../types/setup';
+import { formatBytes, formatDuration, formatRate } from '../utils/format';
 import { installLlama } from '../services/platform/llamaInstall';
 import { Button } from './ui/Button';
 import { Banner } from './ui/Banner';
@@ -14,7 +15,7 @@ interface LlamaInstallModalProps {
   isOpen?: boolean;
   canDownload?: boolean;
   installing?: boolean;
-  progress?: LlamaInstallProgress | null;
+  progress?: LlamaProgressEvent | null;
   error?: string | null;
   onInstall?: () => void;
   onSkip?: () => void;
@@ -48,8 +49,8 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
   const progress = propProgress;
   const error = metadata ? localError : propError;
 
-  const isCompleted = progress?.status === 'completed';
-  const isError = progress?.status === 'error';
+  const isCompleted = progress?.type === 'completed';
+  const isError = progress?.type === 'failed';
 
   // Error-triggered mode: handle installation
   const handleErrorModeInstall = async () => {
@@ -78,25 +79,57 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
   const renderProgress = () => {
     if (!installing || !progress) return null;
 
-    const isIndeterminate = progress.status === 'started';
+    if (progress.type === 'progress') {
+      // Percentage is a rendering detail; speed and time remaining are not —
+      // they arrive measured, and deriving them here would disagree with
+      // every other surface.
+      const percentage = progress.total > 0 ? (progress.downloaded / progress.total) * 100 : 0;
+      return (
+        <div className="flex flex-col gap-[0.35rem]">
+          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary to-primary-light rounded transition-[width] duration-300"
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-text-secondary text-base">
+            <span>{percentage.toFixed(1)}%</span>
+            {progress.total > 0 && (
+              <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
+            )}
+          </div>
+          <div className="text-text text-base">
+            {formatRate(progress.rate_bps)} · {formatDuration(progress.eta_seconds)} remaining
+          </div>
+        </div>
+      );
+    }
 
-    return (
-      <div className="flex flex-col gap-[0.35rem]">
-        <div className="h-2 bg-background-tertiary rounded overflow-hidden">
-          <div
-            className={cn('h-full bg-gradient-to-r from-primary to-primary-light rounded transition-[width] duration-300', isIndeterminate && 'w-[30%] animate-indeterminate')}
-            style={!isIndeterminate ? { width: `${progress.percentage}%` } : undefined}
-          />
+    if (progress.type === 'phase_started') {
+      return (
+        <div className="flex flex-col gap-[0.35rem]">
+          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
+            <div className={cn('h-full bg-gradient-to-r from-primary to-primary-light rounded', 'w-[30%] animate-indeterminate')} />
+          </div>
+          <div className="text-text text-base">{INSTALL_PHASE_LABELS[progress.phase]}</div>
         </div>
-        <div className="flex justify-between text-text-secondary text-base">
-          <span>{progress.percentage.toFixed(1)}%</span>
-          {progress.total > 0 && (
-            <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
-          )}
+      );
+    }
+
+    if (progress.type === 'completed') {
+      return (
+        <div className="flex flex-col gap-[0.35rem]">
+          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
+            <div className="h-full w-full bg-gradient-to-r from-primary to-primary-light rounded" />
+          </div>
+          <div className="text-text text-base">llama.cpp {progress.version} installed</div>
         </div>
-        <div className="text-text text-base">{progress.message}</div>
-      </div>
-    );
+      );
+    }
+
+    // `phase_completed` has nothing of its own to draw, and `failed` is
+    // already carried by the error banner above.
+    return null;
   };
   const renderFooterContent = () => {
     if (metadata) {

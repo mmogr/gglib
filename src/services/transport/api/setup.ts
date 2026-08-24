@@ -7,7 +7,7 @@ import { get, post } from './client';
 import { parseFrame, streamSse } from './sse';
 import type {
   SetupStatus,
-  LlamaInstallProgress,
+  LlamaProgressEvent,
   LlamaStatus,
   LlamaUpdateCheck,
   LlamaUninstallOutcome,
@@ -25,30 +25,24 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
 
 /**
- * Install llama.cpp pre-built binaries with progress streaming.
- * 
- * Uses SSE to stream download progress events.
- * 
- * @param onProgress Called with download progress updates
- * @param onComplete Called when installation finishes successfully
- * @param onError Called when installation fails
+ * Install llama.cpp pre-built binaries, streaming install progress.
+ *
+ * Same arrangement as `streamLlamaUpdate`: every payload carries its own
+ * `type`, so the SSE event name is redundant and the parsed object is the
+ * single source of truth.
+ *
+ * @param onEvent Called for every install event, in arrival order
+ * @param onError Called when the transport itself fails
  * @returns An abort function to cancel the installation
  */
 export function streamLlamaInstall(
-  onProgress: (progress: LlamaInstallProgress) => void,
-  onComplete: () => void,
+  onEvent: (event: LlamaProgressEvent) => void,
   onError: (error: string) => void,
 ): () => void {
   return streamSse('/api/config/system/install-llama', {
     onFrame: (frame) => {
-      if (frame.event === 'progress') {
-        const progress = parseFrame<LlamaInstallProgress>(frame);
-        if (progress) onProgress(progress);
-      } else if (frame.event === 'complete') {
-        onComplete();
-      } else if (frame.event === 'error') {
-        onError(parseFrame<{ message?: string }>(frame)?.message ?? 'Unknown error');
-      }
+      const event = parseFrame<LlamaProgressEvent>(frame);
+      if (event) onEvent(event);
     },
     onError,
   });

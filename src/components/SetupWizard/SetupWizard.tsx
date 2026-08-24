@@ -30,7 +30,8 @@ import { Banner } from '../ui/Banner';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
 import { formatBytes } from '../../utils/format';
-import type { SetupStatus, LlamaInstallProgress } from '../../types/setup';
+import type { SetupStatus, LlamaProgressEvent } from '../../types/setup';
+import { InstallProgress } from './InstallProgress';
 import {
   getSetupStatus,
   streamLlamaInstall,
@@ -377,7 +378,7 @@ const LlamaInstallStep: FC<{
   onBack: () => void;
 }> = ({ status, onNext, onBack }) => {
   const [installing, setInstalling] = useState(false);
-  const [progress, setProgress] = useState<LlamaInstallProgress | null>(null);
+  const [progress, setProgress] = useState<LlamaProgressEvent | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [installed, setInstalled] = useState(status.llamaInstalled);
 
@@ -387,10 +388,15 @@ const LlamaInstallStep: FC<{
     setProgress(null);
 
     const abort = streamLlamaInstall(
-      (p) => setProgress(p),
-      () => {
-        setInstalling(false);
-        setInstalled(true);
+      (event) => {
+        setProgress(event);
+        if (event.type === 'completed') {
+          setInstalling(false);
+          setInstalled(true);
+        } else if (event.type === 'failed') {
+          setInstalling(false);
+          setInstallError(event.message);
+        }
       },
       (err) => {
         setInstalling(false);
@@ -441,30 +447,7 @@ const LlamaInstallStep: FC<{
         </Banner>
       )}
 
-      {/* Progress bar */}
-      {installing && progress && (
-        <div className="flex flex-col gap-2">
-          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-primary to-primary-light rounded transition-[width] duration-300"
-              style={{ width: progress.total > 0 ? `${(progress.downloaded / progress.total) * 100}%` : '0%' }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-text-secondary font-mono tabular-nums">
-            <span>{progress.total > 0 ? `${((progress.downloaded / progress.total) * 100).toFixed(1)}%` : 'Starting…'}</span>
-            {progress.total > 0 && (
-              <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {installing && !progress && (
-        <div className="flex items-center gap-2 text-sm text-text-secondary">
-          <Icon icon={Loader2} className="animate-spin" size={16} />
-          <span>Preparing download...</span>
-        </div>
-      )}
+      {installing && <InstallProgress progress={progress} />}
 
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-2">

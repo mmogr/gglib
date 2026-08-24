@@ -5,18 +5,13 @@
  */
 
 import { isDesktop } from './detect';
+import type { LlamaProgressEvent } from '../../types/setup';
+
+export type { LlamaProgressEvent };
 
 export interface LlamaStatus {
   installed: boolean;
   canDownload: boolean;
-}
-
-export interface LlamaInstallProgress {
-  status: 'started' | 'downloading' | 'completed' | 'error';
-  downloaded: number;
-  total: number;
-  percentage: number;
-  message: string;
 }
 
 /**
@@ -55,14 +50,14 @@ export async function installLlama(): Promise<void> {
  * No-op on web (returns empty function).
  */
 export async function listenLlamaProgress(
-  callback: (progress: LlamaInstallProgress) => void
+  callback: (event: LlamaProgressEvent) => void
 ): Promise<() => void> {
   if (!isDesktop()) {
     return () => {};
   }
 
   const { listen } = await import('@tauri-apps/api/event');
-  const unlisten = await listen<LlamaInstallProgress>('llama-install-progress', (event) => {
+  const unlisten = await listen<LlamaProgressEvent>('llama-install-progress', (event) => {
     callback(event.payload);
   });
   return unlisten;

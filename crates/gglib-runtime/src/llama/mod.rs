@@ -84,7 +84,4 @@ pub use args::{
 
 // Prebuilt download (for adapters that need fine-grained control - Tauri + CLI)
 #[cfg(feature = "prebuilt")]
-pub use download::{
-    LlamaProgressCallbackBoxed, PrebuiltAvailability, check_prebuilt_availability,
-    download_prebuilt_binaries, download_prebuilt_binaries_with_boxed_callback,
-};
+pub use download::{PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries};

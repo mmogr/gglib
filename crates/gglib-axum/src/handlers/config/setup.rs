@@ -17,8 +17,8 @@ use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
 use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome, llama_status,
-    llama_update_check, run_llama_update, uninstall_llama, update_acceleration,
+    Acceleration, BuildEvent, LlamaProgressEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome,
+    llama_status, llama_update_check, run_llama_update, uninstall_llama, update_acceleration,
 };
 
 /// Get the full system setup status for the first-run wizard.
@@ -28,10 +28,13 @@ pub(crate) async fn status(State(state): State<AppState>) -> Result<Json<SetupSt
 
 /// Install llama.cpp pre-built binaries with SSE progress streaming.
 ///
-/// Returns an SSE stream with events:
-/// - `progress`: `{ "downloaded": <bytes>, "total": <bytes> }`
-/// - `complete`: `{}`
-/// - `error`: `{ "message": "<error>" }`
+/// Streams [`LlamaProgressEvent`] verbatim — one SSE event name per variant,
+/// the payload its JSON — exactly as [`update_llama`] streams [`BuildEvent`].
+/// The browser reads the payload's `type`; the event name is a convenience.
+///
+/// This route used to declare a private three-variant event type of its own
+/// and adapt a byte-counting callback into it, which is why it could report
+/// neither the phase nor the speed the runtime already knew.
 pub(crate) async fn install_llama(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
@@ -39,42 +42,36 @@ pub(crate) async fn install_llama(
     let setup = state.setup.clone();
 
     tokio::spawn(async move {
-        let tx_progress = tx.clone();
-        let callback: Box<dyn Fn(u64, u64) + Send + Sync> =
-            Box::new(move |downloaded: u64, total: u64| {
-                // Best-effort send; if the receiver dropped, ignore
-                let _ = tx_progress.try_send(LlamaProgressEvent::Progress { downloaded, total });
-            });
-
-        match setup.install_llama(callback).await {
-            Ok(()) => {
-                let _ = tx.send(LlamaProgressEvent::Complete).await;
-            }
-            Err(e) => {
-                let _ = tx
-                    .send(LlamaProgressEvent::Error {
-                        message: e.to_string(),
-                    })
-                    .await;
-            }
+        // The pipeline reports failure by returning, leaving the wording to
+        // whoever owns the channel. This is that owner.
+        if let Err(e) = setup.install_llama(tx.clone()).await {
+            let _ = tx
+                .send(LlamaProgressEvent::Failed {
+                    message: e.to_string(),
+                })
+                .await;
         }
     });
 
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|event| {
-        let (event_type, data) = match &event {
-            LlamaProgressEvent::Progress { .. } => (
-                "progress",
-                serde_json::to_string(&event).unwrap_or_default(),
-            ),
-            LlamaProgressEvent::Complete => ("complete", "{}".to_string()),
-            LlamaProgressEvent::Error { .. } => {
-                ("error", serde_json::to_string(&event).unwrap_or_default())
-            }
-        };
-        Ok(Event::default().event(event_type).data(data))
-    });
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(install_event_to_sse);
 
-    Sse::new(stream)
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(30))
+            .text("ping"),
+    )
+}
+
+fn install_event_to_sse(event: LlamaProgressEvent) -> Result<Event, Infallible> {
+    let event_type = match &event {
+        LlamaProgressEvent::PhaseStarted { .. } => "phase_started",
+        LlamaProgressEvent::Progress { .. } => "progress",
+        LlamaProgressEvent::PhaseCompleted { .. } => "phase_completed",
+        LlamaProgressEvent::Completed { .. } => "completed",
+        LlamaProgressEvent::Failed { .. } => "failed",
+    };
+    let data = serde_json::to_string(&event).unwrap_or_default();
+    Ok(Event::default().event(event_type).data(data))
 }
 
 /// Set up the Python fast-download helper environment.
@@ -126,22 +123,6 @@ pub(crate) async fn diagnostics(
             error: d.fast_downloads.error,
         },
     }))
-}
-
-/// SSE progress events for llama installation.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-enum LlamaProgressEvent {
-    #[serde(rename_all = "camelCase")]
-    Progress {
-        downloaded: u64,
-        total: u64,
-    },
-    Complete,
-    #[serde(rename_all = "camelCase")]
-    Error {
-        message: String,
-    },
 }
 
 /// What llama.cpp install is present, if any — the GUI face of

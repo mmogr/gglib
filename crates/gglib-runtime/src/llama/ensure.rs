@@ -8,6 +8,7 @@ use super::download::{
     PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries,
 };
 use super::install::run_llama_source_build;
+use super::install_events::LlamaProgressEvent;
 use super::prompt::InstallPrompt;
 
 /// Message used for every "shall I install?" confirmation.
@@ -106,7 +107,7 @@ async fn ensure_for_prebuilt_binary(prompt: &dyn InstallPrompt) -> Result<()> {
             }
 
             // Try downloading pre-built binaries
-            match download_prebuilt_binaries().await {
+            match install_prebuilt().await {
                 Ok(()) => Ok(()),
                 Err(e) => {
                     println!();
@@ -140,6 +141,31 @@ async fn ensure_for_prebuilt_binary(prompt: &dyn InstallPrompt) -> Result<()> {
             install_from_source().await
         }
     }
+}
+
+/// Runs a pre-built install and streams events as simple text output.
+///
+/// The same deal as [`install_from_source`]: the ensure flow does its own
+/// prompting and has no progress bar to drive, so it renders phases as plain
+/// lines rather than pulling `indicatif` into a surface-agnostic crate.
+async fn install_prebuilt() -> Result<()> {
+    let (tx, mut rx) = mpsc::channel::<LlamaProgressEvent>(64);
+    let install = tokio::spawn(download_prebuilt_binaries(tx));
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            LlamaProgressEvent::PhaseStarted { phase } => println!("→ {}", phase.label()),
+            LlamaProgressEvent::Completed { version } => {
+                println!("✓ llama.cpp installed ({version})");
+            }
+            LlamaProgressEvent::Failed { message } => {
+                eprintln!("✗ Install failed: {message}");
+            }
+            LlamaProgressEvent::Progress { .. } | LlamaProgressEvent::PhaseCompleted { .. } => {}
+        }
+    }
+
+    install.await?
 }
 
 /// Runs a source build and streams events as simple text output.

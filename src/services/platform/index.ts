@@ -24,7 +24,7 @@ export type { LogLevel, LogEntry, ILogger } from './logging/types';
 
 // Llama binary management
 export { checkLlamaInstalled, installLlama, listenLlamaProgress } from './llamaInstall';
-export type { LlamaStatus, LlamaInstallProgress } from './llamaInstall';
+export type { LlamaStatus, LlamaProgressEvent } from './llamaInstall';
 
 // Server logs
 export { getServerLogs, listenToServerLogs } from './serverLogs';

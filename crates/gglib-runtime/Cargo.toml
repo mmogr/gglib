@@ -50,9 +50,6 @@ zip = { version = "7.1", default-features = false, features = ["aes-crypto", "bz
 flate2 = "1"
 tar = "0.4"
 
-# CLI progress (used by cli feature and prebuilt download)
-indicatif = { workspace = true }
-
 # Unix signal handling
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", features = ["signal", "process"] }

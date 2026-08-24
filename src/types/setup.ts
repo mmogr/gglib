@@ -46,11 +46,47 @@ export interface SetupStatus {
   systemMemory?: SystemMemory | null;
 }
 
-/** SSE progress event for llama installation. */
-export interface LlamaInstallProgress {
-  downloaded: number;
-  total: number;
-}
+/** Pre-built install phases, in order. */
+export type InstallPhase =
+  | 'check_availability'
+  | 'fetch_release'
+  | 'download'
+  | 'extract'
+  | 'cuda_runtime'
+  | 'verify';
+
+/**
+ * Streaming pre-built install events.
+ *
+ * One type for both transports: the SSE route streams these and the desktop
+ * build emits the same payloads on `llama-install-progress`.
+ *
+ * `rateBps` and `etaSeconds` are absent until the backend's estimator has
+ * warmed up, and absent is not zero — zero is a stalled transfer. Never derive
+ * a rate here from successive `downloaded` values; the backend measures it.
+ */
+export type LlamaProgressEvent =
+  | { type: 'phase_started'; phase: InstallPhase }
+  | {
+      type: 'progress';
+      downloaded: number;
+      total: number;
+      rate_bps?: number;
+      eta_seconds?: number;
+    }
+  | { type: 'phase_completed'; phase: InstallPhase }
+  | { type: 'completed'; version: string }
+  | { type: 'failed'; message: string };
+
+/** How each install phase reads in the UI. */
+export const INSTALL_PHASE_LABELS: Record<InstallPhase, string> = {
+  check_availability: 'Checking platform availability…',
+  fetch_release: 'Fetching release information…',
+  download: 'Downloading llama.cpp binaries…',
+  extract: 'Extracting binaries and libraries…',
+  cuda_runtime: 'Downloading CUDA runtime libraries…',
+  verify: 'Verifying installation…',
+};
 
 
 /** What gglib recorded when it built the binary. Absent for a prebuilt install. */

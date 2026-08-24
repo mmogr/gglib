@@ -4,19 +4,19 @@ import {
   installLlama as platformInstallLlama, 
   listenLlamaProgress,
   type LlamaStatus,
-  type LlamaInstallProgress,
+  type LlamaProgressEvent,
   appLogger,
 } from '../services/platform';
 
 // Re-export types for consumers
-export type { LlamaStatus, LlamaInstallProgress };
+export type { LlamaStatus, LlamaProgressEvent };
 
 export function useLlamaStatus() {
   const [status, setStatus] = useState<LlamaStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
-  const [installProgress, setInstallProgress] = useState<LlamaInstallProgress | null>(null);
+  const [installProgress, setInstallProgress] = useState<LlamaProgressEvent | null>(null);
 
   const checkStatus = useCallback(async () => {
     try {
@@ -38,13 +38,7 @@ export function useLlamaStatus() {
     try {
       setInstalling(true);
       setError(null);
-      setInstallProgress({
-        status: 'started',
-        downloaded: 0,
-        total: 0,
-        percentage: 0,
-        message: 'Starting installation...',
-      });
+      setInstallProgress({ type: 'phase_started', phase: 'check_availability' });
 
       await platformInstallLlama();
       
@@ -53,13 +47,7 @@ export function useLlamaStatus() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to install llama.cpp: ${errorMessage}`);
-      setInstallProgress({
-        status: 'error',
-        downloaded: 0,
-        total: 0,
-        percentage: 0,
-        message: errorMessage,
-      });
+      setInstallProgress({ type: 'failed', message: errorMessage });
     } finally {
       setInstalling(false);
     }
@@ -78,15 +66,15 @@ export function useLlamaStatus() {
 
     let cleanup: (() => void) | null = null;
 
-    listenLlamaProgress((progress) => {
-      setInstallProgress(progress);
+    listenLlamaProgress((event) => {
+      setInstallProgress(event);
 
-      if (progress.status === 'completed') {
+      if (event.type === 'completed') {
         setTimeout(() => {
           setInstallProgress(null);
           setInstalling(false);
         }, 1500);
-      } else if (progress.status === 'error') {
+      } else if (event.type === 'failed') {
         setInstalling(false);
       }
     }).then(unsubscribe => {
