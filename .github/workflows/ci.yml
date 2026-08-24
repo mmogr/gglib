@@ -185,16 +185,24 @@ jobs:
           cargo metadata --locked --format-version 1 > /dev/null
           cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Swatinem/rust-cache, as release.yml already uses, with a shared-key
+      # per build configuration. The raw actions/cache this replaces used one
+      # key for every job: clippy runs --all-features and saved it, test runs
+      # default features and restored it, and got 49 of 630 units fresh. And
+      # because test hit the key exactly, actions/cache never saved — test's
+      # own artifacts were discarded every run, permanently.
+      #
+      # It also prunes. Those two Linux entries were 2.69 and 2.24 GB of a
+      # repo cache budget that had reached 10.09 GB against GitHub's 10 GB
+      # ceiling, so the cross-OS entries were being evicted: the Windows leg
+      # logged `Cache not found for input keys: Windows-cargo-…, Windows-cargo-`
+      # and cold-built the workspace every run. release.yml's rust-cache
+      # entries are 0.55-0.80 GB for comparable graphs.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-test"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -360,16 +368,14 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-clippy"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -407,16 +413,14 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-cli-${{ matrix.target }}"
+          cache-on-failure: true
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -468,16 +472,14 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          shared-key: "ci-clippy-${{ matrix.target }}"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
