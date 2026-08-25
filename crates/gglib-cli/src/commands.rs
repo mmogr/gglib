@@ -153,12 +153,15 @@ pub enum Commands {
         /// Observation-only tool name patterns for the dual-threshold loop guard.
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.
-        /// Omit to use the built-in defaults (snapshot, screenshot, read_page).
+        /// Omit to use the built-in defaults, which cover the read-only tools
+        /// browser and coding agents repeat — snapshot, screenshot, read_file,
+        /// list_dir, grep_search and similar. Passing any value replaces that
+        /// list entirely rather than adding to it.
         /// Pass an empty string to disable observation classification entirely.
         #[arg(long = "observation-tool", value_delimiter = ',')]
         observation_tools: Vec<String>,
         /// Maximum times an observation-only batch may repeat before loop detection
-        /// fires. Clamped to 100. Defaults to 10.
+        /// fires. Clamped to 100. Defaults to 15.
         #[arg(long = "max-observation-steps")]
         max_observation_steps: Option<usize>,
         /// Subcommand (e.g. `history`)
@@ -215,11 +218,14 @@ pub enum Commands {
         /// Observation-only tool name patterns for the dual-threshold loop guard.
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.
-        /// Omit to use the built-in defaults (snapshot, screenshot, read_page).
+        /// Omit to use the built-in defaults, which cover the read-only tools
+        /// browser and coding agents repeat — snapshot, screenshot, read_file,
+        /// list_dir, grep_search and similar. Passing any value replaces that
+        /// list entirely rather than adding to it.
         #[arg(long = "observation-tool", value_delimiter = ',')]
         observation_tools: Vec<String>,
         /// Maximum times an observation-only batch may repeat before loop detection
-        /// fires. Clamped to 100. Defaults to 10.
+        /// fires. Clamped to 100. Defaults to 15.
         #[arg(long = "max-observation-steps")]
         max_observation_steps: Option<usize>,
     },

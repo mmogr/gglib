@@ -218,7 +218,7 @@ export const AgentLimitsSection: FC = () => {
           className="font-mono"
           disabled={classificationDisabled}
           value={observationText}
-          placeholder="built-ins (snapshot, screenshot, …)"
+          placeholder="built-ins (read_file, grep_search, snapshot, …)"
           onChange={(e) => {
             setObservationText(e.target.value);
             update({ observationTools: parseTools(e.target.value) });

@@ -48,8 +48,9 @@ tool_timeout_ms: number | null,
  * `ends_with` OR `contains` semantics.
  *
  * `Some([])` disables observation classification entirely.
- * `None` (field absent) keeps the built-in defaults
- * (`["snapshot", "screenshot", "read_page", "navigate", "click"]`).
+ * `None` (field absent) keeps the built-in defaults, which cover
+ * browser tools and the read-only tools coding agents repeat — see
+ * `AgentConfig::default`.
  */
 observation_tools: Array<string> | null, 
 /**
