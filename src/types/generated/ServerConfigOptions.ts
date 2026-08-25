@@ -30,6 +30,15 @@ model_server_ctx: number | null,
  */
 global_default_ctx: number | null, 
 /**
+ * Context fitted to this model and this machine, from
+ * [`crate::domain::fit_context`]. Fourth tier in the fallback chain.
+ *
+ * `None` when it could not be computed — unknown KV shape, no memory
+ * reading — which is a refusal, not a zero: the chain falls through to the
+ * built-in default rather than launching against a guess.
+ */
+fitted_ctx: number | null, 
+/**
  * Bind llama-server to a specific port instead of letting the allocator
  * choose.
  */

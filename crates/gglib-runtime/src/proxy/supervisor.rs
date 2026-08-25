@@ -26,7 +26,7 @@ use tracing::{debug, error, info, warn};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
-use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
+use gglib_core::settings::DEFAULT_PROXY_PORT;
 use gglib_core::{ApiKeySource, CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
 use gglib_proxy::slot_eviction::DiskBudget;
@@ -104,7 +104,13 @@ pub struct ProxyConfig {
     /// Port to bind to (0 for auto-assign).
     pub port: u16,
     /// Default context size for models.
-    pub default_context: u64,
+    /// The user's global default context, or `None` when they never set one.
+    ///
+    /// `Option`, not a `u64` pre-filled with the floor: pre-resolving it here
+    /// meant every launch arrived with `global_default_ctx = Some(4096)`
+    /// whether or not anyone had chosen 4096, which made every rung below it
+    /// — including the fitted one — unreachable dead code.
+    pub default_context: Option<u64>,
     /// Whether KV cache session persistence is enabled for this proxy run.
     /// `false` (the default) means zero behavior change — no
     /// `--slot-save-path`/`--cache-ram` flags are ever passed to llama-server.
@@ -137,7 +143,7 @@ impl Default for ProxyConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: DEFAULT_PROXY_PORT,
-            default_context: DEFAULT_CONTEXT_SIZE,
+            default_context: None,
             cache_enabled: false,
             slot_dir: None,
             disk_budget: DiskBudget::Auto,
@@ -365,6 +371,22 @@ impl ProxySupervisor {
             config.allowed_hosts,
         );
 
+        // Start reading the device's memory capacity, but do not wait for it.
+        // The admission path needs the figure to fit a context and the probe is
+        // slow — it builds a `System` snapshot and forks `nvidia-smi`, `lspci`
+        // and the vulkan tools — so warming it keeps that cost off the first
+        // request.
+        //
+        // Detached rather than awaited, because none of those forks has a
+        // timeout: `utils::process::cmd` is a bare `std::process::Command` and
+        // `.output()` blocks until the child exits. Awaiting here would put
+        // four unbounded subprocess waits between the bind and the serve task,
+        // so a wedged GPU driver — the common way `nvidia-smi` fails — would
+        // hang `gglib up` with no output at all. Detached, the worst case is
+        // that the first request finds the cache cold and pays for it, which is
+        // exactly the behaviour this warm improves on rather than replaces.
+        tokio::spawn(crate::system::warm_device_memory());
+
         // Create cancellation token
         let cancel_token = CancellationToken::new();
         let cancel_clone = cancel_token.clone();
@@ -386,7 +408,7 @@ impl ProxySupervisor {
         let join_handle: JoinHandle<AnyResult<()>> = tokio::spawn(async move {
             debug!(
                 addr = %bound_addr,
-                default_ctx = %default_ctx,
+                default_ctx = ?default_ctx,
                 "Proxy task starting"
             );
 
@@ -595,7 +617,7 @@ mod tests {
             &self,
             _model_name: &str,
             _num_ctx: Option<u64>,
-            _default_ctx: u64,
+            _default_ctx: Option<u64>,
             _overrides: gglib_core::ports::LaunchOverrides,
         ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
             Ok(gglib_core::ports::Admission::detached(
@@ -669,7 +691,7 @@ mod tests {
         let config = ProxyConfig {
             host: "127.0.0.1".to_string(),
             port: 0, // Random port
-            default_context: 4096,
+            default_context: Some(4096),
             cache_enabled: false,
             slot_dir: None,
             ..ProxyConfig::default()
@@ -723,7 +745,7 @@ mod tests {
         let config = ProxyConfig {
             host: "127.0.0.1".to_string(),
             port: 0,
-            default_context: 4096,
+            default_context: Some(4096),
             cache_enabled: false,
             slot_dir: None,
             ..ProxyConfig::default()

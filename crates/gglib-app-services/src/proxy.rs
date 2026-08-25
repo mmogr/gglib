@@ -13,7 +13,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use gglib_core::ports::{ModelCatalogPort, ModelRepository, ModelRuntimePort, UsageSink};
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
@@ -247,10 +246,10 @@ impl ProxyOps {
             .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
         let config = ProxyConfig {
             port: settings.effective_proxy_port(),
-            default_context: resolve_context_size(&ServerConfigOptions {
-                global_default_ctx: settings.default_context_size,
-                ..Default::default()
-            }),
+            // Passed through, not resolved: resolving here turned "the user
+            // set nothing" into "the user set 4096", which is what made every
+            // rung below the global default unreachable.
+            default_context: settings.default_context_size,
             ..ProxyConfig::default()
         };
 

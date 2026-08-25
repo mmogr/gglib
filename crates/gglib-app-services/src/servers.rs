@@ -18,7 +18,9 @@ use gglib_core::ports::{
     AppEventEmitter, LaunchOverrides, ModelRuntimeError, ProcessHandle, ServerHealthStatus,
     ToolSupportDetectorPort,
 };
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{
+    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+};
 use gglib_core::services::AppCore;
 use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 
@@ -228,7 +230,13 @@ impl ServerOps {
         debug!(%proxy_addr, "proxy ready for model start");
 
         let overrides = Self::launch_overrides(&model, &request, settings.default_context_size);
-        let default_ctx = resolve_context_size(&overrides.options);
+        // Only a value somebody chose: falling through to the built-in floor
+        // would hand admission `Some(4096)` and make the fitted rung
+        // unreachable for a GUI-started model.
+        let default_ctx = match resolve_context_size_with_source(&overrides.options) {
+            (_, ContextSizeSource::BuiltInDefault) => None,
+            (ctx, _) => Some(ctx),
+        };
 
         // The lease is dropped as soon as the model is up: this is a "start
         // this model" request, not a request being served. The model stays

@@ -101,7 +101,9 @@ pub(crate) async fn run_agentic_eval(
         .admit(
             &model.name,
             Some(resolved_ctx),
-            resolved_ctx,
+            // A benchmark pins its own context explicitly above; the fallback
+            // rung is unreachable here and must not smuggle in a floor.
+            None,
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await

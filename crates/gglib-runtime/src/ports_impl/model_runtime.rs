@@ -73,7 +73,7 @@ impl ModelRuntimePort for RuntimePortImpl {
         &self,
         model_name: &str,
         num_ctx: Option<u64>,
-        default_ctx: u64,
+        default_ctx: Option<u64>,
         mut overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         // This instance's standing cache-RAM setting applies only when the

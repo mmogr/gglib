@@ -6,7 +6,9 @@
 //! the routing around them.
 
 use gglib_app_services::types::AppSettings;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{
+    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+};
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
@@ -125,11 +127,16 @@ pub(super) fn to_runtime_config(
     cfg: &StartProxyConfig,
     settings: &AppSettings,
 ) -> RuntimeProxyConfig {
-    let default_context = resolve_context_size(&ServerConfigOptions {
+    // Only a value somebody chose. Resolving to the built-in floor here would
+    // hand the proxy `Some(4096)` and make the fitted rung unreachable.
+    let default_context = match resolve_context_size_with_source(&ServerConfigOptions {
         context_size: cfg.default_context,
         global_default_ctx: settings.default_context_size,
         ..Default::default()
-    });
+    }) {
+        (_, ContextSizeSource::BuiltInDefault) => None,
+        (ctx, _) => Some(ctx),
+    };
 
     let cache_enabled = cfg.cache.unwrap_or(false);
     // Resolved here rather than left `None`: the Axum proxy path errors

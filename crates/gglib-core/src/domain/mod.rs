@@ -6,6 +6,7 @@ pub(crate) mod cache_budget;
 pub mod capabilities;
 pub mod capability_tags;
 pub mod chat;
+mod context_fit;
 pub mod defects;
 pub mod dialect;
 pub(crate) mod generation_config;
@@ -75,6 +76,7 @@ pub use model_sampling::{
 pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_mib_as_gib};
 
 // Re-export the first-run model recommendation at the domain level.
+pub use recommendation::BUDGET_UTILISATION;
 pub use recommendation::{BudgetSource, Recommendation, recommend};
 
 // Re-export admission-control telemetry at the domain level for convenience
@@ -131,6 +133,7 @@ pub use capabilities::infer_from_chat_template;
 pub use capabilities::{
     ChatMessage, MessageContent, ModelCapabilities, transform_messages_for_capabilities,
 };
+pub use context_fit::{FitInputs, fit_context, fit_context_explained};
 pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;
 pub use model::RangeValues;

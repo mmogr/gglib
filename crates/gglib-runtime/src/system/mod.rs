@@ -501,9 +501,82 @@ impl SystemProbePort for DefaultSystemProbe {
     }
 }
 
+/// Total device memory a model may be sized against, cached.
+///
+/// The GPU's nominal capacity — unified memory on Apple, VRAM on NVIDIA —
+/// **not** a live free reading. Free memory moves with whatever else the user
+/// has open, and a budget that moves produces a fitted context that moves,
+/// which recycles the resident and blows its prefix cache. The caller reserves
+/// a fixed allowance for the second slot from this figure and must *not* net
+/// out the models actually loaded — that set changes while a model is resident,
+/// which is exactly the drift this avoids.
+///
+/// `None` when gglib cannot read the GPU's memory — which includes every
+/// AMD/Intel/Vulkan device and an NVIDIA card whose `nvidia-smi` query fails.
+/// Deliberately a refusal rather than a fallback to system RAM: sizing a KV
+/// cache against 64 GiB of host memory on an 8 GiB card is exactly the
+/// "working but unusably slow" outcome the recommendation module exists to
+/// prevent, and it would look stable while measuring the wrong device.
+///
+/// Cached in a `OnceLock` because the probe behind it builds a whole `System`
+/// snapshot and forks `nvidia-smi`; this is read from the admission path.
+/// Warm it from a blocking context at startup — see `warm_device_memory`.
+#[must_use]
+pub fn total_device_memory_bytes() -> Option<u64> {
+    static TOTAL: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *TOTAL.get_or_init(|| device_budget_of(&gpu::get_system_memory_info()))
+}
+
+/// The decision, over a plain struct.
+///
+/// Lifted out of the probe for the same reason `resolve_cache_ram_inner` and
+/// `resolve_kv_cache_types_inner` are: the interesting part is one line of
+/// policy, and it should be assertable without the hardware it describes.
+const fn device_budget_of(mem: &SystemMemoryInfo) -> Option<u64> {
+    mem.gpu_memory_bytes
+}
+
+/// Populate the [`total_device_memory_bytes`] cache off the async runtime.
+///
+/// The first call forks `nvidia-smi` and enumerates every process; doing that
+/// lazily from `admit` would block a tokio worker on the first request.
+pub async fn warm_device_memory() {
+    let _ = tokio::task::spawn_blocking(total_device_memory_bytes).await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// A machine whose VRAM gglib cannot read must get no budget at all —
+    /// never host RAM. Sizing a KV cache against 64 GiB of system memory on an
+    /// 8 GiB card is the "working but unusably slow" outcome the recommendation
+    /// module exists to prevent, and it would look perfectly stable while
+    /// measuring the wrong device.
+    #[test]
+    fn a_machine_with_unreadable_vram_gets_no_budget_rather_than_host_ram() {
+        let vulkan_box = SystemMemoryInfo {
+            total_ram_bytes: 64 * GIB,
+            gpu_memory_bytes: None,
+            is_apple_silicon: false,
+            has_nvidia_gpu: false,
+        };
+        assert_eq!(device_budget_of(&vulkan_box), None);
+    }
+
+    /// A readable device reports what it reported.
+    #[test]
+    fn a_readable_device_reports_its_own_memory() {
+        let card = SystemMemoryInfo {
+            total_ram_bytes: 64 * GIB,
+            gpu_memory_bytes: Some(24 * GIB),
+            is_apple_silicon: false,
+            has_nvidia_gpu: true,
+        };
+        assert_eq!(device_budget_of(&card), Some(24 * GIB));
+    }
 
     #[test]
     fn test_default_system_probe_creation() {

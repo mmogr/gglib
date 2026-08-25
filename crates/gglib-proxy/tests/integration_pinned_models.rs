@@ -48,7 +48,7 @@ async fn spawn(
     tokio::spawn(async move {
         gglib_proxy::serve(
             listener,
-            4096,
+            Some(4096),
             runtime,
             catalog,
             make_mcp_service(),

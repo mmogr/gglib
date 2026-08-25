@@ -23,7 +23,7 @@
 //!
 //! Tier 2 is split across two places for a reason. The per-model context
 //! length already has a home inside [`ServerConfigOptions`] (it is the second
-//! rung of [`resolve_context_size`]'s 4-level chain). The tag-driven defaults
+//! rung of the context-resolution chain). The tag-driven defaults
 //! for jinja, reasoning format and MTP are resolved from the model's own tags
 //! by `build_server_config` — the caller already has the model in hand to get
 //! `model_id`/`model_name`/`model_path` there in the first place, so this
@@ -41,7 +41,9 @@
 use std::path::PathBuf;
 
 use gglib_core::domain::InferenceConfig;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{
+    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+};
 use gglib_proxy::slot_eviction::DiskBudget;
 
 use crate::proxy::ProxyConfig;
@@ -191,7 +193,14 @@ impl UnifiedServerConfig {
         ProxyConfig {
             host: self.globals.host.clone(),
             port: self.globals.proxy_port,
-            default_context: resolve_context_size(&self.resolved_options()),
+            // Only a value somebody actually chose. Falling through to the
+            // built-in floor here would hand the proxy `Some(4096)` and make
+            // the fitted rung unreachable in pinned mode — the same laundering
+            // this change removes from the ordinary path.
+            default_context: match resolve_context_size_with_source(&self.resolved_options()) {
+                (_, ContextSizeSource::BuiltInDefault) => None,
+                (ctx, _) => Some(ctx),
+            },
             cache_enabled: self.globals.cache_enabled,
             slot_dir: self.resolved_slot_dir(),
             disk_budget: self.globals.disk_budget,
@@ -217,6 +226,7 @@ impl UnifiedServerConfig {
 mod tests {
     use super::*;
     use gglib_core::cache_config::KvCacheType;
+    use gglib_core::server_config::resolve_context_size;
 
     /// A config with nothing explicit set — every value comes from tier 3.
     fn bare(globals: GlobalDefaults) -> UnifiedServerConfig {
@@ -455,7 +465,7 @@ mod tests {
         });
         cfg.explicit.context_size = Some(32_768);
 
-        assert_eq!(cfg.to_proxy_config().default_context, 32_768);
+        assert_eq!(cfg.to_proxy_config().default_context, Some(32_768));
     }
 
     /// `GlobalDefaults::default` is defined *as* `ProxyConfig::default`, so a

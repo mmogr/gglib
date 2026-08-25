@@ -7,7 +7,6 @@ mod warm;
 use std::io::IsTerminal;
 
 use anyhow::Result;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
@@ -56,10 +55,12 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // Step 4: the proxy. Its own banners take over from here.
     step(4, "Endpoint");
     let settings = ctx.app.settings().get().await?;
-    let default_context = resolve_context_size(&ServerConfigOptions {
-        global_default_ctx: settings.default_context_size,
-        ..Default::default()
-    });
+    // Passed through, not resolved. `up` is the path that computes a fitted
+    // context, prints it as the number that earns the user's trust, and then
+    // used to start the proxy at a flat 4096 — because resolving here turned
+    // "the user set nothing" into "the user set 4096", which outranked the
+    // fitted value at launch. Sending `None` lets the launch fit it.
+    let default_context = settings.default_context_size;
 
     // The stored key, if any, is what the proxy about to start will demand of
     // this very probe: `up` binds loopback and passes no `--api-key`, so the
@@ -74,7 +75,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
         .start_proxy(&StartProxyBody {
             host: Some(HOST.to_string()),
             port: Some(args.port),
-            default_context: Some(default_context),
+            default_context,
             // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
             // discover anything. `up` warms one model; it does not restrict
             // to it. Everything else is deliberately unconfigurable here.

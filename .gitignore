@@ -97,3 +97,8 @@ logs/
 .github/copilot-instructions.md
 CLAUDE.md
 AGENTS.md
+
+# Scratch directory the ts-rs bindings target writes into before swapping it
+# over src/types/generated. `make bindings` deletes it on every run, so a
+# tracked copy shows up as mass deletions on any clean clone.
+src/types/generated.new/

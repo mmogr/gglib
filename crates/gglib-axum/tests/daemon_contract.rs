@@ -55,7 +55,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
         .admit(
             "some-other-model",
             None,
-            4096,
+            Some(4096),
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await

@@ -309,6 +309,25 @@ async fn launch(
     let deadline_secs = *health_deadline_secs;
     let started = tokio::time::Instant::now();
 
+    // A launch that fails because gglib chose the context has to say so.
+    // Everything else about a startup failure is the model server's business;
+    // this one is ours, the remedy is not guessable from the symptom, and the
+    // failure repeats identically forever — the budget is a per-machine
+    // constant, so a fit too large to load produces the same number on every
+    // retry.
+    let blame_the_fit = || {
+        if *ctx_source == ContextSizeSource::FittedToHardware {
+            format!(
+                " — context {resolved_ctx} was fitted to this machine; set a \
+                 global default to override it, or GGLIB_DISABLE_CONTEXT_FIT=1 \
+                 to fall back to {}",
+                gglib_core::settings::DEFAULT_CONTEXT_SIZE
+            )
+        } else {
+            String::new()
+        }
+    };
+
     // Raced against the child's own exit, not just run to the deadline. A
     // server that dies on startup — bad arguments, OOM, a missing GPU library
     // — never answers `/health`, and polling a dead port until a budget sized
@@ -319,7 +338,9 @@ async fn launch(
     loop {
         tokio::select! {
             result = &mut health => {
-                result.map_err(|e| ModelRuntimeError::HealthCheckFailed(e.to_string()))?;
+                result.map_err(|e| {
+                    ModelRuntimeError::HealthCheckFailed(format!("{e}{}", blame_the_fit()))
+                })?;
                 break;
             }
             () = tokio::time::sleep(LIVENESS_TICK) => {
@@ -329,8 +350,9 @@ async fn launch(
                 // A missed tick simply defers to the next one.
                 if core.try_write().is_ok_and(|mut c| c.has_exited(spec.id)) {
                     return Err(ModelRuntimeError::HealthCheckFailed(format!(
-                        "llama-server for {} exited during startup",
-                        spec.name
+                        "llama-server for {} exited during startup{}",
+                        spec.name,
+                        blame_the_fit()
                     )));
                 }
             }

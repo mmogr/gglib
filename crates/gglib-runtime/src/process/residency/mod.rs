@@ -76,22 +76,44 @@ pub struct ResidentSet {
 /// estimate. See #685.
 ///
 /// The context chain is assigned onto the overlaid template rather than
-/// overlaid itself: the manager is authoritative for all three rungs, and a
+/// overlaid itself: the manager is authoritative for every rung, and a
 /// stale `model_server_ctx` inherited from `template` would silently size the
 /// launch for a different model than `model_server_ctx` names here.
 fn resolve_launch_opts(
     template: &ServerConfigOptions,
     per_call: &ServerConfigOptions,
     num_ctx: Option<u64>,
-    default_ctx: u64,
+    default_ctx: Option<u64>,
+    fitted_ctx: Option<u64>,
     model_server_ctx: Option<usize>,
 ) -> (ServerConfigOptions, u64, ContextSizeSource) {
     let mut opts = template.overlay(per_call);
     opts.context_size = num_ctx.or(opts.context_size);
     opts.model_server_ctx = model_server_ctx;
-    opts.global_default_ctx = Some(default_ctx);
+    opts.fitted_ctx = fitted_ctx;
+    // Assigned as given, not `Some(default_ctx)`: a user who set nothing must
+    // fall through to the fitted rung rather than be handed the floor as
+    // though they had chosen it.
+    opts.global_default_ctx = default_ctx;
     let (resolved_ctx, ctx_source) = resolve_context_size_with_source(&opts);
     (opts, resolved_ctx, ctx_source)
+}
+
+/// Fit against the reserved budget, falling back to the undivided device.
+///
+/// A seam, not indirection: the chain is the whole of the co-resident
+/// reservation's escape hatch, and inlining it left the behaviour unguarded —
+/// deleting the fallback passed every test in the crate.
+///
+/// The seam guards the logic, not the wiring. Passing the same budget as both
+/// arguments still neuters the fallback and no test would notice; catching that
+/// needs `admit` exercised end to end against a catalog, which this module does
+/// not do.
+fn fit_or_undivided<F>(fit: F, reserved: Option<u64>, undivided: Option<u64>) -> Option<u64>
+where
+    F: Fn(Option<u64>) -> Option<u64>,
+{
+    fit(reserved).or_else(|| fit(undivided))
 }
 
 /// Removes a ticket from the queue on every exit path.
@@ -176,7 +198,7 @@ impl ResidentSet {
         core: &Arc<RwLock<GuiProcessCore>>,
         model_name: &str,
         num_ctx: Option<u64>,
-        default_ctx: u64,
+        default_ctx: Option<u64>,
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         // Refuse foreign models before touching the queue, so a rejected
@@ -196,6 +218,88 @@ impl ResidentSet {
         };
         let cache_ram = overrides.cache_ram.unwrap_or(self.cache_ram);
 
+        // What this machine could serve for this model, if nobody has said
+        // otherwise. Ranks below an explicit request, a per-model default and
+        // a global setting the user actually chose — and above the built-in
+        // floor, which is what you serve when you know nothing.
+        //
+        // Derived from the model's own GGUF facts and the device's nominal
+        // capacity less a fixed reservation for the second slot. `None` when
+        // any of that is unknown, which falls through to the floor rather than
+        // guessing.
+        //
+        // KV types come from the *overlaid* options, in the same precedence the
+        // launch will use (`over` wins). Reading the template first would size
+        // the fit against one KV type and launch with another — and a
+        // q8_0/f16 disagreement is a factor of two on the cache being
+        // budgeted.
+        let overlaid = template.overlay(&overrides.options);
+        let kv_types = crate::llama::args::resolve_kv_cache_types(
+            overlaid.cache_type_k,
+            overlaid.cache_type_v,
+        );
+        // One closure, two budgets. Spelling the six-argument call out twice is
+        // how the fit and the launch once came to disagree about which KV cache
+        // type they were sizing for.
+        let fit_against = |budget| {
+            let (fitted, inputs) = gglib_core::domain::fit_context_explained(
+                spec.context_length,
+                Some(spec.file_size_bytes),
+                spec.kv_elems_per_token,
+                kv_types.k,
+                kv_types.v,
+                budget,
+            );
+            // The two constants behind this are judgement calls, and the only
+            // way they stop being guesses is if the numbers they produced are
+            // visible when somebody looks. Nothing reads this.
+            debug!(
+                model = %spec.name,
+                budget_bytes = ?inputs.budget_bytes,
+                weights_bytes = ?inputs.weights_bytes,
+                kv_bytes_per_token = ?inputs.kv_bytes_per_token,
+                trained_ctx = ?inputs.trained_ctx,
+                unsnapped = ?inputs.unsnapped,
+                fitted = ?fitted,
+                "context fit"
+            );
+            fitted
+        };
+
+        // `enabled`, not "is the variable present": every other switch reads
+        // truthiness through this helper, and `active()` — what the daemon
+        // reports as in effect — filters by the same call. Reading presence
+        // would turn the fit off for `=0` while the roster said it was
+        // untouched, which is the confident-wrong-conclusion failure
+        // `debug_switches` exists to prevent.
+        //
+        // Reserving room for a co-resident is worth a rung, not the whole
+        // feature. On a small card a large model can fail to fit at all once
+        // the reservation is taken — and that is exactly the machine where a
+        // full-ceiling secondary could never have loaded anyway, so the
+        // reservation buys nothing and costs everything. Fall back to the
+        // undivided device.
+        //
+        // The two budgets are one closure apart on purpose: they differ only
+        // in the budget, and two spelled-out copies of the same six-argument
+        // call is how the fit and the launch once came to disagree about which
+        // KV cache type they were sizing for.
+        //
+        // Known consequence, deliberate: this makes the served context
+        // non-monotonic in device size. A 6.5 GiB card cannot host a secondary,
+        // so its primary takes the whole device; a 7 GiB card can, so it yields
+        // room for one and its primary gets less. Upgrading that card lowers
+        // the context served for the same model.
+        let fitted_ctx = (!gglib_core::debug_switches::enabled("GGLIB_DISABLE_CONTEXT_FIT"))
+            .then(|| {
+                fit_or_undivided(
+                    fit_against,
+                    vram::fit_budget_for(),
+                    crate::system::total_device_memory_bytes(),
+                )
+            })
+            .flatten();
+
         // Resolved once, here, before anything else runs. This is the single
         // source of truth for "what context is this launch/reuse decision
         // about" — read by the resident-match test below, every log line, the
@@ -205,6 +309,7 @@ impl ResidentSet {
             &overrides.options,
             num_ctx,
             default_ctx,
+            fitted_ctx,
             spec.server_defaults
                 .as_ref()
                 .and_then(|sc| sc.context_length),

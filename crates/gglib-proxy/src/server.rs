@@ -62,7 +62,7 @@ pub(crate) struct AppState {
     /// Session manager for MCP Streamable HTTP sessions.
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
-    pub(crate) default_ctx: u64,
+    pub(crate) default_ctx: Option<u64>,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
     /// pushes snapshots to `GET /v1/proxy/status/stream`. Replaces what were
@@ -185,7 +185,7 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 #[allow(clippy::too_many_arguments)]
 pub async fn serve(
     listener: TcpListener,
-    default_ctx: u64,
+    default_ctx: Option<u64>,
     runtime_port: Arc<dyn ModelRuntimePort>,
     catalog_port: Arc<dyn ModelCatalogPort>,
     mcp: Arc<McpService>,
@@ -432,9 +432,12 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 /// serving context or clients budget against a stale floor for the entire
 /// session:
 ///
-/// * **Non-running models**: `min(static GGUF context_length, default_ctx)`
-///   — `default_ctx` is the same value `admit` will launch
-///   the model with on its first request.
+/// * **Non-running models**: the GGUF's `context_length`, capped only by a
+///   configured per-model or global default
+///   — with nothing configured the launch fits the context to this machine,
+///   so the trained window is advertised as the upper bound rather than a
+///   floor nobody chose — meaning `admit` may launch the model at less than
+///   the advertised figure, never more.
 /// * **The currently running model**: its full live `effective_ctx` (the
 ///   real `--ctx-size` llama-server was launched with), which also drives
 ///   the per-request truncation budget in

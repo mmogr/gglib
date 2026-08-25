@@ -154,7 +154,7 @@ pub(crate) async fn execute(
         .start_proxy(&StartProxyBody {
             host: Some(proxy_config.host),
             port: Some(proxy_config.port),
-            default_context: Some(proxy_config.default_context),
+            default_context: proxy_config.default_context,
             cache: Some(cache.cache),
             // `slot_dir` comes from the cascade rather than the raw flag: it
             // has already had the `cache_enabled` master switch applied and
