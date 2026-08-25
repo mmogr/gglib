@@ -153,18 +153,26 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
     out
 }
 
-/// Render per-model defect counts — what actually failed, and for which model.
+/// Render the per-model signals section — what failed, what merely went in
+/// circles, and for which model.
 ///
-/// These are the Tier C instruments ADR 0006 kept when the tuning scheduler
+/// These are the diagnostic counters ADR 0006 kept when the tuning scheduler
 /// went. Nothing acts on them automatically, which is exactly why they need
 /// somewhere to be read: until now they were on `/v1/proxy/status` and in no
 /// human-facing surface at all, so the only way to see them was `curl | jq`.
 ///
-/// Only models with something to report get a line. A healthy model produces
-/// zero of every counter, so an empty section is a real answer — and listing
-/// every clean model would bury the one that is not.
+/// Only models with something to report get a line, and listing every clean
+/// model would bury the one that is not.
+///
+/// Two counters here are not failures. `identical_result_repeats` describes a
+/// conversation that went in a circle, and `repeats_not_evaluated` says how
+/// often that question could not be answered — facts about the client's
+/// history rather than faults in the model. They print below the defects under
+/// an `observed` heading of their own, and a model whose only signal is one of
+/// them still earns a line. The section is named for signals rather than
+/// defects because of them.
 pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCounts>) -> String {
-    let mut out = String::from("Defects (this proxy run)\n");
+    let mut out = String::from("Per-model signals (this proxy run)\n");
 
     let faulty: Vec<_> = per_model
         .iter()
@@ -234,6 +242,25 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
                     "empty responses",
                     thousands(counts.empty_responses)
                 ));
+            }
+        }
+
+        // Below the defects, under a heading of their own, because neither is
+        // one: the model asked for the same thing twice and the environment
+        // gave the same answer twice. Nothing acts on them — they are the
+        // evidence for whether a corrective arm on the input plane would ever
+        // fire, and the second says how often the question could be asked at
+        // all. Own indent level so the label column is not shared with the
+        // defect rows above.
+        if counts.identical_result_repeats > 0 || counts.repeats_not_evaluated > 0 {
+            out.push_str("    observed\n");
+            for (label, value) in [
+                ("repeated, same result", counts.identical_result_repeats),
+                ("repeated, not comparable", counts.repeats_not_evaluated),
+            ] {
+                if value > 0 {
+                    out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
+                }
             }
         }
     }
