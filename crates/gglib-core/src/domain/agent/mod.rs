@@ -17,7 +17,7 @@ pub use config::{
     MIN_TOOL_TIMEOUT_MS,
 };
 pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent};
-pub use loop_detection::{LoopDetector, is_observation_batch};
+pub use loop_detection::{LoopDetector, batch_signature, is_observation_batch};
 pub use messages::{AgentMessage, AssistantContent};
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};

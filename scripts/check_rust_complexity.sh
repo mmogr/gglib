@@ -37,7 +37,7 @@ current_sizes() {
     | awk -v root="$ROOT_DIR/" '$2 != "total" && $1 > '"$THRESHOLD"' {
         path = $2; sub(root, "", path); print path" "$1
       }' \
-    | sort
+    | LC_ALL=C sort
 }
 
 if [ "${1:-}" = "--update" ]; then

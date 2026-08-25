@@ -304,6 +304,28 @@ impl ContextMetricsStore {
         }
     }
 
+    /// Record that one turn repeated a call and got an equal result back.
+    ///
+    /// Goes straight to the ledger by model name rather than through
+    /// [`Self::with_model`]: the loop guard runs before admission, so no
+    /// snapshot — and therefore no `seq` — exists yet, and a request that
+    /// passes the guard is not recorded until it reaches the forwarder.
+    /// Waiting for either would drop the observation on exactly the requests
+    /// that carry it.
+    pub fn record_identical_result_repeat(&self, model: &str) {
+        if let Some(ledger) = &self.ledger {
+            ledger.record_identical_result_repeat(model);
+        }
+    }
+
+    /// Record that one turn repeated a call whose results could not be
+    /// compared — the reading that makes a zero above interpretable.
+    pub fn record_repeat_not_evaluated(&self, model: &str) {
+        if let Some(ledger) = &self.ledger {
+            ledger.record_repeat_not_evaluated(model);
+        }
+    }
+
     /// Per-model defect counts, for the dashboard.
     ///
     /// The ledger is written on every request and, until this existed, read by

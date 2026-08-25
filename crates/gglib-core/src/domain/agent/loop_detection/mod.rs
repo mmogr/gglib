@@ -95,7 +95,7 @@ fn tool_signature(call: &ToolCall) -> String {
 ///
 /// Individual signatures are sorted before joining so that the result is
 /// independent of the order in which the LLM emitted the calls.
-fn batch_signature(calls: &[ToolCall]) -> String {
+pub fn batch_signature(calls: &[ToolCall]) -> String {
     let mut sigs: Vec<String> = calls.iter().map(tool_signature).collect();
     sigs.sort_unstable();
     sigs.join("|")
