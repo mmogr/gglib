@@ -644,7 +644,7 @@ async fn a_third_model_evicts_the_secondary_not_the_primary() {
 
 /// The cold-start papercut (observed three times in one benchmarking day): a
 /// request that arrives while a model launch is in flight must wait the load
-/// out, not expire in the queue. The load is bounded by [`LAUNCH_TIMEOUT`],
+/// out, not expire in the queue. The load is bounded by its own launch budget,
 /// so pausing the stall clock here cannot extend a wait indefinitely.
 #[tokio::test]
 async fn a_waiter_never_expires_while_a_launch_is_in_flight() {

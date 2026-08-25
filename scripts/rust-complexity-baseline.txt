@@ -161,10 +161,10 @@ crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 407
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 342
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 358
 crates/gglib-runtime/src/process/admission/queue_tests.rs 973
-crates/gglib-runtime/src/process/admission/state.rs 736
+crates/gglib-runtime/src/process/admission/state.rs 761
 crates/gglib-runtime/src/process/manager.rs 367
-crates/gglib-runtime/src/process/residency/launch.rs 445
-crates/gglib-runtime/src/process/residency/mod.rs 518
+crates/gglib-runtime/src/process/residency/launch.rs 518
+crates/gglib-runtime/src/process/residency/mod.rs 532
 crates/gglib-runtime/src/proxy/supervisor.rs 763
 crates/gglib-runtime/src/system/mod.rs 568
 crates/gglib-runtime/src/unified_server_config.rs 491

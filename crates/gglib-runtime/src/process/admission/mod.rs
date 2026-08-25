@@ -3,9 +3,10 @@ mod lease;
 mod state;
 
 pub use lease::AdmissionQueue;
+pub(crate) use state::launch_timeout;
 pub use state::{
-    ADMISSION_DEADLINE, AdmissionDecision, DRAIN_QUANTUM, LAUNCH_TIMEOUT, PRIMARY_SLOT, Resident,
-    SLOT_COUNT, SlotState, Ticket,
+    ADMISSION_DEADLINE, AdmissionDecision, DRAIN_QUANTUM, PRIMARY_SLOT, Resident, SLOT_COUNT,
+    SlotState, Ticket,
 };
 
 #[cfg(test)]

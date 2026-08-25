@@ -44,12 +44,29 @@ pub const PRIMARY_SLOT: usize = 0;
 /// what an agentic client will sit through.
 pub const DRAIN_QUANTUM: Duration = Duration::from_secs(20);
 
+/// Everything in a launch that is not waiting for the server to answer.
+///
+/// Model resolution, the *displaced* process's shutdown — which is inline and
+/// awaited, and can itself take SIGTERM plus a five-second grace — the purge of
+/// stale slot files, and the spawn.
+///
+/// Deliberately not headroom for the failed-launch cleanup: that runs from a
+/// `Drop` on a detached task, outside this budget by construction, because the
+/// case it exists for is the one where this budget has already expired.
+pub(crate) const LAUNCH_OVERHEAD: Duration = Duration::from_secs(40);
+
 /// How long one model launch may take before it is abandoned.
 ///
-/// The health check itself waits up to 120 s for llama-server to come up; the
-/// remainder covers model resolution, the displaced process's shutdown, and the
-/// spawn.
-pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(150);
+/// Derived per launch rather than fixed, because the health wait it contains
+/// is itself sized to the model — see `process::health::launch_deadline_secs`.
+/// A flat budget silently capped that wait: any model whose deadline exceeded
+/// the constant had its future dropped by this timeout first, which skipped
+/// the cleanup inside it and leaked the very process the deadline was extended
+/// for.
+#[must_use]
+pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
+    health_deadline.saturating_add(LAUNCH_OVERHEAD)
+}
 
 /// How long a request may wait **with no queue progress** before giving up
 /// with a 503.
@@ -66,10 +83,18 @@ pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(150);
 /// anyone's behalf, and two things hold it back:
 ///
 /// - **A launch in flight pauses every waiter's clock.** A loading slot is
-///   the opposite of a stall, and it is bounded on its own: [`LAUNCH_TIMEOUT`]
+///   the opposite of a stall, and it is bounded on its own: [`launch_timeout`]
 ///   abandons an overrunning launch and frees the slot, at which point the
 ///   clock runs again. Waiting out a load can therefore extend a wait by at
 ///   most one launch budget at a time, never indefinitely.
+///
+///   That budget is no longer a single number: [`launch_timeout`] scales with
+///   the model, from 160 s to 640 s. So a large model loading can pause every
+///   other waiter's clock for well past this deadline. That is consistent with
+///   what the clock measures — a load in flight is progress, not a stall — but
+///   whether a waiter behind a ten-minute load should have its clock paused
+///   outright rather than merely extended is a question this constant does not
+///   answer, and did not have to while the budget was flat.
 /// - **Progress resets the clock.** A lease released (a generation finished),
 ///   a launch landing or failing, a slot evicted — each proves the queue is
 ///   moving, so a waiter behind it is queued, not stuck.
@@ -423,7 +448,7 @@ impl QueueState {
     /// in-flight launch has its stall clock held at `now`.
     fn is_expired(&mut self, ticket: &Ticket, now: Instant) -> bool {
         // A launch in flight is the opposite of a stall: it is bounded by
-        // LAUNCH_TIMEOUT, and both of its outcomes change the queue. This is
+        // its launch timeout, and both outcomes change the queue. This is
         // the cold-start case that motivated stall semantics — the first
         // request on a fresh daemon must wait out the model load, not time
         // out in the queue while the load it needs is landing.

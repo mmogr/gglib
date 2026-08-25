@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 mod launch;
+mod spawned_child;
 mod vram;
 
 use std::sync::Arc;
@@ -17,7 +18,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::process::admission::{
-    AdmissionDecision, AdmissionQueue, LAUNCH_TIMEOUT, PRIMARY_SLOT, Resident, Ticket,
+    AdmissionDecision, AdmissionQueue, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
 };
 use crate::process::core::GuiProcessCore;
 use crate::process::health::check_http_health;
@@ -183,6 +184,7 @@ impl ResidentSet {
         self.check_pinned(model_name)?;
 
         let spec = self.resolve(model_name).await?;
+        let spec_weights_bytes = spec.file_size_bytes;
 
         // A pin's launch overrides layer onto the standing template, winning
         // field-wise: they are the *output* of the caller's full cascade
@@ -217,6 +219,9 @@ impl ResidentSet {
                 slot: PRIMARY_SLOT, // replaced by the queue's decision
                 evict: None,
                 cache_ram,
+                health_deadline_secs: crate::process::health::launch_deadline_secs(
+                    spec_weights_bytes,
+                ),
             },
         )
         .await
@@ -433,11 +438,20 @@ impl ResidentSet {
             } else {
                 vram::secondary_cache_ram()
             },
+            // Carried through, not re-derived: the budget below reads the same
+            // field the launch waits on.
+            health_deadline_secs: request.health_deadline_secs,
         };
+
+        // Sized to this model, not to a constant, and read from the same field
+        // the launch itself waits on: a flat budget here would cut that wait
+        // short — dropping the future mid-await, which skips the cleanup that
+        // stops the child and leaks it.
+        let budget = launch_timeout(Duration::from_secs(launch_request.health_deadline_secs));
 
         let handle = tokio::spawn(async move {
             match tokio::time::timeout(
-                LAUNCH_TIMEOUT,
+                budget,
                 run_launch(core, Arc::clone(&queue), catalog, launch_request),
             )
             .await
