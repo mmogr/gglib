@@ -465,7 +465,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         &self,
         model_name: &str,
         num_ctx: Option<u64>,
-        default_ctx: u64,
+        default_ctx: Option<u64>,
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError>;
 
@@ -580,7 +580,7 @@ impl ModelRuntimePort for NoopModelRuntime {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         Err(ModelRuntimeError::Internal(
@@ -600,6 +600,7 @@ impl ModelRuntimePort for NoopModelRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::DEFAULT_CONTEXT_SIZE;
 
     /// Implements only the three required methods, so the defaulted ones are
     /// exercised exactly as an untouched test double would get them.
@@ -612,14 +613,14 @@ mod tests {
             &self,
             model_name: &str,
             num_ctx: Option<u64>,
-            default_ctx: u64,
+            default_ctx: Option<u64>,
             _overrides: LaunchOverrides,
         ) -> Result<Admission, ModelRuntimeError> {
             Ok(Admission::detached(RunningTarget::local(
                 5500,
                 1,
                 model_name.to_string(),
-                num_ctx.unwrap_or(default_ctx),
+                num_ctx.or(default_ctx).unwrap_or(DEFAULT_CONTEXT_SIZE),
                 false,
             )))
         }
@@ -638,7 +639,7 @@ mod tests {
     #[tokio::test]
     async fn a_minimal_runtime_admits_with_a_detached_lease() {
         let admission = MinimalRuntime
-            .admit("m", Some(8192), 4096, LaunchOverrides::default())
+            .admit("m", Some(8192), Some(4096), LaunchOverrides::default())
             .await
             .expect("minimal runtime admits");
 

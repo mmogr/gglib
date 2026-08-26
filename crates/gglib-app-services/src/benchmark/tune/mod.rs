@@ -115,7 +115,8 @@ pub async fn run_tune(
         .admit(
             &model.name,
             Some(resolved_ctx),
-            resolved_ctx,
+            // Pinned explicitly above; no fallback rung is reachable here.
+            None,
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await

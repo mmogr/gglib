@@ -33,7 +33,7 @@ use crate::utils::system::SystemMemoryInfo;
 /// compute buffer, the framebuffer already in use by the desktop, allocator
 /// fragmentation. Sizing to 100% of nominal VRAM reliably produces a model
 /// that *almost* fits, which is the slowest possible outcome.
-const BUDGET_UTILISATION: f64 = 0.9;
+pub const BUDGET_UTILISATION: f64 = 0.9;
 
 /// One entry in the shortlist.
 ///

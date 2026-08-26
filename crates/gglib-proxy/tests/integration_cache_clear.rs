@@ -32,7 +32,7 @@ impl ModelRuntimePort for RecordingRuntime {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: gglib_core::ports::LaunchOverrides,
     ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
         Ok(gglib_core::ports::Admission::detached(
@@ -71,7 +71,7 @@ async fn spawn_proxy(
     tokio::spawn(async move {
         gglib_proxy::serve(
             listener,
-            4096,
+            Some(4096),
             runtime,
             catalog,
             mcp,

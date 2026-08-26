@@ -36,7 +36,7 @@ impl ModelRuntimePort for NoopRuntime {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         Ok(Admission::detached(RunningTarget::local(
@@ -72,7 +72,7 @@ impl ModelRuntimePort for PinnedRuntime {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         Ok(Admission::detached(RunningTarget::local(
@@ -115,7 +115,7 @@ impl ModelRuntimePort for EnforcingPinnedRuntime {
         &self,
         model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         if model_name != self.0 {
@@ -358,7 +358,7 @@ impl ModelRuntimePort for FixedUpstream {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         Ok(Admission::detached(
@@ -411,7 +411,7 @@ impl ModelRuntimePort for CountingRuntime {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         self.admit_calls.fetch_add(1, Ordering::SeqCst);
@@ -617,7 +617,7 @@ impl ModelRuntimePort for ResidentSimRuntime {
         &self,
         model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         let port = *self
@@ -1046,7 +1046,7 @@ pub(crate) async fn spawn_proxy_with_settings(
     tokio::spawn(async move {
         gglib_proxy::serve(
             listener,
-            4096,
+            Some(4096),
             runtime,
             catalog,
             mcp,
@@ -1100,7 +1100,7 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
     tokio::spawn(async move {
         gglib_proxy::serve(
             listener,
-            4096,
+            Some(4096),
             runtime,
             catalog,
             mcp,

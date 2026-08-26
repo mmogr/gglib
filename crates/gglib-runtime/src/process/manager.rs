@@ -121,7 +121,7 @@ impl ProcessManager {
         &self,
         model_name: &str,
         num_ctx: Option<u64>,
-        default_ctx: u64,
+        default_ctx: Option<u64>,
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
         self.residency
@@ -254,7 +254,7 @@ mod tests {
     #[tokio::test]
     async fn admit_rejects_a_foreign_model() {
         let err = pinned_manager()
-            .admit("llama-3-8b", None, 4096, LaunchOverrides::default())
+            .admit("llama-3-8b", None, Some(4096), LaunchOverrides::default())
             .await
             .expect_err("a pinned manager must refuse a foreign model");
 
@@ -271,7 +271,7 @@ mod tests {
     #[tokio::test]
     async fn foreign_model_is_refused_before_catalog_lookup() {
         let err = pinned_manager()
-            .admit("llama-3-8b", None, 4096, LaunchOverrides::default())
+            .admit("llama-3-8b", None, Some(4096), LaunchOverrides::default())
             .await
             .unwrap_err();
 
@@ -286,7 +286,7 @@ mod tests {
     #[tokio::test]
     async fn admit_allows_the_pinned_model_through_to_the_catalog() {
         let err = pinned_manager()
-            .admit("qwen2.5", None, 4096, LaunchOverrides::default())
+            .admit("qwen2.5", None, Some(4096), LaunchOverrides::default())
             .await
             .unwrap_err();
 
@@ -300,7 +300,7 @@ mod tests {
     #[tokio::test]
     async fn an_unpinned_manager_admits_any_model() {
         let err = manager()
-            .admit("anything", None, 4096, LaunchOverrides::default())
+            .admit("anything", None, Some(4096), LaunchOverrides::default())
             .await
             .unwrap_err();
 
@@ -316,7 +316,7 @@ mod tests {
     async fn an_unknown_model_fails_without_queueing() {
         let manager = manager();
         let _ = manager
-            .admit("nope", None, 4096, LaunchOverrides::default())
+            .admit("nope", None, Some(4096), LaunchOverrides::default())
             .await;
 
         let snapshot = manager.admission_snapshot();

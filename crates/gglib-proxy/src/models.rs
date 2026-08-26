@@ -4,7 +4,9 @@
 //! Domain types live in `gglib-core`; this module handles the API layer mapping.
 
 use gglib_core::ports::{ModelRuntimeError, ModelSummary};
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::server_config::{
+    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+};
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
@@ -261,30 +263,48 @@ pub struct ModelsResponse {
 impl ModelsResponse {
     /// Create a new ModelsResponse from a list of model summaries.
     ///
-    /// Each model's `context_window` is resolved through the canonical
-    /// [`resolve_context_size`] fallback chain (per-model server_defaults →
-    /// global default), then clamped to the GGUF metadata ceiling so we never
-    /// advertise more context than the model file supports.
-    pub fn from_summaries(summaries: Vec<ModelSummary>, global_default_ctx: u64) -> Self {
+    /// Each model's `context_window` is the GGUF's trained ceiling, capped by
+    /// anything a person actually configured — a per-model server default or a
+    /// global setting, resolved through
+    /// [`resolve_context_size_with_source`].
+    ///
+    /// A chain that falls through to the built-in floor means nothing is
+    /// configured, and the launch will fit the context to this machine, so no
+    /// cap is applied: advertising 4096 there would understate what the model
+    /// is about to be served at. The trained window is always an upper bound —
+    /// `fit_context` caps at it before snapping — so this never advertises
+    /// more than the file supports, but it can advertise more than a
+    /// particular launch fits.
+    pub fn from_summaries(summaries: Vec<ModelSummary>, global_default_ctx: Option<u64>) -> Self {
         let data: Vec<ModelInfo> = summaries
             .into_iter()
             .map(|summary| {
-                let effective_cap = resolve_context_size(&ServerConfigOptions {
-                    context_size: None,
-                    model_server_ctx: summary
-                        .server_defaults
-                        .as_ref()
-                        .and_then(|sd| sd.context_length),
-                    global_default_ctx: Some(global_default_ctx),
-                    ..Default::default()
-                });
+                let (effective_cap, cap_source) =
+                    resolve_context_size_with_source(&ServerConfigOptions {
+                        context_size: None,
+                        model_server_ctx: summary
+                            .server_defaults
+                            .as_ref()
+                            .and_then(|sd| sd.context_length),
+                        global_default_ctx,
+                        ..Default::default()
+                    });
                 ModelInfo {
                     id: summary.name.clone(),
                     object: "model".to_string(),
                     created: summary.created_at,
                     owned_by: "gglib".to_string(),
                     description: Some(summary.description()),
-                    context_window: summary.context_length.map(|ctx| ctx.min(effective_cap)),
+                    // Capped only by something a person actually configured.
+                    // Falling through to the built-in floor means nothing is
+                    // set, and the launch will fit the context to this machine
+                    // — so advertising 4096 here would understate what the
+                    // model is about to be served at. The trained window is
+                    // the honest upper bound.
+                    context_window: match cap_source {
+                        ContextSizeSource::BuiltInDefault => summary.context_length,
+                        _ => summary.context_length.map(|ctx| ctx.min(effective_cap)),
+                    },
                     capabilities: capabilities_of(&summary),
                 }
             })

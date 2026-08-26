@@ -204,19 +204,29 @@ arguments are applied after the environment.
 
 ### Context size resolution
 
-The `resolve_context_size()` function implements a strict 4-level fallback chain
+The `resolve_context_size()` function implements a strict 5-level fallback chain
 for determining the context window passed to llama-server:
 
 ```text
 1. Runtime request / CLI flag (opts.context_size)
 2. Per-model server_defaults (opts.model_server_ctx, from DB column server_defaults)
-3. Global app setting (opts.global_default_ctx)
-4. Hardcoded DEFAULT_CONTEXT_SIZE = 4096
+3. Global app setting (opts.global_default_ctx) — only when the user set one
+4. Fitted to this machine (opts.fitted_ctx)
+5. Hardcoded DEFAULT_CONTEXT_SIZE = 4096
 ```
 
 Each level fills in only if the previous levels are `None`. This ensures per-model
 overrides (`server_defaults.context_length`) take precedence over global settings,
 while still allowing runtime flags to win when explicitly provided.
+
+Level 4 is computed by `gglib_core::domain::fit_context` from the model's trained
+context, its weights, its KV shape and the device's capacity less what other
+models already hold. It refuses — yielding level 5 — whenever any of that is
+unknown, and `GGLIB_DISABLE_CONTEXT_FIT` turns it off entirely.
+
+Level 3 carries `None` all the way from `Settings` rather than being resolved
+early. That matters: pre-resolving it turned "the user set nothing" into "the
+user set 4096", which made levels 4 and 5 unreachable.
 
 ## Usage
 

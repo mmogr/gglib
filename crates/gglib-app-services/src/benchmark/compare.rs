@@ -99,7 +99,9 @@ pub(crate) async fn run_compare(
             }
         };
 
-        // 4-level fallback chain: config override → per-model server_defaults → global setting → hardcoded default
+        // Resolved here and pinned: a benchmark sends its context explicitly, so
+        // the lower rungs of the chain (fitted-to-hardware, built-in default) are
+        // unreachable from this call site by construction.
         let resolved_ctx = resolve_context_size(&ServerConfigOptions {
             context_size: config.ctx_size,
             model_server_ctx: model
@@ -163,10 +165,8 @@ pub(crate) async fn run_compare(
 
 /// Run the compare prompt through one model and collect results.
 ///
-/// `resolved_ctx` is the fully-resolved context size (4-level fallback:
-/// config override → per-model server_defaults → global setting → hardcoded default),
-/// computed per-model by the caller ([`run_compare`]) to avoid redundant
-/// settings reads. `global_inf` is also resolved once per run.
+/// `resolved_ctx` is the context this benchmark pins (resolved here from the
+/// upper rungs only, since it always supplies a global default).
 #[allow(clippy::too_many_arguments)]
 async fn run_single_compare(
     deps: &BenchmarkDeps,
@@ -179,7 +179,7 @@ async fn run_single_compare(
     global_inf: Option<&InferenceConfig>,
 ) -> Result<ModelCompareResult> {
     // Start (or keep running) the model server. Pre-resolved per-model context
-    // size (4-level fallback); both args are the same because resolution
+    // size, pinned; both args are the same because resolution
     // already happened above with per-model granularity — the runtime's
     // internal resolution is a no-op when context_size is Some.
     //
@@ -191,7 +191,9 @@ async fn run_single_compare(
         .admit(
             &model.name,
             Some(resolved_ctx),
-            resolved_ctx,
+            // A benchmark pins its own context explicitly above; the fallback
+            // rung is unreachable here and must not smuggle in a floor.
+            None,
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await

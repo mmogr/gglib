@@ -334,7 +334,7 @@ impl gglib_core::ports::ModelRuntimePort for RunningRuntime {
         &self,
         _model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: gglib_core::ports::LaunchOverrides,
     ) -> Result<gglib_core::ports::Admission, gglib_core::ports::ModelRuntimeError> {
         unimplemented!("not exercised by the remove() tests")

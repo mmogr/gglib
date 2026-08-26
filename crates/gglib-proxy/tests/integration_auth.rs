@@ -49,7 +49,7 @@ async fn spawn_proxy(access: ProxyAccessConfig) -> (String, u16, CancellationTok
     tokio::spawn(async move {
         gglib_proxy::serve(
             listener,
-            4096,
+            Some(4096),
             runtime,
             catalog,
             make_mcp_service(),

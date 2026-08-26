@@ -156,7 +156,7 @@ pub(crate) fn build_server_config_narrated(
 ) -> (ServerConfig, ResolvedCapabilities) {
     let mut config = ServerConfig::new(model_id, model_name, model_path, base_port);
 
-    // --- Context size (4-level fallback chain) --------------------------------
+    // --- Context size (5-level fallback chain) --------------------------------
     let ctx = resolve_context_size(&opts);
     config = config.with_context_size(ctx);
 

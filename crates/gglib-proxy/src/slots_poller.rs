@@ -766,7 +766,7 @@ mod tests {
             &self,
             model: &str,
             _num_ctx: Option<u64>,
-            _default_ctx: u64,
+            _default_ctx: Option<u64>,
             _overrides: gglib_core::ports::LaunchOverrides,
         ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
             Err(ModelRuntimeError::ModelNotFound(model.to_string()))

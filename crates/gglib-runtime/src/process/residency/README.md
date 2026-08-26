@@ -42,12 +42,23 @@ where `⊕` is [`ServerConfigOptions::overlay`]. A flag added to
 `ServerConfigOptions` reaches llama-server through this path with no change
 here at all.
 
-# Two residents, two budgets
+# Two residents, three budgets
 
 A co-loaded secondary must not be sized as though it had the machine to itself.
 [`vram`] nets the primary's weights and KV out of the host-RAM figure the
 secondary's `--cache-ram` is computed against, so two residents cannot each
 claim the same memory.
+
+It owns two device-memory questions besides. *May* a secondary load at all is
+answered against a **live** free-VRAM reading, because that decision is made
+once and acted on immediately. *How large a context* the primary is fitted to
+is answered against **total capacity less a fixed reservation** for the second
+slot — deliberately not a live reading and deliberately not the current
+resident set, because the fitted context becomes part of a resident's identity
+and a budget that moves evicts and relaunches the model it just sized.
+
+The asymmetry is the point: one question tolerates a figure that changes,
+the other cannot.
 
 # What this module is not responsible for
 

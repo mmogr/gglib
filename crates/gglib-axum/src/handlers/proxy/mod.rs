@@ -47,7 +47,7 @@ pub(crate) async fn start_pinned(
     let cfg = StartProxyConfig {
         pinned: Some(plan.pinned),
         slot_dir: proxy_config.slot_dir,
-        default_context: Some(proxy_config.default_context),
+        default_context: proxy_config.default_context,
         // Sampling rides the proxy-wide override, exactly as the CLI sends
         // it. It cannot ride the pinned model's launch options: gglib emits
         // no sampler flags to llama-server at all (ADR 0003/0004), so the

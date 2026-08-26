@@ -113,7 +113,7 @@ fn default_context_falls_through_to_settings() {
         ..AppSettings::default()
     };
     let runtime_cfg = to_runtime_config(&cfg, &settings);
-    assert_eq!(runtime_cfg.default_context, 16_384);
+    assert_eq!(runtime_cfg.default_context, Some(16_384));
 }
 
 /// A crashed proxy must not look reachable. It reports stopped, with no

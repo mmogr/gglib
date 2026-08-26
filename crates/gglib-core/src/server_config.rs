@@ -1,4 +1,4 @@
-//! Canonical context-size resolver (4-level fallback chain).
+//! Canonical context-size resolver (5-level fallback chain).
 //!
 //! Extracted to `gglib-core` so that crates which cannot depend on
 //! `gglib-runtime` (e.g. `gglib-proxy`) can still use the same resolution
@@ -100,6 +100,16 @@ pub struct ServerConfigOptions {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub global_default_ctx: Option<u64>,
 
+    /// Context fitted to this model and this machine, from
+    /// [`crate::domain::fit_context`]. Fourth tier in the fallback chain.
+    ///
+    /// `None` when it could not be computed — unknown KV shape, no memory
+    /// reading — which is a refusal, not a zero: the chain falls through to the
+    /// built-in default rather than launching against a guess.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub fitted_ctx: Option<u64>,
+
     /// Bind llama-server to a specific port instead of letting the allocator
     /// choose.
     pub port: Option<u16>,
@@ -198,6 +208,7 @@ impl ServerConfigOptions {
             context_size,
             model_server_ctx,
             global_default_ctx,
+            fitted_ctx,
             port,
             jinja,
             reasoning_format,
@@ -216,6 +227,7 @@ impl ServerConfigOptions {
             context_size: context_size.or(self.context_size),
             model_server_ctx: model_server_ctx.or(self.model_server_ctx),
             global_default_ctx: global_default_ctx.or(self.global_default_ctx),
+            fitted_ctx: fitted_ctx.or(self.fitted_ctx),
             port: port.or(self.port),
             jinja: jinja.or(self.jinja),
             reasoning_format: reasoning_format
@@ -256,6 +268,8 @@ pub enum ContextSizeSource {
     ModelServerDefaults,
     /// Global app setting (`opts.global_default_ctx`).
     GlobalDefault,
+    /// Computed from the model's trained context and this machine's memory.
+    FittedToHardware,
     /// The hardcoded [`DEFAULT_CONTEXT_SIZE`] floor — nothing else was set.
     BuiltInDefault,
 }
@@ -268,12 +282,13 @@ impl ContextSizeSource {
             Self::Explicit => "explicit",
             Self::ModelServerDefaults => "model server_defaults",
             Self::GlobalDefault => "global default",
+            Self::FittedToHardware => "fitted to hardware",
             Self::BuiltInDefault => "built-in default",
         }
     }
 }
 
-/// Resolve context size using the 4-level fallback chain, reporting which
+/// Resolve context size using the 5-level fallback chain, reporting which
 /// rung won.
 ///
 /// 1. Runtime request / CLI flag (`opts.context_size`) — highest priority
@@ -296,14 +311,23 @@ pub const fn resolve_context_size_with_source(
     if let Some(ctx) = opts.global_default_ctx {
         return (ctx, ContextSizeSource::GlobalDefault);
     }
+    if let Some(ctx) = opts.fitted_ctx {
+        return (ctx, ContextSizeSource::FittedToHardware);
+    }
     (DEFAULT_CONTEXT_SIZE, ContextSizeSource::BuiltInDefault)
 }
 
-/// Resolve context size using the 4-level fallback chain.
+/// Resolve context size using the 5-level fallback chain.
 /// 1. Runtime request / CLI flag (`opts.context_size`) — highest priority
 /// 2. Per-model server defaults (`opts.model_server_ctx`) — from DB
-/// 3. Global app setting (`opts.global_default_ctx`)
-/// 4. Hardcoded default (`DEFAULT_CONTEXT_SIZE` = 4096) — lowest priority
+/// 3. Global app setting (`opts.global_default_ctx`) — only when the user set one
+/// 4. Fitted to this machine (`opts.fitted_ctx`)
+/// 5. Hardcoded default (`DEFAULT_CONTEXT_SIZE` = 4096) — lowest priority
+///
+/// The fitted value sits *below* the global default deliberately: a number the
+/// user typed outranks one gglib computed. It sits above the built-in floor for
+/// the same reason — 4096 is what you serve when you know nothing, and by this
+/// rung something is known.
 pub const fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
     resolve_context_size_with_source(opts).0
 }
@@ -425,6 +449,79 @@ mod tests {
     }
 
     #[test]
+    fn fitted_beats_the_built_in_default() {
+        // The rung that makes the whole change worth anything: with nothing
+        // configured, a machine-derived context is served instead of 4096.
+        let opts = ServerConfigOptions {
+            fitted_ctx: Some(32_768),
+            ..Default::default()
+        };
+        let (ctx, source) = resolve_context_size_with_source(&opts);
+        assert_eq!(ctx, 32_768);
+        assert_eq!(source, ContextSizeSource::FittedToHardware);
+    }
+
+    #[test]
+    fn a_user_set_global_default_beats_the_fitted_value() {
+        // A number somebody typed outranks one gglib computed, even a worse
+        // one — that is what "setting" means.
+        let opts = ServerConfigOptions {
+            global_default_ctx: Some(8192),
+            fitted_ctx: Some(65_536),
+            ..Default::default()
+        };
+        let (ctx, source) = resolve_context_size_with_source(&opts);
+        assert_eq!(ctx, 8192);
+        assert_eq!(source, ContextSizeSource::GlobalDefault);
+    }
+
+    #[test]
+    fn per_model_server_defaults_beat_the_fitted_value() {
+        let opts = ServerConfigOptions {
+            model_server_ctx: Some(16_384),
+            fitted_ctx: Some(65_536),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 16_384);
+    }
+
+    #[test]
+    fn an_explicit_request_beats_the_fitted_value() {
+        let opts = ServerConfigOptions {
+            context_size: Some(4096),
+            fitted_ctx: Some(65_536),
+            ..Default::default()
+        };
+        assert_eq!(resolve_context_size(&opts), 4096);
+    }
+
+    #[test]
+    fn the_built_in_default_survives_when_nothing_can_be_fitted() {
+        // `fit_context` refuses rather than guessing, and a refusal must land
+        // on the floor rather than on nothing.
+        let opts = ServerConfigOptions {
+            fitted_ctx: None,
+            ..Default::default()
+        };
+        let (ctx, source) = resolve_context_size_with_source(&opts);
+        assert_eq!(ctx, DEFAULT_CONTEXT_SIZE);
+        assert_eq!(source, ContextSizeSource::BuiltInDefault);
+    }
+
+    #[test]
+    fn overlay_carries_a_fitted_value_through() {
+        let base = ServerConfigOptions {
+            fitted_ctx: Some(32_768),
+            ..Default::default()
+        };
+        assert_eq!(
+            base.overlay(&ServerConfigOptions::default()).fitted_ctx,
+            Some(32_768),
+            "an empty per-call overlay must not erase the fitted value"
+        );
+    }
+
+    #[test]
     fn test_resolve_context_size_runtime_beats_all() {
         let opts = ServerConfigOptions {
             context_size: Some(32_768),
@@ -516,6 +613,7 @@ mod tests {
             context_size: Some(u64::from(marker)),
             model_server_ctx: Some(usize::from(marker)),
             global_default_ctx: Some(u64::from(marker)),
+            fitted_ctx: Some(u64::from(marker)),
             port: Some(u16::from(marker)),
             jinja: Some(true),
             reasoning_format: Some(format!("fmt-{marker}")),

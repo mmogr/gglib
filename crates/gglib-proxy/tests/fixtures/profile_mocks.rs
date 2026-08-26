@@ -34,7 +34,7 @@ impl ModelRuntimePort for RecordingRuntime {
         &self,
         model_name: &str,
         _num_ctx: Option<u64>,
-        _default_ctx: u64,
+        _default_ctx: Option<u64>,
         _overrides: gglib_core::ports::LaunchOverrides,
     ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
         self.launched.lock().unwrap().push(model_name.to_owned());
