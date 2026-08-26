@@ -22,6 +22,7 @@ use gglib_core::server_config::{CacheRamSetting, ContextSizeSource, ServerConfig
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
+use super::spawned_child::{LIVENESS_TICK, SpawnedChild};
 use super::vram;
 use crate::launch_narration::NarrationInputs;
 use crate::process::admission::{AdmissionQueue, PRIMARY_SLOT, Resident};
@@ -47,6 +48,14 @@ pub(super) struct LaunchRequest {
     pub evict: Option<u32>,
     /// How to size the host-RAM prompt cache.
     pub cache_ram: CacheRamSetting,
+    /// How long to wait for this model's server to answer `/health`.
+    ///
+    /// Resolved once, here, for the same reason every other field is: the
+    /// outer launch budget must leave room for this wait, and deriving the two
+    /// separately is what let a flat budget silently cap a scaled wait — the
+    /// future dropped mid-await, the cleanup skipped, the child leaked. One
+    /// value, read by both, and the relationship cannot drift.
+    pub health_deadline_secs: u64,
 }
 
 /// Run one launch and record it in the queue.
@@ -133,6 +142,7 @@ async fn launch(
         slot,
         evict,
         cache_ram: cache_ram_setting,
+        health_deadline_secs,
     } = request;
     let mut opts = opts.clone();
 
@@ -268,17 +278,76 @@ async fn launch(
         purge_stale_slot_bin_files(slot_dir, spec.id);
     }
 
-    let port = {
+    // The guard is armed inside the same critical section that created the
+    // child, from the pid `spawn` hands back. Reading the pid afterwards would
+    // mean a second lock acquisition with an `await` between it and the spawn
+    // — a suspension point at which the child exists and nothing owns it,
+    // which is the leak this whole commit is about.
+    let (port, mut child) = {
         let mut core_w = core.write().await;
-        core_w
+        let (port, pid) = core_w
             .spawn(config)
             .await
-            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
+            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
+        (port, SpawnedChild::arm(core, spec.id, pid))
     };
 
-    if let Err(e) = wait_for_http_health(port, 120).await {
-        return Err(ModelRuntimeError::HealthCheckFailed(e.to_string()));
+    // From here until `queue.install` the child exists and nothing else owns
+    // it. `spawn` registered it in `GuiProcessCore::processes`, but the queue
+    // has no resident for it yet — and every kill path is gated on
+    // `queue.evict` returning one, while `cleanup_dead` reaps only processes
+    // that have already exited. A failure in this window therefore left a live
+    // llama-server holding VRAM with nobody able to route to it or stop it,
+    // and `spawn`'s "already running" guard refused every retry until the
+    // daemon was restarted.
+    //
+    // The guard, not an error arm, because the dominant failure here is
+    // *cancellation*: `run_launch` runs inside a `tokio::time::timeout`, which
+    // drops the future rather than returning, so an `if let Err(..)` cleanup
+    // is skipped entirely on exactly the slow launches this is about.
+
+    let deadline_secs = *health_deadline_secs;
+    let started = tokio::time::Instant::now();
+
+    // Raced against the child's own exit, not just run to the deadline. A
+    // server that dies on startup — bad arguments, OOM, a missing GPU library
+    // — never answers `/health`, and polling a dead port until a budget sized
+    // for a large model runs out would make the failure this commit exists to
+    // clean up take minutes to report.
+    let health = wait_for_http_health(port, deadline_secs);
+    tokio::pin!(health);
+    loop {
+        tokio::select! {
+            result = &mut health => {
+                result.map_err(|e| ModelRuntimeError::HealthCheckFailed(e.to_string()))?;
+                break;
+            }
+            () = tokio::time::sleep(LIVENESS_TICK) => {
+                // `try_write`, not `write`: this is a best-effort check, and
+                // blocking on the lock would stop polling the health future it
+                // is supervising while that future's deadline keeps running.
+                // A missed tick simply defers to the next one.
+                if core.try_write().is_ok_and(|mut c| c.has_exited(spec.id)) {
+                    return Err(ModelRuntimeError::HealthCheckFailed(format!(
+                        "llama-server for {} exited during startup",
+                        spec.name
+                    )));
+                }
+            }
+        }
     }
+
+    // Diagnostic, not an instrument: `process::residency` is Tier B, which
+    // owes no deletion criterion (ADR 0001). Recorded next to the deadline
+    // that allowed it so a person debugging a slow launch can see both.
+    info!(
+        model_id = %spec.id,
+        model_name = %spec.name,
+        weights_bytes = %spec.file_size_bytes,
+        deadline_secs = %deadline_secs,
+        load_secs = %started.elapsed().as_secs(),
+        "model became healthy"
+    );
 
     let lease = queue.install(
         *slot,
@@ -297,6 +366,10 @@ async fn launch(
             weights_bytes: spec.file_size_bytes,
         },
     );
+
+    // The queue owns the process now: eviction, recycling and shutdown can all
+    // reach it, so the guard must not.
+    child.disarm();
 
     info!(
         model_id = %spec.id,

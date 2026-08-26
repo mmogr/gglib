@@ -50,10 +50,16 @@ impl GuiProcessCore {
         }
     }
 
-    /// Spawn a new llama-server process
+    /// Spawn a new llama-server process.
     ///
-    /// Returns the port number for the spawned process.
-    pub async fn spawn(&mut self, config: ServerConfig) -> Result<u16> {
+    /// Returns the port it was allocated **and** its process id. The pid comes
+    /// back with the port because a caller that owns a freshly spawned child
+    /// needs its identity to clean it up, and reading it afterwards means a
+    /// second lock acquisition with an `await` in between — a suspension point
+    /// at which the child exists and nothing owns it. Handing both out of the
+    /// same critical section removes the window rather than arguing it is
+    /// small.
+    pub async fn spawn(&mut self, config: ServerConfig) -> Result<(u16, u32)> {
         let model_id = config.model_id as u32;
 
         if self.processes.contains_key(&model_id) {
@@ -103,7 +109,7 @@ impl GuiProcessCore {
         let running = RunningProcess::new(info, child);
         self.processes.insert(model_id, running);
 
-        Ok(port)
+        Ok((port, pid))
     }
 
     fn spawn_log_readers(&self, child: &mut tokio::process::Child, port: u16) {
@@ -150,6 +156,44 @@ impl GuiProcessCore {
         Ok(())
     }
 
+    /// Stop the child tracked for `model_id`, but only if it is still the one
+    /// with `pid`.
+    ///
+    /// Returns whether anything was stopped. A mismatch is the ABA case and is
+    /// not an error: the process this caller owned is already gone, and what
+    /// holds the id now belongs to somebody else. Killing it because the names
+    /// match would take down a healthy server that had just replaced it.
+    pub async fn kill_if_pid(&mut self, model_id: u32, pid: u32) -> Result<bool> {
+        if self.processes.get(&model_id).map(|p| p.info.pid) != Some(pid) {
+            return Ok(false);
+        }
+        self.kill(model_id).await?;
+        Ok(true)
+    }
+
+    /// Whether the child tracked for `model_id` has already exited.
+    ///
+    /// Reaps as it asks — `try_wait` is how a child stops being a zombie — so
+    /// this is `&mut self`. An untracked id reads as exited: either it never
+    /// started or something has already cleaned it up, and both mean "stop
+    /// waiting for it".
+    ///
+    /// Reaping here is also what makes a later kill safe: once `try_wait` has
+    /// collected the child, `tokio::process::Child::id()` returns `None`, so
+    /// `shutdown_child` sends no signal at all rather than signalling a pid the
+    /// OS may since have recycled. A refactor that stored the raw pid instead
+    /// of the `Child`, or reaped with a bare `waitpid`, would lose that.
+    ///
+    /// Exists so a launch can stop polling `/health` the moment the server it
+    /// is polling for is gone. Without it a llama-server that dies on startup
+    /// — bad arguments, OOM, a missing GPU library — is waited out for the
+    /// whole launch budget, which is minutes for a large model.
+    pub fn has_exited(&mut self, model_id: u32) -> bool {
+        self.processes
+            .get_mut(&model_id)
+            .is_none_or(|running| !matches!(running.child.try_wait(), Ok(None)))
+    }
+
     /// List all running processes
     pub fn list_all(&self) -> Vec<&ServerInfo> {
         debug!(process_count = %self.processes.len(), "GuiProcessCore: list_all called");
@@ -188,8 +232,12 @@ impl GuiProcessCore {
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    warn!(id = %id, error = %e, "Error checking process");
-                    dead.push(*id);
+                    // Deliberately *not* `dead.push`. Dropping the entry is the
+                    // only way to lose the handle to a still-running child, and
+                    // "I could not read its status" is not "it exited" — that
+                    // is the same inversion the launch guard exists to correct.
+                    // Keep tracking it so a later kill can still reach it.
+                    warn!(id = %id, error = %e, "could not read process status; still tracking it");
                 }
             }
         }
