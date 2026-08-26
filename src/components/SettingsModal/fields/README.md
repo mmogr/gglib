@@ -4,7 +4,11 @@
 
 Single-responsibility field groups for the General Settings form, plus the `SettingField` primitive they're built on.
 
-`SettingField` renders one label / control / hint group. Settings inputs start empty and only backfill from the server when a value has been explicitly set, so a field's default has to be stated rather than inferred, and it is stated twice on purpose: `SettingField`'s `defaultHint` renders an always-visible "Default: 4096" line, and the control carries the same value as its placeholder. The hint survives focus and survives a value being entered; the placeholder sits in the box where it can be typed over. Numeric fields get both from a single `{default, min, max}` spec through `NumberSettingField` — a field that supplies its own control (the models directory, the title prompt) owns its placeholder itself.
+`SettingField` renders one label / control / hint group. Settings inputs start empty and only backfill from the server when a value has been explicitly set, so what leaving a field empty does has to be stated rather than inferred, and it is stated twice on purpose: `SettingField` renders an always-visible line below the control, and the control carries a matching placeholder. The hint survives focus and survives a value being entered; the placeholder sits in the box where it can be typed over.
+
+Numeric fields get both from one `NumericSettingSpec` through `NumberSettingField`. That spec has two shapes, and the type enforces the choice. A field with a fixed backend default (`{default: '8080', min, max}`) is captioned `Default: 8080`. A field with none (`{default: null, unset: {placeholder, hint}, min, max}`) renders its `hint` as a plain sentence and its shorter `placeholder` in the box — never behind a "Default:" label, because captioning a field with a default it does not have is the contradiction the shape exists to prevent. The context window is the only field of the second kind: it is resolved per launch from the model and the machine.
+
+A field that supplies its own control (the models directory, the title prompt) owns its placeholder itself.
 
 ## Key Files
 

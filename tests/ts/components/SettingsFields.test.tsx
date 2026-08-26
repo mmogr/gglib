@@ -92,7 +92,13 @@ const renderStagnationSettings: RenderField = (value, onChange) =>
  */
 const FIELDS: {
   label: string;
+  /** Placeholder shown in the empty box. */
   fallback: string;
+  /**
+   * Hint sentence, for a field with no fixed default. When absent the field
+   * has one and the hint is the standard `Default: {fallback}` caption.
+   */
+  hint?: string;
   min: string;
   max: string;
   renderField: RenderField;
@@ -120,7 +126,12 @@ const FIELDS: {
   },
   {
     label: 'Default Context Size',
-    fallback: '4096',
+    // No fixed fallback. Leaving the box empty is what lets the launch fit the
+    // context to the machine, so the placeholder is a short token and the hint
+    // is a sentence — and crucially NOT captioned "Default:", which is the
+    // thing this field does not have.
+    fallback: 'auto',
+    hint: 'Left empty, the context is fitted to this machine.',
     min: '512',
     max: '1000000',
     renderField: renderModelDefaults,
@@ -141,8 +152,14 @@ const FIELDS: {
   },
 ];
 
-describe.each(FIELDS)('$label', ({ label, fallback, min, max, renderField }) => {
-  it('offers the default as a placeholder to type over while empty', () => {
+describe.each(FIELDS)('$label', ({ label, fallback, hint, min, max, renderField }) => {
+  // A field with a fixed default is captioned "Default: N". One without must
+  // say what happens instead, and must NOT be captioned with a default it does
+  // not have — "Default: fitted to this machine" is a contradiction the user
+  // has to unpick.
+  const hintText = hint ?? `Default: ${fallback}`;
+
+  it('offers something to type over while the box is empty', () => {
     renderField('', noop);
 
     // The regression from #730: the hint below the field was left in place
@@ -150,27 +167,46 @@ describe.each(FIELDS)('$label', ({ label, fallback, min, max, renderField }) => 
     expect(screen.getByLabelText(label)).toHaveAttribute('placeholder', fallback);
   });
 
-  it('states the default below the field', () => {
+  it('states below the field what leaving it empty does', () => {
     renderField('', noop);
 
-    expect(screen.getByText(`Default: ${fallback}`)).toBeInTheDocument();
+    expect(screen.getByText(hintText)).toBeInTheDocument();
   });
 
-  it('keeps the default legible once a value is set', async () => {
+  it('keeps that statement legible once a value is set', async () => {
     renderField('7', noop);
 
     // The placeholder is gone at this point — the hint is the only thing
-    // still telling the user what clearing the field would fall back to.
+    // still telling the user what clearing the field would do.
     expect(screen.getByLabelText(label)).toHaveValue(7);
-    expect(screen.getByText(`Default: ${fallback}`)).toBeInTheDocument();
+    expect(screen.getByText(hintText)).toBeInTheDocument();
   });
 
-  it('announces the default to assistive technology', () => {
+  it('announces that statement to assistive technology', () => {
     renderField('', noop);
 
     expect(screen.getByLabelText(label)).toHaveAccessibleDescription(
-      new RegExp(`Default: ${fallback}`),
+      new RegExp(hintText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
     );
+  });
+
+  it('captions a default only when the field actually has one', () => {
+    renderField('', noop);
+
+    const captioned = screen.queryAllByText(/^Default:/);
+    if (hint) {
+      // The contradiction this shape exists to prevent: a field whose whole
+      // point is that it has no default, captioned with one. Asserting on the
+      // caption rather than the placeholder is what makes this fail if
+      // `unsetHint` is ever routed back through `defaultHint`, which would
+      // render "Default: Left empty, the context is fitted to this machine."
+      expect(captioned).toHaveLength(0);
+    } else {
+      // A field that does have one must still say so — otherwise this test
+      // would pass by rendering nothing at all.
+      expect(captioned.length).toBeGreaterThan(0);
+      expect(screen.getByText(`Default: ${fallback}`)).toBeInTheDocument();
+    }
   });
 
   it('constrains input to the range the backend accepts', () => {

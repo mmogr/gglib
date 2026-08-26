@@ -7,7 +7,10 @@ use super::*;
 #[test]
 fn test_default_settings() {
     let settings = Settings::with_defaults();
-    assert_eq!(settings.default_context_size, Some(4096));
+    // Deliberately unset. See the comment on the field in `with_defaults`:
+    // writing the floor here claimed the user had chosen it, which outranks
+    // the fitted rung. The ports below have no rung under them and stay set.
+    assert_eq!(settings.default_context_size, None);
     assert_eq!(settings.proxy_port, Some(DEFAULT_PROXY_PORT));
     assert_eq!(settings.llama_base_port, Some(DEFAULT_LLAMA_BASE_PORT));
     assert_eq!(settings.default_download_path, None);
@@ -449,4 +452,33 @@ fn test_profiles_round_trip_through_json_and_default_when_absent() {
 
     let absent: Settings = serde_json::from_str("{}").expect("deserializes without the field");
     assert_eq!(absent.inference_profiles, None);
+}
+
+/// The property `test_default_settings`' `None` is only the shadow of.
+///
+/// `gglib config settings reset` writes `Settings::with_defaults()` verbatim,
+/// so what that constructor holds decides which context rung a reset user
+/// lands on. Asserting the field is `None` says what the value is; this says
+/// why it matters, and it is the assertion that fails if someone restores the
+/// floor because "reset should reset it to the default".
+///
+/// The converse — a number the user actually typed still outranking the fit —
+/// is already `server_config`'s `a_user_set_global_default_beats_the_fitted_value`.
+/// The rung order is not the defect and must not move; only the fabrication of
+/// a choice nobody made was.
+#[test]
+fn a_reset_leaves_the_fitted_rung_reachable() {
+    use crate::server_config::{
+        ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+    };
+
+    let after_reset = Settings::with_defaults();
+    let (ctx, source) = resolve_context_size_with_source(&ServerConfigOptions {
+        global_default_ctx: after_reset.default_context_size,
+        fitted_ctx: Some(32_768),
+        ..Default::default()
+    });
+
+    assert_eq!(source, ContextSizeSource::FittedToHardware);
+    assert_eq!(ctx, 32_768);
 }

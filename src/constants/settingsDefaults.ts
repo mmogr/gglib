@@ -15,13 +15,38 @@
  * Values are strings because they feed `<input type="number">` attributes.
  */
 
-/** Default value plus the range accepted by a numeric settings input. */
-export interface NumericSettingSpec {
-  /** Value the backend falls back to when the field is left empty. */
-  readonly default: string;
+/** The range a numeric settings input accepts, shared by both spec shapes. */
+interface NumericBounds {
   readonly min: string;
   readonly max: string;
 }
+
+/**
+ * What a field does when it is left empty, for fields with no fixed default.
+ *
+ * Both halves are required. A field that renders neither a number nor a
+ * sentence loses its hint row and its placeholder silently, and nothing in the
+ * type system or the tests would say so — hence the union below rather than an
+ * optional property beside a nullable one.
+ */
+interface UnsetBehaviour {
+  /** Short token shown inside the box. The control column is narrow. */
+  readonly placeholder: string;
+  /** Sentence shown under the field in place of "Default: N". */
+  readonly hint: string;
+}
+
+/**
+ * Default value plus the range accepted by a numeric settings input.
+ *
+ * Either the field has a fixed default the backend falls back to, or it has
+ * none and must say what happens instead. The context window is the second
+ * kind: it is resolved per launch from the model and the machine, so there is
+ * no one number to promise.
+ */
+export type NumericSettingSpec =
+  | (NumericBounds & { readonly default: string; readonly unset?: never })
+  | (NumericBounds & { readonly default: null; readonly unset: UnsetBehaviour });
 
 /**
  * OpenAI-compatible proxy listener.
@@ -60,10 +85,17 @@ export const MAX_DOWNLOAD_QUEUE_SIZE: NumericSettingSpec = {
 /**
  * Context window applied to a model with no per-model override.
  *
- * Rust: `DEFAULT_CONTEXT_SIZE`, range `512..=1_000_000` in `validate_settings`.
+ * Rust: unset in `Settings::with_defaults()`, range `512..=1_000_000` in
+ * `validate_settings`. Deliberately has no default: leaving this empty is what
+ * lets each launch fit the context to the model and the machine, and a stored
+ * number — including one this box put there — outranks that fit.
  */
 export const CONTEXT_SIZE: NumericSettingSpec = {
-  default: '4096',
+  default: null,
+  unset: {
+    placeholder: 'auto',
+    hint: 'Left empty, the context is fitted to this machine.',
+  },
   min: '512',
   max: '1000000',
 };

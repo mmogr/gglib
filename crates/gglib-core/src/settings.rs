@@ -24,6 +24,19 @@ pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 /// Default context size for models when not specified by the user.
 pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
 
+/// The context sizes a person is allowed to configure.
+///
+/// One constant because more than one surface describes this range and they
+/// have to agree — [`validate_settings`] rejects anything outside it, and so do
+/// the flags that write this setting or default it. Spelling the numbers out
+/// separately on each is how they drift.
+///
+/// Not every context-size flag is bounded by it: `--ctx-size` names a
+/// per-launch value rather than this setting, and `CtxSizeArg::parse` accepts
+/// any `u64`. That is a separate surface with a separate contract, not an
+/// omission here.
+pub const CONTEXT_SIZE_RANGE: std::ops::RangeInclusive<u64> = 512..=1_000_000;
+
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
@@ -33,7 +46,14 @@ pub struct Settings {
     /// Default directory for downloading models.
     pub default_download_path: Option<String>,
 
-    /// Default context size for models (e.g., 4096, 8192).
+    /// Default context size for models (e.g., 8192, 32768).
+    ///
+    /// `None` means the user has chosen nothing, and is the ordinary state —
+    /// it is what lets a launch fit the context to the model and the machine.
+    /// A value here is read as a number the user typed and outranks that fit,
+    /// so nothing should write one on their behalf. See
+    /// [`crate::server_config::resolve_context_size_with_source`] for the chain
+    /// and `Self::with_defaults` for why this field is the one left unset.
     pub default_context_size: Option<u64>,
 
     /// Port for the OpenAI-compatible proxy server.
@@ -242,7 +262,15 @@ impl Settings {
     pub const fn with_defaults() -> Self {
         Self {
             default_download_path: None,
-            default_context_size: Some(DEFAULT_CONTEXT_SIZE),
+            // `None`, not the floor. This is what `gglib config settings
+            // reset` writes, and a stored value is the evidence that the user
+            // chose a number — the settings modal shows an empty box when
+            // unset and writes back blank. Writing 4096 here fabricated that
+            // evidence, and the global-default rung outranks the fitted one,
+            // so a reset pinned the user above the context #925 computes for
+            // their machine. The rungs below have no such problem: nothing
+            // sits under `proxy_port` or `llama_base_port` to be shadowed.
+            default_context_size: None,
             proxy_port: Some(DEFAULT_PROXY_PORT),
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
             max_download_queue_size: Some(10),
@@ -427,7 +455,7 @@ pub enum SettingsError {
 pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
     // Validate context size
     if let Some(ctx_size) = settings.default_context_size
-        && !(512..=1_000_000).contains(&ctx_size)
+        && !CONTEXT_SIZE_RANGE.contains(&ctx_size)
     {
         return Err(SettingsError::InvalidContextSize(ctx_size));
     }

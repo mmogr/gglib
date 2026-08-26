@@ -78,7 +78,8 @@ mod tests {
         let service = SettingsService::new(repo);
 
         let settings = service.get().await.unwrap();
-        assert_eq!(settings.default_context_size, Some(4096));
+        // Unset, not the floor: nothing has chosen a global default here.
+        assert_eq!(settings.default_context_size, None);
     }
 
     #[tokio::test]
