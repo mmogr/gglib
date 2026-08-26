@@ -125,7 +125,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `chat history` | List past conversations with message counts |
-| `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is fitted to this machine when unset) |
+| `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |

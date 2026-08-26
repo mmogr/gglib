@@ -85,6 +85,16 @@ describe('ModelEditForm context-length override', () => {
     expect(onServerDefaultsChange).toHaveBeenCalledWith({ contextLength: 4096 });
   });
 
+  it('says an empty box is no override, not a default', () => {
+    // This field writes `serverDefaults.contextLength`, which IS a rung of the
+    // ladder — so "Use default" was a fourth sense of the word on one panel,
+    // and the wrong one: an empty box here means the model states no override,
+    // not that some default applies. See ADR 0009.
+    renderForm({ serverDefaults: undefined }, undefined);
+    expect(screen.getByPlaceholderText('No override')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/default/i)).toBeNull();
+  });
+
   it('offers no button at all while the override is untouched', () => {
     renderForm({}, undefined);
 

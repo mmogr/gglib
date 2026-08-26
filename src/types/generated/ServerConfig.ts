@@ -31,7 +31,9 @@ export type ServerConfig = {
  * Context length (number of tokens) for the model server.
  *
  * Controls the maximum context window the server will use.
- * `None` falls through to the rungs below this one, which end in a
- * context fitted to the machine. Common values: 8192, 32768, 131072.
+ * This field is level 2 of the chain above, so `None` falls through to
+ * levels 3 through 5: the global setting, a context fitted to this
+ * machine, and finally the built-in floor — which is where a host whose
+ * device gglib cannot read ends up. Common values: 8192, 32768, 131072.
  */
 contextLength: number | null, };

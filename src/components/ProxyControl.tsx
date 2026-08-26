@@ -249,7 +249,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                       type="number"
                       className="font-mono tabular-nums"
                       value={config.default_context ?? ''}
-                      placeholder={`${settings?.defaultContextSize ?? 'server default'} (from settings)`}
+                      placeholder={settings?.defaultContextSize ? `${settings.defaultContextSize.toLocaleString()} (from settings)` : 'Sized per launch'}
                       onChange={(e) => {
                         const parsed = parseInt(e.target.value);
                         setConfig({

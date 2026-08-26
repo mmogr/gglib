@@ -292,6 +292,23 @@ and not fixed by this change.~~
 > and one of them predates this arc by seven weeks, so a sweep scoped to any
 > one diff would go on missing it. Recorded rather than fixed, deliberately:
 > the alternative was a three-line fix carrying thirty-two files.
+>
+> > **Amended 2026-08-28 — the sweep landed.** All of them now say what a
+> > launch actually does. The wording is deliberately *hedged* rather than
+> > merely corrected: none of these surfaces can know which rung a launch will
+> > reach, so they say "sized per launch" instead of naming the fit. Naming it
+> > would repeat the original error in the other direction, on the hosts this
+> > ADR records as getting no fit at all.
+> >
+> > `ServerConfig::context_length`'s doc was the one that mattered most and the
+> > one nothing would have caught: it is `ts(export)`, so a sentence claiming
+> > the chain "ends in a context fitted to the machine" was compiled into
+> > `ServerConfig.ts` and shipped to the GUI. The chain ends at the floor; the
+> > fit is one rung above it.
+> >
+> > `ProxyControl.tsx` was the seven-week-old one, and wrong twice over — with
+> > nothing set it offered "server default (from settings)", where there is no
+> > server default and it is not from settings.
 
 ## Kill criteria
 

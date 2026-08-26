@@ -869,9 +869,9 @@ fn pinned_model_mismatch_is_not_plain_model_not_found() {
 /// With nothing configured, the advertised window is the model's own trained
 /// ceiling — not a floor nobody chose.
 ///
-/// The launch fits the context to this machine in that case, so advertising
-/// 4096 would understate what the model is about to be served at. Every other
-/// test here passes `Some(..)`, so this is the only cover for the branch.
+/// The launch is sized by the daemon in that case, so advertising 4096 would
+/// understate what the model is about to be served at. Every other test here
+/// passes `Some(..)`, so this is the only cover for the branch.
 #[test]
 fn an_unconfigured_model_advertises_its_trained_window() {
     let resp = ModelsResponse::from_summaries(

@@ -49,7 +49,7 @@ pub struct Settings {
     /// Default context size for models (e.g., 8192, 32768).
     ///
     /// `None` means the user has chosen nothing, and is the ordinary state —
-    /// it is what lets a launch fit the context to the model and the machine.
+    /// it is what lets the daemon size each launch rather than pinning it.
     /// A value here is read as a number the user typed and outranks that fit,
     /// so nothing should write one on their behalf. See
     /// [`crate::server_config::resolve_context_size_with_source`] for the chain
