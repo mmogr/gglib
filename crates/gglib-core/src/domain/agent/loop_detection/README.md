@@ -19,10 +19,26 @@ Tool-call loop detection via FNV-1a batch signatures.
 
 # Dual-threshold detection
 
-Observation-only tools (e.g. browser snapshots, page screenshots) take no
-meaningful arguments, so every call hashes to the same signature regardless
-of the page content returned.  With a strict threshold this causes false
-positives on legitimate `ReAct` *observe → act → observe* cycles.
+Observation-only tools are the read-only half of an agent's toolkit: browser
+snapshots and page screenshots, and the file reads, directory listings and
+searches a coding agent runs.  Repeating one is ordinary work, not a loop, and
+a strict threshold causes false positives on legitimate `ReAct`
+*observe → act → observe* cycles.
+
+Two distinct reasons put a tool in this tier, and both matter:
+
+1. **The signature cannot tell the calls apart.**  A browser snapshot takes no
+   meaningful arguments, so every call hashes identically regardless of the
+   page content returned.  The repeat is an artifact of the signature scheme.
+2. **The repeat is real but benign.**  `read_file{"path":"a.rs"}` hashes
+   distinctly and genuinely did happen twice — the agent read a file, edited
+   it, and read it back to check.  Nothing is stuck; verifying your own work
+   is the correct behaviour, and rejecting it ends the conversation.
+
+The second reason is why membership is not limited to argument-free tools.
+What the tier actually selects for is **read-only** — a call that changes
+nothing can be repeated without consequence, so the cost of tolerating it is a
+few wasted generations, while the cost of refusing it is the session.
 
 The detector therefore applies **two thresholds**:
 

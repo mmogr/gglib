@@ -640,7 +640,7 @@ conversation every turn, so the scan is stateless: no session store, no TTL.
 | Signal | Threshold | Source |
 |--------|-----------|--------|
 | Identical tool-call batch (FNV-1a signature over canonicalized args) | 3rd occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
-| Identical batch of observation-only tools (`snapshot`, `screenshot`, `read_page`, `navigate`, `click`) | 16th occurrence aborts | `AgentConfig::default().max_observation_steps` |
+| Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends | 16th occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
 | Identical assistant response text (session-wide, catches A→B→A→B oscillation) | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
 
 A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
@@ -769,22 +769,39 @@ model"*, which is the only form the answer is actionable in. Each value carries
 `requests` (the denominator) plus `loop_guard_trips`, `repairs_attempted`,
 `repairs_succeeded`, `stream_errors`, `truncated_generations`,
 `empty_responses`, `reasoning_only`, `dialect_residue`,
-`unvalidatable_schemas` and `normalization_errors`.
+`unvalidatable_schemas`, `normalization_errors`,
+`identical_result_repeats` and `repeats_not_evaluated`.
 
-Two shapes worth knowing before reading them:
+Four shapes worth knowing before reading them:
 
 - **`reasoning_only` is counted *inside* `empty_responses`**, not beside it.
   The turn was empty from the client's point of view either way; the
   distinction is *why*. Adding them double-counts.
 - **Only `loop_guard_trips` bumps `requests`.** The guard fires *instead of* a
-  forward, so it has to count its own denominator; every other counter
-  describes a turn that was already counted when it was forwarded.
+  forward, so it has to count its own denominator; every other *defect*
+  counter describes a turn that was already counted when it was forwarded.
+- **`identical_result_repeats` is not a defect, and does not bump
+  `requests`.** It counts turns whose newest tool-call batch repeated the one
+  before it and got an equal result back — a fact about the
+  conversation, not a fault in the model. It is recorded at the guard, before
+  the catalog round-trip that rejects an unknown model, so a request that is
+  later rejected can carry one without ever counting as a request.
+- **`repeats_not_evaluated` is the one that makes a zero above readable.** It
+  counts turns that repeated a batch whose results could not be compared —
+  a client that omits `id` on replayed tool calls, results that are not
+  contiguous after the assistant turn, a parallel batch answered in part.
+  Without it, an instrument that never joined a single result would be
+  indistinguishable from a fleet with nothing wrong, and a decision rests on
+  telling those apart.
 
 Process-lifetime and reset on restart, deliberately — see
 [ADR 0006](../../docs/adr/0006-recover-dont-predict.md). Nothing acts on them
 automatically; they are diagnosis. `gglib proxy dashboard` renders them, listing
-only models with something to report, since a healthy model produces zero of
-every counter.
+only models with something to report. A model with no faults can still earn a
+line on the two observational counters alone, printed under an `observed`
+heading below the defect rows — that model is the one they exist to surface,
+and filtering it out would hide it. The section is titled *Per-model signals*
+rather than *Defects* for the same reason.
 
 #### `cache` (`CacheStatus`)
 

@@ -619,6 +619,58 @@ fn reasoning_only_turns_are_shown_inside_the_empty_total() {
     );
 }
 
+/// A model whose only signal is repeated calls returning identical results
+/// has failed at nothing gglib measures, and is still the model this
+/// dashboard most needs to show.
+#[test]
+fn identical_result_repeats_alone_still_lists_the_model() {
+    let per_model = BTreeMap::from([(
+        "qwen".to_string(),
+        counts(|c| c.identical_result_repeats = 3),
+    )]);
+
+    let rendered = render_defects_section(&per_model);
+    assert!(rendered.contains("qwen"), "{rendered}");
+    assert!(rendered.contains("observed"), "{rendered}");
+    assert!(rendered.contains("repeated, same result"), "{rendered}");
+    assert!(rendered.contains('3'), "{rendered}");
+}
+
+/// A fleet whose joins never succeed must not read as a clean one — that is
+/// the reading the second counter exists to prevent anyone acting on.
+#[test]
+fn repeats_that_could_not_be_evaluated_still_list_the_model() {
+    let per_model = BTreeMap::from([("qwen".to_string(), counts(|c| c.repeats_not_evaluated = 9))]);
+
+    let rendered = render_defects_section(&per_model);
+    assert!(rendered.contains("qwen"), "{rendered}");
+    assert!(rendered.contains("repeated, not comparable"), "{rendered}");
+    assert!(!rendered.contains("repeated, same result"), "{rendered}");
+}
+
+/// Every row must fit an 80-column terminal: the observed block sits at a
+/// deeper indent than the defect rows and must not append prose past the
+/// label column.
+#[test]
+fn observed_rows_fit_an_eighty_column_terminal() {
+    let per_model = BTreeMap::from([(
+        "a-model-with-a-fairly-long-name".to_string(),
+        counts(|c| {
+            c.identical_result_repeats = 123_456;
+            c.repeats_not_evaluated = 123_456;
+        }),
+    )]);
+
+    let rendered = render_defects_section(&per_model);
+    for line in rendered.lines() {
+        assert!(
+            line.chars().count() <= 80,
+            "line exceeds 80 columns ({}): {line:?}",
+            line.chars().count()
+        );
+    }
+}
+
 /// A counter at zero is not news. Only what fired is printed, or a model
 /// with one bad turn costs eight lines of zeroes.
 #[test]

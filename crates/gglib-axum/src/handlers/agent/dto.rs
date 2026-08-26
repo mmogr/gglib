@@ -50,8 +50,9 @@ pub(crate) struct AgentRequestConfig {
     /// `ends_with` OR `contains` semantics.
     ///
     /// `Some([])` disables observation classification entirely.
-    /// `None` (field absent) keeps the built-in defaults
-    /// (`["snapshot", "screenshot", "read_page", "navigate", "click"]`).
+    /// `None` (field absent) keeps the built-in defaults, which cover
+    /// browser tools and the read-only tools coding agents repeat — see
+    /// `AgentConfig::default`.
     pub observation_tools: Option<Vec<String>>,
 
     /// Maximum repetitions of an observation-only batch before loop detection

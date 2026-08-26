@@ -82,4 +82,48 @@ unvalidatable_schemas: number,
  * Turns whose normalization discarded a malformed dialect tool call and
  * surfaced the raw body as visible text instead.
  */
-normalization_errors: number, };
+normalization_errors: number, 
+/**
+ * Turns whose newest tool-call batch repeated the batch before it and
+ * got an equal result back.
+ *
+ * The comparison is against the *preceding* occurrence of that signature,
+ * not any earlier one: a call that returned A, then B, then A again is
+ * not counted, because the model did get a different answer last time.
+ *
+ * The odd one out, deliberately. Every counter above measures a gglib
+ * organ firing or a defect in the shape of the model's own output. This
+ * one measures a condition in the *conversation*: the model asked for
+ * the same thing twice and the environment answered the same way twice,
+ * which is the only evidence available that a repeat was genuinely
+ * stuck rather than progress that happens to look alike.
+ *
+ * One increment per turn, like every counter above it — not a tally over
+ * the replayed history. A client resends the whole conversation each
+ * turn, so counting history-wide would re-count the same event on every
+ * later request and grow with the square of session length.
+ *
+ * "Equal" means equal after hashing the result's `content` as it
+ * arrived, per turn. Bounded to the calls the batch actually made, and
+ * only when every one of them was answered.
+ *
+ * Counted whether or not the guard trips — a repeat under the threshold
+ * is exactly the case a verdict cannot see. Nothing acts on it: it
+ * exists to answer whether a corrective arm on the input plane would
+ * ever have a trigger, before one is built.
+ */
+identical_result_repeats: number, 
+/**
+ * Turns whose newest tool-call batch repeated the batch before it but
+ * whose results could **not** be compared.
+ *
+ * The denominator for the counter above, and the reason a zero there can
+ * be read at all. A repeat gglib could not evaluate is not a repeat that
+ * did not happen: without this, an instrument that never managed to join
+ * a single result would look exactly like a fleet with nothing wrong.
+ *
+ * Bumps when a client omits `id` on replayed tool calls, when results are
+ * not contiguous after the assistant turn, or when a parallel batch went
+ * partly unanswered.
+ */
+repeats_not_evaluated: number, };

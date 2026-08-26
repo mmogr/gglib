@@ -123,6 +123,54 @@ the model still beats predicting them from traffic. It corrects the sentence,
 which reads as though three automatic channels are all writing defaults when
 one is.
 
+## Postscript, 2026-08-26 — the ledger records two things that are not failures
+
+Decision 4 above scopes the ledger precisely: *"Per-model counters keep
+recording **what actually fails**"*, and every counter it names is either a
+gglib organ firing or a defect in the shape of the model's own output. A new
+counter, `identical_result_repeats`, does not fit that sentence, so the sentence
+is widened here rather than quietly outgrown.
+
+It counts turns whose newest tool-call batch repeated the batch before it
+**and got an equal result back**. Nothing failed. The model asked for the same
+thing twice and the environment answered the same way twice — a fact about the
+conversation, not a fault.
+
+It is here because the ledger had no way to say whether a repeat was productive.
+Every existing counter measures gglib's own reflexes; none measures whether a
+turn accomplished anything, and the loop guard's verdict cannot supply it — that
+verdict keys on `batch_signature`, which is blind to what came back. So a model
+varying one argument each time escapes the guard forever, while a model
+verifying its own edit is refused. Reading the `role: "tool"` half of the
+transcript is the only available evidence, and it arrives free in a body the
+proxy already parses.
+
+This does not reopen prediction. The counter is per-process, non-persisted, read
+by a person, and acts on nothing — the same discipline as every counter beside
+it. It is the measurement decision 4's own consequence section calls for:
+*"Any escalation beyond that should be chosen from measured failure rates, not
+from a candidate list; the counters exist for exactly that."* A corrective arm on
+the input plane is the candidate; this is the rate that decides whether it is
+built. If it stays near zero in real use, the arm is cancelled rather than
+written.
+
+That criterion carries a precondition, so a second counter carries it.
+`repeats_not_evaluated` counts turns that repeated a batch whose results could
+not be compared — a client omitting `id` on replayed calls, results that are not
+contiguous, a parallel batch answered in part. A repeat gglib could not evaluate
+is not a repeat that did not happen, and without the distinction a near-zero
+reading is equally consistent with a rare phenomenon and with a join that never
+once matched. Only the first of those licenses cancelling the arm. This is
+ADR 0004's own standard applied to an instrument rather than to policy: an
+observation that cannot report its own failure to observe is not yet an
+observation.
+
+The scope change is therefore: **the ledger records what a person needs in order
+to decide what to build next, which is usually but not always a failure.** A
+counter that is not a defect must say so where it is read — `gglib proxy
+dashboard` prints both under an `observed` heading below the defect rows, in a
+section titled *Per-model signals* rather than *Defects*.
+
 ## Notes
 
 The scheduler's removal was mechanical but wide: 45 references across the Rust

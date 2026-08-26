@@ -821,7 +821,25 @@ async fn chat_completions(
     // See `loop_guard` for the design (stateless history scan, fail-open).
     if let Some(guard_cfg) = crate::loop_guard::LoopGuardConfig::from_settings(&settings) {
         use crate::loop_guard::LoopGuardVerdict;
-        match crate::loop_guard::scan_history(&body, &guard_cfg) {
+        let outcome = crate::loop_guard::scan_history(&body, &guard_cfg);
+
+        // Diagnosis, not a decision: recorded for every scanned request,
+        // whether or not the verdict below trips. A repeat under the
+        // threshold is exactly the case the verdict cannot see, and it is
+        // the one that says whether the repeat was stuck or productive.
+        if outcome.identical_result_repeat {
+            state
+                .dashboard
+                .metrics
+                .record_identical_result_repeat(&model_name);
+        } else if outcome.repeat_not_evaluated {
+            state
+                .dashboard
+                .metrics
+                .record_repeat_not_evaluated(&model_name);
+        }
+
+        match outcome.verdict {
             LoopGuardVerdict::Pass => {}
             tripped => {
                 warn!(

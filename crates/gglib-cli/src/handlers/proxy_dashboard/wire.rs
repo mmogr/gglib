@@ -87,14 +87,26 @@ pub(super) struct ModelDefectCounts {
     pub(super) unvalidatable_schemas: u64,
     #[serde(default)]
     pub(super) normalization_errors: u64,
+    #[serde(default)]
+    pub(super) identical_result_repeats: u64,
+    #[serde(default)]
+    pub(super) repeats_not_evaluated: u64,
 }
 
 impl ModelDefectCounts {
-    /// Whether anything at all went wrong for this model.
+    /// Whether this model has anything worth reading — not quite the same as
+    /// whether anything went wrong.
     ///
     /// `requests` is the denominator, not a defect — a model that served a
     /// thousand clean turns has nothing to report, and saying so at length
     /// would bury the model that does.
+    ///
+    /// The two observational members are not faults. They are included
+    /// because the dashboard is their only reader: a model whose sole signal
+    /// is conversations going in circles is precisely the one to look at, as
+    /// is one whose joins never succeed, and excluding either here would hide
+    /// that model entirely. Both are counted once per turn, so they stay
+    /// sparse enough not to bury anything.
     pub(super) const fn is_clean(&self) -> bool {
         self.loop_guard_trips == 0
             && self.repairs_attempted == 0
@@ -104,6 +116,16 @@ impl ModelDefectCounts {
             && self.dialect_residue == 0
             && self.unvalidatable_schemas == 0
             && self.normalization_errors == 0
+            // Not a defect, but still something to report: a model whose only
+            // signal is repeated calls returning identical results has not
+            // failed at anything gglib measures, and is the exact case this
+            // dashboard exists to make visible. Excluding it here would hide
+            // the model from the listing entirely.
+            && self.identical_result_repeats == 0
+            // Listed too, and for the same reason: a fleet where the join
+            // never succeeds reads as a clean one, and that is the reading
+            // this counter exists to prevent anyone acting on.
+            && self.repeats_not_evaluated == 0
     }
 }
 

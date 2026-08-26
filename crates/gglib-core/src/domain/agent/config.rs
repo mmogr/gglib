@@ -233,7 +233,11 @@ pub struct AgentConfig {
     /// the standard [`Self::max_repeated_batch_steps`] threshold applies to all
     /// batches.
     ///
-    /// Default: `["snapshot", "screenshot", "read_page", "navigate", "click"]`.
+    /// Defaults cover both agent families gglib serves: browser/GUI tools
+    /// (`snapshot`, `screenshot`, `read_page`, `navigate`, `click`) and the
+    /// read-only tools coding agents repeat constantly (`read_file`,
+    /// `list_dir`, `grep_search`, `search_files`, …). See the `Default` impl
+    /// for why every entry is a full tool name rather than a fragment.
     pub observation_tools: Vec<String>,
 
     /// Maximum number of times an exploratory-tool-only batch may repeat
@@ -273,11 +277,59 @@ impl Default for AgentConfig {
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
             observation_tools: vec![
+                // Browser / GUI agents.
                 "snapshot".into(),
                 "screenshot".into(),
                 "read_page".into(),
                 "navigate".into(),
                 "click".into(),
+                // Coding agents. Without these a VS Code Copilot or Cline
+                // session that reads the same file three times — read, edit,
+                // re-read to verify — is classified as a non-observation
+                // repeat and rejected at `max_repeated_batch_steps` (2)
+                // rather than at `max_observation_steps` (15).
+                //
+                // Matching is `contains` (see `is_observation_batch`), so a
+                // short fragment silently captures unrelated tools: "read"
+                // matches `thread_create`, "list" matches `listen_port`,
+                // "glob" matches `set_global_config`. Every pattern here is
+                // long enough that the only names it can capture are
+                // themselves read-only — `list_dir` also covers
+                // `list_directory` and `list_directory_with_sizes`, which is
+                // why neither is listed separately.
+                //
+                // Deliberately absent for the same reason: bare `read`,
+                // `grep`, `glob` and `view`, which some clients use as whole
+                // tool names. There is no way to match those without also
+                // exempting `thread_*`, `set_global_*` and `preview_*`, and
+                // a guard that silently stops guarding is worse than one
+                // that occasionally refuses honest work.
+                "read_file".into(),
+                "read_text_file".into(),
+                "read_media_file".into(),
+                "read_multiple_files".into(),
+                "list_dir".into(),
+                "list_files".into(),
+                "list_allowed_directories".into(),
+                "directory_tree".into(),
+                "file_search".into(),
+                "grep_search".into(),
+                "search_files".into(),
+                "semantic_search".into(),
+                "codebase_search".into(),
+                "test_search".into(),
+                "get_file_info".into(),
+                "get_errors".into(),
+                "get_changed_files".into(),
+                "get_terminal_output".into(),
+                "list_code_usages".into(),
+                "list_code_definition_names".into(),
+                // The one entry the "changes nothing" rule covers only
+                // locally: repeating it is free on this machine but spends
+                // someone else's rate limit. Kept because a coding agent
+                // re-reading docs mid-task is ordinary, and 15 fetches is a
+                // smaller harm than a dead session.
+                "fetch_webpage".into(),
             ],
             max_observation_steps: Some(DEFAULT_MAX_OBSERVATION_STEPS),
         }
@@ -333,8 +385,8 @@ impl AgentConfig {
     ///   entirely.  Pass the complete list you want, including any defaults you
     ///   wish to preserve.  `Some(vec![])` disables observation classification
     ///   (standard threshold applies to all batches).  `None` keeps the
-    ///   built-in defaults
-    ///   (`["snapshot", "screenshot", "read_page", "navigate", "click"]`).
+    ///   built-in defaults, which cover browser tools and the read-only tools
+    ///   coding agents repeat (see `AgentConfig::default`).
     ///
     /// - `max_observation_steps: Some(n)` — clamped to
     ///   `[1, MAX_OBSERVATION_STEPS_CEILING]`.  `None` keeps the built-in
@@ -434,8 +486,36 @@ mod tests {
         assert_eq!(cfg.prune_keep_tail_messages, 12);
         assert_eq!(
             cfg.observation_tools,
-            vec!["snapshot", "screenshot", "read_page", "navigate", "click"],
-            "default exploratory patterns must cover common snapshot, navigation, and click tools"
+            vec![
+                "snapshot",
+                "screenshot",
+                "read_page",
+                "navigate",
+                "click",
+                "read_file",
+                "read_text_file",
+                "read_media_file",
+                "read_multiple_files",
+                "list_dir",
+                "list_files",
+                "list_allowed_directories",
+                "directory_tree",
+                "file_search",
+                "grep_search",
+                "search_files",
+                "semantic_search",
+                "codebase_search",
+                "test_search",
+                "get_file_info",
+                "get_errors",
+                "get_changed_files",
+                "get_terminal_output",
+                "list_code_usages",
+                "list_code_definition_names",
+                "fetch_webpage",
+            ],
+            "default exploratory patterns must cover both browser tools and the \
+             read-only tools coding agents repeat"
         );
         assert_eq!(
             cfg.max_observation_steps,

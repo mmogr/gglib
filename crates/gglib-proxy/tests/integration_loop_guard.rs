@@ -50,7 +50,24 @@ fn chat_body(model: &str, history: Vec<Value>) -> Value {
 
 /// History with `n` identical tool-call batches (each followed by a tool
 /// result, as a real client would replay it).
+///
+/// Uses a *mutating* tool deliberately. `read_file` and friends are
+/// observation tools, whose repeats are held to the far higher
+/// `max_observation_steps` ceiling — see
+/// `repeated_file_reads_are_not_a_loop` for why that matters.
 fn looping_history(n: usize) -> Vec<Value> {
+    (0..n)
+        .flat_map(|_| {
+            vec![
+                assistant_call("write_file", r#"{"path":"src/main.rs"}"#),
+                json!({ "role": "tool", "tool_call_id": "c1", "content": "1 file changed" }),
+            ]
+        })
+        .collect()
+}
+
+/// The same shape, but with the read-only tool a coding agent repeats.
+fn repeated_read_history(n: usize) -> Vec<Value> {
     (0..n)
         .flat_map(|_| {
             vec![
@@ -59,6 +76,116 @@ fn looping_history(n: usize) -> Vec<Value> {
             ]
         })
         .collect()
+}
+
+/// Reading the same file repeatedly is the ordinary shape of an agentic
+/// coding turn — read, edit, re-read to verify — and must reach the model.
+///
+/// Before `read_file` was classified as an observation tool this returned
+/// 400 `loop_detected` on the third read, and because agentic clients replay
+/// the whole conversation every turn, the rejection was permanent for the
+/// rest of the session.
+#[tokio::test]
+async fn repeated_file_reads_are_not_a_loop() {
+    let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
+    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+
+    let resp = Client::new()
+        .post(format!("{proxy_url}/v1/chat/completions"))
+        .json(&chat_body("test-model", repeated_read_history(5)))
+        .send()
+        .await
+        .expect("proxy request");
+
+    assert_ne!(
+        resp.status(),
+        400,
+        "five identical file reads must not be rejected as a loop"
+    );
+
+    cancel.cancel();
+}
+
+/// The instrument must actually reach the ledger over a real request. The
+/// counter's whole purpose is that a person reads it and decides whether to
+/// build a corrective arm; a wiring break would look exactly like a fleet
+/// with nothing to report.
+#[tokio::test]
+async fn an_identical_result_repeat_reaches_the_dashboard() {
+    let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
+    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+
+    // The agentic continuation shape: the client executes the calls, appends
+    // the results, and asks the model to carry on. The history therefore ends
+    // with a tool result, not with a user turn — `chat_body` appends
+    // `user: "continue"`, which is a chat-shaped request and correctly clears
+    // the observation, so it cannot be used here.
+    let mut messages = vec![json!({ "role": "system", "content": "be helpful" })];
+    messages.push(json!({ "role": "user", "content": "check the file" }));
+    messages.extend(repeated_read_history(2));
+
+    let _ = Client::new()
+        .post(format!("{proxy_url}/v1/chat/completions"))
+        .json(&json!({ "model": "test-model", "stream": false, "messages": messages }))
+        .send()
+        .await
+        .expect("proxy request");
+
+    let status: Value = Client::new()
+        .get(format!("{proxy_url}/v1/proxy/status"))
+        .send()
+        .await
+        .expect("status request")
+        .json()
+        .await
+        .expect("status json");
+
+    let counts = &status["per_model_defects"]["test-model"];
+    assert_eq!(
+        counts["identical_result_repeats"].as_u64(),
+        Some(1),
+        "the repeat must reach the ledger, got {status}"
+    );
+    assert_eq!(
+        counts["repeats_not_evaluated"].as_u64(),
+        Some(0),
+        "the results were joinable, so nothing went unevaluated: {status}"
+    );
+
+    cancel.cancel();
+}
+
+/// The same history with a user turn appended — the client is no longer asking
+/// the model to continue the loop, so the repeat belongs to the previous
+/// request and must not be counted again.
+#[tokio::test]
+async fn a_trailing_user_turn_does_not_re_report_the_repeat() {
+    let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
+    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+
+    let _ = Client::new()
+        .post(format!("{proxy_url}/v1/chat/completions"))
+        .json(&chat_body("test-model", repeated_read_history(2)))
+        .send()
+        .await
+        .expect("proxy request");
+
+    let status: Value = Client::new()
+        .get(format!("{proxy_url}/v1/proxy/status"))
+        .send()
+        .await
+        .expect("status request")
+        .json()
+        .await
+        .expect("status json");
+
+    assert_eq!(
+        status["per_model_defects"]["test-model"]["identical_result_repeats"].as_u64(),
+        Some(0),
+        "a chat-shaped request must not re-report the previous turn: {status}"
+    );
+
+    cancel.cancel();
 }
 
 // ─── Guard trips ───────────────────────────────────────────────────────────

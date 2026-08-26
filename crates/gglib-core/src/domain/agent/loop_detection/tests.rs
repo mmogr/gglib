@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::*;
+use crate::AgentConfig;
 
 // ---- tool_signature / batch_signature ---------------------------------------
 // Note: fnv1a_64 correctness is covered in crates/gglib-core/src/domain/agent/fnv1a.rs.
@@ -340,6 +341,115 @@ fn is_observation_batch_mixed_returns_false() {
         !is_observation_batch(&calls, &patterns(&["snapshot"])),
         "mixed batch (snapshot + do_thing) should return false"
     );
+}
+
+#[test]
+fn coding_agent_reads_are_observation_tools_by_default() {
+    // The regression this arc exists for: a VS Code Copilot / Cline session
+    // that reads a file, edits it, then re-reads it to verify was classified
+    // as a non-observation repeat and rejected at `max_repeated_batch_steps`
+    // (2) instead of `max_observation_steps` (15), because the default
+    // pattern list held only browser tool names.
+    let defaults = AgentConfig::default().observation_tools;
+    for name in [
+        // MCP filesystem server.
+        "read_file",
+        "read_text_file",
+        "read_media_file",
+        "read_multiple_files",
+        "list_directory",
+        "list_directory_with_sizes",
+        "list_allowed_directories",
+        "directory_tree",
+        "search_files",
+        "get_file_info",
+        // Cline / Roo Code.
+        "list_files",
+        "list_code_definition_names",
+        // VS Code Copilot.
+        "file_search",
+        "grep_search",
+        "semantic_search",
+        "codebase_search",
+        "test_search",
+        "get_errors",
+        "get_changed_files",
+        "get_terminal_output",
+        "list_code_usages",
+        "fetch_webpage",
+        "list_dir",
+        // Server-prefixed and vendor-prefixed forms must match too.
+        "2:read_file",
+        "mcp_filesystem_read_text_file",
+    ] {
+        assert!(
+            is_observation_batch(&obs_batch(name), &defaults),
+            "{name} should be an observation tool under the defaults"
+        );
+    }
+}
+
+#[test]
+fn observation_patterns_do_not_match_unrelated_names() {
+    // Matching is `contains` (which subsumes `ends_with`), so a short
+    // fragment would silently
+    // exempt unrelated tools from loop detection. This pins the choice to use
+    // full tool names: "read" would capture `thread_create`, "list" would
+    // capture `listen_port`, and "glob" would capture `set_global_config`.
+    let defaults = AgentConfig::default().observation_tools;
+    for name in [
+        // Fragments that would have captured these: read, list, glob, view.
+        "thread_create",
+        "listen_port",
+        "set_global_config",
+        "preview_changes",
+        // Mutating tools across the clients gglib serves. Each is a near
+        // neighbour of a pattern above and must stay outside the tier.
+        "write_file",
+        "edit_file",
+        "create_file",
+        "create_directory",
+        "delete_file",
+        "delete_directory",
+        "move_file",
+        "run_in_terminal",
+        "run_in_terminal_background",
+        "apply_patch",
+        "insert_edit_into_file",
+        "replace_string_in_file",
+        "search_and_replace",
+        "execute_command",
+        "write_to_file",
+    ] {
+        assert!(
+            !is_observation_batch(&obs_batch(name), &defaults),
+            "{name} must not be classified as an observation tool"
+        );
+    }
+}
+
+#[test]
+fn a_repeated_file_read_survives_past_the_standard_threshold() {
+    // End-to-end through the detector: the same `read_file` batch repeated
+    // more times than `max_repeated_batch_steps` allows must still pass,
+    // because the observation ceiling applies instead.
+    let cfg = AgentConfig::default();
+    let calls = obs_batch("read_file");
+    let mut detector = LoopDetector::default();
+
+    for i in 1..=cfg.max_repeated_batch_steps.unwrap() + 1 {
+        assert!(
+            detector
+                .check(
+                    &calls,
+                    cfg.max_repeated_batch_steps.unwrap(),
+                    &cfg.observation_tools,
+                    cfg.max_observation_steps,
+                )
+                .is_ok(),
+            "repeat {i} of a read_file batch should not trip the guard"
+        );
+    }
 }
 
 #[test]

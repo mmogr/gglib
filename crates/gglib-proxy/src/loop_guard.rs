@@ -29,10 +29,14 @@
 //! client sending consistently malformed arguments still gets loop
 //! protection and never gets a parse-driven rejection.
 
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use serde::Deserialize;
 use serde_json::Value;
 
-use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector};
+use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
 use gglib_core::ports::AgentError;
 use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 
@@ -118,18 +122,30 @@ struct HistoryEnvelope {
 #[derive(Deserialize)]
 struct HistoryMessage {
     #[serde(default)]
-    role: String,
-    /// String, array-of-parts, or null — inspected via [`extract_text`].
+    role: Value,
+    /// Assistant text is read via [`extract_text`]; on a `role: "tool"`
+    /// message the whole value is hashed by [`hash_content`] instead.
     #[serde(default)]
     content: Value,
     #[serde(default)]
     tool_calls: Vec<WireToolCall>,
+    /// Present on `role: "tool"` messages: the id of the call this is the
+    /// result of.  The join key between the model's request and the
+    /// environment's answer, and the reason this struct is no longer
+    /// assistant-only.
+    ///
+    /// `Value`, not `Option<String>`, for the reason stated above every field
+    /// here: a typed field rejects a body whose shape is merely odd, and a
+    /// failed deserialize takes the *whole envelope* with it — silently
+    /// disabling the guard for that request. Read through `as_str`.
+    #[serde(default)]
+    tool_call_id: Value,
 }
 
 #[derive(Deserialize)]
 struct WireToolCall {
     #[serde(default)]
-    id: String,
+    id: Value,
     #[serde(default)]
     function: WireFunction,
 }
@@ -137,10 +153,62 @@ struct WireToolCall {
 #[derive(Deserialize, Default)]
 struct WireFunction {
     #[serde(default)]
-    name: String,
-    /// OpenAI wire format: a JSON-encoded *string*, not an object.
+    name: Value,
+    /// OpenAI wire format says a JSON-encoded *string*, but models and
+    /// bridges routinely emit a bare object here, and `ToolCall::arguments`
+    /// in the domain is a `Value` for that reason. Typed as `String` this
+    /// failed the whole envelope and switched the guard off for the request.
     #[serde(default)]
-    arguments: String,
+    arguments: Value,
+}
+
+// =============================================================================
+// Scan outcome
+// =============================================================================
+
+/// What one history scan concluded.
+///
+/// The verdict is the decision; the bits beside it are observations the
+/// verdict cannot express. A batch that repeats *under* the threshold never
+/// reaches a verdict at all, and whether its results were identical is the
+/// difference between a model stuck in a loop and a model making progress
+/// that happens to look alike — so it is measured separately and acted on by
+/// nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ScanOutcome {
+    /// Whether to forward, and if not, why.
+    pub(crate) verdict: LoopGuardVerdict,
+    /// Whether this request's **newest** tool-call batch repeated the batch
+    /// before it and got an equal result back.
+    ///
+    /// The comparison is against the *preceding* occurrence of that
+    /// signature, not any earlier one: `A(r1), A(r2), A(r1)` reports false at
+    /// the third A, because the model did get a different answer last time.
+    ///
+    /// Deliberately one bit per request rather than a count over the history.
+    /// A client replays the whole conversation every turn, so a running total
+    /// would re-count the same event on every subsequent request and grow
+    /// quadratically in conversation length — a session with three stuck
+    /// repeats over fifty turns would report about a hundred. The question
+    /// worth answering is "did *this* turn repeat itself", once per turn.
+    pub(crate) identical_result_repeat: bool,
+    /// Whether the newest batch repeated the one before it but the results
+    /// could **not** be compared.
+    ///
+    /// The difference between "no repeat happened" and "a repeat happened and
+    /// gglib could not tell" — states that would otherwise both read as
+    /// `identical_result_repeat: false`. The join fails when a client omits
+    /// `id` on replayed tool calls (which the wire types above exist to
+    /// tolerate), when results are not contiguous after the assistant turn,
+    /// or when any call in a parallel batch went unanswered.
+    ///
+    /// Recorded because a decision rests on the other field reading near zero
+    /// — see ADR 0006's 2026-08-26 postscript. A near-zero count is only
+    /// evidence that repeats are rare if the question was actually being
+    /// asked; without this, an instrument that never joined anything is
+    /// indistinguishable from a clean fleet, and would cancel the work it
+    /// exists to justify.
+    pub(crate) repeat_not_evaluated: bool,
 }
 
 // =============================================================================
@@ -154,35 +222,166 @@ struct WireFunction {
 /// text), and the loop detector only sees non-empty tool-call batches.
 ///
 /// Fail-open: an unparseable body returns [`LoopGuardVerdict::Pass`].
-pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> LoopGuardVerdict {
+///
+/// One pass. A tool result belongs to the assistant turn it immediately
+/// follows, so the join is positional rather than a global index by
+/// `tool_call_id` — gglib mints those ids itself for dialect models
+/// (`DelimitedToolCallParser` restarts at zero on every response), so
+/// `call_qwen_0` recurs on every turn of a replayed conversation and a global
+/// map would resolve every occurrence of a batch to the same result.
+pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
     let Ok(envelope) = serde_json::from_slice::<HistoryEnvelope>(body) else {
-        return LoopGuardVerdict::Pass;
+        return ScanOutcome {
+            verdict: LoopGuardVerdict::Pass,
+            identical_result_repeat: false,
+            repeat_not_evaluated: false,
+        };
     };
 
     let mut stagnation = StagnationDetector::default();
     let mut loops = LoopDetector::default();
+    // Batch signature -> the results hash from the last time that exact batch
+    // appeared. Absent from the map means "first time"; a `None` value means
+    // the batch went unanswered, which is not evidence of anything.
+    let mut previous: HashMap<String, Option<u64>> = HashMap::new();
+    // Overwritten by each batch, so what survives describes the newest one.
+    // See `ScanOutcome::identical_result_repeat` for why this is not a tally.
+    let mut identical_result_repeat = false;
+    let mut repeat_not_evaluated = false;
 
-    for msg in &envelope.messages {
-        if msg.role != "assistant" {
-            continue;
+    for (i, msg) in envelope.messages.iter().enumerate() {
+        match msg.role.as_str() {
+            // A batch's own results are part of that turn, not the end of it.
+            Some("tool") => continue,
+            Some("assistant") => {}
+            // Anything else — a user interjecting mid-turn, a system message —
+            // ends the observation, exactly as a prose answer does below. The
+            // bits describe the batch the next generation follows, and the
+            // request that carried that batch has already reported it.
+            _ => {
+                identical_result_repeat = false;
+                repeat_not_evaluated = false;
+                continue;
+            }
         }
+
+        // Computed before the guards, so the bits describe *this* message even
+        // when stagnation rejects it. Neither detector can see them: the
+        // observation has no effect on the verdicts below.
+        let calls: Vec<ToolCall> = msg.tool_calls.iter().map(to_domain_call).collect();
+        if calls.is_empty() {
+            // A prose turn ends the observation. Without this the bits stay
+            // set from whatever batch came last and are re-reported on every
+            // subsequent request — ask, tools, prose answer, follow-up is the
+            // ordinary shape of a chat session, so the inflation is unbounded.
+            identical_result_repeat = false;
+            repeat_not_evaluated = false;
+        } else {
+            let results = turn_results_hash(&calls, &envelope.messages[i + 1..]);
+            let seen_before = previous.insert(batch_signature(&calls), results);
+            identical_result_repeat =
+                matches!(seen_before, Some(Some(seen)) if Some(seen) == results);
+            // A repeat gglib could not evaluate is not a repeat that did not
+            // happen, and the two must not share a reading.
+            repeat_not_evaluated =
+                matches!(seen_before, Some(prior) if prior.is_none() || results.is_none());
+        }
+
         if let Err(e) = stagnation.record(&extract_text(&msg.content), cfg.max_stagnation_steps) {
-            return verdict(e);
+            return ScanOutcome {
+                verdict: verdict(e),
+                identical_result_repeat,
+                repeat_not_evaluated,
+            };
         }
-        if !msg.tool_calls.is_empty() {
-            let calls: Vec<ToolCall> = msg.tool_calls.iter().map(to_domain_call).collect();
-            if let Err(e) = loops.check(
+        if !calls.is_empty()
+            && let Err(e) = loops.check(
                 &calls,
                 cfg.max_repeated_batch_steps,
                 &cfg.observation_tools,
                 cfg.max_observation_steps,
-            ) {
-                return verdict(e);
-            }
+            )
+        {
+            return ScanOutcome {
+                verdict: verdict(e),
+                identical_result_repeat,
+                repeat_not_evaluated,
+            };
         }
     }
 
-    LoopGuardVerdict::Pass
+    ScanOutcome {
+        verdict: LoopGuardVerdict::Pass,
+        identical_result_repeat,
+        repeat_not_evaluated,
+    }
+}
+
+/// Hash the results answering one assistant turn's tool calls.
+///
+/// `rest` is the history *after* that assistant message; the answers are the
+/// contiguous run of result messages at its head, which bounds the join to
+/// this turn and makes repeated synthetic ids harmless.
+///
+/// Each call is paired with its own answer before sorting. Sorting bare result
+/// hashes would meet the ordering goal — [`batch_signature`] sorts too, so the
+/// same parallel batch re-emitted in a different order must still match — but
+/// it severs which call produced which result, and a two-call batch whose
+/// answers swapped would compare equal.
+///
+/// The pair key renders `arguments` rather than hashing it structurally, which
+/// relies on `serde_json::Value` being a `BTreeMap`. Enabling that crate's
+/// `preserve_order` feature would make the rendering insertion-ordered and this
+/// join would quietly start under-reporting.
+///
+/// `None` when any call is unanswered — a partially-answered batch says
+/// nothing about whether work repeated.
+fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> Option<u64> {
+    let answers: HashMap<&str, u64> = rest
+        .iter()
+        .take_while(|m| m.role.as_str() == Some("tool"))
+        .filter_map(|m| Some((m.tool_call_id.as_str()?, hash_content(&m.content))))
+        .collect();
+
+    // Pairs, not bare hashes: sorting results alone severs which call
+    // produced which, so a two-call batch whose answers swap between
+    // occurrences would compare equal.
+    let mut pairs: Vec<(&str, &Value, u64)> = calls
+        .iter()
+        .map(|c| {
+            let answer = answers.get(c.id.as_str()).copied()?;
+            Some((c.name.as_str(), &c.arguments, answer))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    // `Value` is not `Ord`/`Hash`, and it is a `BTreeMap` underneath, so its
+    // rendering is key-canonical and stands in for both.
+    let mut keyed: Vec<(String, u64)> = pairs
+        .drain(..)
+        .map(|(name, args, answer)| (format!("{name}\u{0}{args}"), answer))
+        .collect();
+    keyed.sort_unstable();
+
+    let mut hasher = DefaultHasher::new();
+    keyed.hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+/// Hash a tool result's content for equality alone.
+///
+/// Deliberately *not* [`extract_text`]: that projects to the empty string for
+/// objects, numbers, nulls and non-text parts, which would make two different
+/// structured results compare equal — a manufactured "identical" repeat. The
+/// value is hashed as it arrived, and the string case avoids a copy because
+/// tool results run to tens of kilobytes on this pre-admission path.
+fn hash_content(content: &Value) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    match content {
+        // Discriminated so `null` and the string "null" cannot collide, in a
+        // function whose only job is equality.
+        Value::String(s) => (0u8, s).hash(&mut hasher),
+        other => (1u8, other.to_string()).hash(&mut hasher),
+    }
+    hasher.finish()
 }
 
 /// Map a detector error onto the guard's verdict.
@@ -223,11 +422,18 @@ fn extract_text(content: &Value) -> String {
 /// A malformed arguments string falls back to hashing the raw string —
 /// identical malformed batches still count as repeats.
 fn to_domain_call(call: &WireToolCall) -> ToolCall {
-    let arguments = serde_json::from_str::<Value>(&call.function.arguments)
-        .unwrap_or_else(|_| Value::String(call.function.arguments.clone()));
+    // A JSON-encoded string is the documented shape, a bare object is the
+    // common deviation, and anything else is used as it stands rather than
+    // rejected — this runs on content the guard only inspects.
+    let arguments = match &call.function.arguments {
+        Value::String(s) => {
+            serde_json::from_str::<Value>(s).unwrap_or_else(|_| Value::String(s.clone()))
+        }
+        other => other.clone(),
+    };
     ToolCall {
-        id: call.id.clone(),
-        name: call.function.name.clone(),
+        id: call.id.as_str().unwrap_or_default().to_owned(),
+        name: call.function.name.as_str().unwrap_or_default().to_owned(),
         arguments,
     }
 }
@@ -237,284 +443,5 @@ fn to_domain_call(call: &WireToolCall) -> ToolCall {
 // =============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn cfg() -> LoopGuardConfig {
-        LoopGuardConfig::from_settings(&Settings::with_defaults()).expect("guard on by default")
-    }
-
-    /// Build a request body from raw message values.
-    fn body(messages: &[Value]) -> Vec<u8> {
-        json!({ "model": "m", "messages": messages })
-            .to_string()
-            .into_bytes()
-    }
-
-    fn assistant_call(name: &str, args: &str) -> Value {
-        json!({
-            "role": "assistant",
-            "content": null,
-            "tool_calls": [{
-                "id": "c1",
-                "type": "function",
-                "function": { "name": name, "arguments": args }
-            }]
-        })
-    }
-
-    fn assistant_text(text: &str) -> Value {
-        json!({ "role": "assistant", "content": text })
-    }
-
-    // ── Pass cases ───────────────────────────────────────────────────────────
-
-    #[test]
-    fn empty_and_first_turn_bodies_pass() {
-        assert_eq!(scan_history(&body(&[]), &cfg()), LoopGuardVerdict::Pass);
-        let first_turn = body(&[
-            json!({ "role": "system", "content": "be helpful" }),
-            json!({ "role": "user", "content": "hi" }),
-        ]);
-        assert_eq!(scan_history(&first_turn, &cfg()), LoopGuardVerdict::Pass);
-    }
-
-    #[test]
-    fn unparseable_body_fails_open() {
-        assert_eq!(
-            scan_history(b"not json at all", &cfg()),
-            LoopGuardVerdict::Pass
-        );
-        // messages of the wrong shape entirely — still a pass, not a panic.
-        assert_eq!(
-            scan_history(br#"{"messages": "nope"}"#, &cfg()),
-            LoopGuardVerdict::Pass
-        );
-    }
-
-    #[test]
-    fn non_assistant_roles_are_ignored() {
-        // Identical tool results and user messages must never count.
-        let msgs: Vec<Value> = (0..10)
-            .flat_map(|_| {
-                vec![
-                    json!({ "role": "user", "content": "same" }),
-                    json!({ "role": "tool", "content": "same result", "tool_call_id": "c1" }),
-                ]
-            })
-            .collect();
-        assert_eq!(scan_history(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
-    }
-
-    #[test]
-    fn two_identical_batches_pass_at_default_threshold() {
-        let msgs = vec![
-            assistant_call("read_file", r#"{"path":"a.rs"}"#),
-            assistant_call("read_file", r#"{"path":"a.rs"}"#),
-        ];
-        assert_eq!(scan_history(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
-    }
-
-    #[test]
-    fn distinct_arguments_never_trip() {
-        let msgs: Vec<Value> = (0..10)
-            .map(|i| assistant_call("read_file", &format!(r#"{{"path":"file{i}.rs"}}"#)))
-            .collect();
-        assert_eq!(scan_history(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
-    }
-
-    // ── Loop detection ───────────────────────────────────────────────────────
-
-    #[test]
-    fn third_identical_batch_trips_loop() {
-        let msgs = vec![
-            assistant_call("read_file", r#"{"path":"a.rs"}"#),
-            assistant_call("read_file", r#"{"path":"a.rs"}"#),
-            assistant_call("read_file", r#"{"path":"a.rs"}"#),
-        ];
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn shuffled_argument_keys_still_trip() {
-        // Same logical arguments, different JSON key order — canonicalized
-        // hashing must see them as identical.
-        let msgs = vec![
-            assistant_call("edit", r#"{"a":1,"b":2}"#),
-            assistant_call("edit", r#"{"b":2,"a":1}"#),
-            assistant_call("edit", r#"{"a":1,"b":2}"#),
-        ];
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn batch_signature_ignores_call_order() {
-        let pair = |first: &str, second: &str| {
-            json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [
-                    { "id": "c1", "function": { "name": first, "arguments": "{}" } },
-                    { "id": "c2", "function": { "name": second, "arguments": "{}" } },
-                ]
-            })
-        };
-        let msgs = vec![pair("a", "b"), pair("b", "a"), pair("a", "b")];
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn malformed_arguments_hash_as_raw_string() {
-        // Not valid JSON — must not 400 the request, and identical malformed
-        // batches must still count as repeats.
-        let msgs: Vec<Value> = (0..3)
-            .map(|_| assistant_call("edit", "{not valid json"))
-            .collect();
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn observation_batches_use_elevated_threshold() {
-        // 3 identical snapshot calls would trip the standard threshold (2)
-        // but pass under the observation threshold (15)…
-        let obs: Vec<Value> = (0..3)
-            .map(|_| assistant_call("browser_snapshot", "{}"))
-            .collect();
-        assert_eq!(scan_history(&body(&obs), &cfg()), LoopGuardVerdict::Pass);
-
-        // …and 16 trips even the elevated threshold.
-        let many: Vec<Value> = (0..16)
-            .map(|_| assistant_call("browser_snapshot", "{}"))
-            .collect();
-        assert!(matches!(
-            scan_history(&body(&many), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn mixed_observation_action_batch_uses_standard_threshold() {
-        let mixed = || {
-            json!({
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [
-                    { "id": "c1", "function": { "name": "browser_snapshot", "arguments": "{}" } },
-                    { "id": "c2", "function": { "name": "do_thing", "arguments": "{}" } },
-                ]
-            })
-        };
-        let msgs = vec![mixed(), mixed(), mixed()];
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    // ── Stagnation detection ─────────────────────────────────────────────────
-
-    #[test]
-    fn five_identical_texts_pass_then_sixth_trips() {
-        let five: Vec<Value> = (0..5).map(|_| assistant_text("I am stuck.")).collect();
-        assert_eq!(scan_history(&body(&five), &cfg()), LoopGuardVerdict::Pass);
-
-        let six: Vec<Value> = (0..6).map(|_| assistant_text("I am stuck.")).collect();
-        assert_eq!(
-            scan_history(&body(&six), &cfg()),
-            LoopGuardVerdict::StagnationDetected {
-                count: 6,
-                max_steps: 5
-            }
-        );
-    }
-
-    #[test]
-    fn oscillation_is_counted_session_wide() {
-        // A→B→A→B… trips once either text exceeds the threshold, even though
-        // no two consecutive responses match.
-        let msgs: Vec<Value> = (0..12)
-            .map(|i| assistant_text(if i % 2 == 0 { "plan A" } else { "plan B" }))
-            .collect();
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::StagnationDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn content_part_arrays_feed_stagnation() {
-        let part_msg = || {
-            json!({
-                "role": "assistant",
-                "content": [
-                    { "type": "text", "text": "same answer" },
-                    { "type": "image_url", "image_url": { "url": "ignored" } },
-                ]
-            })
-        };
-        let msgs: Vec<Value> = (0..6).map(|_| part_msg()).collect();
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::StagnationDetected { .. }
-        ));
-    }
-
-    #[test]
-    fn null_content_with_tool_calls_feeds_loop_only() {
-        // Tool-call-only turns have null content; the empty text must not
-        // accumulate stagnation counts (record() skips empty text), so the
-        // verdict is the loop detector's, not a stagnation false positive.
-        let msgs = vec![
-            assistant_call("t", "{}"),
-            assistant_call("t", "{}"),
-            assistant_call("t", "{}"),
-        ];
-        assert!(matches!(
-            scan_history(&body(&msgs), &cfg()),
-            LoopGuardVerdict::LoopDetected { .. }
-        ));
-    }
-
-    // ── Configuration ────────────────────────────────────────────────────────
-
-    #[test]
-    fn from_settings_gates_on_proxy_loop_detection() {
-        let mut settings = Settings::with_defaults();
-        assert!(LoopGuardConfig::from_settings(&settings).is_some());
-
-        settings.proxy_loop_detection = Some(true);
-        assert!(LoopGuardConfig::from_settings(&settings).is_some());
-
-        settings.proxy_loop_detection = Some(false);
-        assert!(LoopGuardConfig::from_settings(&settings).is_none());
-    }
-
-    #[test]
-    fn from_settings_honours_persisted_stagnation_threshold() {
-        let mut settings = Settings::with_defaults();
-        settings.max_stagnation_steps = Some(2);
-        let cfg = LoopGuardConfig::from_settings(&settings).expect("enabled");
-
-        let three: Vec<Value> = (0..3).map(|_| assistant_text("stuck")).collect();
-        assert_eq!(
-            scan_history(&body(&three), &cfg),
-            LoopGuardVerdict::StagnationDetected {
-                count: 3,
-                max_steps: 2
-            }
-        );
-    }
-}
+#[path = "loop_guard_tests.rs"]
+mod tests;
