@@ -162,7 +162,13 @@ and not fixed by this change.~~
 
 > **Amended 2026-08-26.** The exception is closed. `Settings::with_defaults`
 > now leaves `default_context_size` unset, so a reset writes no row and the
-> fitted rung stays reachable.
+> fitted rung stays reachable. A second serving path carried the same
+> fabrication and was not named above: `gglib proxy` pre-resolved the chain to
+> a bare `u64` and sent the floor as though the user had chosen it, which the
+> daemon's own `BuiltInDefault → None` filter could not see because the value
+> arrived at the explicit rung. Both now pass the setting through untouched, as
+> `gglib up` already did, so the claim above — that a stored global default
+> means the user typed a number — now holds for every path that serves a model.
 >
 > Other places still fabricate the floor, and they predate this amendment
 > rather than being introduced by it — unset was already the ordinary state for

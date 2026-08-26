@@ -719,10 +719,10 @@ install-templates` installs all nine.
 
 In addition to inference parameters, each model can store per-model **server launch
 defaults** (e.g., `context_length`) in the `server_defaults` DB column. These are
-resolved through a 4-level fallback chain:
+resolved through a 5-level fallback chain:
 
 ```
-Runtime request / CLI flag  →  Per-model server_defaults  →  Global settings  →  Hardcoded default (4096)
+Runtime request / CLI flag  →  Per-model server_defaults  →  Global settings  →  Fitted to this machine  →  Hardcoded default (4096)
 ```
 
 Per-model server defaults can be set via the GUI or API (`PATCH /api/models/:id` with

@@ -10,8 +10,9 @@
 //!
 //! 1. Runtime request / CLI flag (highest priority)
 //! 2. Model `server_defaults` (from DB, stored as JSON)
-//! 3. Global app setting
-//! 4. Hardcoded default (lowest priority)
+//! 3. Global app setting, when the user set one
+//! 4. Fitted to this machine
+//! 5. Hardcoded default (lowest priority)
 
 use serde::{Deserialize, Serialize};
 
@@ -19,12 +20,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// Stores per-model server configuration parameters that override global
 /// settings but can themselves be overridden at request time. This is part
-/// of the 4-level fallback chain:
+/// of the 5-level fallback chain:
 ///
 /// 1. Runtime request / CLI flag (highest priority)
 /// 2. Model `server_defaults` (from DB, stored as JSON in `server_defaults` column)
-/// 3. Global app setting
-/// 4. Hardcoded default (lowest priority)
+/// 3. Global app setting, when the user set one
+/// 4. Fitted to this machine
+/// 5. Hardcoded default (lowest priority)
 ///
 /// All fields are optional to support partial configuration.
 ///
@@ -45,6 +47,7 @@ pub struct ServerConfig {
     /// Context length (number of tokens) for the model server.
     ///
     /// Controls the maximum context window the server will use.
-    /// Common values: 4096 (default), 8192, 32768, 131072
+    /// `None` falls through to the rungs below this one, which end in a
+    /// context fitted to the machine. Common values: 8192, 32768, 131072.
     pub context_length: Option<usize>,
 }

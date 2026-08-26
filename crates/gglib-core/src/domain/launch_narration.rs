@@ -6,7 +6,7 @@
 //! model: it sizes the host-RAM prompt cache against free memory, quantizes
 //! the KV cache, enables speculative decoding from the model's own metadata,
 //! picks a tool-call dialect parser, and resolves the context size through a
-//! four-level fallback chain. Every one of those values already existed at
+//! five-level fallback chain. Every one of those values already existed at
 //! launch — but only in a `debug!` line or a local variable, so the user's
 //! evidence that any of it happened was a 1,000-line README.
 //!

@@ -174,8 +174,9 @@ fn resolve_launch_opts_applies_the_per_model_context_when_nothing_more_specific_
     assert_eq!(opts.global_default_ctx, Some(131_072));
 }
 
-/// A per-request `num_ctx` still outranks the per-model tier — the 4-level
-/// chain (`resolve_context_size`) is unchanged by M9, only who reads the result.
+/// A per-request `num_ctx` still outranks the per-model tier — the ordering of
+/// the chain (`resolve_context_size`) is unchanged by M9, only who reads the
+/// result.
 #[test]
 fn resolve_launch_opts_explicit_num_ctx_beats_the_per_model_tier() {
     let (_, resolved_ctx, _) = resolve_launch_opts(

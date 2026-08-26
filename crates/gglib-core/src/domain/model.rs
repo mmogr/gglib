@@ -131,7 +131,7 @@ pub struct Model {
     /// Per-model server-level defaults (`context_length`, etc.).
     ///
     /// Stored as JSON in the database. Overrides global settings but can
-    /// be overridden at request time. Part of the 4-level fallback chain.
+    /// be overridden at request time. Part of the 5-level fallback chain.
     #[serde(default)]
     pub server_defaults: Option<ServerConfig>,
     /// Tool-call dialect spec detected at import/retag time.

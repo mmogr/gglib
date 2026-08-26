@@ -311,10 +311,11 @@ pub enum Commands {
         #[arg(short, long, default_value = "8080")]
         port: u16,
         /// Default context size when not specified by client.
-        /// Falls back to the app settings `default_context_size`, then to the
-        /// compiled default (4096) if unset. Must be a positive number — `max`
-        /// is not supported here since no specific model is in scope for a
-        /// standalone proxy.
+        /// Falls back to the app settings `default_context_size`; with neither
+        /// set, each launch fits the context to this machine. Must be within
+        /// the range `gglib config settings set --default-context-size`
+        /// accepts — `max` is not supported here since no specific model is
+        /// in scope for a standalone proxy.
         #[arg(long)]
         default_context: Option<String>,
 

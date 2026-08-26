@@ -196,8 +196,8 @@ impl ServerConfigOptions {
     ///
     /// Note that this merges *options*, not resolved values — the tier chain
     /// baked into [`resolve_context_size`] (request → per-model → global →
-    /// hardcoded) still runs afterwards on the merged result, so overlaying
-    /// never collapses those tiers early.
+    /// fitted → hardcoded) still runs afterwards on the merged result, so
+    /// overlaying never collapses those tiers early.
     ///
     /// `over` is destructured exhaustively on purpose: adding a field to this
     /// struct then fails to compile until it is given merge semantics here,
@@ -293,8 +293,9 @@ impl ContextSizeSource {
 ///
 /// 1. Runtime request / CLI flag (`opts.context_size`) — highest priority
 /// 2. Per-model server defaults (`opts.model_server_ctx`) — from DB
-/// 3. Global app setting (`opts.global_default_ctx`)
-/// 4. Hardcoded default (`DEFAULT_CONTEXT_SIZE` = 4096) — lowest priority
+/// 3. Global app setting (`opts.global_default_ctx`) — only when the user set one
+/// 4. Fitted to this machine (`opts.fitted_ctx`)
+/// 5. Hardcoded default (`DEFAULT_CONTEXT_SIZE` = 4096) — lowest priority
 ///
 /// [`resolve_context_size`] delegates here and discards the source, so the
 /// chain exists in exactly one place: a second copy that drifted would make
