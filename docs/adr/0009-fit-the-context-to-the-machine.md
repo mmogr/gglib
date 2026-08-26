@@ -1,7 +1,7 @@
 # ADR 0009 — Fit the context to the machine, from a budget that cannot move
 
 - **Status:** Accepted
-- **Date:** 2026-08-26 (amended 2026-08-26 — see the note under "Existing users
+- **Date:** 2026-08-26 (amended 2026-08-26 — see the notes under "Existing users
   need no migration")
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0006](0006-recover-dont-predict.md)
@@ -203,7 +203,7 @@ and not fixed by this change.~~
 > lists none.
 >
 > One more defeats the fit from the other direction, and is the one worth
-> acting on first. `useServerActions.ts`'s Serve action falls through to
+> acting on first. ~~`useServerActions.ts`'s Serve action falls through to
 > `model.contextLength` — the GGUF's *trained* window — when neither a custom
 > value nor a stored default exists, and sends it as an explicit
 > `contextLength`. That lands on the top rung, above the fit, so a GUI user
@@ -211,9 +211,62 @@ and not fixed by this change.~~
 > whether or not it fits: the failure the floor at least never had. Fresh
 > installs already reached it, because an unset default has always been
 > `None` at that branch; the reset fix above widens the set to anyone who has
-> run `settings reset`. Sending nothing and letting admission decide is the
-> fix, and it is not made here — but unlike the three above, this one can
+> run `settings reset`.~~ Sending nothing and letting admission decide is the
+> fix ~~, and it is not made here~~ — but unlike the three above, this one can
 > refuse to load rather than merely under-serve.
+
+> **Amended 2026-08-26.** The Serve action is fixed. It now sends a
+> `contextLength` only when the user typed one, so with the box empty the
+> daemon resolves the whole cascade itself: the fit where it can read the
+> device, and the floor on the hosts named above where it cannot. The ladder
+> is unchanged and still ranks a typed value above a stored default and a
+> stored default above the fit, because both of those mean a person chose a
+> number. What changed is that the Serve action no longer pre-empts it.
+>
+> A second rung was defeated by the same expression and is closed with it.
+> When nothing was typed but a global default *was* stored, the action sent
+> that default as an explicit `contextLength`, where it outranked the model's
+> own `server_defaults.context_length` one rung below — so a model configured
+> for 16,384 was served the global 8,192 instead. The daemon already reads
+> that setting into `globals.default_ctx` itself, so sending it changed no
+> resolved number except in that one case, where it changed it for the worse.
+> The pinned path in the same function had always been right about this and
+> said so in a comment; the bare path now agrees, and both send the typed
+> value alone. `settings` had no other reader in that hook and is no longer a
+> prop of it, which a compile-time assertion in its test now holds open —
+> `request.context_length` also reaches `admit` as `num_ctx`, but that is not
+> a second channel: `resolve_launch_opts` folds it straight back in with
+> `opts.context_size = num_ctx.or(opts.context_size)`, the explicit rung.
+>
+> The serve modal's placeholder had to move with it, because it was a promise
+> about what leaving the box empty would do and the answer changed. It read
+> `Model max: N`, which was true only while the action sent the trained
+> window. It now names the rung that will answer while that rung is a fact
+> about the model or the settings, and otherwise says `Sized per launch`.
+>
+> It deliberately does **not** say "fitted to this machine", and two wrong
+> drafts are the argument for that. Whether the fit is reachable is not a fact
+> the client holds: `fit_context` returns `None` unless it can read the device
+> budget, the weight size and the KV geometry, and again when the weights
+> alone exceed the budget — and this ADR records above that AMD, Intel, Vulkan
+> and CPU-only hosts get no fit at all. Naming the fitted rung would have been
+> a fresh false promise to every one of those users, on the surface being
+> corrected for making false promises. `gpuMemoryBytes` reaches the GUI
+> already and would answer the hardware half, but none of the rest. The ladder
+> moved to `contextPlaceholder.ts` so its answers could be asserted rather
+> than rendered and eyeballed; both wrong drafts read correctly by inspection
+> and were caught only by tracing each branch to the rung it lands on.
+>
+> **This is the Serve action only.** A phrase sweep found the same promise on
+> eight further surfaces — the inspector's Context Length row and its edit
+> form, the proxy panel's context box, Settings → Default Context Size,
+> `gglib config settings show`, two clap help strings, the
+> `--default-context` validation error — plus a doc on `ServerConfig` that is
+> `ts(export)` and was shipping a false sentence into the GUI binding. None is
+> corrected here. They are a different change with a different blast radius,
+> and one of them predates this arc by seven weeks, so a sweep scoped to any
+> one diff would go on missing it. Recorded rather than fixed, deliberately:
+> the alternative was a three-line fix carrying thirty-two files.
 
 ## Kill criteria
 

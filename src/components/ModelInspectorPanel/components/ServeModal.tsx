@@ -8,6 +8,7 @@ import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import { JinjaModeField } from './JinjaModeField';
+import { contextPlaceholder } from './contextPlaceholder';
 import { useSamplingExplanation } from '../hooks/useSamplingExplanation';
 import type { GgufModel, AppSettings, SparseInferenceConfig, TemplateSupport } from '../../../types';
 import { formatParamCount } from '../../../utils/format';
@@ -132,13 +133,7 @@ export const ServeModal: FC<ServeModalProps> = ({
             id="context-input"
             type="number"
             className="font-mono tabular-nums"
-            placeholder={
-              settings?.defaultContextSize
-                ? `Default: ${settings.defaultContextSize.toLocaleString()}`
-                : model.contextLength
-                  ? `Model max: ${model.contextLength.toLocaleString()}`
-                  : 'Enter context length'
-            }
+            placeholder={contextPlaceholder(model, settings)}
             value={customContext}
             onChange={(e) => onContextChange(e.target.value)}
             disabled={isServing}

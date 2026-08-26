@@ -117,7 +117,6 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
   const serverActions = useServerActions({
     model,
-    settings,
     servers,
     editedName: editMode.editedName,
     editedQuantization: editMode.editedQuantization,
