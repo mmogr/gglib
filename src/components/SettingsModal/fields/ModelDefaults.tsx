@@ -34,7 +34,7 @@ export const ModelDefaults: FC<ModelDefaultsProps> = ({
       spec={CONTEXT_SIZE}
       value={contextSizeInput}
       onChange={setContextSizeInput}
-      description="Default context size for models (e.g., 4096, 8192, 16384)"
+      description="Context window for models with no per-model override."
       disabled={saving}
     />
 

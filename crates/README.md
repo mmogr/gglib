@@ -185,7 +185,7 @@ Implements port traits for data persistence:
 Manages llama.cpp lifecycle:
 - Installation and updates
 - Configuration and argument building
-- Context size resolution (explicit flag → settings default → server default)
+- Context size resolution (explicit flag → per-model server defaults → settings default → fitted to this machine → built-in floor)
 - Process spawning and monitoring
 - Health checking
 - Port allocation

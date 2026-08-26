@@ -24,13 +24,17 @@ interface NumberSettingFieldProps {
  * A numeric settings input with its label, description, and default hint.
  *
  * Ports, sizes, and caps all want the same shape — a narrow number input,
- * min/max bounds, and a visible statement of what the backend falls back to
- * when the field is left empty — and were repeating it call site by call
- * site. Owning the `Input` here (rather than leaving it to each caller, as
- * plain `SettingField` does) is what lets the default reach the control as
- * well as the hint, without `SettingField` having to clone its children —
- * both as the placeholder and, via `aria-describedby`, as something a
- * screen reader will actually read out.
+ * min/max bounds, and a visible statement of what happens when the field is
+ * left empty — and were repeating it call site by call site. Owning the
+ * `Input` here (rather than leaving it to each caller, as plain `SettingField`
+ * does) is what lets that statement reach the control as well as the hint,
+ * without `SettingField` having to clone its children — both as the
+ * placeholder and, via `aria-describedby`, as something a screen reader will
+ * actually read out.
+ *
+ * A field with no fixed default renders its `unset.hint` as a plain sentence
+ * rather than behind the "Default:" label, and its shorter `unset.placeholder`
+ * in the box, which is only seven rem wide.
  */
 export const NumberSettingField: FC<NumberSettingFieldProps> = ({
   id,
@@ -45,7 +49,8 @@ export const NumberSettingField: FC<NumberSettingFieldProps> = ({
     id={id}
     label={label}
     controlWidth="xs"
-    defaultHint={spec.default}
+    defaultHint={spec.default ?? undefined}
+    unsetHint={spec.default === null ? spec.unset.hint : undefined}
     description={description}
   >
     <Input
@@ -53,7 +58,7 @@ export const NumberSettingField: FC<NumberSettingFieldProps> = ({
       type="number"
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      placeholder={spec.default}
+      placeholder={spec.default ?? spec.unset.placeholder}
       min={spec.min}
       max={spec.max}
       disabled={disabled}

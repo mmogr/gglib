@@ -12,8 +12,11 @@ interface SettingFieldProps {
    */
   controlWidth?: 'xs' | 'sm' | 'full';
   /**
-   * The value this field falls back to when left empty, e.g. "4096".
-   * Rendered as an explicit "Default: 4096" hint below the control.
+   * The value this field falls back to when left empty, e.g. "8080".
+   * Rendered as an explicit "Default: 8080" hint below the control. A field
+   * with no fixed default uses `unsetHint` instead and renders no such label —
+   * the context window is the one such field, and captioning it with a default
+   * is exactly what must not happen.
    *
    * This is the half of the story that survives: it stays put when the
    * field takes focus, and it stays put once a value has been entered, so
@@ -24,6 +27,14 @@ interface SettingFieldProps {
    * own control is responsible for its own placeholder.
    */
   defaultHint?: string;
+  /**
+   * What happens when the field is left empty, for a field with no fixed
+   * default. Rendered as its own sentence, *not* behind the "Default:" label —
+   * a field whose whole point is that it has no default must not be captioned
+   * with one. Mutually exclusive with `defaultHint` in practice; if both are
+   * given, both render.
+   */
+  unsetHint?: string;
   /** Additional description text, shown alongside the default hint. */
   description?: ReactNode;
   /** Optional trailing action (e.g. "Reset to default") on the hint row. */
@@ -60,6 +71,7 @@ export const SettingField: FC<SettingFieldProps> = ({
   children,
   controlWidth = 'full',
   defaultHint,
+  unsetHint,
   description,
   action,
 }) => (
@@ -68,12 +80,13 @@ export const SettingField: FC<SettingFieldProps> = ({
       {label}
     </Label>
     <div className={controlWidthClasses[controlWidth]}>{children}</div>
-    {(description || defaultHint || action) && (
+    {(description || defaultHint || unsetHint || action) && (
       <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span id={id ? settingDescriptionId(id) : undefined}>
           {description}
-          {description && defaultHint && ' '}
+          {description && (defaultHint || unsetHint) && ' '}
           {defaultHint && <span className="text-text-muted">Default: {defaultHint}</span>}
+          {unsetHint && <span className="text-text-muted">{unsetHint}</span>}
         </span>
         {action}
       </Row>

@@ -44,6 +44,23 @@ interface Range {
 
 const num = (literal: string) => Number(literal.replace(/_/g, ''));
 
+/**
+ * Every `pub const NAME: RangeInclusive<T> = A..=B;` across those files.
+ *
+ * A bound that has been extracted into a named range still has to be followed,
+ * or this file silently stops checking the field the moment someone stops
+ * spelling the numbers out inline.
+ */
+const RANGE_CONSTANTS: Map<string, Range> = new Map(
+  [SETTINGS_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
+    [
+      ...source.matchAll(
+        /pub const (\w+):\s*(?:std::ops::)?RangeInclusive<\w+>\s*=\s*(-?[0-9_.]+)\.\.=(-?[0-9_.]+)\s*;/g,
+      ),
+    ].map((match) => [match[1], { min: num(match[2]), max: num(match[3]) }] as [string, Range]),
+  ),
+);
+
 /** Every `pub const NAME: T = <number>;` across the files we care about. */
 const CONSTANTS: Map<string, number> = new Map(
   [SETTINGS_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
@@ -117,6 +134,18 @@ function acceptedRange(source: string, field: string): Range {
   // -2.0..=2.0, where negative values encourage reuse.
   const inclusive = guard.match(/!\((-?[0-9_.]+)\.\.=(-?[0-9_.]+)\)\.contains/);
   if (inclusive) return { min: num(inclusive[1]), max: num(inclusive[2]) };
+
+  // The same guard, written against a named range rather than two literals.
+  const namedRange = guard.match(/!(\w+)\.contains/);
+  if (namedRange) {
+    const resolved = RANGE_CONSTANTS.get(namedRange[1]);
+    if (!resolved) {
+      throw new Error(
+        `${field} is guarded by ${namedRange[1]}, which is not a resolvable RangeInclusive const`,
+      );
+    }
+    return resolved;
+  }
 
   // `x < N` rejects everything below N. N may be negative: `dry_penalty_last_n`
   // accepts -1 as "scan the whole context".
@@ -210,7 +239,9 @@ describe('settings fields vs validate_settings', () => {
     ({ spec, defaultField }) => {
       const fields = structLiteral(SETTINGS_RS, 'with_defaults');
 
-      expect(Number(spec.default)).toBe(value('with_defaults', fields, defaultField!));
+      expect(spec.default === null ? null : Number(spec.default)).toBe(
+        value('with_defaults', fields, defaultField!),
+      );
     },
   );
 

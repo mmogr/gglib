@@ -71,8 +71,11 @@ pub(crate) async fn start(
 ) -> Result<Json<ProxyStatus>, HttpError> {
     let cfg = cfg.unwrap_or_default();
 
-    // Resolve context size through the shared 3-level fallback chain
-    // (flag > settings default > hard-coded default), matching CLI behavior.
+    // Resolve context size through the shared chain, matching CLI behaviour:
+    // flag > settings default > nothing. Deliberately *not* down to the
+    // hard-coded default — `to_runtime_config` collapses that rung to `None`
+    // so the launch can fit the context to the machine instead of arriving
+    // with a floor nobody chose.
     let settings = state.settings.get().await?;
     let runtime_cfg = to_runtime_config(&cfg, &settings);
 

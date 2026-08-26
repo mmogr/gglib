@@ -135,6 +135,101 @@ fn third_identical_batch_trips_loop() {
 }
 
 #[test]
+fn a_batch_repeated_with_real_work_in_between_never_trips() {
+    // The wall this change removes, at the layer a client meets it. Running
+    // one command, editing, and running it again is ordinary work, and it
+    // reached three identical `write_file` batches — the standard threshold —
+    // well inside a normal task. Fifty alternations is far past any ceiling
+    // the guard applies, and none of them is evidence of a loop.
+    //
+    // This also pins the deliberately accepted cost: A -> B -> A -> B on tool
+    // batches is no longer caught at all. If that is ever revisited, this
+    // test is the one that must be argued with.
+    let msgs: Vec<Value> = (0..50)
+        .flat_map(|_| {
+            vec![
+                assistant_call("write_file", r#"{"path":"a.rs"}"#),
+                assistant_call("run_tests", r#"{"suite":"unit"}"#),
+            ]
+        })
+        .collect();
+    assert_eq!(verdict_of(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
+}
+
+#[test]
+fn a_cycle_that_never_exceeds_the_threshold_escapes_entirely() {
+    // The accepted cost, stated at its real width. It is not only strict
+    // alternation: run-length counting sees an unbroken run, so *any* cycle
+    // whose period is two or more escapes forever, including one that reaches
+    // the threshold on every pass without ever crossing it.
+    //
+    // This shape is a genuinely stuck agent — running the same failing test
+    // twice, editing nothing that helps, and doing it again. It was rejected
+    // on the third turn before this change and is never rejected now. The
+    // session-wide tally that caught it is the same one that rejected an agent
+    // for running `cargo test` three times across an hour of real work, which
+    // is why it went; but the trade is real in both directions and this is the
+    // half that costs something.
+    //
+    // `identical_result_repeats` is what observes it. If that counter reads
+    // high in real use, this test is the one to argue with.
+    let msgs: Vec<Value> = (0..40)
+        .flat_map(|_| {
+            vec![
+                assistant_call("run_tests", r#"{"suite":"unit"}"#),
+                assistant_call("run_tests", r#"{"suite":"unit"}"#),
+                assistant_call("write_file", r#"{"path":"a.rs"}"#),
+            ]
+        })
+        .collect();
+    assert_eq!(verdict_of(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
+}
+
+#[test]
+fn prose_and_results_between_identical_batches_do_not_break_the_run() {
+    // Load bearing, and the reason the run is broken only by a *different
+    // batch*. Every real tool call is answered by a `role: "tool"` message
+    // before the next one, and a model often narrates in between, so a run
+    // that either of those could break would never reach two and the guard
+    // would never fire on a real conversation at all.
+    //
+    // Moving `loops.check` out from behind its `!calls.is_empty()` guard
+    // looks like a tightening and would silently disable the guard instead.
+    // This test is what fails if someone does.
+    let msgs = vec![
+        assistant_call_id("c1", "write_file", r#"{"path":"a.rs"}"#),
+        tool_result("c1", "1 file changed"),
+        assistant_text("that did not work, let me try again"),
+        assistant_call_id("c2", "write_file", r#"{"path":"a.rs"}"#),
+        tool_result("c2", "1 file changed"),
+        assistant_text("still not right"),
+        assistant_call_id("c3", "write_file", r#"{"path":"a.rs"}"#),
+        tool_result("c3", "1 file changed"),
+    ];
+    assert!(matches!(
+        verdict_of(&body(&msgs), &cfg()),
+        LoopGuardVerdict::LoopDetected { .. }
+    ));
+}
+
+#[test]
+fn a_user_interjection_between_identical_batches_does_not_break_the_run() {
+    // Same property for the `_ =>` arm of the role match: a user turn ends
+    // the *observation* the two counters report, but it is not work, so it
+    // does not restore the model's allowance to repeat itself.
+    let msgs = vec![
+        assistant_call("write_file", r#"{"path":"a.rs"}"#),
+        json!({ "role": "user", "content": "keep going" }),
+        assistant_call("write_file", r#"{"path":"a.rs"}"#),
+        assistant_call("write_file", r#"{"path":"a.rs"}"#),
+    ];
+    assert!(matches!(
+        verdict_of(&body(&msgs), &cfg()),
+        LoopGuardVerdict::LoopDetected { .. }
+    ));
+}
+
+#[test]
 fn a_thrice_read_file_does_not_trip_the_loop_guard() {
     // This case used to be `third_identical_batch_trips_loop`, asserting
     // the opposite. Reading the same file three times — read, edit,

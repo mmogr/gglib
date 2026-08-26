@@ -279,8 +279,8 @@ impl AgentLoopPort for AgentLoop {
     ///   requesting further tool calls.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
-    /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated more
-    ///   than `config.max_repeated_batch_steps` times.
+    /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated
+    ///   back to back more than `config.max_repeated_batch_steps` times.
     /// - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
     ///   text content for too many consecutive iterations.
     async fn run(
@@ -403,8 +403,10 @@ impl AgentLoopPort for AgentLoop {
             // Guards run BEFORE the finalize check so that:
             // - Stagnation catches repeated text on both tool-calling and
             //   text-only iterations.
-            // - Loop detection catches repeated tool-call batches (skipped
-            //   when tool_calls is empty to avoid a degenerate signature).
+            // - Loop detection catches tool-call batches repeated back to
+            //   back (skipped when tool_calls is empty to avoid a degenerate
+            //   signature — which also means a text-only iteration does not
+            //   break a run, matching the proxy's history scan).
             guards
                 .check(&config, &response.content, &response.tool_calls, &tx)
                 .await?;
@@ -452,7 +454,9 @@ impl Guards {
     /// the same text regardless of whether tool calls are present.
     ///
     /// Loop detection is only checked when tool calls are present, since an
-    /// empty batch would produce a degenerate signature.
+    /// empty batch would produce a degenerate signature — and, now that the
+    /// detector counts back-to-back repeats, skipping is also what stops a
+    /// text-only iteration from breaking a run. See `loop_detection`.
     ///
     /// On failure, emits an [`AgentEvent::Error`] on `tx` before returning so
     /// SSE consumers always see the failure reason before the stream closes.

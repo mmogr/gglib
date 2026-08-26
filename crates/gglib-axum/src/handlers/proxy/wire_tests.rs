@@ -104,7 +104,8 @@ fn cache_true_without_slot_dir_uses_the_default_directory() {
 }
 
 /// `default_context` resolution is untouched by the cache wiring — still
-/// falls through explicit → settings → hardcoded default.
+/// falls through explicit → settings → nothing, the floor being collapsed to
+/// `None` so the launch can reach the fitted rung.
 #[test]
 fn default_context_falls_through_to_settings() {
     let cfg = StartProxyConfig::default();

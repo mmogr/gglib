@@ -19,7 +19,11 @@ use clap::Args;
 #[derive(Args)]
 pub struct SettingsSetArgs {
     /// Default context size for models (512-1000000).
-    /// Global fallback (level 3 of 4); per-model server_defaults and runtime flags take precedence.
+    /// Global fallback (level 3 of 5); per-model server_defaults and runtime flags take
+    /// precedence, and leaving it unset lets each launch fit the context to this machine.
+    /// Setting it pins every launch to that number. This flag cannot clear the value
+    /// again — `gglib config settings reset` is the only CLI route back to unset, and it
+    /// resets every other setting too. The settings modal can clear this field alone.
     #[arg(long)]
     pub default_context_size: Option<u64>,
     /// Port for the OpenAI-compatible proxy server (>= 1024)
@@ -67,10 +71,11 @@ pub struct SettingsSetArgs {
     pub trust_client_sampling: Option<bool>,
     /// Run the proxy's turn-level loop/stagnation guard on
     /// /v1/chat/completions. Enabled by default: a conversation whose
-    /// replayed history repeats the same tool-call batch or assistant
-    /// response beyond the agent-path thresholds is rejected with a
-    /// clean 400 before any model work. Set false only for a client
-    /// that legitimately replays identical batches.
+    /// replayed history repeats the same tool-call batch back to back,
+    /// or the same assistant response anywhere in the session, beyond
+    /// the agent-path thresholds is rejected with a clean 400 before
+    /// any model work. Set false only for a client that legitimately
+    /// repeats identical batches with nothing in between.
     #[arg(long)]
     pub proxy_loop_detection: Option<bool>,
     /// Cap the temperature on agentic turns. Enabled by default: a
@@ -103,4 +108,33 @@ pub struct SettingsSetArgs {
     /// immediately, so the stored value and the OS state stay in step.
     #[arg(long)]
     pub start_at_login: Option<bool>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SettingsSetArgs;
+    use clap::{Args, Command};
+    use gglib_core::settings::CONTEXT_SIZE_RANGE;
+
+    /// The range in this flag's help must be the range the backend enforces.
+    ///
+    /// `CONTEXT_SIZE_RANGE`'s own doc says more than one surface describes this
+    /// bound and that spelling the numbers out separately is how they drift.
+    /// `validate_settings` and `gglib proxy --default-context` derive from the
+    /// constant; a clap doc comment cannot, because it is a literal. This is
+    /// what stands in for that — the numbers may stay written out, but they
+    /// stop being able to disagree in silence.
+    #[test]
+    fn the_context_size_help_states_the_range_the_backend_enforces() {
+        let rendered = SettingsSetArgs::augment_args(Command::new("t"))
+            .render_long_help()
+            .to_string();
+
+        let start = CONTEXT_SIZE_RANGE.start();
+        let end = CONTEXT_SIZE_RANGE.end();
+        assert!(
+            rendered.contains(&format!("({start}-{end})")),
+            "--default-context-size help must state ({start}-{end}); rendered help was:\n{rendered}"
+        );
+    }
 }

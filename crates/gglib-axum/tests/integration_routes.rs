@@ -801,10 +801,15 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
     );
 }
 
-/// Proxy start should fall back to the hard-coded default (4096) when no
-/// settings default is configured and no explicit override is provided.
+/// Proxy start must accept a request that configures no context at all.
+///
+/// It used to be named for falling back to the hard-coded 4096, which is what
+/// it did until #925: `to_runtime_config` now collapses that rung to `None`
+/// so the launch can fit the context to the machine instead. What this asserts
+/// is only that the request stays valid; `wire_tests.rs` is where the resolved
+/// value itself is checked.
 #[tokio::test]
-async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
+async fn proxy_start_accepts_a_request_that_configures_no_context() {
     let app = test_app(CorsConfig::AllowAll).await;
 
     // Clear any settings default by explicitly setting null
@@ -842,11 +847,12 @@ async fn proxy_start_fallback_to_hardcoded_default_when_no_settings() {
         .await
         .unwrap();
 
-    // Should NOT return 400 — the hard-coded default (4096) should be used
+    // Should NOT return 400 — an unconfigured context is a valid request, and
+    // resolves to `None` so the launch can fit it to this machine.
     assert_ne!(
         response.status(),
         StatusCode::BAD_REQUEST,
-        "POST /api/proxy/start with empty body should not return 400 when falling back to hard-coded default"
+        "POST /api/proxy/start with empty body should not return 400 when nothing configures the context"
     );
 }
 

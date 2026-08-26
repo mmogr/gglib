@@ -1,7 +1,8 @@
 # ADR 0009 — Fit the context to the machine, from a budget that cannot move
 
 - **Status:** Accepted
-- **Date:** 2026-08-26
+- **Date:** 2026-08-26 (amended 2026-08-26 — see the note under "Existing users
+  need no migration")
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0006](0006-recover-dont-predict.md)
 - **Supersedes:** nothing
@@ -154,10 +155,65 @@ caps at it before snapping.
 
 **Existing users need no migration.** A stored global default means the user
 typed a number: the settings modal shows an empty box when unset and writes back
-blank, and the repository deletes the row for `null`. The exception is
+blank, and the repository deletes the row for `null`. ~~The exception is
 `gglib config settings reset`, which writes `Some(4096)` and therefore pins that
 user above the fitted rung — a semantic contradiction in `reset`, recorded here
-and not fixed by this change.
+and not fixed by this change.~~
+
+> **Amended 2026-08-26.** The exception is closed. `Settings::with_defaults`
+> now leaves `default_context_size` unset, so a reset writes no row and the
+> fitted rung stays reachable. A second serving path carried the same
+> fabrication and was not named above: `gglib proxy` pre-resolved the chain to
+> a bare `u64` and sent the floor as though the user had chosen it, which the
+> daemon's own `BuiltInDefault → None` filter could not see because the value
+> arrived at the explicit rung. Both now pass the setting through untouched, as
+> `gglib up` already did, so the claim above — that a stored global default
+> means the user typed a number — now holds for every path that serves a model.
+>
+> Other places still fabricate the floor, and they predate this amendment
+> rather than being introduced by it — unset was already the ordinary state for
+> anyone who never typed a number.
+>
+> The benchmark harness is one. `benchmark/agentic.rs`,
+> `benchmark/compare.rs` and `benchmark/tune/mod.rs` each read the setting and
+> `.unwrap_or(DEFAULT_CONTEXT_SIZE)` before resolving, so a measurement taken
+> with nothing configured is taken at 4096 and never at the fitted rung. That
+> means ADR 0006's retained instrument measures a configuration the product no
+> longer ships. Fixing it is its own change: a benchmark that silently
+> re-baselines is worse than one known to be stale.
+>
+> `gglib serve`'s banner is another, and it is the more embarrassing of them
+> because it is the failure this ADR opens with. `launch_options.rs` builds
+> `PinnedLaunch::effective_ctx` with `resolve_context_size` and no `fitted_ctx`
+> — that field is only ever set at admission — so with nothing configured the
+> banner prints `Context size: 4096 (resolved)` while `to_proxy_config` sends
+> `None` and the daemon serves the fitted rung. The number shown and the number
+> used are unrelated again, on a different surface. Making them agree means the
+> banner learning what admission decided, which is a plumbing change this
+> amendment records rather than makes.
+>
+> The GUI's memory-fit badge is the third. `useSystemMemory.ts` reads
+> `settings?.defaultContextSize ?? 4096` to estimate whether a model fits.
+> Before the reset fix an unconfigured user had `Some(4096)` stored and the
+> estimate matched what was served; unset is now the ordinary state, so the
+> badge sizes KV at 4096 while the launch fits a larger window. It understates
+> rather than overstates, and `fit_context` still sizes the real launch against
+> real capacity, so this misleads a person rather than risking an OOM. Named
+> here because an inventory that lists two of three is worse than one that
+> lists none.
+>
+> One more defeats the fit from the other direction, and is the one worth
+> acting on first. `useServerActions.ts`'s Serve action falls through to
+> `model.contextLength` — the GGUF's *trained* window — when neither a custom
+> value nor a stored default exists, and sends it as an explicit
+> `contextLength`. That lands on the top rung, above the fit, so a GUI user
+> who serves a model with nothing configured gets the full trained context
+> whether or not it fits: the failure the floor at least never had. Fresh
+> installs already reached it, because an unset default has always been
+> `None` at that branch; the reset fix above widens the set to anyone who has
+> run `settings reset`. Sending nothing and letting admission decide is the
+> fix, and it is not made here — but unlike the three above, this one can
+> refuse to load rather than merely under-serve.
 
 ## Kill criteria
 

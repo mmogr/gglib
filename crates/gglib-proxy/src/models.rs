@@ -538,16 +538,17 @@ impl ErrorResponse {
     /// Create an error response for a detected agentic tool-call loop.
     ///
     /// Returned as HTTP 400 by the pre-dispatch loop guard when the request's
-    /// replayed history repeats the same tool-call batch beyond the shared
-    /// agent-path threshold (see `loop_guard`).  `type` and `code` are both
-    /// `loop_detected`, mirroring [`Self::context_length_exceeded`]'s shape.
+    /// replayed history repeats the same tool-call batch **back to back**
+    /// beyond the shared agent-path threshold (see `loop_guard`).  `type` and
+    /// `code` are both `loop_detected`, mirroring
+    /// [`Self::context_length_exceeded`]'s shape.
     pub fn loop_detected(signature: &str) -> Self {
         Self::with_code(
             format!(
                 "Agentic loop detected: this conversation repeats the same tool-call batch \
-                 (signature: {signature}). Aborting before another identical turn. Start a new \
-                 conversation or change approach; to disable this guard run \
-                 `gglib config settings set --proxy-loop-detection false`."
+                 with nothing in between (signature: {signature}). Aborting before another \
+                 identical turn. Start a new conversation or change approach; to disable this \
+                 guard run `gglib config settings set --proxy-loop-detection false`."
             ),
             "loop_detected",
             "loop_detected",

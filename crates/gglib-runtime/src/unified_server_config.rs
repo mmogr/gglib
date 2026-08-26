@@ -237,7 +237,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Context size — the one field with all four rungs in play
+    // Context size — the one field with every rung of the chain in play
     // ---------------------------------------------------------------
 
     #[test]

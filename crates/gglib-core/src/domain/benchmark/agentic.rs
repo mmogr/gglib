@@ -57,8 +57,11 @@ pub struct AgenticEvalConfig {
     /// [`TuneConfig::weights`]: super::tune::config::TuneConfig::weights
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weights: Option<ScoreWeights>,
-    /// Context size override (tokens). `None` resolves through the normal
-    /// chain (model server defaults → global setting → hardcoded default).
+    /// Context size override (tokens). `None` resolves through the harness's
+    /// own chain (model server defaults → global setting → hardcoded default),
+    /// which deliberately stops short of the fitted rung a real launch reaches
+    /// — so a benchmark taken with nothing configured is taken at the floor.
+    /// Recorded in ADR 0009's amendment; not the serving path's chain.
     #[serde(default)]
     pub ctx_size: Option<u64>,
     /// RNG seeds to repeat every task under, once each.

@@ -91,6 +91,14 @@ pub(super) fn settings_display_rows(
         if kebab_key == "default-model-id" {
             let display = model_display.clone().unwrap_or_else(|| "None".to_owned());
             rows.push((kebab_key, display));
+        } else if kebab_key == "default-context-size" && val.is_null() {
+            // Unset is the ordinary — and preferred — state for this one
+            // field: it is what lets each launch fit the context to the
+            // model and the machine. A bare "None" reads like something is
+            // missing, and this is the surface a person runs to find out
+            // what is configured. Every write surface says what empty means;
+            // the read surface has to as well.
+            rows.push((kebab_key, "None (fitted to this machine)".to_owned()));
         } else {
             collect_rows(&kebab_key, val, &mut rows);
         }
@@ -193,6 +201,38 @@ mod tests {
     }
 
     // ── settings_display_rows ─────────────────────────────────────────────────
+
+    /// An unset context is the recommended state, not a gap, and `show` is
+    /// where a person looks to find out what is configured. A bare "None"
+    /// there reads as something missing.
+    #[test]
+    fn an_unset_context_size_says_what_unset_means() {
+        let settings = Settings {
+            default_context_size: None,
+            ..Settings::default()
+        };
+        let rows = settings_display_rows(&settings, None);
+        let (_, value) = rows
+            .iter()
+            .find(|(k, _)| k == "default-context-size")
+            .expect("the row is listed");
+        assert_eq!(value, "None (fitted to this machine)");
+    }
+
+    /// A number the user chose is shown as that number, with nothing added.
+    #[test]
+    fn a_chosen_context_size_is_shown_plainly() {
+        let settings = Settings {
+            default_context_size: Some(32_768),
+            ..Settings::default()
+        };
+        let rows = settings_display_rows(&settings, None);
+        let (_, value) = rows
+            .iter()
+            .find(|(k, _)| k == "default-context-size")
+            .expect("the row is listed");
+        assert_eq!(value, "32768");
+    }
 
     #[test]
     fn settings_display_rows_uses_kebab_case_keys() {

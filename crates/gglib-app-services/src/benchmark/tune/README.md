@@ -38,7 +38,15 @@ only: those the guards aborted, or that completed at least
 `MIN_ITERATIONS_FOR_LOOP_RISK` tool-executing iterations. A run that
 answered after a single tool batch never gave `LoopDetector` two
 signatures to compare, so it could not have looped, and counting it as
-having avoided one turns the axis into a reward for not iterating. When
+having avoided one turns the axis into a reward for not iterating.
+
+The bound is a lower one and always has been: two iterations make a repeat
+*representable*, not inevitable, so a task whose batches all differed was
+already counted as eligible while being incapable of tripping. Now that
+`LoopDetector` counts consecutively, a task that alternated between two
+batches is in that same position, so the denominator is slightly wider than
+before. Left as is — narrowing it means replaying each task's batch sequence
+inside the scorer, which is a heavier instrument than the axis is worth. When
 nothing was eligible the axis is `None` — unmeasured, not perfect — and
 `compute_composite_score` drops it and renormalises the remaining weight
 rather than imputing a score.
