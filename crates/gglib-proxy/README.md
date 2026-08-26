@@ -622,7 +622,8 @@ unchanged; the upstream llama-server produces its own diagnostic.
 ### Problem
 
 The built-in agent loop (`gglib-agent`) aborts a run when the model repeats
-the same tool-call batch or the same response text. External agentic clients
+the same tool-call batch back to back, or the same response text anywhere in
+the session. External agentic clients
 (Cline, Roo Code, Copilot BYOK) run their loop client-side, where those guards
 never execute — a model looping in such a session burns a model swap plus a
 full generation per stuck turn, and nothing in the system notices except the
@@ -639,15 +640,17 @@ conversation every turn, so the scan is stateless: no session store, no TTL.
 
 | Signal | Threshold | Source |
 |--------|-----------|--------|
-| Identical tool-call batch (FNV-1a signature over canonicalized args) | 3rd occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
-| Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends | 16th occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
+| Identical tool-call batch (FNV-1a signature over canonicalized args), repeated back to back | 3rd consecutive occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
+| Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends, repeated back to back | 16th consecutive occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
 | Identical assistant response text (session-wide, catches A→B→A→B oscillation) | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
 
 A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
 cost — `type` and `code` are `loop_detected` or `stagnation_detected`
 (mirroring `context_length_exceeded`'s shape), and the message names the
 off-switch: `gglib config settings set --proxy-loop-detection false`, for a
-client that legitimately replays identical batches. Detection lags the agent
+client that legitimately repeats identical batches with nothing in between.
+(Replaying identical batches across a history no longer trips it — the count
+is back to back.) Detection lags the agent
 path's per-iteration check by one turn (the history at turn N shows responses
 1..N-1), capping a runaway session at threshold+1 turns.
 

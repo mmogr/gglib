@@ -102,9 +102,16 @@ pub const DEFAULT_MAX_OBSERVATION_STEPS: usize = 15;
 
 /// Configuration that governs a single agentic loop run.
 ///
-/// All fields have sensible defaults via [`Default`] that match the historical
-/// TypeScript frontend constants (previously in `agentLoop.ts`, now reflected
-/// in `streamAgentChat.ts`).
+/// All fields have sensible defaults via [`Default`]. These used to mirror
+/// TypeScript constants in the frontend's own agent loop; that loop is
+/// backend-driven now, and `streamAgentChat.ts` records these fields as
+/// deliberately absent from it, so nothing in the frontend's loop competes with
+/// the values here. What the settings UI still carries are the *ceilings and
+/// floors* it clamps user input to (`MAX_PARALLEL_TOOLS_CEILING`,
+/// `TOOL_TIMEOUT_MS_FLOOR` and friends), and its own copies of the two defaults
+/// a person can edit — `MAX_TOOL_ITERATIONS`, pinned against this file by
+/// `settingsBounds.test.ts`, and `MAX_STAGNATION_STEPS`, pinned by
+/// `settingsParity.test.ts`.
 ///
 /// # Serialisation
 ///
@@ -117,8 +124,6 @@ pub const DEFAULT_MAX_OBSERVATION_STEPS: usize = 15;
 #[non_exhaustive]
 pub struct AgentConfig {
     /// Maximum number of LLM→tool→LLM iterations before the loop is aborted.
-    ///
-    /// Frontend constant: `DEFAULT_MAX_TOOL_ITERS = 25`.
     pub max_iterations: usize,
 
     /// Maximum number of tool calls that may be executed in parallel per iteration.
@@ -132,26 +137,23 @@ pub struct AgentConfig {
     /// serialising them.  Setting this to `1` means the model may only request
     /// **one** tool call per turn; two calls in a single response will abort the
     /// loop, not run them sequentially.
-    ///
-    /// Frontend constant: `MAX_PARALLEL_TOOLS = 5`.
     pub max_parallel_tools: usize,
 
     /// Per-tool execution timeout in milliseconds.
-    ///
-    /// Frontend constant: `TOOL_TIMEOUT_MS = 30_000`.
     pub tool_timeout_ms: u64,
 
     /// Maximum total character budget across all messages before context pruning
     /// is applied.
-    ///
-    /// Frontend constant: `MAX_CONTEXT_CHARS = 180_000`.
     pub context_budget_chars: usize,
 
     /// Maximum number of times the same tool-call batch signature may repeat
-    /// before the loop is declared stuck and aborted with
+    /// **back to back** before the loop is declared stuck and aborted with
     /// [`crate::ports::AgentError::LoopDetected`].
     ///
-    /// Frontend constant: `MAX_SAME_SIGNATURE_HITS = 2` in `streamAgentChat.ts`.
+    /// Consecutive, not session-wide: a batch with a different signature
+    /// resets the run. Contrast [`Self::max_stagnation_steps`] below, which
+    /// stays session-wide deliberately. See the `loop_detection` module docs
+    /// for why the two differ.
     ///
     /// Set to `None` to disable loop detection entirely (useful in tests that
     /// deliberately repeat the same tool call).
@@ -168,7 +170,9 @@ pub struct AgentConfig {
     /// With `max_stagnation_steps = 0`, the error fires on the **very first**
     /// occurrence of any repeated text.
     ///
-    /// Frontend constant: `MAX_STAGNATION_STEPS = 5` in `streamAgentChat.ts`.
+    /// Counted session-wide, unlike [`Self::max_repeated_batch_steps`] above:
+    /// A → B → A → B oscillation in the text is caught, and is deliberately
+    /// not caught for tool batches. See the `loop_detection` module docs.
     ///
     /// Set to `None` to disable stagnation detection entirely (useful in tests
     /// that return a fixed LLM response across many iterations).
@@ -196,14 +200,17 @@ pub struct AgentConfig {
     // -------------------------------------------------------------------------
     //
     // Standard loop detection (max_repeated_batch_steps) hashes tool names and
-    // arguments to detect stuck cycles.  Observation-only tools (e.g. browser
+    // arguments to detect a batch repeated back to back.  It does not detect
+    // cycles: a batch that recurs with other work in between resets the run,
+    // so A -> B -> A -> B escapes it entirely.  See the `loop_detection`
+    // module docs for why that cost was taken.  Observation-only tools (e.g. browser
     // snapshots, screenshots) legitimately repeat with identical signatures
     // because they take no meaningful arguments, yet return completely different
     // page content on each call.  These two fields allow a separate, higher
     // threshold to be applied when every tool in a batch is classified as an
     // exploratory tool, preventing false-positive loop aborts during ReAct
-    // observation and navigation cycles while still eventually catching a
-    // genuinely confused agent.
+    // observation and navigation cycles while still catching an agent that
+    // repeats one of them back to back without pause.
     /// Substring/suffix patterns used to classify tools as **exploratory**.
     ///
     /// "Exploratory" tools are those that drive progress by repeatedly
@@ -241,14 +248,14 @@ pub struct AgentConfig {
     pub observation_tools: Vec<String>,
 
     /// Maximum number of times an exploratory-tool-only batch may repeat
-    /// before loop detection fires.
+    /// **back to back** before loop detection fires.
     ///
     /// Applied **instead of** [`Self::max_repeated_batch_steps`] when every
     /// tool call in the current batch matches a pattern in
     /// [`Self::observation_tools`].  A higher value (default: 15) gives the
     /// agent room to browse multiple pages, walk directory trees, or paginate
-    /// through API results while still eventually aborting a genuinely confused
-    /// agent before it exhausts the token budget.
+    /// through API results while still aborting an agent that repeats one
+    /// identical batch back to back before it exhausts the token budget.
     ///
     /// **Mixed batches** (at least one non-exploratory tool alongside an
     /// exploratory one) always fall back to [`Self::max_repeated_batch_steps`]
@@ -480,7 +487,7 @@ mod tests {
         assert_eq!(
             cfg.max_stagnation_steps,
             Some(5),
-            "must mirror MAX_STAGNATION_STEPS from streamAgentChat.ts"
+            "the documented default stagnation ceiling"
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);
         assert_eq!(cfg.prune_keep_tail_messages, 12);

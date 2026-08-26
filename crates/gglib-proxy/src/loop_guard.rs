@@ -1,7 +1,8 @@
 //! Pre-dispatch loop/stagnation guard for `/v1/chat/completions`.
 //!
 //! The built-in agent loop (`gglib-agent`) aborts a run when the model
-//! repeats the same tool-call batch or the same response text — but external
+//! repeats the same tool-call batch back to back, or the same response text
+//! anywhere in the session — but external
 //! agentic clients (Cline, Roo Code, Copilot BYOK) run their own loop
 //! client-side, where those guards never execute.  A model looping in such a
 //! session burns a model swap plus a full generation per stuck turn, and
@@ -90,7 +91,8 @@ impl LoopGuardConfig {
 pub(crate) enum LoopGuardVerdict {
     /// No guard tripped — forward the request.
     Pass,
-    /// The same tool-call batch signature repeats beyond the threshold.
+    /// The same tool-call batch signature repeats back to back, beyond the
+    /// threshold. Occurrences separated by other work do not count.
     LoopDetected {
         /// The repeated batch signature (`name:hash|name:hash…`).
         signature: String,
@@ -220,6 +222,13 @@ pub(crate) struct ScanOutcome {
 /// Mirrors `gglib-agent`'s per-iteration `Guards::check` exactly: stagnation
 /// records every assistant message's text (the detector itself skips empty
 /// text), and the loop detector only sees non-empty tool-call batches.
+///
+/// That second half decides what breaks a loop run, now that the detector
+/// counts consecutively. Only an assistant turn carrying a *different* batch
+/// does. A `role: "tool"` result, a prose answer and a user interjection are
+/// all transparent to it — which is load bearing rather than incidental, since
+/// every real tool call is answered by a result message before the next one,
+/// so a run those could break would never reach two.
 ///
 /// Fail-open: an unparseable body returns [`LoopGuardVerdict::Pass`].
 ///

@@ -2,8 +2,6 @@
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
-
 use serde_json::Value;
 
 use super::fnv1a::fnv1a_64;
@@ -116,8 +114,10 @@ pub fn batch_signature(calls: &[ToolCall]) -> String {
 /// observation-only, so the function always returns `false`.
 ///
 /// An empty `calls` slice returns `true` (vacuous truth), but the caller
-/// ([`LoopDetector::check`]) is never invoked with an empty batch — the
-/// agent loop skips loop detection when there are no tool calls.
+/// ([`LoopDetector::check`]) is never invoked with an empty batch — both the
+/// agent loop and the proxy's history scan skip loop detection when there are
+/// no tool calls. That is now load bearing rather than merely tidy: an empty
+/// batch would hash to a signature of its own and break the consecutive run.
 pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
     if patterns.is_empty() {
         return false;
@@ -134,13 +134,42 @@ pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
 // LoopDetector
 // =============================================================================
 
-/// Stateful guard that detects when the same tool-call batch repeats.
+/// Stateful guard that detects when the same tool-call batch repeats **back to
+/// back**.
 ///
 /// Create once per agent run and call [`LoopDetector::check`] after every
 /// iteration that produces tool calls.
+///
+/// Counting is run-length, not session-wide: only the current unbroken run of
+/// one signature is held, and a different batch discards it. A session-wide
+/// tally made any long conversation terminal — a client replays the whole
+/// history every turn, so a batch that recurred often enough anywhere in the
+/// session was rejected on every subsequent request for the rest of it. The
+/// case that made it urgent is ordinary work rather than a loop: an agent that
+/// runs one command, edits, runs it again, edits again and runs it a third
+/// time reaches three occurrences of an identical batch well inside a normal
+/// task, and `max_repeated_batch_steps` is 2.
+///
+/// The cost is that a *cycle* of tool batches is no longer caught, at any
+/// period of two or more — A → B → A → B, and equally A → A → B repeating,
+/// where the run reaches the threshold on every pass without ever crossing
+/// it. That is accepted rather than worked around: separating a cycle from
+/// the scattered repeats above needs a window or a decay rate, and there is
+/// no measurement behind either number.
+///
+/// Nothing backstops it in the general case, and saying otherwise would be
+/// worse than the gap. [`super::StagnationDetector`] keeps its session-wide
+/// counting and catches an oscillating session *only if the model also
+/// repeats its prose* — and a tool-call-only turn carries `content: null`,
+/// which that detector ignores by design. So a model alternating two batches
+/// and narrating nothing is now refused by neither guard. What observes it is
+/// `identical_result_repeats` in the proxy's ledger, which is a reading for a
+/// person and not a verdict.
 #[derive(Debug, Default)]
 pub struct LoopDetector {
-    hits: HashMap<String, usize>,
+    /// The signature of the most recent batch, and how many times in a row it
+    /// has now been seen. `None` until the first batch arrives.
+    run: Option<(String, usize)>,
 }
 
 impl LoopDetector {
@@ -153,11 +182,19 @@ impl LoopDetector {
     ///   is used as the threshold (falling back to `max_strikes` when `None`).
     /// - Otherwise, `max_strikes` (`max_repeated_batch_steps`) is used.
     ///
-    /// The count is incremented **before** the comparison so that
+    /// The run length is incremented **before** the comparison so that
     /// `effective_max = 2` allows two identical batches before erroring on
     /// the third.
     ///
     /// `effective_max = 0` rejects the very first occurrence (zero tolerance).
+    ///
+    /// A batch with a different signature resets the run to 1 — and that is
+    /// the only thing that resets it. Both call sites skip this method when
+    /// the batch is empty, so a prose answer, a `role: "tool"` result and a
+    /// user interjection all pass without breaking a run. That is load
+    /// bearing rather than incidental: every real tool call is answered by a
+    /// result message before the next one, so a run broken by anything other
+    /// than a different batch could never reach two.
     pub fn check(
         &mut self,
         calls: &[ToolCall],
@@ -171,9 +208,16 @@ impl LoopDetector {
             max_strikes
         };
         let sig = batch_signature(calls);
-        let entry = self.hits.entry(sig.clone()).or_insert(0);
-        *entry += 1;
-        let count = *entry;
+        let count = match &mut self.run {
+            Some((last, count)) if *last == sig => {
+                *count += 1;
+                *count
+            }
+            slot => {
+                *slot = Some((sig.clone(), 1));
+                1
+            }
+        };
         if count > effective_max {
             return Err(AgentError::LoopDetected { signature: sig });
         }

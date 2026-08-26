@@ -27,8 +27,9 @@ This crate implements:
 - **`AgentLoop`** — concrete implementation of `AgentLoopPort`; drives the
   ReAct-style LLM→tool→LLM cycle until a final answer or termination condition
 - **Guard enforcement** — runs `gglib_core::domain::agent`'s `LoopDetector`
-  (FNV-1a batch-signature tracking) and `StagnationDetector` (repeated-response
-  hashing) after every iteration
+  (FNV-1a batch-signature tracking, counting back-to-back repeats only) on
+  tool-call-producing iterations, and `StagnationDetector` (repeated-response
+  hashing, session-wide) on every iteration
 - **Parallel tool execution** — bounded concurrency with per-tool timeout
 - **Stream collection** — consumes `LlmCompletionPort` stream, forwards text
   deltas in real-time, accumulates tool-call deltas until `Done`

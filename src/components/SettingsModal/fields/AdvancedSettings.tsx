@@ -139,11 +139,11 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           onChange={setProxyLoopDetection}
           disabled={saving}
         >
-          On by default: a conversation whose history repeats the same tool-call batch or
-          assistant response beyond the agent-path thresholds is rejected with a clean 400
-          before any model work, instead of burning a model swap and a full generation per
-          stuck turn. Turn this off only for a client that legitimately replays identical
-          batches.
+          On by default: a conversation whose history repeats the same tool-call batch back
+          to back, or the same assistant response anywhere in the session, beyond the
+          agent-path thresholds is rejected with a clean 400 before any model work, instead
+          of burning a model swap and a full generation per stuck turn. Turn this off only
+          for a client that legitimately repeats identical batches with nothing in between.
         </ToggleField>
 
         <ToggleField
@@ -179,7 +179,7 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           spec={MAX_STAGNATION_STEPS}
           value={agentGuards.maxStagnationSteps}
           onChange={(value) => setAgentGuardSetting('maxStagnationSteps', value)}
-          description="Consecutive no-progress steps before an agent loop stops. Shared by the built-in agent loop and the proxy's turn-level guard, so the two paths cannot drift."
+          description="Repeats of one assistant response before an agent loop stops. Counted across the whole session, not just consecutively, so A-B-A-B oscillation is caught. Shared by the built-in agent loop and the proxy's turn-level guard, so the two paths cannot drift."
           disabled={saving}
         />
       </div>

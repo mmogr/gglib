@@ -143,13 +143,16 @@ pub struct Settings {
     /// `/v1/chat/completions`.
     ///
     /// `None`/`Some(true)` → active (the default): a conversation whose
-    /// replayed history already repeats the same tool-call batch or the same
-    /// assistant response beyond the shared agent-path thresholds is rejected
+    /// replayed history already repeats the same tool-call batch back to back,
+    /// or the same assistant response anywhere in the session, beyond the
+    /// shared agent-path thresholds is rejected
     /// with a clean HTTP 400 (`loop_detected` / `stagnation_detected`)
     /// **before** admission — no model swap, no generation, no ten minutes of
     /// scrolling garbage. `Some(false)` disables the guard entirely: the
-    /// escape hatch for a client that legitimately replays identical
-    /// tool-call batches or responses.
+    /// escape hatch for a client that legitimately repeats identical
+    /// tool-call batches with nothing in between, or repeats a response.
+    /// Replaying identical batches across a history no longer trips it — the
+    /// batch count is back to back.
     ///
     /// Note the inverse polarity to [`Self::trust_client_sampling`]: absent
     /// means **on**, because the guard is protection the endpoint should not

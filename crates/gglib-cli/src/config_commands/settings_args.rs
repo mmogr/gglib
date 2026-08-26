@@ -67,10 +67,11 @@ pub struct SettingsSetArgs {
     pub trust_client_sampling: Option<bool>,
     /// Run the proxy's turn-level loop/stagnation guard on
     /// /v1/chat/completions. Enabled by default: a conversation whose
-    /// replayed history repeats the same tool-call batch or assistant
-    /// response beyond the agent-path thresholds is rejected with a
-    /// clean 400 before any model work. Set false only for a client
-    /// that legitimately replays identical batches.
+    /// replayed history repeats the same tool-call batch back to back,
+    /// or the same assistant response anywhere in the session, beyond
+    /// the agent-path thresholds is rejected with a clean 400 before
+    /// any model work. Set false only for a client that legitimately
+    /// repeats identical batches with nothing in between.
     #[arg(long)]
     pub proxy_loop_detection: Option<bool>,
     /// Cap the temperature on agentic turns. Enabled by default: a

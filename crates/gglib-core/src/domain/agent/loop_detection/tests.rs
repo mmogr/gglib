@@ -137,9 +137,13 @@ fn loop_detected_on_third_identical_batch_with_max_strikes_2() {
 }
 
 #[test]
-fn different_batches_do_not_trigger_loop() {
-    // Two distinct batches should each have independent hit counters.
-    // Each can appear up to max_strikes times without triggering.
+fn interleaved_batches_never_trigger_a_loop() {
+    // This test used to assert the opposite: that A and B kept independent
+    // session-wide tallies, and that A was rejected on its 11th occurrence
+    // however much work happened in between. That is the wall this change
+    // removes. An agent alternating between two pieces of real work is doing
+    // exactly what it should, and no number of alternations is evidence of a
+    // loop — only repetition with nothing in between is.
     let mut det = LoopDetector::default();
     let a = vec![ToolCall {
         id: "c1".into(),
@@ -151,26 +155,82 @@ fn different_batches_do_not_trigger_loop() {
         name: "b".into(),
         arguments: json!({}),
     }];
-    // max_strikes = 10: each may appear 10 times
-    for _ in 0..10 {
+    // Well past the old session-wide ceiling of 10, and past the tightest
+    // threshold the guard ever applies.
+    for i in 0..50 {
         assert!(
-            det.check(&a, 10, &[], None).is_ok(),
-            "batch a should not trigger within limit"
+            det.check(&a, 2, &[], None).is_ok(),
+            "alternation {i}: batch a broke b's run and must start over"
         );
         assert!(
-            det.check(&b, 10, &[], None).is_ok(),
-            "batch b should not trigger within limit"
+            det.check(&b, 2, &[], None).is_ok(),
+            "alternation {i}: batch b broke a's run and must start over"
         );
     }
-    // 11th appearance of `a` should fire (count 11 > 10)
+}
+
+#[test]
+fn a_run_broken_and_resumed_starts_over() {
+    // The counter holds one run, not a per-signature history: returning to a
+    // batch after doing something else is a fresh start, not a continuation.
+    let mut det = LoopDetector::default();
+    let a = vec![ToolCall {
+        id: "c1".into(),
+        name: "a".into(),
+        arguments: json!({}),
+    }];
+    let b = vec![ToolCall {
+        id: "c2".into(),
+        name: "b".into(),
+        arguments: json!({}),
+    }];
+
+    // Two of `a` — one short of the threshold.
+    assert!(det.check(&a, 2, &[], None).is_ok());
+    assert!(det.check(&a, 2, &[], None).is_ok());
+    // `b` breaks the run.
+    assert!(det.check(&b, 2, &[], None).is_ok());
+    // `a` again is occurrence 1 of a new run, not 3 of the old one.
     assert!(
-        det.check(&a, 10, &[], None).is_err(),
-        "batch a should trigger on 11th occurrence"
+        det.check(&a, 2, &[], None).is_ok(),
+        "a resumed run must start at 1, not continue from 2"
     );
-    // `b` is still at count 10 — one more must fire
+    assert!(det.check(&a, 2, &[], None).is_ok());
+    // And the new run trips on its own third. This is the half that keeps the
+    // change honest: a reset that restored the allowance without restoring the
+    // guard would pass every assertion above and fail here. The unbroken case
+    // is `loop_detected_on_third_identical_batch_with_max_strikes_2`.
     assert!(
-        det.check(&b, 10, &[], None).is_err(),
-        "batch b should trigger on 11th occurrence"
+        det.check(&a, 2, &[], None).is_err(),
+        "the resumed run must still trip at its own threshold"
+    );
+}
+
+#[test]
+fn the_batch_that_breaks_a_run_starts_its_own() {
+    // The reset arm has to *record* the new signature, not merely forget the
+    // old one. Forgetting passes every other test here — the resumed batch
+    // starts at 1 either way — and only diverges on the batch that did the
+    // breaking, which would silently get one extra strike.
+    let mut det = LoopDetector::default();
+    let a = vec![ToolCall {
+        id: "c1".into(),
+        name: "a".into(),
+        arguments: json!({}),
+    }];
+    let b = vec![ToolCall {
+        id: "c2".into(),
+        name: "b".into(),
+        arguments: json!({}),
+    }];
+
+    assert!(det.check(&a, 2, &[], None).is_ok(), "a: run of 1");
+    // `b` breaks a's run and is itself occurrence 1 of its own.
+    assert!(det.check(&b, 2, &[], None).is_ok(), "b: occurrence 1");
+    assert!(det.check(&b, 2, &[], None).is_ok(), "b: occurrence 2");
+    assert!(
+        det.check(&b, 2, &[], None).is_err(),
+        "b's third must trip — the breaking batch was recorded, not forgotten"
     );
 }
 

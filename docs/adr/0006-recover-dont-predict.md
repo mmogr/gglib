@@ -1,7 +1,8 @@
 # ADR 0006 — Recover, don't predict: the scheduler is removed and defaults come from the model
 
 - **Status:** Accepted
-- **Date:** 2026-08-12
+- **Date:** 2026-08-12 (amended 2026-08-26 — see the note at the end of the
+  2026-08-26 postscript)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md),
@@ -170,6 +171,20 @@ to decide what to build next, which is usually but not always a failure.** A
 counter that is not a defect must say so where it is read — `gglib proxy
 dashboard` prints both under an `observed` heading below the defect rows, in a
 section titled *Per-model signals* rather than *Defects*.
+
+> **Amended 2026-08-26 — readings either side of the loop-guard change are not
+> comparable.** The criterion above stakes a build-or-cancel decision on
+> `identical_result_repeats` reading near zero in real use. `LoopDetector` has
+> since stopped counting a batch's occurrences session-wide and counts only
+> back-to-back runs, so conversations that were rejected before — and therefore
+> contributed nothing further — now continue and can go on repeating. The
+> population feeding the counter is larger, and the rate reads higher for a
+> reason that has nothing to do with models getting worse.
+>
+> The direction is conservative: a higher reading makes cancelling the arm less
+> likely, not more, so the criterion cannot be tripped into a wrong *cancel* by
+> this. But two weeks of data spanning the change is two populations, and a
+> decision taken on it should say which side it was gathered from.
 
 ## Notes
 
