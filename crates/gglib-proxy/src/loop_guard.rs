@@ -31,13 +31,14 @@
 //! protection and never gets a parse-driven rejection.
 
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 use serde::Deserialize;
 use serde_json::Value;
 
-use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
+use gglib_core::domain::agent::{
+    AgentConfig, LoopDetector, StagnationDetector, batch_results_hash, batch_signature,
+    hash_result_content,
+};
 use gglib_core::ports::AgentError;
 use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 
@@ -330,18 +331,16 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
 ///
 /// `rest` is the history *after* that assistant message; the answers are the
 /// contiguous run of result messages at its head, which bounds the join to
-/// this turn and makes repeated synthetic ids harmless.
+/// this turn and makes repeated synthetic ids harmless. gglib mints those ids
+/// itself for dialect models (`DelimitedToolCallParser` restarts at zero on
+/// every response), so `call_qwen_0` recurs on every turn of a replayed
+/// conversation and a global index would resolve every occurrence of a batch
+/// to the same result.
 ///
-/// Each call is paired with its own answer before sorting. Sorting bare result
-/// hashes would meet the ordering goal — [`batch_signature`] sorts too, so the
-/// same parallel batch re-emitted in a different order must still match — but
-/// it severs which call produced which result, and a two-call batch whose
-/// answers swapped would compare equal.
-///
-/// The pair key renders `arguments` rather than hashing it structurally, which
-/// relies on `serde_json::Value` being a `BTreeMap`. Enabling that crate's
-/// `preserve_order` feature would make the rendering insertion-ordered and this
-/// join would quietly start under-reporting.
+/// The windowing is all that lives here. Pairing each call with its own
+/// answer, and hashing the pairs, is
+/// [`gglib_core::domain::agent::batch_results_hash`] — shared with the agent
+/// loop, which has the pairing for free and no window to find.
 ///
 /// `None` when any call is unanswered — a partially-answered batch says
 /// nothing about whether work repeated.
@@ -349,48 +348,14 @@ fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> Option<u64>
     let answers: HashMap<&str, u64> = rest
         .iter()
         .take_while(|m| m.role.as_str() == Some("tool"))
-        .filter_map(|m| Some((m.tool_call_id.as_str()?, hash_content(&m.content))))
+        .filter_map(|m| Some((m.tool_call_id.as_str()?, hash_result_content(&m.content))))
         .collect();
 
-    // Pairs, not bare hashes: sorting results alone severs which call
-    // produced which, so a two-call batch whose answers swap between
-    // occurrences would compare equal.
-    let mut pairs: Vec<(&str, &Value, u64)> = calls
+    let per_call: Vec<Option<u64>> = calls
         .iter()
-        .map(|c| {
-            let answer = answers.get(c.id.as_str()).copied()?;
-            Some((c.name.as_str(), &c.arguments, answer))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    // `Value` is not `Ord`/`Hash`, and it is a `BTreeMap` underneath, so its
-    // rendering is key-canonical and stands in for both.
-    let mut keyed: Vec<(String, u64)> = pairs
-        .drain(..)
-        .map(|(name, args, answer)| (format!("{name}\u{0}{args}"), answer))
+        .map(|c| answers.get(c.id.as_str()).copied())
         .collect();
-    keyed.sort_unstable();
-
-    let mut hasher = DefaultHasher::new();
-    keyed.hash(&mut hasher);
-    Some(hasher.finish())
-}
-
-/// Hash a tool result's content for equality alone.
-///
-/// Deliberately *not* [`extract_text`]: that projects to the empty string for
-/// objects, numbers, nulls and non-text parts, which would make two different
-/// structured results compare equal — a manufactured "identical" repeat. The
-/// value is hashed as it arrived, and the string case avoids a copy because
-/// tool results run to tens of kilobytes on this pre-admission path.
-fn hash_content(content: &Value) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    match content {
-        // Discriminated so `null` and the string "null" cannot collide, in a
-        // function whose only job is equality.
-        Value::String(s) => (0u8, s).hash(&mut hasher),
-        other => (1u8, other.to_string()).hash(&mut hasher),
-    }
-    hasher.finish()
+    batch_results_hash(calls, &per_call)
 }
 
 /// Map a detector error onto the guard's verdict.

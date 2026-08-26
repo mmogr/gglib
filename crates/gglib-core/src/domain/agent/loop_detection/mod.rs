@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub(crate) mod results;
 #[cfg(test)]
 mod tests;
 
