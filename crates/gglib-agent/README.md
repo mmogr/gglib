@@ -28,7 +28,7 @@ This crate implements:
   ReAct-style LLM→tool→LLM cycle until a final answer or termination condition
 - **Guard enforcement** — runs `gglib_core::domain::agent`'s `LoopDetector` on
   tool-call-producing iterations, and `StagnationDetector` (repeated-response
-  hashing, session-wide) on every iteration. The loop detector counts
+  hashing, windowed) on iterations that made no tool call. The loop detector counts
   back-to-back repeats only, and only those that got the same answer back, so
   it needs telling twice: `check` before the batch executes and
   `record_results` once its answers exist

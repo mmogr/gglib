@@ -433,9 +433,8 @@ impl Guards {
     /// Check both stagnation and loop-detection guards against the current
     /// iteration's response.
     ///
-    /// Stagnation is checked on **every** iteration — including ones that will
-    /// become the final answer — so the detector catches models that repeat
-    /// the same text regardless of whether tool calls are present.
+    /// Stagnation is checked only on iterations that made **no** tool calls —
+    /// a turn that called a tool is doing work, and the loop detector judges it.
     ///
     /// Loop detection is only checked when tool calls are present, since an
     /// empty batch would produce a degenerate signature — and, now that the
@@ -458,7 +457,8 @@ impl Guards {
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<Option<BatchRecord>, AgentError> {
         if let Some(max_steps) = config.max_stagnation_steps {
-            if let Err(e) = self.stagnation.record(content, max_steps) {
+            let did_work = !tool_calls.is_empty();
+            if let Err(e) = self.stagnation.record(content, did_work, max_steps) {
                 emit_error_event(tx, &e.to_string()).await;
                 return Err(e);
             }

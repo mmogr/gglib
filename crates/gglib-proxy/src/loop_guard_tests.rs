@@ -393,33 +393,21 @@ fn a_prose_turn_between_two_identical_batches_does_not_hide_the_repeat() {
 
 #[test]
 fn a_stagnation_rejection_reports_on_the_message_that_tripped_it() {
-    // The bits are computed before the guards run, so a turn carrying both
-    // repeated text and a fresh batch does not report the previous batch.
-    let repeated_text_with_batch = |id: &str, path: &str| {
-        json!({
-            "role": "assistant",
-            "content": "still working on it",
-            "tool_calls": [{
-                "id": id, "type": "function",
-                "function": { "name": "write_file",
-                              "arguments": format!(r#"{{"path":"{path}"}}"#) }
-            }]
-        })
-    };
+    // Stagnation can only trip on a turn that called no tools, and such a turn
+    // clears the three bits before the guard runs. So the rejection always
+    // reports on itself and can never carry a reading from the batch before it.
     let mut msgs = vec![
         assistant_call_id("c0", "write_file", r#"{"path":"a.rs"}"#),
         tool_result("c0", "same"),
         assistant_call_id("c1", "write_file", r#"{"path":"a.rs"}"#),
         tool_result("c1", "same"),
     ];
-    // Now enough repeated *text* turns to trip stagnation, each with a
-    // distinct batch of its own.
-    for i in 0..8 {
-        msgs.push(repeated_text_with_batch(
-            &format!("t{i}"),
-            &format!("f{i}.rs"),
-        ));
-        msgs.push(tool_result(&format!("t{i}"), "ok"));
+    assert!(
+        scan_history(&body(&msgs), &cfg()).identical_result_repeat,
+        "precondition: the second batch is an identical repeat"
+    );
+    for _ in 0..6 {
+        msgs.push(assistant_text("still working on it"));
     }
     let outcome = scan_history(&body(&msgs), &cfg());
     assert!(matches!(
@@ -428,7 +416,7 @@ fn a_stagnation_rejection_reports_on_the_message_that_tripped_it() {
     ));
     assert!(
         !outcome.identical_result_repeat,
-        "the newest batch was distinct; the stale bit must not survive"
+        "the tripping turn called no tools; the stale bit must not survive"
     );
 }
 
@@ -764,8 +752,10 @@ fn a_rejection_does_not_inherit_the_previous_turns_rescue() {
 /// tripped_it` cannot catch it either: its turns use distinct batches, so no
 /// rescue ever precedes the trip and the stale value would be `false` anyway.
 ///
-/// This needs a turn that both rescues *and* is followed by a stagnation trip,
-/// which means assistant messages carrying text as well as tool calls.
+/// The invariant is now stronger than the arm that implements it: a turn which
+/// called a tool is never recorded, so the trip can only land on a prose turn —
+/// and a prose turn has already cleared all three bits by the time the guard
+/// runs. The rescue below is therefore real, and provably cannot reach it.
 #[test]
 fn a_stagnation_rejection_does_not_inherit_the_previous_turns_rescue() {
     let with_text = |id: &str, path: &str| {
@@ -794,9 +784,10 @@ fn a_stagnation_rejection_does_not_inherit_the_previous_turns_rescue() {
     assert_eq!(mid.verdict, LoopGuardVerdict::Pass, "precondition: {mid:?}");
     assert!(mid.repeat_rescued, "precondition: turn 5 is a rescue");
 
-    // A sixth repeat of the same text trips stagnation.
-    msgs.push(with_text("s1", "g.rs"));
-    msgs.push(tool_result("s1", "ok"));
+    // Prose turns then trip stagnation, which is the only way it can now trip.
+    for _ in 0..6 {
+        msgs.push(assistant_text("no progress"));
+    }
     let outcome = scan_history(&body(&msgs), &cfg());
     assert!(
         matches!(outcome.verdict, LoopGuardVerdict::StagnationDetected { .. }),
