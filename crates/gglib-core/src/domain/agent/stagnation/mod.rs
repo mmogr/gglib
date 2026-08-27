@@ -47,6 +47,17 @@ pub struct StagnationDetector {
 }
 
 impl StagnationDetector {
+    /// Forget the window, as a user turn does.
+    ///
+    /// The counterpart to [`LoopDetector::break_run`](crate::domain::agent::LoopDetector::break_run),
+    /// and the other half of what a fresh detector gives the agent path. A
+    /// window alone cannot rescue a conversation whose repeats were *adjacent*:
+    /// they stay in the transcript, and a replayed scan trips on them at the
+    /// same point forever. Someone saying something new is what moves on.
+    pub fn clear(&mut self) {
+        self.recent.clear();
+    }
+
     /// Record one assistant turn and error if the model has stagnated.
     ///
     /// `made_tool_calls` says whether this turn also issued a tool-call batch.

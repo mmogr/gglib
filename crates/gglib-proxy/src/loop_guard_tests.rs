@@ -219,20 +219,19 @@ fn prose_and_results_between_identical_batches_do_not_break_the_run() {
 }
 
 #[test]
-fn a_user_interjection_between_identical_batches_does_not_break_the_run() {
-    // Same property for the `_ =>` arm of the role match: a user turn ends
-    // the *observation* the two counters report, but it is not work, so it
-    // does not restore the model's allowance to repeat itself.
+fn a_user_interjection_between_identical_batches_breaks_the_run() {
+    // The `_ =>` arm of the role match. A user turn is not work, but it is a
+    // person taking the wheel, and on the agent path it ends a run outright:
+    // `AgentLoop::run` builds a fresh `Guards` per user message. One detector
+    // walking a whole replayed conversation has to be told. Two batches after
+    // the interjection is a run of two, which is inside the allowance.
     let msgs = vec![
         assistant_call("write_file", r#"{"path":"a.rs"}"#),
         json!({ "role": "user", "content": "keep going" }),
         assistant_call("write_file", r#"{"path":"a.rs"}"#),
         assistant_call("write_file", r#"{"path":"a.rs"}"#),
     ];
-    assert!(matches!(
-        verdict_of(&body(&msgs), &cfg()),
-        LoopGuardVerdict::LoopDetected { .. }
-    ));
+    assert_eq!(verdict_of(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
 }
 
 #[test]

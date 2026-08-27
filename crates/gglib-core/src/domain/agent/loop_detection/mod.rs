@@ -180,13 +180,11 @@ impl LoopDetector {
     /// allows two identical batches and errors on the third, and
     /// `max_strikes = 0` rejects the very first occurrence.
     ///
-    /// A batch with a different signature resets the run to one, and that is
-    /// the only thing that resets it. Both call sites skip this method when the
-    /// batch is empty, so a prose answer, a `role: "tool"` result and a user
-    /// interjection are all transparent to a run. That is load bearing rather
-    /// than incidental: every real tool call is answered by a result message
-    /// before the next one, so a run that those could break would never reach
-    /// two.
+    /// A batch with a different signature resets the run to one. Both call
+    /// sites skip this method when the batch is empty, so a prose answer and a
+    /// `role: "tool"` result are transparent — load bearing, since every call
+    /// is answered before the next one and a run those could break would never
+    /// reach two. A user turn ends a run explicitly: see [`Self::break_run`].
     ///
     /// # Errors
     ///
@@ -257,6 +255,16 @@ impl LoopDetector {
     /// client that omits `id` on replayed calls switch the guard off. It is
     /// also what makes a detector that is never told anything behave exactly as
     /// it did before it could be.
+    /// Forget the current run, as a user turn does.
+    ///
+    /// Structural on the agent path — `run` is invoked once per user message
+    /// and builds a fresh `Guards` — so only the proxy, which walks one
+    /// detector across a whole replayed conversation, has to be told. Resets
+    /// the read-only allowance with the strike count, as a fresh `Guards` does.
+    pub fn break_run(&mut self) {
+        self.run = None;
+    }
+
     pub fn record_results(&mut self, record: BatchRecord, answers: Option<u64>) -> RepeatOutcome {
         // Destructured rather than read through: taking the record by value is
         // what stops one batch being recorded twice, and clippy's

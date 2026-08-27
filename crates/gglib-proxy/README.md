@@ -623,7 +623,7 @@ unchanged; the upstream llama-server produces its own diagnostic.
 
 The built-in agent loop (`gglib-agent`) aborts a run when the model repeats
 the same tool-call batch back to back **and keeps getting the same answer
-back**, or repeats the same response text anywhere in the session. A repeat
+back**, or repeats the same prose too often in a short span. A repeat
 whose answer changed is an agent polling for output, not a loop. External
 agentic clients
 (Cline, Roo Code, Copilot BYOK) run their loop client-side, where those guards
@@ -645,7 +645,16 @@ conversation every turn, so the scan is stateless: no session store, no TTL.
 | Identical tool-call batch (FNV-1a signature over canonicalized args), repeated back to back **and answered the same way** | 3rd consecutive occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
 | The same, where the answer keeps changing — an agent polling for output | never aborts if read-only; 16th aborts otherwise | `.max_observation_steps`, reused as the ceiling |
 | Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends, repeated back to back and answered the same way | 16th consecutive occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
-| Identical assistant response text (session-wide, catches A→B→A→B oscillation) | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
+| Identical assistant **prose**, within a sliding window of `max_stagnation_steps × 4` turns. A turn that called a tool is not counted at all — narration is not stagnation. Still catches A→B→A→B oscillation in the prose | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
+
+**A user turn resets both detectors.** On the agent path that is structural —
+`AgentLoop::run` is invoked once per user message and builds a fresh `Guards` —
+so only the proxy, which walks one detector across a whole replayed
+conversation, has to be told. Without it a person asking three times for the
+same failing build was refused on the third, while the identical conversation
+through `gglib-agent` was not. It does **not** rescue a transcript that already
+tripped: the scan returns on the first trip it finds and never reaches a later
+user turn. See [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
 
 A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
 cost — `type` and `code` are `loop_detected` or `stagnation_detected`

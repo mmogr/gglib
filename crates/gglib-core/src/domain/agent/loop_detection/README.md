@@ -35,12 +35,21 @@ one command, edits a file, runs it again, edits again and runs it a third
 time reaches three identical batches well inside a normal task — and was
 refused on that third run.
 
-**What breaks a run.** Only a batch with a different signature.  The detector
-is never called for a turn that produced no tool calls, so a prose answer, a
-`role: "tool"` result and a user interjection all pass without breaking a run.
-That is deliberate rather than incidental: every real tool call is answered by
-a result message before the next one, so a run that anything else could break
-would never reach two.
+**What breaks a run.** A batch with a different signature, or a user turn.
+The detector is never called for a turn that produced no tool calls, so a prose
+answer and a `role: "tool"` result pass without breaking a run.  That is
+deliberate rather than incidental: every real tool call is answered by a result
+message before the next one, so a run that either could break would never reach
+two.
+
+A user turn is different, and breaks a run explicitly through `break_run`.  On
+the agent path that is structural — `AgentLoop::run` is invoked once per user
+message and builds a fresh `Guards` — so only the proxy, which walks one
+detector across a whole replayed conversation, has to be told.  Without it the
+two paths refuse at different turns while claiming parity by construction, and
+a person asking three times for the same failing build was refused on the
+third.  It resets the read-only allowance along with the strike count, because
+that is what a fresh `Guards` does.
 
 **The accepted cost.** A *cycle* of tool batches is no longer caught, at any
 period of two or more.  Not only strict alternation: `A, A, B` repeating also
