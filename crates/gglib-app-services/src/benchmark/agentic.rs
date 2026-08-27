@@ -33,8 +33,6 @@ use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::ports::{LlmCompletionPort, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::LlmCompletionAdapter;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
@@ -78,21 +76,12 @@ pub(crate) async fn run_agentic_eval(
         .await
         .context("failed to create agentic eval run record")?;
 
-    // Resolve the serving context exactly as the tune sweep does.
+    // Passed through, not resolved, exactly as the tune sweep now does.
+    // `.unwrap_or(DEFAULT_CONTEXT_SIZE)` turned "the user set nothing" into
+    // "the user set 4096" and sent it as `num_ctx` — the explicit rung — so
+    // the fit was computed and discarded on every benchmark launch.
     let settings = deps.settings_repo.load().await.ok();
-    let default_ctx = settings
-        .as_ref()
-        .and_then(|s| s.default_context_size)
-        .unwrap_or(DEFAULT_CONTEXT_SIZE);
-    let resolved_ctx = resolve_context_size(&ServerConfigOptions {
-        context_size: config.ctx_size,
-        model_server_ctx: model
-            .server_defaults
-            .as_ref()
-            .and_then(|s| s.context_length),
-        global_default_ctx: Some(default_ctx),
-        ..Default::default()
-    });
+    let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
 
     // One lease across both arms — an arm measured across a model swap would
     // be measuring the swap.
@@ -100,10 +89,9 @@ pub(crate) async fn run_agentic_eval(
         .runtime
         .admit(
             &model.name,
-            Some(resolved_ctx),
-            // A benchmark pins its own context explicitly above; the fallback
-            // rung is unreachable here and must not smuggle in a floor.
-            None,
+            // Only what the user actually pinned reaches the explicit rung.
+            config.ctx_size,
+            default_ctx,
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await
@@ -116,6 +104,10 @@ pub(crate) async fn run_agentic_eval(
             return Ok(());
         }
     };
+    // What the launch actually served, not what this function asked for. With
+    // the chain resolved by admission rather than here, they are the same only
+    // when the user pinned a number.
+    let served_ctx = admission.target.effective_ctx;
     let base_url = admission.target.base_url.clone();
 
     // The gglib arm's per-model facts, straight from the catalog row. Shared
@@ -262,7 +254,7 @@ pub(crate) async fn run_agentic_eval(
         model_name: model.name.clone(),
         quantization: model.quantization.clone(),
         param_count_b: model.param_count_b,
-        ctx_size: resolved_ctx,
+        ctx_size: served_ctx,
         raw,
         gglib,
         delta,

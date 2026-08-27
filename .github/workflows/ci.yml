@@ -96,6 +96,9 @@ jobs:
       - name: Check ParamSource matches are exhaustive
         run: ./scripts/check_param_source_exhaustive.sh
 
+      - name: Check nothing fabricates the context floor
+        run: ./scripts/check_context_floor.sh
+
       - name: Check every setting has a surface
         run: ./scripts/check_settings_surfaces.sh
 

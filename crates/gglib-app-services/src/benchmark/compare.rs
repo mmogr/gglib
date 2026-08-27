@@ -36,8 +36,6 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, CompareConfig, ModelCompareResult,
 };
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 
 use super::BenchmarkDeps;
 use super::mapper::{
@@ -53,10 +51,10 @@ pub(crate) async fn run_compare(
 ) -> Result<()> {
     // ── Load settings once per run (mirrors the proxy's per-request read) ──
     let settings = deps.settings_repo.load().await.ok();
-    let default_ctx = settings
-        .as_ref()
-        .and_then(|s| s.default_context_size)
-        .unwrap_or(DEFAULT_CONTEXT_SIZE);
+    // Passed through, not resolved. `.unwrap_or(DEFAULT_CONTEXT_SIZE)` turned
+    // "the user set nothing" into "the user set 4096" and sent it as `num_ctx`
+    // — the explicit rung — so the fit was discarded on every launch.
+    let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
     let global_inf = settings.and_then(|s| s.inference_defaults);
     let config_json = serde_json::to_string(&config).ok();
     let run_id = deps
@@ -99,19 +97,6 @@ pub(crate) async fn run_compare(
             }
         };
 
-        // Resolved here and pinned: a benchmark sends its context explicitly, so
-        // the lower rungs of the chain (fitted-to-hardware, built-in default) are
-        // unreachable from this call site by construction.
-        let resolved_ctx = resolve_context_size(&ServerConfigOptions {
-            context_size: config.ctx_size,
-            model_server_ctx: model
-                .server_defaults
-                .as_ref()
-                .and_then(|s| s.context_length),
-            global_default_ctx: Some(default_ctx),
-            ..Default::default()
-        });
-
         let _ = tx
             .send(BenchmarkEvent::ModelStarted {
                 model_id,
@@ -128,7 +113,7 @@ pub(crate) async fn run_compare(
             &config,
             run_id,
             &tx,
-            resolved_ctx,
+            default_ctx,
             global_inf.as_ref(),
         )
         .await
@@ -165,8 +150,8 @@ pub(crate) async fn run_compare(
 
 /// Run the compare prompt through one model and collect results.
 ///
-/// `resolved_ctx` is the context this benchmark pins (resolved here from the
-/// upper rungs only, since it always supplies a global default).
+/// `default_ctx` is the user's stored global default, or `None` when they set
+/// none — the same value the proxy passes, so both resolve the same chain.
 #[allow(clippy::too_many_arguments)]
 async fn run_single_compare(
     deps: &BenchmarkDeps,
@@ -175,13 +160,11 @@ async fn run_single_compare(
     config: &CompareConfig,
     run_id: i64,
     tx: &Sender<BenchmarkEvent>,
-    resolved_ctx: u64,
+    default_ctx: Option<u64>,
     global_inf: Option<&InferenceConfig>,
 ) -> Result<ModelCompareResult> {
-    // Start (or keep running) the model server. Pre-resolved per-model context
-    // size, pinned; both args are the same because resolution
-    // already happened above with per-model granularity — the runtime's
-    // internal resolution is a no-op when context_size is Some.
+    // Start (or keep running) the model server. The context chain is resolved
+    // by admission, which is the only place that can reach the fitted rung.
     //
     // The lease is held for the whole measurement, not dropped here: a
     // benchmark that let the model be swapped out mid-run would be measuring
@@ -190,10 +173,9 @@ async fn run_single_compare(
         .runtime
         .admit(
             &model.name,
-            Some(resolved_ctx),
-            // A benchmark pins its own context explicitly above; the fallback
-            // rung is unreachable here and must not smuggle in a floor.
-            None,
+            // Only what the user actually pinned reaches the explicit rung.
+            config.ctx_size,
+            default_ctx,
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await
