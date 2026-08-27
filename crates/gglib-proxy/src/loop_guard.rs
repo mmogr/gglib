@@ -40,9 +40,7 @@
 
 use std::collections::HashMap;
 
-use gglib_core::domain::agent::{
-    AgentConfig, LoopDetector, RepeatOutcome, StagnationDetector, batch_signature,
-};
+use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
 use gglib_core::ports::AgentError;
 use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 
@@ -194,10 +192,14 @@ pub(crate) struct ScanOutcome {
     /// Whether the newest batch repeated, got a **different** answer, and was
     /// let through on that basis.
     ///
-    /// Read from the detector's run-scoped outcome rather than the map the two
-    /// bits above use, so it answers a different question: not "did this
-    /// conversation repeat itself" but "did the guard decline to act because
-    /// the answer moved". ADR 0010's kill criteria read it against
+    /// Read from the verdict rather than the map the two bits above use, so it
+    /// answers a different question: not "did this conversation repeat itself"
+    /// but "did the guard decline to act because the answer moved".
+    ///
+    /// Only a turn that would otherwise have been refused counts. A repeat
+    /// still inside the allowance was never at risk, so nothing was withheld
+    /// on it — counting those made the rate say the rescue had customers it
+    /// did not have. ADR 0010's kill criteria read it against
     /// `identical_result_repeat`.
     pub(crate) repeat_rescued: bool,
 }
@@ -357,8 +359,12 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 // in one step — its batch has not run yet — which is the whole
                 // reason `check` and `record_results` are two calls.
                 Ok(record) => {
-                    repeat_rescued =
-                        loops.record_results(record, results) == RepeatOutcome::AnswerChanged;
+                    // Read from the verdict, not from the reset below. The
+                    // reset that saved this turn happened on an earlier one,
+                    // and `check` is where "would the old rule have refused
+                    // this?" is answerable.
+                    repeat_rescued = record.rescued();
+                    loops.record_results(record, results);
                 }
             }
         }
@@ -403,3 +409,8 @@ mod stagnation_tests;
 #[cfg(test)]
 #[path = "loop_guard_user_turn_tests.rs"]
 mod user_turn_tests;
+
+/// What `repeats_rescued` counts, and what it must not.
+#[cfg(test)]
+#[path = "loop_guard_rescue_tests.rs"]
+mod rescue_tests;

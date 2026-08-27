@@ -128,8 +128,8 @@ identical_result_repeats: number,
  */
 repeats_not_evaluated: number, 
 /**
- * Turns where a repeated batch got a **different** answer, and the loop
- * guard let it through on that basis.
+ * Turns the loop guard would have refused for repeating, and did not,
+ * because the answer had moved. A repeat inside the allowance is not one.
  *
  * Unlike the two above, this is not a fact about the conversation — it is
  * a fact about gglib's own reflex, which is what the ledger was chartered
