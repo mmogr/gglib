@@ -173,6 +173,12 @@ fn a_cycle_that_never_exceeds_the_threshold_escapes_entirely() {
     //
     // `identical_result_repeats` is what observes it. If that counter reads
     // high in real use, this test is the one to argue with.
+    //
+    // Reading the answers did not close this. The run breaks on *signature*
+    // before any answer is consulted, so a cycle escapes whatever came back —
+    // and this history carries no `role: "tool"` messages at all, so it is
+    // unjoinable on top of that. Both are true independently; fixing either
+    // would leave the other. See ADR 0010.
     let msgs: Vec<Value> = (0..40)
         .flat_map(|_| {
             vec![
@@ -567,8 +573,12 @@ fn only_the_newest_batch_is_reported_on() {
     assert!(!scan_history(&body(&msgs), &cfg()).identical_result_repeat);
 }
 
+/// This test was named `reporting_a_repeat_never_changes_a_verdict`, and that
+/// invariant is gone: the verdict reads the join now. What survives is the
+/// assertion, because the answers here are identical and identical answers are
+/// exactly what the guard is for. See ADR 0010.
 #[test]
-fn reporting_a_repeat_never_changes_a_verdict() {
+fn a_repeat_with_the_same_answer_still_trips_and_is_reported() {
     let msgs = vec![
         assistant_call_id("c1", "write_file", "{}"),
         tool_result("c1", "same"),
@@ -583,6 +593,406 @@ fn reporting_a_repeat_never_changes_a_verdict() {
         LoopGuardVerdict::LoopDetected { .. }
     ));
     assert!(outcome.identical_result_repeat);
+}
+
+/// The two paths agree on when a run trips.
+///
+/// `loop_guard`'s module docs promise parity "by construction — there is one
+/// detector implementation, not two". That was an argument, not a check:
+/// nothing compared the paths, and the split into `check` and
+/// `record_results` is exactly the kind of change that could make one of them
+/// forget half the protocol without a single test noticing.
+///
+/// This drives the same turns through `scan_history` and through a bare
+/// detector exercised in the agent's order — check, then record, because on
+/// that path the batch has not run at check time. Same detector, same
+/// arithmetic, same step.
+///
+/// What it holds is the *detector's* half on both sides. It does not run the
+/// agent loop, so it does not hold `gglib-agent`'s wiring: deleting
+/// `guards.record_results` from `run` leaves this test green. That is held by
+/// `test_changing_tool_results_do_not_trip_the_loop_guard` instead.
+#[test]
+fn the_two_paths_agree_on_when_a_run_trips() {
+    // (tool, answer) per turn. Chosen so that the recording half is what
+    // decides the answer: a different batch breaks the first run, the resumed
+    // run is rescued once by a changed answer, and only then does it trip. A
+    // path that checks but never records trips one turn earlier, which is what
+    // makes this an agreement test rather than a pair of coincidences.
+    let turns: &[(&str, &str)] = &[
+        ("write_file", "a"),
+        ("run_tests", "green"),
+        ("write_file", "a"),
+        ("write_file", "b"),
+        ("write_file", "b"),
+        ("write_file", "b"),
+    ];
+
+    // Agent path: one detector, check then record, stop at the first refusal.
+    let mut det = LoopDetector::default();
+    let c = cfg();
+    let agent_trips_at = turns.iter().enumerate().find_map(|(i, (tool, answer))| {
+        let calls = vec![ToolCall {
+            id: format!("c{i}"),
+            name: (*tool).to_owned(),
+            arguments: json!({}),
+        }];
+        match det.check(
+            &calls,
+            c.max_repeated_batch_steps,
+            &c.observation_tools,
+            c.max_observation_steps,
+        ) {
+            Err(_) => Some(i),
+            Ok(record) => {
+                let answers = vec![Some(hash_result_content(&Value::String(
+                    (*answer).to_owned(),
+                )))];
+                det.record_results(record, batch_results_hash(&calls, &answers));
+                None
+            }
+        }
+    });
+
+    // Proxy path: the same turns as a replayed history, scanned fresh. The
+    // guard sees a prefix of length n and refuses at the same turn the agent
+    // did, so the shortest refusing prefix names the step.
+    let proxy_trips_at = (1..=turns.len()).find(|n| {
+        let mut msgs = Vec::new();
+        for (i, (tool, answer)) in turns.iter().take(*n).enumerate() {
+            msgs.push(assistant_call_id(&format!("c{i}"), tool, "{}"));
+            msgs.push(tool_result(&format!("c{i}"), answer));
+        }
+        matches!(
+            verdict_of(&body(&msgs), &cfg()),
+            LoopGuardVerdict::LoopDetected { .. }
+        )
+    });
+
+    assert_eq!(
+        agent_trips_at,
+        proxy_trips_at.map(|n| n - 1),
+        "the paths disagreed about which turn trips"
+    );
+    assert!(
+        agent_trips_at.is_some(),
+        "a sequence that never trips proves nothing about agreement"
+    );
+}
+
+/// Two calls sharing a `tool_call_id`, one answer between them.
+///
+/// The map join resolved both calls to the single answer present, so a
+/// half-answered batch reported as fully joined: `repeat_not_evaluated` read
+/// false and the run took a strike from an answer that never existed. The
+/// mirror case — one shared id whose answer moves — manufactured a rescue
+/// instead. The agent path joins positionally and can do neither, so this was
+/// also the one place the two paths could drift.
+#[test]
+fn duplicate_tool_call_ids_are_unjoinable_rather_than_half_joined() {
+    let dup = || {
+        json!({
+            "role": "assistant",
+            "tool_calls": [
+                {"id": "c1", "type": "function",
+                 "function": {"name": "write_file", "arguments": "{}"}},
+                {"id": "c1", "type": "function",
+                 "function": {"name": "run_tests", "arguments": "{}"}},
+            ]
+        })
+    };
+    let msgs = vec![
+        dup(),
+        tool_result("c1", "only one answer"),
+        dup(),
+        tool_result("c1", "only one answer"),
+    ];
+    let outcome = scan_history(&body(&msgs), &cfg());
+    assert!(
+        outcome.repeat_not_evaluated,
+        "an unattributable answer must read as not evaluated: {outcome:?}"
+    );
+    assert!(!outcome.identical_result_repeat, "{outcome:?}");
+    assert!(!outcome.repeat_rescued, "{outcome:?}");
+}
+
+/// A rejection must not inherit the previous turn's rescue.
+///
+/// The other two bits are computed before the guards, so they describe this
+/// message even when one rejects it. `repeat_rescued` is only known after
+/// `check`, so an early return shipped whatever the last turn set — and since
+/// agentic clients replay the whole history, every retry of a 400'd body
+/// counted that one rescue again. That inflates precisely the ratio ADR 0010's
+/// first kill criterion reads, which is the one that would have the rescue
+/// removed. It is also self-contradictory on its face: a verdict saying the
+/// guard acted, beside a bit saying it declined to.
+///
+/// The ceiling path is what makes this observable — the turn before it trips is
+/// always a rescue, because reaching the ceiling requires the resets.
+#[test]
+fn a_rejection_does_not_inherit_the_previous_turns_rescue() {
+    let mut msgs = Vec::new();
+    for i in 0..15 {
+        msgs.push(assistant_call_id(&format!("c{i}"), "write_file", "{}"));
+        msgs.push(tool_result(&format!("c{i}"), &format!("{i} files changed")));
+    }
+    let before = scan_history(&body(&msgs), &cfg());
+    assert_eq!(before.verdict, LoopGuardVerdict::Pass);
+    assert!(
+        before.repeat_rescued,
+        "precondition: the 15th turn was a rescue"
+    );
+
+    msgs.push(assistant_call_id("c15", "write_file", "{}"));
+    msgs.push(tool_result("c15", "brand new"));
+    let outcome = scan_history(&body(&msgs), &cfg());
+    assert!(
+        matches!(outcome.verdict, LoopGuardVerdict::LoopDetected { .. }),
+        "precondition: the 16th spends the allowance: {outcome:?}"
+    );
+    assert!(
+        !outcome.repeat_rescued,
+        "a batch the guard refused was not one it let through: {outcome:?}"
+    );
+}
+
+/// The stagnation arm of the same defect.
+///
+/// The round that added `repeat_rescued: false` corrected both early returns
+/// but only tested the loop-detected one, so reverting the stagnation arm
+/// survived every suite. `a_stagnation_rejection_reports_on_the_message_that_
+/// tripped_it` cannot catch it either: its turns use distinct batches, so no
+/// rescue ever precedes the trip and the stale value would be `false` anyway.
+///
+/// This needs a turn that both rescues *and* is followed by a stagnation trip,
+/// which means assistant messages carrying text as well as tool calls.
+#[test]
+fn a_stagnation_rejection_does_not_inherit_the_previous_turns_rescue() {
+    let with_text = |id: &str, path: &str| {
+        json!({
+            "role": "assistant",
+            "content": "still working on it",
+            "tool_calls": [{
+                "id": id,
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "arguments": format!(r#"{{"path":"{path}"}}"#),
+                },
+            }],
+        })
+    };
+    let mut msgs = Vec::new();
+    for i in 0..4 {
+        msgs.push(with_text(&format!("d{i}"), &format!("f{i}.rs")));
+        msgs.push(tool_result(&format!("d{i}"), "ok"));
+    }
+    // Repeats turn 4's batch with a different answer: a rescue.
+    msgs.push(with_text("r1", "f3.rs"));
+    msgs.push(tool_result("r1", "different"));
+    let mid = scan_history(&body(&msgs), &cfg());
+    assert_eq!(mid.verdict, LoopGuardVerdict::Pass, "precondition: {mid:?}");
+    assert!(mid.repeat_rescued, "precondition: turn 5 is a rescue");
+
+    // A sixth repeat of the same text trips stagnation.
+    msgs.push(with_text("s1", "g.rs"));
+    msgs.push(tool_result("s1", "ok"));
+    let outcome = scan_history(&body(&msgs), &cfg());
+    assert!(
+        matches!(outcome.verdict, LoopGuardVerdict::StagnationDetected { .. }),
+        "precondition: {outcome:?}"
+    );
+    assert!(
+        !outcome.repeat_rescued,
+        "a rejected turn must not inherit the previous turn's rescue: {outcome:?}"
+    );
+}
+
+/// The same, from the answers side: one call, two results claiming to answer it.
+///
+/// The map kept the last and reported "fully joined" on an arbitrary answer —
+/// taking a strike from an answer that never existed, or manufacturing a rescue
+/// if that one moved. The calls-side test above never reaches this branch,
+/// which is how it survived a mutation round.
+#[test]
+fn duplicate_answers_for_one_call_are_unjoinable_too() {
+    let turn = |a: &str, b: &str| {
+        vec![
+            assistant_call_id("c1", "write_file", "{}"),
+            tool_result("c1", a),
+            tool_result("c1", b),
+        ]
+    };
+    let mut msgs = turn("first", "second");
+    msgs.extend(turn("first", "third"));
+    let outcome = scan_history(&body(&msgs), &cfg());
+    assert!(
+        outcome.repeat_not_evaluated,
+        "two answers for one call cannot be attributed: {outcome:?}"
+    );
+    assert!(!outcome.identical_result_repeat, "{outcome:?}");
+    assert!(!outcome.repeat_rescued, "{outcome:?}");
+}
+
+/// The rescue has its own reading, because neither bit beside it can show one.
+/// `identical_result_repeat` is false here — the answers differ — and
+/// `repeat_not_evaluated` is false too, since they joined fine. Without a third
+/// counter the turn where the guard declined to act is indistinguishable from a
+/// turn where nothing repeated at all.
+#[test]
+fn a_repeat_the_guard_let_through_is_reported_as_rescued() {
+    let msgs = vec![
+        assistant_call_id("c1", "write_file", "{}"),
+        tool_result("c1", "1 file changed"),
+        assistant_call_id("c2", "write_file", "{}"),
+        tool_result("c2", "2 files changed"),
+    ];
+    let outcome = scan_history(&body(&msgs), &cfg());
+    assert_eq!(outcome.verdict, LoopGuardVerdict::Pass);
+    assert!(outcome.repeat_rescued, "the answer moved: {outcome:?}");
+    assert!(!outcome.identical_result_repeat);
+    assert!(!outcome.repeat_not_evaluated);
+}
+
+/// The rescue bit is cleared by a prose turn, like the two beside it.
+///
+/// Without the reset it stays set from whatever batch came last and is
+/// re-reported on every subsequent request — ask, tools, prose answer,
+/// follow-up is the ordinary shape of a chat session, so the inflation is
+/// unbounded. An inflated `repeats_rescued` would falsely satisfy ADR 0010's
+/// first kill criterion, which is the one that would have the rescue removed.
+#[test]
+fn a_prose_turn_after_a_rescue_clears_the_observation() {
+    let mut msgs = vec![
+        assistant_call_id("c1", "write_file", "{}"),
+        tool_result("c1", "one"),
+        assistant_call_id("c2", "write_file", "{}"),
+        tool_result("c2", "two"),
+    ];
+    assert!(
+        scan_history(&body(&msgs), &cfg()).repeat_rescued,
+        "precondition"
+    );
+    msgs.push(assistant_text("moving on"));
+    assert!(!scan_history(&body(&msgs), &cfg()).repeat_rescued);
+}
+
+/// And by a user interjection, which takes the other reset arm.
+#[test]
+fn a_user_interjection_after_a_rescue_clears_the_observation() {
+    let mut msgs = vec![
+        assistant_call_id("c1", "write_file", "{}"),
+        tool_result("c1", "one"),
+        assistant_call_id("c2", "write_file", "{}"),
+        tool_result("c2", "two"),
+    ];
+    assert!(
+        scan_history(&body(&msgs), &cfg()).repeat_rescued,
+        "precondition"
+    );
+    msgs.push(json!({"role": "user", "content": "actually, stop"}));
+    assert!(!scan_history(&body(&msgs), &cfg()).repeat_rescued);
+}
+
+/// And is not reported when the answer stood, or when nothing repeated.
+#[test]
+fn a_repeat_with_the_same_answer_is_not_reported_as_rescued() {
+    let msgs = vec![
+        assistant_call_id("c1", "write_file", "{}"),
+        tool_result("c1", "same"),
+        assistant_call_id("c2", "write_file", "{}"),
+        tool_result("c2", "same"),
+    ];
+    let outcome = scan_history(&body(&msgs), &cfg());
+    assert!(!outcome.repeat_rescued);
+    assert!(outcome.identical_result_repeat);
+}
+
+/// The headline. Three identical `write_file` batches, three different answers.
+/// This was a 400 before, on the third turn, at `max_repeated_batch_steps`.
+#[test]
+fn a_repeat_whose_answer_changed_is_no_longer_a_loop() {
+    let msgs = vec![
+        assistant_call_id("c1", "write_file", "{}"),
+        tool_result("c1", "1 file changed"),
+        assistant_call_id("c2", "write_file", "{}"),
+        tool_result("c2", "2 files changed"),
+        assistant_call_id("c3", "write_file", "{}"),
+        tool_result("c3", "3 files changed"),
+    ];
+    assert_eq!(verdict_of(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
+}
+
+/// An answer nobody can read is not evidence of progress. A history with no
+/// `role: "tool"` messages at all is unjoinable, and unjoinable never rescues —
+/// which is why every loop test written before this change still holds.
+#[test]
+fn an_unanswered_repeat_still_trips() {
+    let msgs = vec![
+        assistant_call("write_file", "{}"),
+        assistant_call("write_file", "{}"),
+        assistant_call("write_file", "{}"),
+    ];
+    assert!(matches!(
+        verdict_of(&body(&msgs), &cfg()),
+        LoopGuardVerdict::LoopDetected { .. }
+    ));
+}
+
+/// Half an answer is no answer: a batch whose second call went unanswered says
+/// nothing about whether work repeated, so it cannot buy a rescue.
+#[test]
+fn a_partially_answered_repeat_still_trips() {
+    let two_calls = |a: &str, b: &str| {
+        json!({
+            "role": "assistant",
+            "tool_calls": [
+                {"id": a, "type": "function",
+                 "function": {"name": "write_file", "arguments": "{}"}},
+                {"id": b, "type": "function",
+                 "function": {"name": "run_tests", "arguments": "{}"}},
+            ]
+        })
+    };
+    let msgs = vec![
+        two_calls("a1", "b1"),
+        tool_result("a1", "done"),
+        two_calls("a2", "b2"),
+        tool_result("a2", "done"),
+        two_calls("a3", "b3"),
+        tool_result("a3", "done"),
+    ];
+    assert!(matches!(
+        verdict_of(&body(&msgs), &cfg()),
+        LoopGuardVerdict::LoopDetected { .. }
+    ));
+}
+
+/// A mutating batch cannot be carried forever by an answer that keeps moving.
+/// It gets the read-only allowance — fifteen — and the sixteenth trips however
+/// new its answer. Without the ceiling this history would pass at any length,
+/// and `cargo test`'s `finished in 0.31s` is enough to produce it.
+#[test]
+fn a_mutating_repeat_with_new_answers_stops_at_the_read_only_allowance() {
+    let mut msgs = Vec::new();
+    for i in 0..15 {
+        msgs.push(assistant_call_id(&format!("c{i}"), "write_file", "{}"));
+        msgs.push(tool_result(&format!("c{i}"), &format!("{i} files changed")));
+    }
+    assert_eq!(
+        verdict_of(&body(&msgs), &cfg()),
+        LoopGuardVerdict::Pass,
+        "fifteen occurrences is the allowance, not past it"
+    );
+    msgs.push(assistant_call_id("c15", "write_file", "{}"));
+    msgs.push(tool_result("c15", "brand new"));
+    assert!(
+        matches!(
+            verdict_of(&body(&msgs), &cfg()),
+            LoopGuardVerdict::LoopDetected { .. }
+        ),
+        "the sixteenth must trip"
+    );
 }
 
 #[test]

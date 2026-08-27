@@ -160,8 +160,12 @@ pub enum Commands {
         /// Pass an empty string to disable observation classification entirely.
         #[arg(long = "observation-tool", value_delimiter = ',')]
         observation_tools: Vec<String>,
-        /// Maximum times an observation-only batch may repeat before loop detection
-        /// fires. Clamped to 100. Defaults to 15.
+        /// Maximum times an observation-only batch may repeat, getting the same
+        /// answer back each time, before loop detection fires. A repeat whose
+        /// answer changed is not counted. This is also the ceiling on how far
+        /// changing answers may carry a batch that is *not* observation-only,
+        /// so raising it loosens the guard for every batch. Clamped to 100.
+        /// Defaults to 15.
         #[arg(long = "max-observation-steps")]
         max_observation_steps: Option<usize>,
         /// Subcommand (e.g. `history`)
@@ -224,8 +228,12 @@ pub enum Commands {
         /// list entirely rather than adding to it.
         #[arg(long = "observation-tool", value_delimiter = ',')]
         observation_tools: Vec<String>,
-        /// Maximum times an observation-only batch may repeat before loop detection
-        /// fires. Clamped to 100. Defaults to 15.
+        /// Maximum times an observation-only batch may repeat, getting the same
+        /// answer back each time, before loop detection fires. A repeat whose
+        /// answer changed is not counted. This is also the ceiling on how far
+        /// changing answers may carry a batch that is *not* observation-only,
+        /// so raising it loosens the guard for every batch. Clamped to 100.
+        /// Defaults to 15.
         #[arg(long = "max-observation-steps")]
         max_observation_steps: Option<usize>,
     },

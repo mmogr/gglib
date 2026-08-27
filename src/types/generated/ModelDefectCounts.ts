@@ -126,4 +126,21 @@ identical_result_repeats: number,
  * not contiguous after the assistant turn, or when a parallel batch went
  * partly unanswered.
  */
-repeats_not_evaluated: number, };
+repeats_not_evaluated: number, 
+/**
+ * Turns where a repeated batch got a **different** answer, and the loop
+ * guard let it through on that basis.
+ *
+ * Unlike the two above, this is not a fact about the conversation — it is
+ * a fact about gglib's own reflex, which is what the ledger was chartered
+ * for before ADR 0006 had to widen it. It reads the detector's run-scoped
+ * outcome, not the session-wide map those two are computed from, so it is
+ * a third instrument rather than a third view of one.
+ *
+ * It exists because ADR 0010 promoted the results join from an
+ * observation to a policy input, and a kill criterion nobody can read is
+ * not a kill criterion. If this dwarfs `identical_result_repeats` in real
+ * use, the join is being defeated by output that carries a clock rather
+ * than measuring progress, and the rescue wants narrowing or removing.
+ */
+repeats_rescued: number, };

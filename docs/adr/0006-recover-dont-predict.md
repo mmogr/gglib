@@ -1,8 +1,8 @@
 # ADR 0006 — Recover, don't predict: the scheduler is removed and defaults come from the model
 
 - **Status:** Accepted
-- **Date:** 2026-08-12 (amended 2026-08-26 — see the note at the end of the
-  2026-08-26 postscript)
+- **Date:** 2026-08-12 (amended 2026-08-26 and 2026-08-27 — see the two notes
+  following the 2026-08-26 postscript)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md),
@@ -147,8 +147,8 @@ transcript is the only available evidence, and it arrives free in a body the
 proxy already parses.
 
 This does not reopen prediction. The counter is per-process, non-persisted, read
-by a person, and acts on nothing — the same discipline as every counter beside
-it. It is the measurement decision 4's own consequence section calls for:
+by a person ~~, and acts on nothing — the same discipline as every counter
+beside it~~. It is the measurement decision 4's own consequence section calls for:
 *"Any escalation beyond that should be chosen from measured failure rates, not
 from a candidate list; the counters exist for exactly that."* A corrective arm on
 the input plane is the candidate; this is the rate that decides whether it is
@@ -185,6 +185,45 @@ section titled *Per-model signals* rather than *Defects*.
 > likely, not more, so the criterion cannot be tripped into a wrong *cancel* by
 > this. But two weeks of data spanning the change is two populations, and a
 > decision taken on it should say which side it was gathered from.
+
+> **Amended 2026-08-27 — the arm was built, and not from this rate.**
+> [ADR 0010](0010-the-loop-guard-reads-what-came-back.md) makes the loop
+> guard's verdict read the same `role: "tool"` join these counters are computed
+> from. Three things above stop being true, and one of them is the criterion
+> this postscript exists to state.
+>
+> **"Acts on nothing" is struck.** The counters themselves still act on
+> nothing — they are still read by a person and still decide nothing on their
+> own. What has changed is that the *observation* they are computed from is no
+> longer inert: a repeat whose answer changed is no longer a strike. The
+> discipline the sentence claimed — "the same as every counter beside it" — is
+> the part that fails, because no counter beside it shares an input with a
+> verdict.
+>
+> **The counter does not count what this postscript says it counts.** "Turns
+> whose newest tool-call batch repeated the batch before it" describes a
+> comparison against the immediately preceding batch. The implementation keys a
+> session-wide map by signature, so it also fires on a repeat with other turns
+> in between — `A`, prose, `A` is reported. That was true when it was written.
+> It matters more now, because the verdict uses a **run-scoped** comparison
+> instead: the two read different populations, and are not two views of one
+> instrument. ADR 0010 adds a third counter taken from the detector's own
+> outcome for the reading its kill criteria depend on.
+>
+> **The cancel criterion is spent, not satisfied.** This postscript said the
+> rate "decides whether it is built" and that a near-zero reading would cancel
+> the arm rather than write it. The arm was written without waiting for the
+> rate. What forced it was two verified consumer bugs — the guard refusing a
+> file read, and refusing an agent that runs a command, edits and runs it again
+> — and a third, an agent polling a build for output, which no rate could have
+> answered because the failure was a false *rejection* rather than a missed
+> detection. A criterion quietly outgrown is worse than one recorded as spent,
+> so it is recorded as spent.
+>
+> Readings are again not comparable across the change, and in the opposite
+> direction from the note above: a verdict that stops rejecting productive
+> repeats lets more sessions continue, which enlarges the population again, and
+> a verdict that reads the join changes which turns are counted at all.
 
 ## Notes
 

@@ -140,10 +140,12 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           disabled={saving}
         >
           On by default: a conversation whose history repeats the same tool-call batch back
-          to back, or the same assistant response anywhere in the session, beyond the
-          agent-path thresholds is rejected with a clean 400 before any model work, instead
-          of burning a model swap and a full generation per stuck turn. Turn this off only
-          for a client that legitimately repeats identical batches with nothing in between.
+          to back and gets the same answer back each time, or repeats the same assistant
+          response anywhere in the session, beyond the agent-path thresholds is rejected
+          with a clean 400 before any model work, instead of burning a model swap and a
+          full generation per stuck turn. A repeat whose answer changed is an agent polling
+          for output, and is not counted. Turn this off only for a client that legitimately
+          repeats identical batches with nothing in between.
         </ToggleField>
 
         <ToggleField

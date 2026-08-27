@@ -164,13 +164,14 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
 /// Only models with something to report get a line, and listing every clean
 /// model would bury the one that is not.
 ///
-/// Two counters here are not failures. `identical_result_repeats` describes a
+/// Three counters here are not failures. `identical_result_repeats` describes a
 /// conversation that went in a circle, and `repeats_not_evaluated` says how
 /// often that question could not be answered — facts about the client's
-/// history rather than faults in the model. They print below the defects under
-/// an `observed` heading of their own, and a model whose only signal is one of
-/// them still earns a line. The section is named for signals rather than
-/// defects because of them.
+/// history rather than faults in the model. `repeats_rescued` is a fact about
+/// gglib instead: how often the loop guard declined to act because the answer
+/// had moved. They print below the defects under an `observed` heading of their
+/// own, and a model whose only signal is one of them still earns a line. The
+/// section is named for signals rather than defects because of them.
 pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCounts>) -> String {
     let mut out = String::from("Per-model signals (this proxy run)\n");
 
@@ -252,11 +253,15 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
         // fire, and the second says how often the question could be asked at
         // all. Own indent level so the label column is not shared with the
         // defect rows above.
-        if counts.identical_result_repeats > 0 || counts.repeats_not_evaluated > 0 {
+        if counts.identical_result_repeats > 0
+            || counts.repeats_not_evaluated > 0
+            || counts.repeats_rescued > 0
+        {
             out.push_str("    observed\n");
             for (label, value) in [
                 ("repeated, same result", counts.identical_result_repeats),
                 ("repeated, not comparable", counts.repeats_not_evaluated),
+                ("repeated, new result", counts.repeats_rescued),
             ] {
                 if value > 0 {
                     out.push_str(&format!("      {label:<24} {}\n", thousands(value)));

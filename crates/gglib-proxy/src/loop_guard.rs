@@ -1,8 +1,9 @@
 //! Pre-dispatch loop/stagnation guard for `/v1/chat/completions`.
 //!
 //! The built-in agent loop (`gglib-agent`) aborts a run when the model
-//! repeats the same tool-call batch back to back, or the same response text
-//! anywhere in the session — but external
+//! repeats the same tool-call batch back to back and keeps getting the same
+//! answer back, or repeats the same response text anywhere in the session —
+//! but external
 //! agentic clients (Cline, Roo Code, Copilot BYOK) run their own loop
 //! client-side, where those guards never execute.  A model looping in such a
 //! session burns a model swap plus a full generation per stuck turn, and
@@ -31,13 +32,14 @@
 //! protection and never gets a parse-driven rejection.
 
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 use serde::Deserialize;
 use serde_json::Value;
 
-use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
+use gglib_core::domain::agent::{
+    AgentConfig, LoopDetector, RepeatOutcome, StagnationDetector, batch_results_hash,
+    batch_signature, hash_result_content,
+};
 use gglib_core::ports::AgentError;
 use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 
@@ -91,8 +93,14 @@ impl LoopGuardConfig {
 pub(crate) enum LoopGuardVerdict {
     /// No guard tripped — forward the request.
     Pass,
-    /// The same tool-call batch signature repeats back to back, beyond the
-    /// threshold. Occurrences separated by other work do not count.
+    /// The same tool-call batch signature repeats back to back and keeps
+    /// getting the same answer back, beyond the threshold. Occurrences
+    /// separated by other work do not count, and neither does a repeat whose
+    /// answer changed.
+    ///
+    /// Also raised when a batch that is not read-only has been carried past
+    /// the read-only allowance by changing answers. The two are not
+    /// distinguished: the remedy is the same.
     LoopDetected {
         /// The repeated batch signature (`name:hash|name:hash…`).
         signature: String,
@@ -126,7 +134,7 @@ struct HistoryMessage {
     #[serde(default)]
     role: Value,
     /// Assistant text is read via [`extract_text`]; on a `role: "tool"`
-    /// message the whole value is hashed by [`hash_content`] instead.
+    /// message the whole value is hashed by [`hash_result_content`] instead.
     #[serde(default)]
     content: Value,
     #[serde(default)]
@@ -170,12 +178,17 @@ struct WireFunction {
 
 /// What one history scan concluded.
 ///
-/// The verdict is the decision; the bits beside it are observations the
-/// verdict cannot express. A batch that repeats *under* the threshold never
-/// reaches a verdict at all, and whether its results were identical is the
-/// difference between a model stuck in a loop and a model making progress
-/// that happens to look alike — so it is measured separately and acted on by
-/// nothing.
+/// The verdict is the decision; the bits beside it are readings for a person.
+/// A batch that repeats *under* the threshold never reaches a verdict at all,
+/// and whether its results were identical is the difference between a model
+/// stuck in a loop and a model making progress that happens to look alike.
+///
+/// The verdict now reads that difference too — ADR 0010 — but not through
+/// these bits. Two of them are computed from a session-wide map keyed by
+/// signature, while the detector compares within the current run, so they
+/// answer neighbouring questions rather than the same one. The third is the
+/// detector's own outcome, and exists so the change ADR 0010 made has a
+/// reading of its own.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ScanOutcome {
     /// Whether to forward, and if not, why.
@@ -211,6 +224,15 @@ pub(crate) struct ScanOutcome {
     /// indistinguishable from a clean fleet, and would cancel the work it
     /// exists to justify.
     pub(crate) repeat_not_evaluated: bool,
+    /// Whether the newest batch repeated, got a **different** answer, and was
+    /// let through on that basis.
+    ///
+    /// Read from the detector's run-scoped outcome rather than the map the two
+    /// bits above use, so it answers a different question: not "did this
+    /// conversation repeat itself" but "did the guard decline to act because
+    /// the answer moved". ADR 0010's kill criteria read it against
+    /// `identical_result_repeat`.
+    pub(crate) repeat_rescued: bool,
 }
 
 // =============================================================================
@@ -219,7 +241,9 @@ pub(crate) struct ScanOutcome {
 
 /// Walk the request's `messages[]` history through fresh detectors.
 ///
-/// Mirrors `gglib-agent`'s per-iteration `Guards::check` exactly: stagnation
+/// Mirrors `gglib-agent`'s per-iteration guard step exactly — including the
+/// `check`-then-`record_results` pair, which this path can do in one place
+/// because it reads a transcript that already has the answers: stagnation
 /// records every assistant message's text (the detector itself skips empty
 /// text), and the loop detector only sees non-empty tool-call batches.
 ///
@@ -244,6 +268,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             verdict: LoopGuardVerdict::Pass,
             identical_result_repeat: false,
             repeat_not_evaluated: false,
+            repeat_rescued: false,
         };
     };
 
@@ -257,6 +282,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
     // See `ScanOutcome::identical_result_repeat` for why this is not a tally.
     let mut identical_result_repeat = false;
     let mut repeat_not_evaluated = false;
+    let mut repeat_rescued = false;
 
     for (i, msg) in envelope.messages.iter().enumerate() {
         match msg.role.as_str() {
@@ -270,14 +296,19 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             _ => {
                 identical_result_repeat = false;
                 repeat_not_evaluated = false;
+                repeat_rescued = false;
                 continue;
             }
         }
 
         // Computed before the guards, so the bits describe *this* message even
-        // when stagnation rejects it. Neither detector can see them: the
-        // observation has no effect on the verdicts below.
+        // when stagnation rejects it. The loop detector reads `results` below,
+        // but not these bits: it compares within its own run, and these are a
+        // session-wide reading.
         let calls: Vec<ToolCall> = msg.tool_calls.iter().map(to_domain_call).collect();
+        // Hoisted so the verdict below can read it. The bits are still computed
+        // in the branch, and still before the guards run.
+        let mut results = None;
         if calls.is_empty() {
             // A prose turn ends the observation. Without this the bits stay
             // set from whatever batch came last and are re-reported on every
@@ -285,8 +316,9 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             // ordinary shape of a chat session, so the inflation is unbounded.
             identical_result_repeat = false;
             repeat_not_evaluated = false;
+            repeat_rescued = false;
         } else {
-            let results = turn_results_hash(&calls, &envelope.messages[i + 1..]);
+            results = turn_results_hash(&calls, &envelope.messages[i + 1..]);
             let seen_before = previous.insert(batch_signature(&calls), results);
             identical_result_repeat =
                 matches!(seen_before, Some(Some(seen)) if Some(seen) == results);
@@ -301,21 +333,42 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 verdict: verdict(e),
                 identical_result_repeat,
                 repeat_not_evaluated,
+                // Not carried over from the previous turn. The two bits above
+                // are computed before the guards and so describe *this*
+                // message; this one is only known after `check`, and a guard
+                // that rejected this batch did not decline to act on it.
+                // Shipping the last turn's value would count one rescue again
+                // on every replay of a 400'd body, and inflate precisely the
+                // ratio ADR 0010's first kill criterion reads.
+                repeat_rescued: false,
             };
         }
-        if !calls.is_empty()
-            && let Err(e) = loops.check(
+        if !calls.is_empty() {
+            match loops.check(
                 &calls,
                 cfg.max_repeated_batch_steps,
                 &cfg.observation_tools,
                 cfg.max_observation_steps,
-            )
-        {
-            return ScanOutcome {
-                verdict: verdict(e),
-                identical_result_repeat,
-                repeat_not_evaluated,
-            };
+            ) {
+                Err(e) => {
+                    return ScanOutcome {
+                        verdict: verdict(e),
+                        identical_result_repeat,
+                        repeat_not_evaluated,
+                        // See the stagnation arm above: a batch the guard
+                        // refused was not one it let through.
+                        repeat_rescued: false,
+                    };
+                }
+                // Recorded immediately, because this scan reads a transcript
+                // that already has the answers. The agent path cannot do this
+                // in one step — its batch has not run yet — which is the whole
+                // reason `check` and `record_results` are two calls.
+                Ok(record) => {
+                    repeat_rescued =
+                        loops.record_results(record, results) == RepeatOutcome::AnswerChanged;
+                }
+            }
         }
     }
 
@@ -323,6 +376,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
         verdict: LoopGuardVerdict::Pass,
         identical_result_repeat,
         repeat_not_evaluated,
+        repeat_rescued,
     }
 }
 
@@ -330,67 +384,54 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
 ///
 /// `rest` is the history *after* that assistant message; the answers are the
 /// contiguous run of result messages at its head, which bounds the join to
-/// this turn and makes repeated synthetic ids harmless.
+/// this turn and makes repeated synthetic ids harmless. gglib mints those ids
+/// itself for dialect models (`DelimitedToolCallParser` restarts at zero on
+/// every response), so `call_qwen_0` recurs on every turn of a replayed
+/// conversation and a global index would resolve every occurrence of a batch
+/// to the same result.
 ///
-/// Each call is paired with its own answer before sorting. Sorting bare result
-/// hashes would meet the ordering goal — [`batch_signature`] sorts too, so the
-/// same parallel batch re-emitted in a different order must still match — but
-/// it severs which call produced which result, and a two-call batch whose
-/// answers swapped would compare equal.
-///
-/// The pair key renders `arguments` rather than hashing it structurally, which
-/// relies on `serde_json::Value` being a `BTreeMap`. Enabling that crate's
-/// `preserve_order` feature would make the rendering insertion-ordered and this
-/// join would quietly start under-reporting.
+/// The windowing is all that lives here. Pairing each call with its own
+/// answer, and hashing the pairs, is
+/// [`gglib_core::domain::agent::batch_results_hash`] — shared with the agent
+/// loop, which has the pairing for free and no window to find.
 ///
 /// `None` when any call is unanswered — a partially-answered batch says
 /// nothing about whether work repeated.
 fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> Option<u64> {
-    let answers: HashMap<&str, u64> = rest
-        .iter()
-        .take_while(|m| m.role.as_str() == Some("tool"))
-        .filter_map(|m| Some((m.tool_call_id.as_str()?, hash_content(&m.content))))
-        .collect();
-
-    // Pairs, not bare hashes: sorting results alone severs which call
-    // produced which, so a two-call batch whose answers swap between
-    // occurrences would compare equal.
-    let mut pairs: Vec<(&str, &Value, u64)> = calls
-        .iter()
-        .map(|c| {
-            let answer = answers.get(c.id.as_str()).copied()?;
-            Some((c.name.as_str(), &c.arguments, answer))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    // `Value` is not `Ord`/`Hash`, and it is a `BTreeMap` underneath, so its
-    // rendering is key-canonical and stands in for both.
-    let mut keyed: Vec<(String, u64)> = pairs
-        .drain(..)
-        .map(|(name, args, answer)| (format!("{name}\u{0}{args}"), answer))
-        .collect();
-    keyed.sort_unstable();
-
-    let mut hasher = DefaultHasher::new();
-    keyed.hash(&mut hasher);
-    Some(hasher.finish())
-}
-
-/// Hash a tool result's content for equality alone.
-///
-/// Deliberately *not* [`extract_text`]: that projects to the empty string for
-/// objects, numbers, nulls and non-text parts, which would make two different
-/// structured results compare equal — a manufactured "identical" repeat. The
-/// value is hashed as it arrived, and the string case avoids a copy because
-/// tool results run to tens of kilobytes on this pre-admission path.
-fn hash_content(content: &Value) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    match content {
-        // Discriminated so `null` and the string "null" cannot collide, in a
-        // function whose only job is equality.
-        Value::String(s) => (0u8, s).hash(&mut hasher),
-        other => (1u8, other.to_string()).hash(&mut hasher),
+    let mut answers: HashMap<&str, u64> = HashMap::new();
+    for m in rest.iter().take_while(|m| m.role.as_str() == Some("tool")) {
+        let Some(id) = m.tool_call_id.as_str() else {
+            continue;
+        };
+        // A window with the same id twice cannot say which call either answer
+        // belongs to. Bail rather than keep one: this join's whole contract is
+        // that it reports nothing when it cannot attribute an answer.
+        if answers
+            .insert(id, hash_result_content(&m.content))
+            .is_some()
+        {
+            return None;
+        }
     }
-    hasher.finish()
+
+    // The same, from the other side. Two calls sharing an id would both resolve
+    // to the single answer present, so a half-answered batch would report as
+    // fully joined and take a strike from an answer that never existed — or, if
+    // that one answer moved, manufacture a rescue. The agent path joins
+    // positionally and can do neither, so this is also where the two paths
+    // would drift.
+    let mut seen: HashMap<&str, ()> = HashMap::with_capacity(calls.len());
+    for c in calls {
+        if seen.insert(c.id.as_str(), ()).is_some() {
+            return None;
+        }
+    }
+
+    let per_call: Vec<Option<u64>> = calls
+        .iter()
+        .map(|c| answers.get(c.id.as_str()).copied())
+        .collect();
+    batch_results_hash(calls, &per_call)
 }
 
 /// Map a detector error onto the guard's verdict.

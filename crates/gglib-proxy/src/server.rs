@@ -841,6 +841,14 @@ async fn chat_completions(
                 .metrics
                 .record_repeat_not_evaluated(&model_name);
         }
+        // Its own `if`, not another arm of the chain above: this bit comes
+        // from the detector's run-scoped outcome and those two from a
+        // session-wide map, so a turn can genuinely be both — a batch that
+        // repeated earlier with the same answer, and repeated just now with a
+        // different one.
+        if outcome.repeat_rescued {
+            state.dashboard.metrics.record_repeat_rescued(&model_name);
+        }
 
         match outcome.verdict {
             LoopGuardVerdict::Pass => {}

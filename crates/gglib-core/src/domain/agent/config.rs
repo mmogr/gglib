@@ -147,13 +147,16 @@ pub struct AgentConfig {
     pub context_budget_chars: usize,
 
     /// Maximum number of times the same tool-call batch signature may repeat
-    /// **back to back** before the loop is declared stuck and aborted with
-    /// [`crate::ports::AgentError::LoopDetected`].
+    /// **back to back and answered the same way** before the loop is declared
+    /// stuck and aborted with [`crate::ports::AgentError::LoopDetected`].
     ///
     /// Consecutive, not session-wide: a batch with a different signature
-    /// resets the run. Contrast [`Self::max_stagnation_steps`] below, which
-    /// stays session-wide deliberately. See the `loop_detection` module docs
-    /// for why the two differ.
+    /// resets the run. So does an answer that differs from the previous
+    /// occurrence's — the same call with a different result is progress that
+    /// happens to look alike, and is not a strike. Contrast
+    /// [`Self::max_stagnation_steps`] below, which stays session-wide and
+    /// reads nothing but text. See the `loop_detection` module docs for why
+    /// the three differ.
     ///
     /// Set to `None` to disable loop detection entirely (useful in tests that
     /// deliberately repeat the same tool call).
@@ -248,7 +251,8 @@ pub struct AgentConfig {
     pub observation_tools: Vec<String>,
 
     /// Maximum number of times an exploratory-tool-only batch may repeat
-    /// **back to back** before loop detection fires.
+    /// **back to back and be answered the same way** before loop detection
+    /// fires.
     ///
     /// Applied **instead of** [`Self::max_repeated_batch_steps`] when every
     /// tool call in the current batch matches a pattern in
@@ -265,8 +269,26 @@ pub struct AgentConfig {
     /// [`AgentConfig::from_user_params`] to prevent API callers from providing
     /// a value large enough to neutralise the guard.
     ///
+    /// # It is also the ceiling on rescued repeats
+    ///
+    /// A repeat whose answer *changed* is not a strike — an agent polling a
+    /// build for output repeats a batch every turn and is working. That reset
+    /// would, on its own, exempt any tool whose output carries a clock or a
+    /// counter, so a batch that is **not** exploratory may be carried by
+    /// changing answers only while its run stays inside this allowance. The
+    /// number is reused rather than invented: an exploratory batch already
+    /// gets it on the ground that repeating a call which changes nothing is
+    /// free, and there is no measurement behind a second number.
+    ///
+    /// So this field is read twice for a mutating batch — never as its strike
+    /// threshold, always as the ceiling past which a moving answer stops
+    /// buying anything. See
+    /// [ADR 0010](https://github.com/mmogr/gglib/blob/main/docs/adr/0010-the-loop-guard-reads-what-came-back.md).
+    ///
     /// Set to `None` to disable the elevated threshold entirely; exploratory
-    /// batches then use [`Self::max_repeated_batch_steps`] like any other batch.
+    /// batches then use [`Self::max_repeated_batch_steps`] like any other
+    /// batch, and the rescue ceiling collapses onto that too — which leaves
+    /// the verdict exactly as it was before it read answers at all.
     ///
     /// Default: `Some(15)`.
     pub max_observation_steps: Option<usize>,

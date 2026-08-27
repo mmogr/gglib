@@ -163,8 +163,9 @@ pub struct Settings {
     /// `/v1/chat/completions`.
     ///
     /// `None`/`Some(true)` → active (the default): a conversation whose
-    /// replayed history already repeats the same tool-call batch back to back,
-    /// or the same assistant response anywhere in the session, beyond the
+    /// replayed history already repeats the same tool-call batch back to back
+    /// and gets the same answer back each time, or repeats the same assistant
+    /// response anywhere in the session, beyond the
     /// shared agent-path thresholds is rejected
     /// with a clean HTTP 400 (`loop_detected` / `stagnation_detected`)
     /// **before** admission — no model swap, no generation, no ten minutes of
@@ -172,7 +173,8 @@ pub struct Settings {
     /// escape hatch for a client that legitimately repeats identical
     /// tool-call batches with nothing in between, or repeats a response.
     /// Replaying identical batches across a history no longer trips it — the
-    /// batch count is back to back.
+    /// batch count is back to back — and a repeat whose answer changed is not
+    /// counted at all.
     ///
     /// Note the inverse polarity to [`Self::trust_client_sampling`]: absent
     /// means **on**, because the guard is protection the endpoint should not

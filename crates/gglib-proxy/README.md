@@ -622,8 +622,10 @@ unchanged; the upstream llama-server produces its own diagnostic.
 ### Problem
 
 The built-in agent loop (`gglib-agent`) aborts a run when the model repeats
-the same tool-call batch back to back, or the same response text anywhere in
-the session. External agentic clients
+the same tool-call batch back to back **and keeps getting the same answer
+back**, or repeats the same response text anywhere in the session. A repeat
+whose answer changed is an agent polling for output, not a loop. External
+agentic clients
 (Cline, Roo Code, Copilot BYOK) run their loop client-side, where those guards
 never execute — a model looping in such a session burns a model swap plus a
 full generation per stuck turn, and nothing in the system notices except the
@@ -640,8 +642,9 @@ conversation every turn, so the scan is stateless: no session store, no TTL.
 
 | Signal | Threshold | Source |
 |--------|-----------|--------|
-| Identical tool-call batch (FNV-1a signature over canonicalized args), repeated back to back | 3rd consecutive occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
-| Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends, repeated back to back | 16th consecutive occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
+| Identical tool-call batch (FNV-1a signature over canonicalized args), repeated back to back **and answered the same way** | 3rd consecutive occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
+| The same, where the answer keeps changing — an agent polling for output | never aborts if read-only; 16th aborts otherwise | `.max_observation_steps`, reused as the ceiling |
+| Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends, repeated back to back and answered the same way | 16th consecutive occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
 | Identical assistant response text (session-wide, catches A→B→A→B oscillation) | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
 
 A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
@@ -650,7 +653,10 @@ cost — `type` and `code` are `loop_detected` or `stagnation_detected`
 off-switch: `gglib config settings set --proxy-loop-detection false`, for a
 client that legitimately repeats identical batches with nothing in between.
 (Replaying identical batches across a history no longer trips it — the count
-is back to back.) Detection lags the agent
+is back to back, and a repeat whose answer changed is not counted at all. A
+batch that went unanswered, or was answered only in part, cannot be compared
+and is counted as a repeat: an answer nobody can read is not evidence of
+progress. See [ADR 0010](../../docs/adr/0010-the-loop-guard-reads-what-came-back.md).) Detection lags the agent
 path's per-iteration check by one turn (the history at turn N shows responses
 1..N-1), capping a runaway session at threshold+1 turns.
 
@@ -773,9 +779,9 @@ model"*, which is the only form the answer is actionable in. Each value carries
 `repairs_succeeded`, `stream_errors`, `truncated_generations`,
 `empty_responses`, `reasoning_only`, `dialect_residue`,
 `unvalidatable_schemas`, `normalization_errors`,
-`identical_result_repeats` and `repeats_not_evaluated`.
+`identical_result_repeats`, `repeats_not_evaluated` and `repeats_rescued`.
 
-Four shapes worth knowing before reading them:
+Five shapes worth knowing before reading them:
 
 - **`reasoning_only` is counted *inside* `empty_responses`**, not beside it.
   The turn was empty from the client's point of view either way; the
@@ -796,6 +802,17 @@ Four shapes worth knowing before reading them:
   Without it, an instrument that never joined a single result would be
   indistinguishable from a fleet with nothing wrong, and a decision rests on
   telling those apart.
+- **`repeats_rescued` is a fact about gglib, not about the conversation.** It
+  counts turns where a repeated batch got a *different* answer and the loop
+  guard declined to act on that basis. The two counters above are computed from
+  a session-wide map keyed by signature; this one comes from the detector's own
+  run-scoped outcome, so it is a third instrument rather than a third view of
+  one, and a turn can be both. It exists because
+  [ADR 0010](../../docs/adr/0010-the-loop-guard-reads-what-came-back.md)
+  promoted the results join from an observation to a policy input, and a kill
+  criterion nobody can read is not one: if this dwarfs
+  `identical_result_repeats` in real use, the join is being defeated by output
+  that carries a clock rather than measuring progress.
 
 Process-lifetime and reset on restart, deliberately — see
 [ADR 0006](../../docs/adr/0006-recover-dont-predict.md). Nothing acts on them
