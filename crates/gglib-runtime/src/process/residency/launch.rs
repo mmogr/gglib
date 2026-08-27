@@ -158,14 +158,12 @@ async fn launch(
     // The queue has already decided this is safe: a slot is only offered for
     // eviction once it has no requests in flight.
     if let Some(model_id) = evict {
-        if let Some(previous) = queue.evict(*slot) {
-            info!(
-                model_id = %previous.model_id,
-                model_name = %previous.model_name,
-                slot = %slot,
-                "Stopping resident model for swap"
-            );
-        }
+        // No `queue.evict` here. `poll` captured this id from the resident and
+        // replaced the slot with `Loading` in the same critical section, so the
+        // record is already gone and the call could only ever return `None` —
+        // its `info!` never fired. The id is what the kill needs, and `poll`
+        // handing it over is what makes the displacement safe.
+        info!(model_id = %model_id, slot = %slot, "Stopping resident model for swap");
         let mut core_w = core.write().await;
         if let Err(e) = core_w.kill(*model_id).await {
             warn!(error = %e, "Failed to stop displaced model cleanly, continuing");
