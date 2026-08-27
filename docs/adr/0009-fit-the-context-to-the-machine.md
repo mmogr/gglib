@@ -333,8 +333,11 @@ and not fixed by this change.~~
 
 ## Kill criteria
 
-- If the `debug` fit log shows the chosen rung is routinely far below the
-  unsnapped figure, the ladder is too coarse.
+- If the chosen rung is routinely far below the unsnapped figure, the ladder is
+  too coarse. `gglib model explain` prints both, per model, without launching
+  anything — so this is now a survey rather than a log to grep. (Amended
+  2026-08-28: it was a `debug!` line emitted after a launch and collected by
+  nothing, which made this criterion unreadable in practice.)
 - If launches fail at the fitted context on real hardware, `BUDGET_UTILISATION`
   is too generous for this duty and wants its own constant.
 - If the reservation's one measured configuration never occurs in practice, the

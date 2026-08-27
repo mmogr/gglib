@@ -9,8 +9,13 @@
 //! cannot describe a hierarchy that differs from the one that runs.
 
 use anyhow::{Result, anyhow};
+use gglib_core::Settings;
 use gglib_core::domain::{InferenceProfile, ModelSamplingContext, ModelSamplingDefaults};
 use gglib_core::request_pipeline;
+use gglib_core::server_config::{ServerConfigOptions, resolve_context_size_with_source};
+use gglib_runtime::llama::args::resolve_kv_cache_types;
+use gglib_runtime::ports_impl::model_shards::total_model_bytes;
+use gglib_runtime::process::residency::explain::explain_fit;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
@@ -74,7 +79,84 @@ pub(crate) async fn execute(
         },
     );
 
+    print_context_explanation(&model, &settings);
+
     Ok(())
+}
+
+/// Print the context chain, and what the fit worked from where it reached one.
+///
+/// The two constants behind a fitted context — `BUDGET_UTILISATION` and the
+/// co-resident reservation — are judgement calls, and ADR 0009 says so. The
+/// only way they stop being guesses is if the numbers they produce are visible
+/// when somebody looks, and until now the only record was a `debug!` line
+/// inside `admit`, written after a launch and read by nothing. Its first kill
+/// criterion needs exactly this reading across a catalog: if the chosen rung is
+/// routinely far below `unsnapped`, the ladder is too coarse.
+///
+/// Every value comes from [`gglib_runtime::process::residency::explain::explain_fit`]
+/// and [`resolve_context_size_with_source`] — the same calls a launch makes —
+/// so this cannot describe a chain that differs from the one that runs.
+fn print_context_explanation(model: &gglib_core::domain::Model, settings: &Settings) {
+    let kv = gglib_core::domain::estimate_kv_elems_per_token(
+        &model.metadata,
+        model.architecture.as_deref(),
+    );
+    let kv_types = resolve_kv_cache_types(None, None);
+    let weights = total_model_bytes(&model.file_path);
+    let (fitted, inputs) = explain_fit(
+        model.context_length,
+        Some(weights),
+        kv,
+        kv_types.k,
+        kv_types.v,
+    );
+
+    let (resolved, source) = resolve_context_size_with_source(&ServerConfigOptions {
+        model_server_ctx: model
+            .server_defaults
+            .as_ref()
+            .and_then(|s| s.context_length),
+        global_default_ctx: settings.default_context_size,
+        fitted_ctx: fitted,
+        ..Default::default()
+    });
+
+    println!();
+    println!("Context");
+    println!("  {:<22} {resolved} ({})", "serves at", source.label());
+    // Printed whatever the winning rung was. A fit that lost to a number
+    // someone typed is still the fact that says whether the number was a good
+    // one, and a fit that refused is the fact that explains the floor.
+    println!("  {:<22} {}", "fitted to hardware", opt(fitted));
+    println!("  {:<22} {}", "  device budget", gib(inputs.budget_bytes));
+    println!("  {:<22} {}", "  weights", gib(inputs.weights_bytes));
+    println!(
+        "  {:<22} {}",
+        "  kv bytes/token",
+        opt(inputs.kv_bytes_per_token)
+    );
+    println!("  {:<22} {}", "  trained window", opt(inputs.trained_ctx));
+    // The gap between these two is what the ladder costs, which is the whole
+    // of ADR 0009's first kill criterion.
+    println!("  {:<22} {}", "  before snapping", opt(inputs.unsnapped));
+}
+
+/// `None` reads as a refusal here, not as a zero — see `FitInputs`.
+fn opt(v: Option<u64>) -> String {
+    v.map_or_else(|| "unknown".to_owned(), |n| n.to_string())
+}
+
+/// Bytes as GiB, or `unknown` when the value could not be read.
+fn gib(v: Option<u64>) -> String {
+    v.map_or_else(
+        || "unknown".to_owned(),
+        |b| {
+            #[allow(clippy::cast_precision_loss)]
+            let g = b as f64 / (1024.0 * 1024.0 * 1024.0);
+            format!("{g:.2} GiB")
+        },
+    )
 }
 
 /// Look up a configured profile by name.
