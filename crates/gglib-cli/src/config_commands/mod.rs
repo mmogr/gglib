@@ -216,6 +216,16 @@ pub enum SettingsCommand {
     Show,
     /// Update application settings
     Set(Box<SettingsSetArgs>),
+    /// Clear one setting, returning it to unset
+    ///
+    /// Unset is not the same as zero or a default: for `default-context-size`
+    /// it is what lets each launch size the context to this machine, and
+    /// `settings set` can only ever write a value. Before this existed, a
+    /// number written once could only be removed by resetting everything.
+    Unset {
+        /// The setting to clear, as shown by `settings show`
+        key: String,
+    },
     /// Reset all settings to defaults
     Reset {
         /// Skip confirmation prompt

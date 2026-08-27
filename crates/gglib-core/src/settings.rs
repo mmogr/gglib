@@ -50,8 +50,8 @@ pub struct Settings {
     ///
     /// `None` means the user has chosen nothing, and is the ordinary state —
     /// it is what lets the daemon size each launch rather than pinning it.
-    /// A value here is read as a number the user typed and outranks that fit,
-    /// so nothing should write one on their behalf. See
+    /// A value here is read as a number the user typed and outranks that, so
+    /// nothing writes one on their behalf and `settings unset` returns it. See
     /// [`crate::server_config::resolve_context_size_with_source`] for the chain
     /// and `Self::with_defaults` for why this field is the one left unset.
     pub default_context_size: Option<u64>,
