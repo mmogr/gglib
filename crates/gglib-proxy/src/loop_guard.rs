@@ -30,18 +30,43 @@
 //! is not valid JSON is hashed as the raw string rather than erroring — a
 //! client sending consistently malformed arguments still gets loop
 //! protection and never gets a parse-driven rejection.
+//!
+//! Fail-open is also the sharpest edge here, because it is *silent*: a body
+//! that fails to deserialize switches the guard off for that request, and a
+//! replayed history brings the offending message back on every request after
+//! it. So the surface that can fail is kept as small as the wire format allows
+//! — see [`wire`], where every field a client controls is a
+//! `serde_json::Value` and only `messages` itself is typed.
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
-use serde_json::Value;
-
 use gglib_core::domain::agent::{
-    AgentConfig, LoopDetector, RepeatOutcome, StagnationDetector, batch_results_hash,
-    batch_signature, hash_result_content,
+    AgentConfig, LoopDetector, RepeatOutcome, StagnationDetector, batch_signature,
 };
 use gglib_core::ports::AgentError;
 use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
+
+/// The permissive view of the incoming history.
+///
+/// A child module rather than a section of this file: the reason every field
+/// there is a `serde_json::Value` is a page of argument, and it belongs beside
+/// the types it governs rather than in the middle of the scan.
+#[path = "loop_guard_wire.rs"]
+mod wire;
+
+use wire::HistoryEnvelope;
+
+/// Reached by `loop_guard_tests.rs` through `use super::*`.
+///
+/// The scan no longer names these — the results join moved to [`wire`] — but
+/// the tests that pin its behaviour still build answers by hand. Imported here
+/// rather than in the test file because that file is frozen at its current size
+/// by the complexity ratchet.
+#[cfg(test)]
+use {
+    gglib_core::domain::agent::{batch_results_hash, hash_result_content},
+    serde_json::Value,
+};
 
 // =============================================================================
 // Configuration
@@ -112,64 +137,6 @@ pub(crate) enum LoopGuardVerdict {
         /// The configured threshold.
         max_steps: usize,
     },
-}
-
-// =============================================================================
-// Permissive wire types
-// =============================================================================
-//
-// Deliberately NOT `crate::models::ToolCall`: a client replaying history may
-// omit `id` or `type` on old messages, and a guard must never 400 a request
-// because of a shape quirk in content it is only inspecting.  Every field
-// defaults.
-
-#[derive(Deserialize)]
-struct HistoryEnvelope {
-    #[serde(default)]
-    messages: Vec<HistoryMessage>,
-}
-
-#[derive(Deserialize)]
-struct HistoryMessage {
-    #[serde(default)]
-    role: Value,
-    /// Assistant text is read via [`extract_text`]; on a `role: "tool"`
-    /// message the whole value is hashed by [`hash_result_content`] instead.
-    #[serde(default)]
-    content: Value,
-    #[serde(default)]
-    tool_calls: Vec<WireToolCall>,
-    /// Present on `role: "tool"` messages: the id of the call this is the
-    /// result of.  The join key between the model's request and the
-    /// environment's answer, and the reason this struct is no longer
-    /// assistant-only.
-    ///
-    /// `Value`, not `Option<String>`, for the reason stated above every field
-    /// here: a typed field rejects a body whose shape is merely odd, and a
-    /// failed deserialize takes the *whole envelope* with it — silently
-    /// disabling the guard for that request. Read through `as_str`.
-    #[serde(default)]
-    tool_call_id: Value,
-}
-
-#[derive(Deserialize)]
-struct WireToolCall {
-    #[serde(default)]
-    id: Value,
-    #[serde(default)]
-    function: WireFunction,
-}
-
-#[derive(Deserialize, Default)]
-struct WireFunction {
-    #[serde(default)]
-    name: Value,
-    /// OpenAI wire format says a JSON-encoded *string*, but models and
-    /// bridges routinely emit a bare object here, and `ToolCall::arguments`
-    /// in the domain is a `Value` for that reason. Typed as `String` this
-    /// failed the whole envelope and switched the guard off for the request.
-    #[serde(default)]
-    arguments: Value,
 }
 
 // =============================================================================
@@ -305,7 +272,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
         // when stagnation rejects it. The loop detector reads `results` below,
         // but not these bits: it compares within its own run, and these are a
         // session-wide reading.
-        let calls: Vec<ToolCall> = msg.tool_calls.iter().map(to_domain_call).collect();
+        let calls: Vec<ToolCall> = wire::domain_calls(&msg.tool_calls);
         // Hoisted so the verdict below can read it. The bits are still computed
         // in the branch, and still before the guards run.
         let mut results = None;
@@ -318,7 +285,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             repeat_not_evaluated = false;
             repeat_rescued = false;
         } else {
-            results = turn_results_hash(&calls, &envelope.messages[i + 1..]);
+            results = wire::turn_results_hash(&calls, &envelope.messages[i + 1..]);
             let seen_before = previous.insert(batch_signature(&calls), results);
             identical_result_repeat =
                 matches!(seen_before, Some(Some(seen)) if Some(seen) == results);
@@ -328,7 +295,9 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 matches!(seen_before, Some(prior) if prior.is_none() || results.is_none());
         }
 
-        if let Err(e) = stagnation.record(&extract_text(&msg.content), cfg.max_stagnation_steps) {
+        if let Err(e) =
+            stagnation.record(&wire::extract_text(&msg.content), cfg.max_stagnation_steps)
+        {
             return ScanOutcome {
                 verdict: verdict(e),
                 identical_result_repeat,
@@ -380,60 +349,6 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
     }
 }
 
-/// Hash the results answering one assistant turn's tool calls.
-///
-/// `rest` is the history *after* that assistant message; the answers are the
-/// contiguous run of result messages at its head, which bounds the join to
-/// this turn and makes repeated synthetic ids harmless. gglib mints those ids
-/// itself for dialect models (`DelimitedToolCallParser` restarts at zero on
-/// every response), so `call_qwen_0` recurs on every turn of a replayed
-/// conversation and a global index would resolve every occurrence of a batch
-/// to the same result.
-///
-/// The windowing is all that lives here. Pairing each call with its own
-/// answer, and hashing the pairs, is
-/// [`gglib_core::domain::agent::batch_results_hash`] — shared with the agent
-/// loop, which has the pairing for free and no window to find.
-///
-/// `None` when any call is unanswered — a partially-answered batch says
-/// nothing about whether work repeated.
-fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> Option<u64> {
-    let mut answers: HashMap<&str, u64> = HashMap::new();
-    for m in rest.iter().take_while(|m| m.role.as_str() == Some("tool")) {
-        let Some(id) = m.tool_call_id.as_str() else {
-            continue;
-        };
-        // A window with the same id twice cannot say which call either answer
-        // belongs to. Bail rather than keep one: this join's whole contract is
-        // that it reports nothing when it cannot attribute an answer.
-        if answers
-            .insert(id, hash_result_content(&m.content))
-            .is_some()
-        {
-            return None;
-        }
-    }
-
-    // The same, from the other side. Two calls sharing an id would both resolve
-    // to the single answer present, so a half-answered batch would report as
-    // fully joined and take a strike from an answer that never existed — or, if
-    // that one answer moved, manufacture a rescue. The agent path joins
-    // positionally and can do neither, so this is also where the two paths
-    // would drift.
-    let mut seen: HashMap<&str, ()> = HashMap::with_capacity(calls.len());
-    for c in calls {
-        if seen.insert(c.id.as_str(), ()).is_some() {
-            return None;
-        }
-    }
-
-    let per_call: Vec<Option<u64>> = calls
-        .iter()
-        .map(|c| answers.get(c.id.as_str()).copied())
-        .collect();
-    batch_results_hash(calls, &per_call)
-}
-
 /// Map a detector error onto the guard's verdict.
 fn verdict(e: AgentError) -> LoopGuardVerdict {
     match e {
@@ -444,47 +359,6 @@ fn verdict(e: AgentError) -> LoopGuardVerdict {
         // The detectors return no other variant; treat anything unexpected as
         // a pass rather than inventing a rejection (fail-open).
         _ => LoopGuardVerdict::Pass,
-    }
-}
-
-/// Extract the assistant-visible text from an OpenAI `content` value.
-///
-/// `content` may be a plain string, `null` (tool-call-only turns), or an
-/// array of typed parts; only `{"type": "text"}` parts contribute.  Anything
-/// else (images, unknown part types) yields the empty string, which the
-/// stagnation detector ignores.
-fn extract_text(content: &Value) -> String {
-    match content {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts
-            .iter()
-            .filter(|p| p.get("type").and_then(Value::as_str) == Some("text"))
-            .filter_map(|p| p.get("text").and_then(Value::as_str))
-            .collect::<Vec<_>>()
-            .join(""),
-        _ => String::new(),
-    }
-}
-
-/// Bridge the OpenAI wire tool call (arguments as a JSON string) to the
-/// domain [`ToolCall`] (arguments as a [`Value`]) the detectors hash.
-///
-/// A malformed arguments string falls back to hashing the raw string —
-/// identical malformed batches still count as repeats.
-fn to_domain_call(call: &WireToolCall) -> ToolCall {
-    // A JSON-encoded string is the documented shape, a bare object is the
-    // common deviation, and anything else is used as it stands rather than
-    // rejected — this runs on content the guard only inspects.
-    let arguments = match &call.function.arguments {
-        Value::String(s) => {
-            serde_json::from_str::<Value>(s).unwrap_or_else(|_| Value::String(s.clone()))
-        }
-        other => other.clone(),
-    };
-    ToolCall {
-        id: call.id.as_str().unwrap_or_default().to_owned(),
-        name: call.function.name.as_str().unwrap_or_default().to_owned(),
-        arguments,
     }
 }
 
