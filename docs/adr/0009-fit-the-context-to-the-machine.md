@@ -207,6 +207,27 @@ and not fixed by this change.~~
 > longer ships. Fixing it is its own change: a benchmark that silently
 > re-baselines is worse than one known to be stale.
 >
+> > **Amended 2026-08-28 — and it was not measurement-only.** The paragraph
+> > above treats this as a stale instrument. It is also a live cost, because
+> > `service_graph.rs` builds `benchmark_runtime` from the **same**
+> > `ProcessManager` the proxy uses, and `ResidentSet::serve` recycles any
+> > resident whose `context_size` differs from the one resolved. Before the fit
+> > existed both sides resolved 4096 and matched; afterwards they were
+> > guaranteed to differ wherever `fit_context` succeeds. So a sweep evicted the
+> > proxy's resident, relaunched it at 4096, and the next chat request evicted it
+> > back — a full teardown, weight reload and prefill each way.
+> >
+> > All three now pass the setting through and let admission resolve the chain,
+> > and record what the launch actually served rather than what they asked for.
+> > `scripts/check_context_floor.sh` keeps the construct out: it is the third
+> > time this exact `.unwrap_or` has shipped, and each was found by reading
+> > rather than by a test.
+> >
+> > **The re-baseline is real and is not silently absorbed.** Numbers taken
+> > before this change were measured at 4096; numbers after are measured at
+> > whatever the machine fits. They are not comparable, and any stored history
+> > spans both.
+>
 > `gglib serve`'s banner is another, and it is the more embarrassing of them
 > because it is the failure this ADR opens with. `launch_options.rs` builds
 > `PinnedLaunch::effective_ctx` with `resolve_context_size` and no `fitted_ctx`

@@ -256,6 +256,11 @@ enforce: ## Run the architecture enforcement checks
 	@# exactly that: an ALTER failed with "no such table", said nothing, and left
 	@# every fresh install without the column until a second boot.
 	@./scripts/check_swallowed_db_errors.sh
+	@# `.unwrap_or(DEFAULT_CONTEXT_SIZE)` reads as a harmless default and turns
+	@# "the user chose nothing" into "the user chose 4096", which outranks the
+	@# fitted rung. The same construct shipped in #925, #926 and #934, each time
+	@# found months later by reading. The construct is the tell.
+	@./scripts/check_context_floor.sh
 	@# The repo's "small files" constraint was enforced only over src/ (TS and
 	@# CSS); Rust was never checked, and 175 files are already over the same
 	@# budget. A ratchet rather than a threshold, so the rule can bite today

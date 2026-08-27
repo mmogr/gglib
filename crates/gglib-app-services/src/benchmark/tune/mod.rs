@@ -19,8 +19,6 @@ use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::domain::{InferenceConfig, Model};
 use gglib_core::ports::{LlmCompletionPort, RunningTarget, ToolExecutorPort, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
-use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 use gglib_runtime::LlmCompletionAdapter;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
@@ -94,29 +92,22 @@ pub async fn run_tune(
     // ── Load the model once — every candidate only varies per-request
     // sampling parameters, never the loaded llama-server process. ──────────
     let settings = deps.settings_repo.load().await.ok();
-    let default_ctx = settings
-        .as_ref()
-        .and_then(|s| s.default_context_size)
-        .unwrap_or(DEFAULT_CONTEXT_SIZE);
-    let resolved_ctx = resolve_context_size(&ServerConfigOptions {
-        context_size: config.ctx_size,
-        model_server_ctx: model
-            .server_defaults
-            .as_ref()
-            .and_then(|s| s.context_length),
-        global_default_ctx: Some(default_ctx),
-        ..Default::default()
-    });
-
+    // Passed through, not resolved. `.unwrap_or(DEFAULT_CONTEXT_SIZE)` turned
+    // "the user set nothing" into "the user set 4096" and sent it as `num_ctx`
+    // — the explicit rung — so the fit below it was computed and discarded on
+    // every benchmark launch, and the resident it produced disagreed with the
+    // one the proxy wanted. They share a `ProcessManager`, so that disagreement
+    // is an evict and a relaunch, both ways.
+    let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
     // The lease is held for the whole sweep: a candidate measured across a
     // model swap would be measuring the swap.
     let admission = match deps
         .runtime
         .admit(
             &model.name,
-            Some(resolved_ctx),
-            // Pinned explicitly above; no fallback rung is reachable here.
-            None,
+            // Only what the user actually pinned reaches the explicit rung.
+            config.ctx_size,
+            default_ctx,
             gglib_core::ports::LaunchOverrides::default(),
         )
         .await
