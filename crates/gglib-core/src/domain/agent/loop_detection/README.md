@@ -13,10 +13,13 @@ Tool-call loop detection via FNV-1a batch signatures.
    `"{name}:{fnv1a_64(canonical_args_json):016x}"`.
 2. Sort the individual signatures and join them with `"|"` to form a
    **batch signature** that is independent of tool-call ordering.
-3. A [`LoopDetector`] counts how many times the **current** batch signature
-   has repeated back to back.  A batch with a different signature resets that
-   run to one.  The threshold applied depends on whether the batch is
-   classified as "observation-only" (see below).
+3. Compute a **results hash** for the batch by pairing each call with its own
+   answer, sorting the pairs and hashing them (see `results.rs`).
+4. A [`LoopDetector`] counts how many times the **current** batch signature has
+   repeated back to back **and got the same answer back**.  A batch with a
+   different signature resets that run to one; so does an answer that differs
+   from the previous occurrence's.  The threshold applied depends on whether
+   the batch is classified as "observation-only" (see below).
 
 # Consecutive, not session-wide
 
@@ -45,6 +48,10 @@ escapes, because the run reaches the threshold on every pass and never crosses
 it.  Separating a cycle from the scattered repeats above needs a window or a
 decay rate, and there is no measurement behind either number.
 
+Reading the answers did not close this, and it is worth saying so plainly
+because it looks as though it should have.  The run breaks on **signature**,
+before any answer is consulted, so a cycle escapes whatever came back.
+
 Nothing backstops it in the general case.
 [`crate::domain::agent::stagnation::StagnationDetector`] keeps its session-wide
 counting and catches an oscillating session **only if the model also repeats its
@@ -54,12 +61,49 @@ therefore refused by neither guard.  What observes it is
 `identical_result_repeats` in the proxy's ledger: a reading for a person, not a
 verdict.
 
-What this does **not** fix is a batch repeated back to back whose result
-changes every time — an agent polling a build for output.  Those repeats are
-consecutive, so run-length counting refuses them exactly as a session-wide
-tally did.  Telling them apart needs the verdict to read what came back, which
-it cannot do today; see ADR 0006's postscript and the `identical_result_repeats`
-counter, which measures how often it happens.
+# The verdict reads what came back
+
+A repeat is a strike only when its answers matched the previous occurrence's.
+The same call with a different answer is progress that happens to look alike —
+an agent polling a build for output issues an identical batch every time, and
+run-length counting alone refused it exactly as a session-wide tally did.
+
+The two call sites cannot ask this the same way at the same moment, which is why
+[`LoopDetector::check`] and [`LoopDetector::record_results`] are separate calls.
+The proxy reads a finished transcript and knows a batch's answers when it
+counts it; the agent loop counts a batch *before* it runs, so its answers do not
+exist yet.  Both call `check` where the verdict is needed and `record_results`
+once the answers are in hand.  A [`BatchRecord`] links the two, so the answers
+recorded cannot belong to a different batch than the one counted — getting that
+backwards would invert the measurement silently.
+
+**Unknown answers never rescue.**  A batch that went unanswered, or was
+answered only in part, produces no hash, and no hash is not evidence of
+progress.  That is also what makes a detector nobody records into behave exactly
+as it did before it could read anything.
+
+**The ceiling.**  A run carries two counts: occurrences since the answer last
+changed, which the threshold is compared against, and occurrences in the run
+overall, which a changed answer does *not* reset.  A changed answer restarts
+the first, so on its own it would exempt any tool whose output carries a clock,
+an elapsed time or a progress counter — `cargo test`'s `finished in 0.31s` is
+enough.  Observation batches are exempt
+anyway, on the same ground the tier already stands on — but only while the tier
+is *configured*: the classification comes from `observation_tools` and the
+exemption from `max_observation_steps`, so with the latter unset a read-only
+batch is bounded like any other.  Everything else
+may be carried by changing answers only while the run itself stays inside the
+read-only allowance, `max_observation_steps`.  That number is reused rather than
+invented; there is no measurement behind a new one.
+
+**What it still does not fix.**  A *quiet* poll.  Sixteen identical answers in a
+row to a read-only batch is a loop by this detector's definition, so an agent
+watching a compile that prints nothing for two minutes is still refused at the
+observation ceiling.  Reading the answers helps only once the output moves.
+
+See [ADR 0010].
+
+[ADR 0010]: https://github.com/mmogr/gglib/blob/main/docs/adr/0010-the-loop-guard-reads-what-came-back.md
 
 # Dual-threshold detection
 
@@ -123,7 +167,9 @@ bypassing the loop guard.
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`results.rs`](results.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-results-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-results-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-results-coverage.json) |
+| [`signature.rs`](signature.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-signature-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-signature-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-signature-coverage.json) |
 | [`tests.rs`](tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-tests-coverage.json) |
+| [`verdict_tests.rs`](verdict_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-verdict_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-verdict_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loop_detection-verdict_tests-coverage.json) |
 <!-- module-table:end -->
 
 </details>

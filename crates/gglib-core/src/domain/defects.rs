@@ -154,6 +154,22 @@ pub struct ModelDefectCounts {
     /// partly unanswered.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repeats_not_evaluated: u64,
+    /// Turns where a repeated batch got a **different** answer, and the loop
+    /// guard let it through on that basis.
+    ///
+    /// Unlike the two above, this is not a fact about the conversation — it is
+    /// a fact about gglib's own reflex, which is what the ledger was chartered
+    /// for before ADR 0006 had to widen it. It reads the detector's run-scoped
+    /// outcome, not the session-wide map those two are computed from, so it is
+    /// a third instrument rather than a third view of one.
+    ///
+    /// It exists because ADR 0010 promoted the results join from an
+    /// observation to a policy input, and a kill criterion nobody can read is
+    /// not a kill criterion. If this dwarfs `identical_result_repeats` in real
+    /// use, the join is being defeated by output that carries a clock rather
+    /// than measuring progress, and the rescue wants narrowing or removing.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub repeats_rescued: u64,
 }
 
 /// Process-lifetime per-model defect counters.
@@ -250,8 +266,14 @@ impl ModelDefectLedger {
         self.with(model, |c| c.identical_result_repeats += 1);
     }
 
-    /// Count one turn that repeated the call before it whose results could
-    /// not be compared.
+    /// Count one turn where a repeated batch got a different answer and the
+    /// loop guard declined to act on that basis.
+    pub fn record_repeat_rescued(&self, model: &str) {
+        self.with(model, |c| c.repeats_rescued += 1);
+    }
+
+    /// Record that one turn repeated a batch whose results could not be
+    /// compared.
     pub fn record_repeat_not_evaluated(&self, model: &str) {
         self.with(model, |c| c.repeats_not_evaluated += 1);
     }

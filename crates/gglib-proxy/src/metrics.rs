@@ -318,6 +318,14 @@ impl ContextMetricsStore {
         }
     }
 
+    /// Record that one turn repeated a batch, got a different answer, and was
+    /// let through on that basis — the reading ADR 0010's kill criteria use.
+    pub fn record_repeat_rescued(&self, model: &str) {
+        if let Some(ledger) = &self.ledger {
+            ledger.record_repeat_rescued(model);
+        }
+    }
+
     /// Record that one turn repeated a call whose results could not be
     /// compared — the reading that makes a zero above interpretable.
     pub fn record_repeat_not_evaluated(&self, model: &str) {

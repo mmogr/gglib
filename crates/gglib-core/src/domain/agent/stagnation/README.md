@@ -21,14 +21,19 @@ whether tools are invoked.  Tool-call loops are handled separately by
 [`crate::domain::agent::loop_detection::LoopDetector`], **and the two count
 differently on purpose**: that detector counts only back-to-back repeats of a
 batch, because a session-wide tally rejected ordinary work — an agent that runs
-a command, edits, and runs it again.  This detector stays session-wide.
+a command, edits, and runs it again — and it counts a repeat as a strike only
+when the answer came back the same, because an agent polling a build for output
+repeats a batch every turn and is working.  This detector stays session-wide and
+reads nothing but text.
 
 That does **not** make it a backstop for what the loop detector gave up.  The
 oscillation this detector catches (below) is oscillation *in the text*, and a
 tool-call-only turn has none — empty text is ignored, as stated below.  A model
 cycling through tool batches while narrating nothing is caught by neither
 guard — at any cycle period of two or more, not only strict alternation — and
-is visible only as `identical_result_repeats` in the proxy's ledger.
+is visible only in the proxy's ledger.  Reading the answers did not change
+that: a cycle breaks the other detector's run on *signature*, before any answer
+is consulted.
 
 ## Oscillation detection
 

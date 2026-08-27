@@ -9,7 +9,9 @@
 //! | Test | Guard exercised |
 //! |------|----------------|
 //! | [`test_max_iterations_reached`]                  | [`AgentConfig::max_iterations`] limit |
-//! | [`test_loop_detection`]                          | Repeated tool-call batch → [`AgentError::LoopDetected`] |
+//! | [`test_loop_detection`]                          | Repeated tool-call batch, same answer → [`AgentError::LoopDetected`] |
+//! | [`test_changing_tool_results_do_not_trip_the_loop_guard`] | Repeated batch whose answer moves is progress, not a loop |
+//! | [`test_changing_results_still_stop_at_the_read_only_allowance`] | ...but a mutating batch is still capped at `max_observation_steps` |
 //! | [`test_stagnation_detected_integration`]         | Repeated text response → [`AgentError::StagnationDetected`] |
 //! | [`test_stagnation_fires_before_finalize`]        | Stagnation catches repeated final answer |
 //! | [`test_too_many_tool_calls_integration`]         | Oversized tool-call batch → soft-recovery via synthetic tool error + [`AgentEvent::SystemWarning`] |
@@ -84,6 +86,104 @@ async fn test_max_iterations_reached() {
 
     // No FinalAnswer should have been emitted.
     assert!(!has_final_answer(&events), "unexpected FinalAnswer");
+}
+
+/// The same batch, back to back, whose answer moves every time.
+///
+/// The shape of an agent polling a build for output. `max_repeated_batch_steps`
+/// is 2, so this was refused on the third call however much work was being
+/// done — run-length counting could not tell a stuck agent from a productive
+/// one, because the verdict could not see what came back. See ADR 0010.
+#[tokio::test]
+async fn test_changing_tool_results_do_not_trip_the_loop_guard() {
+    // Eight polls, then the build finishes and the model answers. Without the
+    // trailing answer the run would end on `MaxIterationsReached`, which emits
+    // an error event of its own and would mask what this test is about.
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push_many(
+                (0..8)
+                    .map(|i| MockLlmResponse::tool_call(format!("tc{i}"), "get_output", json!({}))),
+            )
+            .push(MockLlmResponse::text("the build finished")),
+    );
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("get_output"),
+        MockToolBehavior::Counting {
+            prefix: "build line".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(128);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "watch the build".into(),
+            }],
+            common::for_test(|c| {
+                c.max_iterations = 12;
+                c.max_repeated_batch_steps = Some(2);
+                c.max_stagnation_steps = None;
+            }),
+            tx,
+        )
+        .await;
+    let events = collect_events(rx).await;
+
+    assert!(
+        result.is_ok(),
+        "a poll whose output moves is progress, not a loop: {result:?}"
+    );
+    assert!(
+        !has_error_event(&events),
+        "no error event should reach the stream"
+    );
+}
+
+/// ...but not without a ceiling.
+///
+/// A changed answer restarts the run, so on its own it would exempt any tool
+/// whose output carries a clock. `get_output` is read-only and exempt anyway;
+/// `write_file` is not, and gets the read-only allowance and no more.
+#[tokio::test]
+async fn test_changing_results_still_stop_at_the_read_only_allowance() {
+    let llm = Arc::new(MockLlmPort::new().push_many(
+        (0..30).map(|i| MockLlmResponse::tool_call(format!("tc{i}"), "write_file", json!({}))),
+    ));
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("write_file"),
+        MockToolBehavior::Counting {
+            prefix: "wrote revision".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(128);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "go".into(),
+            }],
+            common::for_test(|c| {
+                c.max_iterations = 30;
+                c.max_repeated_batch_steps = Some(2);
+                c.max_observation_steps = Some(15);
+                c.max_stagnation_steps = None;
+            }),
+            tx,
+        )
+        .await;
+    let _ = collect_events(rx).await;
+
+    assert!(
+        matches!(result, Err(AgentError::LoopDetected { .. })),
+        "a mutating batch cannot be carried past the allowance by a moving answer: {result:?}"
+    );
 }
 
 /// **Loop detection**: the model keeps invoking the same tool with the same

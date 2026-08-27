@@ -26,6 +26,7 @@ use std::hash::{Hash, Hasher};
 use serde_json::Value;
 
 use super::super::tool_types::ToolCall;
+use super::signature::stable_repr;
 
 // =============================================================================
 // One answer
@@ -82,10 +83,19 @@ pub fn hash_result_content(content: &Value) -> u64 {
 /// which call produced which result, and a two-call batch whose answers
 /// swapped between occurrences would compare equal.
 ///
-/// The pair key renders `arguments` rather than hashing it structurally, which
-/// relies on `serde_json::Value` being a `BTreeMap`. Enabling that crate's
-/// `preserve_order` feature would make the rendering insertion-ordered and
-/// this join would quietly start under-reporting.
+/// The pair key canonicalises `arguments` through
+/// [`super::signature::stable_repr`] — the *same* rendering
+/// [`super::batch_signature`] uses, and that is load bearing rather than tidy.
+/// `stable_repr` collapses everything below `MAX_REPR_DEPTH` to a sentinel, so
+/// a bare `Value::to_string` here would distinguish batches the signature calls
+/// identical: one run, a different answers hash every occurrence, and a rescue
+/// that never ends. An observation-tier batch built that way could never be
+/// refused at all — which inverts the depth cap's own safety argument, that a
+/// collision can only ever make the guard *stricter*.
+///
+/// It also removes a dependence the previous rendering carried on
+/// `serde_json::Value` being a `BTreeMap`: `stable_repr` sorts keys itself, so
+/// enabling `preserve_order` cannot make this join quietly under-report.
 #[must_use]
 pub fn batch_results_hash(calls: &[ToolCall], answers: &[Option<u64>]) -> Option<u64> {
     if answers.len() != calls.len() {
@@ -102,7 +112,12 @@ pub fn batch_results_hash(calls: &[ToolCall], answers: &[Option<u64>]) -> Option
     let mut keyed: Vec<(String, u64)> = calls
         .iter()
         .zip(answers)
-        .map(|(call, answer)| Some((format!("{}\u{0}{}", call.name, call.arguments), (*answer)?)))
+        .map(|(call, answer)| {
+            Some((
+                format!("{}\u{0}{}", call.name, stable_repr(&call.arguments)),
+                (*answer)?,
+            ))
+        })
         .collect::<Option<Vec<_>>>()?;
     keyed.sort_unstable();
 

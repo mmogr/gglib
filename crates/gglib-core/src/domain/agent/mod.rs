@@ -18,7 +18,9 @@ pub use config::{
 };
 pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent};
 pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_result_text};
-pub use loop_detection::{LoopDetector, batch_signature, is_observation_batch};
+pub use loop_detection::{
+    BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
+};
 pub use messages::{AgentMessage, AssistantContent};
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};

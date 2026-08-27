@@ -65,9 +65,11 @@ Everything between the OpenAI request and llama-server is the product:
   corrected call. [Details →](docs/tool-call-repair.md)
 - **Loop defense**: agentic clients replay the full conversation each turn,
   so the proxy scans the incoming history for tool-call batches repeated back
-  to back, observation-tool spam, and repeated *response text* anywhere in the
-  session. A stuck session is rejected with a clean 400 *before* it costs a
-  model swap or another generation. The model never sees the request.
+  to back *and answered the same way*, observation-tool spam, and repeated
+  *response text* anywhere in the session. A batch whose answer keeps changing
+  is an agent polling for output, not a loop, and is not refused. A stuck
+  session is rejected with a clean 400 *before* it costs a model swap or
+  another generation. The model never sees the request.
   [Details →](crates/gglib-proxy/README.md#loop--stagnation-defence)
 - **Sampling authority**: a 5-level hierarchy (request → profile →
   per-model → global → floor) resolves every sampling parameter server-side.

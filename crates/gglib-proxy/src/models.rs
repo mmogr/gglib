@@ -538,8 +538,10 @@ impl ErrorResponse {
     /// Create an error response for a detected agentic tool-call loop.
     ///
     /// Returned as HTTP 400 by the pre-dispatch loop guard when the request's
-    /// replayed history repeats the same tool-call batch **back to back**
-    /// beyond the shared agent-path threshold (see `loop_guard`).  `type` and
+    /// replayed history repeats the same tool-call batch **back to back and
+    /// gets the same answer back each time** beyond the shared agent-path
+    /// threshold (see `loop_guard`). A repeat whose answer changed is an
+    /// agent polling for output and is not counted.  `type` and
     /// `code` are both `loop_detected`, mirroring
     /// [`Self::context_length_exceeded`]'s shape.
     pub fn loop_detected(signature: &str) -> Self {

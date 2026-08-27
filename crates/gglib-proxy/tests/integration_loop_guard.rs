@@ -155,6 +155,58 @@ async fn an_identical_result_repeat_reaches_the_dashboard() {
     cancel.cancel();
 }
 
+/// The reading ADR 0010's kill criteria rest on must reach the ledger too.
+///
+/// Its neighbour has had this test since the counter existed, and the reason
+/// given there applies here with more force: this counter decides whether the
+/// rescue that ADR 0010 introduced gets narrowed or removed. A wiring break
+/// would read as a fleet where the guard never declines to act, which is the
+/// answer that leaves the rescue in place.
+#[tokio::test]
+async fn a_rescued_repeat_reaches_the_dashboard() {
+    let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
+    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+
+    // Same batch twice, different answers: the guard declines to act.
+    let mut messages = vec![json!({ "role": "user", "content": "watch the build" })];
+    for (i, answer) in ["build line 1", "build line 2"].iter().enumerate() {
+        messages.push(assistant_call("read_file", r#"{"path":"build.log"}"#));
+        messages.push(json!({
+            "role": "tool", "tool_call_id": "c1", "content": format!("{answer} ({i})")
+        }));
+    }
+
+    let _ = Client::new()
+        .post(format!("{proxy_url}/v1/chat/completions"))
+        .json(&json!({ "model": "test-model", "stream": false, "messages": messages }))
+        .send()
+        .await
+        .expect("proxy request");
+
+    let status: Value = Client::new()
+        .get(format!("{proxy_url}/v1/proxy/status"))
+        .send()
+        .await
+        .expect("status request")
+        .json()
+        .await
+        .expect("status json");
+
+    let counts = &status["per_model_defects"]["test-model"];
+    assert_eq!(
+        counts["repeats_rescued"].as_u64(),
+        Some(1),
+        "the rescue must reach the ledger, got {status}"
+    );
+    assert_eq!(
+        counts["identical_result_repeats"].as_u64(),
+        Some(0),
+        "the answers differed, so this is not an identical repeat: {status}"
+    );
+
+    cancel.cancel();
+}
+
 /// The same history with a user turn appended — the client is no longer asking
 /// the model to continue the loop, so the repeat belongs to the previous
 /// request and must not be counted again.

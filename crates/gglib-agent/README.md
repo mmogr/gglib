@@ -26,10 +26,12 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 This crate implements:
 - **`AgentLoop`** — concrete implementation of `AgentLoopPort`; drives the
   ReAct-style LLM→tool→LLM cycle until a final answer or termination condition
-- **Guard enforcement** — runs `gglib_core::domain::agent`'s `LoopDetector`
-  (FNV-1a batch-signature tracking, counting back-to-back repeats only) on
+- **Guard enforcement** — runs `gglib_core::domain::agent`'s `LoopDetector` on
   tool-call-producing iterations, and `StagnationDetector` (repeated-response
-  hashing, session-wide) on every iteration
+  hashing, session-wide) on every iteration. The loop detector counts
+  back-to-back repeats only, and only those that got the same answer back, so
+  it needs telling twice: `check` before the batch executes and
+  `record_results` once its answers exist
 - **Parallel tool execution** — bounded concurrency with per-tool timeout
 - **Stream collection** — consumes `LlmCompletionPort` stream, forwards text
   deltas in real-time, accumulates tool-call deltas until `Done`

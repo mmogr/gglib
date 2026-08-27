@@ -91,6 +91,8 @@ pub(super) struct ModelDefectCounts {
     pub(super) identical_result_repeats: u64,
     #[serde(default)]
     pub(super) repeats_not_evaluated: u64,
+    #[serde(default)]
+    pub(super) repeats_rescued: u64,
 }
 
 impl ModelDefectCounts {
@@ -101,11 +103,12 @@ impl ModelDefectCounts {
     /// thousand clean turns has nothing to report, and saying so at length
     /// would bury the model that does.
     ///
-    /// The two observational members are not faults. They are included
+    /// The three observational members are not faults. They are included
     /// because the dashboard is their only reader: a model whose sole signal
     /// is conversations going in circles is precisely the one to look at, as
-    /// is one whose joins never succeed, and excluding either here would hide
-    /// that model entirely. Both are counted once per turn, so they stay
+    /// is one whose joins never succeed, and as is one whose repeats are all
+    /// being rescued. Excluding any of them here would hide that model
+    /// entirely. All are counted once per turn, so they stay
     /// sparse enough not to bury anything.
     pub(super) const fn is_clean(&self) -> bool {
         self.loop_guard_trips == 0
@@ -126,6 +129,11 @@ impl ModelDefectCounts {
             // never succeeds reads as a clean one, and that is the reading
             // this counter exists to prevent anyone acting on.
             && self.repeats_not_evaluated == 0
+            // And the reading ADR 0010's kill criteria rest on. A fleet whose
+            // repeats are all rescued by a moving answer is one where the
+            // guard has effectively stopped guarding, which is invisible from
+            // the two above.
+            && self.repeats_rescued == 0
     }
 }
 

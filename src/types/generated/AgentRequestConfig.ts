@@ -54,8 +54,17 @@ tool_timeout_ms: number | null,
  */
 observation_tools: Array<string> | null, 
 /**
- * Maximum repetitions of an observation-only batch before loop detection
- * fires.
+ * Maximum repetitions of an observation-only batch **that keeps getting
+ * the same answer back** before loop detection fires.
+ *
+ * A repeat whose answer changed is not counted at all: the same call with
+ * a different result is an agent polling for output, not a loop.
+ *
+ * This value is read twice. For a batch that is **not** observation-only
+ * it is never the strike threshold, but it *is* the ceiling on how far
+ * changing answers may carry that batch — otherwise any tool whose output
+ * carries a clock would be exempt from the guard entirely. Raising this
+ * therefore loosens the guard for every batch, not only read-only ones.
  *
  * Clamped to `MAX_OBSERVATION_STEPS_CEILING` (100) server-side.
  * `None` (field absent) keeps the built-in default of `15`.

@@ -38,6 +38,17 @@ pub(crate) enum MockToolBehavior {
         /// Content returned to the LLM as the tool output.
         content: String,
     },
+    /// Returns a **different** successful result on every call.
+    ///
+    /// The shape of an agent polling for output: same call, moving answer.
+    /// `Immediate` cannot express it, and the loop guard's verdict now turns on
+    /// exactly that difference — a repeat whose answer changed is progress that
+    /// happens to look alike, and is not a strike.
+    Counting {
+        /// Prefixed to the call number, so the content is readable in a
+        /// failure message rather than a bare integer.
+        prefix: String,
+    },
     /// Sleeps for `millis` milliseconds before returning a successful result.
     ///
     /// Useful for exercising the per-tool timeout in [`AgentConfig`].
@@ -83,6 +94,8 @@ pub(crate) struct MockToolExecutorPort {
     behaviors: HashMap<String, MockToolBehavior>,
     /// Shared call log — clone the `Arc` before wrapping in `Arc<dyn …>`.
     pub call_log: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
+    /// Per-tool invocation counts, for [`MockToolBehavior::Counting`].
+    counters: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl MockToolExecutorPort {
@@ -92,6 +105,7 @@ impl MockToolExecutorPort {
             tools: Vec::new(),
             behaviors: HashMap::new(),
             call_log: Arc::new(Mutex::new(Vec::new())),
+            counters: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -142,6 +156,18 @@ impl ToolExecutorPort for MockToolExecutorPort {
             }),
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
+                Ok(ToolResult {
+                    tool_call_id: call.id.clone(),
+                    content,
+                    success: true,
+                })
+            }
+            MockToolBehavior::Counting { prefix } => {
+                let mut counters = self.counters.lock().await;
+                let n = counters.entry(call.name.clone()).or_insert(0);
+                *n += 1;
+                let content = format!("{prefix} {n}");
+                drop(counters);
                 Ok(ToolResult {
                     tool_call_id: call.id.clone(),
                     content,

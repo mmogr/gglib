@@ -648,6 +648,21 @@ fn repeats_that_could_not_be_evaluated_still_list_the_model() {
     assert!(!rendered.contains("repeated, same result"), "{rendered}");
 }
 
+/// The reading ADR 0010's kill criteria rest on. A fleet whose repeats are all
+/// rescued by a moving answer is one where the guard has effectively stopped
+/// guarding, and neither counter beside this one can show that.
+#[test]
+fn rescued_repeats_alone_still_list_the_model() {
+    let per_model = BTreeMap::from([("qwen".to_string(), counts(|c| c.repeats_rescued = 41))]);
+
+    let rendered = render_defects_section(&per_model);
+    assert!(rendered.contains("qwen"), "{rendered}");
+    assert!(rendered.contains("observed"), "{rendered}");
+    assert!(rendered.contains("repeated, new result"), "{rendered}");
+    assert!(rendered.contains("41"), "{rendered}");
+    assert!(!rendered.contains("repeated, same result"), "{rendered}");
+}
+
 /// Every row must fit an 80-column terminal: the observed block sits at a
 /// deeper indent than the defect rows and must not append prose past the
 /// label column.
@@ -658,6 +673,7 @@ fn observed_rows_fit_an_eighty_column_terminal() {
         counts(|c| {
             c.identical_result_repeats = 123_456;
             c.repeats_not_evaluated = 123_456;
+            c.repeats_rescued = 123_456;
         }),
     )]);
 

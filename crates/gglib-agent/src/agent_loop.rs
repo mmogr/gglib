@@ -15,9 +15,18 @@
 //!       ├─ tool_execution::execute_tools_parallel()   parallel tool dispatch
 //!       │      ├─ AgentEvent::ToolCallStart           per-tool
 //!       │      └─ AgentEvent::ToolCallComplete        per-tool
+//!       ├─ LoopDetector::record_results()             the answers, after the fact
 //!       ├─ context_pruning::prune_for_budget()        post-append budget trim
 //!       └─ AgentEvent::IterationComplete              per-iteration
 //! ```
+//!
+//! The loop guard appears twice on purpose. Its verdict turns on whether a
+//! repeated batch got the same answer back, and on this path the batch has not
+//! run when the verdict is needed — so `check` counts the batch before dispatch
+//! and `record_results` hands back what it got once the results exist. The
+//! `BatchRecord` returned by the first is required by the second, so the
+//! answers cannot be attributed to the wrong batch. The proxy's history scan
+//! calls both together, because it reads a transcript that already has them.
 //!
 //! When a final answer is reached: `AgentEvent::FinalAnswer` → `Ok(content)`.
 //! On any guard or limit failure: `AgentEvent::Error` is emitted first, then
@@ -44,7 +53,9 @@ use crate::context_pruning::prune_for_budget;
 use crate::stream_collector::{MAX_TOOL_CALL_INDEX, collect_stream};
 use crate::tool_execution::execute_tools_parallel;
 use crate::util::emit_error_event;
-use gglib_core::domain::agent::{LoopDetector, StagnationDetector};
+use gglib_core::domain::agent::{
+    BatchRecord, LoopDetector, StagnationDetector, batch_results_hash, hash_result_text,
+};
 
 // =============================================================================
 // Private helpers
@@ -237,13 +248,32 @@ impl AgentLoop {
         iteration: usize,
         tx: &mpsc::Sender<AgentEvent>,
         tools: &[ToolDefinition],
-    ) {
+    ) -> Option<u64> {
         let results =
             execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx, tools)
                 .await;
 
         let tool_call_count = results.len();
         let tool_failures = results.iter().filter(|r| !r.success).count();
+        // Hashed here because `append_iteration_messages` takes `results` by
+        // value on the next line, and because this is the last point at which
+        // the calls and their answers are both in hand.
+        //
+        // The join is positional: `execute_tools_parallel` returns one result
+        // per call in order, pre-sizing the vector and filling every hole, so
+        // `results[i]` answers `calls[i]` by construction. That is stronger
+        // than matching on `tool_call_id`, which on the success path comes from
+        // the executor rather than from gglib.
+        //
+        // `success` is deliberately not hashed. The proxy cannot see it — it is
+        // dropped at the message boundary below — and a failure's content
+        // already describes itself, so hashing it would put the two paths on
+        // different rules for no reading anyone gets.
+        let answers: Vec<Option<u64>> = results
+            .iter()
+            .map(|r| Some(hash_result_text(&r.content)))
+            .collect();
+        let answers_hash = batch_results_hash(&response.tool_calls, &answers);
         append_iteration_messages(messages, response.content, response.tool_calls, results);
 
         *messages = prune_for_budget(std::mem::take(messages), config);
@@ -261,6 +291,8 @@ impl AgentLoop {
             tool_failures,
             "iteration complete"
         );
+
+        answers_hash
     }
 }
 
@@ -280,7 +312,8 @@ impl AgentLoopPort for AgentLoop {
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated
-    ///   back to back more than `config.max_repeated_batch_steps` times.
+    ///   back to back, with the same answer each time, more than
+    ///   `config.max_repeated_batch_steps` times.
     /// - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
     ///   text content for too many consecutive iterations.
     async fn run(
@@ -332,59 +365,7 @@ impl AgentLoopPort for AgentLoop {
                 //    by retrying with a smaller batch.
                 // 3. Append assistant + synthetic results to history and
                 //    continue the loop.
-                let count = response.tool_calls.len();
-                let limit = config.max_parallel_tools;
-
-                let synthetic_error = format!(
-                    "ERROR: You requested {count} tool calls in a single batch, but the \
-                     parallel tool-call limit is {limit}.  None of the {count} calls were \
-                     executed.  Please retry your request, issuing at most {limit} tool \
-                     calls per turn (you can split a large batch across multiple turns)."
-                );
-                let synthetic_results: Vec<ToolResult> = response
-                    .tool_calls
-                    .iter()
-                    .map(|tc| ToolResult {
-                        tool_call_id: tc.id.clone(),
-                        content: synthetic_error.clone(),
-                        success: false,
-                    })
-                    .collect();
-
-                let suggested_action = format!(
-                    "To permanently raise this limit, run: \
-                     `gglib config settings set --max-parallel-tools <N>` \
-                     (current: {limit}, ceiling: {ceiling})",
-                    ceiling = gglib_core::MAX_PARALLEL_TOOLS_CEILING,
-                );
-                let warning_message = format!(
-                    "Agent attempted {count} parallel tool calls (limit is {limit}). \
-                     Auto-recovering: the model will retry in smaller batches."
-                );
-                warn!(
-                    count,
-                    limit, "parallel tool limit exceeded; soft-recovering"
-                );
-                let _ = tx
-                    .send(AgentEvent::SystemWarning {
-                        message: warning_message,
-                        suggested_action: Some(suggested_action),
-                    })
-                    .await;
-
-                append_iteration_messages(
-                    &mut messages,
-                    response.content,
-                    response.tool_calls,
-                    synthetic_results,
-                );
-                messages = prune_for_budget(std::mem::take(&mut messages), &config);
-
-                let _ = tx
-                    .send(AgentEvent::IterationComplete {
-                        iteration: iteration + 1,
-                        tool_calls: count,
-                    })
+                recover_from_parallel_overflow(&mut messages, response, &config, iteration, &tx)
                     .await;
                 continue;
             }
@@ -407,7 +388,7 @@ impl AgentLoopPort for AgentLoop {
             //   back (skipped when tool_calls is empty to avoid a degenerate
             //   signature — which also means a text-only iteration does not
             //   break a run, matching the proxy's history scan).
-            guards
+            let batch = guards
                 .check(&config, &response.content, &response.tool_calls, &tx)
                 .await?;
 
@@ -422,8 +403,11 @@ impl AgentLoopPort for AgentLoop {
                 .await;
             }
 
-            self.execute_tool_iteration(&mut messages, response, &config, iteration, &tx, &tools)
+            let answers = self
+                .execute_tool_iteration(&mut messages, response, &config, iteration, &tx, &tools)
                 .await;
+            // Straight-line: no `?` between the execution and the record.
+            guards.record_results(batch, answers);
         }
 
         warn!(max = config.max_iterations, "agent loop hit max iterations");
@@ -460,13 +444,19 @@ impl Guards {
     ///
     /// On failure, emits an [`AgentEvent::Error`] on `tx` before returning so
     /// SSE consumers always see the failure reason before the stream closes.
+    ///
+    /// Returns the [`BatchRecord`] for the batch the loop detector counted, so
+    /// the caller can hand its answers back once they exist. `None` when there
+    /// was no batch to count — an empty `tool_calls`, or loop detection
+    /// disabled — which [`Self::record_results`] accepts and ignores, so the
+    /// caller does not branch on it.
     async fn check(
         &mut self,
         config: &AgentConfig,
         content: &str,
         tool_calls: &[ToolCall],
         tx: &mpsc::Sender<AgentEvent>,
-    ) -> Result<(), AgentError> {
+    ) -> Result<Option<BatchRecord>, AgentError> {
         if let Some(max_steps) = config.max_stagnation_steps {
             if let Err(e) = self.stagnation.record(content, max_steps) {
                 emit_error_event(tx, &e.to_string()).await;
@@ -475,19 +465,113 @@ impl Guards {
         }
         if !tool_calls.is_empty() {
             if let Some(max_steps) = config.max_repeated_batch_steps {
-                if let Err(e) = self.loop_detector.check(
+                match self.loop_detector.check(
                     tool_calls,
                     max_steps,
                     &config.observation_tools,
                     config.max_observation_steps,
                 ) {
-                    emit_error_event(tx, &e.to_string()).await;
-                    return Err(e);
+                    Err(e) => {
+                        emit_error_event(tx, &e.to_string()).await;
+                        return Err(e);
+                    }
+                    Ok(record) => return Ok(Some(record)),
                 }
             }
         }
-        Ok(())
+        Ok(None)
     }
+
+    /// Hand the answers back to the loop detector.
+    ///
+    /// Separate from [`Self::check`] because on this path the batch has not run
+    /// at check time, so its answers do not exist yet. The proxy's history scan
+    /// calls both together; this one cannot.
+    ///
+    /// The caller must reach this with no `?` between the execution and here:
+    /// the answers recorded belong to the batch that *just ran*, and the
+    /// comparison at the next `check` is against those. Recording a different
+    /// batch's would invert the measurement silently — which is what
+    /// [`BatchRecord`] exists to make impossible, and why this takes one
+    /// rather than a bare signature.
+    fn record_results(&mut self, record: Option<BatchRecord>, answers: Option<u64>) {
+        if let Some(record) = record {
+            self.loop_detector.record_results(record, answers);
+        }
+    }
+}
+
+/// Soft-recover from a batch that exceeded `max_parallel_tools`.
+///
+/// Lifted out of `run` because it is a recovery routine rather than a step of
+/// the state machine, and because it is the largest block in a function that
+/// clippy's line budget was already close to. Nothing about it changed in the
+/// move.
+///
+/// The guards are deliberately not consulted on this path and no batch is
+/// executed, so there is no [`BatchRecord`] and nothing to record: the model is
+/// being told to retry in smaller batches, and the retry is what gets counted.
+async fn recover_from_parallel_overflow(
+    messages: &mut Vec<AgentMessage>,
+    response: CollectedResponse,
+    config: &AgentConfig,
+    iteration: usize,
+    tx: &mpsc::Sender<AgentEvent>,
+) {
+    let count = response.tool_calls.len();
+    let limit = config.max_parallel_tools;
+
+    let synthetic_error = format!(
+        "ERROR: You requested {count} tool calls in a single batch, but the \
+         parallel tool-call limit is {limit}.  None of the {count} calls were \
+         executed.  Please retry your request, issuing at most {limit} tool \
+         calls per turn (you can split a large batch across multiple turns)."
+    );
+    let synthetic_results: Vec<ToolResult> = response
+        .tool_calls
+        .iter()
+        .map(|tc| ToolResult {
+            tool_call_id: tc.id.clone(),
+            content: synthetic_error.clone(),
+            success: false,
+        })
+        .collect();
+
+    let suggested_action = format!(
+        "To permanently raise this limit, run: \
+         `gglib config settings set --max-parallel-tools <N>` \
+         (current: {limit}, ceiling: {ceiling})",
+        ceiling = gglib_core::MAX_PARALLEL_TOOLS_CEILING,
+    );
+    let warning_message = format!(
+        "Agent attempted {count} parallel tool calls (limit is {limit}). \
+         Auto-recovering: the model will retry in smaller batches."
+    );
+    warn!(
+        count,
+        limit, "parallel tool limit exceeded; soft-recovering"
+    );
+    let _ = tx
+        .send(AgentEvent::SystemWarning {
+            message: warning_message,
+            suggested_action: Some(suggested_action),
+        })
+        .await;
+
+    append_iteration_messages(
+        messages,
+        response.content,
+        response.tool_calls,
+        synthetic_results,
+    );
+    *messages = prune_for_budget(std::mem::take(messages), config);
+
+    let _ = tx
+        .send(AgentEvent::IterationComplete {
+            iteration: iteration + 1,
+            tool_calls: count,
+        })
+        .await;
 }
 
 /// Append an assistant turn and its tool results to `messages`.

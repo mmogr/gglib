@@ -48,14 +48,22 @@ pub enum AgentError {
     #[error("agent loop reached the maximum number of iterations ({0})")]
     MaxIterationsReached(usize),
 
-    /// The loop detected a tool-call signature repeated **back to back**,
-    /// indicating the model is stuck in a cycle.
+    /// The loop detected a tool-call signature repeated **back to back and
+    /// answered the same way**, indicating the model is stuck rather than
+    /// working.
     ///
     /// The `signature` field is a stable hash of the tool-call batch that
-    /// recurred, with nothing in between, more times than
+    /// recurred, with nothing in between **and getting the same answer back
+    /// each time**, more times than
     /// [`AgentConfig::max_repeated_batch_steps`] allows. A batch that repeats
     /// with other work between occurrences is not a cycle and does not raise
-    /// this.
+    /// this; neither does one whose answers keep changing, which is an agent
+    /// polling for output rather than a stuck one.
+    ///
+    /// It is also raised when a batch that is *not* read-only has been carried
+    /// past `max_observation_steps` by changing answers. The two are not
+    /// distinguished here: the remedy is the same, and this variant is
+    /// mirrored into the proxy's 400 body.
     #[error("tool-call loop detected (repeated signature: {signature})")]
     LoopDetected {
         /// Stable hash of the repeated tool-call batch (for diagnostics).
