@@ -81,7 +81,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                   const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
                   onServerDefaultsChange(val !== undefined ? { contextLength: val } : null);
                 }}
-                placeholder="Use default"
+                placeholder="No override"
                 className="w-32 font-mono tabular-nums"
               />
               {editedServerDefaults !== undefined && (

@@ -320,10 +320,12 @@ pub enum Commands {
         port: u16,
         /// Default context size when not specified by client.
         /// Falls back to the app settings `default_context_size`; with neither
-        /// set, each launch fits the context to this machine. Must be within
-        /// the range `gglib config settings set --default-context-size`
-        /// accepts — `max` is not supported here since no specific model is
-        /// in scope for a standalone proxy.
+        /// set, each launch is sized by the daemon — fitted to this machine
+        /// where gglib can read the device, and the built-in floor where it
+        /// cannot. Must be within the range
+        /// `gglib config settings set --default-context-size` accepts — `max`
+        /// is not supported here since no specific model is in scope for a
+        /// standalone proxy.
         #[arg(long)]
         default_context: Option<String>,
 

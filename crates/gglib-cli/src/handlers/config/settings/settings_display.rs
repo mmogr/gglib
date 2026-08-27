@@ -93,12 +93,20 @@ pub(super) fn settings_display_rows(
             rows.push((kebab_key, display));
         } else if kebab_key == "default-context-size" && val.is_null() {
             // Unset is the ordinary — and preferred — state for this one
-            // field: it is what lets each launch fit the context to the
-            // model and the machine. A bare "None" reads like something is
-            // missing, and this is the surface a person runs to find out
-            // what is configured. Every write surface says what empty means;
-            // the read surface has to as well.
-            rows.push((kebab_key, "None (fitted to this machine)".to_owned()));
+            // field: it is what lets the daemon size each launch. A bare
+            // "None" reads like something is missing, and this is the surface
+            // a person runs to find out what is configured. Every write
+            // surface says what empty means; the read surface has to as well.
+            //
+            // "sized per launch" rather than "fitted to this machine",
+            // because the fit is not always reachable: `fit_context` needs
+            // the device budget, the weight size and the KV geometry, and
+            // ADR 0009 records that AMD, Intel, Vulkan and CPU-only hosts get
+            // no fit at all and land on the floor. This row cannot know which
+            // of those a launch will hit, and a read surface that names a
+            // rung the reader will never reach is worse than one that names
+            // none.
+            rows.push((kebab_key, "None (sized per launch)".to_owned()));
         } else {
             collect_rows(&kebab_key, val, &mut rows);
         }
@@ -216,7 +224,7 @@ mod tests {
             .iter()
             .find(|(k, _)| k == "default-context-size")
             .expect("the row is listed");
-        assert_eq!(value, "None (fitted to this machine)");
+        assert_eq!(value, "None (sized per launch)");
     }
 
     /// A number the user chose is shown as that number, with nothing added.

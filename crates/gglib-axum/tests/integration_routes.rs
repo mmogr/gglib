@@ -805,9 +805,9 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
 ///
 /// It used to be named for falling back to the hard-coded 4096, which is what
 /// it did until #925: `to_runtime_config` now collapses that rung to `None`
-/// so the launch can fit the context to the machine instead. What this asserts
-/// is only that the request stays valid; `wire_tests.rs` is where the resolved
-/// value itself is checked.
+/// so the launch is sized by the daemon instead. What this asserts is only
+/// that the request stays valid; `wire_tests.rs` is where the resolved value
+/// itself is checked.
 #[tokio::test]
 async fn proxy_start_accepts_a_request_that_configures_no_context() {
     let app = test_app(CorsConfig::AllowAll).await;
@@ -848,7 +848,7 @@ async fn proxy_start_accepts_a_request_that_configures_no_context() {
         .unwrap();
 
     // Should NOT return 400 — an unconfigured context is a valid request, and
-    // resolves to `None` so the launch can fit it to this machine.
+    // resolves to `None` so the daemon sizes the launch.
     assert_ne!(
         response.status(),
         StatusCode::BAD_REQUEST,

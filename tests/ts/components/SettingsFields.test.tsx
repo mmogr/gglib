@@ -126,12 +126,12 @@ const FIELDS: {
   },
   {
     label: 'Default Context Size',
-    // No fixed fallback. Leaving the box empty is what lets the launch fit the
-    // context to the machine, so the placeholder is a short token and the hint
-    // is a sentence — and crucially NOT captioned "Default:", which is the
-    // thing this field does not have.
+    // No fixed fallback. Leaving the box empty is what lets the daemon size
+    // each launch, so the placeholder is a short token and the hint is a
+    // sentence — and crucially NOT captioned "Default:", which is the thing
+    // this field does not have.
     fallback: 'auto',
-    hint: 'Left empty, the context is fitted to this machine.',
+    hint: 'Left empty, the server sizes each launch — fitted to this machine where gglib can read the device, and the built-in floor where it cannot.',
     min: '512',
     max: '1000000',
     renderField: renderModelDefaults,
@@ -155,8 +155,9 @@ const FIELDS: {
 describe.each(FIELDS)('$label', ({ label, fallback, hint, min, max, renderField }) => {
   // A field with a fixed default is captioned "Default: N". One without must
   // say what happens instead, and must NOT be captioned with a default it does
-  // not have — "Default: fitted to this machine" is a contradiction the user
-  // has to unpick.
+  // not have — captioning this field "Default:" prefixes a sentence about
+  // having none, which is a contradiction the user has to unpick. The exact
+  // rendering that would produce is spelled out at the assertion below.
   const hintText = hint ?? `Default: ${fallback}`;
 
   it('offers something to type over while the box is empty', () => {
@@ -199,7 +200,7 @@ describe.each(FIELDS)('$label', ({ label, fallback, hint, min, max, renderField 
       // point is that it has no default, captioned with one. Asserting on the
       // caption rather than the placeholder is what makes this fail if
       // `unsetHint` is ever routed back through `defaultHint`, which would
-      // render "Default: Left empty, the context is fitted to this machine."
+      // render "Default: Left empty, the server sizes each launch — fitted to this machine where gglib can read the device, and the built-in floor where it cannot."
       expect(captioned).toHaveLength(0);
     } else {
       // A field that does have one must still say so — otherwise this test

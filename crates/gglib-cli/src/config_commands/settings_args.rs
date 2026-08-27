@@ -20,7 +20,8 @@ use clap::Args;
 pub struct SettingsSetArgs {
     /// Default context size for models (512-1000000).
     /// Global fallback (level 3 of 5); per-model server_defaults and runtime flags take
-    /// precedence, and leaving it unset lets each launch fit the context to this machine.
+    /// precedence, and leaving it unset lets the daemon size each launch — fitted to this
+    /// machine where gglib can read the device, and the built-in floor where it cannot.
     /// Setting it pins every launch to that number. This flag cannot clear the value
     /// again — `gglib config settings reset` is the only CLI route back to unset, and it
     /// resets every other setting too. The settings modal can clear this field alone.

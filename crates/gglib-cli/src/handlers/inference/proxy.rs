@@ -44,7 +44,8 @@ fn resolve_default_context(
         format!(
             "Invalid --default-context '{trimmed}'. Use a number from {} to {}; 'max' is not \
              supported here because `gglib proxy` serves every model, so no single trained \
-             context is in scope. Omit the flag to fit the context to this machine.",
+             context is in scope. Omit the flag to fall back to the app settings \
+             `default_context_size`, or, with that unset too, to per-launch sizing.",
             CONTEXT_SIZE_RANGE.start(),
             CONTEXT_SIZE_RANGE.end(),
         )
@@ -244,6 +245,26 @@ mod tests {
                 "the range's own endpoints must be accepted"
             );
         }
+    }
+
+    /// Omitting the flag falls back to the stored setting, and only reaches
+    /// per-launch sizing when that is unset too. The message said "omit the
+    /// flag to fit the context to this machine", which is false for anyone
+    /// with a `default_context_size` stored — and disagreed with this flag's
+    /// own `--help`, which has always described the fallback correctly.
+    #[test]
+    fn the_remedy_describes_the_fallback_and_not_just_the_fit() {
+        let err = resolve_default_context(Some("8k"), &Settings::default())
+            .expect_err("`8k` is not a number this flag accepts");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("default_context_size"),
+            "omitting the flag falls back to the setting; the message must say so: {msg}"
+        );
+        assert!(
+            !msg.contains("fit the context to this machine"),
+            "the message must not promise a fit that omitting the flag does not deliver: {msg}"
+        );
     }
 
     /// The help says `max` is unsupported here; the error must agree with it
