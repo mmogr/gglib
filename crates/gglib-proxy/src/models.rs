@@ -269,13 +269,17 @@ impl ModelsResponse {
     /// [`resolve_context_size_with_source`].
     ///
     /// A chain that falls through to the built-in floor means nothing is
-    /// configured, and the launch will fit the context to this machine, so no
-    /// cap is applied: advertising 4096 there would understate what the model
-    /// is about to be served at. The trained window is always an upper bound —
-    /// `fit_context` caps at it before snapping — so this never advertises
-    /// more than the file supports, but it can advertise more than a
-    /// particular launch fits.
-    pub fn from_summaries(summaries: Vec<ModelSummary>, global_default_ctx: Option<u64>) -> Self {
+    /// configured. Where the launch will fit the context to this machine, no
+    /// cap is applied: advertising 4096 would understate what is about to be
+    /// served, and the trained window is a true upper bound because
+    /// `fit_context` caps at it before snapping. Where it will not —
+    /// `fit_available` is false, so the floor is what a launch actually gets —
+    /// the floor is what gets advertised.
+    pub fn from_summaries(
+        summaries: Vec<ModelSummary>,
+        global_default_ctx: Option<u64>,
+        fit_available: bool,
+    ) -> Self {
         let data: Vec<ModelInfo> = summaries
             .into_iter()
             .map(|summary| {
@@ -295,14 +299,14 @@ impl ModelsResponse {
                     created: summary.created_at,
                     owned_by: "gglib".to_string(),
                     description: Some(summary.description()),
-                    // Capped only by something a person actually configured.
-                    // Falling through to the built-in floor means nothing is
-                    // set, and the launch will fit the context to this machine
-                    // — so advertising 4096 here would understate what the
-                    // model is about to be served at. The trained window is
-                    // the honest upper bound.
+                    // Capped by what a person configured — or, where no fit
+                    // is reachable, by the floor that will therefore be
+                    // served. Advertising the trained window on a host gglib
+                    // cannot probe overstates it by up to 32x, read once.
                     context_window: match cap_source {
-                        ContextSizeSource::BuiltInDefault => summary.context_length,
+                        ContextSizeSource::BuiltInDefault if fit_available => {
+                            summary.context_length
+                        }
                         _ => summary.context_length.map(|ctx| ctx.min(effective_cap)),
                     },
                     capabilities: capabilities_of(&summary),
@@ -342,16 +346,12 @@ pub struct ModelInfo {
     /// Model's context window size, in tokens (llama.cpp's `/v1/models`
     /// field-naming convention). `None` when unknown.
     ///
-    /// Populated from [`ModelSummary::context_length`] by default. The
-    /// `/v1/models` handler (`server::list_models`) then adjusts it to the
-    /// context the model would actually be served with: non-running models
-    /// are clamped to the proxy's `default_ctx` (what `admit`
-    /// would launch them with), and the currently running model is
-    /// overwritten with its live `effective_ctx` from
-    /// `ModelRuntimePort::current_model()`. Clients that auto-detect context
-    /// size from this endpoint (e.g. the GitHub Copilot LLM Gateway
-    /// extension) read it once at picker-build time — usually before any
-    /// model runs — so the pre-launch value must already be honest.
+    /// Set by [`ModelsResponse::from_summaries`], then adjusted by
+    /// [`crate::models_endpoint::list_models`]: the running model is
+    /// overwritten with its live `effective_ctx`, and every entry is shaved by
+    /// the advertisement's safety margin. Clients that auto-detect context
+    /// size read this once at picker-build time — usually before any model
+    /// runs — so the pre-launch value must already be honest.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
     /// Non-OpenAI endpoints this model can serve, beyond

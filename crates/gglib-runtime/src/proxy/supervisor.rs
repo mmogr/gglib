@@ -103,7 +103,6 @@ pub struct ProxyConfig {
     pub host: String,
     /// Port to bind to (0 for auto-assign).
     pub port: u16,
-    /// Default context size for models.
     /// The user's global default context, or `None` when they never set one.
     ///
     /// `Option`, not a `u64` pre-filled with the floor: pre-resolving it here
@@ -392,6 +391,10 @@ impl ProxySupervisor {
         let cancel_clone = cancel_token.clone();
         let cancel_for_exit = cancel_token.clone();
         let default_ctx = config.default_context;
+        // Whether a launch with nothing configured reaches the fitted rung or
+        // falls through to the floor. Read here because this crate owns the
+        // probe and `gglib-proxy` cannot depend on it.
+        let device_memory_readable = crate::system::total_device_memory_bytes().is_some();
         let cache_enabled = config.cache_enabled;
         let slot_dir = config.slot_dir;
         let disk_budget = config.disk_budget;
@@ -415,6 +418,7 @@ impl ProxySupervisor {
             let result = gglib_proxy::serve(
                 listener,
                 default_ctx,
+                device_memory_readable,
                 runtime_port,
                 catalog_port,
                 mcp,

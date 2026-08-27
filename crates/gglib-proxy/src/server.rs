@@ -38,8 +38,8 @@ use crate::forward::{ForwardError, ForwardRequest};
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
-use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelsResponse};
-use crate::profiles::{configured_names, variant_entries};
+use crate::models::{ChatRoutingEnvelope, ErrorResponse};
+use crate::profiles::configured_names;
 use crate::sampling_audit::SamplingAuditStore;
 use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
@@ -63,6 +63,15 @@ pub(crate) struct AppState {
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
     pub(crate) default_ctx: Option<u64>,
+    /// Whether this machine's device memory can be read, and therefore whether
+    /// a launch with nothing configured gets a context fitted to it.
+    ///
+    /// Supplied by the runtime, which owns the probe; this crate has none and
+    /// cannot depend on the one that does. `false` on every AMD, Intel, Vulkan
+    /// and CPU-only host, where `fit_context` refuses and the chain lands on
+    /// the built-in floor — see [`crate::models_endpoint`] for what that means
+    /// for the advertisement.
+    pub(crate) device_memory_readable: bool,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
     /// pushes snapshots to `GET /v1/proxy/status/stream`. Replaces what were
@@ -141,6 +150,7 @@ impl AppState {
 ///
 /// * `listener` - Pre-bound TCP listener (from supervisor)
 /// * `default_ctx` - Default context size for models
+/// * `device_memory_readable` - Whether a fitted context is reachable here
 /// * `runtime_port` - Port for managing model runtime
 /// * `catalog_port` - Port for listing and resolving models
 /// * `mcp` - MCP service for tool gateway
@@ -186,6 +196,8 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 pub async fn serve(
     listener: TcpListener,
     default_ctx: Option<u64>,
+    // See `AppState::device_memory_readable`.
+    device_memory_readable: bool,
     runtime_port: Arc<dyn ModelRuntimePort>,
     catalog_port: Arc<dyn ModelCatalogPort>,
     mcp: Arc<McpService>,
@@ -313,6 +325,7 @@ pub async fn serve(
         mcp,
         sessions: SessionManager::new(),
         default_ctx,
+        device_memory_readable,
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
         shutdown: cancel.clone(),
@@ -335,7 +348,7 @@ pub async fn serve(
     // closing the one endpoint a supervisor or a load balancer needs to poll
     // before it has any credentials to poll with.
     let mut protected = Router::new()
-        .route("/v1/models", get(list_models))
+        .route("/v1/models", get(crate::models_endpoint::list_models))
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))
@@ -404,108 +417,6 @@ async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "ok"
     }))
-}
-
-/// Percentage shaved off a model's raw context window when advertised via
-/// `/v1/models`.
-///
-/// Reserves headroom for the tool-schema JSON and chat-template tokens that a
-/// client's own char→token budget estimate (e.g. the VS Code LLM Gateway's
-/// `CHARS_PER_TOKEN = 4`) does not account for. Advertising slightly less than
-/// the true ceiling makes such clients begin proactive context compaction
-/// before the real limit is hit, avoiding upstream context-overflow rejections
-/// on the final turns of a long session.
-const CONTEXT_WINDOW_SAFETY_MARGIN_PCT: u64 = 8;
-
-/// Apply [`CONTEXT_WINDOW_SAFETY_MARGIN_PCT`] to a raw context-window token
-/// count, returning the value to advertise to clients.
-fn advertised_context_window(raw_ctx: u64) -> u64 {
-    raw_ctx.saturating_mul(100 - CONTEXT_WINDOW_SAFETY_MARGIN_PCT) / 100
-}
-
-/// List all models from the catalog in OpenAI format.
-///
-/// Every model advertises the context it would actually be served with —
-/// clients like the GitHub Copilot LLM Gateway extension read this endpoint
-/// ONCE when building their model picker (typically before any model is
-/// running), so the pre-launch advertisement must already reflect the real
-/// serving context or clients budget against a stale floor for the entire
-/// session:
-///
-/// * **Non-running models**: the GGUF's `context_length`, capped only by a
-///   configured per-model or global default
-///   — with nothing configured the launch fits the context to this machine,
-///   so the trained window is advertised as the upper bound rather than a
-///   floor nobody chose — meaning `admit` may launch the model at less than
-///   the advertised figure, never more.
-/// * **The currently running model**: its full live `effective_ctx` (the
-///   real `--ctx-size` llama-server was launched with), which also drives
-///   the per-request truncation budget in
-///   [`crate::forward::forward_chat_completion`] — advertised and enforced
-///   values stay in lockstep.
-///
-/// Both are shaved by [`CONTEXT_WINDOW_SAFETY_MARGIN_PCT`] before being
-/// advertised, reserving headroom for tool-schema JSON and chat-template
-/// tokens that a client's own char→token budget does not account for.
-async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
-    debug!("GET /v1/models");
-
-    match state.catalog_port.list_models().await {
-        Ok(mut models) => {
-            // Pinned mode refuses every other model, so advertising the rest
-            // of the catalog would offer a BYOK client a choice that can only
-            // come back as PinnedModelMismatch. Filtering the summaries here
-            // rather than the finished response also keeps the variants below
-            // correct for free — they are built from what survives.
-            //
-            // Profile variants of the pinned model stay: a profile changes
-            // only the request body, never which model actually runs, so it
-            // cannot trip the guard.
-            if let Some(pinned) = state.runtime_port.pinned_model() {
-                models.retain(|m| m.name == pinned);
-            }
-
-            let mut response = ModelsResponse::from_summaries(models, state.default_ctx);
-
-            // Apply safety margin to every model's context_window.
-            for model in &mut response.data {
-                model.context_window = model.context_window.map(advertised_context_window);
-            }
-
-            if let Some(target) = state.runtime_port.current_model().await
-                && let Some(model) = response.data.iter_mut().find(|m| m.id == target.model_name)
-            {
-                model.context_window = Some(advertised_context_window(target.effective_ctx));
-            }
-
-            // Append `{model}:{profile}` variants for profiles the user opted
-            // into listing. Built from the base entries above, so they inherit
-            // the context window each model would actually be served with.
-            let variants = variant_entries(
-                &response.data,
-                state
-                    .settings
-                    .get()
-                    .await
-                    .inference_profiles
-                    .as_deref()
-                    .unwrap_or_default(),
-            );
-            response.data.extend(variants);
-
-            Json(response).into_response()
-        }
-        Err(e) => {
-            error!("Failed to list models: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse::internal_error(&format!(
-                    "Failed to list models: {e}"
-                ))),
-            )
-                .into_response()
-        }
-    }
 }
 
 /// Return the unified proxy dashboard snapshot: active connections,

@@ -1047,6 +1047,8 @@ pub(crate) async fn spawn_proxy_with_settings(
         gglib_proxy::serve(
             listener,
             Some(4096),
+            // Device memory readable: this suite is not about the fit.
+            true,
             runtime,
             catalog,
             mcp,
@@ -1101,6 +1103,8 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
         gglib_proxy::serve(
             listener,
             Some(4096),
+            // Device memory readable: this suite is not about the fit.
+            true,
             runtime,
             catalog,
             mcp,
