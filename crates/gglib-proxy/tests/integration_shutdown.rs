@@ -45,6 +45,8 @@ async fn spawn_proxy() -> (String, CancellationToken, JoinHandle<()>) {
         gglib_proxy::serve(
             listener,
             Some(4096),
+            // Device memory readable: this suite is not about the fit.
+            true,
             runtime,
             catalog,
             make_mcp_service(),

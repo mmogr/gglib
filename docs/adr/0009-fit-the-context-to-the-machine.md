@@ -153,6 +153,31 @@ endpoint has no such field — so gglib defines its semantics, and a cap nobody
 chose was the worse lie. The trained window is a true upper bound: `fit_context`
 caps at it before snapping.
 
+> **Amended 2026-08-28 — true only where the fit is reachable.** This paragraph
+> assumed "nothing is configured" implies "the launch will fit the context to
+> this machine". On every AMD, Intel, Vulkan and CPU-only host it does not:
+> `total_device_memory_bytes` returns `None`, `fit_context` refuses, and the
+> chain lands on the floor. Composed with #926 leaving `default_context_size`
+> unset, those hosts advertised the trained window — up to 131,072 — while
+> llama-server was launched at 4096.
+>
+> That is a **regression** rather than a known limitation: before this ADR the
+> same host advertised `min(trained, 4096)`, which was honest. A Copilot picker
+> reads the endpoint once, so it then budgets a session against a window the
+> server cannot hold.
+>
+> The advertisement now takes the fit's availability as an input. The runtime
+> reads it — `gglib-proxy` has no device probe and cannot depend on the crate
+> that does — and where no fit is reachable the floor is advertised, because the
+> floor is what a launch actually gets.
+>
+> **Per-model refusals are not covered.** `fit_context` also declines on an
+> unknown KV shape or weights that exceed the budget, and those are properties
+> of one model rather than the machine. A single boolean cannot express them, so
+> such a model still advertises its trained window on a host that can otherwise
+> fit. Narrower than the systemic case this closes, and recorded rather than
+> silently left.
+
 **Existing users need no migration.** A stored global default means the user
 typed a number: the settings modal shows an empty box when unset and writes back
 blank, and the repository deletes the row for `null`. ~~The exception is

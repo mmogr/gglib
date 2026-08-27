@@ -146,6 +146,8 @@ pub(crate) async fn spawn_with_default_profile(
         gglib_proxy::serve(
             listener,
             Some(4096),
+            // Device memory readable: this suite is not about the fit.
+            true,
             runtime,
             catalog,
             mcp,

@@ -29,6 +29,7 @@ pub(crate) mod loop_guard;
 pub(crate) mod mcp;
 pub(crate) mod metrics;
 pub mod models;
+pub(crate) mod models_endpoint;
 pub(crate) mod profiles;
 pub mod props;
 pub mod repair;

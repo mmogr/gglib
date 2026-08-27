@@ -199,7 +199,7 @@ fn admission_timeout_and_model_loading_share_service_unavailable_type() {
 
 #[test]
 fn models_response_from_empty_summaries() {
-    let resp = ModelsResponse::from_summaries(vec![], Some(DEFAULT_CONTEXT_SIZE));
+    let resp = ModelsResponse::from_summaries(vec![], Some(DEFAULT_CONTEXT_SIZE), true);
     assert_eq!(resp.object, "list");
     assert!(resp.data.is_empty());
 }
@@ -243,7 +243,7 @@ fn models_response_from_summaries_maps_fields() {
         },
     ];
 
-    let resp = ModelsResponse::from_summaries(summaries, Some(DEFAULT_CONTEXT_SIZE));
+    let resp = ModelsResponse::from_summaries(summaries, Some(DEFAULT_CONTEXT_SIZE), true);
     assert_eq!(resp.data.len(), 2);
     assert_eq!(resp.data[0].id, "llama-3-8b-q4");
     assert_eq!(resp.data[0].object, "model");
@@ -273,6 +273,7 @@ fn models_response_serializes_to_openai_format() {
             server_defaults: None,
         }],
         Some(DEFAULT_CONTEXT_SIZE),
+        true,
     );
 
     let json = serde_json::to_value(&resp).unwrap();
@@ -311,6 +312,7 @@ fn an_embedding_tagged_model_advertises_the_embeddings_capability() {
     let resp = ModelsResponse::from_summaries(
         vec![summary_with_tags("bge-small", &["embedding"])],
         Some(DEFAULT_CONTEXT_SIZE),
+        true,
     );
     assert_eq!(
         resp.data[0].capabilities.as_deref(),
@@ -325,6 +327,7 @@ fn a_chat_model_omits_the_capabilities_field_entirely() {
     let resp = ModelsResponse::from_summaries(
         vec![summary_with_tags("qwen3", &["agent", "reasoning"])],
         Some(DEFAULT_CONTEXT_SIZE),
+        true,
     );
     assert!(resp.data[0].capabilities.is_none());
 
@@ -340,6 +343,7 @@ fn an_embedding_models_capabilities_survive_serialization() {
     let resp = ModelsResponse::from_summaries(
         vec![summary_with_tags("bge-small", &["embedding"])],
         Some(DEFAULT_CONTEXT_SIZE),
+        true,
     );
     let json = serde_json::to_value(&resp.data[0]).unwrap();
     assert_eq!(json["capabilities"], serde_json::json!(["embeddings"]));
@@ -368,7 +372,7 @@ fn model_info_description_includes_arch_and_quant() {
         defaults_origin: None,
         server_defaults: None,
     };
-    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE));
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE), true);
     let info = &resp.data[0];
     let desc = info.description.as_ref().unwrap();
     assert!(desc.contains("llama"), "description should include arch");
@@ -395,7 +399,7 @@ fn model_info_handles_missing_arch_and_quant() {
         defaults_origin: None,
         server_defaults: None,
     };
-    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE));
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE), true);
     let info = &resp.data[0];
     let desc = info.description.as_ref().unwrap();
     assert!(
@@ -423,7 +427,7 @@ fn model_info_maps_context_length_to_context_window() {
         defaults_origin: None,
         server_defaults: None,
     };
-    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE));
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE), true);
     // With no server_defaults, resolve_context_size returns global default (4096).
     // min(32768, 4096) = 4096.
     assert_eq!(resp.data[0].context_window, Some(4096));
@@ -448,7 +452,7 @@ fn model_info_context_window_none_when_unknown() {
         defaults_origin: None,
         server_defaults: None,
     };
-    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE));
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE), true);
     assert_eq!(resp.data[0].context_window, None);
 }
 
@@ -477,7 +481,7 @@ fn models_response_respects_server_defaults_context_length() {
     };
     // Global default is 4096, but server_defaults (8192) wins.
     // min(32768, 8192) = 8192.
-    let resp = ModelsResponse::from_summaries(vec![summary], Some(4096));
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(4096), true);
     assert_eq!(resp.data[0].context_window, Some(8192));
 }
 
@@ -506,7 +510,7 @@ fn models_response_falls_through_when_server_defaults_context_length_none() {
     };
     // Falls through to global default (4096).
     // min(32768, 4096) = 4096.
-    let resp = ModelsResponse::from_summaries(vec![summary], Some(4096));
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(4096), true);
     assert_eq!(resp.data[0].context_window, Some(4096));
 }
 
@@ -889,6 +893,7 @@ fn an_unconfigured_model_advertises_its_trained_window() {
             server_defaults: None,
         }],
         None,
+        true,
     );
     assert_eq!(resp.data[0].context_window, Some(131_072));
 }
@@ -915,6 +920,7 @@ fn a_configured_default_still_caps_the_advertised_window() {
             server_defaults: None,
         }],
         Some(8192),
+        true,
     );
     assert_eq!(resp.data[0].context_window, Some(8192));
 }
