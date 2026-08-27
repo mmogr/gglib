@@ -109,10 +109,32 @@ async fn download_recommended(
     find_downloaded(ctx, &repo).await
 }
 
+/// What the `context` row says, since it cannot say a number.
+const SERVED_CONTEXT: &str = "sized at launch";
+
+/// And where that size comes from, so "sized at launch" is not merely a shrug.
+const SERVED_CONTEXT_NOTE: &str = "from this machine's free memory";
+
+/// The note beside `needs`, naming what `context` was used *for*.
+///
+/// "to clear", not "at": the shortlist tested this model against that context
+/// to decide whether to offer it, which is not the same as serving it there.
+fn needs_note(context: u64) -> String {
+    format!("to clear {context} context")
+}
+
 /// State the choice and the arithmetic behind it.
 ///
 /// The size and headroom are the part that earns trust: a bare model name is a
 /// guess, whereas "18.9 GiB of 24.0 GiB VRAM" is a claim the user can check.
+///
+/// `c.context` is the bar this model had to clear to be shortlisted, not a
+/// promise about the launch. The two are different questions — the shortlist
+/// asks "does this fit *at* 32k", `fit_context` asks "what is the largest rung
+/// this fits" — and they are answered against different budgets, so predicting
+/// one from the other here would be a new false claim on the surface ADR 0009
+/// opens by condemning for making one. `up` sends `None` and the daemon
+/// decides; the note says so rather than naming a number.
 fn print_recommendation(rec: &Recommendation) {
     let c = rec.candidate;
     println!();
@@ -134,9 +156,10 @@ fn print_recommendation(rec: &Recommendation) {
             format_gib(rec.budget_bytes),
             rec.budget_source.label(),
         ),
-        Some(&format!("at {} context", c.context)),
+        Some(&needs_note(c.context)),
     );
     row("spare", &format_gib(rec.headroom_bytes), None);
+    row("context", SERVED_CONTEXT, Some(SERVED_CONTEXT_NOTE));
 }
 
 /// Ask, once it is established there is somebody to ask.
@@ -231,6 +254,33 @@ mod tests {
     fn budget_prefers_vram_and_falls_back_to_ram() {
         assert_eq!(budget_of(&mem(Some(8 * GB), false)), 8 * GB);
         assert_eq!(budget_of(&mem(None, false)), 32 * GB);
+    }
+
+    /// The banner used to annotate `needs` with "at 32768 context", which reads
+    /// as the context the launch will serve. It is not. That number is the bar
+    /// the model had to clear to be shortlisted, tested against a different
+    /// budget from the one `fit_context` uses — and `up` sends `None`, so the
+    /// daemon decides. ADR 0009 opens by condemning exactly this surface for
+    /// showing a number unrelated to the one served.
+    #[test]
+    fn the_needs_note_does_not_promise_a_served_context() {
+        let note = needs_note(32_768);
+        assert!(note.contains("32768"), "the bar is still stated: {note}");
+        assert!(
+            !note.starts_with("at "),
+            "must not read as the served context: {note}"
+        );
+    }
+
+    /// And the row that does speak for the launch names no number at all,
+    /// because none is knowable here.
+    #[test]
+    fn the_context_row_names_no_number() {
+        assert!(
+            !SERVED_CONTEXT.chars().any(|c| c.is_ascii_digit()),
+            "a number here would be a guess: {SERVED_CONTEXT}"
+        );
+        assert!(!SERVED_CONTEXT_NOTE.chars().any(|c| c.is_ascii_digit()));
     }
 
     #[test]
