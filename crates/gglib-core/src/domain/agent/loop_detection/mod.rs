@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod observation;
 pub(crate) mod results;
 pub(crate) mod signature;
 #[cfg(test)]
@@ -10,38 +11,8 @@ mod verdict_tests;
 use super::tool_types::ToolCall;
 use crate::ports::AgentError;
 
+pub use observation::is_observation_batch;
 pub use signature::batch_signature;
-
-// =============================================================================
-// Observation-batch classifier
-// =============================================================================
-
-/// Return `true` if **every** call in `calls` is an observation-only tool.
-///
-/// A tool call is classified as observation-only when its lowercased name
-/// satisfies `name.ends_with(pattern) || name.contains(pattern)` for at
-/// least one pattern in `patterns`.  Matching is case-insensitive (both
-/// sides are lowercased before comparison).
-///
-/// An empty `patterns` list means no tools are ever classified as
-/// observation-only, so the function always returns `false`.
-///
-/// An empty `calls` slice returns `true` (vacuous truth), but the caller
-/// ([`LoopDetector::check`]) is never invoked with an empty batch — both the
-/// agent loop and the proxy's history scan skip loop detection when there are
-/// no tool calls. That is now load bearing rather than merely tidy: an empty
-/// batch would hash to a signature of its own and break the consecutive run.
-pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
-    if patterns.is_empty() {
-        return false;
-    }
-    calls.iter().all(|call| {
-        let name = call.name.to_lowercase();
-        patterns
-            .iter()
-            .any(|pat| name.ends_with(pat.as_str()) || name.contains(pat.as_str()))
-    })
-}
 
 // =============================================================================
 // LoopDetector
