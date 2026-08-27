@@ -104,11 +104,11 @@ pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
 /// compile that prints nothing for two minutes is still refused at the
 /// observation ceiling. Result-awareness helps only once the output moves.
 ///
-/// [`super::StagnationDetector`] keeps its session-wide counting and catches
-/// an oscillating session *only if the model also repeats its prose* — and a
-/// tool-call-only turn carries `content: null`, which that detector ignores by
-/// design. What observes the rest is the proxy's ledger, which is a reading
-/// for a person and not a verdict.
+/// [`super::StagnationDetector`] does not backstop this. It reads only prose
+/// turns — a turn that called a tool is not recorded at all — so an oscillating
+/// session is caught by neither guard, at any cycle period of two or more.
+/// What observes the rest is the proxy's ledger, which is a reading for a
+/// person and not a verdict. See ADR 0011.
 #[derive(Debug, Default)]
 pub struct LoopDetector {
     /// The current unbroken run, or `None` until the first batch arrives.

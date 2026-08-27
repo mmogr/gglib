@@ -120,6 +120,19 @@ outright. The proxy path is bounded only by the client's own loop, with
 session-wide — and a tool-call-only turn carries `content: null`, which that
 detector ignores by design.
 
+> **Amended 2026-08-27 — that bound is narrower than this sentence claims, and
+> narrower still now.** `StagnationDetector` read assistant text from turns that
+> *also* carried tool calls, so what it mostly caught on the proxy path was
+> narration, not prose. At the default threshold of 5 that refused a Copilot
+> session on its sixth narrated call, and it overruled the read-only allowance
+> #923 had just raised to 16.
+>
+> [ADR 0011](0011-stagnation-is-about-prose.md) stops it recording any turn that
+> called a tool, and windows what remains. So the residual bound on a rescued
+> run is smaller than stated above: it is prose only, and a rescued run consists
+> of tool-calling turns. Read this paragraph as naming the gap rather than
+> filling it.
+
 **What the counters mean now.** `identical_result_repeats` and
 `repeats_not_evaluated` keep their session-wide scope and remain facts about the
 conversation: they key a map by signature and fire on a repeat with other turns

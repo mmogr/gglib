@@ -154,28 +154,28 @@ pub struct AgentConfig {
     /// resets the run. So does an answer that differs from the previous
     /// occurrence's — the same call with a different result is progress that
     /// happens to look alike, and is not a strike. Contrast
-    /// [`Self::max_stagnation_steps`] below, which stays session-wide and
-    /// reads nothing but text. See the `loop_detection` module docs for why
+    /// [`Self::max_stagnation_steps`] below, which is windowed and reads
+    /// nothing but prose turns. See the `loop_detection` module docs for why
     /// the three differ.
     ///
     /// Set to `None` to disable loop detection entirely (useful in tests that
     /// deliberately repeat the same tool call).
     pub max_repeated_batch_steps: Option<usize>,
 
-    /// Session-wide occurrence limit for identical assistant text before the
-    /// loop is considered stagnant and aborted with
+    /// Occurrence limit for identical assistant text within a sliding window,
+    /// before the loop is considered stagnant and aborted with
     /// [`crate::ports::AgentError::StagnationDetected`].
     ///
-    /// **Semantics:** Each occurrence of the same response text increments a
-    /// session counter.  The error fires when the counter **after**
-    /// incrementing exceeds `max_stagnation_steps`.  With the default value
+    /// **Semantics:** Occurrences of the same response text are counted within
+    /// the last `max_stagnation_steps × 4` recorded turns.  The error fires
+    /// when that count exceeds `max_stagnation_steps`.  With the default value
     /// of `5`, stagnation triggers on the **sixth** identical occurrence.
     /// With `max_stagnation_steps = 0`, the error fires on the **very first**
     /// occurrence of any repeated text.
     ///
-    /// Counted session-wide, unlike [`Self::max_repeated_batch_steps`] above:
-    /// A → B → A → B oscillation in the text is caught, and is deliberately
-    /// not caught for tool batches. See the `loop_detection` module docs.
+    /// Only turns that called **no tools** are recorded: narration alongside a
+    /// tool call is not stagnation, and the loop detector judges that work.
+    /// A → B → A → B oscillation in the prose is still caught. See ADR 0011.
     ///
     /// Set to `None` to disable stagnation detection entirely (useful in tests
     /// that return a fixed LLM response across many iterations).

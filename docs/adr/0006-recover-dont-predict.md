@@ -225,6 +225,23 @@ section titled *Per-model signals* rather than *Defects*.
 > repeats lets more sessions continue, which enlarges the population again, and
 > a verdict that reads the join changes which turns are counted at all.
 
+## Postscript, 2026-08-27 — the other half of the same guard
+
+This ADR's postscripts, and [ADR 0010](0010-the-loop-guard-reads-what-came-back.md),
+treat the loop guard as `LoopDetector` plus a ledger. It is two detectors, and
+the second one was left on its original design through both changes.
+[ADR 0011](0011-stagnation-is-about-prose.md) rebuilds it: a turn that called a
+tool is no longer recorded, and what remains is counted in a window rather than
+for the life of the session.
+
+Two consequences reach this ADR directly. The oscillation `LoopDetector`
+deliberately gives up on was, until now, caught by accident whenever a cycling
+model happened to repeat its prose — that accident is gone, and nothing
+backstops cycles. And a conversation could be refused permanently by either
+detector, because both judge a replayed transcript from its beginning; ADR 0011
+records that the remedy is a user turn breaking their state, which is not built
+here.
+
 ## Notes
 
 The scheduler's removal was mechanical but wide: 45 references across the Rust

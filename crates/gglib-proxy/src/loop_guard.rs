@@ -2,7 +2,7 @@
 //!
 //! The built-in agent loop (`gglib-agent`) aborts a run when the model
 //! repeats the same tool-call batch back to back and keeps getting the same
-//! answer back, or repeats the same response text anywhere in the session —
+//! answer back, or repeats the same prose too often in a short span —
 //! but external
 //! agentic clients (Cline, Roo Code, Copilot BYOK) run their own loop
 //! client-side, where those guards never execute.  A model looping in such a
@@ -295,9 +295,11 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 matches!(seen_before, Some(prior) if prior.is_none() || results.is_none());
         }
 
-        if let Err(e) =
-            stagnation.record(&wire::extract_text(&msg.content), cfg.max_stagnation_steps)
-        {
+        if let Err(e) = stagnation.record(
+            &wire::extract_text(&msg.content),
+            !calls.is_empty(),
+            cfg.max_stagnation_steps,
+        ) {
             return ScanOutcome {
                 verdict: verdict(e),
                 identical_result_repeat,
@@ -309,6 +311,12 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 // Shipping the last turn's value would count one rescue again
                 // on every replay of a 400'd body, and inflate precisely the
                 // ratio ADR 0010's first kill criterion reads.
+                //
+                // Since a turn that called a tool is no longer recorded, this
+                // arm is now reachable only on a prose turn — where the branch
+                // above has already cleared all three. Kept explicit rather
+                // than collapsed to that observation: the invariant lives in
+                // another crate, and a `false` costs nothing to state twice.
                 repeat_rescued: false,
             };
         }
@@ -369,3 +377,9 @@ fn verdict(e: AgentError) -> LoopGuardVerdict {
 #[cfg(test)]
 #[path = "loop_guard_tests.rs"]
 mod tests;
+
+/// Stagnation cases. Its own module because `loop_guard_tests.rs` is frozen at
+/// its current size by the complexity ratchet.
+#[cfg(test)]
+#[path = "loop_guard_stagnation_tests.rs"]
+mod stagnation_tests;

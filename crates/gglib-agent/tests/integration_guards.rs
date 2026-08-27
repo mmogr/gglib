@@ -246,29 +246,31 @@ async fn test_loop_detection() {
     );
 }
 
-/// **Text stagnation**: the LLM produces the same response text on every
-/// iteration (text + tool call each time, so the loop does not exit on
-/// `FinalAnswer` — it must hit the stagnation guard instead).
-/// After `max_stagnation_steps` identical responses the loop must terminate
-/// with [`AgentError::StagnationDetected`] and emit [`AgentEvent::Error`].
+/// **Narration is not stagnation**: the LLM produces the same text on every
+/// iteration alongside a tool call. That used to trip the stagnation guard,
+/// which is the defect — small models narrate almost every call, and the text
+/// says nothing about whether the work is stuck. A turn that called a tool is
+/// no longer counted, so this run must complete.
 ///
-/// Uses `max_stagnation_steps: Some(2)` so the detector fires after the
-/// 3rd identical response (baseline + 2 repeats).
+/// `max_repeated_batch_steps` is off, so nothing else can end it either: the
+/// point is that the *stagnation* guard does not.
 #[tokio::test]
-async fn test_stagnation_detected_integration() {
-    // Each response includes both text content AND a tool call so the loop
-    // does not immediately produce a FinalAnswer and has a chance to stagnate.
+async fn test_narration_alongside_tool_calls_is_not_stagnation() {
+    // Identical narration every turn, each alongside a tool call — the shape a
+    // coding agent produces, and the one that used to be refused mid-task.
     let llm = Arc::new(
-        MockLlmPort::new().push_many((0..5).map(|i| MockLlmResponse {
-            reasoning: None,
-            content: Some("Thinking...".into()),
-            tool_calls: vec![ToolCall {
-                id: format!("s{i}"),
-                name: "do_thing".into(),
-                arguments: json!({}),
-            }],
-            finish_reason: "tool_calls".into(),
-        })),
+        MockLlmPort::new()
+            .push_many((0..5).map(|i| MockLlmResponse {
+                reasoning: None,
+                content: Some("Thinking...".into()),
+                tool_calls: vec![ToolCall {
+                    id: format!("s{i}"),
+                    name: "do_thing".into(),
+                    arguments: json!({}),
+                }],
+                finish_reason: "tool_calls".into(),
+            }))
+            .push(MockLlmResponse::text("Done.")),
     );
 
     let executor = MockToolExecutorPort::new().with_tool(
@@ -297,28 +299,14 @@ async fn test_stagnation_detected_integration() {
 
     let events = collect_events(rx).await;
 
-    // max_stagnation_steps=2 → 3 total identical responses before abort
-    // (baseline + 2 repeats → fires when repeat_count >= 2, count = 3).
     assert!(
-        matches!(
-            result,
-            Err(AgentError::StagnationDetected {
-                max_steps: 2,
-                count: 3,
-                ..
-            })
-        ),
-        "expected StagnationDetected {{ max_steps: 2, count: 3 }}, got: {result:?}"
+        !matches!(result, Err(AgentError::StagnationDetected { .. })),
+        "repeated narration alongside tool calls must not stagnate: {result:?}"
     );
 
     assert!(
-        has_error_event(&events),
-        "AgentEvent::Error must be emitted before stream closes on stagnation"
-    );
-
-    assert!(
-        !has_final_answer(&events),
-        "FinalAnswer must not be emitted when stagnation is detected"
+        has_final_answer(&events),
+        "the run must reach its final answer instead of being refused"
     );
 }
 
@@ -432,19 +420,19 @@ async fn test_too_many_tool_calls_integration() {
     );
 }
 
-/// **Stagnation fires before finalize**: A model produces repeated text with
-/// tool calls (building up the stagnation counter), then produces the same
-/// text WITHOUT tools.  Because guards run before the finalize check, the
-/// stagnation guard must fire on the text-only iteration, preventing a
-/// stagnated final answer from being accepted.
+/// **Stagnation fires before finalize**: a model produces text with a tool
+/// call, then the same text WITHOUT tools. Only the second turn is counted —
+/// a turn that called a tool is doing work — but because guards run before the
+/// finalize check, the guard must still fire on it rather than let a stagnated
+/// final answer through.
 ///
-/// Uses `max_stagnation_steps: Some(1)` so the detector fires after the
-/// 2nd identical response (baseline + 1 repeat).
+/// Uses `max_stagnation_steps: Some(0)`: with tool-calling turns no longer
+/// counted, the text-only turn is the only one this run records.
 #[tokio::test]
 async fn test_stagnation_fires_before_finalize() {
     let llm = Arc::new(
         MockLlmPort::new()
-            // Iteration 0: "Stuck" + tool call → stagnation records count=1 (ok)
+            // Iteration 0: "Stuck" + a tool call → not recorded, it did work
             .push(MockLlmResponse {
                 reasoning: None,
                 content: Some("Stuck".into()),
@@ -455,7 +443,7 @@ async fn test_stagnation_fires_before_finalize() {
                 }],
                 finish_reason: "tool_calls".into(),
             })
-            // Iteration 1: "Stuck" (no tools) → stagnation records count=2 > max_steps=1 → error
+            // Iteration 1: "Stuck", no tools → recorded, count=1 > max_steps=0
             // Without the guards-before-finalize restructure, this would be
             // accepted as a FinalAnswer.
             .push(MockLlmResponse::text("Stuck")),
@@ -477,7 +465,7 @@ async fn test_stagnation_fires_before_finalize() {
                 content: "go".into(),
             }],
             common::for_test(|c| {
-                c.max_stagnation_steps = Some(1);
+                c.max_stagnation_steps = Some(0);
                 c.max_repeated_batch_steps = None;
                 c.max_iterations = 10;
             }),
@@ -491,12 +479,12 @@ async fn test_stagnation_fires_before_finalize() {
         matches!(
             result,
             Err(AgentError::StagnationDetected {
-                max_steps: 1,
-                count: 2,
+                max_steps: 0,
+                count: 1,
                 ..
             })
         ),
-        "expected StagnationDetected {{ max_steps: 1, count: 2 }}, got: {result:?}"
+        "expected StagnationDetected {{ max_steps: 0, count: 1 }}, got: {result:?}"
     );
 
     assert!(
