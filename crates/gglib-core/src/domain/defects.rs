@@ -154,8 +154,8 @@ pub struct ModelDefectCounts {
     /// partly unanswered.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repeats_not_evaluated: u64,
-    /// Turns where a repeated batch got a **different** answer, and the loop
-    /// guard let it through on that basis.
+    /// Turns the loop guard would have refused for repeating, and did not,
+    /// because the answer had moved. A repeat inside the allowance is not one.
     ///
     /// Unlike the two above, this is not a fact about the conversation — it is
     /// a fact about gglib's own reflex, which is what the ledger was chartered
@@ -266,8 +266,8 @@ impl ModelDefectLedger {
         self.with(model, |c| c.identical_result_repeats += 1);
     }
 
-    /// Count one turn where a repeated batch got a different answer and the
-    /// loop guard declined to act on that basis.
+    /// Count one turn the guard would have refused for repeating and did not,
+    /// because the answer had moved. A repeat still inside the allowance is not.
     pub fn record_repeat_rescued(&self, model: &str) {
         self.with(model, |c| c.repeats_rescued += 1);
     }

@@ -120,6 +120,21 @@ struct Run {
 #[must_use = "the batch that was checked must have its answers recorded, or the verdict cannot read them"]
 pub struct BatchRecord {
     signature: String,
+    rescued: bool,
+}
+
+impl BatchRecord {
+    /// Whether this occurrence survived only because an earlier answer moved.
+    ///
+    /// True when the run has repeated more times than the threshold allows and
+    /// [`LoopDetector::check`] passed anyway — which is exactly the turn that
+    /// signature-only counting would have refused. Known when the verdict is
+    /// reached, not when the next answers arrive: the reset that saved this
+    /// turn happened on a previous one.
+    #[must_use]
+    pub const fn rescued(&self) -> bool {
+        self.rescued
+    }
 }
 
 /// What one occurrence turned out to be, once its answers were known.
@@ -210,7 +225,19 @@ impl LoopDetector {
         if count > effective_max || (!exempt && total > ceiling) {
             return Err(AgentError::LoopDetected { signature: sig });
         }
-        Ok(BatchRecord { signature: sig })
+        // Reported against `total`, the count that no answer resets, because
+        // that is what the verdict used before it could read answers at all. A
+        // turn where `total` has passed the threshold and `count` has not is
+        // precisely a turn the old rule refused and this one does not.
+        //
+        // Not derived from `record_results` returning `AnswerChanged`: that
+        // fires on the *first* repeat with a new answer, which is one the guard
+        // would have allowed regardless, so it counted turns that were never at
+        // risk and inflated the ratio ADR 0010's kill criteria read.
+        Ok(BatchRecord {
+            signature: sig,
+            rescued: total > effective_max,
+        })
     }
 
     /// Record what the batch named by `record` got back.
@@ -243,7 +270,7 @@ impl LoopDetector {
         // *reads* a field. Its suggested remedy — take `&BatchRecord` — would
         // reinstate exactly the hole this signature closes, so the argument is
         // consumed here instead of silenced.
-        let BatchRecord { signature } = record;
+        let BatchRecord { signature, .. } = record;
         let Some(run) = self.run.as_mut() else {
             return RepeatOutcome::NotTheCurrentRun;
         };

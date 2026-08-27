@@ -776,9 +776,11 @@ fn a_stagnation_rejection_does_not_inherit_the_previous_turns_rescue() {
         msgs.push(with_text(&format!("d{i}"), &format!("f{i}.rs")));
         msgs.push(tool_result(&format!("d{i}"), "ok"));
     }
-    // Repeats turn 4's batch with a different answer: a rescue.
+    // Repeats turn 4's batch twice with moving answers; the third is a rescue.
     msgs.push(with_text("r1", "f3.rs"));
     msgs.push(tool_result("r1", "different"));
+    msgs.push(with_text("r2", "f3.rs"));
+    msgs.push(tool_result("r2", "different again"));
     let mid = scan_history(&body(&msgs), &cfg());
     assert_eq!(mid.verdict, LoopGuardVerdict::Pass, "precondition: {mid:?}");
     assert!(mid.repeat_rescued, "precondition: turn 5 is a rescue");
@@ -831,11 +833,15 @@ fn duplicate_answers_for_one_call_are_unjoinable_too() {
 /// turn where nothing repeated at all.
 #[test]
 fn a_repeat_the_guard_let_through_is_reported_as_rescued() {
+    // Three, not two: the second was never at risk, so a changed answer there
+    // averted nothing. The third is the turn the old rule would have refused.
     let msgs = vec![
         assistant_call_id("c1", "write_file", "{}"),
         tool_result("c1", "1 file changed"),
         assistant_call_id("c2", "write_file", "{}"),
         tool_result("c2", "2 files changed"),
+        assistant_call_id("c3", "write_file", "{}"),
+        tool_result("c3", "3 files changed"),
     ];
     let outcome = scan_history(&body(&msgs), &cfg());
     assert_eq!(outcome.verdict, LoopGuardVerdict::Pass);
@@ -858,6 +864,8 @@ fn a_prose_turn_after_a_rescue_clears_the_observation() {
         tool_result("c1", "one"),
         assistant_call_id("c2", "write_file", "{}"),
         tool_result("c2", "two"),
+        assistant_call_id("c3", "write_file", "{}"),
+        tool_result("c3", "three"),
     ];
     assert!(
         scan_history(&body(&msgs), &cfg()).repeat_rescued,
@@ -875,6 +883,8 @@ fn a_user_interjection_after_a_rescue_clears_the_observation() {
         tool_result("c1", "one"),
         assistant_call_id("c2", "write_file", "{}"),
         tool_result("c2", "two"),
+        assistant_call_id("c3", "write_file", "{}"),
+        tool_result("c3", "three"),
     ];
     assert!(
         scan_history(&body(&msgs), &cfg()).repeat_rescued,

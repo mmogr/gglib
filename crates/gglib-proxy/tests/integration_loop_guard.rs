@@ -167,10 +167,10 @@ async fn a_rescued_repeat_reaches_the_dashboard() {
     let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
     let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
 
-    // Same batch twice, different answers: the guard declines to act.
-    let mut messages = vec![json!({ "role": "user", "content": "watch the build" })];
-    for (i, answer) in ["build line 1", "build line 2"].iter().enumerate() {
-        messages.push(assistant_call("read_file", r#"{"path":"build.log"}"#));
+    // Mutating batch, three times, answers moving: only the third is a rescue.
+    let mut messages = vec![json!({ "role": "user", "content": "fix the file" })];
+    for (i, answer) in ["1 changed", "2 changed", "3 changed"].iter().enumerate() {
+        messages.push(assistant_call("write_file", r#"{"path":"a.rs"}"#));
         messages.push(json!({
             "role": "tool", "tool_call_id": "c1", "content": format!("{answer} ({i})")
         }));
