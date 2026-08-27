@@ -101,9 +101,19 @@ identical prose turns in a row remain in the transcript, and a replayed scan
 trips on them at the same point every time, however much good work follows.
 
 This is not specific to stagnation — `LoopDetector` has it too, and it is a
-property of judging a whole transcript rather than the turn in front of you. The
-remedy is that a user turn should break both detectors' state, which is a
-separate change with its own argument to make.
+property of judging a whole transcript rather than the turn in front of you.
+
+> **Amended 2026-08-27.** A user turn now clears both detectors, which stops
+> repeats *either side* of an interjection accumulating into one span. It does
+> **not** rescue a transcript that already tripped, and the paragraph above
+> originally implied it would. `scan_history` returns on the first trip it
+> finds, so it never reaches a later user turn to be cleared by it.
+>
+> Recovering that means judging the end of the transcript rather than its worst
+> moment — and a verdict that a trailing user message can clear is one most
+> clients could clear by accident, since a trailing user message is the ordinary
+> shape of a chat request. That needs its own argument and a measurement, and is
+> deliberately not made.
 
 ## Kill criteria
 

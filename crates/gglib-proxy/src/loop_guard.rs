@@ -260,10 +260,25 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             // ends the observation, exactly as a prose answer does below. The
             // bits describe the batch the next generation follows, and the
             // request that carried that batch has already reported it.
+            //
+            // It also ends both detectors' state, which is what the agent path
+            // gets for free: `AgentLoop::run` is invoked once per user message
+            // and builds a fresh `Guards`, so a user turn resets everything
+            // there. One detector walking a whole replayed conversation has to
+            // be told, and without this the two paths refuse at different
+            // turns while the docs above promise parity by construction.
+            //
+            // This is also the only way out of a transcript that already
+            // contains a trip. Both detectors judge the replay from its
+            // beginning, so an early run of identical batches — or of
+            // identical prose — would otherwise refuse every later request
+            // forever, however much good work followed.
             _ => {
                 identical_result_repeat = false;
                 repeat_not_evaluated = false;
                 repeat_rescued = false;
+                loops.break_run();
+                stagnation.clear();
                 continue;
             }
         }
@@ -383,3 +398,8 @@ mod tests;
 #[cfg(test)]
 #[path = "loop_guard_stagnation_tests.rs"]
 mod stagnation_tests;
+
+/// What a user turn resets, on both detectors.
+#[cfg(test)]
+#[path = "loop_guard_user_turn_tests.rs"]
+mod user_turn_tests;
