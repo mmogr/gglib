@@ -23,8 +23,8 @@ pub struct SettingsSetArgs {
     /// precedence, and leaving it unset lets the daemon size each launch — fitted to this
     /// machine where gglib can read the device, and the built-in floor where it cannot.
     /// Setting it pins every launch to that number. This flag cannot clear the value
-    /// again — `gglib config settings reset` is the only CLI route back to unset, and it
-    /// resets every other setting too. The settings modal can clear this field alone.
+    /// again — `gglib config settings unset default-context-size` is what returns it to
+    /// unset, and the settings modal can clear the field alone.
     #[arg(long)]
     pub default_context_size: Option<u64>,
     /// Port for the OpenAI-compatible proxy server (>= 1024)

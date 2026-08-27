@@ -2,6 +2,7 @@
 pub(crate) mod profiles;
 mod set;
 mod settings_display;
+mod unset;
 
 use anyhow::Result;
 
@@ -140,6 +141,7 @@ pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) 
             Ok(())
         }
         SettingsCommand::Set(args) => set::handle_set(ctx, *args).await,
+        SettingsCommand::Unset { key } => unset::handle_unset(ctx, &key).await,
         SettingsCommand::Reset { force } => {
             if !force {
                 let confirm = crate::utils::input::prompt_confirmation(
