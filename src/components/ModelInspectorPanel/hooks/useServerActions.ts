@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
-import type { GgufModel, ServeConfig, AppSettings, SparseInferenceConfig } from '../../../types';
+import type { GgufModel, ServeConfig, SparseInferenceConfig } from '../../../types';
 import type { ServerViewModel } from '../../../hooks/useServers';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
@@ -10,7 +10,6 @@ import { formatError } from '../../../utils/errors';
 
 export interface ServerActionsConfig {
   model: GgufModel | null;
-  settings: AppSettings | null;
   servers: ServerViewModel[];
   // Edit mode state
   editedName: string;
@@ -61,7 +60,6 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
   
   const {
     model,
-    settings,
     servers,
     editedName,
     editedQuantization,
@@ -98,17 +96,23 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
 
     setIsServing(true);
     try {
-      // Priority: custom input > settings default > model metadata
+      // Only what the user typed, and nothing resolved on their behalf.
+      //
+      // This used to fall through to the stored default and then to
+      // `model.contextLength`, the GGUF's *trained* window. Both landed on
+      // the resolution ladder's top rung: the trained window outranked the
+      // fit gglib computes from this machine's memory, so a model trained on
+      // a window this machine cannot hold was handed one that will not load;
+      // and the stored default outranked the model's own
+      // `server_defaults.context_length` one rung below it. The daemon reads
+      // that setting itself, so sending it bought nothing and cost that rung;
+      // the trained window bought a launch that may not load. See ADR 0009.
       let contextLength: number | undefined = undefined;
       if (customContext.trim()) {
-        const parsed = parseInt(customContext.trim());
+        const parsed = parseInt(customContext.trim(), 10);
         if (!isNaN(parsed) && parsed > 0) {
           contextLength = parsed;
         }
-      } else if (settings?.defaultContextSize) {
-        contextLength = settings.defaultContextSize;
-      } else if (model.contextLength) {
-        contextLength = model.contextLength;
       }
 
       // Parse port if specified (must be >= 1024)
@@ -151,7 +155,10 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         // The GUI's `gglib serve`: the daemon plans the pin server-side.
         // Send only what the user explicitly typed — pre-resolving context
         // client-side would bypass the cascade's model-defaults rung and
-        // freeze the settings default as an explicit override.
+        // freeze the settings default as an explicit override. The shared
+        // computation above now does exactly this, so the override is
+        // belt-and-braces rather than a live correction; it stays because
+        // this path is the one that must never regress into pre-resolving.
         const customCtx = customContext.trim() ? parseInt(customContext.trim(), 10) : NaN;
         try {
           const status = await getTransport().startPinnedProxy({
@@ -213,7 +220,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
+  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;
