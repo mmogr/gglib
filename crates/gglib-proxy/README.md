@@ -644,7 +644,7 @@ conversation every turn, so the scan is stateless: no session store, no TTL.
 | Signal | Threshold | Source |
 |--------|-----------|--------|
 | Identical tool-call batch (FNV-1a signature over canonicalized args), repeated back to back **and answered the same way** | 3rd consecutive occurrence aborts | `AgentConfig::default().max_repeated_batch_steps` |
-| The same, where the answer keeps changing — an agent polling for output | never aborts if read-only; 16th aborts otherwise | `.max_observation_steps`, reused as the ceiling |
+| The same, where the answer keeps changing — an agent polling for output | never aborts if read-only *and* free to repeat; 16th aborts otherwise, `navigate`/`click`/`fetch_webpage` included (matched on whole name segments, so a camelCase `browserNavigate` is missed — see `is_costly_batch`) | `.max_observation_steps`, reused as the ceiling; `is_costly_batch` for the exclusions |
 | Identical batch of observation-only (read-only) tools — browser `snapshot`/`screenshot`/`navigate`/`click`, and coding-agent `read_file`/`list_dir`/`grep_search`/`search_files` and friends, repeated back to back and answered the same way | 16th consecutive occurrence aborts | `AgentConfig::default().observation_tools`, `.max_observation_steps` |
 | Identical assistant **prose**, within a sliding window of `max_stagnation_steps × 4` turns. A turn that called a tool is not counted at all — narration is not stagnation. Still catches A→B→A→B oscillation in the prose | exceeds `max_stagnation_steps` (default 5) | the persisted `max_stagnation_steps` setting, shared with the agent path |
 

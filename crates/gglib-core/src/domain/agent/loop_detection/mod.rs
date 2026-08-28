@@ -11,6 +11,7 @@ mod verdict_tests;
 use super::tool_types::ToolCall;
 use crate::ports::AgentError;
 
+use observation::is_costly_batch;
 pub use observation::is_observation_batch;
 pub use signature::batch_signature;
 
@@ -46,9 +47,10 @@ pub use signature::batch_signature;
 /// whose output carries a clock, an elapsed time, a progress counter or a
 /// random id — `cargo test`'s `finished in 0.31s` is enough. Read-only batches
 /// are exempt anyway, because that tier exists on the ground that repeating a
-/// call which changes nothing is free. Everything else keeps a ceiling: a
-/// batch that changes something may be carried by changing answers only while
-/// the run itself stays inside the read-only allowance,
+/// call which changes nothing is free — except where it changes nothing only
+/// *here*, which `is_costly_batch` withholds the waiver from. Everything else
+/// keeps a ceiling: a batch that changes something may be carried by changing
+/// answers only while the run stays inside the read-only allowance,
 /// `max_observation_steps`. Reusing that number rather than inventing one is
 /// deliberate; there is no measurement behind a new one.
 ///
@@ -175,10 +177,10 @@ impl LoopDetector {
     /// # Errors
     ///
     /// [`AgentError::LoopDetected`] when the run has passed its threshold, or
-    /// when a batch that is not read-only has been carried past the read-only
-    /// allowance by changing answers. The two are not distinguished in the
-    /// error: the remedy is identical, and the variant is mirrored into the
-    /// proxy's 400 body.
+    /// when a batch that is not read-only — or is read-only but not free to
+    /// repeat — has been carried past the read-only allowance by changing
+    /// answers. The cases are not distinguished in the error: the remedy is
+    /// identical, and the variant is mirrored into the proxy's 400 body.
     pub fn check(
         &mut self,
         calls: &[ToolCall],
@@ -198,7 +200,9 @@ impl LoopDetector {
         // field: with `max_observation_steps: None` a read-only batch is still
         // *classified*, so waiving the ceiling on classification alone left it
         // with no bound at all and a moving answer could carry it forever.
-        let exempt = observation && max_observation_steps.is_some();
+        // Costly batches keep the ceiling for the same reason: a
+        // `fetch_webpage` answer moves every call, so the waiver would never end.
+        let exempt = observation && max_observation_steps.is_some() && !is_costly_batch(calls);
         // Never tighter than the strike threshold. `total >= count` always, so
         // an allowance below `max_strikes` would become the strike threshold
         // for mutating batches and refuse them *earlier* than configured —

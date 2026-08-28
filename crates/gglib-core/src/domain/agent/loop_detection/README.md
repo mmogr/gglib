@@ -100,7 +100,12 @@ enough.  Observation batches are exempt
 anyway, on the same ground the tier already stands on — but only while the tier
 is *configured*: the classification comes from `observation_tools` and the
 exemption from `max_observation_steps`, so with the latter unset a read-only
-batch is bounded like any other.  Everything else
+batch is bounded like any other.  The exemption is also withheld from the
+entries that change nothing *on this machine* and still cost something
+elsewhere — `navigate` moves a browser session, `click` changes page state,
+`fetch_webpage` spends someone else's rate limit.  They stay classified, so
+they keep the elevated threshold; they simply do not get the ceiling waived.
+See `is_costly_batch`.  Everything else
 may be carried by changing answers only while the run itself stays inside the
 read-only allowance, `max_observation_steps`.  That number is reused rather than
 invented; there is no measurement behind a new one.
