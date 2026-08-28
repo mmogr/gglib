@@ -31,8 +31,9 @@ fn summary(trained: Option<u64>) -> ModelSummary {
 ///
 /// Three separately-reviewed changes composed into it. #926 left
 /// `default_context_size` unset, so a fresh consumer configures nothing;
-/// `total_device_memory_bytes` returns `None` on every AMD, Intel, Vulkan and
-/// CPU-only host, so `fit_context` refuses and the chain lands on the floor;
+/// `total_device_memory_bytes` returned `None` on every AMD, Intel, Vulkan and
+/// CPU-only host — #946 later narrowed that to CPU-only and unreadable devices
+/// — so `fit_context` refuses and the chain lands on the floor;
 /// and #925 then read that floor as "no cap, advertise the trained window".
 ///
 /// The result on a Ryzen laptop with an AMD iGPU: `context_window` 131072

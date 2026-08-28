@@ -12,14 +12,14 @@ export type SystemMemoryInfoDto = {
  */
 totalRamBytes: number, 
 /**
- * GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon).
- * None if no GPU detected or memory couldn't be determined.
+ * GPU memory in bytes: VRAM on a discrete card, or the addressable share
+ * of host RAM on a unified-memory device. None if it could not be read.
  */
 gpuMemoryBytes?: number, 
 /**
- * Whether the system has Apple Silicon with unified memory.
+ * Whether the GPU shares host memory — Apple Silicon or an integrated GPU.
  */
-isAppleSilicon: boolean, 
+isUnifiedMemory: boolean, 
 /**
  * Whether the system has an NVIDIA GPU.
  */

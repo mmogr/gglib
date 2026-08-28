@@ -95,11 +95,14 @@ pub struct GpuInfo {
 pub struct SystemMemoryInfo {
     /// Total system RAM in bytes.
     pub total_ram_bytes: u64,
-    /// GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon).
-    /// None if no GPU detected or memory couldn't be determined.
+    /// GPU memory in bytes: VRAM on a discrete card, or the addressable share
+    /// of host RAM on a unified-memory device (Apple Silicon, or an integrated
+    /// GPU). None if no GPU was detected or its memory could not be read.
     pub gpu_memory_bytes: Option<u64>,
-    /// Whether the system has Apple Silicon with unified memory.
-    pub is_apple_silicon: bool,
+    /// Whether the GPU shares host memory — Apple Silicon, or an integrated
+    /// GPU whose heaps are GTT rather than its own VRAM. Decides whether the
+    /// figure above is labelled "VRAM" or "unified memory" to the user.
+    pub is_unified_memory: bool,
     /// Whether the system has an NVIDIA GPU.
     pub has_nvidia_gpu: bool,
 }

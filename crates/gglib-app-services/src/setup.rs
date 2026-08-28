@@ -67,7 +67,7 @@ pub struct ModelsDirectoryDto {
 pub struct SystemMemoryDto {
     pub total_ram_bytes: u64,
     pub gpu_memory_bytes: Option<u64>,
-    pub is_apple_silicon: bool,
+    pub is_unified_memory: bool,
 }
 
 /// Dependencies for setup operations.
@@ -157,7 +157,7 @@ impl SetupOps {
             Some(SystemMemoryDto {
                 total_ram_bytes: mem_info.total_ram_bytes,
                 gpu_memory_bytes: mem_info.gpu_memory_bytes,
-                is_apple_silicon: mem_info.is_apple_silicon,
+                is_unified_memory: mem_info.is_unified_memory,
             })
         } else {
             None

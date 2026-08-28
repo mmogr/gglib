@@ -227,7 +227,7 @@ fn budget_of(mem: &SystemMemoryInfo) -> u64 {
 
 fn source_label(mem: &SystemMemoryInfo) -> &'static str {
     match mem.gpu_memory_bytes {
-        Some(_) if mem.is_apple_silicon => "unified memory",
+        Some(_) if mem.is_unified_memory => "unified memory",
         Some(_) => "VRAM",
         None => "system RAM",
     }
@@ -243,7 +243,7 @@ mod tests {
         SystemMemoryInfo {
             total_ram_bytes: 32 * GB,
             gpu_memory_bytes: vram,
-            is_apple_silicon: apple,
+            is_unified_memory: apple,
             has_nvidia_gpu: vram.is_some() && !apple,
         }
     }

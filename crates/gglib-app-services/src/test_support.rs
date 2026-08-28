@@ -227,7 +227,7 @@ impl SystemProbePort for MockSystemProbePort {
         SystemMemoryInfo {
             total_ram_bytes: self.total_ram_bytes,
             gpu_memory_bytes: None,
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: false,
         }
     }

@@ -151,7 +151,7 @@ export function useSystemMemory(): UseSystemMemoryReturn {
       const requiredStr = formatMemorySize(required);
       const availableStr = formatMemorySize(availableMemory);
       const memoryType = memoryInfo.gpuMemoryBytes 
-        ? (memoryInfo.isAppleSilicon ? "Unified Memory" : "GPU VRAM")
+        ? (memoryInfo.isUnifiedMemory ? "Unified Memory" : "GPU VRAM")
         : "System RAM";
       
       let statusText: string;

@@ -96,7 +96,7 @@ mod tests {
             memory: SystemMemoryInfo {
                 total_ram_bytes: 16 * 1024 * 1024 * 1024,
                 gpu_memory_bytes: Some(12 * 1024 * 1024 * 1024),
-                is_apple_silicon: true,
+                is_unified_memory: true,
                 has_nvidia_gpu: false,
             },
         };
@@ -110,6 +110,6 @@ mod tests {
         assert!(!gpu.has_nvidia_gpu);
 
         let mem = probe.get_system_memory_info();
-        assert!(mem.is_apple_silicon);
+        assert!(mem.is_unified_memory);
     }
 }

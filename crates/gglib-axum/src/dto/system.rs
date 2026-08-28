@@ -14,13 +14,13 @@ pub(crate) struct SystemMemoryInfoDto {
     /// Total system RAM in bytes.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_ram_bytes: u64,
-    /// GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon).
-    /// None if no GPU detected or memory couldn't be determined.
+    /// GPU memory in bytes: VRAM on a discrete card, or the addressable share
+    /// of host RAM on a unified-memory device. None if it could not be read.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_memory_bytes: Option<u64>,
-    /// Whether the system has Apple Silicon with unified memory.
-    pub is_apple_silicon: bool,
+    /// Whether the GPU shares host memory — Apple Silicon or an integrated GPU.
+    pub is_unified_memory: bool,
     /// Whether the system has an NVIDIA GPU.
     pub has_nvidia_gpu: bool,
 }
@@ -30,7 +30,7 @@ impl From<SystemMemoryInfo> for SystemMemoryInfoDto {
         Self {
             total_ram_bytes: info.total_ram_bytes,
             gpu_memory_bytes: info.gpu_memory_bytes,
-            is_apple_silicon: info.is_apple_silicon,
+            is_unified_memory: info.is_unified_memory,
             has_nvidia_gpu: info.has_nvidia_gpu,
         }
     }
@@ -45,7 +45,7 @@ mod tests {
         let core_info = SystemMemoryInfo {
             total_ram_bytes: 16 * 1024 * 1024 * 1024,       // 16 GB
             gpu_memory_bytes: Some(8 * 1024 * 1024 * 1024), // 8 GB VRAM
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: true,
         };
 
@@ -53,7 +53,7 @@ mod tests {
 
         assert_eq!(dto.total_ram_bytes, 16 * 1024 * 1024 * 1024);
         assert_eq!(dto.gpu_memory_bytes, Some(8 * 1024 * 1024 * 1024));
-        assert!(!dto.is_apple_silicon);
+        assert!(!dto.is_unified_memory);
         assert!(dto.has_nvidia_gpu);
     }
 
@@ -62,7 +62,7 @@ mod tests {
         let dto = SystemMemoryInfoDto {
             total_ram_bytes: 1024,
             gpu_memory_bytes: Some(512),
-            is_apple_silicon: true,
+            is_unified_memory: true,
             has_nvidia_gpu: false,
         };
 
@@ -70,12 +70,17 @@ mod tests {
 
         assert!(json.get("totalRamBytes").is_some());
         assert!(json.get("gpuMemoryBytes").is_some());
-        assert!(json.get("isAppleSilicon").is_some());
+        assert!(json.get("isUnifiedMemory").is_some());
         assert!(json.get("hasNvidiaGpu").is_some());
 
         // Ensure snake_case fields don't exist
         assert!(json.get("total_ram_bytes").is_none());
         assert!(json.get("gpu_memory_bytes").is_none());
+
+        // The field was `isAppleSilicon` until integrated GPUs started
+        // reporting a budget too. It answers "does the GPU share host memory",
+        // which is what every consumer was already asking it.
+        assert!(json.get("isAppleSilicon").is_none());
     }
 
     #[test]
@@ -83,7 +88,7 @@ mod tests {
         let dto = SystemMemoryInfoDto {
             total_ram_bytes: 1024,
             gpu_memory_bytes: None,
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: false,
         };
 
