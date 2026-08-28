@@ -1,6 +1,5 @@
 #![doc = include_str!("README.md")]
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Result;
 use tokio::sync::mpsc::Sender;
@@ -16,6 +15,7 @@ use gglib_core::ports::{
 mod agentic;
 mod compare;
 pub mod guard;
+mod http_client;
 pub mod mapper;
 mod perf;
 pub mod tune;
@@ -26,18 +26,14 @@ pub mod tune;
 
 /// All external dependencies needed by [`BenchmarkOps`].
 ///
-/// # HTTP client timeout
+/// # HTTP client timeouts
 ///
-/// The `http_client` **must** be built with an explicit long timeout (≥ 10
-/// minutes) because large models can have a very long time-to-first-token
-/// (TTFT).  Do **not** reuse the short-timeout client from `AxumContext` or
-/// `TauriContext`.
-///
-/// ```rust,ignore
-/// let http_client = reqwest::Client::builder()
-///     .timeout(Duration::from_secs(600))
-///     .build()?;
-/// ```
+/// `http_client` carries a **total-request** deadline, which is only safe
+/// because compare mode's streams are short. Do **not** reuse the
+/// short-timeout client from `AxumContext` or `TauriContext`, and do **not**
+/// give this client to the agentic eval — see
+/// [`BenchmarkDeps::build_agentic_http_client`] for why a total deadline is
+/// the wrong shape for a long agentic stream and what it cost.
 #[derive(Clone)]
 pub struct BenchmarkDeps {
     /// Model catalog for name and file-path lookups.
@@ -55,22 +51,6 @@ pub struct BenchmarkDeps {
     /// `inference_defaults` at the start of each compare run — mirrors the
     /// same per-request settings read the proxy performs.
     pub settings_repo: Arc<dyn SettingsRepository>,
-}
-
-impl BenchmarkDeps {
-    /// Construct a dedicated `reqwest::Client` with the required 10-minute
-    /// timeout for TTFT on large models.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `reqwest` cannot build the client (extremely rare —
-    /// only fails on TLS initialisation errors).
-    pub fn build_http_client() -> Result<reqwest::Client> {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(600))
-            .build()
-            .map_err(|e| anyhow::anyhow!("failed to build benchmark HTTP client: {e}"))
-    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

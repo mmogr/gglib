@@ -8,7 +8,7 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use futures_core::Stream;
 use futures_util::StreamExt as _;
 
@@ -45,7 +45,16 @@ pub(super) fn normalized_event_stream(
             let chunk = match chunk_result {
                 Ok(c) => c,
                 Err(e) => {
-                    yield Err(anyhow!("SSE byte-stream error: {e}"));
+                    // Attach the reqwest error rather than formatting it away.
+                    // `Response::bytes_stream` funnels every body failure
+                    // through `error::decode`, so an idle-timeout and a
+                    // mid-stream connection reset share the Display string
+                    // "error decoding response body" and are told apart only
+                    // by the source beneath it. Formatting with `{e}` here
+                    // discarded exactly that, and cost the 2026-08-28 eval a
+                    // diagnosis: five runs died at a timeout nothing named.
+                    // Readers must use `{:#}` to see the chain.
+                    yield Err(anyhow::Error::new(e).context("SSE byte-stream error"));
                     return;
                 }
             };

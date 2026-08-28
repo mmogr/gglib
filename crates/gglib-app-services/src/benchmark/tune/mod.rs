@@ -611,7 +611,59 @@ async fn run_task(
 /// unrepresentable at the call site.
 pub(crate) async fn run_task_with_llm<F>(build_llm: F, task: &TuneTask) -> TuneTaskResult
 where
-    F: FnOnce(Arc<dyn UsageSink>) -> Arc<dyn LlmCompletionPort>,
+    F: Fn(Arc<dyn UsageSink>) -> Arc<dyn LlmCompletionPort>,
+{
+    let mut retries = 0u32;
+    loop {
+        let mut result = run_task_once(&build_llm, task).await;
+        if !should_retry(&result, retries) {
+            result.transport_retries = retries;
+            return result;
+        }
+        retries += 1;
+        warn!(
+            task_id = %task.id,
+            attempt = retries,
+            of = TRANSPORT_RETRY_ATTEMPTS,
+            reason = result.unmeasured.as_deref().unwrap_or("unknown"),
+            "benchmark: run reached no model; retrying"
+        );
+    }
+}
+
+/// Whether an attempt is worth throwing away and repeating.
+///
+/// Keyed on `unmeasured`, never on a matched error string. That field is
+/// already the harness's answer to "was anything observed here", and it is set
+/// for exactly the two ways a run can produce nothing: the loop could not reach
+/// the upstream, or its task panicked.
+///
+/// The half that matters is the one that says **no**. Every way of *doing
+/// badly* — a detected loop, a stagnated answer, a wrong tool call, an
+/// exhausted iteration budget — leaves `unmeasured` at `None` and is returned
+/// untouched. Retrying those would be the eval resampling until it liked the
+/// answer, which is a far worse defect than the one this retry fixes.
+const fn should_retry(result: &TuneTaskResult, retries: u32) -> bool {
+    !result.is_measured() && retries < TRANSPORT_RETRY_ATTEMPTS
+}
+
+/// How many extra attempts a run reaching no model is given.
+///
+/// Small on purpose. This exists so a single transient transport failure does
+/// not delete a run from one arm and silently skew the comparison — not so the
+/// eval can grind through a genuinely dead upstream. An arm whose every run is
+/// unmeasured still aborts the eval, and does so three times slower now, which
+/// is the price of not mistaking a blip for a corpse.
+const TRANSPORT_RETRY_ATTEMPTS: u32 = 2;
+
+/// One attempt at a task. See [`run_task_with_llm`], which owns the retry.
+///
+/// `latency_ms` here is *this attempt's* wall time, so a retried run reports
+/// what its successful attempt cost rather than the sum of its failures. The
+/// discarded time is not lost — it is what `transport_retries` is for.
+async fn run_task_once<F>(build_llm: &F, task: &TuneTask) -> TuneTaskResult
+where
+    F: Fn(Arc<dyn UsageSink>) -> Arc<dyn LlmCompletionPort>,
 {
     let usage = TaskUsageTally::new();
     let llm = build_llm(usage.clone());
@@ -711,6 +763,9 @@ where
         time_to_first_tool_call_ms,
         detail,
         unmeasured,
+        // Stamped by `run_task_with_llm`, which is the only thing that knows
+        // how many attempts this one cost.
+        transport_retries: 0,
     }
 }
 
@@ -936,6 +991,7 @@ mod tests {
             time_to_first_tool_call_ms: None,
             detail: None,
             unmeasured: None,
+            transport_retries: 0,
         }
     }
 
@@ -954,6 +1010,48 @@ mod tests {
         let axes = axis_scores(&[answered_directly, one_batch_then_answer, looped]).unwrap();
         assert_eq!(axes.loop_eligible, 1, "only the looping task risked a loop");
         assert_eq!(axes.loop_avoidance, Some(0.0));
+    }
+
+    /// A run that reached no model is worth repeating, up to the budget.
+    #[test]
+    fn an_unmeasured_run_is_retried_until_the_budget_runs_out() {
+        let mut unreachable = task_result(0.0, false, false);
+        unreachable.unmeasured = Some("SSE byte-stream error: operation timed out".to_owned());
+
+        for spent in 0..TRANSPORT_RETRY_ATTEMPTS {
+            assert!(
+                should_retry(&unreachable, spent),
+                "an unmeasured run with {spent} attempt(s) spent should be retried"
+            );
+        }
+        assert!(
+            !should_retry(&unreachable, TRANSPORT_RETRY_ATTEMPTS),
+            "the budget must be finite — a dead upstream is not retried forever"
+        );
+    }
+
+    /// **The half of the rule that matters.** Retrying a run the model actually
+    /// failed would let the eval resample until it liked the answer, which is a
+    /// worse defect than the lost runs the retry exists to prevent. Every one
+    /// of these is a real observation and must be returned as it stands.
+    #[test]
+    fn a_measured_failure_is_never_retried() {
+        let wrong_call = task_result(0.0, false, false);
+        let looped = task_result(0.0, false, true);
+        let mut stagnated = task_result(0.0, false, false);
+        stagnated.stagnation_detected = true;
+
+        for (name, result) in [
+            ("a wrong tool call", wrong_call),
+            ("a detected loop", looped),
+            ("a stagnated answer", stagnated),
+        ] {
+            assert!(
+                result.is_measured(),
+                "{name} is an observation, not an absence of one"
+            );
+            assert!(!should_retry(&result, 0), "{name} must not be re-rolled");
+        }
     }
 
     /// The regression test for the reported artifact: a bare llama-server arm

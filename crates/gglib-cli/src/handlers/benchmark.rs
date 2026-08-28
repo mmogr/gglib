@@ -604,9 +604,45 @@ fn render_unmeasured_block(report: &AgenticEvalReport) {
         ("A/A", report.raw_replicate.as_ref()),
         ("control", report.control.as_ref()),
     ];
-    let affected: Vec<(&str, &ArmScores)> = arms
+    let present: Vec<(&str, &ArmScores)> = arms
         .into_iter()
         .filter_map(|(name, scores)| scores.map(|s| (name, s)))
+        .collect();
+
+    // Reported even when every run was eventually measured. An arm that lost
+    // three requests to the transport and won them back on a retry is fully
+    // scored and *not* clean, and the run after it deserves to know the
+    // upstream was flaky before it trusts a delta this one produced.
+    let retried: Vec<(&str, &ArmScores)> = present
+        .iter()
+        .copied()
+        .filter(|(_, s)| s.transport_retries > 0)
+        .collect();
+    if !retried.is_empty() {
+        eprintln!();
+        eprintln!(
+            "  {WARN}runs that failed in transport and were retried:{RESET}",
+            WARN = style::WARNING,
+            RESET = style::RESET,
+        );
+        for (name, scores) in &retried {
+            eprintln!(
+                "  {WARN}  {name}: {n} retried attempt(s) across {runs} runs{RESET}",
+                n = scores.transport_retries,
+                runs = scores.runs,
+                WARN = style::WARNING,
+                RESET = style::RESET,
+            );
+        }
+        eprintln!(
+            "  {WARN}These scores come from a later attempt than the suite nominally ran.{RESET}",
+            WARN = style::WARNING,
+            RESET = style::RESET,
+        );
+    }
+
+    let affected: Vec<(&str, &ArmScores)> = present
+        .into_iter()
         .filter(|(_, s)| s.is_partly_unmeasured())
         .collect();
     if affected.is_empty() {

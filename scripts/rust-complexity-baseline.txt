@@ -1,11 +1,11 @@
-crates/gglib-agent/src/agent_loop.rs 607
+crates/gglib-agent/src/agent_loop.rs 610
 crates/gglib-agent/src/stream_collector.rs 463
 crates/gglib-agent/tests/integration_guards.rs 763
 crates/gglib-agent/tests/integration_happy_path.rs 433
-crates/gglib-app-services/src/benchmark/agentic.rs 914
+crates/gglib-app-services/src/benchmark/agentic.rs 932
 crates/gglib-app-services/src/benchmark/compare.rs 392
 crates/gglib-app-services/src/benchmark/mapper.rs 529
-crates/gglib-app-services/src/benchmark/tune/mod.rs 1204
+crates/gglib-app-services/src/benchmark/tune/mod.rs 1293
 crates/gglib-app-services/src/benchmark/tune/scoring.rs 352
 crates/gglib-app-services/src/downloads.rs 375
 crates/gglib-app-services/src/mcp.rs 397
@@ -25,7 +25,7 @@ crates/gglib-axum/src/routes.rs 469
 crates/gglib-axum/tests/integration_routes.rs 1029
 crates/gglib-cli/src/commands.rs 342
 crates/gglib-cli/src/daemon_client/mod.rs 324
-crates/gglib-cli/src/handlers/benchmark.rs 1511
+crates/gglib-cli/src/handlers/benchmark.rs 1547
 crates/gglib-cli/src/handlers/config/llama_install.rs 341
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 436
 crates/gglib-cli/src/handlers/config/settings/settings_display.rs 452
@@ -42,8 +42,8 @@ crates/gglib-core/src/domain/agent/config.rs 745
 crates/gglib-core/src/domain/agent/events.rs 354
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 418
 crates/gglib-core/src/domain/agent/messages.rs 321
-crates/gglib-core/src/domain/benchmark/agentic.rs 1818
-crates/gglib-core/src/domain/benchmark/tune/apply.rs 447
+crates/gglib-core/src/domain/benchmark/agentic.rs 1833
+crates/gglib-core/src/domain/benchmark/tune/apply.rs 448
 crates/gglib-core/src/domain/cache_budget.rs 306
 crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/defects.rs 368
@@ -86,7 +86,7 @@ crates/gglib-core/src/sse/encoder.rs 460
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 591
 crates/gglib-db/src/repositories/row_mappers.rs 317
-crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 830
+crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 831
 crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 438
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1065
