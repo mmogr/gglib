@@ -493,6 +493,15 @@ An ADR records a decision and the evidence behind it. Rustdoc says what the code
 - **Record retractions, do not delete them.** When a later finding overturns an earlier one, strike the original and say why it was wrong. ADR 0002's finding 4 overturned its own finding 1; leaving both is what stops the same reasoning error recurring.
 - **State the scope of the evidence.** "60/60 on one model, one build, one schema" is a finding. "Upstream enforces schemas" is a claim the evidence does not support, and ADR 0002 was overturned by a second model precisely because that distinction was written down.
 - **Cite the reproducer.** A measurement that cannot be re-run is an opinion with a table.
+- **A kill criterion must name a reading that exists.** Not a counter somebody intends to add, not a number a `debug!` emits into a log nothing collects — a reading a person can actually take, named where it is taken from. A criterion nobody can read is not a criterion; it is a promise that the decision will be revisited, and it will not be. [ADR 0011](docs/adr/0011-stagnation-is-about-prose.md)'s first criterion named `loop_guard_trips` for a question that counter cannot answer, and it took the first live reading, months later, to notice. Where the reading is a survey rather than a tally, name the command that produces it, as [ADR 0009](docs/adr/0009-fit-the-context-to-the-machine.md)'s first criterion names `gglib model explain`.
+- **Record zeros with their denominators.** "0 events across 10 requests, 2026-08-28" is a reading; "none" is not, because it cannot distinguish a mechanism that does not fire from one nobody exercised. This matters most for the criteria that are *satisfied* by zeros — "if it stays at zero, delete it" — where the ambiguity is what turns a small sample into a wrong deletion.
+
+### Handoff briefs
+
+A brief that carries work between sessions is not an ADR and does not need one's ceremony. It is still read as authority by whoever picks the work up, and it is copied forward.
+
+- **Cite a source for every number**: a file path, a PR number, or the command that produced it. A number with no source is a claim wearing a finding's clothes. Because briefs are copied forward, an uncited figure is re-cited by the next brief and arrives three documents later as established fact — the "15 defects" that circulated around ADRs 0009–0011 was 12 verified and 3 deferred, and no document anywhere held either number.
+- **Say where a number cannot be re-derived** — a live counter that resets, a one-off session, a reading taken on hardware nobody else has. That is "cite the reproducer" above, applied to a document that is not an ADR: the honest move is to name the gap in the brief, not to leave the figure looking as solid as the ones beside it.
 
 ## Badges Pipeline
 

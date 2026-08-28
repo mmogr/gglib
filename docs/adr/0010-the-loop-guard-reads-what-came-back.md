@@ -175,3 +175,37 @@ restarts at zero on every response, so `call_qwen_0` recurs on every turn of a
 replayed conversation and a global index would resolve every occurrence of a
 batch to the same result. The agent loop has no window to find: its results
 arrive one per call, in order.
+
+### First reading, 2026-08-28
+
+The first evaluation of these three criteria. Same session as
+[ADR 0009](0009-fit-the-context-to-the-machine.md)'s first reading, which
+carries the provenance and the arc's defect count: ten requests, one model,
+Qwen3.8-27B via VS Code Copilot, read from `gglib proxy dashboard`, per-process
+counters that reset on restart and cannot be re-read.
+
+**All three read from one line, and the note says so rather than presenting four
+zeros as four observations.** `Per-model signals (this proxy run)` printed
+`none across 10 request(s)`. The dashboard emits that line only when `is_clean`
+holds for every model, and `is_clean` requires `repeats_rescued`,
+`identical_result_repeats`, `repeats_not_evaluated` and `loop_guard_trips` to be
+zero together — so one printed word is the source of every number below.
+
+- **If `repeats_rescued` dwarfs `identical_result_repeats`** — **0 and 0 across
+  10 requests, 2026-08-28.** A ratio between two zeros is not a reading, in
+  either direction. **OPEN.**
+- **If sessions are still refused while polling a build that is quiet** — **0
+  loop-guard trips across 10 requests, 2026-08-28**, and no build-polling
+  occurred in the session, so the shape this criterion is about was never
+  exercised. A zero here is the absence of the test, not its result. **OPEN.**
+- **If `repeats_rescued` stays at zero in real use** — **0 across 10 requests,
+  2026-08-28.** This is the criterion a small denominator most easily misleads,
+  because it is *satisfied* by zeros rather than by a value: at n=10, "the
+  ceiling has no customer" and "nobody exercised the ceiling" produce the same
+  number, and only the first licenses deleting the ceiling and `Run::total`.
+  It should not be acted on until the denominator is large enough to exclude the
+  second reading. **OPEN.**
+
+**All three remain OPEN**, and the third is the one to be most careful with: it
+is the only criterion in this arc where the reading taken so far points, on its
+face, at deletion.

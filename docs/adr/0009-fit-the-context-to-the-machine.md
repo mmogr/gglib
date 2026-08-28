@@ -377,3 +377,58 @@ and not fixed by this change.~~
 - If the reservation's one measured configuration never occurs in practice, the
   second slot's top-up is complexity without a customer and should be deleted
   along with the fallback and the non-monotonic step it creates.
+
+### First reading, 2026-08-28
+
+The first time these criteria have been evaluated against real traffic. The
+values below are almost all zero and the denominators are what make them worth
+recording at all, so both are stated in every line.
+
+**Scope.** One session, ten requests, Qwen3.8-27B via VS Code Copilot, read from
+`gglib proxy dashboard`. This ADR carries the provenance for the whole arc;
+[ADR 0010](0010-the-loop-guard-reads-what-came-back.md) and
+[ADR 0011](0011-stagnation-is-about-prose.md) cite this note rather than
+repeating it.
+
+**It cannot be re-run**, and that is a decision rather than an oversight. The
+ledger's counters are per-process and reset on restart — `domain::defects`'
+module docs argue for that lifetime — so no stored history exists to re-read and
+this note is the only durable record of the numbers. That is weaker provenance
+than "cite the reproducer" asks for. Recorded as it is rather than dressed up.
+
+**The audit that produced this arc found 12 verified defects and 3 deferred.**
+The figure of 15 that circulated in prose around it was never right. The audit is
+not a repo artifact and no document held either number, so this line is the
+count's only source.
+
+- **If the chosen rung is routinely far below the unsnapped figure** —
+  **not evaluated.** The reading is `gglib model explain`'s `fitted to hardware`
+  against `before snapping`, taken across a catalog; the session ran neither and
+  the dashboard carries neither number. **OPEN, and unread rather than clean.**
+- **If launches fail at the fitted context on real hardware** — **0 failures in
+  1 fitted launch, 2026-08-28.** The denominator is the whole of what this
+  reading says: the dashboard reported `Model swaps  0`, so one resident served
+  all ten requests and this criterion saw exactly one launch, on one host, for
+  one model. Ten requests is not ten launches. **OPEN.**
+- **If the reservation's one measured configuration never occurs in practice** —
+  **not evaluated, and the session's one second-slot event is not evidence for
+  it.** The dashboard showed the second slot refusing a ~31.6 GiB model, which is
+  `decide_secondary_slot` enforcing its 2 GiB ceiling — the mechanism the
+  amendment above describes, not the budget top-up this criterion is about.
+  Conflating them would retire the top-up on evidence about something else. The
+  reading that does exist is per model and needs no session: `gglib model
+  explain`'s `device budget` against the device's nominal capacity — equal means
+  the fallback to the undivided device fired, smaller means the top-up was taken.
+  Nothing reports it in aggregate. **OPEN.**
+
+**All three remain OPEN.** Each asks what happens *routinely*, and one session
+cannot answer that whatever it shows. What this reading establishes is the
+convention rather than a verdict: a zero is recorded as "0 across N", never as
+"none", because "none" cannot distinguish a mechanism that does not fire from one
+nobody exercised.
+
+Two readings outside the criteria are kept because they bear on "Why the budget
+cannot move" above. The proxy reused 58,944 of 87,941 prompt tokens and swapped
+models zero times across the ten requests. A budget that drifted between requests
+would have recycled the resident and taken the prefix cache with it; that neither
+happened is consistent with the decision, at a sample of one session.
