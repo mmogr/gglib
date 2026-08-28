@@ -130,7 +130,8 @@
         {
           "name": "read_file",
           "required_args": {},
-          "ordered": true
+          "ordered": true,
+          "depends_on_result": true
         }
       ]
     }
@@ -826,7 +827,8 @@
           "required_args": {
             "path": "build/cache.tmp"
           },
-          "ordered": true
+          "ordered": true,
+          "depends_on_result": true
         }
       ]
     }
