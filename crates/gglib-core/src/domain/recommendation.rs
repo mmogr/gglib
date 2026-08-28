@@ -100,7 +100,7 @@ impl ModelCandidate {
 pub enum BudgetSource {
     /// Discrete GPU VRAM.
     Vram,
-    /// Apple Silicon unified memory.
+    /// Unified memory — Apple Silicon, or an integrated GPU.
     UnifiedMemory,
     /// Host RAM — either a CPU-only machine, or a GPU whose VRAM gglib cannot
     /// read.
@@ -194,14 +194,14 @@ static SHORTLIST: &[ModelCandidate] = &[
 /// Resolve the memory figure to size against, and say where it came from.
 ///
 /// VRAM wins when it is known, because that is the memory the weights will
-/// actually occupy. It is `None` on every Vulkan-only machine — gglib reads
-/// VRAM for Metal and NVIDIA only — so an AMD or Intel GPU falls back to host
-/// RAM. That fallback is usually *too generous*, which is exactly why
-/// [`BudgetSource`] is returned alongside the number instead of being thrown
-/// away: the caller is expected to say so.
+/// actually occupy. It is `None` on a CPU-only host, and on any device whose
+/// memory gglib could not read — which falls back to host RAM. That fallback
+/// is usually *too generous*, which is exactly why [`BudgetSource`] is
+/// returned alongside the number instead of being thrown away: the caller is
+/// expected to say so. A unified-memory device is labelled, not guessed.
 const fn resolve_budget(mem: &SystemMemoryInfo) -> (u64, BudgetSource) {
     match mem.gpu_memory_bytes {
-        Some(vram) if mem.is_apple_silicon => (vram, BudgetSource::UnifiedMemory),
+        Some(vram) if mem.is_unified_memory => (vram, BudgetSource::UnifiedMemory),
         Some(vram) => (vram, BudgetSource::Vram),
         None => (mem.total_ram_bytes, BudgetSource::SystemRam),
     }
@@ -240,7 +240,7 @@ mod tests {
         SystemMemoryInfo {
             total_ram_bytes: 64 * GB,
             gpu_memory_bytes: Some(gb * GB),
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: true,
         }
     }
@@ -249,7 +249,7 @@ mod tests {
         SystemMemoryInfo {
             total_ram_bytes: gb * GB,
             gpu_memory_bytes: None,
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: false,
         }
     }
@@ -309,7 +309,7 @@ mod tests {
         let mem = SystemMemoryInfo {
             total_ram_bytes: 128 * GB,
             gpu_memory_bytes: Some(8 * GB),
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: true,
         };
         let got = recommend(&mem).expect("8 GB fits something");
@@ -326,15 +326,15 @@ mod tests {
         let mem = SystemMemoryInfo {
             total_ram_bytes: 32 * GB,
             gpu_memory_bytes: Some(24 * GB),
-            is_apple_silicon: true,
+            is_unified_memory: true,
             has_nvidia_gpu: false,
         };
         let got = recommend(&mem).expect("24 GB fits something");
         assert_eq!(got.budget_source, BudgetSource::UnifiedMemory);
     }
 
-    /// Vulkan-only machines report no VRAM at all, so this is the AMD/Intel
-    /// path, not just the CPU-only one.
+    /// A device whose memory could not be read at all — a CPU-only host, or
+    /// one with no readable Vulkan or sysfs answer.
     #[test]
     fn missing_vram_falls_back_to_system_ram() {
         let got = recommend(&ram_only(32)).expect("32 GB fits something");
@@ -350,7 +350,7 @@ mod tests {
         let mem = SystemMemoryInfo {
             total_ram_bytes: smallest.required_bytes(),
             gpu_memory_bytes: Some(smallest.required_bytes()),
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: true,
         };
         assert!(recommend(&mem).is_none());

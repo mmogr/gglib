@@ -30,7 +30,7 @@ export interface ModelsDirectory {
 export interface SystemMemory {
   totalRamBytes: number;
   gpuMemoryBytes?: number | null;
-  isAppleSilicon: boolean;
+  isUnifiedMemory: boolean;
 }
 
 /** Combined setup status returned by the setup-status endpoint. */

@@ -133,9 +133,21 @@ an instrument anything acts on.
 **Every user who never set a global default gets a different context on their
 next launch.** That is the point, and it is also the blast radius.
 
-**A machine whose VRAM gglib cannot read gets no fit at all.** AMD, Intel,
-Vulkan and CPU-only hosts fall through to the floor. Deliberate: the
-recommendation module documents its own RAM fallback as "usually too generous",
+~~**A machine whose VRAM gglib cannot read gets no fit at all.** AMD, Intel,
+Vulkan and CPU-only hosts fall through to the floor.~~
+
+> **Amended 2026-08-28 — the population shrank.** `get_system_memory_info` now
+> reads a Vulkan device's heaps, so a **discrete** AMD or Intel card reports its
+> own VRAM and an **integrated** GPU reports the same share of host RAM Apple
+> Silicon already gets, capped by the heap total the device publishes. What
+> still falls through to the floor: CPU-only hosts, software rasterisers, an
+> NVIDIA card whose `nvidia-smi` query fails, and any device with no readable
+> Vulkan or amdgpu-sysfs answer. The reasoning below is unchanged and is what
+> the new probe is built to satisfy — it refuses rather than guessing, and an
+> integrated GPU is labelled unified memory rather than VRAM.
+
+The original reasoning, which still governs the hosts that remain. Deliberate:
+the recommendation module documents its own RAM fallback as "usually too generous",
 and sizing a KV cache against 64 GiB of host memory on an 8 GiB card is the
 working-but-unusably-slow outcome that module exists to prevent. It would also
 look perfectly stable while measuring the wrong device.
@@ -189,7 +201,8 @@ caps at it before snapping.
 
 > **Amended 2026-08-28 — true only where the fit is reachable.** This paragraph
 > assumed "nothing is configured" implies "the launch will fit the context to
-> this machine". On every AMD, Intel, Vulkan and CPU-only host it does not:
+> this machine". On a CPU-only host, and (until the Vulkan probe landed later
+> the same day) on every AMD, Intel and Vulkan host, it does not:
 > `total_device_memory_bytes` returns `None`, `fit_context` refuses, and the
 > chain lands on the floor. Composed with #926 leaving `default_context_size`
 > unset, those hosts advertised the trained window — up to 131,072 — while
@@ -328,8 +341,12 @@ and not fixed by this change.~~
 > drafts are the argument for that. Whether the fit is reachable is not a fact
 > the client holds: `fit_context` returns `None` unless it can read the device
 > budget, the weight size and the KV geometry, and again when the weights
-> alone exceed the budget — and this ADR records above that AMD, Intel, Vulkan
-> and CPU-only hosts get no fit at all. Naming the fitted rung would have been
+> alone exceed the budget — and this ADR records above that a host whose device
+> memory cannot be read gets no fit at all. (That population was AMD, Intel,
+> Vulkan and CPU-only when this was written; the Vulkan probe later narrowed it
+> to CPU-only and unreadable devices. The argument is unaffected: the client
+> still cannot know which side of it a given host is on.) Naming the fitted
+> rung would have been
 > a fresh false promise to every one of those users, on the surface being
 > corrected for making false promises. `gpuMemoryBytes` reaches the GUI
 > already and would answer the hardware half, but none of the rest. The ladder

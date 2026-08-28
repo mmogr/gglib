@@ -61,16 +61,18 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
 /// against.
 ///
 /// The VRAM row is where this command is most likely to mislead, so it says
-/// what it knows: gglib reads VRAM for Metal and NVIDIA only, and every
-/// Vulkan-only card reports nothing. Falling back to system RAM without saying
-/// so would quietly recommend a model far too large for an AMD or Intel GPU.
+/// what it knows. A unified-memory device — Apple Silicon or an integrated GPU
+/// — gets its own row rather than being labelled VRAM, because its budget is a
+/// share of host RAM. A card whose memory could not be read still reports
+/// nothing: falling back to system RAM without saying so would quietly
+/// recommend a model far too large for it.
 fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
     let mem = status.system_memory.as_ref()?;
     let has_gpu =
         status.gpu_info.has_metal || status.gpu_info.has_nvidia || status.gpu_info.has_vulkan;
 
     match mem.gpu_memory_bytes {
-        Some(bytes) if mem.is_apple_silicon => {
+        Some(bytes) if mem.is_unified_memory => {
             row("memory", &format_gib(bytes), Some("unified, usable share"));
         }
         Some(bytes) => {
@@ -97,7 +99,7 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
     Some(SystemMemoryInfo {
         total_ram_bytes: mem.total_ram_bytes,
         gpu_memory_bytes: mem.gpu_memory_bytes,
-        is_apple_silicon: mem.is_apple_silicon,
+        is_unified_memory: mem.is_unified_memory,
         has_nvidia_gpu: status.gpu_info.has_nvidia,
     })
 }

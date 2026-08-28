@@ -101,11 +101,11 @@ pub(super) fn settings_display_rows(
             // "sized per launch" rather than "fitted to this machine",
             // because the fit is not always reachable: `fit_context` needs
             // the device budget, the weight size and the KV geometry, and
-            // ADR 0009 records that AMD, Intel, Vulkan and CPU-only hosts get
-            // no fit at all and land on the floor. This row cannot know which
-            // of those a launch will hit, and a read surface that names a
-            // rung the reader will never reach is worse than one that names
-            // none.
+            // ADR 0009 records that a host whose device memory cannot be
+            // read gets no fit at all and lands on the floor. This row cannot
+            // know which side of that a launch will hit, and a read surface
+            // that names a rung the reader will never reach is worse than one
+            // that names none.
             rows.push((kebab_key, "None (sized per launch)".to_owned()));
         } else {
             collect_rows(&kebab_key, val, &mut rows);

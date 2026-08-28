@@ -73,8 +73,8 @@ enum FreeVramSource {
     /// Apple Silicon unified memory — free host RAM, scaled by the same share
     /// [`gpu::get_system_memory_info`] treats as GPU-addressable.
     UnifiedMemory,
-    /// Every other machine. gglib reads VRAM for Metal and NVIDIA only, so an
-    /// AMD, Intel, or CPU-only host reports nothing rather than guessing.
+    /// Every other machine. Unlike `total_device_memory_bytes`, the *free*
+    /// reading has no Vulkan path, so an AMD or Intel host reports nothing.
     Unavailable,
 }
 
@@ -503,24 +503,24 @@ impl SystemProbePort for DefaultSystemProbe {
 
 /// Total device memory a model may be sized against, cached.
 ///
-/// The GPU's nominal capacity — unified memory on Apple, VRAM on NVIDIA —
-/// **not** a live free reading. Free memory moves with whatever else the user
-/// has open, and a budget that moves produces a fitted context that moves,
-/// which recycles the resident and blows its prefix cache. The caller reserves
-/// a fixed allowance for the second slot from this figure and must *not* net
-/// out the models actually loaded — that set changes while a model is resident,
-/// which is exactly the drift this avoids.
+/// The GPU's nominal capacity — unified memory on Apple and on an integrated
+/// GPU, VRAM on a discrete card — **not** a live free reading. Free memory moves
+/// with whatever else the user has open, and a budget that moves produces a
+/// fitted context that moves, which recycles the resident and blows its prefix
+/// cache. The caller reserves a fixed allowance for the second slot from this
+/// figure and must *not* net out the models actually loaded — that set changes
+/// while a model is resident, which is exactly the drift this avoids.
 ///
-/// `None` when gglib cannot read the GPU's memory — which includes every
-/// AMD/Intel/Vulkan device and an NVIDIA card whose `nvidia-smi` query fails.
+/// `None` when gglib cannot read the GPU's memory: a CPU-only host, a software
+/// rasteriser, or a device whose heaps cannot be shown to be its own.
 /// Deliberately a refusal rather than a fallback to system RAM: sizing a KV
 /// cache against 64 GiB of host memory on an 8 GiB card is exactly the
 /// "working but unusably slow" outcome the recommendation module exists to
 /// prevent, and it would look stable while measuring the wrong device.
 ///
 /// Cached in a `OnceLock` because the probe behind it builds a whole `System`
-/// snapshot and forks `nvidia-smi`; this is read from the admission path.
-/// Warm it from a blocking context at startup — see `warm_device_memory`.
+/// snapshot and forks `nvidia-smi` and `vulkaninfo`; this is read from the
+/// admission path. Warm it at startup — see `warm_device_memory`.
 #[must_use]
 pub fn total_device_memory_bytes() -> Option<u64> {
     static TOTAL: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
@@ -560,7 +560,7 @@ mod tests {
         let vulkan_box = SystemMemoryInfo {
             total_ram_bytes: 64 * GIB,
             gpu_memory_bytes: None,
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: false,
         };
         assert_eq!(device_budget_of(&vulkan_box), None);
@@ -572,7 +572,7 @@ mod tests {
         let card = SystemMemoryInfo {
             total_ram_bytes: 64 * GIB,
             gpu_memory_bytes: Some(24 * GIB),
-            is_apple_silicon: false,
+            is_unified_memory: false,
             has_nvidia_gpu: true,
         };
         assert_eq!(device_budget_of(&card), Some(24 * GIB));

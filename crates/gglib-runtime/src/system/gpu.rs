@@ -10,6 +10,11 @@ use sysinfo::System;
 
 use crate::llama::vulkan_status;
 
+#[path = "device_memory.rs"]
+mod device_memory;
+
+use device_memory::{other_gpu_memory_bytes, unified_share};
+
 /// Detect GPU hardware and acceleration software.
 pub(crate) fn detect_gpu_info() -> GpuInfo {
     let has_metal = cfg!(target_os = "macos");
@@ -158,24 +163,26 @@ pub(crate) fn get_system_memory_info() -> SystemMemoryInfo {
     let total_ram_bytes = sys.total_memory();
     let gpu_info = detect_gpu_info();
 
-    let (gpu_memory_bytes, is_apple_silicon) = if gpu_info.has_metal {
-        // Apple Silicon: unified memory architecture
-        // Approximately 75% of total RAM is available for GPU use
-        let gpu_available = (total_ram_bytes as f64 * 0.75) as u64;
-        (Some(gpu_available), true)
+    let (gpu_memory_bytes, is_unified_memory) = if gpu_info.has_metal {
+        // Apple Silicon: unified memory architecture.
+        (Some(unified_share(total_ram_bytes)), true)
     } else if gpu_info.has_nvidia_gpu {
-        // NVIDIA GPU: query VRAM via nvidia-smi
-        let vram = get_nvidia_vram_bytes();
-        (vram, false)
+        // NVIDIA GPU: query VRAM via nvidia-smi, and refuse if it cannot
+        // answer. Deliberately *not* falling through to the Vulkan probe: on a
+        // hybrid laptop `vulkaninfo`'s first device is frequently the iGPU, so
+        // that path would size an 8 GiB card against a share of host RAM —
+        // verbatim the outcome `total_device_memory_bytes` refuses to risk. A
+        // failing `nvidia-smi` is also the signature of a wedged driver, which
+        // is the worst moment to fork another unbounded probe at it.
+        (get_nvidia_vram_bytes(), false)
     } else {
-        // No GPU acceleration available, will use RAM
-        (None, false)
+        other_gpu_memory_bytes(total_ram_bytes)
     };
 
     SystemMemoryInfo {
         total_ram_bytes,
         gpu_memory_bytes,
-        is_apple_silicon,
+        is_unified_memory,
         has_nvidia_gpu: gpu_info.has_nvidia_gpu,
     }
 }
