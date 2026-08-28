@@ -117,14 +117,71 @@ property of judging a whole transcript rather than the turn in front of you.
 
 ## Kill criteria
 
-- If `loop_guard_trips` shows stagnation rejections have effectively vanished on
-  the proxy path, the guard is no longer paying for itself and the window should
-  be widened or the detector retired. It should get *rarer*, not zero.
+- ~~If `loop_guard_trips` shows stagnation rejections have effectively vanished
+  on the proxy path, the guard is no longer paying for itself and the window
+  should be widened or the detector retired. It should get *rarer*, not zero.~~
+
+  > **Restated 2026-08-28 — `loop_guard_trips` cannot show that.** It is one
+  > tally over both detectors and both paths. `ModelDefectCounts` documents it as
+  > "requests the loop/stagnation guard rejected before dispatch", and the proxy
+  > records `LoopDetected` and `StagnationDetected` through the same
+  > `loop_guard_tripped` flag before they diverge into two error bodies;
+  > `record_loop_guard_trip` takes no discriminator. A stagnation rejection is
+  > not separable from a loop one in that number, and the proxy path is not
+  > separable from the agent path.
+  >
+  > Read as written, the criterion is answerable only where the combined tally is
+  > zero — which is the reading taken below, and which says nothing about whether
+  > stagnation *specifically* has become rare. A criterion nobody can read is a
+  > promise that the decision will be revisited, and it will not be.
+  >
+  > **What stands in its place, and it is deliberately weaker: if
+  > `loop_guard_trips` reaches zero across a denominator large enough that a
+  > rejection would have been expected, then neither detector is paying for
+  > itself**, and the window should be widened or the detector retired. That is
+  > the most this counter supports. It cannot single out stagnation, so it cannot
+  > retire this detector alone.
+  >
+  > Separating the two needs a counter that does not exist. Queued as
+  > [#947](https://github.com/mmogr/gglib/issues/947) rather than assumed, and
+  > the original criterion above is struck rather than deleted so that what was
+  > wanted stays legible.
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.
 - If `WINDOW_FACTOR` ever needs a value below 3, the oscillation guarantee it
   exists to preserve has been given up, and the ADR should say so instead.
+
+### First reading, 2026-08-28
+
+The first evaluation of these three criteria. Same session as
+[ADR 0009](0009-fit-the-context-to-the-machine.md)'s first reading, which
+carries the provenance: ten requests, one model, Qwen3.8-27B via VS Code
+Copilot, read from `gglib proxy dashboard`, per-process counters that reset on
+restart and cannot be re-read.
+
+Mapping the three criteria to their instruments is what produced the
+restatement above. Two of them turn out not to be readings at all, which is
+worth saying plainly rather than leaving as three lines that look alike.
+
+- **The guard is no longer paying for itself** — **0 loop-guard trips across 10
+  requests, 2026-08-28**, covering both detectors and both paths, read against
+  the restated criterion rather than the struck one. Ten requests is nowhere
+  near a denominator at which a rejection would have been expected, so this is a
+  zero with nothing yet behind it. **OPEN.**
+- **If cycling sessions become a reported complaint** — **0 complaints, 1
+  session, 2026-08-28.** This one is a report and not a counter, and it says so:
+  nothing in the ledger observes a cycle, which is the gap the Consequences
+  section above records as backstopped by nothing. **OPEN.**
+- **If `WINDOW_FACTOR` ever needs a value below 3** — **not applicable.** A
+  tripwire consulted when the constant is changed, not a reading taken from
+  traffic. It has not been changed. Alone among the nine criteria in this arc it
+  needs no denominator, and it is the only one that was readable the day it was
+  written.
+
+**Both live criteria remain OPEN**, and one of them has been narrowed by the
+restatement: until [#947](https://github.com/mmogr/gglib/issues/947) lands,
+nothing can retire `StagnationDetector` on its own evidence.
 
 ## Notes
 
