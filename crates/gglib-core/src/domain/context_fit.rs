@@ -8,8 +8,14 @@
 //!
 //! This is the launch-time half of that arithmetic. `up`'s shortlist still
 //! asks a different question — "does this model fit *at* 32k?" — so the two
-//! are not yet one calculation, and the banner can still name a smaller
-//! context than the launch fits.
+//! are not one calculation and cannot be made one cheaply: they are answered
+//! against different budgets, and the shortlist runs before the model is
+//! downloaded, when its real KV geometry is not yet readable.
+//!
+//! What changed is that the banner no longer implies otherwise. It reports 32k
+//! as the bar the model had to clear, and says the served context is sized at
+//! launch, which is true and knowable. Naming a rung there would have been the
+//! same error in the other direction.
 //!
 //! ## Why it snaps to rungs
 //!
