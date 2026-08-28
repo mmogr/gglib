@@ -326,6 +326,7 @@ mod tests {
             time_to_first_tool_call_ms: Some(5),
             detail: None,
             unmeasured: None,
+            transport_retries: 0,
         }
     }
 

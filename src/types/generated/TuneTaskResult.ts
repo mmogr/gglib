@@ -96,4 +96,19 @@ detail: string | null,
  * cannot tell "the model did badly" from "there was no model" is
  * reporting a number it never took.
  */
-unmeasured: string | null, };
+unmeasured: string | null, 
+/**
+ * How many attempts this run threw away to a transport failure before the
+ * one reported here.
+ *
+ * `0` on a run that succeeded first time. Non-zero means the harness hit
+ * [`Self::unmeasured`] and tried again, so the numbers above come from a
+ * later attempt than the one the suite nominally ran.
+ *
+ * Recorded rather than swallowed because a silently-retried run is not the
+ * same measurement as a clean one, and an eval that hides its retries can
+ * report a healthy suite while the upstream underneath it is failing one
+ * request in ten. It is also the reading its own kill criterion needs: if
+ * this stays `0` across two full evals, the retry is unnecessary and goes.
+ */
+transport_retries: number, };

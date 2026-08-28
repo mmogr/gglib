@@ -378,6 +378,16 @@ export interface ArmScores {
    * read as a floor rather than a measurement.
    */
   unmeasured_runs?: number;
+  /**
+   * How many attempts this arm threw away to transport failures and retried.
+   *
+   * Independent of `unmeasured_runs` and worth showing on its own: an arm that
+   * lost requests and won them back on a retry is fully measured and still not
+   * clean, because its scores come from a later attempt than the suite
+   * nominally ran. A report that showed only the survivors would call it
+   * clean.
+   */
+  transport_retries?: number;
 }
 
 /**

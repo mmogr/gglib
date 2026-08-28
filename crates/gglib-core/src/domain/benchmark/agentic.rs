@@ -372,6 +372,19 @@ pub struct ArmScores {
     /// an amount this number is the only record of.
     #[serde(default)]
     pub unmeasured_runs: usize,
+    /// How many attempts this arm threw away to transport failures and retried.
+    ///
+    /// Distinct from [`Self::unmeasured_runs`] in both direction and meaning: a
+    /// retry that worked leaves this non-zero and `unmeasured_runs` at zero, so
+    /// an arm can be fully measured and still have been fighting the upstream
+    /// the whole way. A report that showed only the survivors would call that
+    /// arm clean.
+    ///
+    /// Summed over runs, so one run retried twice and two runs retried once
+    /// both read `2`. See [`TuneTaskResult::transport_retries`].
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub transport_retries: u32,
 }
 
 const fn one() -> usize {
@@ -1104,6 +1117,7 @@ mod tests {
             seeds: 3,
             runs: 12,
             unmeasured_runs: 0,
+            transport_retries: 0,
         }
     }
 
@@ -1121,6 +1135,7 @@ mod tests {
             time_to_first_tool_call_ms: Some(5),
             detail: None,
             unmeasured: None,
+            transport_retries: 0,
         }
     }
 

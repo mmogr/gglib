@@ -694,6 +694,7 @@ mod tests {
             seeds: 3,
             runs: 9,
             unmeasured_runs: 0,
+            transport_retries: 0,
         }
     }
 

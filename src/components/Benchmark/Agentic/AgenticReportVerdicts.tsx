@@ -11,15 +11,39 @@ import {
 
 const fmt = (v: number) => v.toFixed(3);
 
+const armList = (report: AgenticEvalReport): Array<[EvalArm, ArmScores | null | undefined]> => [
+  ['raw', report.raw],
+  ['gglib', report.gglib],
+  ['raw_replicate', report.raw_replicate],
+  ['control', report.control],
+];
+
+/**
+ * Arms that fought the transport and won. Shown even when every run was
+ * eventually measured: an arm scored off a retried attempt is not the same
+ * measurement as a clean one, and without this it renders identically.
+ */
+const RetryBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
+  const retried = armList(report).filter(([, a]) => a && (a.transport_retries ?? 0) > 0);
+  if (retried.length === 0) return null;
+
+  return (
+    <Banner variant="warning" title="Transport retries">
+      {retried.map(([arm, a]) => (
+        <p key={arm} className="m-0 font-mono tabular-nums">
+          {arm}: {a!.transport_retries} retried attempt(s) across {a!.runs ?? '?'} runs
+        </p>
+      ))}
+      <p className="m-0">
+        These scores come from a later attempt than the suite nominally ran.
+      </p>
+    </Banner>
+  );
+};
+
 /** Arms with runs the harness never delivered to the model — means are floors, not measurements. */
 const UnmeasuredBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
-  const arms: Array<[EvalArm, ArmScores | null | undefined]> = [
-    ['raw', report.raw],
-    ['gglib', report.gglib],
-    ['raw_replicate', report.raw_replicate],
-    ['control', report.control],
-  ];
-  const partly = arms.filter(([, a]) => a && (a.unmeasured_runs ?? 0) > 0);
+  const partly = armList(report).filter(([, a]) => a && (a.unmeasured_runs ?? 0) > 0);
   if (partly.length === 0) return null;
 
   return (
@@ -174,6 +198,7 @@ const StabilityBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
 /** The report's validity story, in the CLI's order: unmeasured, drift, control, stability. */
 export const AgenticReportVerdicts: FC<{ report: AgenticEvalReport }> = ({ report }) => (
   <div className="flex flex-col gap-md">
+    <RetryBlock report={report} />
     <UnmeasuredBlock report={report} />
     <section className="flex flex-col gap-xs">
       <h3 className="m-0 text-sm font-semibold text-text">Drift (A/A)</h3>

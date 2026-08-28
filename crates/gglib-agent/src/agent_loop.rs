@@ -170,13 +170,16 @@ impl AgentLoop {
         tools: &[ToolDefinition],
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
+        // `{:#}` rather than `{}` on both arms: these errors carry their cause
+        // as a source chain, and the transport failures worth telling apart —
+        // an idle timeout against a mid-stream reset — differ only there.
         let stream = match self.llm.chat_stream(messages, tools).await {
             Ok(s) => s,
-            Err(e) => return fail_loop(tx, format!("LLM stream error: {e}")).await,
+            Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
         };
         match collect_stream(stream, tx).await {
             Ok(r) => Ok(r),
-            Err(e) => fail_loop(tx, format!("stream collection error: {e}")).await,
+            Err(e) => fail_loop(tx, format!("stream collection error: {e:#}")).await,
         }
     }
 

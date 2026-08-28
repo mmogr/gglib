@@ -115,6 +115,13 @@ pub(crate) async fn run_agentic_eval(
     // means the same thing in both.
     let model_context = super::tune::model_context_for(&model);
 
+    // Deliberately not `deps.http_client`: that one carries a total-request
+    // deadline, which on an SSE stream kills the body mid-flight and reports it
+    // as a decode failure. See `BenchmarkDeps::build_agentic_http_client`.
+    // Built per run rather than per process so the connection pool never
+    // outlives the eval that filled it.
+    let http_client = BenchmarkDeps::build_agentic_http_client()?;
+
     let plans = plan_arms(&config);
 
     // Per arm, results are grouped by task and ordered by seed within each
@@ -151,7 +158,7 @@ pub(crate) async fn run_agentic_eval(
                 let result = run_task_with_llm(
                     |usage| {
                         build_arm_llm(
-                            deps,
+                            &http_client,
                             &base_url,
                             &model.name,
                             arm,
@@ -164,6 +171,23 @@ pub(crate) async fn run_agentic_eval(
                     task,
                 )
                 .await;
+                // The only place that knows all four of arm, task, seed and
+                // reason at once. Nothing downstream does: the stream error is
+                // yielded as a value rather than logged, the agent loop turns it
+                // into an event the task runner discards, and what survives into
+                // the report is a count with no way back to the run that earned
+                // it. A failure nobody can locate is one nobody diagnoses.
+                if let Some(reason) = &result.unmeasured {
+                    warn!(
+                        ?arm,
+                        task_id = %task.id,
+                        seed = seed.unwrap_or(0),
+                        retries = result.transport_retries,
+                        elapsed_ms = result.latency_ms,
+                        %reason,
+                        "agentic eval: run reached no model"
+                    );
+                }
                 let _ = tx
                     .send(BenchmarkEvent::AgenticTaskComplete {
                         arm,
@@ -471,7 +495,7 @@ fn empty_scores(weights: &ScoreWeights) -> ArmScores {
 /// finish.
 #[allow(clippy::too_many_arguments)]
 fn build_arm_llm(
-    deps: &BenchmarkDeps,
+    http_client: &reqwest::Client,
     base_url: &str,
     model_name: &str,
     arm: EvalArm,
@@ -512,7 +536,7 @@ fn build_arm_llm(
 
     let adapter = LlmCompletionAdapter::with_client(
         base_url.to_owned(),
-        deps.http_client.clone(),
+        http_client.clone(),
         Some(model_name.to_owned()),
     )
     .with_first_turn_tool_choice(tool_choice)
@@ -635,6 +659,7 @@ fn arm_scores(
         seeds,
         runs: tasks * seeds,
         unmeasured_runs: results.iter().filter(|r| !r.is_measured()).count(),
+        transport_retries: results.iter().map(|r| r.transport_retries).sum(),
         tool_accuracy: axes.as_ref().map_or(0.0, |a| a.tool_accuracy),
         loop_avoidance: axes.as_ref().and_then(|a| a.loop_avoidance),
         loop_eligible: axes.as_ref().map_or(0, |a| a.loop_eligible),
@@ -834,6 +859,7 @@ mod tests {
             time_to_first_tool_call_ms: None,
             detail: None,
             unmeasured: unmeasured.map(ToOwned::to_owned),
+            transport_retries: 0,
         }
     }
 
