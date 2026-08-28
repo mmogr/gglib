@@ -82,26 +82,7 @@ pub fn fit_context(
     v: KvCacheType,
     budget_bytes: Option<u64>,
 ) -> Option<u64> {
-    let trained = trained_ctx?;
-    // `0` is this codebase's sentinel for "size could not be read"
-    // (`total_model_bytes`), and it is the most dangerous value to take
-    // literally: weights that cost nothing hand the entire budget to the KV
-    // cache. `launch_deadline_secs` reads the same field and refuses it the
-    // same way.
-    let weights = weights_bytes.filter(|&b| b > 0)?;
-    let per_token = kv_bytes_per_token(kv?, k, v);
-    if per_token == 0 {
-        return None;
-    }
-
-    let usable = scale(budget_bytes?, BUDGET_UTILISATION);
-    let for_kv = usable.checked_sub(weights)?;
-
-    // Never claim more than the model was trained for, *before* snapping, so
-    // the result is always both a rung and within the model's range.
-    let fitted = (for_kv / per_token).min(trained);
-
-    RUNGS.iter().rev().find(|&&rung| rung <= fitted).copied()
+    fit_context_explained(trained_ctx, weights_bytes, kv, k, v, budget_bytes).0
 }
 
 /// What [`fit_context`] worked from, for a person reading a launch log.
@@ -111,6 +92,12 @@ pub fn fit_context(
 /// acts on this record; it exists so the numbers behind a fitted context are
 /// visible when someone asks whether those judgements were right, rather than
 /// having to be re-derived from the rung alone.
+///
+/// `gglib model explain` is where a person reads it, through
+/// `residency::explain::explain_fit`, which supplies the same two budgets
+/// `admit` does. Before that it reached only a `debug!` line written after a
+/// launch, which is not a reading anyone could take across a catalog — and
+/// ADR 0009's first kill criterion needs exactly that.
 #[derive(Debug, Clone, Copy)]
 pub struct FitInputs {
     /// Device memory the fit was allowed to spend against.
@@ -139,23 +126,29 @@ pub fn fit_context_explained(
     let per_token = kv
         .map(|elems| kv_bytes_per_token(elems, k, v))
         .filter(|&b| b > 0);
+    // `0` is this codebase's sentinel for "size could not be read"
+    // (`total_model_bytes`), and it is the most dangerous value to take
+    // literally: weights that cost nothing hand the entire budget to the KV
+    // cache. `launch_deadline_secs` reads the same field and refuses it the
+    // same way.
+    let weights = weights_bytes.filter(|&b| b > 0);
+    // Never claim more than the model was trained for, *before* snapping, so
+    // the result is always both a rung and within the model's range.
     let unsnapped = (|| {
         let usable = scale(budget_bytes?, BUDGET_UTILISATION);
-        let for_kv = usable.checked_sub(weights_bytes.filter(|&b| b > 0)?)?;
+        let for_kv = usable.checked_sub(weights?)?;
         Some((for_kv / per_token?).min(trained_ctx?))
     })();
 
     let inputs = FitInputs {
         budget_bytes,
-        weights_bytes: weights_bytes.filter(|&b| b > 0),
+        weights_bytes: weights,
         kv_bytes_per_token: per_token,
         trained_ctx,
         unsnapped,
     };
-    (
-        fit_context(trained_ctx, weights_bytes, kv, k, v, budget_bytes),
-        inputs,
-    )
+    let fitted = unsnapped.and_then(|u| RUNGS.iter().rev().find(|&&rung| rung <= u).copied());
+    (fitted, inputs)
 }
 
 #[cfg(test)]

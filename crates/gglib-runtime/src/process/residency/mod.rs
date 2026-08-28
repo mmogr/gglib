@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub mod explain;
 mod launch;
 mod spawned_child;
 mod vram;
@@ -107,8 +108,7 @@ fn resolve_launch_opts(
 ///
 /// The seam guards the logic, not the wiring. Passing the same budget as both
 /// arguments still neuters the fallback and no test would notice; catching that
-/// needs `admit` exercised end to end against a catalog, which this module does
-/// not do.
+/// needs `admit` exercised end to end, which this module does not do.
 fn fit_or_undivided<F>(fit: F, reserved: Option<u64>, undivided: Option<u64>) -> Option<u64>
 where
     F: Fn(Option<u64>) -> Option<u64>,
