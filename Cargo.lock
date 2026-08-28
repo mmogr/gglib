@@ -596,12 +596,12 @@ checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "chacha20"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.3.0",
+ "cpufeatures 0.3.1",
  "rand_core 0.10.1",
 ]
 
@@ -723,9 +723,9 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "combine"
-version = "4.6.7"
+version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+checksum = "cfc320937d09e6de266b31b9afb480f197d7a861be86be7cb2ea7e5d1bfffc5e"
 dependencies = [
  "bytes",
  "memchr",
@@ -863,9 +863,9 @@ dependencies = [
 
 [[package]]
 name = "cpufeatures"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
@@ -1673,12 +1673,12 @@ checksum = "d45db016d36b838f563236e9193d0ee6ce38f3f68b6c94e914b4929c96bbb890"
 
 [[package]]
 name = "flate2"
-version = "1.1.9"
+version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
+checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
 dependencies = [
  "crc32fast",
- "miniz_oxide",
+ "miniz_oxide 0.9.1",
  "zlib-rs 0.6.7",
 ]
 
@@ -2052,7 +2052,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2067,7 +2067,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "dotenvy",
  "gglib-app-services",
@@ -2093,7 +2093,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2124,7 +2124,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -2161,7 +2161,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2179,14 +2179,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2225,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2271,7 +2271,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2313,7 +2313,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2330,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-integration-tests"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -2345,7 +2345,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2362,7 +2362,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2397,7 +2397,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-sse"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "axum",
  "futures-util",
@@ -2441,7 +2441,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "serde",
  "tauri",
@@ -3338,9 +3338,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "839c0e8a181239723652be9062bb56ca5bf5f64011f73b623f6f4fc59086a228"
+checksum = "ef8e5e5a340588f4452631496976cf8636d4a7ecf600239fdc27615d2530bc16"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -4247,9 +4247,9 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libredox"
-version = "0.1.20"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28d0a00925a9f930d679b6789b721e3a7f9ed110f41b86d2497caa780c3a070a"
+checksum = "d7955dfc218a8afb29dfeffd540e3a6e96baeb94fe7138228dd7cc6937fbbf96"
 dependencies = [
  "bitflags 2.13.1",
  "libc",
@@ -4456,6 +4456,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "miniz_oxide"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
+dependencies = [
+ "adler2",
+ "simd-adler32",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4633,7 +4643,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-traits",
- "rand 0.8.7",
+ "rand 0.8.8",
  "smallvec",
  "zeroize",
 ]
@@ -4940,9 +4950,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open"
-version = "5.4.1"
+version = "5.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9cfef937e9c486488c7e3d949ae31c0f1d06bdacd75b99c086cb35356e30408"
+checksum = "ade3be4664bc1ef537ce133015f04c176b737815c2ba9fd60edf212d6e90dd55"
 dependencies = [
  "is-wsl",
  "libc",
@@ -5225,7 +5235,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -5238,7 +5248,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -5488,9 +5498,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.7"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22f6172bdec972074665ed81ed53b71da00bfc44b65a753cfde883ec4c702a1a"
+checksum = "e058c7de0b26af77780c769414d6257830bb240f3c38477dbc2c16e5f54d6d4c"
 dependencies = [
  "libc",
  "rand_chacha 0.3.1",
@@ -6330,7 +6340,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.3.0",
+ "cpufeatures 0.3.1",
  "digest 0.11.3",
 ]
 
@@ -6666,7 +6676,7 @@ dependencies = [
  "memchr",
  "once_cell",
  "percent-encoding",
- "rand 0.8.7",
+ "rand 0.8.8",
  "rsa",
  "serde",
  "sha1",
@@ -6705,7 +6715,7 @@ dependencies = [
  "md-5",
  "memchr",
  "once_cell",
- "rand 0.8.7",
+ "rand 0.8.8",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -8057,9 +8067,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.25.0"
+version = "1.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f053576934f05a761a402421fbbe3d425d9366f75f978806a037b3ca481abecc"
+checksum = "b5772d71c9be8a8a6ac2117d949c5b224c1b72241bb611d9a3012edcf8af7812"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -8411,9 +8421,9 @@ dependencies = [
 
 [[package]]
 name = "which"
-version = "8.0.5"
+version = "8.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3ef584124b911bcc3875c2f1472e80f24361ceb789bd1c62b3e9a3df9ff43c"
+checksum = "bae2f2b2b816647a1cab1acc91f5bd20812d53cb344382635ec2181940c8034f"
 dependencies = [
  "libc",
 ]
