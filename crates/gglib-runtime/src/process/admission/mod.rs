@@ -12,3 +12,8 @@ pub use state::{
 #[cfg(test)]
 #[path = "queue_tests.rs"]
 mod queue_tests;
+
+/// What eviction does to a slot that is not a plain resident.
+#[cfg(test)]
+#[path = "state_tests.rs"]
+mod state_tests;

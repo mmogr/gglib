@@ -680,9 +680,24 @@ impl QueueState {
         }
     }
 
-    /// Empty a slot, unconditionally. Used by explicit stop requests, which are
-    /// the user's decision rather than the scheduler's.
+    /// Empty a slot at the user's explicit request — but not one whose launch
+    /// has not landed yet.
+    ///
+    /// [`SlotState::is_evictable`] has always said a slot mid-launch is never
+    /// evictable; this is the path that ignored it. Emptying a `Loading` slot
+    /// returned `None`, so every caller killed nothing and reported success
+    /// while the detached launch carried on into a slot the scheduler now
+    /// believed free — `choose_slot` handed it to the next waiter, `install`
+    /// overwrote whichever landed second, and the loser held VRAM under no
+    /// name any stop path could reach.
+    ///
+    /// The cost: an explicit stop during a launch is a no-op. Cancelling the
+    /// launch itself means reaching the task that owns it, which is larger;
+    /// keeping the state coherent is the half that stops a leak.
     pub(super) fn evict(&mut self, slot: usize) -> Option<Resident> {
+        if matches!(self.slots[slot], SlotState::Loading { .. }) {
+            return None;
+        }
         let previous = std::mem::replace(&mut self.slots[slot], SlotState::Empty);
         self.record_progress();
         match previous {
