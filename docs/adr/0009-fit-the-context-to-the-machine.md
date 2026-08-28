@@ -147,6 +147,40 @@ context. No current hardware occupies it — GPU VRAM comes in 4/6/8/10/12/16/24
 GiB and Apple unified memory is 0.75× of 8/16/24/32/64 GB — but it is a real
 discontinuity in the function and it is named in the code.
 
+**A fitted context can disqualify a model from the second slot.** The fit is
+computed against the whole device, before the queue has decided which slot the
+model gets; `decide_secondary_slot` then judges the result against a hard 2 GiB
+ceiling. A model sized as though it owned the card is measured against a slot
+that is a fraction of it.
+
+> **Amended 2026-08-28 — measured, and it binds on the model the slot exists
+> for.** `residency_fit_tests.rs` pins the arithmetic. A Qwen3-Embedding-0.6B at
+> Q8_0 is about 57k KV elements per token, so at the 4096 floor its whole
+> footprint is under a gigabyte and it co-resides comfortably — which is what
+> the second slot is *for*. At a fitted 32,768 its KV alone is about 2 GiB and
+> the ceiling refuses it. The rungs at and below 16,384 still fit; 32,768 does
+> not.
+>
+> The consequence is not a failed launch. It is thrash: `may_co_reside` is
+> false, so the embedder displaces the primary, and every `/v1/embeddings` call
+> evicts the chat model while every following chat call evicts the embedder —
+> two full reloads per document indexed, on the pairing this slot was added to
+> keep resident.
+>
+> **Not fixed here, and the reason is the invariant rather than the effort.**
+> The resolved context is "the single source of truth for what context this
+> launch/reuse decision is about", read by the resident-match test, every log
+> line and the narration — and it is resolved *before* `poll` chooses a slot.
+> Sizing a candidate for the slot it will get makes that value slot-dependent,
+> which means the match test in `serve` has to become slot-aware too, or a
+> co-resident is recycled on its very next request for having the context it
+> was granted for. That is a change to the invariant, not a change under it,
+> and it wants its own decision.
+>
+> The operator lever that already exists is a per-model
+> `server_defaults.context_length`: setting an embedder to 8192 restores
+> co-residence today, because a configured value outranks the fit.
+
 **`/v1/models` advertises the trained window when nothing is configured**, rather
 than `min(trained, 4096)`. `context_window` is a gglib extension — the OpenAI
 endpoint has no such field — so gglib defines its semantics, and a cap nobody

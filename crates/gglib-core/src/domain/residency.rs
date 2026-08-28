@@ -224,6 +224,11 @@ pub fn decide_secondary_slot(
     }
 }
 
+/// The interaction between a fitted context and this slot's hard ceiling.
+#[cfg(test)]
+#[path = "residency_fit_tests.rs"]
+mod fit_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;

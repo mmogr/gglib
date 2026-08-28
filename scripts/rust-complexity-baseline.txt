@@ -57,7 +57,7 @@ crates/gglib-core/src/domain/model.rs 343
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 432
 crates/gglib-core/src/domain/recommendation.rs 381
-crates/gglib-core/src/domain/residency.rs 414
+crates/gglib-core/src/domain/residency.rs 419
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
 crates/gglib-core/src/download/completion.rs 557
 crates/gglib-core/src/download/events.rs 478
