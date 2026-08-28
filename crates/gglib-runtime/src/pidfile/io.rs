@@ -126,9 +126,13 @@ mod tests {
     use super::*;
     use std::fs;
 
+    /// Uses an implausible id for the reason `launch_tests` documents: this
+    /// writes into the real `pids_dir()`, and `12345` is a rowid a catalog can
+    /// genuinely hand out — deleting that pidfile would leave a live server the
+    /// startup sweep can no longer reap.
     #[test]
     fn roundtrip_pidfile() {
-        let model_id = 12345;
+        let model_id = 999_011;
         let pid = 98765;
         let port = 8080;
 
@@ -147,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Run with --ignored or --include-ignored; prevents parallel test interference
+    #[ignore = "deletes every .pid in the real pids_dir, which is the developer's own"]
     fn list_pidfiles_filters_non_pid_files() {
         let dir = pids_dir().expect("pids_dir failed");
         fs::create_dir_all(&dir).expect("mkdir failed");
