@@ -2,11 +2,10 @@ crates/gglib-agent/src/agent_loop.rs 610
 crates/gglib-agent/src/stream_collector.rs 463
 crates/gglib-agent/tests/integration_guards.rs 763
 crates/gglib-agent/tests/integration_happy_path.rs 433
-crates/gglib-app-services/src/benchmark/agentic.rs 932
+crates/gglib-app-services/src/benchmark/agentic.rs 933
 crates/gglib-app-services/src/benchmark/compare.rs 392
 crates/gglib-app-services/src/benchmark/mapper.rs 529
-crates/gglib-app-services/src/benchmark/tune/mod.rs 1293
-crates/gglib-app-services/src/benchmark/tune/scoring.rs 352
+crates/gglib-app-services/src/benchmark/tune/mod.rs 1334
 crates/gglib-app-services/src/downloads.rs 375
 crates/gglib-app-services/src/mcp.rs 397
 crates/gglib-app-services/src/models.rs 576

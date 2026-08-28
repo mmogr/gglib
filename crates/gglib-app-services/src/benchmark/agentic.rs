@@ -922,6 +922,7 @@ mod tests {
                 name: "f".into(),
                 required_args: serde_json::Map::new(),
                 ordered: false,
+                depends_on_result: false,
             }],
         });
         let abstaining = call_task(ExpectedOutcome::NoToolCall);

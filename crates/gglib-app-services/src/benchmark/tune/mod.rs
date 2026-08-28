@@ -16,7 +16,7 @@ use gglib_core::domain::benchmark::tune::result::{
 };
 use gglib_core::domain::benchmark::tune::task::{TaskCategory, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
-use gglib_core::domain::{InferenceConfig, Model};
+use gglib_core::domain::{InferenceConfig, Model, ToolCall};
 use gglib_core::ports::{LlmCompletionPort, RunningTarget, ToolExecutorPort, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_runtime::LlmCompletionAdapter;
@@ -631,6 +631,35 @@ where
     }
 }
 
+/// Group a flat call log into the batches the agent loop executed.
+///
+/// `sizes` comes from `AgentEvent::IterationComplete`, one entry per iteration.
+/// The two can disagree — a run the guards aborted mid-batch has calls in the
+/// log that no completed iteration ever reported — so any tail the sizes do not
+/// account for becomes one final batch rather than being dropped.
+///
+/// Erring towards *fewer, larger* batches is the safe direction: a batch is a
+/// set with no order to violate, so a wrong guess can only ever be more
+/// lenient than the truth. Inventing extra boundaries would do the opposite and
+/// demand an order the model never expressed.
+fn partition_calls(recorded: Vec<ToolCall>, sizes: &[usize]) -> Vec<Vec<ToolCall>> {
+    let mut batches = Vec::with_capacity(sizes.len() + 1);
+    let mut rest = recorded.as_slice();
+    for &size in sizes {
+        let take = size.min(rest.len());
+        if take == 0 {
+            continue;
+        }
+        let (batch, tail) = rest.split_at(take);
+        batches.push(batch.to_vec());
+        rest = tail;
+    }
+    if !rest.is_empty() {
+        batches.push(rest.to_vec());
+    }
+    batches
+}
+
 /// Whether an attempt is worth throwing away and repeating.
 ///
 /// Keyed on `unmeasured`, never on a matched error string. That field is
@@ -696,9 +725,21 @@ where
     // return value, so they survive a guard-aborted run.
     let mut iterations = 0usize;
     let mut time_to_first_tool_call_ms: Option<u64> = None;
+    // How many calls each iteration executed, in iteration order. This is the
+    // only record of which recorded calls the model emitted *together*: the
+    // call log itself is in completion order, which the tokio scheduler
+    // decides. `IterationComplete` is emitted after the batch has finished
+    // executing, so every one of its calls is already in the log by then.
+    let mut batch_sizes: Vec<usize> = Vec::new();
     while let Some(event) = event_rx.recv().await {
         match event {
-            AgentEvent::IterationComplete { iteration, .. } => iterations = iteration,
+            AgentEvent::IterationComplete {
+                iteration,
+                tool_calls,
+            } => {
+                iterations = iteration;
+                batch_sizes.push(tool_calls);
+            }
             AgentEvent::ToolCallStart { .. } if time_to_first_tool_call_ms.is_none() => {
                 time_to_first_tool_call_ms = u64::try_from(started_at.elapsed().as_millis()).ok();
             }
@@ -709,7 +750,7 @@ where
     let latency_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
 
     let recorded = call_log.lock().await.clone();
-    let scoring = score_outcome(&task.expected, &recorded);
+    let scoring = score_outcome(&task.expected, &partition_calls(recorded, &batch_sizes));
 
     // Read from the tally, not from `AgentRunOutput`: a guard-aborted run
     // returns `Err` and its tokens would otherwise vanish — and those are the
