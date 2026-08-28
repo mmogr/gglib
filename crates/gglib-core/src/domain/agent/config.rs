@@ -274,15 +274,15 @@ pub struct AgentConfig {
     /// A repeat whose answer *changed* is not a strike — an agent polling a
     /// build for output repeats a batch every turn and is working. That reset
     /// would, on its own, exempt any tool whose output carries a clock or a
-    /// counter, so a batch that is **not** exploratory may be carried by
-    /// changing answers only while its run stays inside this allowance. The
-    /// number is reused rather than invented: an exploratory batch already
-    /// gets it on the ground that repeating a call which changes nothing is
-    /// free, and there is no measurement behind a second number.
+    /// counter, so a batch may be carried by changing answers only while its
+    /// run stays inside this allowance — unless it is exploratory *and* free
+    /// to repeat. The number is reused rather than invented: an exploratory
+    /// batch already gets it because repeating a call which changes nothing
+    /// is free, and there is no measurement behind a second number.
     ///
-    /// So this field is read twice for a mutating batch — never as its strike
-    /// threshold, always as the ceiling past which a moving answer stops
-    /// buying anything. See
+    /// So this field is read twice for a mutating batch, and for an
+    /// exploratory one that costs something elsewhere — never as a strike
+    /// threshold, always as the ceiling on a moving answer. See
     /// [ADR 0010](https://github.com/mmogr/gglib/blob/main/docs/adr/0010-the-loop-guard-reads-what-came-back.md).
     ///
     /// Set to `None` to disable the elevated threshold entirely; exploratory
@@ -355,9 +355,9 @@ impl Default for AgentConfig {
                 "list_code_definition_names".into(),
                 // The one entry the "changes nothing" rule covers only
                 // locally: repeating it is free on this machine but spends
-                // someone else's rate limit. Kept because a coding agent
-                // re-reading docs mid-task is ordinary, and 15 fetches is a
-                // smaller harm than a dead session.
+                // someone else's rate limit. Kept because re-reading docs
+                // mid-task is ordinary — and held to 15 rather than waived,
+                // by `is_costly_batch`, alongside `navigate` and `click`.
                 "fetch_webpage".into(),
             ],
             max_observation_steps: Some(DEFAULT_MAX_OBSERVATION_STEPS),

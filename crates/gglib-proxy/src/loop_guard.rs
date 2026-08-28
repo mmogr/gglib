@@ -414,3 +414,8 @@ mod user_turn_tests;
 #[cfg(test)]
 #[path = "loop_guard_rescue_tests.rs"]
 mod rescue_tests;
+
+/// Observation tools that are read-only here but not free to repeat.
+#[cfg(test)]
+#[path = "loop_guard_costly_tests.rs"]
+mod costly_tests;

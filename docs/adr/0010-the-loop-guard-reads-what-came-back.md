@@ -44,8 +44,19 @@ in the same run.**
   the run, so on its own it would exempt any tool whose output carries a clock,
   an elapsed time, a progress counter or a random id. Observation-tier batches
   are exempt anyway — that tier exists on the ground that repeating a call which
-  changes nothing is free. Everything else may be carried by changing answers
-  only while the run itself stays inside the read-only allowance,
+  changes nothing is free. *(Amended 2026-08-28: exempt unless the call changes
+  nothing only on **this** machine. `navigate`, `click` and `fetch_webpage` are
+  classified as observation but do not get the waiver — see `is_costly_batch`
+  and [#944](https://github.com/mmogr/gglib/issues/944). It is adjacent to the
+  remedy the **first** kill criterion below names — "narrow the rescue to tools
+  with stable output, or remove it" — but not the same axis: that criterion
+  narrows by output stability, this narrows by side-effect cost. The two
+  overlap on `fetch_webpage`, whose output is unstable *and* whose repeat is not
+  free, which is why it was the clearest case. No criterion licensed this: all
+  three stood OPEN at 0/0 across 10 requests when it landed, and it was taken
+  ahead of a reading rather than because of one.)* Everything else may be
+  carried by changing answers only while the run itself stays inside the
+  read-only allowance,
   `max_observation_steps`. That number is **reused, not invented**: there is no
   measurement behind a new one, and inventing one is what this codebase has
   repeatedly refused to do.
@@ -94,7 +105,7 @@ satisfied. See the amendment on that ADR.
 
 1. **A drifting byte buys tolerance.** Any tool whose output carries a clock or
    a counter rescues its run on every occurrence. For a mutating batch that
-   raises the ceiling from 3 to 16; for a read-only batch it removes the ceiling.
+   raises the ceiling from 3 to 16; for a read-only batch that is also free to repeat it removes the ceiling.
    `cargo test`'s `finished in 0.31s` is enough. This is the largest cost and the
    reason the ceiling exists at all.
 2. **A quiet poll still trips.** Sixteen identical answers in a row is a loop by
