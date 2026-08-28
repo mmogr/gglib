@@ -36,6 +36,14 @@ jobs:
       - name: Fetch tags
         run: git fetch --force --tags
 
+      # Needed by the npm half of "Update lockfiles". The workflow had no Node
+      # step at all while package-lock.json was untracked.
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
       - name: Validate semver format
         id: validate
         run: |
@@ -116,15 +124,23 @@ jobs:
         run: |
           cargo generate-lockfile
           cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+          # --package-lock-only writes the lockfile without touching node_modules.
+          # It keeps every resolution the lockfile already pins, so the only diff
+          # is the two root version fields -- a bump must not smuggle in a
+          # dependency upgrade.
+          npm install --package-lock-only --no-audit --no-fund
 
       - name: Verify lockfiles (no build)
         run: |
           cargo metadata --locked --format-version 1 > /dev/null
           cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
+          # The npm equivalent: `npm ci` is the one command that refuses to run
+          # when package.json and package-lock.json disagree on dependencies.
+          npm ci --dry-run --no-audit --no-fund > /dev/null
 
       - name: Stage lockfiles
         run: |
-          git add Cargo.lock
+          git add Cargo.lock package-lock.json
           if [ -f src-tauri/Cargo.lock ]; then git add src-tauri/Cargo.lock; fi
 
       - name: Verify changes
@@ -141,6 +157,15 @@ jobs:
             fi
             echo "✓ Verified $file"
           done
+
+          # package-lock.json is checked separately because it carries the
+          # version twice — the top-level key, and the one on the "" entry under
+          # `packages`. Both must move; a grep -q would pass on either alone.
+          if [ "$(grep -c "\"version\": \"$VERSION\"" package-lock.json)" -lt 2 ]; then
+            echo "::error::package-lock.json was not updated correctly"
+            exit 1
+          fi
+          echo "✓ Verified package-lock.json"
 
           # Guard the fallback: a re-added "version" key would silently pin the
           # app metadata and reintroduce the drift this removal eliminated.
@@ -170,6 +195,7 @@ jobs:
             - ✓ `Cargo.toml` (workspace)
             - ✓ `Cargo.lock` (workspace)
             - ✓ `package.json`
+            - ✓ `package-lock.json`
             - ✓ `src-tauri/Cargo.toml`
             - ✓ `src-tauri/Cargo.lock`
             - ✓ All workspace crates (via inheritance)
