@@ -51,8 +51,24 @@ total_completion_tokens: number | null,
 /**
  * Total wall-clock milliseconds across every task in the suite,
  * unfiltered — the honest cost of running it.
+ *
+ * Report this as "what the suite cost"; never compare two arms with it.
+ * A run that stalled and timed out contributes its whole timeout here, so
+ * this figure answers "how long did I wait" rather than "how fast is the
+ * pipeline". [`Self::measured_wall_ms`] answers the second.
  */
 total_wall_ms: number, 
+/**
+ * Wall-clock milliseconds across the runs that reached the model.
+ *
+ * The comparable figure, and the one every ratio is taken from. It shares
+ * its population with [`Self::tg_tps`] and
+ * [`Self::mean_time_to_first_tool_call_ms`], which already filtered this
+ * way — the efficiency table used to print those beside an unfiltered
+ * wall time, so two of its rows described different sets of runs while
+ * looking like one table.
+ */
+measured_wall_ms: number, 
 /**
  * Mean time to the first tool call, over the tasks that made one. `None`
  * when no task in the arm called a tool.

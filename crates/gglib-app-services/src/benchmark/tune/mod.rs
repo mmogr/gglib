@@ -858,24 +858,15 @@ pub(crate) fn compute_composite_score(results: &[TuneTaskResult], weights: &Scor
         return 0.0;
     };
 
-    // Unmeasured axes contribute no score and claim no weight.
-    let (loop_term, loop_weight) = axes.loop_avoidance.map_or((0.0, 0.0), |avoidance| {
-        (
-            avoidance * f64::from(weights.loop_avoidance),
-            f64::from(weights.loop_avoidance),
-        )
-    });
-
-    let weight_sum =
-        f64::from(weights.tool_accuracy) + loop_weight + f64::from(weights.task_completion);
-    if weight_sum <= 0.0 {
-        return 0.0;
-    }
-
-    (axes.tool_accuracy * f64::from(weights.tool_accuracy)
-        + loop_term
-        + axes.task_completion * f64::from(weights.task_completion))
-        / weight_sum
+    // Unmeasured axes contribute no score and claim no weight. The arithmetic
+    // lives on `ScoreWeights` because the arm comparison needs the identical
+    // formula over a possibly-smaller axis set, and two copies of it would
+    // drift into comparing scales rather than pipelines.
+    weights.composite_of(
+        axes.tool_accuracy,
+        axes.loop_avoidance,
+        axes.task_completion,
+    )
 }
 
 /// Completed tool-executing iterations a task needs before the loop guard

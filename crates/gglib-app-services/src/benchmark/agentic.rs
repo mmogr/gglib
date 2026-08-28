@@ -257,7 +257,7 @@ pub(crate) async fn run_agentic_eval(
         .filter_map(|run| score_arm(&Some(run.clone()), EvalArm::RawReplicate))
         .collect();
     let control = score_arm(&control_results, EvalArm::Control);
-    let delta = AgenticEvalReport::delta_of(&raw, &gglib);
+    let delta = AgenticEvalReport::delta_of(&raw, &gglib, &weights);
 
     let tasks_cmp: Vec<AgenticTaskComparison> = raw_results
         .unwrap_or_default()
@@ -668,6 +668,11 @@ fn arm_scores(
         tg_tps: throughput_tps(results),
         total_completion_tokens: total_completion_tokens(results),
         total_wall_ms: results.iter().map(|r| r.latency_ms).sum(),
+        measured_wall_ms: results
+            .iter()
+            .filter(|r| r.is_measured())
+            .map(|r| r.latency_ms)
+            .sum(),
         mean_time_to_first_tool_call_ms: mean_time_to_first_tool_call_ms(results),
     }
 }

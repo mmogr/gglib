@@ -66,8 +66,12 @@ export const AgenticHistoryList: FC<AgenticHistoryListProps> = ({ models, onSele
           onClick={() => onSelect(r)}
         >
           #{i + 1}
-          {i === 0 ? ' (latest)' : ''} · Δ composite {r.delta.composite >= 0 ? '+' : ''}
-          {r.delta.composite.toFixed(3)}
+          {i === 0 ? ' (latest)' : ''} · Δ composite{' '}
+          {/* A withheld delta must not read as a small one, least of all in a
+              list where past runs are scanned side by side. */}
+          {r.delta.composite == null
+            ? 'withheld'
+            : `${r.delta.composite >= 0 ? '+' : ''}${r.delta.composite.toFixed(3)}`}
         </Button>
       ))}
     </section>

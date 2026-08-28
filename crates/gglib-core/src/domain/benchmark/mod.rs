@@ -11,7 +11,7 @@ pub mod tune;
 pub use agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmDelta, ArmScores,
     CONTROL_MIN_COMPOSITE_GAP, CONTROL_MIN_P, CONTROL_TEMPERATURE, CONTROL_TOP_K, CONTROL_TOP_P,
-    ControlVerdict, DEFAULT_SEEDS, EFFECT_NOISE_RATIO, EffectVerdict, EvalArm,
+    ControlVerdict, DEFAULT_SEEDS, DeltaWithheld, EFFECT_NOISE_RATIO, EffectVerdict, EvalArm,
     REPLICATE_SEED_OFFSET, control_sampling, replicate_seeds,
 };
 pub use compare::{CompareConfig, ModelCompareResult};
