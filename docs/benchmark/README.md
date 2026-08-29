@@ -21,6 +21,19 @@ repeats and the sensitivity check that are dropped, and those are what make the
 full suite slow. Nothing about the arms themselves changes, which is the point:
 a task isolated this way behaves as it did in the full run.
 
+## Which seed
+
+`--seeds ""` names no seed. It is the cheapest form and the least faithful one:
+the full eval seeds every run, so a behaviour reproduced unseeded was reproduced
+under conditions the original never ran. To repeat the run that raised the
+question, name the seed it used — `--seeds 12345`, the first of `DEFAULT_SEEDS`
+(`domain/benchmark/agentic.rs`). Same two runs, same cost, and the sampler is
+back where it was.
+
+Both forms are pinned by tests: `--seeds ""` reaching the eval as *no seeds* is
+a regression guard, because the empty string has to survive a comma splitter
+that would otherwise hand an integer parser nothing to parse.
+
 ## Seeing inside the run
 
 The report says what the model *achieved*. To see what it *did*, raise the log

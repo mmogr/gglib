@@ -13,8 +13,8 @@ use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneC
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, DeltaWithheld,
-    EFFECT_NOISE_RATIO, ModelCompareResult, ModelPerfResult, PerfConfig,
+    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DeltaWithheld, EFFECT_NOISE_RATIO,
+    ModelCompareResult, ModelPerfResult, PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -378,7 +378,7 @@ async fn cmd_agentic(
     model: String,
     task_suite: String,
     ctx_size: Option<u64>,
-    seeds: Option<Vec<u32>>,
+    seeds: Option<Vec<Option<u32>>>,
     include_control: bool,
     replicate_raw: bool,
     replicate_pairs: usize,
@@ -392,10 +392,7 @@ async fn cmd_agentic(
         .next()
         .ok_or_else(|| anyhow!("model not found: {model}"))?;
 
-    // `--seeds` unpassed keeps the default; `--seeds ""` is an explicit
-    // request for one unseeded run, so an empty vec must survive as empty
-    // rather than falling back to the default.
-    let seeds = seeds.unwrap_or_else(|| DEFAULT_SEEDS.to_vec());
+    let seeds = crate::benchmark_commands::resolve_seeds(seeds);
     let config = AgenticEvalConfig {
         model_id,
         task_suite: load_task_suite(&task_suite)?,
