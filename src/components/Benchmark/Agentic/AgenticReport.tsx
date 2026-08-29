@@ -77,10 +77,33 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
       report.gglib.total_completion_tokens?.toLocaleString() ?? '—',
       report.delta.completion_token_ratio,
     ],
-    ['1st tool call', formatMs(report.raw.mean_time_to_first_tool_call_ms), formatMs(report.gglib.mean_time_to_first_tool_call_ms), null],
+    // Median first, because it is the row that describes a run. The mean sits
+    // under it rather than replacing it: a wide gap between the two says a few
+    // runs behaved nothing like the rest, and either figure alone hides that in
+    // opposite directions.
+    ['1st call (median)', formatMs(report.raw.median_time_to_first_tool_call_ms), formatMs(report.gglib.median_time_to_first_tool_call_ms), null],
+    ['1st call (mean)', formatMs(report.raw.mean_time_to_first_tool_call_ms), formatMs(report.gglib.mean_time_to_first_tool_call_ms), null],
     ['Throughput', formatTps(report.raw.tg_tps), formatTps(report.gglib.tg_tps), null],
     ['Suite wall clock', formatMs(report.raw.total_wall_ms), formatMs(report.gglib.total_wall_ms), null],
   ];
+
+  // What each arm generated, as opposed to how much of it. The efficiency table
+  // can say a run cost 950 seconds and 33,000 tokens; it cannot say whether that
+  // was a model thinking or a model failing to stop, and those need opposite
+  // responses.
+  const gen = (a: ArmScores) => a.generated ?? {};
+  const generationRows: Array<[string, string, string]> = [
+    ['LLM requests', `${gen(report.raw).llm_calls ?? 0}`, `${gen(report.gglib).llm_calls ?? 0}`],
+    ['Reasoning chars', (gen(report.raw).reasoning_chars ?? 0).toLocaleString(), (gen(report.gglib).reasoning_chars ?? 0).toLocaleString()],
+    ['Answer chars', (gen(report.raw).answer_chars ?? 0).toLocaleString(), (gen(report.gglib).answer_chars ?? 0).toLocaleString()],
+    ['Widest call batch', `${gen(report.raw).max_tool_calls_in_batch ?? 0}`, `${gen(report.gglib).max_tool_calls_in_batch ?? 0}`],
+  ];
+  // A report from before this was recorded says nothing, rather than showing a
+  // table of zeros that reads as "the model generated nothing".
+  const hasGeneration = (gen(report.raw).llm_calls ?? 0) > 0 || (gen(report.gglib).llm_calls ?? 0) > 0;
+  const reasoningAmbiguous = [report.raw, report.gglib].some(
+    (a) => (gen(a).reasoning_chars ?? 0) === 0 && (gen(a).answer_chars ?? 0) > 0,
+  );
 
   return (
     <div className="bg-surface rounded-md p-base flex flex-col gap-md">
@@ -160,6 +183,52 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
           </table>
         </div>
       </section>
+
+      {hasGeneration && (
+        <section className="flex flex-col gap-xs">
+          <h3 className="m-0 text-sm font-semibold text-text">What was generated</h3>
+          <div className="overflow-x-auto bg-surface-elevated rounded-md">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-border-light">
+                  <Th />
+                  <Th>raw</Th>
+                  <Th>gglib</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {generationRows.map(([label, raw, gglib]) => (
+                  <tr key={label} className="border-b border-border-light last:border-b-0">
+                    <td className="px-md py-xs text-sm text-text-muted">{label}</td>
+                    <Td>{raw}</Td>
+                    <Td>{gglib}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="m-0 text-xs text-text-muted">
+            Characters, not tokens — the upstream reports no reasoning/answer token split.
+          </p>
+          {reasoningAmbiguous && (
+            <p className="m-0 text-xs text-text-muted">
+              Zero reasoning characters is ambiguous: a model whose thinking is not split into
+              `reasoning_content` has it counted as answer text instead.
+            </p>
+          )}
+          {[
+            ['raw', report.raw] as const,
+            ['gglib', report.gglib] as const,
+          ].map(([name, a]) =>
+            (gen(a).system_warnings ?? 0) > 0 ? (
+              <p key={name} className="m-0 text-xs text-warning">
+                {name}: the loop recovered from {gen(a).system_warnings} over-wide tool-call
+                batch(es) — each cost an extra request.
+              </p>
+            ) : null,
+          )}
+        </section>
+      )}
 
       <AgenticTaskDrilldown report={report} />
     </div>

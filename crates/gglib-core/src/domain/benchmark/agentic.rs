@@ -38,7 +38,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::tune::config::ScoreWeights;
-use super::tune::result::TuneTaskResult;
+use super::tune::result::{GeneratedOutput, TuneTaskResult};
 use super::tune::task::{TaskCategory, TaskSuite};
 
 /// Configuration for one A/B agentic eval run.
@@ -363,8 +363,24 @@ pub struct ArmScores {
     pub measured_wall_ms: u64,
     /// Mean time to the first tool call, over the tasks that made one. `None`
     /// when no task in the arm called a tool.
+    ///
+    /// **Read this beside [`Self::median_time_to_first_tool_call_ms`], never
+    /// alone.** The population is not unimodal. On 2026-08-29 one arm reached
+    /// its first call in about a second on most tasks and after roughly 950
+    /// *seconds* on five of them; the mean of that is ~94s, which describes
+    /// neither group and no individual run. The mean is kept because a large
+    /// gap between it and the median is itself the finding.
     #[serde(default)]
     pub mean_time_to_first_tool_call_ms: Option<f64>,
+    /// Median time to the first tool call, over the tasks that made one.
+    ///
+    /// The typical run, which the mean stops describing the moment a handful of
+    /// runs generate for a quarter of an hour. Reported alongside rather than
+    /// instead of the mean: the median alone would have hidden those five runs
+    /// as effectively as the mean misrepresented them, and the pair is what
+    /// makes the spread visible.
+    #[serde(default)]
+    pub median_time_to_first_tool_call_ms: Option<f64>,
     /// How many seeds every task was repeated under.
     ///
     /// The sample size behind every mean above, and the thing that makes them
@@ -401,6 +417,20 @@ pub struct ArmScores {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub transport_retries: u32,
+    /// What this arm generated, summed over its **measured** runs.
+    ///
+    /// Aggregation differs per field, and deliberately: character counts,
+    /// `llm_calls` and `system_warnings` are sums over the arm, while
+    /// [`GeneratedOutput::max_tool_calls_in_batch`] is the arm-wide **maximum**
+    /// — a single runaway batch is the thing worth seeing, and a mean would
+    /// dissolve it into 63 ordinary runs.
+    ///
+    /// Restricted to measured runs for the reason [`Self::measured_wall_ms`]
+    /// gives: a run that never reached the model generated nothing, and folding
+    /// its zeros in would understate the arm's output exactly where the arm was
+    /// least healthy.
+    #[serde(default)]
+    pub generated: GeneratedOutput,
 }
 
 const fn one() -> usize {

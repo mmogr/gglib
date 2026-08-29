@@ -31,37 +31,85 @@ pub enum CandidateSource {
     IncumbentCalibration,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// `CandidateSource` is `#[serde(tag = "kind")]` (internally tagged),
-    /// which only supports newtype variants whose inner value serializes as
-    /// a JSON object/map. `FamilyPreset` must therefore stay a *struct*
-    /// variant (`{ family: String }`), never a bare `FamilyPreset(String)`
-    /// newtype — the latter fails at serialization time with "cannot
-    /// serialize tagged newtype variant ... containing a string".
-    #[test]
-    fn candidate_source_family_preset_round_trips() {
-        let source = CandidateSource::FamilyPreset {
-            family: "qwen-coding".to_string(),
-        };
-        let json = serde_json::to_string(&source).expect("serializes");
-        let round_tripped: CandidateSource = serde_json::from_str(&json).expect("deserializes");
-        assert!(matches!(
-            round_tripped,
-            CandidateSource::FamilyPreset { .. }
-        ));
-    }
-
-    /// `UserGrid` is the only unit variant left since `GgufAuthorDefault` was
-    /// deleted, so this is a single case rather than the loop it used to be.
-    #[test]
-    fn candidate_source_unit_variants_round_trip() {
-        let json = serde_json::to_string(&CandidateSource::UserGrid).expect("serializes");
-        let round_tripped: CandidateSource = serde_json::from_str(&json).expect("deserializes");
-        assert!(matches!(round_tripped, CandidateSource::UserGrid));
-    }
+/// The *shape* of what a run generated, as opposed to how much.
+///
+/// # Why this exists
+///
+/// Until this struct, the eval counted output and threw it away: 7 of the 9
+/// `AgentEvent` variants — `TextDelta` and `ReasoningDelta` among them — fell
+/// through the benchmark's event loop untouched. A run was therefore knowable
+/// only as a token total and a wall time.
+///
+/// That is not enough to read a run. On 2026-08-29 five runs generated ~32,900
+/// completion tokens apiece against ~510 for the same task without the
+/// pipeline, took ~950s, and **passed**. Nothing recorded anywhere could say
+/// whether that was a small reasoning model thinking at length or a generation
+/// fault, and the two call for opposite responses. This struct is the
+/// difference between those two readings.
+///
+/// Every field is taken from events the loop already emitted, so nothing here
+/// changes what the eval sends, executes or scores.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct GeneratedOutput {
+    /// Characters the model emitted as **reasoning** (chain-of-thought).
+    ///
+    /// # This is only meaningful when the upstream separates reasoning
+    ///
+    /// It counts `AgentEvent::ReasoningDelta`, which exists only when
+    /// llama-server was launched with `--reasoning-format deepseek` and so
+    /// splits thinking into its own `reasoning_content` SSE field. Without that
+    /// flag a reasoning model's thinking arrives inline as `<think>…</think>`,
+    /// the normalizer strips the tags, and every one of those characters is
+    /// counted as [`Self::answer_chars`] instead.
+    ///
+    /// So `reasoning_chars: 0` beside a large `answer_chars` is **ambiguous**:
+    /// it means either the model did not think, or it thought and nobody could
+    /// tell. Resolve it by checking whether the model carries the `reasoning`
+    /// capability tag, not by assuming.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub reasoning_chars: u64,
+    /// Characters the model emitted as ordinary answer text, summed across
+    /// every turn — not just the final one.
+    ///
+    /// Counted from `AgentEvent::TextDelta` rather than from `FinalAnswer`,
+    /// which carries the same text already accumulated and would double it.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub answer_chars: u64,
+    /// How many requests the run actually sent to the model.
+    ///
+    /// Distinct from [`TuneTaskResult::iterations`], which counts only
+    /// *tool-executing* turns — a run that ends by answering in text made one
+    /// more request than it reports iterations. Dividing tokens by `iterations`
+    /// therefore overstates per-request generation, by 50% on a two-iteration
+    /// run, which is exactly the arithmetic a reader performs when asking
+    /// whether a token cap was in force.
+    ///
+    /// Derived from the event stream (one per `IterationComplete`, plus one for
+    /// a `FinalAnswer`), so a run a guard aborted mid-turn under-counts by the
+    /// aborting request. Read it as a floor on those runs.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub llm_calls: usize,
+    /// The largest single batch of tool calls any one turn executed.
+    ///
+    /// The fingerprint of a constrained-decoding runaway. gglib's generated
+    /// grammar admits `root ::= sp call (sp call)* sp` — unbounded repetition —
+    /// so a model that never emits an end-of-generation token can keep producing
+    /// syntactically valid calls until it hits a token cap or the context limit.
+    /// Scoring cannot reveal this: extra unrequested calls cost nothing, so a
+    /// batch of hundreds containing the right call still scores `1.0` and the
+    /// task still reads as passed.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub max_tool_calls_in_batch: usize,
+    /// How many recoverable conditions the loop reported during this run.
+    ///
+    /// Counts `AgentEvent::SystemWarning`, whose main source is the loop
+    /// recovering from a model that requested more parallel tool calls than the
+    /// configured limit. That recovery costs a whole extra request and was
+    /// previously invisible to the eval: the warning was emitted, discarded, and
+    /// the run reported as though nothing had happened.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub system_warnings: u32,
 }
 
 /// Result of evaluating one task against one candidate's sampling settings.
@@ -158,6 +206,13 @@ pub struct TuneTaskResult {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub transport_retries: u32,
+    /// What the model generated, as opposed to how much of it.
+    ///
+    /// See [`GeneratedOutput`] — a token total and a wall time cannot
+    /// distinguish a model thinking at length from one failing to stop, and
+    /// those call for opposite responses.
+    #[serde(default)]
+    pub generated: GeneratedOutput,
 }
 
 impl TuneTaskResult {
@@ -196,3 +251,7 @@ pub struct TuneCandidateResult {
     #[serde(default)]
     pub tg_tps: Option<f64>,
 }
+
+#[cfg(test)]
+#[path = "result_tests.rs"]
+mod result_tests;
