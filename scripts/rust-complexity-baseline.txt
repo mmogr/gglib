@@ -69,7 +69,7 @@ crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 651
 crates/gglib-core/src/ports/model_runtime.rs 820
 crates/gglib-core/src/ports/process_runner.rs 347
-crates/gglib-core/src/request_pipeline/constrain.rs 509
+crates/gglib-core/src/request_pipeline/constrain.rs 325
 crates/gglib-core/src/request_pipeline/sampling.rs 698
 crates/gglib-core/src/request_pipeline/sampling_tests.rs 1755
 crates/gglib-core/src/request_pipeline/truncation.rs 350
