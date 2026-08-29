@@ -99,6 +99,17 @@ pub struct GeneratedOutput {
     /// Scoring cannot reveal this: extra unrequested calls cost nothing, so a
     /// batch of hundreds containing the right call still scores `1.0` and the
     /// task still reads as passed.
+    ///
+    /// # It saturates at 64
+    ///
+    /// The collector drops tool-call fragments past `MAX_TOOL_CALL_INDEX` (64),
+    /// so this is a *floor*, and a reading of exactly 64 means "at least 64" —
+    /// the true batch went into `CollectedResponse::tool_calls_truncated` and
+    /// from there into a `SystemWarning` message this eval keeps no text of.
+    /// Measured 2026-08-29: a reading of 64 was `kept=64 dropped=542` — **606
+    /// calls in one response**, for a task whose expected output is one call.
+    /// An earlier run logged `dropped=1237`. Read a 64 as "consult the daemon
+    /// log", never as a batch size.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub max_tool_calls_in_batch: usize,
     /// How many recoverable conditions the loop reported during this run.
@@ -108,6 +119,11 @@ pub struct GeneratedOutput {
     /// configured limit. That recovery costs a whole extra request and was
     /// previously invisible to the eval: the warning was emitted, discarded, and
     /// the run reported as though nothing had happened.
+    ///
+    /// **Warnings, not incidents.** One over-wide batch raises two — the
+    /// collector's slot limit and then the parallel-tool limit — so this
+    /// over-states how many times the model ran away, by up to a factor of two.
+    /// It is a "something went wrong here" flag; the log holds the account.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub system_warnings: u32,
 }

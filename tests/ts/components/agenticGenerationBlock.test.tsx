@@ -84,9 +84,14 @@ describe('AgenticReport — what was generated', () => {
     expect(screen.getByText(/Characters, not tokens/i)).toBeInTheDocument();
   });
 
-  it('surfaces over-wide batch recoveries, which cost a request each', () => {
+  // Warnings, not incidents: one over-wide batch raises two (the collector's
+  // slot limit, then the parallel-tool limit). The banner must not name this
+  // count as a number of batches — the log holds that, and the earlier wording
+  // read 3 warnings from a single 606-call response as three separate batches.
+  it('surfaces runaway warnings without calling them a batch count', () => {
     render(<AgenticReport report={report(arm({ reasoning_chars: 10, system_warnings: 4 }))} />);
-    expect(screen.getByText(/recovered from 4 over-wide tool-call/i)).toBeInTheDocument();
+    expect(screen.getByText(/4 runaway warning/i)).toBeInTheDocument();
+    expect(screen.queryByText(/recovered from 4 over-wide tool-call/i)).not.toBeInTheDocument();
   });
 
   /**

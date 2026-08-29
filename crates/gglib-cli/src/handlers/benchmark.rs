@@ -654,8 +654,10 @@ fn render_generation_block(report: &AgenticEvalReport) {
     for (name, arm) in arms {
         if arm.generated.system_warnings > 0 {
             eprintln!(
-                "  {WARN}{name}: the loop recovered from {n} over-wide tool-call batch(es) — \
-                 each cost an extra request.{RESET}",
+                "  {WARN}{name}: {n} runaway warning(s) — one over-wide batch raises two \
+                 (the collector's slot limit, then the parallel-tool limit), and the \
+                 generation behind it is paid for before being discarded. The daemon log \
+                 carries the batch size this count cannot.{RESET}",
                 n = arm.generated.system_warnings,
                 WARN = style::WARNING,
                 RESET = style::RESET,

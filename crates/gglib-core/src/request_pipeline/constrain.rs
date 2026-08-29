@@ -80,6 +80,7 @@ use serde_json::Value;
 use tracing::{debug, info};
 
 use super::ModelContext;
+use crate::domain::agent::config::MAX_PARALLEL_TOOLS_CEILING;
 use crate::domain::dialect::DialectSpec;
 
 /// Environment kill switch. Truthy values (case-insensitive `1`, `true`,
@@ -143,7 +144,7 @@ fn constrain_tool_calls_inner(body: &mut Value, ctx: &ModelContext) -> bool {
         return false;
     }
 
-    let Some(grammar) = tool_call_grammar(spec, &allowed) else {
+    let Some(grammar) = tool_call_grammar(spec, &allowed, grammar_call_limit()) else {
         debug!("dialect markers not expressible in a GBNF literal; not constraining");
         return false;
     };
@@ -227,7 +228,41 @@ fn gbnf_literal_safe(name: &str) -> bool {
 /// decode rather than risk a grammar llama-server cannot compile.
 ///
 /// [`DelimitedToolCallParser`]: crate::normalize::parsers::delimited::DelimitedToolCallParser
-fn tool_call_grammar(spec: &DialectSpec, names: &[String]) -> Option<String> {
+/// Overrides the grammar's tool-call bound. Numeric; clamped to at least 1.
+const MAX_GRAMMAR_TOOL_CALLS_ENV: &str = "GGLIB_MAX_GRAMMAR_TOOL_CALLS";
+
+/// How many tool calls the originated grammar may express in one response.
+///
+/// # Why bound it at all
+///
+/// The rule was `root ::= sp call (sp call)* sp`. Nothing in `*` says stop,
+/// and nothing else did either: `tool_choice` must be `"none"` beside a custom
+/// grammar (llama-server accepts no other combination), so the model's own
+/// trained stop behaviour is not in play, and a request carrying no
+/// `max_tokens` has no ceiling below the context window. Measured 2026-08-29:
+/// 606 calls in one response for a task expecting one, 853s against 6s
+/// unconstrained, scored 1.0 either way because extra calls cost nothing.
+///
+/// # Why the ceiling
+///
+/// Calls past [`MAX_PARALLEL_TOOLS_CEILING`] can never be executed — no
+/// configured limit may exceed it — so generating them is waste the loop then
+/// pays to discard. The grammar should not be able to express what the runtime
+/// will certainly reject.
+///
+/// This is the *ceiling*, not the user's configured `max_parallel_tools`,
+/// which the request pipeline cannot see: `ModelContext` carries per-model
+/// facts, not agent settings. Threading the live setting through would tighten
+/// this further and is the natural follow-up. The env override exists so the
+/// bound can be tested against a real model without a rebuild.
+fn grammar_call_limit() -> usize {
+    std::env::var(MAX_GRAMMAR_TOOL_CALLS_ENV)
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .map_or(MAX_PARALLEL_TOOLS_CEILING, |n| n.max(1))
+}
+
+fn tool_call_grammar(spec: &DialectSpec, names: &[String], limit: usize) -> Option<String> {
     let open = gbnf_string_literal(&spec.tool_open)?;
     let close = gbnf_string_literal(&spec.tool_close)?;
     let after_open = if spec.emission.newline_after_open {
@@ -247,8 +282,15 @@ fn tool_call_grammar(spec: &DialectSpec, names: &[String]) -> Option<String> {
         .collect::<Vec<_>>()
         .join(" | ");
 
+    // `(sp call)*` — unbounded — is what let a 4B model emit 606 calls for a
+    // one-call task on 2026-08-29, stopping only when it exhausted a 32,768
+    // context, while the same model unconstrained emitted one call in 6s.
+    // Expanded as explicit optionals rather than `{{0,n}}`, which older GBNF
+    // parsers do not accept; the grammar is built once per request.
+    let repeats = " (sp call)?".repeat(limit.saturating_sub(1));
+
     Some(format!(
-        r#"root ::= sp call (sp call)* sp
+        r#"root ::= sp call{repeats} sp
 call ::= {open}{after_open} "{{" sp "\"name\"" sp ":" sp name sp "," sp "\"arguments\"" sp ":" sp object sp "}}"{before_close} {close}
 name ::= {name_alternatives}
 object ::= "{{" sp ( member ( sp "," sp member )* )? sp "}}"
@@ -414,6 +456,54 @@ mod tests {
     /// emission comes from the *spec itself* (`render_call`), so grammar,
     /// parser, and test all read one source — no hand-maintained sample to
     /// silently drift.
+    /// The regression guard for the 2026-08-29 runaway. `(sp call)*` let a
+    /// 4B model emit 606 calls for a one-call task, stopping only when it
+    /// exhausted a 32,768 context — 853s against 6s for the same model
+    /// decoding unconstrained, and scored 1.0 both ways.
+    #[test]
+    fn the_root_rule_bounds_how_many_calls_it_can_express() {
+        let spec = DialectSpec::qwen_xml();
+        let g = tool_call_grammar(&spec, &["f".to_owned()], 3).unwrap();
+        let root = g.lines().next().expect("a root rule");
+        assert!(
+            !root.contains("(sp call)*"),
+            "unbounded repetition is the defect itself: {root}"
+        );
+        assert_eq!(
+            root.matches("(sp call)?").count(),
+            2,
+            "a limit of 3 is one required call plus two optional ones: {root}"
+        );
+    }
+
+    /// A limit of one must not emit a stray `(sp call)?` — the off-by-one that
+    /// would quietly permit two calls where the caller asked for one.
+    #[test]
+    fn a_limit_of_one_expresses_exactly_one_call() {
+        let g = tool_call_grammar(&DialectSpec::qwen_xml(), &["f".to_owned()], 1).unwrap();
+        let root = g.lines().next().expect("a root rule");
+        assert!(!root.contains("(sp call)?"), "no optional repeat: {root}");
+        assert!(root.starts_with("root ::= sp call sp"), "got: {root}");
+    }
+
+    /// Zero is not a grammar that can express a demanded call, so it is
+    /// clamped rather than honoured — `saturating_sub` must not underflow
+    /// into a repeat count of `usize::MAX`.
+    #[test]
+    fn a_limit_of_zero_still_expresses_one_call() {
+        let g = tool_call_grammar(&DialectSpec::qwen_xml(), &["f".to_owned()], 0).unwrap();
+        let root = g.lines().next().expect("a root rule");
+        assert!(root.starts_with("root ::= sp call sp"), "got: {root}");
+    }
+
+    /// The default is the ceiling, because no configured `max_parallel_tools`
+    /// may exceed it — so anything past it is generation the loop is certain
+    /// to discard.
+    #[test]
+    fn the_default_bound_is_the_parallel_tools_ceiling() {
+        assert_eq!(grammar_call_limit(), MAX_PARALLEL_TOOLS_CEILING);
+    }
+
     #[test]
     fn grammar_shape_round_trips_through_the_parser() {
         use crate::normalize::get_parser;
@@ -428,7 +518,10 @@ mod tests {
         ] {
             // The canonical string the grammar's `call` rule admits.
             let emission = spec.render_call("read_file", &json!({"path": "a.rs"}));
-            let grammar = tool_call_grammar(&spec, &["read_file".to_owned()]).unwrap();
+
+            let grammar =
+                tool_call_grammar(&spec, &["read_file".to_owned()], MAX_PARALLEL_TOOLS_CEILING)
+                    .unwrap();
             assert!(grammar.contains(&format!("\"{}\"", spec.tool_open)));
 
             let mut parser = get_parser(Some(&spec));
@@ -470,14 +563,18 @@ mod tests {
             tool_open: "<\"q\">".to_owned(),
             ..DialectSpec::qwen_xml()
         };
-        let grammar = tool_call_grammar(&quoted, &["f".to_owned()]).unwrap();
+        let grammar =
+            tool_call_grammar(&quoted, &["f".to_owned()], MAX_PARALLEL_TOOLS_CEILING).unwrap();
         assert!(grammar.contains(r#""<\"q\">""#));
 
         let control = DialectSpec {
             tool_open: "<a\u{1}b>".to_owned(),
             ..DialectSpec::qwen_xml()
         };
-        assert_eq!(tool_call_grammar(&control, &["f".to_owned()]), None);
+        assert_eq!(
+            tool_call_grammar(&control, &["f".to_owned()], MAX_PARALLEL_TOOLS_CEILING),
+            None
+        );
 
         let ctx = ModelContext {
             dialect: Some(control),
@@ -500,10 +597,16 @@ mod tests {
             },
             ..DialectSpec::qwen_xml()
         };
-        let grammar = tool_call_grammar(&no_newlines, &["f".to_owned()]).unwrap();
+        let grammar =
+            tool_call_grammar(&no_newlines, &["f".to_owned()], MAX_PARALLEL_TOOLS_CEILING).unwrap();
         assert!(grammar.contains(r#"call ::= "<tool_call>" "{""#));
 
-        let with_newlines = tool_call_grammar(&DialectSpec::qwen_xml(), &["f".to_owned()]).unwrap();
+        let with_newlines = tool_call_grammar(
+            &DialectSpec::qwen_xml(),
+            &["f".to_owned()],
+            MAX_PARALLEL_TOOLS_CEILING,
+        )
+        .unwrap();
         assert!(with_newlines.contains(r#"call ::= "<tool_call>" nl "{""#));
     }
 }

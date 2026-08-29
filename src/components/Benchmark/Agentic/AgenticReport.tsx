@@ -222,8 +222,10 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
           ].map(([name, a]) =>
             (gen(a).system_warnings ?? 0) > 0 ? (
               <p key={name} className="m-0 text-xs text-warning">
-                {name}: the loop recovered from {gen(a).system_warnings} over-wide tool-call
-                batch(es) — each cost an extra request.
+                {name}: {gen(a).system_warnings} runaway warning(s) — one over-wide batch
+                raises two (the collector&apos;s slot limit, then the parallel-tool limit),
+                and the generation behind it is paid for before being discarded. The daemon
+                log carries the batch size this count cannot.
               </p>
             ) : null,
           )}
