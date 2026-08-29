@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { Download } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
@@ -6,7 +6,9 @@ import { cn } from '../../../utils/cn';
 import { formatMs, formatTps } from '../format';
 import { AgenticReportVerdicts } from './AgenticReportVerdicts';
 import { AgenticTaskDrilldown } from './AgenticTaskDrilldown';
+import { getTransport } from '../../../services/transport';
 import type { AgenticEvalReport, ArmScores } from '../../../types/benchmark';
+import type { VersionDto } from '../../../types/generated/VersionDto';
 
 const score = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(3));
 const signed = (v: number | null | undefined) =>
@@ -33,15 +35,35 @@ const factorClass = (v: number | null | undefined) =>
  */
 export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => {
   const seedCount = report.seeds?.length ?? 0;
+  const [version, setVersion] = useState<VersionDto | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getTransport()
+      .getVersion()
+      .then((v) => {
+        if (!cancelled) setVersion(v);
+      })
+      .catch(() => {
+        // A failed lookup leaves `gglib_version` null, which is the shape the
+        // export already had — no worse than before, and not worth a banner.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loopDenominatorNote =
     report.raw.loop_avoidance == null || report.gglib.loop_avoidance == null
       ? `loop avoidance measured on ${report.raw.loop_eligible} raw and ${report.gglib.loop_eligible} gglib runs`
       : null;
 
   const download = () => {
-    // The CLI's export shape (--output) with explicit nulls where the browser
-    // has no provenance to offer — consumers of either file see the same keys.
-    const payload = { gglib_version: null, hardware: null, report };
+    // The CLI's export shape (--output). `gglib_version` was a null here until
+    // the daemon gained `/api/version`: the browser had no provenance to
+    // offer, while the CLI wrote its own. Both now write the same bare
+    // `SemVer` from the same constant, so the two files are comparable.
+    // `hardware` stays null — nothing fetches a snapshot on this surface yet.
+    const payload = { gglib_version: version?.semver ?? null, hardware: null, report };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

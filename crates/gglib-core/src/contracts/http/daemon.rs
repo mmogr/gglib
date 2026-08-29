@@ -9,6 +9,13 @@
 /// Daemon identity probe.
 pub const HEALTH_PATH: &str = "/health";
 
+/// Which build of gglib the daemon is running.
+///
+/// Not in [`CLI_ROUTE_CONTRACT`]: the CLI reads its own compiled-in constants
+/// and takes the daemon's from [`HEALTH_PATH`]. This route exists for the
+/// dashboard, which has no compiled-in version of its own.
+pub const VERSION_PATH: &str = "/api/version";
+
 /// Start the proxy.
 pub const PROXY_START_PATH: &str = "/api/proxy/start";
 

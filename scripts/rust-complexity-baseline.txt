@@ -20,7 +20,7 @@ crates/gglib-app-services/src/types.rs 1055
 crates/gglib-axum/src/bootstrap.rs 335
 crates/gglib-axum/src/chat_api.rs 735
 crates/gglib-axum/src/handlers/config/setup.rs 310
-crates/gglib-axum/src/routes.rs 469
+crates/gglib-axum/src/routes.rs 470
 crates/gglib-axum/tests/integration_routes.rs 1029
 crates/gglib-cli/src/commands.rs 342
 crates/gglib-cli/src/daemon_client/mod.rs 324

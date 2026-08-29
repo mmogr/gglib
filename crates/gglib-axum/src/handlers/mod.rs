@@ -10,3 +10,4 @@ pub(crate) mod model;
 pub(crate) mod port_utils;
 pub(crate) mod proxy;
 pub(crate) mod servers;
+pub(crate) mod version;

@@ -17,7 +17,7 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
     let about_metadata = AboutMetadataBuilder::new()
         .name(Some("GGLib"))
         .version(Some(gglib_build_info::SEMVER))
-        .short_version(Some(gglib_build_info::ABOUT_SHORT_VERSION))
+        .short_version(gglib_build_info::HAS_GIT_SHA.then_some(gglib_build_info::GIT_SHA))
         .authors(Some(vec!["mmogr".to_string()]))
         .license(Some("AGPL-3.0"))
         .website(Some("https://github.com/mmogr/gglib"))

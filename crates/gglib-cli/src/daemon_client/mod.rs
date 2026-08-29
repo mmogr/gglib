@@ -94,7 +94,7 @@ fn warn_on_switch_mismatch(health: &serde_json::Value) {
 /// skew, because "405 Method Not Allowed" never will. A daemon predating the
 /// fingerprint reports none, which is itself a mismatch worth naming.
 fn warn_on_build_mismatch(body: &serde_json::Value) {
-    let mine = gglib_core::debug_switches::build_fingerprint();
+    let mine = gglib_build_info::FINGERPRINT;
     let theirs = body.get("fingerprint").and_then(|f| f.as_str());
     if theirs == Some(mine) {
         return;

@@ -14,6 +14,7 @@ import * as mcp from './mcp';
 import * as chat from './chat';
 import * as verification from './verification';
 import * as setup from './setup';
+import * as version from './version';
 
 /**
  * Create unified API transport.
@@ -32,5 +33,6 @@ export function createApiTransport() {
     ...chat,
     ...verification,
     ...setup,
+    ...version,
   };
 }

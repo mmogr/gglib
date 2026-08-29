@@ -61,6 +61,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
     Router::new()
         .nest("/models", model_routes())
         .nest("/config", config_routes())
+        .route("/version", get(handlers::version::get_version))
         // Servers API
         .route("/servers", get(handlers::servers::list))
         .route("/servers/start", post(handlers::servers::start_body))
@@ -453,10 +454,10 @@ pub(crate) async fn health_check() -> Json<Value> {
     Json(json!({
         "service": "gglib-daemon",
         "status": "ok",
-        "version": env!("CARGO_PKG_VERSION"),
-        // See `debug_switches::build_fingerprint`: version alone cannot tell
+        "version": gglib_build_info::SEMVER,
+        // See `gglib_build_info::FINGERPRINT`: version alone cannot tell
         // two dev builds apart, and the probe warns on a mismatch.
-        "fingerprint": gglib_core::debug_switches::build_fingerprint(),
+        "fingerprint": gglib_build_info::FINGERPRINT,
         // Which `GGLIB_DISABLE_*` switches this daemon actually has in effect.
         //
         // Reported because the daemon is the process that reads them, and a

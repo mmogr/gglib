@@ -158,7 +158,7 @@ async fn handle_initialize(sessions: &super::session::SessionManager, id: Value)
         },
         server_info: ServerInfo {
             name: "gglib",
-            version: env!("CARGO_PKG_VERSION"),
+            version: gglib_build_info::SEMVER,
         },
     };
 

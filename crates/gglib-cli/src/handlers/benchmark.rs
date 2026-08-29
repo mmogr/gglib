@@ -467,7 +467,7 @@ async fn cmd_agentic(
 
     if json || output.is_some() {
         let export = serde_json::json!({
-            "gglib_version": env!("CARGO_PKG_VERSION"),
+            "gglib_version": gglib_build_info::SEMVER,
             "hardware": fetch_hardware_snapshot().await,
             "report": report,
         });

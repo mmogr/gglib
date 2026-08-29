@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 # Core domain types and ports only - no sqlx
+gglib-build-info.workspace = true
 gglib-core = { path = "../gglib-core" }
 
 # Async runtime. `macros` is for `tokio::join!` in `combined.rs`; without it

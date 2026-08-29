@@ -38,5 +38,6 @@ Axum backend (HTTP response) → typed result
 | `models/` | Local and HuggingFace model APIs |
 | `setup.ts` | First-run setup and dependency probes |
 | `sse.ts` | The server-sent-events endpoint this transport subscribes to |
+| `version.ts` | Which build of gglib the daemon is running |
 
 <!-- module-docs:end -->
