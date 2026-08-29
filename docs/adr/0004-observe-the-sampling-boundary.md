@@ -7,7 +7,9 @@
   2026-08-09 — why there are no request-level task overlays, moved out of
   #744's PR body so the prohibition outlives it. Amended 2026-08-17 — the two
   reasoning controls are permanently outside this instrument's reach; see the
-  note under decision 3)
+  note under decision 3. Addendum 2026-08-29 — the A/B instrument was reporting
+  a comparison it had not taken; four defects, and a follow-up above whose
+  stated cause was wrong)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -507,13 +509,16 @@ their reasons live only in a merged PR body.
 - ~~Re-run the agentic eval now that the A/A arm exists, so the second
   addendum's +0.082 can be quoted against a measured drift.~~ Done, and the
   figure did not survive: +0.050 against a drift of 0.054. See the addendum.
-- Retry transport failures *inside the eval*. 7.6% of the second run's requests
+- ~~Retry transport failures *inside the eval*. 7.6% of the second run's requests
   never reached the model — a stale keep-alive connection, dropped between turns
   of the same task, which `retry/execute.rs` deliberately treats as terminal.
   That policy is right for production (a refused connection should not be
   masked) and wrong for a benchmark, where it silently deletes runs and does so
   asymmetrically between arms. The eval now *counts* them; it should stop
-  incurring them.
+  incurring them.~~ Done — but **the stated cause was wrong**, and the
+  correction is the useful part. See the third addendum: the 2026-08-28 run's
+  losses were the benchmark's own total-request deadline, not a stale
+  keep-alive, and no retry policy would have prevented them.
 - More than one A/A pair. One pair estimates the drift from a single degree of
   freedom, which is enough to veto an effect inside it and not enough to
   bound one that clears it.
@@ -882,3 +887,155 @@ the criterion this run cannot yet meet on its own.
 [effect-verdict]: https://github.com/mmogr/gglib/blob/main/crates/gglib-core/src/domain/benchmark/agentic.rs
 [`agentic_temperature_ceiling`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-core/src/domain/inference.rs
 [`props`]: https://github.com/mmogr/gglib/blob/main/crates/gglib-proxy/src/props.rs
+
+## Addendum — the instrument was reporting a comparison it had not taken
+
+*Added 2026-08-29. The second addendum records what the A/B instrument
+measured. This one records what it got wrong about its own arithmetic, found by
+reading a report against the code that produced it rather than by any organ.*
+
+The 2026-08-28 run (Qwen3-4B Q8_0, 21 tasks × 3 seeds × 4 arms) headlined a
+composite of **−0.058** and a wall time of **0.2×**, which reads as the pipeline
+being worse and five times slower. Neither figure was about the pipeline. Four
+independent defects produced it, and three of them are the same mistake in
+different places: **a number taken over one population and printed beside a
+number taken over another.**
+
+### 1. The eval's own timeout deleted five runs
+
+Five runs sat for exactly 600.00s and died with `SSE byte-stream error: error
+decoding response body`. `BenchmarkDeps::build_http_client` carried
+`.timeout(600s)` — a reqwest *total-request* deadline, applied from connection
+until the **response body finishes** (`TotalTimeoutBody::poll_frame`). On an SSE
+stream it fires mid-body, and `Response::bytes_stream` funnels every body
+failure through `error::decode`, so the deadline surfaced wearing the same
+string a connection reset wears.
+
+Two things about this are worth keeping.
+
+**The follow-up above named the wrong cause.** It attributed the earlier run's
+7.6% loss to a stale keep-alive that `retry/execute.rs` treats as terminal, and
+prescribed a retry. A stale keep-alive fails *instantly* and reads `request to
+llama-server failed`; these failures took the full ten minutes and read as a
+decode error. The prescription was reasonable and would not have prevented a
+single one of them. A diagnosis nobody re-derived became the basis for a fix.
+
+**The information needed to tell them apart was being discarded one line from
+where it was needed.** `stream.rs` formatted the reqwest error with `{e}`, and
+Display collapses an idle timeout and a mid-stream reset into the identical
+string; only the `source` beneath distinguishes them. This is finding 1's shape
+in a new place — an instrument that cannot report the difference it exists to
+report — except here it was the *error* that had been made unfalsifiable rather
+than the check.
+
+`crates/gglib-proxy/src/server.rs` had already met this trap and documented it,
+which is why the proxy sets no total timeout. The benchmark client did not
+inherit the lesson, and nothing connected the two.
+
+### 2. The scorer punished the arm under test for how it batched
+
+`score_ordered` matched `expected[i]` against `recorded[i]` over a flat call
+log. That log is appended from inside each spawned tool task, and the agent loop
+runs a parallel batch through a `JoinSet` — so its order is *completion* order,
+a scheduler outcome, not the order the model emitted.
+
+The consequence is not noise, because it is not symmetric. **Only an arm that
+emits its calls in one batch can lose the toss.** The gglib arm one-shots all
+three multi-turn tasks; the raw arm takes two iterations and is ordered
+correctly by construction. Both of the gglib arm's losses in the paired test
+carry the exact signature a swapped pair produces, and cannot be distinguished
+from it.
+
+The deeper point is that `ordered` was being asked a question it cannot answer.
+Two calls emitted simultaneously were not ordered by the model at all, so
+demanding an order between them scores the scheduler. Worse, a model that emits
+`file_exists` and `delete_file` together violates no ordering constraint while
+demonstrating none of the competency the task exists to test — it deleted the
+file without ever seeing whether it was there. Ordering is now checked across
+*batches*, and `ExpectedCall::depends_on_result` marks the calls that genuinely
+need a prior result. That is a claim about individual tasks rather than about
+the `MultiTurn` category, so it is pinned per task in a test.
+
+### 3. The composite delta measured its own renormalization
+
+`compute_composite_score` renormalizes over the axes *that arm* measured — an
+arm with a loop-eligible run divides by 0.9, an arm without one by 0.6 — and the
+delta subtracted the two directly. The bias runs one way: the arm that measured
+the extra axis gets a free score on ground its opponent was never scored on. In
+this run the raw arm's `loop_avoidance: 1.0` was worth roughly half the reported
+gap, against a gglib arm whose only loop-eligible task had crashed.
+
+Recorded because the renormalization is *correct* in the place it was written.
+Its doc comment even anticipates the hazard, and reasons that "ranking is
+unaffected wherever candidates share an eligibility count" — true of the sweep
+it was written for, and quietly false of a two-arm comparison, which is the
+caller that arrived later.
+
+### 4. The report printed the headline under its own contradiction
+
+`is_partly_unmeasured()` existed. The warning block printed. It said in terms
+that those arms were floors rather than measurements. Then the axis table
+printed `−0.058` above it as the headline, and the drift check reported that
+figure as "8.3× the drift" — a confident ratio between a diluted effect and a
+noise floor that is not about the same thing.
+
+This is decision 3 failing at the layer it was written for. The state was
+detected, named, and rendered — beside the number it invalidated, rather than
+instead of it. **Annotating a number is not withholding it.** The arm-level
+axis deltas are now `Option`, `ArmDelta::withheld` carries the reason, and the
+distinction is enforced on the wire rather than in the renderer: a withheld
+composite serializes as `null`, never as a `0.0` that reads as two identical
+arms.
+
+### What the corrected report says about that run
+
+Nothing here re-runs the eval, and no claim below is a finding — the point is
+only that the report was not describing what it appeared to describe.
+
+| | as printed | recomputed |
+|---|---|---|
+| suite wall time | `0.2×` (gglib 5× slower) | **`1.14×` per measured run — gglib faster** |
+| completion tokens | `1.48×` | **`1.36×` per measured run** |
+| composite delta | `−0.058` | **withheld** — 5 of 63 gglib runs measured nothing |
+
+The wall-time row was 84% timeout. `tg_tps` had already excluded those runs from
+both of its terms, so the two rows of that table described different sets of
+runs while looking like one table.
+
+### What still is not settled, and must not be inferred from the above
+
+- **Why llama-server stalled.** It returned 200 headers and then produced no
+  body. The deadline capped a symptom; nothing here explains it. The read
+  timeout turns a ten-minute dead run into a 90s failure with a retry and a
+  named cause, which makes the next occurrence diagnosable — it does not make
+  this one diagnosed. The leading suspect is environmental to the machine that
+  ran it.
+- **Whether the pipeline helps.** Two tasks the raw arm never once passes
+  (`single_call_verbatim_payload`, `multi_turn_create_then_append`) are the
+  categorical finding this run supports, on the same terms the second addendum
+  set for `multi_turn_search_then_read`. The composite is not a finding and was
+  not one before.
+- **Whether this suite can resolve anything.** 19 of 21 tasks passed under the
+  *deliberately broken* control, and the control gap came in at 0.045 against
+  the `CONTROL_MIN_COMPOSITE_GAP` of 0.05. By decision 3's own logic that means
+  no delta in the run is interpretable — which was true before any of the fixes
+  above and remains true after them. Fixing the arithmetic does not raise a
+  saturated instrument's resolution; it only stops it lying about what it did
+  measure.
+
+### The rule this arc adds
+
+The two rules above concern instruments that cannot fail. This run adds the
+adjacent case: **an instrument that fails correctly, reports it, and is read
+past anyway.**
+
+Every one of the four defects had a guard already present and working.
+`unmeasured` was populated. `is_partly_unmeasured()` returned true. The warning
+printed. The renormalization documented its own precondition. Not one of them
+was missing — each was *adjacent to* the number that contradicted it, and the
+number won.
+
+So the test for a report is not "does it disclose its limits" but **"is the
+misleading figure still reachable?"** Where it is, the disclosure is decoration.
+The fix is not a louder caveat; it is `Option`, and a type that cannot render a
+comparison nobody took.

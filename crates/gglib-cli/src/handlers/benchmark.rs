@@ -13,8 +13,8 @@ use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneC
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, EFFECT_NOISE_RATIO,
-    ModelCompareResult, ModelPerfResult, PerfConfig,
+    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, DeltaWithheld,
+    EFFECT_NOISE_RATIO, ModelCompareResult, ModelPerfResult, PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -533,7 +533,7 @@ fn render_agentic_report(report: &AgenticEvalReport) {
             "tool accuracy  ",
             Some(report.raw.tool_accuracy),
             Some(report.gglib.tool_accuracy),
-            Some(report.delta.tool_accuracy),
+            report.delta.tool_accuracy,
         ),
         (
             "loop avoidance ",
@@ -545,13 +545,13 @@ fn render_agentic_report(report: &AgenticEvalReport) {
             "task completion",
             Some(report.raw.task_completion),
             Some(report.gglib.task_completion),
-            Some(report.delta.task_completion),
+            report.delta.task_completion,
         ),
         (
             "composite      ",
             Some(report.raw.composite),
             Some(report.gglib.composite),
-            Some(report.delta.composite),
+            report.delta.composite,
         ),
     ] {
         let colour = match delta {
@@ -573,7 +573,8 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     if report.raw.loop_avoidance.is_none() || report.gglib.loop_avoidance.is_none() {
         eprintln!(
             "  {MUTED}loop avoidance measured on {raw}/{total} raw and {gglib}/{total} gglib \
-             tasks; unmeasured arms are excluded from the composite{RESET}",
+             tasks; an axis only one arm measured is dropped from both composites in the \
+             delta{RESET}",
             raw = report.raw.loop_eligible,
             gglib = report.gglib.loop_eligible,
             total = report.tasks.len(),
@@ -582,6 +583,7 @@ fn render_agentic_report(report: &AgenticEvalReport) {
         );
     }
 
+    render_withheld_block(report);
     render_unmeasured_block(report);
     render_noise_block(report);
     render_paired_block(report);
@@ -589,6 +591,33 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     render_stability_block(report);
     render_efficiency_block(report);
     eprintln!();
+}
+
+/// Why the delta column is empty, when it is.
+///
+/// Printed directly under the axis table rather than further down with the
+/// other caveats. The 2026-08-28 report carried the warning *and* the number:
+/// it said those arms were floors rather than measurements, and then printed
+/// `-0.058` as the headline anyway. Both statements were on the same screen and
+/// only one of them was read, which is the argument for withholding the figure
+/// rather than annotating it.
+fn render_withheld_block(report: &AgenticEvalReport) {
+    let Some(DeltaWithheld::ContaminatedByUnmeasuredRuns { raw, gglib }) = report.delta.withheld
+    else {
+        return;
+    };
+    eprintln!(
+        "  {DANGER}delta withheld: {raw} raw and {gglib} gglib run(s) never reached the model, so \
+         every arm mean above is diluted by scores that measure nothing.{RESET}",
+        DANGER = style::DANGER,
+        RESET = style::RESET,
+    );
+    eprintln!(
+        "  {DANGER}Read the paired result below instead — it drops the affected pairs rather \
+         than averaging them in.{RESET}",
+        DANGER = style::DANGER,
+        RESET = style::RESET,
+    );
 }
 
 /// Runs that never reached the model, and so scored zero for it.
@@ -962,10 +991,21 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
     eprintln!("  efficiency          raw    gglib    factor");
     eprintln!("  ─────────────── ─────── ──────── ─────────");
 
+    // Every row below is over the runs that reached the model, and every factor
+    // is per run. Mixing populations inside one table is what let it report an
+    // arm as "0.2× wall time" — 84% of which was five stalled runs waiting out
+    // a ten-minute deadline — on the line above a throughput figure that had
+    // already excluded those same runs from both of its terms.
+    let raw_runs = format!("{}/{}", report.raw.measured_runs(), report.raw.runs);
+    let gglib_runs = format!("{}/{}", report.gglib.measured_runs(), report.gglib.runs);
     eprintln!(
-        "  suite wall time {raw} {gglib} {colour}{factor}{RESET}",
-        raw = format_args!("{:>7}", fmt_duration(report.raw.total_wall_ms)),
-        gglib = format_args!("{:>8}", fmt_duration(report.gglib.total_wall_ms)),
+        "  measured runs   {raw_runs:>7} {gglib_runs:>8} {blank:>9}",
+        blank = "—",
+    );
+    eprintln!(
+        "  wall / run      {raw} {gglib} {colour}{factor}{RESET}",
+        raw = format_args!("{:>7}", fmt_duration(per_run_ms(&report.raw))),
+        gglib = format_args!("{:>8}", fmt_duration(per_run_ms(&report.gglib))),
         colour = factor_colour(report.delta.wall_time_speedup),
         factor = fmt_factor(report.delta.wall_time_speedup),
         RESET = style::RESET,
@@ -990,6 +1030,32 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
         gglib = fmt_tps(&report.gglib),
         blank = "—",
     );
+    eprintln!(
+        "  {MUTED}rows above cover measured runs only; `throughput t/s` is tokens over total \
+         task time, not a decode rate.{RESET}",
+        MUTED = style::MUTED,
+        RESET = style::RESET,
+    );
+    // The suite's own cost, kept off the comparison rows because a stalled run
+    // contributes its whole timeout: this answers "how long did I wait", which
+    // is a different question from "which arm is faster".
+    eprintln!(
+        "  {MUTED}suite wall clock: raw {raw}, gglib {gglib} (all runs, timeouts \
+         included){RESET}",
+        raw = fmt_duration(report.raw.total_wall_ms),
+        gglib = fmt_duration(report.gglib.total_wall_ms),
+        MUTED = style::MUTED,
+        RESET = style::RESET,
+    );
+}
+
+/// Mean wall time per measured run, `0` when the arm measured nothing.
+fn per_run_ms(arm: &ArmScores) -> u64 {
+    let runs = arm.measured_runs();
+    if runs == 0 {
+        return 0;
+    }
+    arm.measured_wall_ms / runs as u64
 }
 
 /// `"seed"` or `"seeds"`. A one-seed run is the common case for the control

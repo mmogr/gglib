@@ -6,7 +6,7 @@ import { cn } from '../../../utils/cn';
 import { formatMs, formatTps } from '../format';
 import { AgenticReportVerdicts } from './AgenticReportVerdicts';
 import { AgenticTaskDrilldown } from './AgenticTaskDrilldown';
-import type { AgenticEvalReport } from '../../../types/benchmark';
+import type { AgenticEvalReport, ArmScores } from '../../../types/benchmark';
 
 const score = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(3));
 const signed = (v: number | null | undefined) =>
@@ -58,8 +58,19 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
     ['Composite', report.raw.composite, report.gglib.composite, report.delta.composite],
   ];
 
+  // Every row here covers the runs that reached the model, and every factor is
+  // per run. Mixing populations inside one table is what let it report an arm
+  // as "0.2x wall time" — mostly stalled runs waiting out a timeout — on the
+  // line above a throughput figure that already excluded those same runs.
+  const measuredRuns = (a: ArmScores) => (a.runs ?? 0) - (a.unmeasured_runs ?? 0);
+  const perRunMs = (a: ArmScores) => {
+    const runs = measuredRuns(a);
+    return runs > 0 ? (a.measured_wall_ms ?? a.total_wall_ms) / runs : null;
+  };
+
   const efficiencyRows: Array<[string, string, string, number | null | undefined]> = [
-    ['Suite wall time', formatMs(report.raw.total_wall_ms), formatMs(report.gglib.total_wall_ms), report.delta.wall_time_speedup],
+    ['Measured runs', `${measuredRuns(report.raw)}/${report.raw.runs ?? '?'}`, `${measuredRuns(report.gglib)}/${report.gglib.runs ?? '?'}`, null],
+    ['Wall / run', formatMs(perRunMs(report.raw)), formatMs(perRunMs(report.gglib)), report.delta.wall_time_speedup],
     [
       'Completion tokens',
       report.raw.total_completion_tokens?.toLocaleString() ?? '—',
@@ -68,6 +79,7 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
     ],
     ['1st tool call', formatMs(report.raw.mean_time_to_first_tool_call_ms), formatMs(report.gglib.mean_time_to_first_tool_call_ms), null],
     ['Throughput', formatTps(report.raw.tg_tps), formatTps(report.gglib.tg_tps), null],
+    ['Suite wall clock', formatMs(report.raw.total_wall_ms), formatMs(report.gglib.total_wall_ms), null],
   ];
 
   return (

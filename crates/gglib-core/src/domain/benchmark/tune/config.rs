@@ -124,6 +124,46 @@ pub struct ScoreWeights {
     pub task_completion: f32,
 }
 
+impl ScoreWeights {
+    /// Weighted mean of the three axes, renormalized over those that were
+    /// measured. An unmeasured loop-avoidance axis claims no weight rather than
+    /// scoring `0.0` or an imputed `1.0`.
+    ///
+    /// The single definition of the composite, because the number is computed
+    /// in two places that must not drift: once per arm from its own runs, and
+    /// again when two arms are compared over the axes they share. A second copy
+    /// of this arithmetic is how a comparison starts measuring the scale
+    /// instead of the pipeline.
+    #[must_use]
+    pub fn composite_of(
+        &self,
+        tool_accuracy: f64,
+        loop_avoidance: Option<f64>,
+        task_completion: f64,
+    ) -> f64 {
+        let (loop_term, loop_weight) = loop_avoidance.map_or((0.0, 0.0), |avoidance| {
+            (
+                avoidance * f64::from(self.loop_avoidance),
+                f64::from(self.loop_avoidance),
+            )
+        });
+
+        let weight_sum =
+            f64::from(self.tool_accuracy) + loop_weight + f64::from(self.task_completion);
+        if weight_sum <= 0.0 {
+            return 0.0;
+        }
+
+        // Nested `mul_add` rather than the plain sum of products: same value,
+        // and it is what the workspace's float lints ask for.
+        let weighted = task_completion.mul_add(
+            f64::from(self.task_completion),
+            tool_accuracy.mul_add(f64::from(self.tool_accuracy), loop_term),
+        );
+        weighted / weight_sum
+    }
+}
+
 impl Default for ScoreWeights {
     /// Prioritizes tool-call correctness over loop-avoidance and completion,
     /// reflecting that an agentic backend which mis-calls tools is unusable

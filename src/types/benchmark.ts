@@ -358,8 +358,13 @@ export interface ArmScores {
   tg_tps?: number | null;
   /** Suite-wide generated tokens; `null` when no task reported usage. */
   total_completion_tokens?: number | null;
-  /** Suite-wide wall clock, unfiltered. */
+  /**
+   * Suite-wide wall clock, unfiltered — what running it cost. Never compare
+   * two arms with it: a stalled run contributes its whole timeout.
+   */
   total_wall_ms: number;
+  /** Wall clock over the runs that reached the model — the comparable figure. */
+  measured_wall_ms?: number;
   /** Mean time to first tool call, over the tasks that made one. */
   mean_time_to_first_tool_call_ms?: number | null;
   /**
@@ -397,15 +402,39 @@ export interface ArmScores {
  * efficiency figures are ratios `raw ÷ gglib` (above 1.0 means gglib did
  * better), because lower is better on those and the gaps are multiplicative.
  */
+/**
+ * Why an arm-level delta is not reported. A distinct state rather than a zero,
+ * because "could not be taken" and "came out small" license different actions.
+ */
+export type DeltaWithheld = {
+  kind: 'contaminated_by_unmeasured_runs';
+  /** Unmeasured runs in the raw arm. */
+  raw: number;
+  /** Unmeasured runs in the gglib arm. */
+  gglib: number;
+};
+
 export interface ArmDelta {
-  tool_accuracy: number;
+  /** `null` when `withheld` is set. */
+  tool_accuracy?: number | null;
   /** `null` unless both arms measured the axis. */
   loop_avoidance?: number | null;
-  task_completion: number;
-  composite: number;
-  /** Suite wall-time speedup, `raw ÷ gglib`. */
+  /** `null` when `withheld` is set. */
+  task_completion?: number | null;
+  /**
+   * Composite difference over the axes BOTH arms measured. `null` when
+   * `withheld` is set.
+   *
+   * Not the difference of the two stored composites: each of those is
+   * renormalized over whichever axes its own arm measured, so subtracting
+   * across a mismatch measures the renormalization rather than the pipeline.
+   */
+  composite?: number | null;
+  /** Why the axis differences above are absent, when they are. */
+  withheld?: DeltaWithheld | null;
+  /** Per-run wall-time speedup, `raw ÷ gglib`, over measured runs. */
   wall_time_speedup?: number | null;
-  /** Completion-token ratio, `raw ÷ gglib`. */
+  /** Per-run completion-token ratio, `raw ÷ gglib`, over measured runs. */
   completion_token_ratio?: number | null;
 }
 

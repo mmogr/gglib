@@ -19,6 +19,32 @@ const armList = (report: AgenticEvalReport): Array<[EvalArm, ArmScores | null | 
 ];
 
 /**
+ * Why the delta column is empty, when it is.
+ *
+ * Sits above every other verdict for the same reason the CLI prints it
+ * directly under the axis table: the 2026-08-28 report carried the warning
+ * *and* the number, said those arms were floors rather than measurements, and
+ * printed -0.058 as the headline anyway. Both were on the same screen and only
+ * one was read.
+ */
+const WithheldBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
+  const withheld = report.delta.withheld;
+  if (withheld == null) return null;
+
+  return (
+    <Banner variant="danger" title="Delta withheld">
+      <p className="m-0 font-mono tabular-nums">
+        {withheld.raw} raw and {withheld.gglib} gglib run(s) never reached the model.
+      </p>
+      <p className="m-0">
+        Every arm mean is diluted by scores that measure nothing. Read the paired result
+        below instead — it drops the affected pairs rather than averaging them in.
+      </p>
+    </Banner>
+  );
+};
+
+/**
  * Arms that fought the transport and won. Shown even when every run was
  * eventually measured: an arm scored off a retried attempt is not the same
  * measurement as a clean one, and without this it renders identically.
@@ -198,6 +224,7 @@ const StabilityBlock: FC<{ report: AgenticEvalReport }> = ({ report }) => {
 /** The report's validity story, in the CLI's order: unmeasured, drift, control, stability. */
 export const AgenticReportVerdicts: FC<{ report: AgenticEvalReport }> = ({ report }) => (
   <div className="flex flex-col gap-md">
+    <WithheldBlock report={report} />
     <RetryBlock report={report} />
     <UnmeasuredBlock report={report} />
     <section className="flex flex-col gap-xs">

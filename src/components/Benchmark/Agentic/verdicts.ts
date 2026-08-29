@@ -77,12 +77,18 @@ function driftGaps(report: AgenticEvalReport): number[] {
  * Whether the measured effect is larger than the eval's own drift. `null`
  * when no A/A arm ran — then the composite delta is a direction, not a
  * magnitude. A zero effect never "exceeds" anything, however quiet the arm.
+ *
+ * Also `null` when the composite delta was withheld. Comparing a diluted
+ * effect against a drift figure produces a confident ratio out of two numbers
+ * that are not about the same thing, which is how a contaminated -0.058 came
+ * to be reported as "8.3x the drift".
  */
 export function effectVerdict(report: AgenticEvalReport): EffectVerdict | null {
   const noise = noiseFloor(report);
   if (noise == null) return null;
   const pairs = noisePairs(report);
   const effect = report.delta.composite;
+  if (effect == null) return null;
   if (Math.abs(effect) > 0 && Math.abs(effect) >= EFFECT_NOISE_RATIO * noise) {
     return { kind: 'exceeds_noise', effect, noise, pairs };
   }
