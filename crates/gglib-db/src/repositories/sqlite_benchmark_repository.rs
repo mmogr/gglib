@@ -674,6 +674,7 @@ fn row_to_agentic_report(
 #[cfg(test)]
 mod tests {
     use gglib_core::domain::benchmark::agentic::{ArmDelta, ArmScores};
+    use gglib_core::domain::benchmark::tune::result::GeneratedOutput;
 
     use crate::setup::setup_test_database;
 
@@ -692,6 +693,8 @@ mod tests {
             total_wall_ms: 1_104_543,
             measured_wall_ms: 1_104_543,
             mean_time_to_first_tool_call_ms: Some(2_100.0),
+            median_time_to_first_tool_call_ms: Some(2_100.0),
+            generated: GeneratedOutput::default(),
             seeds: 3,
             runs: 9,
             unmeasured_runs: 0,

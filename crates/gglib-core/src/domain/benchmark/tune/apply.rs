@@ -309,7 +309,7 @@ pub struct ApplyRecord {
 mod tests {
     use super::*;
     use crate::domain::InferenceConfig;
-    use crate::domain::benchmark::tune::result::TuneTaskResult;
+    use crate::domain::benchmark::tune::result::{GeneratedOutput, TuneTaskResult};
     use crate::domain::benchmark::tune::task::TaskCategory;
 
     fn task(id: &str, score: f64) -> TuneTaskResult {
@@ -327,6 +327,7 @@ mod tests {
             detail: None,
             unmeasured: None,
             transport_retries: 0,
+            generated: GeneratedOutput::default(),
         }
     }
 

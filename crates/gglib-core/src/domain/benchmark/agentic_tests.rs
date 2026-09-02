@@ -39,6 +39,8 @@ fn scores(tool_accuracy: f64, loop_avoidance: Option<f64>, composite: f64) -> Ar
         total_wall_ms: 1_000,
         measured_wall_ms: 1_000,
         mean_time_to_first_tool_call_ms: Some(100.0),
+        median_time_to_first_tool_call_ms: Some(100.0),
+        generated: GeneratedOutput::default(),
         seeds: 3,
         runs: 12,
         unmeasured_runs: 0,
@@ -61,6 +63,7 @@ fn task_result(id: &str, passed: bool) -> TuneTaskResult {
         detail: None,
         unmeasured: None,
         transport_retries: 0,
+        generated: GeneratedOutput::default(),
     }
 }
 

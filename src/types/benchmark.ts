@@ -228,6 +228,39 @@ export type CandidateSource =
   | { kind: 'incumbent' }
   | { kind: 'incumbent_calibration' };
 
+/**
+ * The shape of what a run generated, as opposed to how much.
+ *
+ * A token total and a wall time cannot distinguish a model thinking at length
+ * from one failing to stop, and those call for opposite responses.
+ */
+export interface GeneratedOutput {
+  /**
+   * Characters emitted as reasoning (chain-of-thought).
+   *
+   * Only meaningful when the upstream splits thinking into its own
+   * `reasoning_content` field. Without that, a reasoning model's thinking is
+   * counted as `answer_chars` instead — so `0` here beside a large
+   * `answer_chars` means either "did not think" or "thought, unobservably".
+   */
+  reasoning_chars?: number;
+  /** Characters emitted as ordinary answer text, across every turn. */
+  answer_chars?: number;
+  /**
+   * Requests actually sent to the model. Distinct from `iterations`, which
+   * counts only tool-executing turns.
+   */
+  llm_calls?: number;
+  /**
+   * The largest single batch of tool calls any one turn executed — the
+   * fingerprint of a constrained-decoding runaway, which scoring cannot reveal
+   * because extra unrequested calls cost nothing.
+   */
+  max_tool_calls_in_batch?: number;
+  /** Recoverable conditions the loop reported, chiefly over-wide call batches. */
+  system_warnings?: number;
+}
+
 /** Result of evaluating one task against one candidate's sampling settings. */
 export interface TuneTaskResult {
   task_id: string;
@@ -253,6 +286,8 @@ export interface TuneTaskResult {
    * as a failure the model is responsible for.
    */
   unmeasured?: string | null;
+  /** What the model generated, as opposed to how much. */
+  generated?: GeneratedOutput;
 }
 
 /**
@@ -365,8 +400,22 @@ export interface ArmScores {
   total_wall_ms: number;
   /** Wall clock over the runs that reached the model — the comparable figure. */
   measured_wall_ms?: number;
-  /** Mean time to first tool call, over the tasks that made one. */
+  /**
+   * Mean time to first tool call, over the tasks that made one.
+   *
+   * Read beside the median, never alone: the population is not unimodal, and a
+   * handful of runs generating for a quarter of an hour drag this figure past
+   * anything any individual run did.
+   */
   mean_time_to_first_tool_call_ms?: number | null;
+  /** Median time to first tool call — the typical run, which the mean stops describing. */
+  median_time_to_first_tool_call_ms?: number | null;
+  /**
+   * What this arm generated, summed over its measured runs — except
+   * `max_tool_calls_in_batch`, which is the arm-wide maximum, because one
+   * runaway batch is the signal and a mean would dissolve it.
+   */
+  generated?: GeneratedOutput;
   /**
    * How many seeds every task was repeated under — the sample size behind every
    * mean above. Arms do not all share it: the control repeats fewer.

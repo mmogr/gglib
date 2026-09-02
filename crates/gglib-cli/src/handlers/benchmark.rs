@@ -13,8 +13,8 @@ use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneC
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
     AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DEFAULT_SEEDS, DeltaWithheld,
-    EFFECT_NOISE_RATIO, ModelCompareResult, ModelPerfResult, PerfConfig,
+    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DeltaWithheld, EFFECT_NOISE_RATIO,
+    ModelCompareResult, ModelPerfResult, PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -378,7 +378,7 @@ async fn cmd_agentic(
     model: String,
     task_suite: String,
     ctx_size: Option<u64>,
-    seeds: Option<Vec<u32>>,
+    seeds: Option<Vec<Option<u32>>>,
     include_control: bool,
     replicate_raw: bool,
     replicate_pairs: usize,
@@ -392,10 +392,7 @@ async fn cmd_agentic(
         .next()
         .ok_or_else(|| anyhow!("model not found: {model}"))?;
 
-    // `--seeds` unpassed keeps the default; `--seeds ""` is an explicit
-    // request for one unseeded run, so an empty vec must survive as empty
-    // rather than falling back to the default.
-    let seeds = seeds.unwrap_or_else(|| DEFAULT_SEEDS.to_vec());
+    let seeds = crate::benchmark_commands::resolve_seeds(seeds);
     let config = AgenticEvalConfig {
         model_id,
         task_suite: load_task_suite(&task_suite)?,
@@ -590,7 +587,83 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     render_control_block(report);
     render_stability_block(report);
     render_efficiency_block(report);
+    render_generation_block(report);
     eprintln!();
+}
+
+/// What each arm generated, as opposed to how much.
+///
+/// The efficiency table above says a run cost 950 seconds and 33,000 tokens. It
+/// cannot say whether that was a model thinking or a model failing to stop, and
+/// the two call for opposite responses — one is a question about the sampling
+/// recipe, the other is a bug. Everything here was already streaming through the
+/// eval and being discarded.
+fn render_generation_block(report: &AgenticEvalReport) {
+    let arms = [("raw", &report.raw), ("gglib", &report.gglib)];
+    if arms.iter().all(|(_, a)| a.generated.llm_calls == 0) {
+        // A report from before this was recorded. Say nothing rather than
+        // printing a table of zeros that reads as "the model generated nothing".
+        return;
+    }
+
+    eprintln!();
+    eprintln!("  what was generated  raw    gglib");
+    eprintln!("  ───────────────── ────── ────────");
+    eprintln!(
+        "  llm requests      {raw:>6} {gglib:>8}",
+        raw = report.raw.generated.llm_calls,
+        gglib = report.gglib.generated.llm_calls,
+    );
+    eprintln!(
+        "  reasoning chars   {raw:>6} {gglib:>8}",
+        raw = fmt_count(Some(report.raw.generated.reasoning_chars)),
+        gglib = fmt_count(Some(report.gglib.generated.reasoning_chars)),
+    );
+    eprintln!(
+        "  answer chars      {raw:>6} {gglib:>8}",
+        raw = fmt_count(Some(report.raw.generated.answer_chars)),
+        gglib = fmt_count(Some(report.gglib.generated.answer_chars)),
+    );
+    eprintln!(
+        "  widest call batch {raw:>6} {gglib:>8}",
+        raw = report.raw.generated.max_tool_calls_in_batch,
+        gglib = report.gglib.generated.max_tool_calls_in_batch,
+    );
+
+    // Characters, not tokens, and the report says so rather than letting a
+    // reader assume: the upstream reports one completion-token total and no
+    // split, so a token-level reasoning share would be a number nobody measured.
+    eprintln!(
+        "  {MUTED}characters, not tokens — the upstream reports no reasoning/answer token \
+         split.{RESET}",
+        MUTED = style::MUTED,
+        RESET = style::RESET,
+    );
+    // The ambiguity that would otherwise be read as a finding.
+    if arms
+        .iter()
+        .any(|(_, a)| a.generated.reasoning_chars == 0 && a.generated.answer_chars > 0)
+    {
+        eprintln!(
+            "  {MUTED}zero reasoning chars is ambiguous: a model whose thinking is not split \
+             into `reasoning_content` has it counted as answer text instead.{RESET}",
+            MUTED = style::MUTED,
+            RESET = style::RESET,
+        );
+    }
+    for (name, arm) in arms {
+        if arm.generated.system_warnings > 0 {
+            eprintln!(
+                "  {WARN}{name}: {n} runaway warning(s) — one over-wide batch raises two \
+                 (the collector's slot limit, then the parallel-tool limit), and the \
+                 generation behind it is paid for before being discarded. The daemon log \
+                 carries the batch size this count cannot.{RESET}",
+                n = arm.generated.system_warnings,
+                WARN = style::WARNING,
+                RESET = style::RESET,
+            );
+        }
+    }
 }
 
 /// Why the delta column is empty, when it is.
@@ -1018,8 +1091,18 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
         factor = fmt_factor(report.delta.completion_token_ratio),
         RESET = style::RESET,
     );
+    // Median first, because it is the row that describes a run. The mean sits
+    // under it rather than replacing it: a wide gap between the two is the
+    // finding — it says a few runs behaved nothing like the rest — and printing
+    // either one alone hides that in opposite directions.
     eprintln!(
-        "  1st tool call   {raw:>7} {gglib:>8} {blank:>9}",
+        "  1st call (med)  {raw:>7} {gglib:>8} {blank:>9}",
+        raw = fmt_ms(report.raw.median_time_to_first_tool_call_ms),
+        gglib = fmt_ms(report.gglib.median_time_to_first_tool_call_ms),
+        blank = "—",
+    );
+    eprintln!(
+        "  1st call (mean) {raw:>7} {gglib:>8} {blank:>9}",
         raw = fmt_ms(report.raw.mean_time_to_first_tool_call_ms),
         gglib = fmt_ms(report.gglib.mean_time_to_first_tool_call_ms),
         blank = "—",
@@ -1036,6 +1119,16 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
+    for (name, arm) in [("raw", &report.raw), ("gglib", &report.gglib)] {
+        if let Some(factor) = first_call_skew(arm) {
+            eprintln!(
+                "  {WARN}{name}: mean time to first call is {factor:.0}× its median — a few runs \
+                 took far longer than the rest, so read neither figure as typical.{RESET}",
+                WARN = style::WARNING,
+                RESET = style::RESET,
+            );
+        }
+    }
     // The suite's own cost, kept off the comparison rows because a stalled run
     // contributes its whole timeout: this answers "how long did I wait", which
     // is a different question from "which arm is faster".
@@ -1047,6 +1140,23 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
+}
+
+/// How many times the mean time-to-first-call exceeds the median, when that
+/// gap is wide enough to mean something. `None` when the two agree.
+///
+/// A skew this large is not a distribution with a tail — it is two populations
+/// printed as one number. Three is the threshold because a genuinely unimodal
+/// sample does not reach it, and the run this exists for came in near seventy.
+fn first_call_skew(arm: &ArmScores) -> Option<f64> {
+    const REPORTABLE_SKEW: f64 = 3.0;
+    let mean = arm.mean_time_to_first_tool_call_ms?;
+    let median = arm.median_time_to_first_tool_call_ms?;
+    if median <= 0.0 {
+        return None;
+    }
+    let factor = mean / median;
+    (factor >= REPORTABLE_SKEW).then_some(factor)
 }
 
 /// Mean wall time per measured run, `0` when the arm measured nothing.
@@ -1533,6 +1643,53 @@ fn render_perf_complete(r: &ModelPerfResult) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn arm_with_first_call(mean: Option<f64>, median: Option<f64>) -> ArmScores {
+        ArmScores {
+            tool_accuracy: 0.9,
+            loop_avoidance: None,
+            loop_eligible: 0,
+            task_completion: 0.9,
+            composite: 0.9,
+            tg_tps: None,
+            total_completion_tokens: None,
+            total_wall_ms: 0,
+            measured_wall_ms: 0,
+            mean_time_to_first_tool_call_ms: mean,
+            median_time_to_first_tool_call_ms: median,
+            seeds: 3,
+            runs: 63,
+            unmeasured_runs: 0,
+            transport_retries: 0,
+            generated: gglib_core::domain::benchmark::tune::result::GeneratedOutput::default(),
+        }
+    }
+
+    /// **The reading that flipped between two runs of the same suite.** 46 runs
+    /// at ~1s and 5 at ~950s average to ~94s, which describes neither group.
+    /// The warning fires on the gap, because the gap is the finding — a single
+    /// figure from this population is wrong whichever one is chosen.
+    #[test]
+    fn a_bimodal_first_call_is_called_out() {
+        let skewed = arm_with_first_call(Some(94_000.0), Some(1_029.0));
+        let factor = first_call_skew(&skewed).expect("a 91x gap is reportable");
+        assert!((factor - 91.0).abs() < 1.0, "got {factor}");
+    }
+
+    /// An ordinary arm says nothing. A warning that fires on every run is one
+    /// nobody reads by the third report.
+    #[test]
+    fn an_ordinary_first_call_stays_quiet() {
+        assert!(first_call_skew(&arm_with_first_call(Some(4_507.0), Some(4_100.0))).is_none());
+        assert!(
+            first_call_skew(&arm_with_first_call(None, None)).is_none(),
+            "an arm that never called a tool has no skew to report"
+        );
+        assert!(
+            first_call_skew(&arm_with_first_call(Some(500.0), Some(0.0))).is_none(),
+            "a zero median must not divide into an infinite factor"
+        );
+    }
 
     #[test]
     fn parses_every_sweep_dimension() {
