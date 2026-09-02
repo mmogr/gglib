@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 gglib-app-services = { path = "../gglib-app-services" }
 gglib-bootstrap = { path = "../gglib-bootstrap" }
+gglib-build-info.workspace = true
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: ToolSupportDetector

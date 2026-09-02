@@ -18,6 +18,7 @@ Application settings modal: models directory path, base port configuration, per-
 | `SystemSettings.tsx` | System tab — the GUI face of `gglib config llama` |
 | `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel in the System tab |
 | `LabelledValue.tsx` | A label and its value, for the read-only rows those two panels are mostly made of |
+| `BuildInfo.tsx` | The daemon's own build — version and commit — read from `/api/version` |
 | `useSystemSettings.ts` | State for the System tab: what llama.cpp is installed, whether upstream has moved, and the update/uninstall actions |
 | `useDiagnostics.ts` | State for the diagnostics half of the System tab |
 | `useNetworkSettings.ts` | State for the network-binding settings (bind host, LAN sharing) |

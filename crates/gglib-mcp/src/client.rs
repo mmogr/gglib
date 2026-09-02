@@ -240,7 +240,7 @@ impl McpClient {
             "protocolVersion": "2024-11-05",
             "clientInfo": {
                 "name": "gglib",
-                "version": env!("CARGO_PKG_VERSION")
+                "version": gglib_build_info::SEMVER
             },
             "capabilities": {}
         });

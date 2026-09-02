@@ -14,6 +14,7 @@ import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { getTransport } from '../../services/transport';
 import { useSystemSettings } from './useSystemSettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { BuildInfo } from './BuildInfo';
 import type { LlamaStatus } from '../../types/setup';
 import { LabelledValue } from './LabelledValue';
 
@@ -268,6 +269,8 @@ export const SystemSettings: FC = () => {
       </section>
 
       <DiagnosticsPanel />
+
+      <BuildInfo />
 
       <section>
         <h3 className="m-0 mb-xs text-sm font-semibold text-text">Daemon</h3>

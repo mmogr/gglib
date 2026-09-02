@@ -20,6 +20,7 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
 
 [dependencies]
 # Core domain types and ports (NO runtime, NO sqlx)
+gglib-build-info.workspace = true
 gglib-core = { path = "../gglib-core" }
 ts-rs = { workspace = true, optional = true }
 
