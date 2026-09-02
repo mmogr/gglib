@@ -7,7 +7,7 @@ pub const SEMVER: &str = env!("CARGO_PKG_VERSION");
 /// How many hex characters of the commit id every gglib surface shows.
 ///
 /// `build.rs` owns the cut and holds the same constant; the two agreeing is
-/// what [`tests::the_sha_is_always_the_advertised_width`] checks.
+/// what `tests::the_sha_is_always_the_advertised_width` checks.
 pub const SHA_LEN: usize = 12;
 
 /// The commit this binary was built from, abbreviated to [`SHA_LEN`].
