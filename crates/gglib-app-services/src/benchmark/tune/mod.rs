@@ -8,11 +8,13 @@ use std::time::Instant;
 
 use anyhow::{Context as _, Result};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage,
+};
 use gglib_core::domain::benchmark::agentic::REPLICATE_SEED_OFFSET;
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::result::{
-    CandidateSource, TuneCandidateResult, TuneTaskResult,
+    CandidateSource, GeneratedOutput, TuneCandidateResult, TuneTaskResult,
 };
 use gglib_core::domain::benchmark::tune::task::{TaskCategory, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
@@ -714,7 +716,13 @@ where
     let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(executor);
     let agent_loop = AgentLoop::build(llm, tool_executor, None);
 
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<AgentEvent>(64);
+    // The agent's own capacity, not a smaller local one. `TextDelta` arrives
+    // per fragment, so at 64 this consumer became the generator's rate limit —
+    // the eval was measuring its own reader as much as the model, and the
+    // measurement got worse the more the model generated, which is precisely
+    // backwards for the runs worth understanding.
+    let (event_tx, mut event_rx) =
+        tokio::sync::mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let agent_config = AgentConfig::default();
 
     let started_at = Instant::now();
@@ -731,6 +739,10 @@ where
     // decides. `IterationComplete` is emitted after the batch has finished
     // executing, so every one of its calls is already in the log by then.
     let mut batch_sizes: Vec<usize> = Vec::new();
+    // What the model generated, not merely how much. Every one of these arrived
+    // on this channel already and fell through the catch-all arm below.
+    let mut generated = GeneratedOutput::default();
+    let mut answered_in_text = false;
     while let Some(event) = event_rx.recv().await {
         match event {
             AgentEvent::IterationComplete {
@@ -739,13 +751,32 @@ where
             } => {
                 iterations = iteration;
                 batch_sizes.push(tool_calls);
+                generated.max_tool_calls_in_batch =
+                    generated.max_tool_calls_in_batch.max(tool_calls);
             }
             AgentEvent::ToolCallStart { .. } if time_to_first_tool_call_ms.is_none() => {
                 time_to_first_tool_call_ms = u64::try_from(started_at.elapsed().as_millis()).ok();
             }
+            // Characters, not tokens, and deliberately so: the upstream reports
+            // one `completion_tokens` total and no split, llama.cpp emits no
+            // `completion_tokens_details.reasoning_tokens`, and inventing a
+            // token split from a character ratio would be a measurement nobody
+            // took. The ratio is the signal; the unit stays honest.
+            AgentEvent::ReasoningDelta { content } => {
+                generated.reasoning_chars += content.len() as u64;
+            }
+            AgentEvent::TextDelta { content } => {
+                generated.answer_chars += content.len() as u64;
+            }
+            // `FinalAnswer` re-sends the text already counted above, so it is
+            // read only for the request it implies: the turn that produced it
+            // emits no `IterationComplete`.
+            AgentEvent::FinalAnswer { .. } => answered_in_text = true,
+            AgentEvent::SystemWarning { .. } => generated.system_warnings += 1,
             _ => {}
         }
     }
+    generated.llm_calls = batch_sizes.len() + usize::from(answered_in_text);
     let run_result = join_handle.await;
     let latency_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
 
@@ -807,6 +838,7 @@ where
         // Stamped by `run_task_with_llm`, which is the only thing that knows
         // how many attempts this one cost.
         transport_retries: 0,
+        generated,
     }
 }
 
@@ -1024,6 +1056,7 @@ mod tests {
             detail: None,
             unmeasured: None,
             transport_retries: 0,
+            generated: GeneratedOutput::default(),
         }
     }
 

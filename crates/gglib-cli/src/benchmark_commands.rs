@@ -1,6 +1,7 @@
 //! Subcommands for `gglib benchmark`.
 
 use clap::Subcommand;
+use gglib_core::domain::benchmark::DEFAULT_SEEDS;
 
 /// Subcommands available under `gglib benchmark`.
 #[derive(Clone, Subcommand)]
@@ -173,8 +174,8 @@ pub enum BenchmarkCommand {
         /// the mean across them. Defaults to three seeds — a single sample
         /// per task is one draw from the model's output distribution, not a
         /// measurement of it. Pass `--seeds ""` for one unseeded run
-        #[arg(long, value_delimiter = ',', num_args = 0..)]
-        seeds: Option<Vec<u32>>,
+        #[arg(long, value_delimiter = ',', num_args = 0.., value_parser = parse_seed)]
+        seeds: Option<Vec<Option<u32>>>,
 
         /// Skip the positive control arm. The control runs the gglib pipeline
         /// at a deliberately bad temperature and must score below it; without
@@ -216,3 +217,42 @@ pub enum BenchmarkCommand {
         output: Option<std::path::PathBuf>,
     },
 }
+
+/// One `--seeds` element, where empty means "no seed named".
+///
+/// `--seeds ""` is the documented way to ask for a single unseeded run, and it
+/// only reaches here as an *empty element* rather than as zero elements:
+/// `value_delimiter = ','` splits the raw `""` on commas and gets `[""]`, so a
+/// plain `u32` parser rejected the one form the help text advertised. Mapping
+/// empty to `None` — dropped by the handler — is what makes that form real,
+/// while keeping a genuine typo (`--seeds abc`) a clap parse error rather than
+/// a failure raised later, after the model lookup has already hit the database.
+fn parse_seed(raw: &str) -> Result<Option<u32>, String> {
+    let seed = raw.trim();
+    if seed.is_empty() {
+        return Ok(None);
+    }
+    seed.parse::<u32>()
+        .map(Some)
+        .map_err(|e| format!("'{seed}' is not a seed: {e}"))
+}
+
+/// The seeds an eval actually runs, from what `--seeds` parsed to.
+///
+/// Three cases, and the middle one is the whole reason this is a function:
+/// the flag unpassed (`None`) keeps the three defaults, because a single
+/// sample per task is one draw from the model's distribution rather than a
+/// measurement of it; `--seeds ""` parses to `[None]` and flattens to empty,
+/// which `plan_arms` reads as "run once, naming no seed"; and named seeds
+/// come through as themselves. An empty result must therefore survive as
+/// empty rather than falling back to the default — that fallback is exactly
+/// what would silently turn a requested 2-run smoke test back into 6 runs.
+pub(crate) fn resolve_seeds(parsed: Option<Vec<Option<u32>>>) -> Vec<u32> {
+    parsed
+        .map(|seeds| seeds.into_iter().flatten().collect())
+        .unwrap_or_else(|| DEFAULT_SEEDS.to_vec())
+}
+
+#[cfg(test)]
+#[path = "benchmark_commands_tests.rs"]
+mod benchmark_commands_tests;

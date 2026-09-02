@@ -1,0 +1,101 @@
+[
+  {
+    "id": "long_context_planted_values",
+    "category": "long_context",
+    "history": [
+      {
+        "role": "user",
+        "content": "Let's plan the staging deploy for the metrics collector. I want to get every detail agreed before we touch anything."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood \u2014 tell me the constraints and I will keep track of what we decide."
+      },
+      {
+        "role": "user",
+        "content": "First decision: the service listens on port 8443. Not 8080 like the old collector \u2014 security wants TLS termination on the service itself this time."
+      },
+      {
+        "role": "assistant",
+        "content": "Noted: port 8443, TLS terminated at the service rather than at the ingress. What host will it run on?"
+      },
+      {
+        "role": "user",
+        "content": "Before that \u2014 a digression. The old collector kept falling over because its queue was unbounded. The new one caps the queue at 10k entries and sheds load above that. That is config, not deploy, so it is not your concern today."
+      },
+      {
+        "role": "assistant",
+        "content": "Understood, queue sizing is out of scope for the deploy. Back to the host, then."
+      },
+      {
+        "role": "user",
+        "content": "The host is metrics-02.staging.internal. metrics-01 is still running the old collector until the cutover, so do not touch it."
+      },
+      {
+        "role": "assistant",
+        "content": "Noted: metrics-02.staging.internal, and metrics-01 stays untouched. Anything else before we register it?"
+      },
+      {
+        "role": "user",
+        "content": "Two more things. The health check path is /healthz \u2014 the default /health collides with an existing route. And name the service metrics-collector-v2 in the registry; plain metrics-collector is the old one."
+      },
+      {
+        "role": "assistant",
+        "content": "All recorded: name metrics-collector-v2, host metrics-02.staging.internal, port 8443, health check at /healthz. Say the word when you want it registered."
+      },
+      {
+        "role": "user",
+        "content": "One last digression: remind me Monday to write the runbook for the cutover. Not now \u2014 just do not let me forget it."
+      },
+      {
+        "role": "assistant",
+        "content": "I will bring the runbook up when we next talk. Ready to register when you are."
+      }
+    ],
+    "user_prompt": "Go ahead \u2014 register the service with everything we agreed.",
+    "tools": [
+      {
+        "name": "register_service",
+        "description": "Register a service in the staging registry.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "health_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "host",
+            "port",
+            "health_path"
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "register_service",
+          "required_args": {
+            "name": "metrics-collector-v2",
+            "host": "metrics-02.staging.internal",
+            "port": 8443,
+            "health_path": "/healthz"
+          },
+          "ordered": false
+        }
+      ]
+    }
+  }
+]
