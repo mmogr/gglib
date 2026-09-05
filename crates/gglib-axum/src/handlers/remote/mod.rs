@@ -1,7 +1,9 @@
 #![doc = include_str!("README.md")]
 
+mod connect;
 mod wire;
 
+pub(crate) use connect::{connect, disconnect, kill};
 pub(crate) use wire::{RemoteEnableBody, RemoteEnableResponse, RemoteStatus};
 
 use axum::{Json, extract::State};

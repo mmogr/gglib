@@ -1,15 +1,21 @@
 #![doc = include_str!("README.md")]
 
+mod connect;
 mod gateway;
 mod key;
 mod pairing;
+mod pairing_string;
+mod redeem;
 mod rotation;
 mod types;
 
 pub use gateway::RemoteGateway;
-pub use types::{EnableRequest, Enabled, RemoteStatusSnapshot};
+pub use types::{
+    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, RemoteStatusSnapshot,
+};
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
@@ -22,6 +28,7 @@ use tracing::{info, warn};
 
 use crate::error::GuiError;
 use crate::proxy::ProxyOps;
+use connect::LiveConnect;
 use key::KeyDecision;
 use pairing::PAIRING_TTL;
 use rotation::rotation_poll;
@@ -41,16 +48,22 @@ struct Live {
     rotation: CancellationToken,
 }
 
-/// The remote tunnel's lifecycle: the serve side of ADR 0012.
+/// The remote tunnel's lifecycle: both sides of ADR 0012.
 ///
-/// Off by default and never persisted: `enable` arms the tunnel for this
-/// daemon only, and nothing brings it back on a restart.
+/// Off by default and never persisted: `enable` arms the serve side and
+/// `connect` the connect side for this daemon only, and nothing brings
+/// either back on a restart. The two are independent — a machine can be
+/// both the desktop for one peer and the laptop to another.
 pub struct RemoteOps {
     proxy: Arc<ProxyOps>,
     core: Arc<AppCore>,
     gateway: Arc<RemoteGateway>,
     emitter: Arc<dyn AppEventEmitter>,
     live: Mutex<Option<Live>>,
+    /// Shared with the task that watches the connection, which is why it is
+    /// an `Arc` where `live` is not.
+    live_connect: Arc<Mutex<Option<LiveConnect>>>,
+    connect_generation: AtomicU64,
 }
 
 impl RemoteOps {
@@ -67,6 +80,8 @@ impl RemoteOps {
             gateway,
             emitter,
             live: Mutex::new(None),
+            live_connect: Arc::new(Mutex::new(None)),
+            connect_generation: AtomicU64::new(0),
         }
     }
 
@@ -172,8 +187,23 @@ impl RemoteOps {
         Ok(())
     }
 
-    /// A snapshot for the status surface.
+    /// A snapshot for the status surface: both sides, and what settings
+    /// remember of the last pairing (by fingerprint, never the ticket).
     pub async fn status(&self) -> RemoteStatusSnapshot {
+        let (stored_ticket_fingerprint, has_remote_key) = match self.core.settings().get().await {
+            Ok(settings) => (
+                settings
+                    .remote_last_ticket
+                    .as_deref()
+                    .and_then(|t| t.parse::<modelpipe::Ticket>().ok())
+                    .map(|t| t.fingerprint()),
+                settings
+                    .remote_api_key
+                    .is_some_and(|k| !k.trim().is_empty()),
+            ),
+            Err(_) => (None, false),
+        };
+        let connected = self.connect_snapshot().await;
         let live = self.live.lock().await;
         let mut snapshot = RemoteStatusSnapshot {
             enabled: live.is_some(),
@@ -183,6 +213,9 @@ impl RemoteOps {
             tunnelled_requests: self.gateway.tunnelled_requests(),
             last_tunnelled_ms: self.gateway.last_tunnelled_ms(),
             last_peer: self.gateway.last_peer(),
+            connected,
+            stored_ticket_fingerprint,
+            has_remote_key,
             ..RemoteStatusSnapshot::default()
         };
         if let Some(Live { handle, .. }) = live.as_ref() {

@@ -73,7 +73,7 @@ handlers were grouped.
 | `daemon/` | `gglib daemon run / status / stop` |
 | `up/` | `gglib up` — the one-command setup path |
 | `proxy_dashboard/` | `gglib proxy dashboard` — the live terminal view |
-| `remote/` | `gglib remote enable / disable / status` — the tunnel that puts this proxy on another machine (ADR 0012) |
+| `remote/` | `gglib remote enable / disable / status / connect / disconnect / kill` — the tunnel that puts one machine's proxy on another (ADR 0012) |
 | `benchmark.rs` | `gglib benchmark …`, including `tune` |
 | `mcp_cli.rs` | `gglib mcp …` |
 | `history.rs`, `web.rs`, `gui.rs`, `completions.rs`, `proxy_cache_clear.rs` | One command each |

@@ -66,6 +66,36 @@ pub(crate) struct RemoteEnableDto {
     pub expires_in_s: u64,
 }
 
+/// `POST /api/remote/connect` request body. Mirrors
+/// `gglib_axum::handlers::remote::RemoteConnectBody`.
+#[derive(Debug, Clone, Default, Serialize)]
+pub(crate) struct RemoteConnectBody {
+    pub pairing: Option<String>,
+    pub port: Option<u16>,
+    pub relay: Option<String>,
+    pub discovery: Option<bool>,
+}
+
+/// `POST /api/remote/connect` response.
+///
+/// A narrowing of `gglib_axum::handlers::remote::RemoteConnectResponse`,
+/// which also carries the bare `port`; the CLI prints the URL, which has it.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemoteConnectDto {
+    pub base_url: String,
+    pub ticket_fingerprint: String,
+    pub paired: bool,
+}
+
+/// The connect side in a remote status, while it is up. Narrowed like
+/// `RemoteConnectDto`: the URL carries the port.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemoteConnectionDto {
+    pub base_url: String,
+    pub ticket_fingerprint: String,
+    pub path: String,
+}
+
 /// One connected peer in a remote status.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RemotePeerDto {
@@ -95,6 +125,12 @@ pub(crate) struct RemoteStatusDto {
     pub last_tunnelled_ms: Option<i64>,
     #[serde(default)]
     pub last_peer: Option<String>,
+    #[serde(default)]
+    pub connected: Option<RemoteConnectionDto>,
+    #[serde(default)]
+    pub stored_ticket_fingerprint: Option<String>,
+    #[serde(default)]
+    pub has_remote_key: bool,
 }
 
 /// `POST /api/servers/start` response.

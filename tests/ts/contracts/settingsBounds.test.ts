@@ -33,6 +33,7 @@ import type { SamplingParamKey } from '../../../src/types';
 import { fnSource, rust } from './rustSource';
 
 const SETTINGS_RS = rust('crates/gglib-core/src/settings.rs');
+const SETTINGS_VALIDATE_RS = rust('crates/gglib-core/src/settings_validate.rs');
 const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
 const AGENT_CONFIG_RS = rust('crates/gglib-core/src/domain/agent/config.rs');
 
@@ -52,7 +53,7 @@ const num = (literal: string) => Number(literal.replace(/_/g, ''));
  * spelling the numbers out inline.
  */
 const RANGE_CONSTANTS: Map<string, Range> = new Map(
-  [SETTINGS_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
+  [SETTINGS_RS, SETTINGS_VALIDATE_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
     [
       ...source.matchAll(
         /pub const (\w+):\s*(?:std::ops::)?RangeInclusive<\w+>\s*=\s*(-?[0-9_.]+)\.\.=(-?[0-9_.]+)\s*;/g,
@@ -63,7 +64,7 @@ const RANGE_CONSTANTS: Map<string, Range> = new Map(
 
 /** Every `pub const NAME: T = <number>;` across the files we care about. */
 const CONSTANTS: Map<string, number> = new Map(
-  [SETTINGS_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
+  [SETTINGS_RS, SETTINGS_VALIDATE_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
     [...source.matchAll(/pub const (\w+):\s*\w+\s*=\s*([0-9_.]+)\s*;/g)].map(
       (match) => [match[1], num(match[2])] as [string, number],
     ),
@@ -184,11 +185,14 @@ const VALIDATE_SETTINGS = fnBody(SETTINGS_RS, 'validate_settings');
  * that vanishes entirely must still throw here, and it does, because
  * `acceptedRange` fails on a field it cannot find in this text.
  *
- * A future split has to be added to this list. That is the point.
+ * A future split has to be added to this list. That is the point. The move
+ * of both halves into `settings_validate.rs` — whole and unchanged, so
+ * `settings.rs` could take the remote tunnel's fields — was the next such
+ * event, and it went red here the same way.
  */
 const VALIDATE_INFERENCE = [
-  fnBody(SETTINGS_RS, 'validate_inference_config'),
-  fnBody(SETTINGS_RS, 'validate_dry_params'),
+  fnBody(SETTINGS_VALIDATE_RS, 'validate_inference_config'),
+  fnBody(SETTINGS_VALIDATE_RS, 'validate_dry_params'),
 ].join('\n');
 
 // ── The settings modal's numeric fields ─────────────────────────────────────

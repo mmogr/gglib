@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
+#[path = "settings_validate.rs"]
+mod settings_validate;
+pub use settings_validate::{validate_inference_config, validate_inference_profiles};
+
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
 
@@ -256,6 +260,27 @@ pub struct Settings {
     /// registers or unregisters immediately rather than at next launch, so the
     /// stored value and the OS state cannot drift apart.
     pub start_at_login: Option<bool>,
+
+    // ── Remote tunnel, connect side (ADR 0012) ──────────────────────
+    /// The API key of the machine this one last paired with over
+    /// `gglib remote connect`.
+    ///
+    /// Received, not chosen: `connect` redeems the one-time pairing code for
+    /// it through the tunnel and stores it here so later sessions need only
+    /// the ticket. It is that machine's `proxy_api_key`, and `gglib q --remote`
+    /// and `gglib chat --remote` attach it as the bearer. Nothing writes it by
+    /// hand and no settings surface exposes it; `gglib remote connect` with a
+    /// fresh pairing replaces it.
+    pub remote_api_key: Option<String>,
+
+    /// The ticket `gglib remote connect` last dialled, in its canonical form.
+    ///
+    /// Recorded so `gglib remote connect` with no argument reconnects to the
+    /// same machine. It is an address, not a credential — reaching the far
+    /// side still takes [`Self::remote_api_key`] — and it goes stale the
+    /// moment the far side runs `enable` again, because every `enable` mints
+    /// a fresh identity.
+    pub remote_last_ticket: Option<String>,
 }
 
 impl Settings {
@@ -296,6 +321,8 @@ impl Settings {
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,
+            remote_api_key: None,
+            remote_last_ticket: None,
         }
     }
 
@@ -388,6 +415,12 @@ impl Settings {
         if let Some(ref v) = other.start_at_login {
             self.start_at_login = *v;
         }
+        if let Some(ref v) = other.remote_api_key {
+            self.remote_api_key.clone_from(v);
+        }
+        if let Some(ref v) = other.remote_last_ticket {
+            self.remote_last_ticket.clone_from(v);
+        }
     }
 }
 
@@ -423,6 +456,10 @@ pub struct SettingsUpdate {
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,
+    /// See [`Settings::remote_api_key`].
+    pub remote_api_key: Option<Option<String>>,
+    /// See [`Settings::remote_last_ticket`].
+    pub remote_last_ticket: Option<Option<String>>,
 }
 
 /// Settings validation error.
@@ -451,6 +488,12 @@ pub enum SettingsError {
 
     #[error("Proxy API key cannot be blank — clear it instead to disable authentication")]
     BlankProxyApiKey,
+
+    #[error("Remote API key cannot be blank — clear it instead to forget the pairing")]
+    BlankRemoteApiKey,
+
+    #[error("Remote ticket cannot be blank — clear it instead to forget the pairing")]
+    BlankRemoteTicket,
 }
 
 /// Validate settings values.
@@ -511,6 +554,24 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         return Err(SettingsError::BlankProxyApiKey);
     }
 
+    // The connect side's stored pairing, same rule: a blank is neither a key
+    // nor an address, and `connect` reading one would dial nothing with
+    // nothing rather than say the pairing is gone.
+    if settings
+        .remote_api_key
+        .as_ref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        return Err(SettingsError::BlankRemoteApiKey);
+    }
+    if settings
+        .remote_last_ticket
+        .as_ref()
+        .is_some_and(|ticket| ticket.trim().is_empty())
+    {
+        return Err(SettingsError::BlankRemoteTicket);
+    }
+
     // Validate inference defaults if specified
     if let Some(ref inference_config) = settings.inference_defaults {
         validate_inference_config(inference_config)
@@ -525,207 +586,10 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
     Ok(())
 }
 
-/// Validate a set of inference profiles.
-///
-/// Checks each profile's name against
-/// [`crate::domain::inference_profile::validate_name`], rejects
-/// duplicate names (they would make `{model}:{profile}` ambiguous), and reuses
-/// [`validate_inference_config`] for the numeric ranges so profile parameters
-/// and global defaults can never drift apart on what counts as valid.
-///
-/// # Errors
-///
-/// Returns a human-readable description of the first problem found.
-pub fn validate_inference_profiles(profiles: &[InferenceProfile]) -> Result<(), String> {
-    let mut seen: Vec<&str> = Vec::with_capacity(profiles.len());
-
-    for profile in profiles {
-        profile.validate().map_err(|e| e.to_string())?;
-
-        if seen.contains(&profile.name.as_str()) {
-            return Err(format!("duplicate profile name '{}'", profile.name));
-        }
-        seen.push(&profile.name);
-
-        validate_inference_config(&profile.config)
-            .map_err(|e| format!("profile '{}': {e}", profile.name))?;
-    }
-
-    Ok(())
-}
-
-/// Validate inference configuration parameters.
-///
-/// Checks that all specified parameters are within valid ranges.
-pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String> {
-    // Validate temperature (0.0 - 2.0)
-    if let Some(temp) = config.temperature
-        && !(0.0..=2.0).contains(&temp)
-    {
-        return Err(format!(
-            "Temperature must be between 0.0 and 2.0, got {temp}"
-        ));
-    }
-
-    // Validate top_p (0.0 - 1.0)
-    if let Some(top_p) = config.top_p
-        && !(0.0..=1.0).contains(&top_p)
-    {
-        return Err(format!("Top P must be between 0.0 and 1.0, got {top_p}"));
-    }
-
-    // Validate top_k (must be positive)
-    if let Some(top_k) = config.top_k
-        && top_k <= 0
-    {
-        return Err(format!("Top K must be positive, got {top_k}"));
-    }
-
-    // Validate max_tokens (must be positive)
-    if let Some(max_tokens) = config.max_tokens
-        && max_tokens == 0
-    {
-        return Err("Max tokens must be positive".to_string());
-    }
-
-    // Validate reasoning_budget_tokens (>= -1, exactly upstream's range —
-    // llama-server answers -2 with an HTTP 400 naming it, ADR 0007 finding 7c;
-    // -1 defers to the launch `--reasoning-budget` and 0 stops thinking).
-    //
-    // This guard is the *stored* half of a boundary the request half already
-    // has. `InferenceConfig::extract_client_sampling` applies the same range to
-    // a value that arrives on a request, but three surfaces deserialise a whole
-    // `InferenceConfig` and never pass through it: `Settings::inference_defaults`,
-    // `inference_profiles[].config`, and the proxy's `inference_override`. A
-    // value stored through any of them is force-inserted into every chat body,
-    // so `-5000` in global defaults means an HTTP 400 on every request to every
-    // model until someone finds the setting — and neither reasoning control is
-    // observable in `/slots` or `/props` (ADR 0007 finding 7a), so no readback
-    // can ever point at it. Rejecting at store time is the only place this is
-    // catchable.
-    //
-    // `reasoning_effort` needs no twin guard: it is an enum, so serde refuses
-    // an unknown level before this function is reached.
-    if let Some(budget) = config.reasoning_budget_tokens
-        && budget < -1
-    {
-        return Err(format!(
-            "Reasoning budget tokens must be -1 or greater \
-             (-1 defers to the launch default, 0 stops thinking), got {budget}"
-        ));
-    }
-
-    // Validate repeat_penalty (must be positive)
-    if let Some(repeat_penalty) = config.repeat_penalty
-        && repeat_penalty <= 0.0
-    {
-        return Err(format!(
-            "Repeat penalty must be positive, got {repeat_penalty}"
-        ));
-    }
-
-    // Validate presence_penalty (0.0 - 2.0)
-    if let Some(pp) = config.presence_penalty
-        && !(0.0..=2.0).contains(&pp)
-    {
-        return Err(format!(
-            "Presence penalty must be between 0.0 and 2.0, got {pp}"
-        ));
-    }
-
-    // Validate min_p (0.0 - 1.0)
-    if let Some(mp) = config.min_p
-        && !(0.0..=1.0).contains(&mp)
-    {
-        return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
-    }
-
-    // Validate frequency_penalty (-2.0 - 2.0, the OpenAI-spec range llama.cpp
-    // honours; negative values encourage reuse and are valid upstream)
-    if let Some(fp) = config.frequency_penalty
-        && !(-2.0..=2.0).contains(&fp)
-    {
-        return Err(format!(
-            "Frequency penalty must be between -2.0 and 2.0, got {fp}"
-        ));
-    }
-
-    // Validate dynatemp_range (non-negative; 0.0 disables dynamic temperature)
-    if let Some(dr) = config.dynatemp_range
-        && dr < 0.0
-    {
-        return Err(format!(
-            "Dynatemp range must be non-negative (0.0 disables), got {dr}"
-        ));
-    }
-
-    // Validate dynatemp_exponent (must be positive; inert without a range)
-    if let Some(de) = config.dynatemp_exponent
-        && de <= 0.0
-    {
-        return Err(format!("Dynatemp exponent must be positive, got {de}"));
-    }
-
-    // Validate top_n_sigma (-1.0 disables; llama.cpp treats any value at or
-    // below zero as off, and -1.0 is its own spelling of the default)
-    if let Some(ts) = config.top_n_sigma
-        && ts < -1.0
-    {
-        return Err(format!(
-            "Top-n-sigma must be -1.0 (disabled) or greater, got {ts}"
-        ));
-    }
-
-    validate_dry_params(config)
-}
-
-/// The four DRY parameters' ranges, split out of [`validate_inference_config`].
-///
-/// Not a judgement about them — they are checked exactly as before and in the
-/// same order. They are simply the one cohesive group in a function that is
-/// otherwise one field per check, so lifting them is what kept the parent
-/// under `clippy::too_many_lines` when `reasoning_budget_tokens` joined. Every
-/// caller reaches this through the parent; nothing validates DRY alone.
-fn validate_dry_params(config: &InferenceConfig) -> Result<(), String> {
-    // Validate dry_multiplier (0.0 - 5.0; 0.0 disables DRY)
-    if let Some(dm) = config.dry_multiplier
-        && !(0.0..=5.0).contains(&dm)
-    {
-        return Err(format!(
-            "DRY multiplier must be between 0.0 and 5.0, got {dm}"
-        ));
-    }
-
-    // Validate dry_base (> 1.0; the exponent base grows the penalty with
-    // matched sequence length, so a base at or below 1.0 cannot penalise)
-    if let Some(db) = config.dry_base
-        && db <= 1.0
-    {
-        return Err(format!("DRY base must be greater than 1.0, got {db}"));
-    }
-
-    // Validate dry_allowed_length (non-negative token count)
-    if let Some(dal) = config.dry_allowed_length
-        && dal < 0
-    {
-        return Err(format!(
-            "DRY allowed length must be non-negative, got {dal}"
-        ));
-    }
-
-    // Validate dry_penalty_last_n (0 disables; negatives are resolved by
-    // llama.cpp against the context size)
-    if let Some(dpn) = config.dry_penalty_last_n
-        && dpn < -1
-    {
-        return Err(format!(
-            "DRY penalty last N must be -1 or greater (0 disables), got {dpn}"
-        ));
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 #[path = "settings_tests.rs"]
 mod settings_tests;
+
+#[cfg(test)]
+#[path = "settings_remote_tests.rs"]
+mod settings_remote_tests;

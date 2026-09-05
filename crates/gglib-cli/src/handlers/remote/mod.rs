@@ -1,8 +1,10 @@
 #![doc = include_str!("README.md")]
 
+mod connect;
 mod enable;
 mod pairing_tui;
 
+use connect::{ConnectArgs, connect, disconnect, kill};
 use enable::{EnableArgs, enable};
 
 use anyhow::Result;
@@ -30,6 +32,22 @@ pub(crate) async fn dispatch(command: RemoteCommand) -> Result<()> {
         }
         RemoteCommand::Disable => disable().await,
         RemoteCommand::Status => status().await,
+        RemoteCommand::Connect {
+            pairing,
+            port,
+            relay,
+            no_discovery,
+        } => {
+            connect(ConnectArgs {
+                pairing,
+                port,
+                relay,
+                no_discovery,
+            })
+            .await
+        }
+        RemoteCommand::Disconnect => disconnect().await,
+        RemoteCommand::Kill { yes } => kill(yes).await,
     }
 }
 
@@ -113,6 +131,7 @@ fn print_status(status: &RemoteStatusDto) {
             }
         );
     }
+    connect::print_connection(status);
     eprintln!(
         "  Requests:  {} through the tunnel",
         status.tunnelled_requests
