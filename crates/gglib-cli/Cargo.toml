@@ -52,6 +52,10 @@ futures-util = { workspace = true }
 # dependency. Deliberately scoped to this crate — LAN advertising is a CLI
 # concern and must not reach the shared axum/app-services/Tauri layers.
 mdns-sd = "0.20"
+# Draws the pairing QR for `gglib remote enable`. No default features: the
+# `image` renderer would pull an image stack in for a code drawn as Unicode
+# half-blocks; the `unicode` renderer needs nothing.
+qrcode = { version = "0.14", default-features = false }
 
 [dev-dependencies]
 async-trait = { workspace = true }

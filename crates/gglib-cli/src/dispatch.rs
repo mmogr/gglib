@@ -186,9 +186,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             }
         },
         Commands::Proxy {
-            host,
-            port,
-            default_context,
+            bind,
             sampling,
             cache,
             access,
@@ -231,15 +229,18 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
 
             handlers::inference::proxy::execute(
                 ctx,
-                host,
-                port,
-                default_context,
+                bind.host,
+                bind.port,
+                bind.default_context,
                 sampling,
                 cache,
                 access,
             )
             .await?;
         }
+
+        // ── Remote tunnel (ADR 0012) ────────────────────────────────────────
+        Commands::Remote { command } => handlers::remote::dispatch(command).await?,
 
         // ── MCP tool gateway ────────────────────────────────────────────────
         Commands::Mcp { command } => {
