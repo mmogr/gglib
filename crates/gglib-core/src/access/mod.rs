@@ -5,7 +5,7 @@ mod host;
 #[cfg(test)]
 mod host_tests;
 
-pub use bearer::bearer_matches;
+pub use bearer::{BearerPolicy, bearer_matches};
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 
 use crate::cors::CorsConfig;
@@ -16,7 +16,7 @@ use crate::cors::CorsConfig;
 /// decision rather than merely stating it — the same `(value, source)` shape
 /// [`resolve_context_size_with_source`](crate::server_config::resolve_context_size_with_source)
 /// uses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ApiKeySource {
     /// Supplied on the command line or through `GGLIB_API_KEY`.
     Flag,
@@ -26,6 +26,7 @@ pub enum ApiKeySource {
     /// supplied one. Printed once, then persisted to settings.
     Generated,
     /// No token configured; the endpoint is unauthenticated.
+    #[default]
     None,
 }
 
@@ -74,6 +75,11 @@ pub struct ProxyAccessConfig {
     pub cors: CorsConfig,
     /// Bearer token required on `/v1/*` and `/mcp`. `None` disables the check.
     pub api_key: Option<String>,
+    /// Where [`api_key`](Self::api_key) came from, which decides whether it may
+    /// later be replaced by a settings write. A flag or environment value
+    /// outranks the stored setting, so it must not be overridden by one; every
+    /// other source is the stored setting, or absent, and tracks it.
+    pub api_key_source: ApiKeySource,
     /// Host-header values accepted **in addition to** loopback, normalized to
     /// lowercase with any port stripped. Loopback is always accepted and is
     /// deliberately not listed here — it is a predicate
@@ -122,8 +128,21 @@ impl ProxyAccessConfig {
         Self {
             cors,
             api_key,
+            api_key_source: ApiKeySource::default(),
             allowed_hosts,
         }
+    }
+
+    /// Record where the token came from.
+    ///
+    /// Separate from [`new`](Self::new) so that adding it did not change a
+    /// signature every caller spells out; the supervisor is the only layer
+    /// that knows the answer, and every other construction site means
+    /// [`ApiKeySource::None`].
+    #[must_use]
+    pub const fn with_key_source(mut self, source: ApiKeySource) -> Self {
+        self.api_key_source = source;
+        self
     }
 
     /// Whether a request carrying this `Host` header may proceed.

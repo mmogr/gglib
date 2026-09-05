@@ -24,7 +24,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{bearer_matches, is_loopback_host, normalize_host};
+use gglib_core::access::{BearerPolicy, is_loopback_host, normalize_host};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use serde_json::json;
 use tracing::warn;
@@ -129,15 +129,13 @@ pub(crate) async fn host_guard(
 
 /// Require `Authorization: Bearer <token>` before a request reaches `/api/*`.
 ///
-/// Installed only when a token is configured, so the unauthenticated
-/// loopback default costs nothing per request. `expected` holds the bare
-/// token rather than a pre-formatted `"Bearer <token>"` string: the scheme is
-/// matched case-insensitively per RFC 9110, so there is no fixed header to
-/// compare against. The proxy's twin guard uses the same
-/// [`bearer_matches`] — the two doors have to agree about what a valid
-/// credential looks like, and until now they did not.
+/// Installed unconditionally, and reading the token it requires from
+/// [`BearerPolicy`] rather than from a value frozen at bind. The proxy's twin
+/// guard uses the same type for the same reasons: the two doors have to agree
+/// about what a valid credential looks like, and about which credential is
+/// valid right now.
 pub(crate) async fn bearer_guard(
-    State(expected): State<Arc<str>>,
+    State(policy): State<BearerPolicy>,
     req: Request,
     next: Next,
 ) -> Response {
@@ -146,7 +144,7 @@ pub(crate) async fn bearer_guard(
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok());
 
-    if bearer_matches(presented, &expected) {
+    if policy.admits(presented).await {
         return next.run(req).await;
     }
 

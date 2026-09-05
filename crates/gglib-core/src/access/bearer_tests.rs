@@ -87,3 +87,121 @@ fn the_credential_stays_case_sensitive() {
     assert!(!bearer_matches(Some("Bearer SK-SECRET123"), KEY));
     assert!(!bearer_matches(Some("bearer Sk-Secret123"), KEY));
 }
+
+mod policy {
+    use std::sync::{Arc, Mutex};
+
+    use super::super::BearerPolicy;
+    use crate::ports::{RepositoryError, SettingsRepository};
+    use crate::services::SettingsCache;
+    use crate::settings::Settings;
+
+    /// A repository whose stored key can be changed underneath a live policy,
+    /// standing in for the CLI writing the same database from another process.
+    struct Rotatable(Mutex<Settings>);
+
+    impl Rotatable {
+        fn new(key: Option<&str>) -> Arc<Self> {
+            let mut settings = Settings::with_defaults();
+            settings.proxy_api_key = key.map(str::to_owned);
+            Arc::new(Self(Mutex::new(settings)))
+        }
+
+        fn rotate_to(&self, key: Option<&str>) {
+            self.0.lock().unwrap().proxy_api_key = key.map(str::to_owned);
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SettingsRepository for Rotatable {
+        async fn load(&self) -> Result<Settings, RepositoryError> {
+            Ok(self.0.lock().unwrap().clone())
+        }
+        async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
+            *self.0.lock().unwrap() = settings.clone();
+            Ok(())
+        }
+    }
+
+    /// Zero TTL so a write is observed on the next read; the window itself is
+    /// already covered by the cache's own tests.
+    fn live(repo: Arc<Rotatable>) -> Arc<SettingsCache> {
+        Arc::new(SettingsCache::with_ttl(repo, std::time::Duration::ZERO))
+    }
+
+    /// The blocker this exists for: a key rotated after the endpoint bound is
+    /// the key it demands.
+    #[tokio::test]
+    async fn a_rotation_takes_effect_without_a_restart() {
+        let repo = Rotatable::new(Some("old-key"));
+        let policy = BearerPolicy::tracking(Some("old-key"), live(Arc::clone(&repo)));
+
+        assert!(policy.admits(Some("Bearer old-key")).await);
+
+        repo.rotate_to(Some("new-key"));
+        assert!(
+            policy.admits(Some("Bearer new-key")).await,
+            "the rotated key must be accepted"
+        );
+        assert!(
+            !policy.admits(Some("Bearer old-key")).await,
+            "the retired key must stop working"
+        );
+    }
+
+    /// The other half of unfreezing: an endpoint that bound with no token can
+    /// be closed without restarting it.
+    #[tokio::test]
+    async fn authentication_can_be_switched_on_at_runtime() {
+        let repo = Rotatable::new(None);
+        let policy = BearerPolicy::tracking(None, live(Arc::clone(&repo)));
+
+        assert!(policy.admits(None).await, "no token configured is open");
+
+        repo.rotate_to(Some("now-required"));
+        assert!(!policy.admits(None).await, "setting a key closes the door");
+        assert!(policy.admits(Some("Bearer now-required")).await);
+    }
+
+    /// And never off. A listener bound off loopback had a token minted for it
+    /// precisely because it is reachable; clearing the setting must not
+    /// silently expose it.
+    #[tokio::test]
+    async fn clearing_the_setting_does_not_reopen_a_closed_endpoint() {
+        let repo = Rotatable::new(Some("bound-with"));
+        let policy = BearerPolicy::tracking(Some("bound-with"), live(Arc::clone(&repo)));
+
+        repo.rotate_to(None);
+        assert!(
+            !policy.admits(None).await,
+            "an endpoint that required a token must keep requiring one"
+        );
+        assert!(
+            policy.admits(Some("Bearer bound-with")).await,
+            "it falls back to the token it bound with"
+        );
+    }
+
+    /// A blank stored value is not a credential. Settings validation refuses
+    /// one, and if it arrives anyway it must not read as "auth is off".
+    #[tokio::test]
+    async fn a_blank_stored_key_falls_back_rather_than_opening() {
+        let repo = Rotatable::new(Some("bound-with"));
+        let policy = BearerPolicy::tracking(Some("bound-with"), live(Arc::clone(&repo)));
+
+        repo.rotate_to(Some("   "));
+        assert!(!policy.admits(None).await);
+        assert!(policy.admits(Some("Bearer bound-with")).await);
+    }
+
+    /// `--api-key` and `GGLIB_API_KEY` outrank the stored setting, so a
+    /// settings write must not replace one — that would both invert the
+    /// documented precedence and lock out the operator who passed it.
+    #[tokio::test]
+    async fn a_pinned_key_ignores_the_stored_setting() {
+        let policy = BearerPolicy::pinned("from-the-flag");
+
+        assert!(policy.admits(Some("Bearer from-the-flag")).await);
+        assert!(!policy.admits(Some("Bearer whatever-is-stored")).await);
+    }
+}

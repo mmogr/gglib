@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
+use gglib_core::access::{ApiKeySource, BearerPolicy};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
@@ -356,15 +357,17 @@ pub async fn serve(
         .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp));
 
-    // Installed only when a token is configured, so the unauthenticated
-    // loopback default — still the common case — pays nothing per request.
-    if let Some(expected) = access.api_key.clone() {
-        let expected: Arc<str> = Arc::from(expected);
-        protected = protected.route_layer(axum::middleware::from_fn_with_state(
-            expected,
-            crate::access::bearer_guard,
-        ));
-    }
+    // Unconditional: a key set after this process started has to have a layer
+    // to be enforced by. Which key it is, and whether one is required at all,
+    // is re-decided per request from the settings cache below.
+    let policy = match access.api_key_source {
+        ApiKeySource::Flag => BearerPolicy::pinned(access.api_key.as_deref().unwrap_or_default()),
+        _ => BearerPolicy::tracking(access.api_key.as_deref(), Arc::clone(&state.settings)),
+    };
+    protected = protected.route_layer(axum::middleware::from_fn_with_state(
+        policy,
+        crate::access::bearer_guard,
+    ));
 
     let app = Router::new()
         .route("/health", get(health_check))

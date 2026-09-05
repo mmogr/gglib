@@ -4,7 +4,10 @@
 //! complexity budget, and because this is one self-contained decision: given
 //! what a client sent and what the endpoint expects, does the request get in.
 
+use std::sync::Arc;
+
 use super::constant_time_eq;
+use crate::services::SettingsCache;
 
 /// The auth scheme this endpoint speaks, compared case-insensitively.
 const BEARER: &str = "bearer";
@@ -68,6 +71,112 @@ pub fn bearer_matches(presented: Option<&str>, expected_key: &str) -> bool {
     }
 
     constant_time_eq(credential.as_bytes(), expected_key.as_bytes())
+}
+
+/// Which token a running endpoint currently requires.
+///
+/// # Why this is not just a string
+///
+/// The expected token used to be resolved once, at bind, and baked into the
+/// middleware — so a key rotated afterwards was never honoured and a key set
+/// afterwards was never enforced. Worse, the guard was only *installed* when a
+/// token existed at bind, so an endpoint that started open could not be closed
+/// without a restart.
+///
+/// The fix cannot be an in-process notification. `gglib config settings set`
+/// writes the database from a **separate process**, so nothing the daemon
+/// subscribes to would ever see it — the same reasoning
+/// [`SettingsCache`](crate::services::SettingsCache) already records for every
+/// other setting. Reading through that cache is what makes a rotation take
+/// effect here at all.
+///
+/// **The staleness is bounded, not zero.** A revoked key keeps working for up
+/// to [`SETTINGS_CACHE_TTL`](crate::services::SETTINGS_CACHE_TTL). That is the
+/// accepted trade, and it is strictly better than what it replaces, where a
+/// rotation performed through the CLI never took effect at all.
+#[derive(Clone)]
+pub struct BearerPolicy {
+    /// A token supplied by flag or environment. It does not live in settings,
+    /// so nothing in settings may override it.
+    pinned: Option<Arc<str>>,
+    /// The token in force at bind, kept as a floor.
+    floor: Option<Arc<str>>,
+    /// The live view of the stored token.
+    settings: Option<Arc<SettingsCache>>,
+}
+
+impl BearerPolicy {
+    /// A token the operator supplied directly, which never tracks settings.
+    ///
+    /// `--api-key` and `GGLIB_API_KEY` outrank the stored value by design, so
+    /// letting a settings write replace one would both invert that precedence
+    /// and lock out the operator who passed it.
+    #[must_use]
+    pub fn pinned(key: &str) -> Self {
+        Self {
+            pinned: Some(Arc::from(key)),
+            floor: None,
+            settings: None,
+        }
+    }
+
+    /// A token read from settings — or absent — which tracks later writes.
+    ///
+    /// `bind_key` is whatever was in force when the endpoint bound, and is
+    /// kept as a floor: if the stored value later disappears, this endpoint
+    /// keeps demanding the token it started with rather than falling open.
+    /// **Authentication can be switched on at runtime and never off**, which
+    /// is the asymmetry a listener bound off loopback needs — clearing the
+    /// setting must not silently expose it.
+    #[must_use]
+    pub fn tracking(bind_key: Option<&str>, settings: Arc<SettingsCache>) -> Self {
+        Self {
+            pinned: None,
+            floor: bind_key.map(Arc::from),
+            settings: Some(settings),
+        }
+    }
+
+    /// A token that can never change and is never required. For hosts with no
+    /// settings to read, such as tests and embedded servers.
+    #[must_use]
+    pub fn fixed(key: Option<&str>) -> Self {
+        Self {
+            pinned: key.map(Arc::from),
+            floor: None,
+            settings: None,
+        }
+    }
+
+    /// The token a request must present right now, or `None` while this
+    /// endpoint is unauthenticated.
+    pub async fn current(&self) -> Option<Arc<str>> {
+        if let Some(pinned) = &self.pinned {
+            return Some(Arc::clone(pinned));
+        }
+        let stored = match &self.settings {
+            Some(cache) => cache
+                .get()
+                .await
+                .proxy_api_key
+                .as_deref()
+                .filter(|key| !key.trim().is_empty())
+                .map(Arc::from),
+            None => None,
+        };
+        stored.or_else(|| self.floor.clone())
+    }
+
+    /// Whether `presented` gets in.
+    ///
+    /// An endpoint with no token configured admits everyone, which is the
+    /// loopback default and the behaviour this had before authentication
+    /// existed.
+    pub async fn admits(&self, presented: Option<&str>) -> bool {
+        self.current()
+            .await
+            .is_none_or(|expected| bearer_matches(presented, &expected))
+    }
 }
 
 #[cfg(test)]

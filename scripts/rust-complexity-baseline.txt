@@ -21,7 +21,7 @@ crates/gglib-app-services/src/types.rs 1055
 crates/gglib-axum/src/bootstrap.rs 335
 crates/gglib-axum/src/chat_api.rs 735
 crates/gglib-axum/src/handlers/config/setup.rs 310
-crates/gglib-axum/src/routes.rs 470
+crates/gglib-axum/src/routes.rs 472
 crates/gglib-axum/tests/integration_routes.rs 1029
 crates/gglib-cli/src/commands.rs 342
 crates/gglib-cli/src/daemon_client/mod.rs 324
@@ -137,7 +137,7 @@ crates/gglib-proxy/src/props_baseline_tests.rs 404
 crates/gglib-proxy/src/repair.rs 666
 crates/gglib-proxy/src/sampling_audit.rs 1162
 crates/gglib-proxy/src/sampling_audit_tests.rs 1017
-crates/gglib-proxy/src/server.rs 1306
+crates/gglib-proxy/src/server.rs 1309
 crates/gglib-proxy/src/slots.rs 1246
 crates/gglib-proxy/src/slots_poller.rs 806
 crates/gglib-proxy/src/sse_stream.rs 385
@@ -168,7 +168,7 @@ crates/gglib-runtime/src/process/residency/launch.rs 540
 crates/gglib-runtime/src/process/residency/mod.rs 637
 crates/gglib-runtime/src/process/residency/residency_tests.rs 323
 crates/gglib-runtime/src/process/residency/vram.rs 361
-crates/gglib-runtime/src/proxy/supervisor.rs 789
+crates/gglib-runtime/src/proxy/supervisor.rs 790
 crates/gglib-runtime/src/system/mod.rs 641
 crates/gglib-runtime/src/unified_server_config.rs 501
 crates/gglib-sse/src/lib.rs 325

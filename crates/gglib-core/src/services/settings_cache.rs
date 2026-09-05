@@ -14,7 +14,7 @@
 //! # Why a TTL rather than invalidation on write
 //!
 //! The obvious alternative — clear the cache whenever settings are saved —
-//! cannot work here. The CLI writes the same SQLite file from a **separate
+//! cannot work here. The CLI writes the same `SQLite` file from a **separate
 //! process**, so an in-process invalidation hook would never observe
 //! `gglib config profile set` while the proxy is running. A TTL bounds
 //! staleness uniformly no matter which process did the writing, at the cost of
@@ -169,7 +169,7 @@ mod tests {
     #[tokio::test]
     async fn repeated_reads_within_the_window_load_once() {
         let repo = Arc::new(CountingRepo::default());
-        let cache = SettingsCache::with_ttl(Arc::clone(&repo) as _, Duration::from_secs(60));
+        let cache = SettingsCache::with_ttl(Arc::clone(&repo) as _, Duration::from_mins(1));
 
         for _ in 0..10 {
             let _ = cache.get().await;
@@ -234,7 +234,7 @@ mod tests {
         let repo = Arc::new(CountingRepo::default());
         let cache = Arc::new(SettingsCache::with_ttl(
             Arc::clone(&repo) as _,
-            Duration::from_secs(60),
+            Duration::from_mins(1),
         ));
 
         let handles: Vec<_> = (0..16)

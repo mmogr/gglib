@@ -368,7 +368,8 @@ impl ProxySupervisor {
             api_key.clone(),
             &config.host,
             config.allowed_hosts,
-        );
+        )
+        .with_key_source(api_key_source);
 
         // Start reading the device's memory capacity, but do not wait for it.
         // The admission path needs the figure to fit a context and the probe is
