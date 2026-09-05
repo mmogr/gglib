@@ -10,6 +10,7 @@ export type SidebarTabId = 'models' | 'add';
 import ModelsListContent from './ModelsListContent';
 import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
+import RemoteControl from '../RemoteControl';
 import { FilterPopover, FilterState } from '../FilterPopover';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -145,6 +146,12 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         </Button>
       )}
       <ProxyControl
+        compact
+        buttonClassName="relative text-base w-auto h-auto py-xs px-sm gap-xs inline-flex"
+        statusDotClassName="absolute top-[2px] right-[2px] w-[6px] h-[6px] rounded-full bg-transparent"
+        statusDotActiveClassName="bg-success animate-pulse"
+      />
+      <RemoteControl
         compact
         buttonClassName="relative text-base w-auto h-auto py-xs px-sm gap-xs inline-flex"
         statusDotClassName="absolute top-[2px] right-[2px] w-[6px] h-[6px] rounded-full bg-transparent"
