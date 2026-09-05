@@ -23,6 +23,7 @@ All TypeScript types and DTOs forming the contract between the frontend and back
 | `mcp.ts` | MCP server and tool shapes |
 | `verification.ts` | Model verification shapes |
 | `proxy.ts` | Proxy status and configuration shapes |
+| `remote.ts` | Remote tunnel shapes, all re-exported bindings — the status carries fingerprints, never a ticket |
 | `dashboard.ts` | The proxy dashboard snapshot graph |
 | `admission.ts` | Slot admission and residency shapes |
 

@@ -76,6 +76,7 @@ When a model is served, users can switch between Chat and Console views:
 - **`ServerHealthIndicator.tsx`**: Server health at a glance
 - **`ServerList/`**: List of running server instances
 - **`ProxyControl.tsx`**: OpenAI-compatible proxy controls
+- **`RemoteControl.tsx`**: The remote tunnel popover (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`
 - **`LlamaInstallModal.tsx`**: llama.cpp installation wizard
 
 ### Support Components

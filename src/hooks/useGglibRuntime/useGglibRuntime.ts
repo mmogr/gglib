@@ -1,3 +1,9 @@
+/** Whether the Remote panel asked for chat to go to the connected machine. */
+function askTheRemote(): boolean {
+  const remote = getRemoteState();
+  return remote.useForChat && remote.status?.connected != null;
+}
+
 /**
  * Custom runtime hook using ExternalStoreRuntime.
  * 
@@ -18,6 +24,7 @@ import {
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage, mkAssistantMessage } from '../../types/messages';
 import { streamAgentChat } from './streamAgentChat';
+import { getRemoteState } from '../../services/remoteRegistry';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 import { isAbortError } from '../../utils/errors';
@@ -171,6 +178,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         // sampling, not agent-loop configuration.
         reasoning: reasoningOverridesToWire(),
         supportsToolCalls,
+        // Read at send time, not render time: the Remote panel's choice may
+        // change between turns, and a preference for a machine that has
+        // since disconnected is already cleared by the registry.
+        remote: askTheRemote(),
         onSystemWarning,
       });
     } catch (error) {
