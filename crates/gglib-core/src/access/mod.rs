@@ -10,7 +10,10 @@ mod host_tests;
 pub use bearer::{BearerPolicy, bearer_matches};
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 
+use std::sync::Arc;
+
 use crate::cors::CorsConfig;
+use crate::ports::RemoteGatewayPort;
 
 /// Where the proxy's bearer token came from.
 ///
@@ -89,7 +92,7 @@ pub fn generate_pairing_code() -> String {
 ///   as it behaved before authentication existed.
 /// * [`allowed_hosts`](Self::allowed_hosts) is always enforced. It is the
 ///   DNS-rebinding defence, and it does not depend on a token being set.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 pub struct ProxyAccessConfig {
     /// Which origins the CORS layer accepts.
     pub cors: CorsConfig,
@@ -106,7 +109,29 @@ pub struct ProxyAccessConfig {
     /// ([`is_loopback_host`]), so `127.0.0.2` and `::1` are covered without
     /// anyone having to enumerate them.
     pub allowed_hosts: Vec<String>,
+    /// The remote tunnel's owner, when this proxy may be reached through one
+    /// (ADR 0012). Travels with the access policy because it *is* one: it
+    /// redeems the pairing code that hands out the key, and it decides
+    /// whether a request that arrived through the tunnel may reach `/mcp`.
+    /// `None` for an embedded server or a test, where nothing is listening
+    /// for the answers.
+    pub remote: Option<Arc<dyn RemoteGatewayPort>>,
 }
+
+/// Equality is over the *policy* — CORS, token, source, hosts — and not
+/// over [`remote`](ProxyAccessConfig::remote), which is a live object rather
+/// than a value. Two configs that differ only in whether a tunnel owner is
+/// attached describe the same access rules.
+impl PartialEq for ProxyAccessConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.cors == other.cors
+            && self.api_key == other.api_key
+            && self.api_key_source == other.api_key_source
+            && self.allowed_hosts == other.allowed_hosts
+    }
+}
+
+impl Eq for ProxyAccessConfig {}
 
 impl ProxyAccessConfig {
     /// Build the access policy for a proxy about to bind `bind_host`.
@@ -150,7 +175,19 @@ impl ProxyAccessConfig {
             api_key,
             api_key_source: ApiKeySource::default(),
             allowed_hosts,
+            remote: None,
         }
+    }
+
+    /// Attach the remote tunnel's owner.
+    ///
+    /// Separate from [`new`](Self::new) for the reason
+    /// [`with_key_source`](Self::with_key_source) is: only the supervisor has
+    /// one to attach, and every other construction site means "no tunnel".
+    #[must_use]
+    pub fn with_remote(mut self, remote: Option<Arc<dyn RemoteGatewayPort>>) -> Self {
+        self.remote = remote;
+        self
     }
 
     /// Record where the token came from.

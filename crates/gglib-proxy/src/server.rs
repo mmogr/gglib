@@ -8,35 +8,32 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 
 use axum::{
-    Json, Router,
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use bytes::Bytes;
 use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
-use gglib_core::access::{ApiKeySource, BearerPolicy};
+use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::ports::RemoteGatewayPort;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
 use gglib_core::request_pipeline::{ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
-use gglib_core::{CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
 
 use crate::cache_lifecycle::{StreamConfig, resolve_cache_triple, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, ForwardRequest};
-use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse};
@@ -95,6 +92,10 @@ pub(crate) struct AppState {
     /// `None` for an embedded server or a test, where there is no daemon to
     /// stop and the remote shutdown route says so rather than pretending.
     daemon_shutdown: Option<CancellationToken>,
+    /// The remote tunnel's owner, when this proxy may be reached through one.
+    /// Asked to redeem a pairing code and whether `/mcp` is open to tunnelled
+    /// requests; told when one arrives. `None` where no tunnel can exist.
+    remote: Option<Arc<dyn RemoteGatewayPort>>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -139,6 +140,11 @@ impl AppState {
         self.daemon_shutdown.clone()
     }
 
+    /// The remote tunnel's owner, when there is one.
+    pub(crate) fn remote_gateway(&self) -> Option<Arc<dyn RemoteGatewayPort>> {
+        self.remote.clone()
+    }
+
     pub(crate) fn build_stream_config(
         &self,
         base_url: String,
@@ -180,33 +186,6 @@ impl AppState {
 /// # Returns
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
-/// Build CORS layer from configuration.
-fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    match config {
-        CorsConfig::AllowAll => CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-        CorsConfig::AllowOrigins(origins) => {
-            use axum::http::HeaderValue;
-            let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
-            CorsLayer::new()
-                .allow_origin(allowed)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        CorsConfig::LocalOnly => {
-            let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
-                gglib_core::is_local_origin(origin.to_str().unwrap_or(""))
-            });
-            CorsLayer::new()
-                .allow_origin(local)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 pub async fn serve(
     listener: TcpListener,
@@ -349,6 +328,7 @@ pub async fn serve(
         settings: Arc::new(SettingsCache::new(settings_repo)),
         shutdown: cancel.clone(),
         daemon_shutdown: daemon_cancel,
+        remote: access.remote.clone(),
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
         inference_override,
@@ -363,56 +343,7 @@ pub async fn serve(
         last_loaded_session,
     };
 
-    // Everything a client can reach with credentials. Grouped separately from
-    // `/health` so `route_layer` can require the bearer token here without
-    // closing the one endpoint a supervisor or a load balancer needs to poll
-    // before it has any credentials to poll with.
-    let mut protected = Router::new()
-        .route("/v1/models", get(crate::models_endpoint::list_models))
-        .route("/v1/chat/completions", post(chat_completions))
-        .route("/v1/embeddings", post(crate::embeddings::embeddings))
-        .route("/v1/proxy/status", get(handle_proxy_status))
-        .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
-        .route(
-            "/v1/proxy/cache/clear",
-            post(crate::admin::handle_proxy_cache_clear),
-        )
-        .route(
-            "/v1/proxy/shutdown",
-            post(crate::admin::handle_proxy_shutdown),
-        )
-        .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp));
-
-    // Unconditional: a key set after this process started has to have a layer
-    // to be enforced by. Which key it is, and whether one is required at all,
-    // is re-decided per request from the settings cache below.
-    let policy = match access.api_key_source {
-        ApiKeySource::Flag => BearerPolicy::pinned(access.api_key.as_deref().unwrap_or_default()),
-        _ => BearerPolicy::tracking(access.api_key.as_deref(), Arc::clone(&state.settings)),
-    };
-    protected = protected.route_layer(axum::middleware::from_fn_with_state(
-        policy,
-        crate::access::bearer_guard,
-    ));
-
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .merge(protected)
-        // Host allowlist: always on, and outside the router so it covers
-        // `/health` and unmatched paths too. This is the DNS-rebinding guard;
-        // see the `access` module for why CORS alone does not cover it.
-        .layer(axum::middleware::from_fn_with_state(
-            Arc::new(access.clone()),
-            crate::access::host_guard,
-        ))
-        // LocalOnly CORS: mirrors the Axum web server's default security posture.
-        // Only localhost, 127.0.0.1, ::1, and tauri://localhost origins are accepted.
-        //
-        // Outermost deliberately: it answers OPTIONS preflight itself, and a
-        // preflight that reached the guards above would be refused for carrying
-        // credentials it is not allowed to carry yet.
-        .layer(build_cors_layer(&access.cors))
-        .with_state(state);
+    let app = crate::router::build(state, access);
 
     info!("Proxy listening on {addr}");
     info!("Configure OpenWebUI to use: http://{addr}/v1");
@@ -442,7 +373,7 @@ pub async fn serve(
 }
 
 /// Health check endpoint.
-async fn health_check() -> impl IntoResponse {
+pub(crate) async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "ok"
     }))
@@ -454,7 +385,7 @@ async fn health_check() -> impl IntoResponse {
 /// This is the shared data contract for the CLI TUI and web dashboard.
 /// Fully replaces the old `{snapshots, total_requests}` shape — see the
 /// `dashboard` module docs for why no backwards-compatible shim is kept.
-async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse {
+pub(crate) async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse {
     Json(state.dashboard.snapshot())
 }
 
@@ -465,7 +396,7 @@ async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse
 /// client immediately receives one event carrying the current snapshot,
 /// then a fresh snapshot on every subsequent publish tick — no waiting for
 /// the next tick to see the current state.
-async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoResponse {
+pub(crate) async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoResponse {
     let current = state.dashboard.snapshot();
     // Bounded by the shutdown token: this stream is the one response on the
     // proxy that would otherwise never end, and `with_graceful_shutdown` waits
@@ -481,7 +412,7 @@ async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoR
 }
 
 /// Handle chat completions - ensure model is running and proxy to llama-server.
-async fn chat_completions(
+pub(crate) async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
