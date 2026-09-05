@@ -47,6 +47,7 @@ pub(crate) mod model_sort;
 pub(crate) mod parser;
 pub(crate) mod presentation;
 pub(crate) mod profile_args;
+pub(crate) mod proxy_bind_args;
 pub(crate) mod reasoning_args;
 pub(crate) mod sampling_params;
 pub(crate) mod shared_args;

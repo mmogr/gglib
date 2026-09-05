@@ -39,7 +39,8 @@ Interfaces:\n  \
 gui             Launch the Tauri desktop GUI\n  \
 web             Ensure the daemon is up and print its URL\n  \
 proxy           Start OpenAI-compatible proxy with MCP tool gateway\n  \
-daemon          Run, inspect and stop the background daemon\n\n\
+daemon          Run, inspect and stop the background daemon\n  \
+remote          Put this machine's proxy on another machine, securely\n\n\
 Measurement:\n  \
 benchmark       Measure a model, and tune its sampling defaults\n\n\
 Shell:\n  \

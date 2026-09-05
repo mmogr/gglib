@@ -106,3 +106,42 @@ pub enum DaemonCommand {
     /// Stop the running daemon (and every llama-server it owns)
     Stop,
 }
+
+/// Subcommands available under `gglib remote`.
+///
+/// The serve side of ADR 0012. Off by default and never persisted: `enable`
+/// arms the tunnel for the running daemon only.
+#[derive(Subcommand)]
+pub enum RemoteCommand {
+    /// Put this machine's proxy on another machine, and show the pairing
+    ///
+    /// Brings the tunnel up on the daemon, mints a fresh ticket and a
+    /// six-digit pairing code, and shows both once. The code lives two
+    /// minutes and is spent on first use. Enabling also puts the API key on
+    /// the local proxy, and disabling does not take that away.
+    Enable {
+        /// Let requests arriving through the tunnel reach /mcp
+        ///
+        /// Off by default: invoke_tool starts the MCP servers configured on
+        /// this machine, and a leaked key with a shell server configured is
+        /// remote code execution.
+        #[arg(long)]
+        allow_mcp: bool,
+        /// Self-hosted relay URL (default: iroh's public relays)
+        #[arg(long)]
+        relay: Option<String>,
+        /// Do not publish to, or resolve through, n0's discovery service
+        ///
+        /// The ticket then carries only the paths it was minted with and
+        /// stops working if this machine changes network.
+        #[arg(long)]
+        no_discovery: bool,
+        /// Print the pairing as plain text instead of the QR screen
+        #[arg(long)]
+        no_qr: bool,
+    },
+    /// Take the tunnel down; the ticket is dead from that moment
+    Disable,
+    /// Show the tunnel's state, its peers, and what came through it
+    Status,
+}

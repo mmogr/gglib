@@ -31,6 +31,15 @@ pub const SERVERS_START_PATH: &str = "/api/servers/start";
 /// Ask the daemon to shut down.
 pub const DAEMON_SHUTDOWN_PATH: &str = "/api/daemon/shutdown";
 
+/// Bring the remote tunnel up and arm a pairing (ADR 0012).
+pub const REMOTE_ENABLE_PATH: &str = "/api/remote/enable";
+
+/// Take the remote tunnel down.
+pub const REMOTE_DISABLE_PATH: &str = "/api/remote/disable";
+
+/// The remote tunnel's status.
+pub const REMOTE_STATUS_PATH: &str = "/api/remote/status";
+
 /// Download queue: `POST` enqueues, `GET` returns the snapshot.
 ///
 /// One path for both verbs. The snapshot handler was once double-mounted at
@@ -76,6 +85,9 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], PROXY_STATUS_PATH),
     (&["POST"], SERVERS_START_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
+    (&["POST"], REMOTE_ENABLE_PATH),
+    (&["POST"], REMOTE_DISABLE_PATH),
+    (&["GET"], REMOTE_STATUS_PATH),
     (&["GET", "POST"], DOWNLOADS_QUEUE_PATH),
     (&["GET"], MODELS_LIST_PATH),
     (&["POST"], BENCHMARK_COMPARE_PATH),
