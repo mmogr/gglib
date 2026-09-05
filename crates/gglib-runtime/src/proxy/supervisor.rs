@@ -131,6 +131,11 @@ pub struct ProxyConfig {
     /// to generating one when the bind is not loopback — see
     /// [`ProxySupervisor::start`].
     pub api_key: Option<String>,
+    /// The daemon's cancellation token, when this proxy is being started by
+    /// one. Passed through to the remote shutdown route, which is the only
+    /// thing that uses it; `None` for an embedded server, where there is no
+    /// daemon to stop.
+    pub daemon_cancel: Option<tokio_util::sync::CancellationToken>,
     /// Host header values to accept beyond loopback and the bound address
     /// (`--allowed-host`). Empty is the norm; a wildcard bind is the case that
     /// needs it.
@@ -149,6 +154,7 @@ impl Default for ProxyConfig {
             inference_override: None,
             default_profile: None,
             api_key: None,
+            daemon_cancel: None,
             allowed_hosts: Vec::new(),
         }
     }
@@ -361,6 +367,7 @@ impl ProxySupervisor {
         // Settled after the bind so the decision is made against the host that
         // was actually asked for, and before the spawn so a generated key is
         // already persisted by the time the endpoint accepts its first request.
+        let daemon_cancel = config.daemon_cancel.clone();
         let (api_key, api_key_source) =
             resolve_api_key(config.api_key, &config.host, &settings_repo).await;
         let access = ProxyAccessConfig::new(
@@ -424,6 +431,7 @@ impl ProxySupervisor {
                 catalog_port,
                 mcp,
                 cancel_clone,
+                daemon_cancel,
                 settings_repo,
                 inference_override,
                 default_profile,

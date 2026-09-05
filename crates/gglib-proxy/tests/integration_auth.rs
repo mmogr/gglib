@@ -56,6 +56,7 @@ async fn spawn_proxy(access: ProxyAccessConfig) -> (String, u16, CancellationTok
             catalog,
             make_mcp_service(),
             cancel_clone,
+            None, // daemon_cancel: no daemon in tests
             Arc::new(MockSettingsRepo),
             None,  // inference_override
             None,  // default_profile
