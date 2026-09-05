@@ -118,6 +118,11 @@ pub(super) async fn perform_shutdown(state: &AppState) {
     if let Err(e) = state.remote.disable().await {
         tracing::debug!("remote disable during shutdown: {e}");
     }
+    //    And the connect side, so a client on the loopback port hears a
+    //    closed socket now rather than a dead one later.
+    if let Err(e) = state.remote.disconnect().await {
+        tracing::debug!("remote disconnect during shutdown: {e}");
+    }
 
     // 1. Drain the proxy so in-flight requests finish before their upstream
     //    dies. "Not running" is a fine answer.

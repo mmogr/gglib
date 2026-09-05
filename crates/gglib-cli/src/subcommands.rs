@@ -109,8 +109,8 @@ pub enum DaemonCommand {
 
 /// Subcommands available under `gglib remote`.
 ///
-/// The serve side of ADR 0012. Off by default and never persisted: `enable`
-/// arms the tunnel for the running daemon only.
+/// Both sides of ADR 0012. Off by default and never persisted: `enable` arms
+/// the serve side and `connect` the connect side for the running daemon only.
 #[derive(Subcommand)]
 pub enum RemoteCommand {
     /// Put this machine's proxy on another machine, and show the pairing
@@ -144,4 +144,35 @@ pub enum RemoteCommand {
     Disable,
     /// Show the tunnel's state, its peers, and what came through it
     Status,
+    /// Reach another machine's proxy: bind a local port here that is it
+    ///
+    /// First time, paste the whole `<ticket>-<code>` string that machine's
+    /// `gglib remote enable` showed; the code is redeemed through the tunnel
+    /// for that machine's API key, which is stored here. Afterwards the
+    /// ticket alone will do, and with no argument the last ticket is dialled.
+    Connect {
+        /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
+        pairing: Option<String>,
+        /// Loopback port to bind here (default: a free one)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Self-hosted relay URL for this side (default: iroh's public relays)
+        #[arg(long)]
+        relay: Option<String>,
+        /// Do not resolve through n0's discovery service; dial only the
+        /// paths the ticket carries
+        #[arg(long)]
+        no_discovery: bool,
+    },
+    /// Close the local port; the far machine and the stored pairing stay
+    Disconnect,
+    /// Stop the far machine's daemon through the tunnel, then disconnect
+    ///
+    /// A one-way door: nothing brings that daemon back except someone at
+    /// the machine. Asks before doing it unless --yes is given.
+    Kill {
+        /// Do not ask for confirmation
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
