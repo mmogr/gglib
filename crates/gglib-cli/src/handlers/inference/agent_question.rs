@@ -6,7 +6,7 @@
 //! wants to continue the conversation.
 
 use std::env;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal};
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
@@ -41,6 +41,8 @@ pub(crate) struct QuestionArgs {
     pub model_arg: Option<String>,
     pub file: Option<String>,
     pub port: Option<u16>,
+    /// Drive the machine on the other end of `gglib remote connect`.
+    pub remote: bool,
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,
@@ -64,6 +66,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         model_arg,
         file,
         port,
+        remote,
         max_iterations,
         tools,
         tool_timeout_ms,
@@ -83,6 +86,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         model_identifier: model_arg.clone().unwrap_or_default(),
         ctx_size: context.ctx_size,
         port,
+        remote,
         tools: tools.clone(),
         model_name: model_arg.clone(),
         // `gglib q` takes no retry flag; the environment defaults apply.
@@ -118,7 +122,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         ..params
     };
 
-    let params = if params.model_identifier.is_empty() {
+    // No model and `--remote`: the far machine serves whatever it serves, and
+    // this machine's default is a model it may not even have.
+    let params = if params.model_identifier.is_empty() && !remote {
         let default_id = settings.default_model_id.ok_or_else(|| {
             anyhow!(
                 "No model specified and no default model set.\n\
@@ -256,7 +262,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
 
     if completed && interactive {
         if let Some(history) = history
-            && ask_continue()?
+            && super::question_input::ask_continue()?
         {
             run_repl_with_history(agent, history, config, verbose, persistence).await?;
         }
@@ -267,31 +273,4 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // The llama-server belongs to the daemon and stays warm for the next
     // session; nothing to stop here.
     Ok(())
-}
-
-/// Prompt the user to continue into an interactive chat session.
-///
-/// Returns `true` for 'y', 'Y', or empty input (Enter); `false` for
-/// anything else.  EOF (Ctrl+D) is treated as a clean decline.
-fn ask_continue() -> Result<bool> {
-    // Flush stdout to ensure the agent's final output is fully rendered
-    // before we print the prompt — prevents interleaving.
-    io::stdout().flush().ok();
-    eprintln!();
-    eprint!("[Continue chatting? (y/n)] ");
-    io::stderr().flush().ok();
-
-    let mut input = String::new();
-    let bytes = io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| anyhow!("failed to read input: {e}"))?;
-
-    // EOF (Ctrl+D) → treat as 'n'
-    if bytes == 0 {
-        eprintln!();
-        return Ok(false);
-    }
-
-    let answer = input.trim();
-    Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
 }

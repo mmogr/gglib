@@ -9,7 +9,9 @@ Interactive agentic chat handler for `gglib chat`.
 
 Entry point: [`run`].  Sub-modules keep each concern small and
 independently readable:
-- [`config`]   — resolves LLM port + MCP tools, composes an [`gglib_core::ports::AgentLoopPort`]
+- [`config`]   — resolves MCP tools + sampling, composes an [`gglib_core::ports::AgentLoopPort`]
+- [`upstream`] — which machine answers: a llama-server here (`--port`, or one the
+  daemon starts) or the remote tunnel's port with the pairing's key (`--remote`)
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
 - [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
 - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
@@ -35,6 +37,7 @@ independently readable:
 | [`sampling_warning.rs`](sampling_warning.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-sampling_warning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-sampling_warning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-sampling_warning-coverage.json) |
 | [`thinking_dispatch.rs`](thinking_dispatch.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-thinking_dispatch-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-thinking_dispatch-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-thinking_dispatch-coverage.json) |
 | [`tool_format.rs`](tool_format.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-tool_format-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-tool_format-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-tool_format-coverage.json) |
+| [`upstream.rs`](upstream.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-upstream-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-upstream-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-upstream-coverage.json) |
 <!-- module-table:end -->
 
 </details>
