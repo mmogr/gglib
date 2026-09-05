@@ -86,7 +86,7 @@ pub fn bearer_matches(presented: Option<&str>, expected_key: &str) -> bool {
 /// The fix cannot be an in-process notification. `gglib config settings set`
 /// writes the database from a **separate process**, so nothing the daemon
 /// subscribes to would ever see it — the same reasoning
-/// [`SettingsCache`](crate::services::SettingsCache) already records for every
+/// [`SettingsCache`] already records for every
 /// other setting. Reading through that cache is what makes a rotation take
 /// effect here at all.
 ///

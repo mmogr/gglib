@@ -76,7 +76,7 @@ impl DaemonAccess {
     /// authentication is off.
     ///
     /// The token rather than a pre-formatted `"Bearer <token>"` header,
-    /// because [`bearer_matches`] parses the scheme instead of comparing a
+    /// because [`BearerPolicy`] parses the scheme instead of comparing a
     /// fixed string — see the guard below.
     #[must_use]
     pub fn api_key(&self) -> Option<&str> {

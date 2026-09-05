@@ -65,9 +65,13 @@ banner can explain the decision instead of merely stating it — and so a token
 this process **generated** can be printed once, while one the operator already
 holds is not echoed into terminal scrollback.
 
-[`expected_authorization`](ProxyAccessConfig::expected_authorization)
-pre-formats the full `Bearer <token>` string, so the per-request check is a
-comparison rather than an allocation.
+[`bearer_matches`] decides whether a request presents it. The auth scheme is
+matched case-insensitively, because RFC 9110 says it is a token and tokens are
+case-insensitive; only the credential goes to [`constant_time_eq`].
+
+[`BearerPolicy`] decides *which* token is required, and it is a live question
+rather than a bind-time one — a key rotated afterwards has to be honoured, and
+a key set afterwards has to be enforced.
 
 <!-- module-docs:end -->
 
