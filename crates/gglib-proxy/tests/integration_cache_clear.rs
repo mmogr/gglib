@@ -78,6 +78,7 @@ async fn spawn_proxy(
             catalog,
             mcp,
             cancel_clone,
+            None, // daemon_cancel: no daemon in tests
             Arc::new(fixtures::common::MockSettingsRepo),
             None, // inference_override
             None, // default_profile

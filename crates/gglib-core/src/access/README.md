@@ -65,9 +65,13 @@ banner can explain the decision instead of merely stating it — and so a token
 this process **generated** can be printed once, while one the operator already
 holds is not echoed into terminal scrollback.
 
-[`expected_authorization`](ProxyAccessConfig::expected_authorization)
-pre-formats the full `Bearer <token>` string, so the per-request check is a
-comparison rather than an allocation.
+[`bearer_matches`] decides whether a request presents it. The auth scheme is
+matched case-insensitively, because RFC 9110 says it is a token and tokens are
+case-insensitive; only the credential goes to [`constant_time_eq`].
+
+[`BearerPolicy`] decides *which* token is required, and it is a live question
+rather than a bind-time one — a key rotated afterwards has to be honoured, and
+a key set afterwards has to be enforced.
 
 <!-- module-docs:end -->
 
@@ -77,6 +81,8 @@ comparison rather than an allocation.
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`bearer.rs`](bearer.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-bearer-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-bearer-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-bearer-coverage.json) |
+| [`bearer_tests.rs`](bearer_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-bearer_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-bearer_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-bearer_tests-coverage.json) |
 | [`host.rs`](host.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-host-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-host-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-host-coverage.json) |
 | [`host_tests.rs`](host_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-host_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-host_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-access-host_tests-coverage.json) |
 <!-- module-table:end -->

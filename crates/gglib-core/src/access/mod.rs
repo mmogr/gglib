@@ -1,9 +1,11 @@
 #![doc = include_str!("README.md")]
+mod bearer;
 mod host;
 
 #[cfg(test)]
 mod host_tests;
 
+pub use bearer::{BearerPolicy, bearer_matches};
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 
 use crate::cors::CorsConfig;
@@ -14,7 +16,7 @@ use crate::cors::CorsConfig;
 /// decision rather than merely stating it — the same `(value, source)` shape
 /// [`resolve_context_size_with_source`](crate::server_config::resolve_context_size_with_source)
 /// uses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ApiKeySource {
     /// Supplied on the command line or through `GGLIB_API_KEY`.
     Flag,
@@ -24,6 +26,7 @@ pub enum ApiKeySource {
     /// supplied one. Printed once, then persisted to settings.
     Generated,
     /// No token configured; the endpoint is unauthenticated.
+    #[default]
     None,
 }
 
@@ -72,6 +75,11 @@ pub struct ProxyAccessConfig {
     pub cors: CorsConfig,
     /// Bearer token required on `/v1/*` and `/mcp`. `None` disables the check.
     pub api_key: Option<String>,
+    /// Where [`api_key`](Self::api_key) came from, which decides whether it may
+    /// later be replaced by a settings write. A flag or environment value
+    /// outranks the stored setting, so it must not be overridden by one; every
+    /// other source is the stored setting, or absent, and tracks it.
+    pub api_key_source: ApiKeySource,
     /// Host-header values accepted **in addition to** loopback, normalized to
     /// lowercase with any port stripped. Loopback is always accepted and is
     /// deliberately not listed here — it is a predicate
@@ -120,18 +128,21 @@ impl ProxyAccessConfig {
         Self {
             cors,
             api_key,
+            api_key_source: ApiKeySource::default(),
             allowed_hosts,
         }
     }
 
-    /// The `"Bearer <token>"` string a request must present verbatim, or
-    /// `None` when authentication is off.
+    /// Record where the token came from.
     ///
-    /// Pre-formatted so the per-request check is a comparison rather than an
-    /// allocation.
+    /// Separate from [`new`](Self::new) so that adding it did not change a
+    /// signature every caller spells out; the supervisor is the only layer
+    /// that knows the answer, and every other construction site means
+    /// [`ApiKeySource::None`].
     #[must_use]
-    pub fn expected_authorization(&self) -> Option<String> {
-        self.api_key.as_ref().map(|key| format!("Bearer {key}"))
+    pub const fn with_key_source(mut self, source: ApiKeySource) -> Self {
+        self.api_key_source = source;
+        self
     }
 
     /// Whether a request carrying this `Host` header may proceed.
@@ -176,24 +187,20 @@ mod tests {
         assert!(!constant_time_eq(b"Bearer secret", b"Bearer secret-extra"));
     }
 
+    /// The guards read the bare token off this field, so its presence is what
+    /// decides whether authentication is enforced at all.
     #[test]
-    fn no_api_key_means_no_expected_header() {
-        let cfg = ProxyAccessConfig::new(CorsConfig::LocalOnly, None, "127.0.0.1", vec![]);
-        assert_eq!(cfg.expected_authorization(), None);
-    }
+    fn the_api_key_is_carried_verbatim() {
+        let off = ProxyAccessConfig::new(CorsConfig::LocalOnly, None, "127.0.0.1", vec![]);
+        assert_eq!(off.api_key, None);
 
-    #[test]
-    fn expected_header_is_prefixed_once() {
-        let cfg = ProxyAccessConfig::new(
+        let on = ProxyAccessConfig::new(
             CorsConfig::LocalOnly,
             Some("secret123".into()),
             "127.0.0.1",
             vec![],
         );
-        assert_eq!(
-            cfg.expected_authorization().as_deref(),
-            Some("Bearer secret123")
-        );
+        assert_eq!(on.api_key.as_deref(), Some("secret123"));
     }
 
     /// Loopback needs no configuration — the common case must not require a

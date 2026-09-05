@@ -1053,6 +1053,7 @@ pub(crate) async fn spawn_proxy_with_settings(
             catalog,
             mcp,
             cancel_clone,
+            None, // daemon_cancel: no daemon in tests
             settings_repo,
             None, // inference_override
             None, // default_profile
@@ -1109,6 +1110,7 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
             catalog,
             mcp,
             cancel_clone,
+            None, // daemon_cancel: no daemon in tests
             Arc::new(MockSettingsRepo),
             None, // inference_override
             None, // default_profile

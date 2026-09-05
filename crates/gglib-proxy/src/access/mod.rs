@@ -9,7 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use gglib_core::ProxyAccessConfig;
-use gglib_core::access::constant_time_eq;
+use gglib_core::access::BearerPolicy;
 use tracing::warn;
 
 use crate::models::ErrorResponse;
@@ -65,24 +65,28 @@ pub(crate) async fn host_guard(
 /// Require `Authorization: Bearer <token>` before a request reaches a handler.
 ///
 /// Applied with `route_layer` so it runs only on matched routes, leaving
-/// `/health` — registered outside the protected group — open. The layer is not
-/// installed at all when no token is configured, so the unauthenticated default
-/// costs nothing per request.
+/// `/health` — registered outside the protected group — open.
 ///
-/// `expected` holds the whole `"Bearer <token>"` string rather than the token
-/// alone, so the check is one comparison with no per-request formatting.
+/// **Installed unconditionally**, unlike before. The layer used to exist only
+/// when a token was configured at bind, which made the open default free but
+/// also made it permanent: a key set afterwards had no middleware to be
+/// enforced by. The unauthenticated path now costs one cache read and an
+/// `Arc` clone per request, which is the price of being able to close an
+/// endpoint without restarting it.
+///
+/// [`BearerPolicy`] decides which token is required *now* — see its docs for
+/// why that is a live question and what the staleness bound is.
 pub(crate) async fn bearer_guard(
-    State(expected): State<Arc<str>>,
+    State(policy): State<BearerPolicy>,
     req: Request,
     next: Next,
 ) -> Response {
     let presented = req
         .headers()
         .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
+        .and_then(|v| v.to_str().ok());
 
-    if constant_time_eq(presented.as_bytes(), expected.as_bytes()) {
+    if policy.admits(presented).await {
         return next.run(req).await;
     }
 

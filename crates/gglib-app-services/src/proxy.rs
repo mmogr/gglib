@@ -18,6 +18,7 @@ use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::CatalogPortImpl;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::error::GuiError;
@@ -82,6 +83,13 @@ pub struct ProxyOps {
     mcp: Arc<McpService>,
     core: Arc<AppCore>,
     runtime: Arc<dyn ModelRuntimePort>,
+    /// The daemon's shutdown token, once there is a daemon.
+    ///
+    /// Not a dependency, because it does not exist yet when this is built:
+    /// the daemon mints its token after the service graph is assembled, then
+    /// hands it over. Every proxy it starts from then on carries it, which is
+    /// what lets an authenticated remote client stop the whole thing.
+    daemon_cancel: std::sync::OnceLock<CancellationToken>,
 }
 
 impl ProxyOps {
@@ -93,7 +101,17 @@ impl ProxyOps {
             mcp: deps.mcp,
             core: deps.core,
             runtime: deps.runtime,
+            daemon_cancel: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Hand over the daemon's shutdown token.
+    ///
+    /// Called once, by the daemon, as soon as it has one. A second call is
+    /// ignored: the token identifies a daemon's whole lifetime, so a
+    /// replacement would mean a second daemon in one process.
+    pub fn bind_daemon_cancel(&self, token: CancellationToken) {
+        let _ = self.daemon_cancel.set(token);
     }
 
     /// Resolve a pinned-launch plan for a model — the same cascade
@@ -159,7 +177,12 @@ impl ProxyOps {
     /// Kept untranslated (rather than eagerly mapped to [`GuiError`]) because
     /// the two callers need to react differently to `AlreadyRunning` versus
     /// `BindFailed` — see [`Self::ensure_running`].
-    async fn start_raw(&self, config: ProxyConfig) -> Result<SocketAddr, SupervisorError> {
+    async fn start_raw(&self, mut config: ProxyConfig) -> Result<SocketAddr, SupervisorError> {
+        // Both entry points funnel through here, so the token is attached in
+        // one place rather than at each caller that happens to remember.
+        if config.daemon_cancel.is_none() {
+            config.daemon_cancel = self.daemon_cancel.get().cloned();
+        }
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).
         let catalog: Arc<dyn ModelCatalogPort> =

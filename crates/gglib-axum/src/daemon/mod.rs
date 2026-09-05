@@ -122,6 +122,11 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 
     let shutdown_token = CancellationToken::new();
     ctx.daemon_shutdown = Some(shutdown_token.clone());
+    // The same token, handed to the layer that starts proxies, so a client
+    // that reaches the proxy with the key can stop this daemon. It is the
+    // only route to that: a remote client arrives through a tunnel bound to
+    // the proxy port and cannot reach `/api/daemon/shutdown` here at all.
+    ctx.proxy.bind_daemon_cancel(shutdown_token.clone());
     let state: AppState = Arc::new(ctx);
 
     // 4. Access policy, then the router. The Host guard is always on; the

@@ -14,7 +14,7 @@
 //! # Why a TTL rather than invalidation on write
 //!
 //! The obvious alternative — clear the cache whenever settings are saved —
-//! cannot work here. The CLI writes the same SQLite file from a **separate
+//! cannot work here. The CLI writes the same `SQLite` file from a **separate
 //! process**, so an in-process invalidation hook would never observe
 //! `gglib config profile set` while the proxy is running. A TTL bounds
 //! staleness uniformly no matter which process did the writing, at the cost of
@@ -32,8 +32,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use gglib_core::Settings;
-use gglib_core::ports::SettingsRepository;
+use crate::Settings;
+use crate::ports::SettingsRepository;
 use tokio::sync::RwLock;
 use tracing::warn;
 
@@ -42,10 +42,10 @@ use tracing::warn;
 /// Short enough that a settings change from the GUI or CLI shows up quickly
 /// enough to feel immediate, long enough that a burst of requests collapses to
 /// a single query.
-pub(crate) const DEFAULT_TTL: Duration = Duration::from_secs(5);
+pub const DEFAULT_TTL: Duration = Duration::from_secs(5);
 
 /// A settings snapshot refreshed at most once per TTL window.
-pub(crate) struct SettingsCache {
+pub struct SettingsCache {
     repo: Arc<dyn SettingsRepository>,
     /// The current snapshot and the instant it expires. `None` until the first
     /// successful load.
@@ -66,13 +66,13 @@ impl std::fmt::Debug for SettingsCache {
 impl SettingsCache {
     /// Wrap a repository with the default TTL.
     #[must_use]
-    pub(crate) fn new(repo: Arc<dyn SettingsRepository>) -> Self {
+    pub fn new(repo: Arc<dyn SettingsRepository>) -> Self {
         Self::with_ttl(repo, DEFAULT_TTL)
     }
 
     /// Wrap a repository with an explicit TTL.
     #[must_use]
-    pub(crate) fn with_ttl(repo: Arc<dyn SettingsRepository>, ttl: Duration) -> Self {
+    pub fn with_ttl(repo: Arc<dyn SettingsRepository>, ttl: Duration) -> Self {
         Self {
             repo,
             snapshot: RwLock::new(None),
@@ -84,7 +84,7 @@ impl SettingsCache {
     ///
     /// Never fails: see the module docs for what happens when the repository
     /// errors.
-    pub(crate) async fn get(&self) -> Arc<Settings> {
+    pub async fn get(&self) -> Arc<Settings> {
         // Fast path: a live snapshot, taken under a read lock so concurrent
         // requests do not serialise on each other.
         if let Some((settings, expires_at)) = self.snapshot.read().await.as_ref()
@@ -129,8 +129,8 @@ mod tests {
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use crate::RepositoryError;
     use async_trait::async_trait;
-    use gglib_core::RepositoryError;
 
     /// Repository that counts loads and can be switched to failing.
     #[derive(Debug, Default)]
@@ -169,7 +169,7 @@ mod tests {
     #[tokio::test]
     async fn repeated_reads_within_the_window_load_once() {
         let repo = Arc::new(CountingRepo::default());
-        let cache = SettingsCache::with_ttl(Arc::clone(&repo) as _, Duration::from_secs(60));
+        let cache = SettingsCache::with_ttl(Arc::clone(&repo) as _, Duration::from_mins(1));
 
         for _ in 0..10 {
             let _ = cache.get().await;
@@ -234,7 +234,7 @@ mod tests {
         let repo = Arc::new(CountingRepo::default());
         let cache = Arc::new(SettingsCache::with_ttl(
             Arc::clone(&repo) as _,
-            Duration::from_secs(60),
+            Duration::from_mins(1),
         ));
 
         let handles: Vec<_> = (0..16)

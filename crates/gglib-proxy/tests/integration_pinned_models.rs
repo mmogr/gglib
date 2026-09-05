@@ -55,6 +55,7 @@ async fn spawn(
             catalog,
             make_mcp_service(),
             proxy_cancel,
+            None, // daemon_cancel: no daemon in tests
             settings,
             None, // inference_override
             None, // default_profile

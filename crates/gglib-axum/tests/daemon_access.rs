@@ -127,6 +127,47 @@ async fn configured_token_gates_api_but_not_health() {
     assert_eq!(response.status(), StatusCode::OK, "/health stays open");
 }
 
+/// The daemon's door and the proxy's must agree about what a valid credential
+/// looks like. RFC 9110 makes the scheme case-insensitive, so a client that
+/// spells it `bearer` is authenticating correctly.
+#[tokio::test]
+async fn the_daemon_matches_the_scheme_case_insensitively() {
+    let app = build_app(DaemonAccess::new(
+        Some("s3cret".into()),
+        "0.0.0.0",
+        Vec::new(),
+    ))
+    .await;
+
+    for header in ["bearer s3cret", "BEARER s3cret", "Bearer  s3cret"] {
+        let mut request = get("/api/servers", "127.0.0.1:9887");
+        request
+            .headers_mut()
+            .insert("authorization", header.parse().unwrap());
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "{header:?} presents the configured token"
+        );
+    }
+
+    // And the widening stops at the scheme: a different one, and a credential
+    // in the wrong case, are still refused.
+    for header in ["Basic s3cret", "Bearer S3CRET", "Bearer ", "Bearer"] {
+        let mut request = get("/api/servers", "127.0.0.1:9887");
+        request
+            .headers_mut()
+            .insert("authorization", header.parse().unwrap());
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "{header:?} must not authenticate"
+        );
+    }
+}
+
 /// A LAN-shared daemon must be reachable by raw IP and by its advertised
 /// mDNS name, while still refusing foreign hostnames.
 #[tokio::test]

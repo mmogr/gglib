@@ -19,6 +19,8 @@ use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
 use gglib_core::CorsConfig;
+use gglib_core::access::BearerPolicy;
+use gglib_core::services::SettingsCache;
 
 /// Build CORS layer from configuration.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
@@ -359,18 +361,18 @@ fn config_routes() -> Router<AppState> {
 pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<DaemonAccess>) -> Router {
     let cors = build_cors_layer(cfg);
 
-    let mut api = api_routes().with_state(state);
-    // The bearer layer exists only when a token is configured, so the
-    // unauthenticated loopback default costs nothing per request. /health
-    // stays outside the group: probes must not need credentials. CORS is
-    // layered *after* (outside) the bearer guard so preflight OPTIONS
-    // requests — which never carry Authorization — are answered by the CORS
-    // layer instead of dying on a 401.
-    if let Some(expected) = access.expected_authorization() {
-        let expected: Arc<str> = expected.into();
-        api = api.layer(middleware::from_fn_with_state(expected, bearer_guard));
-    }
-    let api = api.layer(cors);
+    let settings = Arc::new(SettingsCache::new(state.core.settings().repo()));
+    let policy = BearerPolicy::tracking(access.api_key(), settings);
+    // The bearer layer is installed whether or not a token is configured, so a
+    // key set later has something to be enforced by. /health stays outside the
+    // group: probes must not need credentials. CORS is layered *after*
+    // (outside) the bearer guard so preflight OPTIONS requests — which never
+    // carry Authorization — are answered by the CORS layer instead of dying on
+    // a 401.
+    let api = api_routes()
+        .with_state(state)
+        .layer(middleware::from_fn_with_state(policy, bearer_guard))
+        .layer(cors);
 
     Router::new()
         // Intentionally placed outside the CORS layer — /health is a

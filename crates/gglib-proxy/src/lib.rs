@@ -6,6 +6,7 @@
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
 mod access;
+mod admin;
 pub(crate) mod audit_records;
 // Crate-internal. The six that stay `pub` below are the ones other crates
 // name by path: dashboard, models, props, repair, slot_eviction, slots.
@@ -35,7 +36,6 @@ pub mod props;
 pub mod repair;
 pub(crate) mod sampling_audit;
 pub(crate) mod server;
-pub(crate) mod settings_cache;
 pub mod slot_eviction;
 pub mod slots;
 pub(crate) mod slots_poller;

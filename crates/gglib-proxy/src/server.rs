@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, error, info, warn};
 
+use gglib_core::access::{ApiKeySource, BearerPolicy};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
@@ -31,7 +32,7 @@ use gglib_core::retry::RetryPolicy;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
 
-use crate::cache_lifecycle::{StreamConfig, clear_cache, resolve_cache_triple, run_with_cache};
+use crate::cache_lifecycle::{StreamConfig, resolve_cache_triple, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, ForwardRequest};
@@ -41,11 +42,11 @@ use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse};
 use crate::profiles::configured_names;
 use crate::sampling_audit::SamplingAuditStore;
-use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use dashmap::DashSet;
+use gglib_core::services::SettingsCache;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
@@ -89,13 +90,18 @@ pub(crate) struct AppState {
     /// from ever returning. Request/response handlers ignore it entirely —
     /// they finish on their own and the drain takes care of them.
     shutdown: CancellationToken,
+    /// Cancels the *daemon*, when this proxy is running under one.
+    ///
+    /// `None` for an embedded server or a test, where there is no daemon to
+    /// stop and the remote shutdown route says so rather than pretending.
+    daemon_shutdown: Option<CancellationToken>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
     upstream_health: Arc<UpstreamHealth>,
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.
-    calibration: Arc<TokenCalibration>,
+    pub(crate) calibration: Arc<TokenCalibration>,
     /// Operator overrides from the command line, applied above the client's
     /// own request parameters when resolving sampling.
     inference_override: Option<gglib_core::domain::InferenceConfig>,
@@ -110,9 +116,9 @@ pub(crate) struct AppState {
     /// Semaphore gating restore→forward→save cycles to prevent interleaving.
     slot_gate: Arc<Semaphore>,
     /// When true, all pending saves are skipped (set on restart or explicit clear).
-    clear_all_pending: Arc<AtomicBool>,
+    pub(crate) clear_all_pending: Arc<AtomicBool>,
     /// Sessions that have been explicitly cleared (skip save for these).
-    per_session_cleared: Arc<DashSet<String>>,
+    pub(crate) per_session_cleared: Arc<DashSet<String>>,
     /// Unix timestamp (seconds) when the current llama-server process started.
     /// Updated on each restart detection. Used by mtime guard to skip stale slots.
     server_start_time: Arc<AtomicU64>,
@@ -128,7 +134,16 @@ impl AppState {
     /// state's cache-lifecycle fields. Returns `None` when `slot_dir` isn't
     /// configured — the one condition under which a `StreamConfig` cannot be
     /// built, since it holds `slot_dir` as an owned (not `Option`) `PathBuf`.
-    fn build_stream_config(&self, base_url: String, model_id: u32) -> Option<StreamConfig> {
+    /// The daemon's cancellation token, when this proxy runs under one.
+    pub(crate) fn daemon_shutdown(&self) -> Option<CancellationToken> {
+        self.daemon_shutdown.clone()
+    }
+
+    pub(crate) fn build_stream_config(
+        &self,
+        base_url: String,
+        model_id: u32,
+    ) -> Option<StreamConfig> {
         self.slot_dir.as_ref().map(|dir| StreamConfig {
             client: self.client.clone(),
             base_url,
@@ -202,6 +217,10 @@ pub async fn serve(
     catalog_port: Arc<dyn ModelCatalogPort>,
     mcp: Arc<McpService>,
     cancel: CancellationToken,
+    // The daemon's own token, when this proxy runs under one, so an
+    // authenticated remote client can stop the whole thing. `None` for an
+    // embedded server: there is no daemon, and the route says so.
+    daemon_cancel: Option<CancellationToken>,
     settings_repo: Arc<dyn SettingsRepository>,
     // Operator overrides from this process's command line, applied above the
     // client's own request parameters. See `SamplingLayers::cli_override`.
@@ -329,6 +348,7 @@ pub async fn serve(
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
         shutdown: cancel.clone(),
+        daemon_shutdown: daemon_cancel,
         upstream_health,
         calibration: Arc::new(TokenCalibration::new()),
         inference_override,
@@ -353,18 +373,27 @@ pub async fn serve(
         .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
-        .route("/v1/proxy/cache/clear", post(handle_proxy_cache_clear))
+        .route(
+            "/v1/proxy/cache/clear",
+            post(crate::admin::handle_proxy_cache_clear),
+        )
+        .route(
+            "/v1/proxy/shutdown",
+            post(crate::admin::handle_proxy_shutdown),
+        )
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp));
 
-    // Installed only when a token is configured, so the unauthenticated
-    // loopback default — still the common case — pays nothing per request.
-    if let Some(expected) = access.expected_authorization() {
-        let expected: Arc<str> = Arc::from(expected);
-        protected = protected.route_layer(axum::middleware::from_fn_with_state(
-            expected,
-            crate::access::bearer_guard,
-        ));
-    }
+    // Unconditional: a key set after this process started has to have a layer
+    // to be enforced by. Which key it is, and whether one is required at all,
+    // is re-decided per request from the settings cache below.
+    let policy = match access.api_key_source {
+        ApiKeySource::Flag => BearerPolicy::pinned(access.api_key.as_deref().unwrap_or_default()),
+        _ => BearerPolicy::tracking(access.api_key.as_deref(), Arc::clone(&state.settings)),
+    };
+    protected = protected.route_layer(axum::middleware::from_fn_with_state(
+        policy,
+        crate::access::bearer_guard,
+    ));
 
     let app = Router::new()
         .route("/health", get(health_check))
@@ -448,121 +477,6 @@ async fn handle_proxy_status_stream(State(state): State<AppState>) -> impl IntoR
         current,
         SseOptions::default(),
         state.shutdown.clone().cancelled_owned(),
-    )
-}
-
-/// Handle cache clear requests via `POST /v1/proxy/cache/clear`.
-///
-/// Two independent caches sit behind this endpoint:
-///
-/// * the **disk slot** layer, opt-in via `--cache`, cleared per-session with
-///   `X-Gglib-Session-Id` or wholesale without it;
-/// * llama-server's **host-RAM prompt cache** (`--cache-ram`), which has no
-///   clear API of its own — recycling the process is the only way to drop it.
-///
-/// A global clear therefore also recycles the model. Without that, the common
-/// configuration (RAM cache on, disk layer off) had no way to clear the only
-/// cache it actually had: the endpoint reported `cache not enabled` and did
-/// nothing, which is the least useful answer available.
-///
-/// A session-scoped clear is deliberately disk-only. Recycling the process to
-/// service one session would discard every other session's cached prefix too.
-async fn handle_proxy_cache_clear(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    // Extract optional session ID from header
-    let session_id = headers
-        .get("x-gglib-session-id")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_owned);
-
-    // Sanitize if provided — 400 on invalid input (safety-critical)
-    if let Some(ref sid) = session_id
-        && let Err(e) = crate::slots::sanitize_session_id(sid)
-    {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": format!("invalid session id: {}", e)
-            })),
-        );
-    }
-
-    // ── Disk slot layer ───────────────────────────────────────────────────
-    let disk = if state.cache_enabled {
-        // base_url is unused by clear_cache; model_id 0 is a sentinel — it only
-        // touches flags and hot-cache invalidation, not any specific model's slots.
-        let Some(config) = state.build_stream_config(String::new(), 0) else {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "slot_dir not configured"
-                })),
-            );
-        };
-        match clear_cache(&config, session_id.as_deref()).await {
-            Ok(()) => {
-                if session_id.is_some() {
-                    "session cleared"
-                } else {
-                    "all slots cleared"
-                }
-            }
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                );
-            }
-        }
-    } else {
-        "disk cache not enabled"
-    };
-
-    // ── Host-RAM prompt cache ─────────────────────────────────────────────
-    let ram = if session_id.is_some() {
-        "RAM cache kept (session-scoped clear)"
-    } else if state.dashboard.connections.is_empty() {
-        // Gated on idle for the same reason as the watchdog recycle in
-        // `chat_completions`: with `--parallel 1` an in-flight request owns the
-        // only slot, and stop_current() would kill its live generation.
-        info!("cache clear: recycling model to flush the host-RAM prompt cache");
-        match state.runtime_port.stop_current().await {
-            Ok(()) => "model recycled, RAM cache flushed",
-            Err(e) => {
-                warn!(error = %e, "cache clear: model recycle failed");
-                "RAM cache not flushed (recycle failed)"
-            }
-        }
-    } else {
-        "RAM cache not flushed (request in flight; retry when idle)"
-    };
-
-    // Drop any frozen per-session calibration snapshot too, so a session
-    // that explicitly cleared its cache re-baselines from the current
-    // global ratio on its next request instead of reusing a pre-clear one.
-    // Re-derive the sanitized (lowercased) form rather than reusing the raw
-    // header value above — the validation call earlier only checks
-    // `sanitize_session_id`'s `Err` case and discards its `Ok(String)`, so
-    // `session_id` itself is still whatever case the client sent, and
-    // `chat_completions` always keys snapshots by the lowercased form.
-    if let Some(ref sid) = session_id {
-        if let Ok(sanitized) = crate::slots::sanitize_session_id(sid) {
-            state.calibration.clear_session(&sanitized);
-        }
-    } else {
-        state.calibration.clear_all_sessions();
-    }
-
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "status": "ok",
-            "message": format!("{disk}; {ram}"),
-            "disk": disk,
-            "ram": ram,
-        })),
     )
 }
 

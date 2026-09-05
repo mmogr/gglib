@@ -152,6 +152,7 @@ pub(crate) async fn spawn_with_default_profile(
             catalog,
             mcp,
             proxy_cancel,
+            None, // daemon_cancel: no daemon in tests
             Arc::new(ProfileSettings {
                 profiles,
                 trust_client_sampling,
