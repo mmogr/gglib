@@ -181,6 +181,7 @@ All interfaces share the same database and model directory.
 | Desktop GUI | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md) |
 | Web UI | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) |
 | Dashboard | `gglib proxy dashboard` | Live terminal view of connections, cache, and requests |
+| Remote access | `gglib remote enable` / `connect` | One machine's models on another, end-to-end encrypted — [docs](docs/remote.md) |
 
 `gglib proxy dashboard` streams live proxy state to your terminal:
 
@@ -213,13 +214,35 @@ keep the endpoint available without a terminal window.
   <img src="docs/assets/tray-dashboard.png" alt="GGLib tray dashboard" height="300">
 </p>
 
+## Remote access
+
+Your desktop has the GPU; your laptop has the question. `gglib remote` puts
+the desktop's proxy on the laptop's loopback over a direct, end-to-end
+encrypted connection between the two machines — no VPN, no account, and no
+relay that can read a request.
+
+```bash
+# desktop
+gglib remote enable                      # shows a ticket + six-digit code, once
+
+# laptop, within two minutes
+gglib remote connect <ticket>-<code>     # binds a local port that is the desktop
+gglib q --remote "Why is this test flaky?"
+```
+
+The code is single-use and dies in two minutes; the ticket is fresh every
+`enable`; the tunnel enforces the same API key the proxy does, and `/mcp` is
+closed over it unless you say otherwise. [Details →](docs/remote.md)
+
 ## Security
 
 Everything binds `127.0.0.1` by default. **Do not expose the endpoint to the
 public internet.** Optional bearer API key on loopback; auto-minted if you bind
-externally. Host-header allowlist and local-only CORS are always on. No
+externally, and put on the loopback proxy the moment you enable remote
+access. Host-header allowlist and local-only CORS are always on. No
 multi-tenancy or rate limiting. Details in
-[gglib-proxy](crates/gglib-proxy/README.md).
+[gglib-proxy](crates/gglib-proxy/README.md); the tunnel's model is in
+[Remote access](docs/remote.md#how-it-stays-private).
 
 ## Architecture
 
@@ -234,6 +257,7 @@ for conventions, and [generated API docs](https://mmogr.github.io/gglib).
 - [Tags & capability detection](docs/tags.md)
 - [KV cache tiering](docs/cache.md)
 - [Tool-call repair](docs/tool-call-repair.md)
+- [Remote access](docs/remote.md)
 - [Architecture Decision Records](docs/adr/)
 - [Full API docs](https://mmogr.github.io/gglib)
 
