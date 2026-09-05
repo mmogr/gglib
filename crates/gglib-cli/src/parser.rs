@@ -100,6 +100,28 @@ mod tests {
         }
     }
 
+    /// `--remote` and `--port` name different machines, so they are exclusive;
+    /// and `--remote` reaches both commands that compose an agent session.
+    #[test]
+    fn remote_and_port_are_exclusive_on_both_agent_commands() {
+        assert!(Cli::try_parse_from(["gglib", "q", "--remote", "--port", "9000", "hi"]).is_err());
+        assert!(Cli::try_parse_from(["gglib", "chat", "--remote", "--port", "9000", "m"]).is_err());
+
+        let cli = Cli::parse_from(["gglib", "q", "--remote", "hi"]);
+        match cli.command {
+            Some(Commands::Question { upstream, .. }) => {
+                assert!(upstream.remote);
+                assert_eq!(upstream.port, None);
+            }
+            _ => panic!("expected the Question variant"),
+        }
+        let cli = Cli::parse_from(["gglib", "chat", "--remote"]);
+        match cli.command {
+            Some(Commands::Chat { upstream, .. }) => assert!(upstream.remote),
+            _ => panic!("expected the Chat variant"),
+        }
+    }
+
     /// The command list in `help_template` is a hand-written string, so adding
     /// a variant to `Commands` does not add it to `--help`.
     ///

@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 mod dto;
 mod guard;
+mod remote_upstream;
 mod retry_notice;
 
 pub(crate) use dto::AgentChatRequest;
@@ -18,12 +19,10 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::error::HttpError;
-use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
 use gglib_core::ports::{AgentError, RetryObserver};
-use gglib_core::request_pipeline;
 use gglib_runtime::compose_agent_loop;
 
 use guard::AgentTaskGuard;
@@ -79,15 +78,15 @@ pub(crate) async fn chat(
             HttpError::TooManyRequests("all agent loop slots are in use; try again later".into())
         })?;
 
-    validate_port(&state, req.port).await?;
+    // Local llama-server or the remote tunnel: settled first, because it
+    // decides the port check, the model context and the bearer together.
+    let upstream = remote_upstream::resolve(&state, &req).await?;
 
     // Read before `tool_filter` consumes the request piecemeal, and before the
     // loop is composed: the two reasoning controls are the only sampling this
     // endpoint accepts, and they occupy the ladder's top rung.
     let sampling = req.sampling_layer();
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
-    let model_context =
-        request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
 
     // Created before the loop is composed so the completion adapter can report
     // its retries onto the same stream the loop emits through — otherwise a
@@ -97,10 +96,10 @@ pub(crate) async fn chat(
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
     let agent_loop = compose_agent_loop(
-        format!("http://127.0.0.1:{}", req.port),
+        upstream.base_url,
         state.http_client.clone(),
         req.model.clone(),
-        model_context,
+        upstream.model_context,
         state.mcp.clone(),
         tool_filter,
         // GUI chat runs in the same process as the embedded proxy; report its
@@ -108,6 +107,7 @@ pub(crate) async fn chat(
         Some(state.proxy.agent_metrics()),
         Some(retry_observer),
         sampling,
+        upstream.bearer,
     );
 
     let messages = req.messages;

@@ -4,7 +4,11 @@
 //! stdin supplies the material to reason about, and a `{}` placeholder decides
 //! whether that material is substituted into the question or wrapped around
 //! it. That is enough branching to be worth reading on its own, away from the
-//! agent-session setup that surrounds it.
+//! agent-session setup that surrounds it. The continuation prompt at the end
+//! of a question lives here too: it is the other place `q` reads from the
+//! person rather than the agent.
+
+use std::io::{self, Write as _};
 
 use anyhow::{Result, anyhow};
 
@@ -65,4 +69,31 @@ pub(crate) fn build_user_message(
     }
 
     Ok(user_message)
+}
+
+/// Prompt the user to continue into an interactive chat session.
+///
+/// Returns `true` for 'y', 'Y', or empty input (Enter); `false` for
+/// anything else.  EOF (Ctrl+D) is treated as a clean decline.
+pub(super) fn ask_continue() -> Result<bool> {
+    // Flush stdout to ensure the agent's final output is fully rendered
+    // before we print the prompt — prevents interleaving.
+    io::stdout().flush().ok();
+    eprintln!();
+    eprint!("[Continue chatting? (y/n)] ");
+    io::stderr().flush().ok();
+
+    let mut input = String::new();
+    let bytes = io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| anyhow!("failed to read input: {e}"))?;
+
+    // EOF (Ctrl+D) → treat as 'n'
+    if bytes == 0 {
+        eprintln!();
+        return Ok(false);
+    }
+
+    let answer = input.trim();
+    Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
 }

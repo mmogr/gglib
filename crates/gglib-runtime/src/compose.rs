@@ -64,6 +64,9 @@ use crate::LlmCompletionAdapter;
 ///   `POST /api/agent/chat` passes the request's reasoning controls and nothing
 ///   else; see `AgentChatRequest::sampling_layer` for why that pair and not the
 ///   sampler parameters.
+/// * `bearer` — `Some(key)` when `base_url` demands one: the remote tunnel's
+///   loopback port is another machine's proxy (ADR 0012), and the listener
+///   there does not inject credentials. `None` for a llama-server on loopback.
 #[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop(
     base_url: String,
@@ -75,6 +78,7 @@ pub fn compose_agent_loop(
     usage_sink: Option<Arc<dyn UsageSink>>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     sampling: Option<InferenceConfig>,
+    bearer: Option<String>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -89,6 +93,7 @@ pub fn compose_agent_loop(
         retry_observer,
         // The GUI has no per-turn retry override; the environment defaults apply.
         None,
+        bearer,
     )
 }
 
@@ -108,6 +113,7 @@ pub fn compose_agent_loop_with_sampling(
     sampling: Option<InferenceConfig>,
     usage_sink: Option<Arc<dyn UsageSink>>,
     retry_policy: Option<RetryPolicy>,
+    bearer: Option<String>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -123,6 +129,7 @@ pub fn compose_agent_loop_with_sampling(
         // consumer to notify — retries surface through the loop's own output.
         None,
         retry_policy,
+        bearer,
     )
 }
 
@@ -139,9 +146,11 @@ fn compose_agent_loop_inner(
     usage_sink: Option<Arc<dyn UsageSink>>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     retry_policy: Option<RetryPolicy>,
+    bearer: Option<String>,
 ) -> Arc<dyn AgentLoopPort> {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
+            .with_bearer(bearer)
             .with_sampling(sampling)
             .with_model_context(model_context)
             .with_usage_sink(usage_sink)

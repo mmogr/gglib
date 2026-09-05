@@ -33,6 +33,7 @@ use super::classify::{Failure, classify};
 pub(crate) async fn send_with_retry(
     client: &Client,
     url: &str,
+    bearer: Option<&str>,
     body: &Value,
     send_timeout: Duration,
     policy: &RetryPolicy,
@@ -44,7 +45,7 @@ pub(crate) async fn send_with_retry(
     loop {
         attempt += 1;
 
-        let response = send_once(client, url, body, send_timeout).await?;
+        let response = send_once(client, url, bearer, body, send_timeout).await?;
 
         // `classify` reads nothing from a successful body, so the stream
         // decoder still receives it whole.
@@ -107,11 +108,16 @@ pub(crate) async fn send_with_retry(
 async fn send_once(
     client: &Client,
     url: &str,
+    bearer: Option<&str>,
     body: &Value,
     send_timeout: Duration,
 ) -> Result<Response> {
     let secs = send_timeout.as_secs();
-    tokio::time::timeout(send_timeout, client.post(url).json(body).send())
+    let mut request = client.post(url).json(body);
+    if let Some(token) = bearer {
+        request = request.bearer_auth(token);
+    }
+    tokio::time::timeout(send_timeout, request.send())
         .await
         .map_err(|_| anyhow!("llama-server connection timed out after {secs}s"))?
         .map_err(|e| anyhow!("request to llama-server failed: {e}"))

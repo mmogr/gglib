@@ -18,6 +18,7 @@ use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
 pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand};
+use crate::upstream_args::UpstreamArgs;
 
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
@@ -126,9 +127,8 @@ pub enum Commands {
         /// Disable tool access (plain LLM chat without filesystem or MCP tools)
         #[arg(long = "no-tools")]
         no_tools: bool,
-        /// Reuse an already-running llama-server on this port (skips auto-start)
-        #[arg(long)]
-        port: Option<u16>,
+        #[command(flatten)]
+        upstream: UpstreamArgs,
         /// Maximum agent iterations before giving up
         /// [default: persisted setting, or 25 if unset]
         #[arg(long = "max-iterations")]
@@ -204,9 +204,8 @@ pub enum Commands {
         /// Disable tool access (plain LLM question without filesystem or MCP tools)
         #[arg(long = "no-tools")]
         no_tools: bool,
-        /// Port of a running llama-server to reuse (skips auto-start)
-        #[arg(long)]
-        port: Option<u16>,
+        #[command(flatten)]
+        upstream: UpstreamArgs,
         /// Maximum agent iterations
         /// [default: persisted setting, or 25 if unset]
         #[arg(long = "max-iterations")]

@@ -1,6 +1,6 @@
-//! Maps [`AgentSessionParams`] to an [`AgentLoopPort`] composition root and
-//! resolves the llama-server to talk to (daemon-started, or a user-supplied
-//! port).
+//! Maps [`AgentSessionParams`] to an [`AgentLoopPort`] composition root.
+//! Which upstream it talks to — a llama-server here or the remote tunnel's
+//! port — is [`super::upstream`]'s decision.
 //!
 //! The only public surface is [`compose`], which returns the ready-to-use
 //! `Arc<dyn AgentLoopPort>`. The llama-server itself belongs to the daemon —
@@ -13,17 +13,16 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::request_pipeline;
-use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::compose_agent_loop_with_sampling;
 
+use super::upstream;
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::handlers::inference::shared::resolve_inference_config;
-use crate::presentation::style;
 
 // =============================================================================
 // Types
@@ -42,6 +41,9 @@ pub(crate) struct AgentSessionParams {
     pub ctx_size: Option<String>,
     /// When set, reuse an already-running llama-server instead of auto-starting.
     pub port: Option<u16>,
+    /// Drive the machine on the other end of `gglib remote connect` (ADR 0012)
+    /// instead of anything here. `port` is then not consulted.
+    pub remote: bool,
     /// Tool allowlist (empty = all tools visible).
     pub tools: Vec<String>,
     /// Model-name override forwarded to llama-server routing.
@@ -85,6 +87,7 @@ impl From<&ChatArgs> for AgentSessionParams {
             model_identifier: args.identifier.clone(),
             ctx_size: args.context.ctx_size.clone(),
             port: args.port,
+            remote: args.remote,
             tools,
             model_name: args.model.clone(),
             retry_policy: args.retry_policy,
@@ -112,23 +115,29 @@ pub(crate) async fn compose(
     sampling: Option<InferenceConfig>,
     banner: &BannerInfo,
 ) -> Result<Arc<dyn AgentLoopPort>> {
-    // 1. Resolve the LLM port — reuse or ask the daemon to start the model.
-    let port = resolve_port(ctx, params, banner).await?;
+    // 1. Resolve the upstream — a llama-server here (reused, or started by
+    //    the daemon) or the remote machine's tunnel port.
+    let upstream = upstream::resolve(ctx, params, banner).await?;
 
     // 2. Resolve inference parameters via the 4-level hierarchy.
     //    Look up the model so model-level defaults can be applied.  When the
     //    identifier is unknown (external port reuse with no catalog entry) the
-    //    sampling is forwarded as-is.
+    //    sampling is forwarded as-is — and so is the remote case: the far
+    //    proxy runs the ladder over *its* models, and this catalog's entry of
+    //    the same name, if any, describes a different file.
     //    The provenance travels with the values so a later stage can say which
     //    rung supplied each one; an unknown identifier yields none, because no
     //    ladder was run.
-    let (resolved_sampling, _sources) = match ctx
-        .app
-        .models()
-        .find_by_identifier(&params.model_identifier)
-        .await
-        .ok()
-    {
+    let local_model = if params.remote {
+        None
+    } else {
+        ctx.app
+            .models()
+            .find_by_identifier(&params.model_identifier)
+            .await
+            .ok()
+    };
+    let (resolved_sampling, _sources) = match local_model {
         Some(model) => {
             let named = sampling.clone().unwrap_or_default();
             let (resolved, sources) =
@@ -158,11 +167,15 @@ pub(crate) async fn compose(
     } else {
         Some(params.tools.iter().cloned().collect())
     };
-    let base_url = format!("http://127.0.0.1:{port}");
-    let model_context =
-        request_pipeline::resolve(ctx.catalog.as_ref(), Some(&params.model_identifier)).await;
+    // The remote's models are not in this catalog; passthrough lets the far
+    // proxy shape the request, which it does for every client.
+    let model_context = if params.remote {
+        request_pipeline::ModelContext::passthrough()
+    } else {
+        request_pipeline::resolve(ctx.catalog.as_ref(), Some(&params.model_identifier)).await
+    };
     let agent = compose_agent_loop_with_sampling(
-        base_url,
+        upstream.base_url,
         ctx.http_client.clone(),
         params.model_name.clone(),
         model_context,
@@ -173,95 +186,8 @@ pub(crate) async fn compose(
         // No proxy dashboard in the CLI process — nowhere to report reuse.
         None,
         Some(params.retry_policy),
+        upstream.bearer,
     );
 
     Ok(agent)
-}
-
-// =============================================================================
-// Private helpers
-// =============================================================================
-
-/// Resolve the llama-server port for this session.
-///
-/// A caller-supplied `--port` is used as-is (externally managed server).
-/// Otherwise the daemon — the one process that owns llama-server — is asked
-/// to start (or reuse) the model, and the daemon keeps owning it after this
-/// session ends.
-async fn resolve_port(
-    ctx: &CliContext,
-    params: &AgentSessionParams,
-    banner: &BannerInfo,
-) -> Result<u16> {
-    if let Some(port) = params.port {
-        tracing::debug!("reusing user-supplied llama-server on port {port}");
-        return Ok(port);
-    }
-
-    // Look up the model so the context flag can resolve against its metadata.
-    let model = ctx
-        .app
-        .models()
-        .find_by_identifier(&params.model_identifier)
-        .await
-        .context("failed to look up model")?;
-
-    // Resolve the per-request context tier here (this is what makes
-    // `--ctx-size max` work); the daemon applies the per-model and global
-    // tiers itself, exactly as it does for every other start request.
-    let ctx_arg = parse_ctx_size_flag(params.ctx_size.as_deref())?;
-    let context_length = ctx_arg.and_then(|arg| arg.resolve(model.context_length));
-
-    if !banner.quiet {
-        style::print_info_banner("Info", "\u{2139}\u{fe0f}");
-        eprintln!(
-            "  Starting llama-server for '{}' via the gglib daemon (this may take a moment) \u{2026}",
-            model.name
-        );
-    }
-
-    let handle = crate::daemon_client::ensure_daemon().await?;
-    let started = handle
-        .start_model_server(model.id, context_length)
-        .await
-        .context("failed to start llama-server via the daemon")?;
-
-    if !banner.quiet {
-        eprintln!("  llama-server ready on port {}", started.port);
-
-        // Sampling overrides
-        if let Some(ref s) = banner.sampling {
-            print_sampling_lines(s);
-        }
-
-        // Conversation history usage (resume only)
-        if let Some(chars) = banner.prior_history_chars {
-            let budget = 180_000usize; // AgentConfig default
-            let pct = (chars * 100).checked_div(budget).unwrap_or(0);
-            eprintln!("  History: ~{chars} chars loaded (~{pct}% of context budget)");
-        }
-
-        style::print_banner_close();
-    }
-
-    Ok(started.port)
-}
-
-/// Print non-default sampling parameter lines in the info banner.
-fn print_sampling_lines(s: &InferenceConfig) {
-    if let Some(v) = s.temperature {
-        eprintln!("  Temperature: {v}");
-    }
-    if let Some(v) = s.top_p {
-        eprintln!("  Top-p: {v}");
-    }
-    if let Some(v) = s.top_k {
-        eprintln!("  Top-k: {v}");
-    }
-    if let Some(v) = s.max_tokens {
-        eprintln!("  Max tokens: {v}");
-    }
-    if let Some(v) = s.repeat_penalty {
-        eprintln!("  Repeat penalty: {v}");
-    }
 }
