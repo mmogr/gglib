@@ -5,6 +5,7 @@ mod model_import;
 mod model_registrar;
 mod model_service;
 mod model_verification;
+mod settings_cache;
 mod settings_service;
 
 pub use app_core::AppCore;
@@ -19,4 +20,5 @@ pub use model_verification::{
     ShardHealth, ShardHealthReport, ShardProgress, UpdateCheckResult, UpdateDetails,
     VerificationProgress, VerificationReport,
 };
+pub use settings_cache::{DEFAULT_TTL as SETTINGS_CACHE_TTL, SettingsCache};
 pub use settings_service::SettingsService;

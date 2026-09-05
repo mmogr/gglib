@@ -41,11 +41,11 @@ use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse};
 use crate::profiles::configured_names;
 use crate::sampling_audit::SamplingAuditStore;
-use crate::settings_cache::SettingsCache;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use dashmap::DashSet;
+use gglib_core::services::SettingsCache;
 use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.

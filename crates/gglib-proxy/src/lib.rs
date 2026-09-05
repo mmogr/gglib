@@ -35,7 +35,6 @@ pub mod props;
 pub mod repair;
 pub(crate) mod sampling_audit;
 pub(crate) mod server;
-pub(crate) mod settings_cache;
 pub mod slot_eviction;
 pub mod slots;
 pub(crate) mod slots_poller;
