@@ -121,6 +121,18 @@ export type VerificationEvent = Extract<AppEvent, { type: `verification_${string
 export type ProxyEvent = Extract<AppEvent, { type: `proxy_${string}` }>;
 
 // ============================================================================
+// Remote Tunnel Events
+// ============================================================================
+
+/**
+ * The remote tunnel's lifecycle (ADR 0012): enabled, disabled, paired,
+ * connected, disconnected. The ticket never travels here — `remote_enabled`
+ * carries its fingerprint — because this stream is readable by any local
+ * client.
+ */
+export type RemoteEvent = Extract<AppEvent, { type: `remote_${string}` }>;
+
+// ============================================================================
 // App Event Map
 // ============================================================================
 
@@ -133,9 +145,9 @@ export type ProxyEvent = Extract<AppEvent, { type: `proxy_${string}` }>;
  * a `server` handler compile while reading a `download` payload.
  *
  * `getEventCategory` is what actually routes a message here, and it is
- * ordinary runtime code — so these five slices are a claim about the router,
- * not a guarantee from it. The five together are exhaustive over `AppEvent`'s
- * fourteen arms today, which `tests/ts/services/eventCategory.test.ts` is the
+ * ordinary runtime code — so these six slices are a claim about the router,
+ * not a guarantee from it. The six together are exhaustive over `AppEvent`'s
+ * arms today, which `tests/ts/services/eventCategory.test.ts` is the
  * place to keep true.
  *
  * Download events arrive wrapped as `{ type: "download", event: DownloadEvent }`
@@ -148,6 +160,7 @@ export interface AppEventMap {
   'model': ModelEvent;
   'verification': VerificationEvent;
   'proxy': ProxyEvent;
+  'remote': RemoteEvent;
 }
 
 export type AppEventType = keyof AppEventMap;
