@@ -12,52 +12,17 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use gglib_core::ports::{ModelCatalogPort, ModelRepository, ModelRuntimePort, UsageSink};
+use gglib_core::ApiKeySource;
+use gglib_core::ports::{
+    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, UsageSink,
+};
 use gglib_core::services::AppCore;
-use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::CatalogPortImpl;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
 
 use crate::error::GuiError;
-
-/// Resolve the llama-server base port from override, saved settings, or default.
-///
-/// Precedence: override → settings.llama_base_port → DEFAULT_LLAMA_BASE_PORT
-///
-/// Validates that the port is in the valid range (1024-65535).
-///
-/// Returns (port, source_description) for logging.
-pub(crate) fn resolve_llama_base_port(
-    override_port: Option<u16>,
-    settings: &Settings,
-) -> Result<(u16, &'static str), GuiError> {
-    let (port, source) = if let Some(port) = override_port {
-        (port, "override")
-    } else if let Some(port) = settings.llama_base_port {
-        (port, "saved setting")
-    } else {
-        (DEFAULT_LLAMA_BASE_PORT, "default")
-    };
-
-    // Validate port range
-    if !(1024..=65535).contains(&port) {
-        return Err(GuiError::Internal(format!(
-            "Invalid llama-server base port {}: must be in range 1024-65535",
-            port
-        )));
-    }
-
-    info!(
-        port = port,
-        source = source,
-        "Starting llama-server with base port"
-    );
-
-    Ok((port, source))
-}
 
 /// Dependencies for proxy operations.
 pub struct ProxyDeps {
@@ -90,6 +55,18 @@ pub struct ProxyOps {
     /// hands it over. Every proxy it starts from then on carries it, which is
     /// what lets an authenticated remote client stop the whole thing.
     daemon_cancel: std::sync::OnceLock<CancellationToken>,
+    /// The remote tunnel's owner, handed over the same way and for the same
+    /// reason: every proxy this starts carries it, so the pairing route and
+    /// the `/mcp` gate have someone to ask (ADR 0012).
+    remote_gateway: std::sync::OnceLock<Arc<dyn RemoteGatewayPort>>,
+    /// The bearer token the running proxy actually demands, and where it came
+    /// from. `None` while stopped.
+    ///
+    /// Kept because the tunnel has to enforce *this* token, not the one in
+    /// settings: a key supplied by `--api-key` is pinned and never appears in
+    /// settings, so handing the tunnel the stored value would give it a
+    /// credential the proxy refuses.
+    effective_key: std::sync::RwLock<Option<(String, ApiKeySource)>>,
 }
 
 impl ProxyOps {
@@ -102,6 +79,8 @@ impl ProxyOps {
             core: deps.core,
             runtime: deps.runtime,
             daemon_cancel: std::sync::OnceLock::new(),
+            remote_gateway: std::sync::OnceLock::new(),
+            effective_key: std::sync::RwLock::new(None),
         }
     }
 
@@ -112,6 +91,22 @@ impl ProxyOps {
     /// replacement would mean a second daemon in one process.
     pub fn bind_daemon_cancel(&self, token: CancellationToken) {
         let _ = self.daemon_cancel.set(token);
+    }
+
+    /// Hand over the remote tunnel's owner. Once, like the daemon token, and
+    /// before any proxy starts — the service graph does it at assembly.
+    pub fn bind_remote_gateway(&self, gateway: Arc<dyn RemoteGatewayPort>) {
+        let _ = self.remote_gateway.set(gateway);
+    }
+
+    /// The token the running proxy demands right now, with its source, or
+    /// `None` while the proxy is stopped or open.
+    #[must_use]
+    pub fn effective_api_key(&self) -> Option<(String, ApiKeySource)> {
+        self.effective_key
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Resolve a pinned-launch plan for a model — the same cascade
@@ -183,6 +178,9 @@ impl ProxyOps {
         if config.daemon_cancel.is_none() {
             config.daemon_cancel = self.daemon_cancel.get().cloned();
         }
+        if config.remote.is_none() {
+            config.remote = self.remote_gateway.get().cloned();
+        }
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).
         let catalog: Arc<dyn ModelCatalogPort> =
@@ -199,11 +197,21 @@ impl ProxyOps {
                 self.core.settings().repo(),
             )
             .await
-            // The token the supervisor settled on is deliberately dropped here.
-            // These callers are the GUI and the desktop tray, which read it
-            // back from settings — the same place the supervisor persisted it —
-            // rather than being handed a credential through a start response.
-            .map(|bind| bind.addr)
+            // The token the supervisor settled on is kept here and not
+            // returned. These callers are the GUI and the desktop tray, which
+            // read it back from settings rather than being handed a
+            // credential through a start response; the one reader that needs
+            // the *effective* value — the tunnel, which must enforce what the
+            // proxy enforces even when that is a pinned flag — asks
+            // `effective_api_key`.
+            .map(|bind| {
+                *self
+                    .effective_key
+                    .write()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    bind.api_key.clone().map(|key| (key, bind.api_key_source));
+                bind.addr
+            })
     }
 
     /// Translate a [`SupervisorError`] into the [`GuiError`] a caller sees.
@@ -307,6 +315,10 @@ impl ProxyOps {
         if let Err(e) = self.runtime.set_pin(None) {
             tracing::debug!("could not clear model pin on stop: {e}");
         }
+        *self
+            .effective_key
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.supervisor.stop().await.map_err(|e| match e {
             SupervisorError::NotRunning => GuiError::Conflict("Proxy is not running".to_string()),
             SupervisorError::AlreadyRunning(addr) => {
@@ -360,58 +372,6 @@ impl ProxyOps {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::Settings;
-
-    #[test]
-    fn test_resolve_llama_base_port_override_wins() {
-        let settings = Settings::with_defaults();
-        let (port, source) = resolve_llama_base_port(Some(9500), &settings).unwrap();
-        assert_eq!(port, 9500);
-        assert_eq!(source, "override");
-    }
-
-    #[test]
-    fn test_resolve_llama_base_port_from_settings() {
-        let settings = Settings {
-            llama_base_port: Some(9200),
-            ..Default::default()
-        };
-        let (port, source) = resolve_llama_base_port(None, &settings).unwrap();
-        assert_eq!(port, 9200);
-        assert_eq!(source, "saved setting");
-    }
-
-    #[test]
-    fn test_resolve_llama_base_port_default_fallback() {
-        let settings = Settings::default();
-        let (port, source) = resolve_llama_base_port(None, &settings).unwrap();
-        assert_eq!(port, DEFAULT_LLAMA_BASE_PORT);
-        assert_eq!(source, "default");
-    }
-
-    #[test]
-    fn test_resolve_llama_base_port_validates_low() {
-        let settings = Settings::default();
-        let result = resolve_llama_base_port(Some(80), &settings);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("1024-65535"));
-    }
-
-    #[test]
-    fn test_resolve_llama_base_port_validates_high() {
-        let settings = Settings::default();
-        // Test that values at the boundary are rejected (65535 is valid, but we can't test higher with u16)
-        // So instead test a valid u16 that's outside our port range (ports above 65535 don't fit in u16)
-        // Just verify the low boundary works
-        assert!(resolve_llama_base_port(Some(65535), &settings).is_ok());
-    }
-
-    #[test]
-    fn test_resolve_llama_base_port_valid_range() {
-        let settings = Settings::default();
-        assert!(resolve_llama_base_port(Some(1024), &settings).is_ok());
-        assert!(resolve_llama_base_port(Some(65535), &settings).is_ok());
-    }
 
     // ---------------------------------------------------------------
     // ensure_running — settings-aware port, and BindFailed as Conflict

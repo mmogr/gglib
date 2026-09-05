@@ -49,6 +49,23 @@ describe('getEventCategory', () => {
     expect(WIRE_TAGS.length).toBeGreaterThan(10); // extractor sanity check
   });
 
+  /**
+   * The tunnel's five tags arrived with the `RemoteOps` binding and, like the
+   * model events before them, would have been dropped in silence: the test
+   * above caught them the moment the binding was regenerated.
+   */
+  it('routes the remote tunnel tags to the remote category', () => {
+    for (const tag of [
+      'remote_enabled',
+      'remote_disabled',
+      'remote_paired',
+      'remote_connected',
+      'remote_disconnected',
+    ]) {
+      expect(getEventCategory(tag)).toBe('remote');
+    }
+  });
+
   it('routes the three model lifecycle tags to the model category', () => {
     expect(getEventCategory('model_added')).toBe('model');
     expect(getEventCategory('model_updated')).toBe('model');

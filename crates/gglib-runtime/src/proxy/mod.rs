@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 // `pub(crate)` for the launch narration: the banner is the proxy's output
 // voice, but the launch it narrates happens in `process::swap_state`.
+mod api_key;
 pub(crate) mod banner;
 pub mod supervisor;
 

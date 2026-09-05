@@ -100,8 +100,10 @@ impl Default for GlobalDefaults {
             api_key,
             allowed_hosts,
             // Supplied by whoever starts the proxy, not a configured default:
-            // only a daemon has a token to hand over.
+            // only a daemon has a token to hand over, and only a daemon has a
+            // tunnel to answer for.
             daemon_cancel: _,
+            remote: _,
             // Set per-caller on the start body, not inherited as a tier-3
             // default: `serve` takes it from the resolved profile selection
             // and the GUI from its own request.
@@ -213,6 +215,7 @@ impl UnifiedServerConfig {
             allowed_hosts: self.globals.allowed_hosts.clone(),
             // Filled in by the daemon when it is the one starting this.
             daemon_cancel: None,
+            remote: None,
         }
     }
 

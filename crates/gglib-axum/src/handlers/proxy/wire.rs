@@ -166,8 +166,10 @@ pub(super) fn to_runtime_config(
         api_key: cfg.api_key.clone(),
         allowed_hosts: cfg.allowed_hosts.clone(),
         // Attached by `ProxyOps` on the way through, which is the one place
-        // that knows whether a daemon is running this.
+        // that knows whether a daemon is running this — and whether a tunnel
+        // may be in front of it.
         daemon_cancel: None,
+        remote: None,
     }
 }
 

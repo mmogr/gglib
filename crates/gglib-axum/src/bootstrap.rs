@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    AppServices, BenchmarkOps, DownloadOps, McpOps, ModelOps, ProxyOps, ServerOps,
+    AppServices, BenchmarkOps, DownloadOps, McpOps, ModelOps, ProxyOps, RemoteOps, ServerOps,
     ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
@@ -91,6 +91,8 @@ pub struct AxumContext {
     /// Named mcp_ops to avoid clashing with `mcp: Arc<McpService>` below.
     pub mcp_ops: Arc<McpOps>,
     pub proxy: Arc<ProxyOps>,
+    /// The remote tunnel (ADR 0012).
+    pub remote: Arc<RemoteOps>,
     pub setup: Arc<SetupOps>,
     /// The core application facade.
     pub core: Arc<AppCore>,
@@ -220,6 +222,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         settings,
         mcp_ops,
         proxy,
+        remote,
         setup,
         benchmark,
         proxy_supervisor: _,
@@ -250,22 +253,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         }
     });
 
-    // Spawn proxy crash watcher — emits ProxyCrashed when the task exits unexpectedly.
-    // Uses the watch channel from ProxySupervisor (zero polling).
-    tokio::spawn({
-        let mut rx = proxy.exit_receiver();
-        let sse = Arc::clone(&sse);
-        async move {
-            // Skip the initial value; only react to actual changes.
-            while rx.changed().await.is_ok() {
-                let status = rx.borrow().clone();
-                if status == gglib_runtime::proxy::ProxyStatus::Crashed {
-                    tracing::warn!("Proxy crash detected by watcher — emitting ProxyCrashed event");
-                    sse.emit(gglib_core::events::AppEvent::proxy_crashed());
-                }
-            }
-        }
-    });
+    crate::proxy_watch::spawn(&proxy, &sse);
 
     Ok(AxumContext {
         models,
@@ -274,6 +262,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         settings,
         mcp_ops,
         proxy,
+        remote,
         setup,
         core,
         mcp,

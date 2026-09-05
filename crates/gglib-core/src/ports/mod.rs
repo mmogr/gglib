@@ -16,6 +16,7 @@ pub(crate) mod model_registrar;
 pub(crate) mod model_repository;
 pub mod model_runtime;
 pub(crate) mod process_runner;
+pub(crate) mod remote_gateway;
 pub(crate) mod retry_observer;
 pub(crate) mod server_health;
 pub(crate) mod server_log_sink;
@@ -58,6 +59,7 @@ pub use model_runtime::{
     ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget, RuntimeErrorEnvelope,
 };
 pub use process_runner::{JinjaMode, ProcessHandle, ServerConfig};
+pub use remote_gateway::{PairingOutcome, RemoteGatewayPort};
 pub use retry_observer::RetryObserver;
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
