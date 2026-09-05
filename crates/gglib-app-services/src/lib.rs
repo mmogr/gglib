@@ -23,6 +23,8 @@ pub mod launch_options;
 mod mcp;
 mod models;
 mod proxy;
+mod proxy_port;
+mod remote;
 mod sampling_explain;
 mod servers;
 mod service_graph;
@@ -39,6 +41,7 @@ pub use downloads::DownloadOps;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
+pub use remote::{EnableRequest, Enabled, RemoteGateway, RemoteOps, RemoteStatusSnapshot};
 pub use sampling_explain::{
     ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,
 };

@@ -125,4 +125,16 @@ timestamp: number, } | { "type": "proxy_started",
 /**
  * Port the proxy is listening on.
  */
-port: number, } | { "type": "proxy_stopped" } | { "type": "proxy_crashed" };
+port: number, } | { "type": "proxy_stopped" } | { "type": "proxy_crashed" } | { "type": "remote_enabled", 
+/**
+ * Fingerprint of the ticket this session minted.
+ */
+ticketFingerprint: string, } | { "type": "remote_disabled" } | { "type": "remote_paired", 
+/**
+ * The tunnel edge's fingerprint for that device, when it sent one.
+ */
+peer: string | null, } | { "type": "remote_connected", 
+/**
+ * The loopback port the tunnel is bound to on this machine.
+ */
+port: number, } | { "type": "remote_disconnected" };

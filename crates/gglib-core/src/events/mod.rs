@@ -1,6 +1,10 @@
 #![doc = include_str!("README.md")]
 mod app;
+mod remote;
 mod server;
+
+#[cfg(test)]
+mod app_event_tests;
 
 use serde::{Deserialize, Serialize};
 
@@ -174,6 +178,35 @@ pub enum AppEvent {
 
     /// The proxy crashed (task exited without cancellation).
     ProxyCrashed,
+
+    // ========== Remote tunnel events (ADR 0012) ==========
+    /// The remote tunnel is up and has a ticket. The ticket itself is
+    /// never on the event stream — any local GUI client can read it — so
+    /// this carries the same twelve-character fingerprint the logs use.
+    RemoteEnabled {
+        /// Fingerprint of the ticket this session minted.
+        #[serde(rename = "ticketFingerprint")]
+        ticket_fingerprint: String,
+    },
+
+    /// The remote tunnel was taken down; its ticket is dead.
+    RemoteDisabled,
+
+    /// A device redeemed the pairing code and now holds the key.
+    RemotePaired {
+        /// The tunnel edge's fingerprint for that device, when it sent one.
+        peer: Option<String>,
+    },
+
+    /// This machine's connect side is up: a local port that is the remote
+    /// proxy.
+    RemoteConnected {
+        /// The loopback port the tunnel is bound to on this machine.
+        port: u16,
+    },
+
+    /// The connect side was taken down.
+    RemoteDisconnected,
 }
 
 impl AppEvent {
@@ -203,6 +236,11 @@ impl AppEvent {
             Self::ProxyStarted { .. } => "proxy:started",
             Self::ProxyStopped => "proxy:stopped",
             Self::ProxyCrashed => "proxy:crashed",
+            Self::RemoteEnabled { .. } => "remote:enabled",
+            Self::RemoteDisabled => "remote:disabled",
+            Self::RemotePaired { .. } => "remote:paired",
+            Self::RemoteConnected { .. } => "remote:connected",
+            Self::RemoteDisconnected => "remote:disconnected",
         }
     }
 }
@@ -221,66 +259,5 @@ impl AppEvent {
     /// Create a [`AppEvent::ProxyCrashed`] event.
     pub const fn proxy_crashed() -> Self {
         Self::ProxyCrashed
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_event_serialization() {
-        let event = AppEvent::server_started(1, "Llama-2-7B", 8080);
-        let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("\"type\":\"server_started\""));
-        assert!(json.contains("\"modelName\":\"Llama-2-7B\""));
-        assert!(json.contains("\"port\":8080"));
-    }
-
-    #[test]
-    fn test_event_names() {
-        assert_eq!(
-            AppEvent::server_started(1, "test", 8080).event_name(),
-            "server:started"
-        );
-        assert_eq!(AppEvent::model_removed(1).event_name(), "model:removed");
-        // The download names are covered exhaustively by
-        // `download_event_names_are_stable` below.
-    }
-
-    /// Lock down the colon-separated download event names.
-    ///
-    /// This guards [`AppEvent::event_name`] against silent renames, and that
-    /// is all it guards: none of these five strings appears anywhere in the
-    /// frontend. The names the GUI actually validates are the `snake_case`
-    /// serde variants, in `src/services/decoders/downloadEvent.ts`.
-    ///
-    /// It was written when the frontend did subscribe to these, over the
-    /// Tauri bus, and its doc pointed at `eventNames.ts` until #833 deleted
-    /// that file. Pointing it at `getEventCategory` instead — as an earlier
-    /// pass here did — is no better: that allowlist matches the serde tag, so
-    /// updating it in response to this test failing would be a no-op.
-    ///
-    /// Context: downloads started but the progress UI never appeared, because
-    /// the frontend listened for the wrong event names.
-    #[test]
-    fn download_event_names_are_stable() {
-        let cases = [
-            (DownloadEvent::started("id"), "download:started"),
-            (
-                DownloadEvent::progress("id", 50, 100, Some(1024.0), Some(10.0)),
-                "download:progress",
-            ),
-            (
-                DownloadEvent::completed("id", None::<String>),
-                "download:completed",
-            ),
-            (DownloadEvent::failed("id", "error"), "download:failed"),
-            (DownloadEvent::cancelled("id"), "download:cancelled"),
-        ];
-
-        for (event, expected_name) in cases {
-            assert_eq!(AppEvent::Download { event }.event_name(), expected_name);
-        }
     }
 }

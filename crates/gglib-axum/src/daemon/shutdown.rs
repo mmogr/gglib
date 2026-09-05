@@ -112,6 +112,13 @@ pub(super) async fn perform_shutdown(state: &AppState) {
         std::process::exit(1);
     });
 
+    // 0. Take the remote tunnel down first, so nothing new arrives from
+    //    outside while the rest is dismantled; its ticket dies here. "Not
+    //    enabled" is the usual answer.
+    if let Err(e) = state.remote.disable().await {
+        tracing::debug!("remote disable during shutdown: {e}");
+    }
+
     // 1. Drain the proxy so in-flight requests finish before their upstream
     //    dies. "Not running" is a fine answer.
     if let Err(e) = state.proxy.stop().await {
