@@ -366,7 +366,7 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
     // layered *after* (outside) the bearer guard so preflight OPTIONS
     // requests — which never carry Authorization — are answered by the CORS
     // layer instead of dying on a 401.
-    if let Some(expected) = access.expected_authorization() {
+    if let Some(expected) = access.api_key() {
         let expected: Arc<str> = expected.into();
         api = api.layer(middleware::from_fn_with_state(expected, bearer_guard));
     }

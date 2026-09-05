@@ -24,7 +24,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{constant_time_eq, is_loopback_host, normalize_host};
+use gglib_core::access::{bearer_matches, is_loopback_host, normalize_host};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use serde_json::json;
 use tracing::warn;
@@ -72,11 +72,15 @@ impl DaemonAccess {
                 .is_some_and(|host| host.parse::<std::net::IpAddr>().is_ok())
     }
 
-    /// The `"Bearer <token>"` string a request must present verbatim, or
-    /// `None` when authentication is off.
+    /// The bare bearer token this daemon requires, or `None` when
+    /// authentication is off.
+    ///
+    /// The token rather than a pre-formatted `"Bearer <token>"` header,
+    /// because [`bearer_matches`] parses the scheme instead of comparing a
+    /// fixed string — see the guard below.
     #[must_use]
-    pub fn expected_authorization(&self) -> Option<String> {
-        self.policy.expected_authorization()
+    pub fn api_key(&self) -> Option<&str> {
+        self.policy.api_key.as_deref()
     }
 }
 
@@ -126,8 +130,12 @@ pub(crate) async fn host_guard(
 /// Require `Authorization: Bearer <token>` before a request reaches `/api/*`.
 ///
 /// Installed only when a token is configured, so the unauthenticated
-/// loopback default costs nothing per request. `expected` holds the whole
-/// `"Bearer <token>"` string so the check is one comparison.
+/// loopback default costs nothing per request. `expected` holds the bare
+/// token rather than a pre-formatted `"Bearer <token>"` string: the scheme is
+/// matched case-insensitively per RFC 9110, so there is no fixed header to
+/// compare against. The proxy's twin guard uses the same
+/// [`bearer_matches`] — the two doors have to agree about what a valid
+/// credential looks like, and until now they did not.
 pub(crate) async fn bearer_guard(
     State(expected): State<Arc<str>>,
     req: Request,
@@ -136,10 +144,9 @@ pub(crate) async fn bearer_guard(
     let presented = req
         .headers()
         .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
+        .and_then(|v| v.to_str().ok());
 
-    if constant_time_eq(presented.as_bytes(), expected.as_bytes()) {
+    if bearer_matches(presented, &expected) {
         return next.run(req).await;
     }
 
@@ -186,15 +193,5 @@ mod tests {
         assert!(access.host_allowed("gglib.local:9887"));
         assert!(access.host_allowed("127.0.0.1:9887"));
         assert!(!access.host_allowed("evil.com:9887"));
-    }
-
-    #[test]
-    fn expected_authorization_is_preformatted() {
-        let access = DaemonAccess::new(Some("secret".into()), "0.0.0.0", Vec::new());
-        assert_eq!(
-            access.expected_authorization().as_deref(),
-            Some("Bearer secret")
-        );
-        assert_eq!(DaemonAccess::loopback().expected_authorization(), None);
     }
 }

@@ -1,9 +1,11 @@
 #![doc = include_str!("README.md")]
+mod bearer;
 mod host;
 
 #[cfg(test)]
 mod host_tests;
 
+pub use bearer::bearer_matches;
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 
 use crate::cors::CorsConfig;
@@ -124,16 +126,6 @@ impl ProxyAccessConfig {
         }
     }
 
-    /// The `"Bearer <token>"` string a request must present verbatim, or
-    /// `None` when authentication is off.
-    ///
-    /// Pre-formatted so the per-request check is a comparison rather than an
-    /// allocation.
-    #[must_use]
-    pub fn expected_authorization(&self) -> Option<String> {
-        self.api_key.as_ref().map(|key| format!("Bearer {key}"))
-    }
-
     /// Whether a request carrying this `Host` header may proceed.
     ///
     /// This is the DNS-rebinding guard. A rebound page reaches the loopback
@@ -176,24 +168,20 @@ mod tests {
         assert!(!constant_time_eq(b"Bearer secret", b"Bearer secret-extra"));
     }
 
+    /// The guards read the bare token off this field, so its presence is what
+    /// decides whether authentication is enforced at all.
     #[test]
-    fn no_api_key_means_no_expected_header() {
-        let cfg = ProxyAccessConfig::new(CorsConfig::LocalOnly, None, "127.0.0.1", vec![]);
-        assert_eq!(cfg.expected_authorization(), None);
-    }
+    fn the_api_key_is_carried_verbatim() {
+        let off = ProxyAccessConfig::new(CorsConfig::LocalOnly, None, "127.0.0.1", vec![]);
+        assert_eq!(off.api_key, None);
 
-    #[test]
-    fn expected_header_is_prefixed_once() {
-        let cfg = ProxyAccessConfig::new(
+        let on = ProxyAccessConfig::new(
             CorsConfig::LocalOnly,
             Some("secret123".into()),
             "127.0.0.1",
             vec![],
         );
-        assert_eq!(
-            cfg.expected_authorization().as_deref(),
-            Some("Bearer secret123")
-        );
+        assert_eq!(on.api_key.as_deref(), Some("secret123"));
     }
 
     /// Loopback needs no configuration — the common case must not require a

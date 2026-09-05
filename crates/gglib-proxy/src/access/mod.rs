@@ -9,7 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use gglib_core::ProxyAccessConfig;
-use gglib_core::access::constant_time_eq;
+use gglib_core::access::bearer_matches;
 use tracing::warn;
 
 use crate::models::ErrorResponse;
@@ -69,8 +69,10 @@ pub(crate) async fn host_guard(
 /// installed at all when no token is configured, so the unauthenticated default
 /// costs nothing per request.
 ///
-/// `expected` holds the whole `"Bearer <token>"` string rather than the token
-/// alone, so the check is one comparison with no per-request formatting.
+/// `expected` holds the bare token rather than a pre-formatted
+/// `"Bearer <token>"` string: the scheme is matched case-insensitively per RFC
+/// 9110, so there is no fixed header to compare against. See
+/// [`bearer_matches`] for what that admits and what it still refuses.
 pub(crate) async fn bearer_guard(
     State(expected): State<Arc<str>>,
     req: Request,
@@ -79,10 +81,9 @@ pub(crate) async fn bearer_guard(
     let presented = req
         .headers()
         .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
+        .and_then(|v| v.to_str().ok());
 
-    if constant_time_eq(presented.as_bytes(), expected.as_bytes()) {
+    if bearer_matches(presented, &expected) {
         return next.run(req).await;
     }
 

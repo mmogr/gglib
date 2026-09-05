@@ -145,7 +145,7 @@ crates/gglib-proxy/src/token_calibration.rs 370
 crates/gglib-proxy/src/upstream_health.rs 377
 crates/gglib-proxy/tests/fixtures/common.rs 1211
 crates/gglib-proxy/tests/integration_admission.rs 322
-crates/gglib-proxy/tests/integration_auth.rs 418
+crates/gglib-proxy/tests/integration_auth.rs 461
 crates/gglib-proxy/tests/integration_loop_guard.rs 418
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 479
 crates/gglib-proxy/tests/integration_pinned_models.rs 312

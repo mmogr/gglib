@@ -126,8 +126,44 @@ async fn a_correct_bearer_token_is_accepted() {
     cancel.cancel();
 }
 
+/// RFC 9110 §11.1 makes the auth scheme case-insensitive, so these are the
+/// same request as the one above. They used to be answered with a 401 saying
+/// the key was invalid, which was both wrong and unactionable — and the tunnel
+/// in front of this endpoint accepts them, so the two doors disagreed about
+/// one credential.
+#[tokio::test]
+async fn the_scheme_is_matched_case_insensitively() {
+    let (base, _port, cancel) = spawn_proxy(with_key("secret123")).await;
+
+    for header in [
+        "bearer secret123",
+        "BEARER secret123",
+        "BeArEr secret123",
+        // 1*SP, and trailing whitespace is not part of the credential.
+        "Bearer  secret123",
+        "Bearer secret123 ",
+    ] {
+        let res = Client::new()
+            .get(format!("{base}/v1/models"))
+            .header(reqwest::header::AUTHORIZATION, header)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::OK,
+            "{header:?} presents the configured key"
+        );
+    }
+
+    cancel.cancel();
+}
+
 /// Every shape of a wrong credential, including the two that a lenient
 /// comparison would wave through: a prefix, and the raw token with no scheme.
+///
+/// The scheme becoming case-insensitive must not widen this list — the point
+/// was to stop refusing correct requests, not to start admitting wrong ones.
 #[tokio::test]
 async fn every_flavour_of_missing_or_wrong_credential_is_refused() {
     let (base, _port, cancel) = spawn_proxy(with_key("secret123")).await;
@@ -146,6 +182,13 @@ async fn every_flavour_of_missing_or_wrong_credential_is_refused() {
             Some("Bearer secret1234"),
         ),
         ("an empty header", Some("")),
+        ("the scheme with no credential", Some("Bearer")),
+        ("the scheme and a space, nothing more", Some("Bearer ")),
+        (
+            "a scheme that merely starts the same way",
+            Some("Bearerish secret123"),
+        ),
+        ("the credential in the wrong case", Some("Bearer SECRET123")),
     ];
 
     for (description, header) in cases {

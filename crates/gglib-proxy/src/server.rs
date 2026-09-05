@@ -358,7 +358,7 @@ pub async fn serve(
 
     // Installed only when a token is configured, so the unauthenticated
     // loopback default — still the common case — pays nothing per request.
-    if let Some(expected) = access.expected_authorization() {
+    if let Some(expected) = access.api_key.clone() {
         let expected: Arc<str> = Arc::from(expected);
         protected = protected.route_layer(axum::middleware::from_fn_with_state(
             expected,
