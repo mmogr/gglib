@@ -1,5 +1,5 @@
 //! Tests for [`super::Backend`] — the proxy's bind address as a backend
-//! modelpipe will dial.
+//! modelpipe will dial — and for when the tunnel stops fronting it.
 //!
 //! The verdicts asserted here are modelpipe's, restated: `locality::admits`
 //! is `pub(crate)` over there, so this side cannot ask it and instead has to
@@ -12,6 +12,8 @@ use super::*;
 fn addr(s: &str) -> SocketAddr {
     s.parse().expect("test address")
 }
+
+// ── Turning a bind address into a dial address ───────────────────────────
 
 /// The case that made `enable` fail on a proxy someone had deliberately
 /// made reachable: `0.0.0.0` classifies as `Unspecified`, which modelpipe
@@ -101,4 +103,54 @@ fn a_link_local_or_public_bind_is_left_for_modelpipe_to_refuse() {
             "{bound} must not be handed a flag that cannot admit it"
         );
     }
+}
+
+// ── When the tunnel stops fronting its proxy ─────────────────────────────
+
+/// Both exits count. `POST /api/proxy/stop` publishes `Stopped` and a proxy
+/// task that fell over publishes `Crashed`; reacting only to the crash would
+/// leave the deliberate stop — the one a person just asked for — with a
+/// tunnel still forwarding into a port nobody owns.
+#[test]
+fn both_ways_the_proxy_exits_take_the_tunnel_down() {
+    let backend = Backend::at(addr("127.0.0.1:8080"));
+    assert!(!still_fronting(&ProxyStatus::Stopped, &backend));
+    assert!(!still_fronting(&ProxyStatus::Crashed, &backend));
+}
+
+/// The ordinary poll: the proxy is up on the address the tunnel dials, so
+/// nothing happens. This is the answer several times a minute for the whole
+/// life of a session, and it must not cost the tunnel anything.
+#[test]
+fn a_proxy_still_on_the_address_the_tunnel_dials_is_left_alone() {
+    let backend = Backend::at(addr("127.0.0.1:8080"));
+    let status = ProxyStatus::Running {
+        address: addr("127.0.0.1:8080"),
+    };
+    assert!(still_fronting(&status, &backend));
+}
+
+/// The address is re-read on every poll, and the rewrite is applied to what
+/// comes back — otherwise a proxy on the wildcard would compare its own
+/// `0.0.0.0:8080` against the `127.0.0.1:8080` the tunnel was given and read
+/// as a stranger, tearing down a healthy tunnel every five seconds.
+#[test]
+fn a_wildcard_bind_still_matches_the_loopback_address_it_was_rewritten_to() {
+    let backend = Backend::at(addr("0.0.0.0:8080"));
+    let status = ProxyStatus::Running {
+        address: addr("0.0.0.0:8080"),
+    };
+    assert!(still_fronting(&status, &backend));
+}
+
+/// A proxy that went away and came back on another port is running, and is
+/// not this tunnel's backend. `modelpipe::serve` still holds the old port, so
+/// leaving the tunnel up would forward to whatever holds it now.
+#[test]
+fn a_proxy_that_came_back_on_another_port_is_not_the_one_being_fronted() {
+    let backend = Backend::at(addr("127.0.0.1:8080"));
+    let status = ProxyStatus::Running {
+        address: addr("127.0.0.1:9099"),
+    };
+    assert!(!still_fronting(&status, &backend));
 }

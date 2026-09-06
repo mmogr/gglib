@@ -22,8 +22,8 @@ remote/
   serve.rs          — RemoteOps: enable / disable — this machine as the desktop
   connect.rs        — RemoteOps: connect / disconnect / kill_remote — this
                       machine as the laptop
-  backend.rs        — which local address the tunnel fronts, and following
-                      the proxy that owns it
+  backend.rs        — which local address the tunnel fronts, and taking the
+                      tunnel down when it stops being the proxy's
   connect_dial.rs   — the span of connect with the slot reserved and the
                       lock released: the dial, the pairing, the install
   connect_watch.rs  — following one connection until it is over, and the
@@ -86,6 +86,27 @@ rewrites a wildcard bind to the loopback literal of the same family, keeping
 the port, and sets the flag for a deliberate LAN bind, which names an
 interface loopback would not reach. Link-local and public binds stay refused,
 which is the rule and not a gap.
+
+# The tunnel goes down with the proxy
+
+That address cannot be corrected afterwards: `modelpipe::serve` holds it for
+the listener's whole life, a running listener cannot be re-pointed at a new
+port, and re-serving would mint a fresh identity — a new ticket, every paired
+machine unpaired. So the tunnel goes down with the proxy it fronts, on a
+deliberate `POST /api/proxy/stop` as much as on a crash. Leaving it up would
+forward tunnelled requests, and the bearer key modelpipe 0.2.0 does not
+strip, into a port this daemon no longer owns.
+
+Two mechanisms watch for that, because the obvious one has a hole. The
+supervisor's exit channel is the fast path, but it is published from inside
+the proxy task after the serve future returns, so a task that panicked or
+that `stop` aborted on its five-second timeout announces nothing at all. So
+the watcher also asks `ProxyOps::status()` on a timer, which reads a finished
+join handle rather than a message and therefore sees every case — including
+a proxy that went away and came back on a different port, which is running
+and is still not this tunnel's backend. The address is compared through the
+same rewrite `enable` used, so a wildcard bind matches the loopback literal
+it was rewritten to instead of tearing down a healthy tunnel every tick.
 
 # The connect side
 

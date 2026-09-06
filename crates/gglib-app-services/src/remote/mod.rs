@@ -41,10 +41,14 @@ const WAIT_ONLINE: Duration = Duration::from_secs(10);
 /// How long a teardown lets in-flight requests finish before cutting them.
 const DRAIN: Duration = Duration::from_secs(5);
 
-/// One live serve side and the task that keeps its token current.
+/// One live serve side and the tasks that keep it honest.
 struct Live {
     handle: Arc<modelpipe::ServeHandle>,
-    rotation: CancellationToken,
+    /// Cancelled when this tunnel goes down, which is what stops both the
+    /// rotation poll and the watcher following the proxy it fronts. One
+    /// token for both: neither outlives the tunnel they belong to, and a
+    /// second field would only be one more thing to forget.
+    cancel: CancellationToken,
 }
 
 /// The remote tunnel's lifecycle: both sides of ADR 0012.
@@ -58,7 +62,7 @@ pub struct RemoteOps {
     core: Arc<AppCore>,
     gateway: Arc<RemoteGateway>,
     emitter: Arc<dyn AppEventEmitter>,
-    live: Mutex<Slot<Live>>,
+    live: Arc<Mutex<Slot<Live>>>,
     /// Shared with the task that watches the connection, which is why it is
     /// an `Arc` where `live` is not.
     live_connect: Arc<Mutex<Slot<LiveConnect>>>,
@@ -83,7 +87,7 @@ impl RemoteOps {
             core,
             gateway,
             emitter,
-            live: Mutex::new(Slot::Empty),
+            live: Arc::new(Mutex::new(Slot::Empty)),
             live_connect: Arc::new(Mutex::new(Slot::Empty)),
             connect_generation: AtomicU64::new(0),
             enable_generation: AtomicU64::new(0),

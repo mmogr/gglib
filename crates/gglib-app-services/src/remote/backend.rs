@@ -1,10 +1,26 @@
-//! Which local address the tunnel fronts.
+//! Which local address the tunnel fronts, and noticing when it stops being
+//! one.
 //!
-//! `enable` reads the proxy's bound address exactly once, and this turns
-//! that read — a *bind* address — into something `modelpipe::serve` will
-//! dial.
+//! `enable` reads the proxy's bound address exactly once, and both halves of
+//! this file are about that single read: one turns a *bind* address into
+//! something `modelpipe::serve` will dial, and the other takes the tunnel
+//! down when that address stops meaning the proxy.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
+use std::time::Duration;
+
+use gglib_core::events::AppEvent;
+use gglib_core::ports::AppEventEmitter;
+use gglib_runtime::proxy::ProxyStatus;
+use tokio::sync::{Mutex, watch};
+use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
+
+use super::gateway::RemoteGateway;
+use super::slot::Slot;
+use super::{DRAIN, Live, RemoteOps};
+use crate::proxy::ProxyOps;
 
 /// Where the tunnel dials this machine's proxy, and on what terms.
 pub(super) struct Backend {
@@ -72,6 +88,140 @@ fn is_private(ip: IpAddr) -> bool {
         // fc00::/7, unique local. Matched by prefix because
         // `Ipv6Addr::is_unique_local` is still unstable.
         IpAddr::V6(v6) => v6.segments()[0] & 0xFE00 == 0xFC00,
+    }
+}
+
+/// Follow the proxy this tunnel fronts, and take the tunnel down when it
+/// goes away.
+///
+/// `enable` captures the proxy's address once and `modelpipe::serve` holds
+/// it for the listener's whole life: a running listener cannot be re-pointed
+/// at another port, and re-serving would mint a fresh identity — a new
+/// ticket, and every paired machine unpaired. So the only honest answer to
+/// the proxy exiting is to stop fronting it.
+///
+/// Leaving it up is worse than having no tunnel. The port stops being this
+/// daemon's the moment the proxy lets go of it, another local process may
+/// bind it, and modelpipe 0.2.0 forwards `Authorization` verbatim — so
+/// whatever answers there next is handed the tunnelled request *and* the
+/// gglib key that came with it.
+///
+/// Two mechanisms, because one of them has a hole. The exit channel is the
+/// fast path and covers the ordinary exits; the poll is what covers the ones
+/// nothing announces. The receiver must be taken before the address is read:
+/// it publishes only exits, never starts, so a subscription made afterwards
+/// would silently miss a proxy that fell over in between.
+pub(super) fn follow_proxy(
+    ops: &RemoteOps,
+    handle: &Arc<modelpipe::ServeHandle>,
+    exit: watch::Receiver<ProxyStatus>,
+    cancel: CancellationToken,
+    backend: Backend,
+) {
+    tokio::spawn(watch_proxy(
+        Arc::clone(&ops.live),
+        Arc::clone(handle),
+        Arc::clone(&ops.gateway),
+        Arc::clone(&ops.emitter),
+        Arc::clone(&ops.proxy),
+        exit,
+        cancel,
+        backend,
+    ));
+}
+
+/// How often the watcher asks the supervisor what the proxy is doing, on top
+/// of the exit channel it is subscribed to.
+///
+/// The channel is not enough on its own: it is published from inside the
+/// proxy task, *after* the serve future returns, so a task that panicked or
+/// that `ProxySupervisor::stop` aborted on its five-second timeout publishes
+/// nothing at all. `status()` sees all three — it reads `is_finished()` and a
+/// taken handle rather than a message — so it is what closes the case the
+/// channel leaves open. Five seconds is a lock and an `is_finished()`, and it
+/// bounds how long a released port can be fronted.
+const PROXY_POLL: Duration = Duration::from_secs(5);
+
+/// The task [`follow_proxy`] spawns: wait until the proxy stops being the one
+/// this tunnel was built in front of, then undo `enable`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the pieces of `RemoteOps` this outlives, plus what it is \
+              watching; bundling them into a struct used once would hide \
+              rather than reduce them"
+)]
+async fn watch_proxy(
+    live: Arc<Mutex<Slot<Live>>>,
+    handle: Arc<modelpipe::ServeHandle>,
+    gateway: Arc<RemoteGateway>,
+    emitter: Arc<dyn AppEventEmitter>,
+    proxy: Arc<ProxyOps>,
+    mut exit: watch::Receiver<ProxyStatus>,
+    cancel: CancellationToken,
+    backend: Backend,
+) {
+    let mut poll = tokio::time::interval_at(tokio::time::Instant::now() + PROXY_POLL, PROXY_POLL);
+    loop {
+        tokio::select! {
+            () = cancel.cancelled() => return,
+            changed = exit.changed() => {
+                // The sender outlives every proxy run, so a closed channel
+                // means the process itself is coming down.
+                if changed.is_err() {
+                    return;
+                }
+                let status = exit.borrow_and_update().clone();
+                if !still_fronting(&status, &backend) {
+                    warn!(%status, "the proxy the remote tunnel fronts exited");
+                    break;
+                }
+            }
+            _ = poll.tick() => {
+                let status = proxy.status().await;
+                if !still_fronting(&status, &backend) {
+                    warn!(%status, "the proxy the remote tunnel fronts is no longer there");
+                    break;
+                }
+            }
+        }
+    }
+
+    // Identity rather than a generation counter: the only tunnel this
+    // watcher may take down is the one it was spawned beside, and
+    // `Arc::ptr_eq` says exactly that with no second field to keep in step.
+    // A `disable` that got here first leaves nothing to match, and so does a
+    // reservation — `take_if` reads a full slot only, which is why this
+    // watcher is spawned after the install rather than before it.
+    let taken = live
+        .lock()
+        .await
+        .take_if(|l| Arc::ptr_eq(&l.handle, &handle));
+    let Some(live) = taken else { return };
+    // Our own token, and the rotation poll's: the tunnel is over, so nothing
+    // should still be following a key for it.
+    live.cancel.cancel();
+    gateway.reset_session();
+    if !live.handle.shutdown_timeout(DRAIN).await {
+        warn!("remote tunnel drain hit its deadline; remaining requests were cut");
+    }
+    info!("remote tunnel disabled with the proxy it fronted");
+    emitter.emit(AppEvent::remote_disabled());
+}
+
+/// Whether a proxy in this state is still the one this tunnel dials.
+fn still_fronting(status: &ProxyStatus, backend: &Backend) -> bool {
+    match status {
+        // The address is compared, not assumed: a proxy that went away and
+        // came back on another port is not this tunnel's backend, even
+        // though it is running. The comparison goes through the same
+        // rewrite `enable` used, so a proxy that rebound the wildcard is
+        // recognised as the same backend rather than as a new one.
+        ProxyStatus::Running { address } => Backend::at(*address).url == backend.url,
+        // `POST /api/proxy/stop` publishes the first and a proxy task that
+        // fell over publishes the second. Both are equally not ours any
+        // more, and only reacting to the crash would leave the deliberate
+        // stop — the one a person just asked for — forwarding into the dark.
+        ProxyStatus::Stopped | ProxyStatus::Crashed => false,
     }
 }
 
