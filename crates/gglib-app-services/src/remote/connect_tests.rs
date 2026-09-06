@@ -4,23 +4,17 @@
 //! endpoint and a peer that answers: what `connect` refuses before it dials.
 //! What it owes settings once the dial has come up is on the far side of
 //! that call, so it is driven through `settle` in `stored_pairing_tests.rs`
-//! instead. The one test here that does dial is `#[ignore]`d and says why on
-//! itself.
+//! instead. The one test that does dial is `#[ignore]`d and lives in
+//! `connect_race_tests.rs`, beside the claim it makes.
 //!
 //! The tickets and the keys are in `test_support_remote.rs`, beside the
-//! fixture, because `lifecycle_tests.rs` names the same machines.
-
-use std::time::Duration;
+//! fixture, because `lifecycle_tests.rs` names the same machines. What
+//! happens when two of these arrive at once is in `connect_race_tests.rs`.
 
 use super::*;
 use crate::test_support_remote::{
-    FINGERPRINT_A, KEY_A, TICKET_A, TICKET_B, TICKET_UNREACHABLE, paired_with, test_remote_ops,
+    FINGERPRINT_A, KEY_A, TICKET_A, TICKET_B, paired_with, test_remote_ops,
 };
-
-/// What `gglib remote status` allows the daemon before it gives up
-/// (`gglib-cli/src/daemon_client/remote.rs`). A status that takes longer
-/// than this is a status nobody sees.
-const CLI_STATUS_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// A machine that has never paired is told what to paste, not given a
 /// generic failure — there is nothing in settings to dial and nothing to
@@ -169,63 +163,4 @@ async fn the_stored_key_and_the_stored_ticket_describe_one_machine() {
         Some(FINGERPRINT_A)
     );
     assert!(status.has_remote_key);
-}
-
-/// `status` answers while a dial is in flight — finding A1, and it fails
-/// today.
-///
-/// `connect` holds `live_connect` from its first line to its last, across
-/// `modelpipe::connect` and a redeem that may take twenty seconds, while
-/// `status` locks the same mutex to read the connect snapshot.
-/// `tokio::sync::Mutex` is FIFO-fair, so a dial that is waiting out an
-/// unreachable peer makes `gglib remote status` wait with it — past the
-/// five seconds the CLI allows — and makes `gglib remote disconnect` unable
-/// to cancel the very connect it exists to cancel. The fix is to check and
-/// reserve under the lock, release across the dial, and re-acquire to
-/// install; `connect_generation` already exists to make that safe.
-///
-/// `#[ignore]`d because it binds a real iroh endpoint, the way
-/// `pidfile::sweep`'s real-directory test is ignored for touching the real
-/// `pids_dir()`. It dials a ticket whose only address is in the IPv6
-/// documentation prefix, with discovery off so that address is the only
-/// path there is and nothing is resolved over the network. Run it with
-/// `cargo test -p gglib-app-services -- --ignored`.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "binds a real iroh endpoint; pending: connect holds its mutex across the dial"]
-async fn status_answers_while_a_dial_is_in_flight() {
-    let (core, ops, _) = test_remote_ops().await;
-    core.settings()
-        .update(paired_with(TICKET_A, KEY_A))
-        .await
-        .expect("a pairing naming that machine admits a bare ticket for it");
-
-    let dialling = Arc::clone(&ops);
-    let dial = tokio::spawn(async move {
-        dialling
-            .connect(ConnectRequest {
-                pairing: Some(TICKET_UNREACHABLE.to_owned()),
-                discovery: false,
-                ..ConnectRequest::default()
-            })
-            .await
-    });
-    // Long enough for the spawned task to have taken the lock, short enough
-    // that the assertion below is still about the dial and not about it.
-    tokio::time::sleep(Duration::from_millis(250)).await;
-
-    let answered = tokio::time::timeout(CLI_STATUS_TIMEOUT, ops.status()).await;
-    // A dial that gave up on its own released the lock, and then a fast
-    // `status` proves nothing. Checked before the verdict so this cannot go
-    // green on a machine where the address fails immediately for want of
-    // any IPv6 route at all.
-    let still_dialling = !dial.is_finished();
-    dial.abort();
-    assert!(
-        still_dialling,
-        "the dial ended by itself, so this run said nothing about the lock"
-    );
-    assert!(
-        answered.is_ok(),
-        "status waited on the dial's mutex past the timeout the CLI gives it"
-    );
 }
