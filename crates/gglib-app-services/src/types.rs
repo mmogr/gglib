@@ -862,6 +862,9 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,
+            // Written by `gglib remote connect`, never from the settings UI.
+            remote_api_key: None,
+            remote_last_ticket: None,
         }
     }
 }

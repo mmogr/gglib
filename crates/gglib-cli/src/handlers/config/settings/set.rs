@@ -106,6 +106,9 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         proxy_autostart: args.proxy_autostart.map(Some),
         close_to_tray: args.close_to_tray.map(Some),
         start_at_login: args.start_at_login.map(Some),
+        // Written by `gglib remote connect`, never by hand (ADR 0012).
+        remote_api_key: None,
+        remote_last_ticket: None,
     };
 
     // Pre-validate: merge the prospective update into a local copy and validate

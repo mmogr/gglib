@@ -34,6 +34,49 @@ pub struct Enabled {
     pub expires_in_s: u64,
 }
 
+/// What `connect` is asked for.
+#[derive(Debug, Clone, Default)]
+pub struct ConnectRequest {
+    /// `<ticket>-<code>` for a first pairing, a bare ticket afterwards, or
+    /// `None` to dial the ticket this machine last connected to.
+    pub pairing: Option<String>,
+    /// The loopback port to bind here; `None` picks a free one.
+    pub port: Option<u16>,
+    /// A self-hosted relay URL for this endpoint; `None` uses the public
+    /// relays.
+    pub relay: Option<String>,
+    /// Resolve through n0's discovery service. Off means this side dials
+    /// only the paths the ticket carries.
+    pub discovery: bool,
+}
+
+/// What `connect` hands back.
+#[derive(Debug, Clone)]
+pub struct Connected {
+    /// The loopback port that is now the far machine.
+    pub port: u16,
+    /// `http://127.0.0.1:<port>/v1`, ready to paste into a client.
+    pub base_url: String,
+    /// Fingerprint of the ticket dialled.
+    pub ticket_fingerprint: String,
+    /// Whether this call redeemed a pairing code and stored the key, as
+    /// opposed to reusing a key from an earlier pairing.
+    pub paired: bool,
+}
+
+/// The connect side, while it is up.
+#[derive(Debug, Clone)]
+pub struct ConnectSnapshot {
+    /// The loopback port bound here.
+    pub port: u16,
+    /// `http://127.0.0.1:<port>/v1`.
+    pub base_url: String,
+    /// Fingerprint of the ticket dialled.
+    pub ticket_fingerprint: String,
+    /// How this side is reaching the peer: `idle`, `direct`, `relayed`.
+    pub path: String,
+}
+
 /// The tunnel as the status surface sees it.
 #[derive(Debug, Clone, Default)]
 pub struct RemoteStatusSnapshot {
@@ -57,4 +100,10 @@ pub struct RemoteStatusSnapshot {
     pub last_tunnelled_ms: Option<i64>,
     /// The peer that sent it.
     pub last_peer: Option<String>,
+    /// The connect side, when this machine is reaching another.
+    pub connected: Option<ConnectSnapshot>,
+    /// Fingerprint of the ticket a bare `connect` would dial, from settings.
+    pub stored_ticket_fingerprint: Option<String>,
+    /// Whether this machine holds a key from an earlier pairing.
+    pub has_remote_key: bool,
 }

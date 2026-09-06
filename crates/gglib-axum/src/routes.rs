@@ -108,6 +108,9 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/remote/enable", post(handlers::remote::enable))
         .route("/remote/disable", post(handlers::remote::disable))
         .route("/remote/status", get(handlers::remote::status))
+        .route("/remote/connect", post(handlers::remote::connect))
+        .route("/remote/disconnect", post(handlers::remote::disconnect))
+        .route("/remote/kill", post(handlers::remote::kill))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
         // Events (SSE)
