@@ -50,9 +50,12 @@ text instead.
 
 `gglib remote status` shows both sides: whether the tunnel is up, the
 ticket's fingerprint (never the ticket), whether the code is still live,
-which peers are connected and by what path, and how many requests came
-through. `gglib remote disable` takes the tunnel down; the ticket is dead
-from that moment.
+which peers are connected and by what path, and how many requests this machine
+has *served* through the tunnel. That last number is counted where the requests
+arrive, so it is printed only on the machine that is serving; the connecting
+side has nothing to count and is told to read the number over there rather than
+shown a zero of its own. `gglib remote disable` takes the tunnel down; the
+ticket is dead from that moment.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
