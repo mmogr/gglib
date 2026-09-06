@@ -18,8 +18,7 @@ impl DaemonHandle {
     /// freshly minted key to take effect on the local proxy.
     pub(crate) async fn remote_enable(&self, body: &RemoteEnableBody) -> Result<RemoteEnableDto> {
         let response = self
-            .client
-            .post(self.url(paths::REMOTE_ENABLE_PATH))
+            .post(paths::REMOTE_ENABLE_PATH)
             .json(body)
             .timeout(Duration::from_secs(45))
             .send()
@@ -30,8 +29,7 @@ impl DaemonHandle {
     /// Take the tunnel down (idempotent on the daemon side).
     pub(crate) async fn remote_disable(&self) -> Result<RemoteStatusDto> {
         let response = self
-            .client
-            .post(self.url(paths::REMOTE_DISABLE_PATH))
+            .post(paths::REMOTE_DISABLE_PATH)
             .json(&serde_json::json!({}))
             .timeout(Duration::from_secs(15))
             .send()
@@ -42,8 +40,7 @@ impl DaemonHandle {
     /// The tunnel's status.
     pub(crate) async fn remote_status(&self) -> Result<RemoteStatusDto> {
         let response = self
-            .client
-            .get(self.url(paths::REMOTE_STATUS_PATH))
+            .get(paths::REMOTE_STATUS_PATH)
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
@@ -59,8 +56,7 @@ impl DaemonHandle {
         body: &RemoteConnectBody,
     ) -> Result<RemoteConnectDto> {
         let response = self
-            .client
-            .post(self.url(paths::REMOTE_CONNECT_PATH))
+            .post(paths::REMOTE_CONNECT_PATH)
             .json(body)
             .timeout(Duration::from_secs(60))
             .send()
@@ -71,8 +67,7 @@ impl DaemonHandle {
     /// Close the loopback port (idempotent on the daemon side).
     pub(crate) async fn remote_disconnect(&self) -> Result<RemoteStatusDto> {
         let response = self
-            .client
-            .post(self.url(paths::REMOTE_DISCONNECT_PATH))
+            .post(paths::REMOTE_DISCONNECT_PATH)
             .json(&serde_json::json!({}))
             .timeout(Duration::from_secs(15))
             .send()
@@ -85,8 +80,7 @@ impl DaemonHandle {
     /// idea: the CLI has already asked the person.
     pub(crate) async fn remote_kill(&self) -> Result<RemoteStatusDto> {
         let response = self
-            .client
-            .post(self.url(paths::REMOTE_KILL_PATH))
+            .post(paths::REMOTE_KILL_PATH)
             .json(&serde_json::json!({ "confirm": "shutdown" }))
             .timeout(Duration::from_secs(30))
             .send()

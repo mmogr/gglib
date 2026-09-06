@@ -79,7 +79,8 @@ pub(crate) async fn execute(
     let settings = ctx.app.settings().get().await?;
     let default_context = resolve_default_context(default_context.as_deref(), &settings)?;
 
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let status = handle
         .start_proxy(&StartProxyBody {
             host: Some(host.clone()),
@@ -144,7 +145,7 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
-pub(crate) async fn stop() -> Result<()> {
+pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
     match daemon_client::probe(&client).await {
         daemon_client::DaemonProbe::Running => {}
@@ -153,7 +154,10 @@ pub(crate) async fn stop() -> Result<()> {
             return Ok(());
         }
     }
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     let status = handle.stop_proxy().await?;
     if status.running {
         anyhow::bail!("the daemon reported the proxy still running after stop");

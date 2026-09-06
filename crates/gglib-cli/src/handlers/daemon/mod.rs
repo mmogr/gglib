@@ -4,6 +4,7 @@ mod mdns;
 
 use anyhow::Result;
 
+use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonProbe};
 use crate::presentation::style;
 use gglib_axum::{DaemonLock, DaemonOptions, run_daemon};
@@ -48,7 +49,7 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
 }
 
 /// Execute `gglib daemon status`.
-pub(crate) async fn status() -> Result<()> {
+pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
 
     style::print_info_banner("Daemon", "\u{2139}\u{fe0f}");
@@ -60,7 +61,10 @@ pub(crate) async fn status() -> Result<()> {
             {
                 eprintln!("  PID:     {}", holder.pid);
             }
-            let handle = daemon_client::DaemonHandle { client };
+            let handle = daemon_client::DaemonHandle {
+                client,
+                api_key: daemon_client::auth::daemon_api_key(ctx).await,
+            };
             match handle.proxy_status().await {
                 Ok(proxy) if proxy.running => {
                     eprintln!(
@@ -90,7 +94,7 @@ pub(crate) async fn status() -> Result<()> {
 }
 
 /// Execute `gglib daemon stop`: request shutdown and wait for it to land.
-pub(crate) async fn stop() -> Result<()> {
+pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
 
     match daemon_client::probe(&client).await {
@@ -104,7 +108,10 @@ pub(crate) async fn stop() -> Result<()> {
         DaemonProbe::Running => {}
     }
 
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     if !handle.shutdown_daemon().await? {
         anyhow::bail!(
             "the server on port {DAEMON_PORT} refused the shutdown request \

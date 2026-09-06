@@ -5,6 +5,7 @@ use std::io::IsTerminal as _;
 use anyhow::Result;
 
 use super::pairing_tui::{self, Outcome};
+use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, RemoteEnableBody, RemoteEnableDto};
 
 /// What `gglib remote enable` was asked for.
@@ -25,8 +26,9 @@ pub(crate) struct EnableArgs {
 /// Ensures the daemon is running, asks it to bring the tunnel up, and shows
 /// the pairing once — in the alternate screen when stdout is a terminal, as
 /// plain text otherwise.
-pub(crate) async fn enable(args: EnableArgs) -> Result<()> {
-    let handle = daemon_client::ensure_daemon().await?;
+pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
 
     if args.no_discovery {
         eprintln!(
