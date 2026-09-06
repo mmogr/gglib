@@ -207,12 +207,8 @@ impl RemoteOps {
     /// `Conflict` when nothing is enabled and nothing is arming.
     pub async fn disable(&self) -> Result<(), GuiError> {
         match self.live.lock().await.take() {
-            Taken::Value(Live { handle, cancel }) => {
-                cancel.cancel();
-                self.gateway.reset_session();
-                if !handle.shutdown_timeout(DRAIN).await {
-                    warn!("remote tunnel drain hit its deadline; remaining requests were cut");
-                }
+            Taken::Value(live) => {
+                super::teardown::take_down(live, &self.gateway).await;
                 info!("remote tunnel disabled");
                 self.emitter.emit(AppEvent::remote_disabled());
                 Ok(())
