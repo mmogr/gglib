@@ -26,6 +26,13 @@ bound, the key from the pairing as the bearer, and no shaping, because the
 far proxy runs its own pipeline). Not connected, or connected without a key,
 is a `409` that names `gglib remote connect`.
 
+It also settles the request's `model`, because the two paths mean opposite
+things by an absent one. Locally an absence is the ordinary case and means
+"whatever llama-server loaded". Remotely it is a `400`: there is no catalog
+here for the far machine's names and this machine's default is not
+substituted, so an unnamed model would reach that machine as `""` and come
+back `404 Model '' not found` — a real answer through a working tunnel.
+
 # Cancellation
 
 When the HTTP client disconnects (browser tab closed, `curl` killed, etc.),
