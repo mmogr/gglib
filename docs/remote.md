@@ -11,10 +11,12 @@ reasoning; this page has the commands.
 # On the desktop (the machine with the models):
 gglib remote enable
 #   → shows a ticket and a six-digit code, once, for two minutes
+gglib model list
+#   → the names this machine serves; the laptop needs one of them
 
 # On the laptop, within those two minutes:
 gglib remote connect <ticket>-<code>
-gglib q --remote "What does this error mean?"
+gglib q --remote -m <a name from that list> "What does this error mean?"
 ```
 
 That is the whole first pairing. Afterwards the laptop remembers both the
@@ -82,15 +84,18 @@ that daemon again from the laptop. `--yes` skips the question for scripts.
 themselves:
 
 ```bash
-gglib q --remote "Summarise this" < notes.md
-gglib chat --remote
+gglib q --remote -m qwen3 "Summarise this" < notes.md
+gglib chat --remote -m qwen3
 ```
 
-With `--remote`, a model name is forwarded to the desktop rather than looked
-up here, and with no model the desktop's proxy picks the model it serves —
-the laptop's default model is not consulted, because the desktop may not
-have it. `--remote` and `--port` are exclusive: they name different
-machines.
+With `--remote`, the model name is forwarded to the desktop rather than
+looked up here, and the laptop's default model is not consulted, because the
+desktop may not have it. That makes the name mandatory rather than optional:
+name one the desktop serves, or the request arrives there with an empty model
+and comes back `404 Model '' not found` — a real answer from a working
+tunnel, which is easy to misread as the tunnel being broken.
+`gglib model list` on the desktop is the list to choose from. `--remote` and
+`--port` are exclusive: they name different machines.
 
 **The GUI's chat** goes to the desktop when the Remote popover's *Use it for
 chat* box is checked. The choice is per window and is cleared the moment the

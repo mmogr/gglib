@@ -58,7 +58,8 @@ pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
     eprintln!();
     eprintln!("  The other machine is now at:  {}", connected.base_url);
     eprintln!("  Any OpenAI-compatible client pointed there needs its API key; gglib's own do:");
-    eprintln!("    gglib q --remote \"\u{2026}\"        gglib chat --remote");
+    eprintln!("    gglib q --remote -m <model> \"\u{2026}\"     gglib chat --remote -m <model>");
+    eprintln!("  The model is one the other machine serves; without a name the request 404s.");
     eprintln!();
     eprintln!("  Close it:  gglib remote disconnect");
     Ok(())

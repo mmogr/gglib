@@ -227,7 +227,7 @@ gglib remote enable                      # shows a ticket + six-digit code, once
 
 # laptop, within two minutes
 gglib remote connect <ticket>-<code>     # binds a local port that is the desktop
-gglib q --remote "Why is this test flaky?"
+gglib q --remote -m <model> "Why is this test flaky?"   # a model the desktop serves
 ```
 
 The code is single-use and dies in two minutes; the ticket is fresh every
