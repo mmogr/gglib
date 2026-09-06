@@ -58,8 +58,13 @@ fn is_code(s: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// A ticket from modelpipe's own format vectors.
+    /// A ticket from modelpipe's own format vectors: number 1, the minimal
+    /// one, with no transport addresses.
     const TICKET: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na";
+
+    /// Vector 3, which carries an address. Every real ticket does, and it is
+    /// the length the minimal one is not.
+    const TICKET_WITH_ADDRESSES: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaicaajcaainxaaaaaaaaaaaaaaaaaaach4qaabstehw";
 
     #[test]
     fn a_ticket_and_a_code_come_apart() {
@@ -102,6 +107,27 @@ mod tests {
                 .unwrap_err()
                 .contains("not a ticket")
         );
+    }
+
+    /// The split is on the last `-`, not on a length, so a ticket carrying
+    /// addresses comes apart exactly the same way. Every ticket `enable`
+    /// actually prints is this shape, not the minimal one above.
+    #[test]
+    fn a_ticket_that_carries_addresses_comes_apart_the_same_way() {
+        let parsed = parse(&format!("{TICKET_WITH_ADDRESSES}-483920")).expect("parses");
+        assert_eq!(parsed.code.as_deref(), Some("483920"));
+        assert_eq!(parsed.ticket.to_string(), TICKET_WITH_ADDRESSES);
+    }
+
+    /// A separator with nothing after it is the missing-code complaint, not
+    /// a bare ticket and not "that is not a ticket". `enable` never shows a
+    /// trailing `-`, so one that arrives is a paste that stopped short —
+    /// and the reader needs to be sent to the end of the string, not the
+    /// start of it.
+    #[test]
+    fn a_separator_with_no_code_after_it_names_the_missing_code() {
+        let err = parse(&format!("{TICKET}-")).unwrap_err();
+        assert!(err.contains("6-digit"), "{err}");
     }
 
     #[test]
