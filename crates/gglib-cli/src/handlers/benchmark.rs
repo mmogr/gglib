@@ -124,16 +124,21 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
 /// model boundary and VRAM is freed, exactly as the old in-process
 /// `CancellationToken` did.
 async fn run_on_daemon(
+    ctx: &CliContext,
     path: &str,
     body: &impl serde::Serialize,
     mut on_event: impl FnMut(&BenchmarkEvent),
 ) -> Result<()> {
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let url = format!("{}{path}", daemon_client::base_url());
-    let stream =
-        daemon_client::sse::stream_json::<BenchmarkEvent, _>(&handle.client, &url, body, |event| {
-            on_event(&event)
-        });
+    let stream = daemon_client::sse::stream_json::<BenchmarkEvent, _>(
+        &handle.client,
+        &url,
+        handle.api_key.as_deref(),
+        body,
+        |event| on_event(&event),
+    );
     tokio::select! {
         result = stream => result,
         _ = tokio::signal::ctrl_c() => {
@@ -195,6 +200,7 @@ async fn cmd_compare(
     style::print_banner_close();
 
     run_on_daemon(
+        ctx,
         daemon_client::paths::BENCHMARK_COMPARE_PATH,
         &config,
         render_event,
@@ -228,6 +234,7 @@ async fn cmd_perf(
     style::print_banner_close();
 
     run_on_daemon(
+        ctx,
         daemon_client::paths::BENCHMARK_PERF_PATH,
         &config,
         render_event,
@@ -302,6 +309,7 @@ async fn cmd_tune(
 
     let mut completed_run: Option<i64> = None;
     run_on_daemon(
+        ctx,
         daemon_client::paths::BENCHMARK_TUNE_PATH,
         &config,
         |event| {
@@ -315,7 +323,7 @@ async fn cmd_tune(
 
     if apply {
         match completed_run {
-            Some(run_id) => apply_gated(run_id).await?,
+            Some(run_id) => apply_gated(ctx, run_id).await?,
             None => eprintln!(
                 "{}note:{} the run did not complete, so there is nothing to judge",
                 style::WARNING,
@@ -329,11 +337,12 @@ async fn cmd_tune(
 
 /// Ask the daemon to judge the run against the apply gate and render the
 /// verdict — a refusal is an outcome with evidence, not an error.
-async fn apply_gated(run_id: i64) -> Result<()> {
+async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
     use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
     use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
 
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let url = format!(
         "{}{}",
         daemon_client::base_url(),
@@ -445,6 +454,7 @@ async fn cmd_agentic(
 
     let mut report: Option<AgenticEvalReport> = None;
     run_on_daemon(
+        ctx,
         daemon_client::paths::BENCHMARK_AGENTIC_PATH,
         &config,
         |event| {
@@ -465,7 +475,7 @@ async fn cmd_agentic(
     if json || output.is_some() {
         let export = serde_json::json!({
             "gglib_version": gglib_build_info::SEMVER,
-            "hardware": fetch_hardware_snapshot().await,
+            "hardware": fetch_hardware_snapshot(ctx).await,
             "report": report,
         });
         let pretty = serde_json::to_string_pretty(&export)?;
@@ -1246,13 +1256,18 @@ fn fmt_delta(value: Option<f64>) -> String {
 /// Best-effort hardware snapshot for the JSON export, from the daemon's
 /// setup-status endpoint. `null` when unavailable — the report is still
 /// valid, just unpinned to a machine.
-async fn fetch_hardware_snapshot() -> serde_json::Value {
+async fn fetch_hardware_snapshot(ctx: &CliContext) -> serde_json::Value {
     let url = format!(
         "{}{}",
         daemon_client::base_url(),
         daemon_client::paths::SETUP_STATUS_PATH
     );
-    match reqwest::Client::new().get(&url).send().await {
+    let request = reqwest::Client::new().get(&url);
+    let request = match daemon_client::auth::daemon_api_key(ctx).await {
+        Some(key) => request.bearer_auth(key),
+        None => request,
+    };
+    match request.send().await {
         Ok(resp) => resp
             .json::<serde_json::Value>()
             .await

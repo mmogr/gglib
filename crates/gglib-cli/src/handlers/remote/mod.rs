@@ -9,12 +9,13 @@ use enable::{EnableArgs, enable};
 
 use anyhow::Result;
 
+use crate::bootstrap::CliContext;
 use crate::commands::RemoteCommand;
 use crate::daemon_client::{self, DaemonProbe, RemoteStatusDto};
 use crate::presentation::style;
 
 /// Route a `gglib remote` subcommand to its handler.
-pub(crate) async fn dispatch(command: RemoteCommand) -> Result<()> {
+pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result<()> {
     match command {
         RemoteCommand::Enable {
             allow_mcp,
@@ -22,37 +23,43 @@ pub(crate) async fn dispatch(command: RemoteCommand) -> Result<()> {
             no_discovery,
             no_qr,
         } => {
-            enable(EnableArgs {
-                allow_mcp,
-                relay,
-                no_discovery,
-                no_qr,
-            })
+            enable(
+                ctx,
+                EnableArgs {
+                    allow_mcp,
+                    relay,
+                    no_discovery,
+                    no_qr,
+                },
+            )
             .await
         }
-        RemoteCommand::Disable => disable().await,
-        RemoteCommand::Status => status().await,
+        RemoteCommand::Disable => disable(ctx).await,
+        RemoteCommand::Status => status(ctx).await,
         RemoteCommand::Connect {
             pairing,
             port,
             relay,
             no_discovery,
         } => {
-            connect(ConnectArgs {
-                pairing,
-                port,
-                relay,
-                no_discovery,
-            })
+            connect(
+                ctx,
+                ConnectArgs {
+                    pairing,
+                    port,
+                    relay,
+                    no_discovery,
+                },
+            )
             .await
         }
-        RemoteCommand::Disconnect => disconnect().await,
-        RemoteCommand::Kill { yes } => kill(yes).await,
+        RemoteCommand::Disconnect => disconnect(ctx).await,
+        RemoteCommand::Kill { yes } => kill(ctx, yes).await,
     }
 }
 
 /// Execute `gglib remote disable`.
-pub(crate) async fn disable() -> Result<()> {
+pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
     match daemon_client::probe(&client).await {
         DaemonProbe::Running => {}
@@ -61,7 +68,10 @@ pub(crate) async fn disable() -> Result<()> {
             return Ok(());
         }
     }
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     let status = handle.remote_disable().await?;
     if status.enabled {
         anyhow::bail!("the daemon reported remote access still enabled after disable");
@@ -74,7 +84,7 @@ pub(crate) async fn disable() -> Result<()> {
 }
 
 /// Execute `gglib remote status`.
-pub(crate) async fn status() -> Result<()> {
+pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
     style::print_info_banner("Remote", "\u{1f517}");
     match daemon_client::probe(&client).await {
@@ -90,7 +100,10 @@ pub(crate) async fn status() -> Result<()> {
             return Ok(());
         }
     }
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     let status = handle.remote_status().await?;
     print_status(&status);
     style::print_banner_close();

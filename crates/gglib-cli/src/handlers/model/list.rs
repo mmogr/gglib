@@ -60,7 +60,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: ListArgs) -> Result<()> {
 async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>> {
     // Prefer the live daemon so both CLI and GUI use the same HTTP path.
     if let Some(port) = detect_daemon(ctx).await {
-        return fetch_from_daemon(port, args).await;
+        return fetch_from_daemon(ctx, port, args).await;
     }
 
     // Direct mode: query local DB and filter in-process.
@@ -70,7 +70,7 @@ async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>
     Ok(filtered.into_iter().map(GuiModel::from_domain).collect())
 }
 
-async fn fetch_from_daemon(port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> {
+async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> {
     let mut url = format!(
         "http://127.0.0.1:{port}{}?sort={}&order={}",
         crate::daemon_client::paths::MODELS_LIST_PATH,
@@ -97,7 +97,21 @@ async fn fetch_from_daemon(port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> 
         .timeout(Duration::from_secs(5))
         .build()?;
 
-    let models: Vec<GuiModel> = client.get(&url).send().await?.json().await?;
+    let request = client.get(&url);
+    let request = match crate::daemon_client::auth::daemon_api_key(ctx).await {
+        Some(key) => request.bearer_auth(key),
+        None => request,
+    };
+    let response = request.send().await?;
+    // Checked rather than assumed: this call used to go straight to `.json()`,
+    // so a 401 arrived as a deserialization error about unexpected input.
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!(
+            "listing models answered 401: {}",
+            crate::daemon_client::auth::unauthorized_hint()
+        );
+    }
+    let models: Vec<GuiModel> = response.error_for_status()?.json().await?;
     Ok(models)
 }
 

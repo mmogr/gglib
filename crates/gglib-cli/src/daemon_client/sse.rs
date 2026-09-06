@@ -38,9 +38,15 @@ pub(crate) fn drain_events(buffer: &mut String) -> Vec<String> {
 /// Runs until the server closes the stream. Dropping the future (Ctrl-C on
 /// the caller) drops the response, which is exactly the disconnect signal
 /// the daemon's benchmark guard cancels on.
+/// `api_key` is the daemon's credential, or `None` when it wants none. It is
+/// taken explicitly because this function predates [`DaemonHandle`]'s bearer
+/// field and holds a bare client, so it inherits nothing.
+///
+/// [`DaemonHandle`]: super::DaemonHandle
 pub(crate) async fn stream_json<T, B>(
     client: &reqwest::Client,
     url: &str,
+    api_key: Option<&str>,
     body: &B,
     mut on_event: impl FnMut(T),
 ) -> Result<()>
@@ -48,13 +54,19 @@ where
     T: serde::de::DeserializeOwned,
     B: serde::Serialize + ?Sized,
 {
-    let response = client
-        .post(url)
-        .json(body)
+    let request = client.post(url).json(body);
+    let request = match api_key {
+        Some(key) => request.bearer_auth(key),
+        None => request,
+    };
+    let response = request
         .send()
         .await
         .with_context(|| format!("connecting to {url}"))?;
 
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!("daemon answered 401: {}", super::auth::unauthorized_hint());
+    }
     anyhow::ensure!(
         response.status().is_success(),
         "daemon answered {} for {url}",

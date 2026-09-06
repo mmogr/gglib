@@ -4,6 +4,7 @@ use std::io::{IsTerminal as _, Write as _};
 
 use anyhow::Result;
 
+use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonProbe, RemoteConnectBody, RemoteStatusDto};
 
 /// What `gglib remote connect` was asked for.
@@ -20,8 +21,9 @@ pub(crate) struct ConnectArgs {
 }
 
 /// Execute `gglib remote connect`.
-pub(crate) async fn connect(args: ConnectArgs) -> Result<()> {
-    let handle = daemon_client::ensure_daemon().await?;
+pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let first_pairing = args
         .pairing
         .as_deref()
@@ -63,7 +65,7 @@ pub(crate) async fn connect(args: ConnectArgs) -> Result<()> {
 }
 
 /// Execute `gglib remote disconnect`.
-pub(crate) async fn disconnect() -> Result<()> {
+pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
     match daemon_client::probe(&client).await {
         DaemonProbe::Running => {}
@@ -72,7 +74,10 @@ pub(crate) async fn disconnect() -> Result<()> {
             return Ok(());
         }
     }
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     let status = handle.remote_disconnect().await?;
     if status.connected.is_some() {
         anyhow::bail!("the daemon reported the connection still up after disconnect");
@@ -86,7 +91,7 @@ pub(crate) async fn disconnect() -> Result<()> {
 /// Asks first, because the far side cannot be restarted from here. `--yes`
 /// skips the question; so does a stdin that is not a terminal, on the theory
 /// that a script passing `kill` has read the help.
-pub(crate) async fn kill(yes: bool) -> Result<()> {
+pub(crate) async fn kill(ctx: &CliContext, yes: bool) -> Result<()> {
     let client = reqwest::Client::new();
     match daemon_client::probe(&client).await {
         DaemonProbe::Running => {}
@@ -94,7 +99,10 @@ pub(crate) async fn kill(yes: bool) -> Result<()> {
             anyhow::bail!("the daemon is not running, so nothing is connected to a remote");
         }
     }
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     let status = handle.remote_status().await?;
     let Some(connection) = status.connected.as_ref() else {
         anyhow::bail!("not connected to a remote \u{2014} `gglib remote connect` first");
