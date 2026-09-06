@@ -1,9 +1,11 @@
 //! Tests for the connect side — this machine as the laptop.
 //!
 //! Everything here stops short of `modelpipe::connect`, which wants an iroh
-//! endpoint and a peer that answers: what `connect` refuses before it dials,
-//! and what `remember` leaves behind in settings once it has. The one test
-//! that does dial is `#[ignore]`d and says why on itself.
+//! endpoint and a peer that answers: what `connect` refuses before it dials.
+//! What it owes settings once the dial has come up is on the far side of
+//! that call, so it is driven through `settle` in `stored_pairing_tests.rs`
+//! instead. The one test here that does dial is `#[ignore]`d and says why on
+//! itself.
 //!
 //! The tickets and the keys are in `test_support_remote.rs`, beside the
 //! fixture, because `lifecycle_tests.rs` names the same machines.
@@ -12,8 +14,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::test_support_remote::{
-    FINGERPRINT_A, KEY_A, KEY_B, TICKET_A, TICKET_B, TICKET_UNREACHABLE, paired_with,
-    test_remote_ops,
+    FINGERPRINT_A, KEY_A, TICKET_A, TICKET_B, TICKET_UNREACHABLE, paired_with, test_remote_ops,
 };
 
 /// What `gglib remote status` allows the daemon before it gives up
@@ -110,61 +111,6 @@ async fn killing_a_remote_this_machine_is_not_connected_to_is_a_conflict() {
         panic!("not being connected is a conflict: {err:?}");
     };
     assert!(message.contains("not connected"), "{message}");
-}
-
-/// A second pairing replaces the first whole, rather than half of it.
-///
-/// The inversion of the characterisation this test replaces, which pinned
-/// that `remember(None, ticket_b)` left machine A's key sitting under
-/// machine B's ticket. There is no longer a call that can do it: the two
-/// halves are one `RemotePairing` and `remember` writes both or neither, so
-/// the key that outlives the machine that issued it has no shape to live in.
-#[tokio::test]
-async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
-    let (core, _ops, _) = test_remote_ops().await;
-
-    remember(&core, KEY_A.to_owned(), TICKET_A.to_owned())
-        .await
-        .expect("machine A's pairing is stored");
-    remember(&core, KEY_B.to_owned(), TICKET_B.to_owned())
-        .await
-        .expect("machine B's pairing replaces it");
-
-    let stored = core
-        .settings()
-        .get()
-        .await
-        .expect("settings load")
-        .remote_pairing
-        .expect("a pairing is stored");
-    assert_eq!(stored.ticket, TICKET_B);
-    assert_eq!(stored.api_key, KEY_B);
-}
-
-/// A pairing that cannot be stored says the code has already been spent.
-///
-/// Finding A2, as far as this layer can carry it. `redeem` burns the code at
-/// both ends of the far machine before the write is attempted, so a failure
-/// here is not a retry — it is a trip to the other machine — and the
-/// difference is entirely in what the message says. The write is made to
-/// fail the way it really can: the far side answered with a blank key, which
-/// `validate_settings` refuses, and the code is gone either way.
-///
-/// What it does **not** do is get the key back. Nothing here can: the key
-/// exists only in the response just read, and the store that would have kept
-/// it is what failed.
-#[tokio::test]
-async fn a_pairing_that_cannot_be_stored_says_the_code_is_already_spent() {
-    let (core, _ops, _) = test_remote_ops().await;
-
-    let err = store_redeemed(&core, "   ".to_owned(), TICKET_A.to_owned())
-        .await
-        .expect_err("a blank key is not a key, and settings refuse it");
-    let GuiError::Internal(message) = err else {
-        panic!("a store that failed is not the caller's to fix: {err:?}");
-    };
-    assert!(message.contains("already spent"), "{message}");
-    assert!(message.contains("gglib remote enable"), "{message}");
 }
 
 /// Whatever settings remember of a pairing describes **one** machine.
