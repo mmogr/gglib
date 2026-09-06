@@ -145,7 +145,12 @@ pub enum Commands {
         /// Maximum number of tools executed in parallel per iteration
         #[arg(long = "max-parallel")]
         max_parallel: Option<usize>,
-        /// Model name forwarded to llama-server (uses server default when omitted)
+        /// Model name put in the request body, overriding the positional
+        ///
+        /// Locally, omitting it lets llama-server serve whichever model it
+        /// loaded. With --remote there is no local catalog and no default to
+        /// fall back on, so the positional is forwarded as the far machine's
+        /// model name when this flag is absent.
         #[arg(long)]
         model: Option<String>,
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
@@ -183,7 +188,12 @@ pub enum Commands {
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
         question: String,
-        /// Model ID or name (uses default model if not specified)
+        /// Model ID or name
+        ///
+        /// Locally, omitting it falls back to the default model from settings.
+        /// With --remote the name is forwarded to the far machine as given and
+        /// there is no fallback — this machine's default is a model the far one
+        /// may not have — so omitting it lets that machine choose.
         #[arg(short, long)]
         model: Option<String>,
         /// Read context from file instead of stdin
