@@ -39,6 +39,7 @@ pub(crate) mod daemon;
 pub(crate) mod dto;
 pub(crate) mod error;
 pub(crate) mod handlers;
+pub(crate) mod proxy_watch;
 pub(crate) mod routes;
 pub(crate) mod sse;
 pub(crate) mod state;

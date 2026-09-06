@@ -26,6 +26,12 @@ gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
 # its [dev-dependencies] (e.g. test-only mock executors) never ship in any
 # downstream binary, Cargo excludes them by construction.
 gglib-agent = { path = "../gglib-agent" }
+# The p2p tunnel behind `gglib remote` (ADR 0012). This crate owns every
+# `*Ops` type, so it is where the tunnel's lifecycle lives; the CLI and the
+# GUI drive it over the daemon API and never see an iroh type. Pinned to a
+# git revision until 0.2.0 is on crates.io — the swap to `version = "0.2"`
+# is the last edit before this lands.
+modelpipe = { git = "https://github.com/mmogr/modelpipe", rev = "40387d277254589385ba5f18bf73ed9af7b99b0d", features = ["serde"] }
 
 # Shared deps
 anyhow = { workspace = true }

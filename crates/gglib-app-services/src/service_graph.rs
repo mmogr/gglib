@@ -38,7 +38,7 @@ use std::sync::Arc;
 use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, Repos, SystemProbePort,
+    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, Repos, SystemProbePort,
     ToolSupportDetectorPort,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
@@ -53,6 +53,7 @@ use crate::downloads::{DownloadDeps, DownloadOps};
 use crate::mcp::{McpDeps, McpOps};
 use crate::models::{ModelDeps, ModelOps};
 use crate::proxy::{ProxyDeps, ProxyOps};
+use crate::remote::{RemoteGateway, RemoteOps};
 use crate::servers::{ServerDeps, ServerOps};
 use crate::settings::{SettingsDeps, SettingsOps};
 use crate::setup::{SetupDeps, SetupOps};
@@ -88,7 +89,7 @@ pub struct ServiceGraphParams {
     ///
     /// `Some` is an explicit override (a CLI `--base-port`); `None` defers to
     /// `Settings.llama_base_port`, then the compiled default. See
-    /// [`resolve_llama_base_port`](crate::proxy::resolve_llama_base_port).
+    /// [`resolve_llama_base_port`](crate::proxy_port::resolve_llama_base_port).
     pub base_port: Option<u16>,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
@@ -111,6 +112,8 @@ pub struct AppServices {
     pub mcp_ops: Arc<McpOps>,
     /// Proxy lifecycle operations.
     pub proxy: Arc<ProxyOps>,
+    /// The remote tunnel (ADR 0012).
+    pub remote: Arc<RemoteOps>,
     /// First-run setup operations.
     pub setup: Arc<SetupOps>,
     /// Benchmark operations.
@@ -153,8 +156,9 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     // Previously only the GUI start path consulted it and the proxy path did
     // not, which is how the two ended up on different ports.
     let settings = core.settings().get().await?;
-    let (base_port, base_port_source) = crate::proxy::resolve_llama_base_port(base_port, &settings)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let (base_port, base_port_source) =
+        crate::proxy_port::resolve_llama_base_port(base_port, &settings)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
     tracing::debug!(
         port = base_port,
         source = base_port_source,
@@ -195,6 +199,19 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         core: Arc::clone(&core),
         runtime: Arc::clone(&runtime),
     }));
+
+    // The tunnel's gateway is handed to the proxy here, before anything can
+    // start one, so every proxy this daemon runs can redeem a pairing code
+    // and gate `/mcp` for tunnelled requests — whether or not the tunnel is
+    // ever enabled.
+    let remote_gateway = Arc::new(RemoteGateway::new(Arc::clone(&emitter)));
+    proxy.bind_remote_gateway(Arc::clone(&remote_gateway) as Arc<dyn RemoteGatewayPort>);
+    let remote = Arc::new(RemoteOps::new(
+        Arc::clone(&proxy),
+        Arc::clone(&core),
+        remote_gateway,
+        Arc::clone(&emitter),
+    ));
 
     let models = Arc::new(ModelOps::new(ModelDeps {
         core: Arc::clone(&core),
@@ -251,6 +268,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         settings,
         mcp_ops,
         proxy,
+        remote,
         setup,
         benchmark,
         proxy_supervisor,

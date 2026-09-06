@@ -29,5 +29,6 @@ export function getEventCategory(outerType: string): AppEventType | null {
     return 'verification';
   }
   if (outerType.startsWith('proxy_')) return 'proxy';
+  if (outerType.startsWith('remote_')) return 'remote';
   return null;
 }

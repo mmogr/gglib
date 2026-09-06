@@ -25,7 +25,9 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
+use gglib_core::ports::{
+    ModelCatalogPort, ModelRuntimePort, RemoteGatewayPort, SettingsRepository,
+};
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 use gglib_core::{ApiKeySource, CorsConfig, ProxyAccessConfig};
 use gglib_mcp::McpService;
@@ -140,6 +142,12 @@ pub struct ProxyConfig {
     /// (`--allowed-host`). Empty is the norm; a wildcard bind is the case that
     /// needs it.
     pub allowed_hosts: Vec<String>,
+    /// The remote tunnel's owner, when this proxy may be reached through one
+    /// (ADR 0012). The proxy asks it to redeem a pairing code, whether `/mcp`
+    /// is open to tunnelled requests, and notes each tunnelled request on it.
+    /// `None` for an embedded server, where nothing is listening for the
+    /// answers.
+    pub remote: Option<Arc<dyn RemoteGatewayPort>>,
 }
 
 impl Default for ProxyConfig {
@@ -156,6 +164,7 @@ impl Default for ProxyConfig {
             api_key: None,
             daemon_cancel: None,
             allowed_hosts: Vec::new(),
+            remote: None,
         }
     }
 }
@@ -174,68 +183,6 @@ pub struct ProxyBind {
     pub api_key: Option<String>,
     /// Where [`Self::api_key`] came from, so the banner can say so.
     pub api_key_source: ApiKeySource,
-}
-
-/// Settle the bearer token for a proxy about to bind `host`.
-///
-/// Precedence is flag/env → stored setting → generated. The generated case is
-/// deliberately conditional on the bind: a loopback endpoint is already
-/// reachable only by processes on this machine, so demanding a token there
-/// would be ceremony that breaks every existing local setup for no gain.
-/// Binding anywhere else puts the endpoint — and the MCP gateway's filesystem
-/// tools — on a network, and that is worth a token the operator did not have
-/// to remember to ask for.
-///
-/// A minted token is persisted rather than kept for the process: a client
-/// configured once should keep working across restarts, and a token that
-/// changed every launch would train people to turn the feature off.
-async fn resolve_api_key(
-    configured: Option<String>,
-    host: &str,
-    settings_repo: &Arc<dyn SettingsRepository>,
-) -> (Option<String>, ApiKeySource) {
-    if let Some(key) = configured {
-        return (Some(key), ApiKeySource::Flag);
-    }
-
-    let stored = settings_repo
-        .load()
-        .await
-        .inspect_err(|e| warn!("could not read settings while resolving the proxy API key: {e}"))
-        .ok();
-
-    if let Some(key) = stored
-        .as_ref()
-        .and_then(|s| s.proxy_api_key.clone())
-        .filter(|key| !key.trim().is_empty())
-    {
-        return (Some(key), ApiKeySource::Settings);
-    }
-
-    if gglib_core::access::is_loopback_host(host) {
-        return (None, ApiKeySource::None);
-    }
-
-    let key = gglib_core::access::generate_api_key();
-
-    // Only write back settings we successfully read. Saving a `Settings`
-    // reconstructed from defaults after a failed load would silently clear
-    // every other stored preference to buy one field.
-    match stored {
-        Some(mut settings) => {
-            settings.proxy_api_key = Some(key.clone());
-            match settings_repo.save(&settings).await {
-                Ok(()) => info!("generated an API key for the non-loopback bind and saved it"),
-                // Still guard this run. Refusing to start would be worse, and an
-                // unsaved key beats an open endpoint on a network — the banner
-                // prints it either way, so the operator can copy it.
-                Err(e) => warn!("generated an API key but could not save it: {e}"),
-            }
-        }
-        None => warn!("generated an API key but settings were unreadable, so it was not saved"),
-    }
-
-    (Some(key), ApiKeySource::Generated)
 }
 
 /// Supervisor for managing the OpenAI-compatible proxy.
@@ -369,7 +316,7 @@ impl ProxySupervisor {
         // already persisted by the time the endpoint accepts its first request.
         let daemon_cancel = config.daemon_cancel.clone();
         let (api_key, api_key_source) =
-            resolve_api_key(config.api_key, &config.host, &settings_repo).await;
+            super::api_key::resolve_api_key(config.api_key, &config.host, &settings_repo).await;
         let access = ProxyAccessConfig::new(
             CorsConfig::LocalOnly,
             api_key.clone(),
