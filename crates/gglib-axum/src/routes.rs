@@ -19,7 +19,6 @@ use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
 use gglib_core::CorsConfig;
-use gglib_core::access::BearerPolicy;
 use gglib_core::services::SettingsCache;
 
 /// Build CORS layer from configuration.
@@ -369,13 +368,14 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
     let cors = build_cors_layer(cfg);
 
     let settings = Arc::new(SettingsCache::new(state.core.settings().repo()));
-    let policy = BearerPolicy::tracking(access.api_key(), settings);
-    // The bearer layer is installed whether or not a token is configured, so a
-    // key set later has something to be enforced by. /health stays outside the
-    // group: probes must not need credentials. CORS is layered *after*
-    // (outside) the bearer guard so preflight OPTIONS requests — which never
-    // carry Authorization — are answered by the CORS layer instead of dying on
-    // a 401.
+    let policy = access.bearer_policy(settings);
+    // Always installed: a daemon that bound *with* a key follows a later
+    // rotation of it, and one that bound without demands nothing and keeps
+    // demanding nothing — `DaemonAccess::bearer_policy` says why that asymmetry
+    // is the point. /health stays outside the group: probes must not need
+    // credentials. CORS is layered *after* (outside) the bearer guard so
+    // preflight OPTIONS requests — which never carry Authorization — are
+    // answered by the CORS layer instead of dying on a 401.
     let api = api_routes()
         .with_state(state)
         .layer(middleware::from_fn_with_state(policy, bearer_guard))

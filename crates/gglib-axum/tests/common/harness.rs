@@ -142,6 +142,18 @@ pub(crate) async fn test_app(cors: CorsConfig) -> Router {
 /// [`test_app`] under an access policy other than plain loopback.
 #[allow(dead_code)] // each test binary uses a different subset
 pub(crate) async fn test_app_with_access(cors: CorsConfig, access: DaemonAccess) -> Router {
+    test_state_and_app_with_access(cors, access).await.1
+}
+
+/// [`test_app_with_access`] keeping the context, for tests that must write a
+/// setting the router will read back — the bearer policy is the one thing here
+/// that answers from live settings rather than from bind-time configuration.
+#[allow(dead_code)] // each test binary uses a different subset
+pub(crate) async fn test_state_and_app_with_access(
+    cors: CorsConfig,
+    access: DaemonAccess,
+) -> (Arc<AxumContext>, Router) {
     let state = test_state(cors.clone()).await;
-    create_router(state, &cors, Arc::new(access))
+    let router = create_router(Arc::clone(&state), &cors, Arc::new(access));
+    (state, router)
 }

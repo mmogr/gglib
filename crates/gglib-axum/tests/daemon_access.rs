@@ -8,9 +8,9 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use common::harness::test_app_with_access;
+use common::harness::{test_app_with_access, test_state_and_app, test_state_and_app_with_access};
 use gglib_axum::DaemonAccess;
-use gglib_core::CorsConfig;
+use gglib_core::{CorsConfig, SettingsUpdate};
 
 async fn build_app(access: DaemonAccess) -> axum::Router {
     test_app_with_access(CorsConfig::AllowAll, access).await
@@ -80,6 +80,93 @@ async fn loopback_stays_open_by_default() {
         response.status(),
         StatusCode::OK,
         "/api must not require a token when none is configured"
+    );
+}
+
+/// The regression this file exists to prevent from returning.
+///
+/// `gglib remote enable` mints and persists `proxy_api_key` so the *proxy* can
+/// enforce it at the tunnel edge. The management API reads no such thing: it
+/// bound on loopback with no token, and `DaemonAccess::new`'s contract is that
+/// no token means unauthenticated. Before the fix the router rebuilt the policy
+/// as `tracking(None, settings)`, which re-read `proxy_api_key` on every
+/// request — so enabling remote access 401'd the CLI and the desktop app out of
+/// their own daemon, including out of `gglib remote disable`.
+///
+/// The write happens before the first request on purpose: `SettingsCache` is
+/// lazily populated, so its very first `get()` already sees the key. No sleep,
+/// and no flake in either direction.
+#[tokio::test]
+async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+
+    state
+        .core
+        .settings()
+        .update(SettingsUpdate {
+            proxy_api_key: Some(Some("minted-by-remote-enable".into())),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("store a proxy api key");
+
+    let response = app
+        .oneshot(get("/api/servers", "127.0.0.1:9887"))
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "a proxy_api_key set after bind must not close a management API that \
+         bound without one — that is the `gglib remote enable` lockout"
+    );
+}
+
+/// The other half, so the fix above cannot be mistaken for "loopback is always
+/// open" or "the daemon ignores settings".
+///
+/// A daemon that bound *with* a key must keep following the stored value, which
+/// is what makes rotation through `gglib config settings set` reach a running
+/// listener without a restart. Tracking is right here and wrong above; the
+/// difference is whether a token was in force at bind.
+#[tokio::test]
+async fn a_bound_key_still_follows_a_rotation() {
+    let (state, app) = test_state_and_app_with_access(
+        CorsConfig::AllowAll,
+        DaemonAccess::new(Some("bound-key".into()), "0.0.0.0", Vec::new()),
+    )
+    .await;
+
+    state
+        .core
+        .settings()
+        .update(SettingsUpdate {
+            proxy_api_key: Some(Some("rotated-key".into())),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("rotate the stored key");
+
+    let mut rotated = get("/api/servers", "127.0.0.1:9887");
+    rotated
+        .headers_mut()
+        .insert("authorization", "Bearer rotated-key".parse().unwrap());
+    let response = app.clone().oneshot(rotated).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "a rotation must reach a listener that bound with a key"
+    );
+
+    let mut stale = get("/api/servers", "127.0.0.1:9887");
+    stale
+        .headers_mut()
+        .insert("authorization", "Bearer bound-key".parse().unwrap());
+    let response = app.oneshot(stale).await.unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "the superseded key must stop working"
     );
 }
 
