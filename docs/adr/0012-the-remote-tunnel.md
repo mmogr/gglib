@@ -1,7 +1,8 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05
+- **Date:** 2026-09-05 (amended 2026-09-07 — see the dated notes under
+  decisions 2 and 3, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -511,10 +512,10 @@ logged `peer{peer=d702c7dca654 path="relayed"}` followed by `POST
 > Whether traffic ever crossed a relay is a question the evening could not
 > answer with the instrument it had, and the claim that "the relay is a path
 > traffic has taken" is withdrawn until one can. The fix is in flight
-> upstream — a watcher following `PathEvent::Selected` instead of sampling
-> once — and this becomes readable the day gglib takes that `modelpipe`
-> version. A re-run against it is what would settle the sentence; nothing in
-> this note does.
+> upstream — [modelpipe#50](https://github.com/mmogr/modelpipe/pull/50), a
+> watcher following `PathEvent::Selected` instead of sampling once — and this
+> becomes readable the day gglib takes that `modelpipe` version. A re-run
+> against it is what would settle the sentence; nothing in this note does.
 
 **The credential moved as decision 3 describes.** The six-digit code was
 redeemed over the encrypted hop, once, and the connecting machine reports
@@ -564,9 +565,10 @@ avoid. The query has now been run, and this note exists for that one line.
 
 The other two are **not** re-read here and stay where the second reading left
 them: `PINNED_LLAMA_RELEASE` is still `b10327` and the pin has not moved, so
-the survey still has had no occasion to be taken; and no daemon has carried
-tunnel traffic since the session above, so `tunnelled_requests` has nothing
-new to say.
+the survey still has had no occasion to be taken; and `tunnelled_requests` has
+not been re-read, which by this criterion's own terms is all that can be said —
+it counts from daemon start and the daemons that produced the second reading
+have stopped, so there is no surface that could report on the interval.
 
 - **If the trust model itself proves unsound** — **0, and the zero is 0 of 0.**
   `gh issue list -R mmogr/gglib --label "priority: critical" --label
@@ -603,9 +605,7 @@ Named here so that their absence reads as a decision rather than an oversight.
   > in its own out-of-scope note: iroh 1.0 shipped official Swift/Kotlin
   > bindings, so a native iroh-speaking mobile client is buildable, getting the
   > same direct-or-relay behaviour every other peer gets rather than being
-  > relay-only by construction. (Delta Chat is reported to ship iroh on iOS
-  > through the App Store. That is an outside report, cited as one; nothing in
-  > this repo has checked it.) A phone client stays out of scope for the reason
+  > relay-only by construction. A phone client stays out of scope for the reason
   > the bullet gives second — it is a product with its own surface and its own
   > release story — which was always the stronger of the two. What is withdrawn
   > is the capability claim in front of it, which was wrong, and which is the
