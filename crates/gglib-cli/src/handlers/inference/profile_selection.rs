@@ -16,6 +16,12 @@
 //! is that an ambiguous profile fails loudly rather than sampling at the wrong
 //! temperature — see [`gglib_core::request_pipeline::profile_route`].
 //!
+//! # Whose profiles
+//!
+//! A profile is configured per machine, so the machine that serves the turn is
+//! the one that resolves it. [`select_for_upstream`] is the entry point that
+//! knows this; `--remote` sessions go through it and resolve nothing here.
+//!
 //! # Why the port, not the context
 //!
 //! [`select`] takes `&dyn ModelCatalogPort` and a profile slice rather than
@@ -38,6 +44,57 @@ pub(crate) struct ProfileSelection {
     pub model: String,
     /// The selected profile, if either form named one.
     pub profile: Option<InferenceProfile>,
+}
+
+/// Resolve an identifier and an optional `--profile` for a session, given
+/// which machine will serve it.
+///
+/// Locally this is [`select`]. With `--remote` nothing is resolved at all: the
+/// identifier is the *far* machine's wire name, this catalog holds none of its
+/// models, and its profile list is the only one that governs how it samples.
+/// So a `{model}:{profile}` suffix is forwarded intact — the far proxy runs
+/// the same [`resolve_route`] over its own profiles and answers a suffix it
+/// does not know with a 404 naming the ones it has, which is a truer error
+/// than this machine could invent.
+///
+/// Resolving it here instead was silently wrong rather than loud: [`select`]
+/// stripped the suffix against the local catalog and `compose` then dropped
+/// the profile it found, because a local profile does not describe the far
+/// machine's sampling — so the turn ran at the far machine's defaults with no
+/// warning.
+///
+/// # Errors
+///
+/// Everything [`select`] reports, plus a `--profile` given with `--remote`.
+/// That flag names a profile configured *here* and has no wire form, so it
+/// cannot reach the machine that would have to apply it; accepting it would
+/// reproduce the silent-default bug this branch exists to remove. The suffix
+/// form does travel, and the message says so.
+pub(crate) async fn select_for_upstream(
+    catalog: &dyn ModelCatalogPort,
+    profiles: &[InferenceProfile],
+    identifier: &str,
+    flag: Option<&str>,
+    remote: bool,
+) -> Result<ProfileSelection> {
+    if !remote {
+        return select(catalog, profiles, identifier, flag).await;
+    }
+    if let Some(name) = flag {
+        let base = if identifier.is_empty() {
+            "<model>"
+        } else {
+            identifier
+        };
+        bail!(
+            "--profile {name} names a profile on this machine, and --remote runs the turn on the \
+             other one. Ask for it the way that machine reads it: `{base}:{name}`."
+        );
+    }
+    Ok(ProfileSelection {
+        model: identifier.to_owned(),
+        profile: None,
+    })
 }
 
 /// Resolve an identifier and an optional `--profile` into a model and profile.

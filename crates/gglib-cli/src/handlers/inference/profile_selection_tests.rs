@@ -234,3 +234,66 @@ async fn a_resume_survives_a_deleted_stored_profile() {
         "degrades rather than bricking the resume"
     );
 }
+
+// ─── Which machine resolves the profile ───────────────────────────────────
+
+/// Over a catalog holding `qwen`: the local state that made resolving a
+/// remote machine's suffix here look right.
+async fn upstream(
+    profiles: &[InferenceProfile],
+    identifier: &str,
+    flag: Option<&str>,
+    remote: bool,
+) -> Result<ProfileSelection> {
+    select_for_upstream(
+        &NamedCatalog::new(&["qwen"]),
+        profiles,
+        identifier,
+        flag,
+        remote,
+    )
+    .await
+}
+
+/// The far machine owns its profile list, so its suffix must reach it intact.
+/// This ran silently wrong: the suffix resolved here and `compose` then
+/// dropped the local profile, leaving the turn at the far machine's defaults.
+#[tokio::test]
+async fn a_remote_identifier_keeps_the_suffix_its_own_machine_resolves() {
+    let selection = upstream(&profiles(), "qwen:coding", None, true)
+        .await
+        .unwrap();
+    assert_eq!(selection.model, "qwen:coding");
+    assert!(selection.profile.is_none(), "not this machine's profile");
+}
+
+/// Nor may this machine's profile list veto a name it knows nothing about.
+#[tokio::test]
+async fn a_remote_identifier_is_not_judged_against_the_local_profile_list() {
+    let selection = upstream(&[], "qwen:coding", None, true).await.unwrap();
+    assert_eq!(selection.model, "qwen:coding");
+}
+
+/// `--profile` has no wire form, so it cannot reach the machine that would
+/// apply it. Refusing hands back the suffix form that does travel.
+#[tokio::test]
+async fn a_local_profile_flag_is_refused_rather_than_dropped_on_the_remote_path() {
+    let flag = Some("coding");
+    let err = upstream(&profiles(), "qwen", flag, true).await.unwrap_err();
+    let err = err.to_string();
+    assert!(err.contains("qwen:coding"), "unexpected message: {err}");
+
+    let err = upstream(&profiles(), "", flag, true).await.unwrap_err();
+    let err = err.to_string();
+    assert!(err.contains("<model>:coding"), "unexpected message: {err}");
+}
+
+/// Local sessions still resolve here — the branch is about `--remote` alone.
+#[tokio::test]
+async fn a_local_session_still_resolves_the_suffix_against_this_catalog() {
+    let selection = upstream(&profiles(), "qwen:coding", None, false)
+        .await
+        .unwrap();
+    assert_eq!(selection.model, "qwen");
+    assert_eq!(selection.profile.unwrap().name, "coding");
+}
