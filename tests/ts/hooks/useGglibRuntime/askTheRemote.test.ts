@@ -14,6 +14,7 @@ import { askTheRemote } from '../../../../src/hooks/useGglibRuntime/useGglibRunt
 import {
   IDLE_STATUS,
   applyRemoteStatus,
+  getRemoteState,
   resetRemoteState,
   setRemoteChatModel,
   setUseRemoteForChat,
@@ -61,5 +62,17 @@ describe('askTheRemote', () => {
     armed('qwen3');
     applyRemoteStatus(IDLE_STATUS);
     expect(askTheRemote()).toEqual({ remote: false });
+  });
+
+  // The store keeps what the panel was given, byte for byte. Trimming there
+  // would swallow a space as the user types it, in a controlled input whose
+  // value is the store's — so the trim lives on the send path and this is
+  // what says so.
+  it('the store keeps the name as typed, and the send path is what trims it', () => {
+    setRemoteChatModel(' qwen3 ');
+    expect(getRemoteState().chatModel).toBe(' qwen3 ');
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setUseRemoteForChat(true);
+    expect(askTheRemote()).toEqual({ remote: true, model: 'qwen3' });
   });
 });
