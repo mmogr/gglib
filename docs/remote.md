@@ -105,6 +105,16 @@ chat* box is checked. The choice is per window and is cleared the moment the
 connection goes, so a later turn cannot silently land on a machine you
 stopped thinking about.
 
+> **Not working as of 2026-09-07.** The box routes the turn to the desktop
+> correctly, and the turn then fails there. The GUI sends no model name, and
+> the remote path deliberately resolves nothing against this machine's
+> catalog, so the request arrives with an empty model and comes back
+> `404 Model '' not found` — the same failure described just above for a
+> `--remote` command with no `-m`, except that the popover gives you nowhere
+> to name a model. `gglib chat --remote` was fixed in
+> [#987](https://github.com/mmogr/gglib/pull/987); the GUI's own chat was
+> not. Use the CLI for remote turns until this note goes away.
+
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API
 key as its API key. The port does not add the key for you — that is
@@ -128,12 +138,34 @@ before a byte reaches the daemon, and again by the proxy if it somehow got
 there. Rotating the key on the desktop (`gglib config settings set
 --proxy-api-key`) reaches the running tunnel within a few seconds.
 
+**Rotating the key un-pairs every laptop.** That is the same sentence read
+from the other end, and it needs saying on its own because nothing warns you.
+The new key reaches the tunnel edge; it reaches no machine that already
+paired. A laptop keeps whatever it was handed when it redeemed its code, and
+there is no path that updates it — only another redemption writes it. From the
+rotation onward its requests are refused at the edge with `invalid or missing
+bearer token`, a message the tunnel writes rather than gglib, so it names no
+machine and offers no remedy. Getting back in means `gglib remote disable` and
+`gglib remote enable` on the desktop and a fresh `<ticket>-<code>` on every
+laptop that was using the old key. The one case that survives a rotation is a
+pairing code still on screen when it lands: that code is re-armed with the new
+key and redeems normally.
+
 **Pairing moves a one-time code, not the key.** The six-digit code is
 granted once at the tunnel edge, lives two minutes, dies on first use, and
 is burned by the third wrong attempt — and it is useless without the ticket,
 which is the only way to reach the route that accepts it. The key itself
 travels once, inside the encrypted tunnel, in exchange for that code. Every
 refusal is the same flat refusal; a guesser learns nothing.
+
+> **Corrected 2026-09-07.** Any one path gets two of those three, not all
+> three. Over the tunnel a wrong code is a wrong bearer and is refused at the
+> edge before gglib sees it, so the three-attempt burn never counts a guess —
+> there, the two-minute window and the ticket are the whole defence. On the
+> desktop's own loopback the burn does count, but the ticket is not needed to
+> reach the route, so a local process can kill a pairing that is on screen
+> with three POSTs. [ADR 0012](adr/0012-the-remote-tunnel.md), decision 3, has
+> the arithmetic.
 
 **A fresh identity every session.** `enable` mints a new ticket each time and
 never writes it to disk. Revocation is `gglib remote disable`: the old ticket
@@ -191,6 +223,7 @@ which is the ordinary OpenAI-compatible arrangement.
 | `the remote machine could not be reached` | The desktop is off, offline, or has run `enable` again since (a new ticket). Ask for the new pairing. |
 | `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
+| `invalid or missing bearer token` | The tunnel edge refused the key this laptop holds — usually because `proxy_api_key` was rotated on the desktop since you paired. Re-enable there and redeem a fresh `<ticket>-<code>`. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | One session at a time. `gglib remote disable`, then `enable` for a fresh ticket and code. |
