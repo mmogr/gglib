@@ -97,6 +97,17 @@ export interface StreamAgentChatOptions {
    */
   remote?: boolean;
   /**
+   * The model name to put in the request body, spelled as the machine that
+   * serves it spells it.
+   *
+   * Omitted locally, which lets llama-server serve whatever it loaded — the
+   * normal case for a single-model server. **Required with `remote`**: the
+   * far machine resolves its own names, there is no catalog here to resolve
+   * one against, and this machine's default is deliberately not substituted
+   * because the far machine may not have it (`docs/remote.md`).
+   */
+  model?: string;
+  /**
    * Called for each non-fatal `system_warning` the loop emits — an upstream
    * 503 being retried, a tool-call batch being trimmed. The stream continues
    * either way; this is purely so the user is told what is happening rather
@@ -134,7 +145,21 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     supportsToolCalls,
     onSystemWarning,
     remote = false,
+    model,
   } = options;
+
+  // The far machine's model name is mandatory, and this is the last place
+  // that can say so in a sentence. Sent empty, the name reaches the far proxy
+  // as `"model": ""` and comes back `404 Model '' not found` — a real answer
+  // through a working tunnel, two machines away, that reads as transport.
+  const wireModel = model?.trim();
+  if (remote && !wireModel) {
+    throw new Error(
+      'Chat is set to go to the other machine, but no model there is named. ' +
+        'Name one in the Remote panel — this machine’s default is not sent, ' +
+        'because the other machine may not have it.',
+    );
+  }
 
   // Build agent config: use null to let the backend apply defaults unless
   // the caller has overridden at least one field.  Strip `undefined` values
@@ -173,6 +198,8 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
   appLogger.debug('hook.runtime', 'streamAgentChat: starting', {
     port: selectedServerPort,
     messages: wireMessages.length,
+    remote,
+    model: wireModel,
   });
 
   // ── POST the request ──────────────────────────────────────────────────────
@@ -191,6 +218,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         tool_filter: toolFilter,
         ...reasoning,
         ...(remote ? { remote: true } : {}),
+        ...(wireModel ? { model: wireModel } : {}),
       }),
       signal: abortSignal,
     });

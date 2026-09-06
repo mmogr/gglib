@@ -16,6 +16,7 @@ import {
   getRemoteState,
   ingestRemoteEvent,
   resetRemoteState,
+  setRemoteChatModel,
   setUseRemoteForChat,
 } from '../../../src/services/remoteRegistry';
 
@@ -30,7 +31,7 @@ describe('remoteRegistry', () => {
   beforeEach(() => resetRemoteState());
 
   it('starts with no status and no chat preference', () => {
-    expect(getRemoteState()).toEqual({ status: null, useForChat: false });
+    expect(getRemoteState()).toEqual({ status: null, useForChat: false, chatModel: '' });
   });
 
   it('remote_enabled turns the serve side on with the fingerprint and a live code', () => {
@@ -83,6 +84,20 @@ describe('remoteRegistry', () => {
     ingestRemoteEvent({ type: 'remote_disconnected' });
     expect(getRemoteState()).toMatchObject({ useForChat: false });
     expect(getRemoteState().status?.connected).toBeNull();
+  });
+
+  it('the model named for that machine outlives a disconnection; the preference does not', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+    setUseRemoteForChat(true);
+
+    ingestRemoteEvent({ type: 'remote_disconnected' });
+    // Nothing can be sent while the box is off, so keeping the name costs
+    // nothing — and the ordinary reconnection is the same machine again.
+    expect(getRemoteState()).toMatchObject({ useForChat: false, chatModel: 'qwen3' });
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    expect(getRemoteState().chatModel).toBe('qwen3');
   });
 
   it('a status read that shows no connection also drops the preference', () => {

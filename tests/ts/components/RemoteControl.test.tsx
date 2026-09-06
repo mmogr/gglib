@@ -20,6 +20,7 @@ import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import {
   IDLE_STATUS,
   applyRemoteStatus,
+  getRemoteState,
   resetRemoteState,
 } from '../../../src/services/remoteRegistry';
 
@@ -101,6 +102,28 @@ describe('RemoteControl', () => {
     await open();
     expect(screen.getByText(/no key is stored/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^connect$/i })).toBeDisabled();
+  });
+
+  it('the connected half asks which model that machine should be asked for', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      connected: {
+        port: 41234,
+        base_url: 'http://127.0.0.1:41234/v1',
+        ticket_fingerprint: '3ca82708b995',
+        path: 'direct',
+      },
+    });
+    const user = await open();
+
+    // Checking the box with no name says so, rather than letting the turn go
+    // and come back `404 Model '' not found` from two machines away.
+    await user.click(screen.getByRole('checkbox', { name: /use it for chat/i }));
+    expect(screen.getByText(/name one before sending/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/model on that machine/i), 'qwen3');
+    expect(getRemoteState().chatModel).toBe('qwen3');
+    expect(screen.queryByText(/name one before sending/i)).not.toBeInTheDocument();
   });
 
   it('a remembered pairing lets connect dial it with an empty box', async () => {

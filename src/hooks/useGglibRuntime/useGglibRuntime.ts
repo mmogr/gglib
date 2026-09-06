@@ -1,7 +1,20 @@
-/** Whether the Remote panel asked for chat to go to the connected machine. */
-function askTheRemote(): boolean {
+/**
+ * Whether the Remote panel asked for chat to go to the connected machine,
+ * and the name it gave for the model there.
+ *
+ * Returned together because they travel together: the far machine resolves
+ * its own model names and this one has no catalog for them, so the name is
+ * part of the routing decision rather than a detail of it. A blank field
+ * reads as no name at all, which the send path refuses rather than turning
+ * into the empty model the far proxy answers `404 Model '' not found`.
+ *
+ * Exported for the tests: it is the whole link between the Remote panel and
+ * the request body, and the defect it exists for was that link being absent.
+ */
+export function askTheRemote(): { remote: boolean; model?: string } {
   const remote = getRemoteState();
-  return remote.useForChat && remote.status?.connected != null;
+  if (!remote.useForChat || remote.status?.connected == null) return { remote: false };
+  return { remote: true, model: remote.chatModel.trim() || undefined };
 }
 
 /**
@@ -180,8 +193,9 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         supportsToolCalls,
         // Read at send time, not render time: the Remote panel's choice may
         // change between turns, and a preference for a machine that has
-        // since disconnected is already cleared by the registry.
-        remote: askTheRemote(),
+        // since disconnected is already cleared by the registry. Spread as a
+        // pair so the model named for that machine cannot be left behind.
+        ...askTheRemote(),
         onSystemWarning,
       });
     } catch (error) {
