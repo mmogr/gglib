@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+mod backend;
 mod connect;
 mod connect_watch;
 mod gateway;
