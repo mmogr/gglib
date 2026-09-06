@@ -347,6 +347,14 @@ absence of the test, not its result" — and the same applies to all three here,
 more strongly: writing 0 would make a feature nobody has finished testing look
 like a feature nobody wants.
 
+> **Amended 2026-09-06 — the tunnel has since carried traffic between two
+> machines.** A macOS host served and a Linux machine connected the same day
+> this note was written, and the session is recorded under *Second reading*
+> below. It supersedes the third line only: `tunnelled_requests` now has a
+> session behind it and no longer reads *not yet run*. The first two are
+> unaffected — neither reading was taken that evening either, so both stay
+> unread rather than clean.
+
 - **If a dependency ships a first-party remote transport** — **not evaluated,
   and the reading has had no occasion to be taken.** `PINNED_LLAMA_RELEASE` is
   `b10327`, the value it held when this landed; the pin has not moved since.
@@ -369,6 +377,92 @@ like a feature nobody wants.
 note establishes is the state the feature shipped in — reasoned through,
 guarded, and never once run end to end — so that the first person to pair two
 machines knows there is somewhere to put the number.
+
+### Second reading, 2026-09-06 — the first two-machine session
+
+The first time `modelpipe::serve` and `modelpipe::connect` have been on
+opposite sides of a network. Everything above was written against a feature
+that had never carried a byte between two machines; this note retires that
+sentence and changes nothing else in the reading it amends.
+
+**Scope.** One evening, one session, one paired peer. A macOS host served —
+`Matts-MacBook-Pro`, ticket `de371f8d0f7f` — and a Linux machine connected,
+peer `387480a0854e`, which is also the first time the two sides have run on
+different operating systems. Every subcommand was exercised: `enable`,
+`connect`, `status`, `q --remote`, `disconnect`, `kill`, and a second pairing
+on a fresh ticket.
+
+**It cannot be re-run.** `tunnelled_requests` and `last_tunnelled_ms` count
+from daemon start, as the criterion itself says, and both daemons have since
+stopped. Nothing stored the numbers, so this note is their only durable
+record — the same provenance gap
+[ADR 0009](0009-fit-the-context-to-the-machine.md)'s first reading names for
+the ledger's counters, named here rather than dressed up.
+
+**The answer came from the other machine, and that is shown rather than
+assumed.** `gglib model list` on the connecting machine printed `No models
+found` — an empty catalog with nothing local to serve — and `gglib q --remote`
+answered anyway. The prompts carried words nothing could have had ready,
+`bananaramarama` and `kumquat`, and the replies used them, which rules out a
+canned answer as well as a local one.
+
+**The counter read 0, then 1, then 4, and the 1 is the part worth writing
+down.** `gglib remote status` on the serving machine reported `Requests:  0
+through the tunnel` before the connect, `1` immediately after `connect`
+returned and **before any prompt had been sent**, and `4` after the inference
+requests. That first increment is the pairing POST itself: `POST
+/v1/remote/pair` sits outside the bearer group but inside `remote_marker`,
+which runs on every route, so the request that fetches the key counts like any
+other tunnelled one. What shows inference crossed is the increment past 1, not
+the number being non-zero. Recorded because the next person to read this
+counter will otherwise be one ahead of the prompts they remember sending.
+
+**Both transport paths were exercised, so the relay is a path traffic has
+taken rather than one the design merely provides for.** On the home network
+both sides reported `Path:      direct`: the hole punch held and no relay was
+involved. A second pairing was then made with the connecting machine on a
+phone hotspot — ticket `dc82a49cf02c`, connect side on port 36073, the
+connecting machine appearing under a new fingerprint — and the serving machine
+logged `peer{peer=d702c7dca654 path="relayed"}` followed by `POST
+/v1/chat/completions status=200 outcome="forwarded"`.
+
+**The credential moved as decision 3 describes.** The six-digit code was
+redeemed over the encrypted hop, once, and the connecting machine reports
+`has_remote_key: true` with the key persisted, so a later `connect` needs the
+ticket alone. That is decision 4's trade taken in the direction it was argued
+for.
+
+**The kill switch works from the far side.** `gglib remote kill` produced
+`remote shutdown requested by an authenticated client; stopping the daemon`
+and `POST /v1/proxy/shutdown status=202`, and the daemon stopped. The one-way
+door in decision 7 opens.
+
+- **If a dependency ships a first-party remote transport** — **still not
+  evaluated.** `PINNED_LLAMA_RELEASE` is still `b10327` and the pin has not
+  moved, so the survey has still had no occasion to be taken. **OPEN, and
+  unread rather than clean.**
+- **If the trust model itself proves unsound** — **still not evaluated.** The
+  issue query was not run for this note either, and a session in which the
+  feature worked is not evidence about the premise in any case. **OPEN.**
+- **If `tunnelled_requests` stays at zero** — **4 through the tunnel in one
+  daemon run, 2026-09-06**: one pairing POST and three inference requests, one
+  peer, one evening. The criterion has moved from unreadable to readable
+  rather than from open to settled. A zero taken after this can be read as a
+  zero, where every zero before it was the absence of the test. Four requests
+  in one session says the tunnel works; it says nothing about whether anyone
+  uses it, which is what the criterion asks. **OPEN.**
+
+**All three remain OPEN**, and only the third moved at all. What the session
+settles is that the feature does what the Decision section says it does:
+across two operating systems, on both transport paths, with the key moving
+once and the kill switch reachable from outside. What it does not settle is
+use — one evening and one peer cannot distinguish a tunnel people want from a
+tunnel that merely works. Two gaps are worth naming rather than leaving to be
+inferred. The only client on the connecting side was gglib's own CLI, so
+decision 7's third-party arrangement — an OpenAI-compatible client pointed at
+the connect listener with the key as its API key — is still untried. And a
+single evening says nothing about a tunnel left up for days, which is the
+shape the rotation poller and the per-session identity were designed against.
 
 ## Out of scope
 
