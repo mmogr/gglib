@@ -272,7 +272,7 @@ async fn until_gone(
 /// Generic over the handle only because a real `modelpipe::ServeHandle`
 /// exists nowhere but in front of a bound listener; nothing here looks
 /// inside one.
-fn take_if_ours<H>(slot: &mut Slot<Live<H>>, mine: &Arc<H>) -> Option<Live<H>> {
+pub(super) fn take_if_ours<H>(slot: &mut Slot<Live<H>>, mine: &Arc<H>) -> Option<Live<H>> {
     slot.take_if(|l| Arc::ptr_eq(&l.handle, mine))
 }
 
