@@ -29,8 +29,8 @@ were before this module existed.
 
 # Classification
 
-Three structured signals, in order of authority, with no inspection of
-human-readable message text at any point:
+Three structured signals, with no inspection of human-readable message text at
+any point:
 
 1. **The error body's `type`.** The proxy sends `ErrorResponse`, whose `type`
    discriminant is resolved through
@@ -47,6 +47,14 @@ human-readable message text at any point:
    All three are `502`, so the status below cannot separate them.
 3. **The HTTP status.** When the adapter targets a llama-server directly the
    body is not ours to interpret, so `503` and `429` alone drive the decision.
+
+Only the third is ranked. The first two are read as a disjunction: either one
+naming a retryable condition is enough, so a body carrying a terminal `type`
+alongside a retryable `code` would be retried on the `code`. No body written
+today carries both, but nothing in the code enforces that. The status decides
+alone whenever the body offers neither field — a `500` blob and a bare
+`{"error":{"message":…}}` get the same answer, which is the answer the status
+gives.
 
 <!-- module-docs:end -->
 

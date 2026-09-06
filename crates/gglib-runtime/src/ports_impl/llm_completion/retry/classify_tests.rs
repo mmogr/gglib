@@ -1,17 +1,18 @@
 //! Classification tests, against the bodies the two real upstreams write.
 //!
-//! Every literal below is copied verbatim from the program that emits it —
-//! modelpipe 0.2.0's `refusal.rs` (the version gglib pins) and this proxy's
-//! own `ErrorResponse`. That is the point of the file: the interesting
+//! Every literal below is copied verbatim from modelpipe 0.2.0's `refusal.rs`,
+//! the version gglib pins. That is the point of the file: the interesting
 //! failures here were never about the logic, they were about a wire shape
 //! that did not look the way the struct said it did, and a test that
-//! paraphrased the body would have gone green against the bug.
+//! paraphrased the body would have gone green against the bug. This proxy's
+//! own body is not copied — it has a single home in
+//! [`admission_timeout_body`], which the sibling retry tests already share.
 
 use chrono::Utc;
 use reqwest::Client;
 
 use super::classify::{Failure, classify};
-use super::test_server::{TestServer, json};
+use super::test_server::{TestServer, admission_timeout_body, json};
 
 // modelpipe's edge writes `{"error":{"message":…,"code":…}}` — no `type` key —
 // and answers all three of its gateway refusals with 502, so neither the
@@ -27,9 +28,6 @@ const BACKEND_UNREACHABLE: &str = r#"{"error":{"message":"the serving side could
 /// The edge's own 401, written before the backend is contacted at all.
 const INVALID_API_KEY: &str =
     r#"{"error":{"message":"invalid or missing bearer token","code":"invalid_api_key"}}"#;
-
-/// This proxy's admission timeout — the shape with every field filled in.
-const ADMISSION_TIMEOUT: &str = r#"{"error":{"message":"waited without reaching the front of the queue","type":"service_unavailable","code":"admission_timeout"}}"#;
 
 /// Serve `body` once and hand the response to `classify`.
 ///
@@ -111,11 +109,33 @@ async fn a_body_that_names_no_discriminant_gets_no_stray_separator() {
     assert_eq!(reason, "500 Internal Server Error: boom");
 }
 
+/// The narrowing that defaulting `type` would otherwise have caused.
+///
+/// Before the default, this body failed to deserialize and reached the status
+/// arm, where 503 is retryable. Parsing it must not change the answer: the
+/// body names no discriminant, so it asserts nothing about retrying and the
+/// status is still what decides. The 500 case above cannot catch this — 500
+/// is terminal on both paths, so it stays green either way.
+#[tokio::test]
+async fn a_body_that_names_no_discriminant_still_retries_on_the_status() {
+    let failure = classify_body(
+        503,
+        "Service Unavailable",
+        r#"{"error":{"message":"busy"}}"#,
+    )
+    .await;
+
+    assert!(
+        matches!(failure, Failure::Retryable { .. }),
+        "a parseable body with nothing to say must not outrank the status: {failure:?}"
+    );
+}
+
 /// The proxy's own bodies are unaffected by any of the above: `type` still
 /// decides, and still labels the message.
 #[tokio::test]
 async fn the_proxys_own_admission_timeout_still_classifies_on_its_type() {
-    let failure = classify_body(503, "Service Unavailable", ADMISSION_TIMEOUT).await;
+    let failure = classify_body(503, "Service Unavailable", &admission_timeout_body()).await;
 
     assert!(
         matches!(failure, Failure::Retryable { .. }),

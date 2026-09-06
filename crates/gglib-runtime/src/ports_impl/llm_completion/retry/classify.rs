@@ -1,7 +1,7 @@
 //! Response classification: retryable, terminal, or success.
 //!
-//! Three structured signals, in order of authority, and no inspection of
-//! human-readable message text at any point:
+//! Three structured signals, and no inspection of human-readable message text
+//! at any point:
 //!
 //! 1. **The error body's `type`.** When the upstream is the gglib proxy it sends
 //!    [`ErrorResponse`], whose `type` discriminant is resolved through
@@ -15,6 +15,13 @@
 //! 3. **The HTTP status.** When the adapter points straight at a llama-server
 //!    rather than the proxy, the body is not ours to interpret, so
 //!    classification falls back to status semantics alone.
+//!
+//! Only the third is ranked. The first two are read as a disjunction, not in
+//! precedence order — [`error_is_retryable`] says what that costs — and the
+//! status decides alone whenever the body offers neither, whether because it
+//! is not this shape at all or because its author filled in neither field.
+//! Authority *is* ordered in [`describe`], which picks one of the two as the
+//! label; that ordering settles what gets printed, never what gets retried.
 
 use std::time::Duration;
 
@@ -73,7 +80,10 @@ pub(super) async fn classify(response: Response, now: DateTime<Utc>) -> Result<R
     let body = response.text().await.unwrap_or_default();
 
     let (retryable, reason) = match serde_json::from_str::<ErrorResponse>(&body) {
-        Ok(err) => (error_is_retryable(&err.error), describe(status, &err.error)),
+        Ok(err) => (
+            error_is_retryable(status, &err.error),
+            describe(status, &err.error),
+        ),
         Err(_) => (
             status_is_retryable(status),
             format!("{status}: {}", truncate(&body)),
@@ -93,12 +103,24 @@ pub(super) async fn classify(response: Response, now: DateTime<Utc>) -> Result<R
 /// Retryability of a body in the [`ErrorResponse`] shape, whichever
 /// discriminant its author actually filled in.
 ///
-/// The two are read together rather than in an if/else because they name
-/// different things — `type` is a class of condition, `code` is a specific
-/// one — and a body carrying both is a gglib body, whose `type` already
-/// decides it. Neither vocabulary contains a term the other would classify
-/// differently, so the disjunction cannot turn a terminal failure retryable.
-fn error_is_retryable(error: &ErrorDetail) -> bool {
+/// A body that fills in neither says nothing about retrying, so the status
+/// decides — the same answer such a body got before `type` was defaulted,
+/// when it failed to deserialize and reached [`status_is_retryable`] by
+/// falling out of the parse. Parsing it must not change the verdict: doing so
+/// would have made a bare `{"error":{"message":…}}` at 503 terminal.
+///
+/// The two discriminants are read as a disjunction rather than in precedence
+/// order: they name different things — `type` is a class of condition, `code`
+/// is a specific one — and neither vocabulary contains a term the other would
+/// classify differently. That is a fact about today's two vocabularies, not a
+/// rule the code enforces: a body carrying a terminal `type` *and* a retryable
+/// `code` would be called retryable by the `code`. So adding to
+/// [`code_is_retryable`] a code this proxy also emits means revisiting the
+/// disjunction, not just that list.
+fn error_is_retryable(status: StatusCode, error: &ErrorDetail) -> bool {
+    if error.r#type.is_empty() && error.code.is_none() {
+        return status_is_retryable(status);
+    }
     is_retryable_error_type(&error.r#type) || error.code.as_deref().is_some_and(code_is_retryable)
 }
 
