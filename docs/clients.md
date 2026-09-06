@@ -45,6 +45,20 @@ OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model open
 }
 ```
 
+## From another machine
+
+When this machine is connected to another with `gglib remote connect`
+([Remote access](remote.md)), the other machine's proxy is at
+`http://127.0.0.1:<port>/v1` here — the port `connect` printed, also shown
+by `gglib remote status`. Every recipe above works against it with two
+changes: that port instead of `8080`, and the *other* machine's API key
+instead of a placeholder. The key is that machine's `proxy_api_key`
+(`gglib config settings show` there); the port does not add it for you, on
+purpose — see [Why the port does not inject the key](remote.md#why-the-port-does-not-inject-the-key).
+
+`gglib q --remote` and `gglib chat --remote` need neither: they attach the
+key themselves.
+
 ## Sampling profiles
 
 Append `:coding` to a model name (e.g. `qwen3.6:coding`) to select a sampling
