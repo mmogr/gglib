@@ -115,6 +115,11 @@ impl RemoteOps {
             .map_err(|e| GuiError::Internal(format!("could not start the remote tunnel: {e}")))?;
         let handle = Arc::new(handle);
 
+        // The last moment anything notices a proxy that went away while the
+        // tunnel was binding: the watcher that takes over from here is not
+        // spawned until the install below.
+        super::backend::refuse_if_gone(&self.proxy, &backend, &handle).await?;
+
         let code = access::generate_pairing_code();
         handle
             .grant_once(code.clone(), PAIRING_TTL)

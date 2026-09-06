@@ -20,6 +20,7 @@ use tracing::{info, warn};
 use super::gateway::RemoteGateway;
 use super::slot::Slot;
 use super::{DRAIN, Live, RemoteOps};
+use crate::error::GuiError;
 use crate::proxy::ProxyOps;
 
 /// Where the tunnel dials this machine's proxy, and on what terms.
@@ -89,6 +90,46 @@ fn is_private(ip: IpAddr) -> bool {
         // `Ipv6Addr::is_unique_local` is still unstable.
         IpAddr::V6(v6) => v6.segments()[0] & 0xFE00 == 0xFC00,
     }
+}
+
+/// Refuse a tunnel whose proxy went away while it was binding, and let the
+/// half-built listener go.
+///
+/// Nothing is watching the proxy across the span this covers, and that is
+/// the reason it exists. `enable` *reserves* the serve slot rather than
+/// holding its lock — so that `status` keeps answering — but
+/// [`follow_proxy`]'s watcher is deliberately not spawned until the tunnel
+/// is installed: it takes the slot with
+/// [`Slot::take_if`](super::slot::Slot::take_if), which reads a full slot
+/// and passes over a reservation, so a watcher started any earlier would
+/// find nothing, return, and never look again. A proxy that exits between
+/// the address being read and the install is therefore seen by nobody, and
+/// the caller is handed a pairing string for a tunnel fronting a released
+/// port: the event stream reads `remote_enabled` and nothing anywhere says
+/// why the code never worked. Failing closed is the answer; reporting
+/// success is not. Asked of `status()` rather than of the exit channel,
+/// because that also sees the exits nothing publishes ([`PROXY_POLL`]).
+///
+/// # Errors
+///
+/// `Internal`, naming the state the proxy was found in.
+pub(super) async fn refuse_if_gone(
+    proxy: &ProxyOps,
+    backend: &Backend,
+    handle: &modelpipe::ServeHandle,
+) -> Result<(), GuiError> {
+    let status = proxy.status().await;
+    if still_fronting(&status, backend) {
+        return Ok(());
+    }
+    // Nothing can be in flight: the ticket has not left `enable`.
+    if !handle.shutdown_timeout(DRAIN).await {
+        warn!("the tunnel that could not be enabled was slow to go away");
+    }
+    Err(GuiError::Internal(format!(
+        "the local proxy this tunnel would front went away while the tunnel was starting \
+         ({status}); remote access was not enabled"
+    )))
 }
 
 /// Follow the proxy this tunnel fronts, and take the tunnel down when it
