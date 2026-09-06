@@ -101,7 +101,9 @@ name one the desktop serves, or the request arrives there with an empty model
 and comes back `404 Model '' not found` — a real answer from a working
 tunnel, which is easy to misread as the tunnel being broken.
 `gglib model list` on the desktop is the list to choose from. `--remote` and
-`--port` are exclusive: they name different machines.
+`--port` are exclusive: they name different machines. The ID form the
+positional also accepts is local-only — `gglib chat 7 --remote` sends
+`"model": "7"` and comes back `404 Model '7' not found`.
 
 **The GUI's chat** goes to the desktop when the Remote popover's *Use it for
 chat* box is checked. The choice is per window and is cleared the moment the
