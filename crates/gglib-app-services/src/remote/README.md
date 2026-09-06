@@ -41,6 +41,7 @@ remote/
                       is /mcp open, a tunnelled request arrived)
   pairing.rs        — the one-time code: begin, redeem once, burn on the third miss
   key.rs            — which key the tunnel enforces, or that one must be minted
+  teardown.rs       — ending a session: cancel, drain, and only then forget
   rotation.rs       — following a key rotation into the running listener
   types.rs          — what the ops are asked for and what they report
 ```
@@ -74,6 +75,22 @@ through without the token; the proxy's pairing route asks `RemoteGateway`
 whether it is the code this session minted, and takes the key it stands for.
 Two minutes, one redemption, three wrong attempts. Every refusal is the same
 refusal.
+
+# Ending a session
+
+`disable` and the proxy watcher end a session the same way, through
+`teardown.rs`: cancel what was following the tunnel, drain it, and only then
+forget the pairing. The order is the point. A laptop's `POST /remote/pair`
+can cross the tunnel edge — spending the one-time grant that is the only
+reason it got in — a millisecond before someone types `gglib remote disable`
+here, and clearing the pairing first hands that request the same flat `401` a
+wrong code gets, which the laptop renders as "expired, used already, or
+burned by wrong attempts". None of it true, the code spent either way, and
+the operator sent to re-run `enable` on a machine that was working.
+
+Draining first costs nothing in exchange: `shutdown_timeout` closes admission
+before it waits, so the requests it protects are exactly the ones that were
+already inside.
 
 # The address the tunnel fronts
 
@@ -233,6 +250,7 @@ no test can drive.
 | [`slot_tests.rs`](slot_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot_tests-coverage.json) |
 | [`stored_pairing.rs`](stored_pairing.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-coverage.json) |
 | [`stored_pairing_tests.rs`](stored_pairing_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing_tests-coverage.json) |
+| [`teardown.rs`](teardown.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-teardown-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-teardown-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-teardown-coverage.json) |
 | [`types.rs`](types.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-coverage.json) |
 <!-- module-table:end -->
 

@@ -12,6 +12,7 @@ mod rotation;
 mod serve;
 mod slot;
 mod stored_pairing;
+mod teardown;
 mod types;
 
 pub use gateway::RemoteGateway;

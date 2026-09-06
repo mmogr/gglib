@@ -203,13 +203,9 @@ async fn watch_proxy(
     }
     let taken = take_if_ours(&mut *live.lock().await, &handle);
     let Some(live) = taken else { return };
-    // Our own token, and the rotation poll's: the tunnel is over, so nothing
-    // should still be following a key for it.
-    live.cancel.cancel();
-    gateway.reset_session();
-    if !live.handle.shutdown_timeout(DRAIN).await {
-        warn!("remote tunnel drain hit its deadline; remaining requests were cut");
-    }
+    // The same order `disable` ends a session in, and for the same reason —
+    // see [`teardown::take_down`].
+    super::teardown::take_down(live, &gateway).await;
     info!("remote tunnel disabled with the proxy it fronted");
     emitter.emit(AppEvent::remote_disabled());
 }
