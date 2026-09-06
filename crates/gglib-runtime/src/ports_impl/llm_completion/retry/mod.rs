@@ -10,6 +10,10 @@ pub(crate) use execute::send_with_retry;
 mod test_server;
 
 #[cfg(test)]
+#[path = "classify_tests.rs"]
+mod classify_tests;
+
+#[cfg(test)]
 #[path = "execute_tests.rs"]
 mod execute_tests;
 

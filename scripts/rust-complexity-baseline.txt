@@ -130,7 +130,7 @@ crates/gglib-proxy/src/loop_guard.rs 497
 crates/gglib-proxy/src/loop_guard_tests.rs 1191
 crates/gglib-proxy/src/mcp/handlers.rs 564
 crates/gglib-proxy/src/metrics.rs 628
-crates/gglib-proxy/src/models.rs 623
+crates/gglib-proxy/src/models.rs 635
 crates/gglib-proxy/src/models_tests.rs 926
 crates/gglib-proxy/src/props.rs 574
 crates/gglib-proxy/src/props_baseline_tests.rs 404
