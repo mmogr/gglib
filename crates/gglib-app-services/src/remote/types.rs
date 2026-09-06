@@ -102,8 +102,12 @@ pub struct RemoteStatusSnapshot {
     pub last_peer: Option<String>,
     /// The connect side, when this machine is reaching another.
     pub connected: Option<ConnectSnapshot>,
-    /// Fingerprint of the ticket a bare `connect` would dial, from settings.
+    /// Fingerprint of the machine a bare `connect` would dial, from the
+    /// stored pairing — and, because that pairing is one record, the machine
+    /// the stored key belongs to. `None` when nothing is stored, or when the
+    /// ticket is from a format this build cannot read.
     pub stored_ticket_fingerprint: Option<String>,
-    /// Whether this machine holds a key from an earlier pairing.
+    /// Whether this machine holds a key from an earlier pairing. Never true
+    /// on its own: a stored pairing is a ticket *and* a key.
     pub has_remote_key: bool,
 }

@@ -5,38 +5,16 @@
 //! and what `remember` leaves behind in settings once it has. The one test
 //! that does dial is `#[ignore]`d and says why on itself.
 //!
-//! The tickets are modelpipe's own normative vectors from
-//! `docs/ticket-format-v0.md`, which ship in its published tarball and are
-//! asserted identical by three implementations on every one of its CI runs.
-//! `ticket_vectors.py` has no `--update` flag, deliberately, so these
-//! strings cannot drift under us.
+//! The tickets and the keys are in `test_support_remote.rs`, beside the
+//! fixture, because `lifecycle_tests.rs` names the same machines.
 
 use std::time::Duration;
 
-use gglib_core::SettingsUpdate;
-
 use super::*;
-use crate::test_support_remote::test_remote_ops;
-
-/// Vector 1: the minimal v0 ticket, no transport addresses.
-const TICKET_A: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na";
-
-/// The first six bytes of vector 1's endpoint id, which is what a
-/// fingerprint shows.
-const FINGERPRINT_A: &str = "d75a980182b1";
-
-/// A *second* machine: the same minimal shape as vector 1 over the public
-/// key from RFC 8032 §7.1 TEST 2, so the two tickets name genuinely
-/// different endpoints rather than one endpoint at two addresses. Every
-/// published vector shares TEST 1's key, so no pair of them could say this.
-const TICKET_B: &str = "pipeaa6uaf6d5bbyswusw4fkoti3p26jzgbmz4xmjfumydgvl4jk6rtayaaa2e4g6hq";
-
-/// Vector 1's key with vector 3's address set: one IPv6 address in the
-/// documentation prefix (RFC 3849), which routes nowhere anywhere. The only
-/// ticket here that is ever dialled.
-const TICKET_UNREACHABLE: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaicaajcaainxaaaaaaaaaaaaaaaaaaach4qaabstehw";
-
-const KEY_A: &str = "sk-zzq-the-key-machine-a-handed-over";
+use crate::test_support_remote::{
+    FINGERPRINT_A, KEY_A, KEY_B, TICKET_A, TICKET_B, TICKET_UNREACHABLE, paired_with,
+    test_remote_ops,
+};
 
 /// What `gglib remote status` allows the daemon before it gives up
 /// (`gglib-cli/src/daemon_client/remote.rs`). A status that takes longer
@@ -123,12 +101,9 @@ async fn disconnecting_when_nothing_is_connected_is_a_conflict_and_announces_not
 async fn killing_a_remote_this_machine_is_not_connected_to_is_a_conflict() {
     let (core, ops, _) = test_remote_ops().await;
     core.settings()
-        .update(SettingsUpdate {
-            remote_api_key: Some(Some(KEY_A.to_owned())),
-            ..SettingsUpdate::default()
-        })
+        .update(paired_with(TICKET_A, KEY_A))
         .await
-        .expect("a key is stored");
+        .expect("a pairing is stored");
 
     let err = ops.kill_remote().await.expect_err("nothing to stop");
     let GuiError::Conflict(message) = err else {
@@ -137,75 +112,117 @@ async fn killing_a_remote_this_machine_is_not_connected_to_is_a_conflict() {
     assert!(message.contains("not connected"), "{message}");
 }
 
-/// **Characterisation, and the defect is the point.** The two settings
-/// fields move independently, so this machine can end up holding machine
-/// A's key filed under machine B's ticket.
+/// A second pairing replaces the first whole, rather than half of it.
 ///
-/// `remember` is the only writer, and the bare-ticket arm of `connect`
-/// calls it with `None` for the key — which does not clear the old key, it
-/// leaves it exactly where it was. Written as it behaves rather than as it
-/// should, so the fix cannot land silently: the PR that makes a stored key
-/// name its machine inverts this assertion, and the `#[ignore]`d test below
-/// is the claim it makes true.
+/// The inversion of the characterisation this test replaces, which pinned
+/// that `remember(None, ticket_b)` left machine A's key sitting under
+/// machine B's ticket. There is no longer a call that can do it: the two
+/// halves are one `RemotePairing` and `remember` writes both or neither, so
+/// the key that outlives the machine that issued it has no shape to live in.
 #[tokio::test]
-async fn a_bare_ticket_connect_keeps_the_previous_machines_key() {
-    let (core, ops, _) = test_remote_ops().await;
+async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
+    let (core, _ops, _) = test_remote_ops().await;
 
-    ops.remember(Some(KEY_A.to_owned()), TICKET_A.to_owned())
+    remember(&core, KEY_A.to_owned(), TICKET_A.to_owned())
         .await
         .expect("machine A's pairing is stored");
-    // What the `code.is_none()` arm of `connect` does on a dial to a
-    // machine this one has never paired with.
-    ops.remember(None, TICKET_B.to_owned())
+    remember(&core, KEY_B.to_owned(), TICKET_B.to_owned())
         .await
-        .expect("machine B's ticket is stored");
+        .expect("machine B's pairing replaces it");
 
-    let settings = core.settings().get().await.expect("settings load");
-    assert_eq!(settings.remote_last_ticket.as_deref(), Some(TICKET_B));
-    assert_eq!(
-        settings.remote_api_key.as_deref(),
-        Some(KEY_A),
-        "today the key outlives the machine that issued it"
-    );
+    let stored = core
+        .settings()
+        .get()
+        .await
+        .expect("settings load")
+        .remote_pairing
+        .expect("a pairing is stored");
+    assert_eq!(stored.ticket, TICKET_B);
+    assert_eq!(stored.api_key, KEY_B);
 }
 
-/// The claim the PR that makes a stored key name its machine has to satisfy:
-/// whatever settings remember of a pairing describes **one** machine.
+/// A pairing that cannot be stored says the code has already been spent.
 ///
-/// It fails today, which is why it is here and `#[ignore]`d rather than
-/// absent. A key is issued by the machine whose ticket was redeemed, so a
-/// key that survives a change of ticket is a key for nobody: presented to
-/// machine B it is a 401 that gglib renders as "expired, used already, or
-/// burned by wrong attempts", none of which is true. Binding the two into
-/// one record keyed by ticket fingerprint makes the disagreement above
-/// unrepresentable rather than merely wrong.
+/// Finding A2, as far as this layer can carry it. `redeem` burns the code at
+/// both ends of the far machine before the write is attempted, so a failure
+/// here is not a retry — it is a trip to the other machine — and the
+/// difference is entirely in what the message says. The write is made to
+/// fail the way it really can: the far side answered with a blank key, which
+/// `validate_settings` refuses, and the code is gone either way.
+///
+/// What it does **not** do is get the key back. Nothing here can: the key
+/// exists only in the response just read, and the store that would have kept
+/// it is what failed.
 #[tokio::test]
-#[ignore = "pending: the stored pairing is still two independent settings rows"]
-async fn the_stored_key_and_the_stored_ticket_describe_one_machine() {
-    let (core, ops, _) = test_remote_ops().await;
+async fn a_pairing_that_cannot_be_stored_says_the_code_is_already_spent() {
+    let (core, _ops, _) = test_remote_ops().await;
 
-    ops.remember(Some(KEY_A.to_owned()), TICKET_A.to_owned())
+    let err = store_redeemed(&core, "   ".to_owned(), TICKET_A.to_owned())
+        .await
+        .expect_err("a blank key is not a key, and settings refuse it");
+    let GuiError::Internal(message) = err else {
+        panic!("a store that failed is not the caller's to fix: {err:?}");
+    };
+    assert!(message.contains("already spent"), "{message}");
+    assert!(message.contains("gglib remote enable"), "{message}");
+}
+
+/// Whatever settings remember of a pairing describes **one** machine.
+///
+/// The claim PR 1 left `#[ignore]`d, satisfied here — though not the way
+/// that test's body guessed. It assumed a bare-ticket dial to a second
+/// machine would go ahead and record the new ticket with no key; the fix is
+/// that the dial does not go ahead at all. A key is issued by the machine
+/// whose code was redeemed, so a dial that can only end in a 401 is refused
+/// before it reaches the wire, and the pairing this machine does hold is
+/// left exactly as it was — machine A's ticket with machine A's key.
+///
+/// Refusing rather than dialling is the difference between the two
+/// readings, and it is the one 5.5 asks for: the old guard admitted the
+/// dial on "a key exists" and left `remote status` reporting a fully paired
+/// connection to a machine that had never seen this one.
+#[tokio::test]
+async fn the_stored_key_and_the_stored_ticket_describe_one_machine() {
+    let (core, ops, events) = test_remote_ops().await;
+    core.settings()
+        .update(paired_with(TICKET_A, KEY_A))
         .await
         .expect("machine A's pairing is stored");
-    ops.remember(None, TICKET_B.to_owned())
-        .await
-        .expect("machine B's ticket is stored");
 
-    let settings = core.settings().get().await.expect("settings load");
-    let fingerprint = settings
-        .remote_last_ticket
-        .as_deref()
-        .and_then(|t| t.parse::<modelpipe::Ticket>().ok())
-        .map(|t| t.fingerprint());
-    assert_ne!(
-        fingerprint.as_deref(),
-        Some(FINGERPRINT_A),
-        "the stored ticket is machine B's"
+    let err = ops
+        .connect(ConnectRequest {
+            pairing: Some(TICKET_B.to_owned()),
+            ..ConnectRequest::default()
+        })
+        .await
+        .expect_err("machine B never handed this machine a key");
+    let GuiError::ValidationFailed(message) = err else {
+        panic!("holding somebody else's key is the caller's to fix: {err:?}");
+    };
+    assert!(message.contains("holds no key"), "{message}");
+
+    let stored = core
+        .settings()
+        .get()
+        .await
+        .expect("settings load")
+        .remote_pairing
+        .expect("machine A's pairing is untouched");
+    assert_eq!(
+        stored.ticket, TICKET_A,
+        "a refused dial rewrote the stored ticket"
     );
-    assert!(
-        settings.remote_api_key.is_none(),
-        "machine B never handed this machine a key, so there is none to hold"
+    assert_eq!(stored.api_key, KEY_A);
+    assert!(events.events().is_empty(), "nothing happened to announce");
+
+    // And the status surface can say *which* machine the key it reports is
+    // for, which is the question a stale key left unanswerable.
+    let status = ops.status().await;
+    assert_eq!(
+        status.stored_ticket_fingerprint.as_deref(),
+        Some(FINGERPRINT_A)
     );
+    assert!(status.has_remote_key);
 }
 
 /// `status` answers while a dial is in flight — finding A1, and it fails
@@ -232,12 +249,9 @@ async fn the_stored_key_and_the_stored_ticket_describe_one_machine() {
 async fn status_answers_while_a_dial_is_in_flight() {
     let (core, ops, _) = test_remote_ops().await;
     core.settings()
-        .update(SettingsUpdate {
-            remote_api_key: Some(Some(KEY_A.to_owned())),
-            ..SettingsUpdate::default()
-        })
+        .update(paired_with(TICKET_A, KEY_A))
         .await
-        .expect("a stored key admits a bare ticket");
+        .expect("a pairing naming that machine admits a bare ticket for it");
 
     let dialling = Arc::clone(&ops);
     let dial = tokio::spawn(async move {
