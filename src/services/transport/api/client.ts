@@ -113,15 +113,15 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
 }
 
 /**
- * localStorage key holding the API key for web mode.
+ * localStorage key holding the daemon's API key.
  *
  * Only relevant when the daemon is shared over the LAN (`--share-lan`), where
- * /api/* requires a bearer token. Same-origin loopback needs no key and never
- * touches this.
+ * /api/* requires a bearer token. A loopback daemon needs no key and never
+ * touches this — on either surface.
  */
 const WEB_API_KEY_STORAGE = 'gglib_api_key';
 
-function readStoredWebApiKey(): string | undefined {
+function readStoredApiKey(): string | undefined {
   try {
     return localStorage.getItem(WEB_API_KEY_STORAGE) ?? undefined;
   } catch {
@@ -130,10 +130,10 @@ function readStoredWebApiKey(): string | undefined {
 }
 
 /**
- * Ask the user for the daemon's API key after a 401 in web mode.
+ * Ask the user for the daemon's API key after a 401.
  * Returns true if a key was provided and stored (so the request can retry).
  */
-function promptForWebApiKey(): boolean {
+function promptForApiKey(): boolean {
   const entered = window.prompt(
     'This gglib daemon requires an API key (it was printed when the daemon started).\n' +
       'Enter it to continue:'
@@ -147,7 +147,7 @@ function promptForWebApiKey(): boolean {
     // Storage unavailable (private mode) — the retry still works this session
     // because the client cache rebuild re-reads via the in-memory session.
   }
-  setApiSession('', entered.trim());
+  apiAuthToken = entered.trim();
   return true;
 }
 
@@ -215,21 +215,15 @@ function buildClient(config: HttpClientConfig): HttpClient {
         body: hasBody ? JSON.stringify(body) : undefined,
       });
       
-      // If 401 and not already retrying, clear cache and retry once
-      if (response.status === 401 && !isRetry) {
-        if (isTauri()) {
-          appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - clearing cache and retrying');
-          resetClientCache();
-          const newClient = await getClient();
-          return newClient.request<T>(path, options, true);
-        }
-        // Web mode: a LAN-shared daemon requires its API key — ask for it.
-        if (promptForWebApiKey()) {
-          appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
-          resetClientCache();
-          const newClient = await getClient();
-          return newClient.request<T>(path, options, true);
-        }
+      // A 401 means a LAN-shared daemon wants its key. Retrying with the same
+      // credential cannot help, so only a newly entered one earns the retry —
+      // the desktop app used to rebuild an identically tokenless client here
+      // and fail again with nothing asked of the user.
+      if (response.status === 401 && !isRetry && promptForApiKey()) {
+        appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
+        resetClientCache();
+        const newClient = await getClient();
+        return newClient.request<T>(path, options, true);
       }
       
       return await readData<T>(response);
@@ -264,19 +258,23 @@ export async function getClient(): Promise<HttpClient> {
   
   cachedClientPromise = (async () => {
     try {
+      // A loopback daemon requires no token, which is the usual case for both
+      // surfaces. The exception is a daemon started with `--share-lan`: it
+      // binds a LAN interface, so it resolves or mints a key and demands it on
+      // every `/api/*` call — including from a client on the same machine.
+      // The desktop app reaches such a daemon whenever one is already running,
+      // so it needs the same stored-key path web mode has rather than a
+      // hardcoded empty token it could never recover from.
+      const token = readStoredApiKey() ?? apiAuthToken;
+
       if (isTauri()) {
         const info = await discoverEmbeddedApi();
-        // No token: the daemon's loopback API is unauthenticated. A key is
-        // only required once `--share-lan` puts it on a LAN interface, which
-        // the desktop app never reaches it by.
-        const config = { baseUrl: `http://127.0.0.1:${info.port}`, token: '' };
+        const config = { baseUrl: `http://127.0.0.1:${info.port}`, token };
         // Set module-level session for SSE and other fetch-based utilities
         setApiSession(config.baseUrl, config.token);
         return buildClient(config);
       } else {
-        // Web mode: same-origin. A token is only needed against a LAN-shared
-        // daemon; use one previously stored (or entered this session).
-        const token = readStoredWebApiKey() ?? apiAuthToken;
+        // Web mode: same-origin.
         setApiSession('', token);
         return buildClient({ baseUrl: '', token });
       }
@@ -344,18 +342,20 @@ export async function getAuthenticatedFetchConfig(): Promise<{
   baseUrl: string;
   headers: HeadersInit;
 }> {
+  // `getAuthHeaders` rather than `{}`: these callers stream agent chat and the
+  // five benchmark runs, and were the only `/api/*` requests carrying no
+  // credential — so against a `--share-lan` daemon they answered 401 even once
+  // the user had entered the key. It yields `{}` when there is no token.
   if (isTauri()) {
     const info = await discoverEmbeddedApi();
-    // Loopback needs no Authorization header. This sent `Bearer ` with an
-    // empty token for as long as the field existed.
     return {
       baseUrl: `http://127.0.0.1:${info.port}`,
-      headers: {},
+      headers: getAuthHeaders(),
     };
   } else {
     return {
       baseUrl: '',
-      headers: {},
+      headers: getAuthHeaders(),
     };
   }
 }
