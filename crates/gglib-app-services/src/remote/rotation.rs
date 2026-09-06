@@ -13,8 +13,11 @@ use super::gateway::RemoteGateway;
 /// There is no settings-changed event in gglib and there cannot be a useful
 /// one — the CLI writes the same database from another process — so this
 /// polls on the settings cache's own cadence, which bounds the staleness to
-/// the same window the proxy already accepts. A cleared setting is ignored:
-/// the proxy keeps its floor, so the tunnel keeps its token.
+/// the same window the proxy already accepts. A cleared setting is ignored,
+/// because clearing is not a rotation and there is no new token to follow.
+/// Do not read that as the proxy holding the line: a listener that bound on
+/// loopback has no floor, so a clear reopens it and the tunnel edge is then
+/// the only door still asking (ADR 0012, decision 2).
 pub(super) async fn rotation_poll(
     core: Arc<AppCore>,
     handle: Arc<modelpipe::ServeHandle>,

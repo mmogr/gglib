@@ -238,8 +238,9 @@ closed over it unless you say otherwise. [Details →](docs/remote.md)
 
 Everything binds `127.0.0.1` by default. **Do not expose the endpoint to the
 public internet.** Optional bearer API key on loopback; auto-minted if you bind
-externally, and put on the loopback proxy the moment you enable remote
-access. Host-header allowlist and local-only CORS are always on. No
+externally, and put on the loopback proxy — the OpenAI-compatible one on
+`:8080`, not the daemon's management API on `:9887` — the moment you enable
+remote access. Host-header allowlist and local-only CORS are always on. No
 multi-tenancy or rate limiting. Details in
 [gglib-proxy](crates/gglib-proxy/README.md); the tunnel's model is in
 [Remote access](docs/remote.md#how-it-stays-private).

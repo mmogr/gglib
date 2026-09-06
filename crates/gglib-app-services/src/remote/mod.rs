@@ -165,7 +165,9 @@ impl RemoteOps {
     }
 
     /// Take the tunnel down. The ticket is dead from this moment; the key
-    /// stays in settings, because authentication turns on and never off.
+    /// stays in settings, because the local proxy has demanded it since
+    /// `enable` ran and withdrawing it would break whatever adopted it
+    /// (ADR 0012, decision 2).
     ///
     /// # Errors
     ///

@@ -99,6 +99,10 @@ fn print_notice(allow_mcp: bool) {
         "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key too \u{2014} \
          gglib's own clients read it from settings; a hand-configured client needs it added once."
     );
+    eprintln!(
+        "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock you out \
+         of `gglib` or the app."
+    );
     if allow_mcp {
         eprintln!("  /mcp is reachable through the tunnel (--allow-mcp).");
     } else {
