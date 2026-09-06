@@ -269,8 +269,10 @@ pub struct Settings {
     /// it through the tunnel and stores it here so later sessions need only
     /// the ticket. It is that machine's `proxy_api_key`, and `gglib q --remote`
     /// and `gglib chat --remote` attach it as the bearer. Nothing writes it by
-    /// hand and no settings surface exposes it; `gglib remote connect` with a
-    /// fresh pairing replaces it.
+    /// hand, and `gglib config settings show` reports only whether one is held
+    /// — the value itself has no read surface, because re-pairing replaces it
+    /// and nothing needs to recover it. `gglib remote connect` with a fresh
+    /// pairing does exactly that.
     pub remote_api_key: Option<String>,
 
     /// The ticket `gglib remote connect` last dialled, in its canonical form.

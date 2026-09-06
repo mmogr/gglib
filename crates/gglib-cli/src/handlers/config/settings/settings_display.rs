@@ -10,6 +10,23 @@ use gglib_core::Settings;
 /// user-facing output.
 const HIDDEN_KEYS: &[&str] = &["setup-completed"];
 
+/// Keys whose value is shown as set-or-unset rather than printed.
+///
+/// Only `remote-api-key`, and deliberately not `proxy-api-key`: the two are
+/// credentials with opposite recovery stories. The proxy generates its own key
+/// and `settings show` is the only place left to read it, which is why
+/// `the_proxy_api_key_is_shown_rather_than_masked` defends printing it. This
+/// one is *received* from the other machine by `gglib remote connect`, and
+/// re-pairing replaces it — so printing it costs a credential's confidentiality
+/// on a surface people paste into bug reports and buys back nothing.
+///
+/// `remote-last-ticket` stays printed: its own doc calls it an address rather
+/// than a credential, and it is useless without this key.
+const MASKED_KEYS: &[&str] = &["remote-api-key"];
+
+/// What a masked key renders as when it holds a value.
+const MASKED_VALUE: &str = "(set, not shown)";
+
 /// A labeled group of display rows used by [`print_sections`].
 pub(super) struct DisplaySection {
     pub title: &'static str,
@@ -88,7 +105,16 @@ pub(super) fn settings_display_rows(
             continue;
         }
 
-        if kebab_key == "default-model-id" {
+        if MASKED_KEYS.contains(&kebab_key.as_str()) {
+            // Null still renders as "None": whether a key is held at all is
+            // the thing a person runs this to find out, and it is not secret.
+            let shown = if val.is_null() {
+                "None".to_owned()
+            } else {
+                MASKED_VALUE.to_owned()
+            };
+            rows.push((kebab_key, shown));
+        } else if kebab_key == "default-model-id" {
             let display = model_display.clone().unwrap_or_else(|| "None".to_owned());
             rows.push((kebab_key, display));
         } else if kebab_key == "default-context-size" && val.is_null() {
@@ -195,7 +221,7 @@ mod tests {
     use gglib_core::Settings;
     use gglib_core::domain::InferenceConfig;
 
-    use super::{camel_to_kebab, settings_display_rows, settings_to_sections};
+    use super::{MASKED_VALUE, camel_to_kebab, settings_display_rows, settings_to_sections};
 
     // ── camel_to_kebab ────────────────────────────────────────────────────────
 
@@ -315,6 +341,56 @@ mod tests {
                 .map(|(_, v)| v.as_str()),
             Some("secret123"),
             "the key must be recoverable from `settings show`: {rows:?}"
+        );
+    }
+
+    /// The received remote key is not, for the opposite reason.
+    ///
+    /// It belongs to the other machine and arrives over the wire; re-pairing
+    /// replaces it, so nothing needs to read it back. The field's own doc said
+    /// no settings surface exposed it while this one printed it in full.
+    #[test]
+    fn the_received_remote_key_is_masked() {
+        let settings = Settings {
+            remote_api_key: Some("the-other-machines-key".to_owned()),
+            remote_last_ticket: Some("ticket-abc".to_owned()),
+            ..Default::default()
+        };
+        let rows = settings_display_rows(&settings, None);
+        let value = |key: &str| {
+            rows.iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.as_str())
+                .unwrap_or_default()
+                .to_owned()
+        };
+
+        assert_eq!(value("remote-api-key"), MASKED_VALUE, "{rows:?}");
+        assert!(
+            !rows
+                .iter()
+                .any(|(_, v)| v.contains("the-other-machines-key")),
+            "the key must not reach any row: {rows:?}"
+        );
+        assert_eq!(
+            value("remote-last-ticket"),
+            "ticket-abc",
+            "the ticket is an address, not a credential, and stays readable"
+        );
+    }
+
+    /// Masking must not hide *whether* a key is held — that is what a person
+    /// runs this command to find out, and it is not the secret.
+    #[test]
+    fn an_absent_remote_key_still_reads_as_none() {
+        let rows = settings_display_rows(&Settings::default(), None);
+
+        assert_eq!(
+            rows.iter()
+                .find(|(k, _)| k == "remote-api-key")
+                .map(|(_, v)| v.as_str()),
+            Some("None"),
+            "unset must stay distinguishable from set: {rows:?}"
         );
     }
 
