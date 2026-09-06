@@ -1,7 +1,9 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05
+- **Date:** 2026-09-05 (amended 2026-09-06 — see the note in the first reading
+  and the second reading; amended 2026-09-07 — see the note under decision 2
+  on how authentication is turned back off)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -114,6 +116,45 @@ given. That is the one credential and its two doors briefly disagreeing about
 whether it is required — the only case where they do, and the reason the
 accurate version of "on and never off" is "on, and the floor arrives at the
 next restart".
+
+> **Amended 2026-09-07 — what the operator is supposed to do about it.** The
+> two paragraphs above describe the reopening as a property of the code, which
+> it is, and stop there. That leaves the one question a reader arrives with
+> unanswered, and `gglib remote enable` prints "authentication turns on and
+> never off by itself", which invites the reader to go looking. So, plainly:
+>
+> - **Turning it back off is `gglib config settings unset proxy-api-key`,
+>   followed by rebinding the proxy** — `gglib proxy stop` and start it again,
+>   or `gglib daemon stop`, which takes the listener down with everything
+>   else. `settings set --proxy-api-key ""` is not it and is refused —
+>   `Proxy API key cannot be blank — clear it instead to disable
+>   authentication`. Emptying the field in the desktop app's settings sends
+>   `null` and clears it the same way `unset` does.
+> - **The rebind is the load-bearing half, and its order is the opposite of
+>   what it looks like.** `resolve_api_key` runs at bind, in
+>   `ProxySupervisor`'s start path — not at daemon start — so unsetting alone
+>   works only against the listener `enable` closed, which bound on loopback
+>   with an empty floor. Once a proxy has bound with the key stored,
+>   `resolve_api_key` hands it to `tracking` as the bind key and unsetting no
+>   longer opens anything. Unset *then* rebind; rebind then unset leaves it
+>   closed.
+> - **`/mcp` is inside what reopens.** It sits in the bearer-guarded group in
+>   `crates/gglib-proxy/src/router.rs` like every other protected route, so an
+>   unset that lands before the rebind takes the tool gateway back to
+>   unauthenticated along with `/v1/*`. That is the pre-`enable` posture of a
+>   loopback proxy rather than a new hole — decision 5's tunnel gate is
+>   independent of the bearer and still refuses tunnelled `/mcp` — but the
+>   two guards named in *Context* are both off at that moment, and this ADR
+>   exists because that combination is easy to reach by accident.
+> - **A running tunnel does not reopen with it.** `rotation_poll` ignores a
+>   cleared setting, so the tunnel edge keeps demanding the token it was given
+>   until `disable`. The clear opens the local door only.
+>
+> `clearing_reopens_a_listener_that_bound_on_loopback` in
+> `crates/gglib-core/src/access/bearer_tests.rs` pins both halves. Until it was
+> written the suite had no test that constructed `tracking(None, ..)` and
+> cleared a key back off it, so every sentence above was prose with nothing
+> holding it.
 
 Rotation had no mechanism and needed one. There is no settings-changed event
 in gglib and there cannot be a useful one: `gglib config settings set` writes

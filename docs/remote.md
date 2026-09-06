@@ -147,6 +147,43 @@ away. gglib's own CLI and GUI read the key from settings and carry on; a
 hand-configured local client will start getting `401` and needs the key added
 once. `enable` says so every time it runs.
 
+**Turning it back off: unset, then rebind the proxy — in that order.**
+`enable` says authentication never turns off by itself, and it does not, but
+there is a supported way to turn it off by hand:
+
+```
+gglib config settings unset proxy-api-key
+gglib proxy stop        # then start it again however you normally do
+```
+
+`gglib config settings set --proxy-api-key ""` is *not* it; a blank would read
+as "authentication is on" while accepting `Bearer ` from anyone, so it is
+refused with `Proxy API key cannot be blank — clear it instead to disable
+authentication`. Emptying the API key box in the desktop app's settings does
+the same thing `unset` does.
+
+The order is the part that surprises people, because it is the opposite of the
+intuition. What matters is the proxy *rebinding*: the token it demands is
+settled when the listener binds, so a listener that is already up has to go
+down and come back. Unsetting alone reopens the proxy only while the listener
+that `enable` closed is still up — that one bound on loopback before the key
+existed, so it has no bind-time token to fall back on. Once a proxy has
+*bound* with the key in settings, that key becomes its floor and unsetting no
+longer opens anything. So unset first and rebind second. Rebind first and the
+unset does nothing, which reads as the command having failed when it has not.
+`gglib daemon stop` takes the proxy down with everything else and works the
+same way.
+
+Two things do not come back with it. A tunnel that is still running keeps
+demanding the token it was handed — key rotation follows a *changed* key, not
+a cleared one — so this opens the local door only; `gglib remote disable`
+closes the remote one. And `/mcp` *does* come back open, along with `/v1/*`,
+because it sits behind the same bearer guard. That is the ordinary posture of
+a loopback proxy that never enabled remote access, not a new hole, but it is
+worth knowing before you unset on a machine with a shell MCP server
+configured. [ADR 0012](adr/0012-the-remote-tunnel.md), decision 2, has the
+mechanism.
+
 **The proxy, and only the proxy.** The daemon's management API on
 `127.0.0.1:9887` — the door `gglib`'s own commands and the desktop app come
 through — is not affected. A daemon bound on loopback, which is the default,
