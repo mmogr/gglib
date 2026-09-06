@@ -45,10 +45,10 @@ async fn send_to(
     policy: &RetryPolicy,
     observer: Option<&Arc<dyn RetryObserver>>,
 ) -> Result<Response> {
-    let url = format!("{}/v1/chat/completions", server.base_url);
     send_with_retry(
         &Client::new(),
-        &url,
+        &format!("{}/v1/chat/completions", server.base_url),
+        None,
         &serde_json::json!({"model": "test"}),
         Duration::from_secs(5),
         policy,

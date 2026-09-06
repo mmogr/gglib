@@ -52,6 +52,7 @@ pub(crate) mod reasoning_args;
 pub(crate) mod sampling_params;
 pub(crate) mod shared_args;
 pub(crate) mod subcommands;
+pub(crate) mod upstream_args;
 pub(crate) mod utils;
 
 // Re-export primary types for convenient access

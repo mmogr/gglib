@@ -20,6 +20,8 @@ pub(crate) struct ChatArgs {
     /// Disable tools — run as a plain LLM chat.
     pub no_tools: bool,
     pub port: Option<u16>,
+    /// Drive the machine on the other end of `gglib remote connect`.
+    pub remote: bool,
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,

@@ -12,3 +12,7 @@ mod test_server;
 #[cfg(test)]
 #[path = "execute_tests.rs"]
 mod execute_tests;
+
+#[cfg(test)]
+#[path = "bearer_tests.rs"]
+mod bearer_tests;

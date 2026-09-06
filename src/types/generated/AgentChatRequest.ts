@@ -12,9 +12,19 @@ export type AgentChatRequest = {
  *
  * Must match a currently-running server (the same constraint as the chat
  * proxy endpoint). Validated by [`validate_port`](crate::handlers::port_utils::validate_port)
- * before the loop starts.
+ * before the loop starts. Ignored when [`Self::remote`] is set.
  */
 port: number, 
+/**
+ * Drive the machine on the other end of the remote tunnel instead of a
+ * local llama-server (ADR 0012).
+ *
+ * The daemon must be connected (`gglib remote connect`) and hold the key
+ * from that pairing; the loop then talks to the tunnel's loopback port
+ * with that key, and `port` is not consulted. Absent means local, so an
+ * older client is unchanged.
+ */
+remote: boolean, 
 /**
  * Full conversation history in domain form.
  *

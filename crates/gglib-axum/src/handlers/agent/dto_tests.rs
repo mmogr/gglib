@@ -118,3 +118,11 @@ fn the_loop_config_is_unaffected() {
     let cfg: AgentRequestConfig = serde_json::from_str(r#"{"max_iterations":3}"#).expect("parses");
     assert_eq!(cfg.max_iterations, Some(3));
 }
+
+/// `remote` is opt-in: an older client that never heard of it drives a local
+/// server exactly as before.
+#[test]
+fn remote_is_off_unless_the_body_says_so() {
+    assert!(!parse(MINIMAL).remote);
+    assert!(parse(r#"{"port":9000,"messages":[],"remote":true}"#).remote);
+}

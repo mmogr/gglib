@@ -10,6 +10,7 @@
 //! reuses a connection and the accept count is exactly the request count.
 
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -27,6 +28,9 @@ pub(super) struct TestServer {
     /// Base URL, e.g. `http://127.0.0.1:54321`.
     pub(super) base_url: String,
     requests: Arc<AtomicUsize>,
+    /// What each client sent, as far as one read went — enough for the
+    /// request line and headers, which is what the tests look at.
+    heads: Arc<Mutex<Vec<String>>>,
     handle: JoinHandle<()>,
 }
 
@@ -42,11 +46,18 @@ impl TestServer {
         );
 
         let requests = Arc::new(AtomicUsize::new(0));
-        let handle = tokio::spawn(serve(listener, script, Arc::clone(&requests)));
+        let heads = Arc::new(Mutex::new(Vec::new()));
+        let handle = tokio::spawn(serve(
+            listener,
+            script,
+            Arc::clone(&requests),
+            Arc::clone(&heads),
+        ));
 
         Self {
             base_url,
             requests,
+            heads,
             handle,
         }
     }
@@ -54,6 +65,11 @@ impl TestServer {
     /// How many requests have been accepted so far.
     pub(super) fn request_count(&self) -> usize {
         self.requests.load(Ordering::SeqCst)
+    }
+
+    /// The request heads seen so far, in order.
+    pub(super) fn request_heads(&self) -> Vec<String> {
+        self.heads.lock().expect("heads mutex").clone()
     }
 }
 
@@ -64,7 +80,12 @@ impl Drop for TestServer {
 }
 
 /// Accept loop: one response per connection, then close.
-async fn serve(listener: TcpListener, script: Vec<String>, requests: Arc<AtomicUsize>) {
+async fn serve(
+    listener: TcpListener,
+    script: Vec<String>,
+    requests: Arc<AtomicUsize>,
+    heads: Arc<Mutex<Vec<String>>>,
+) {
     loop {
         let Ok((mut socket, _)) = listener.accept().await else {
             return;
@@ -79,7 +100,12 @@ async fn serve(listener: TcpListener, script: Vec<String>, requests: Arc<AtomicU
         // Drain what the client sent. The content is irrelevant — reading it
         // just stops the peer seeing a reset before it has finished writing.
         let mut scratch = vec![0_u8; 8192];
-        let _ = tokio::time::timeout(CLIENT_TIMEOUT, socket.read(&mut scratch)).await;
+        if let Ok(Ok(n)) = tokio::time::timeout(CLIENT_TIMEOUT, socket.read(&mut scratch)).await {
+            heads
+                .lock()
+                .expect("heads mutex")
+                .push(String::from_utf8_lossy(&scratch[..n]).into_owned());
+        }
 
         let _ = tokio::time::timeout(CLIENT_TIMEOUT, socket.write_all(response.as_bytes())).await;
         let _ = socket.shutdown().await;

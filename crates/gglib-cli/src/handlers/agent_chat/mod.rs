@@ -9,6 +9,7 @@ pub(crate) mod resume_settings;
 pub(crate) mod sampling_warning;
 mod thinking_dispatch;
 mod tool_format;
+pub(crate) mod upstream;
 
 use anyhow::{Result, bail};
 
