@@ -107,6 +107,11 @@ fn is_private(ip: IpAddr) -> bool {
 /// exit channel, which does not see the exits nothing publishes
 /// ([`PROXY_POLL`]).
 ///
+/// Asked *before* [`key::Settled::commit`](super::key::Settled::commit), so
+/// on a first enable the answer can be a settings-cache window old by the
+/// time `enable` returns — the deliberate half of a trade that commit
+/// documents: asking later leaves a minted key behind for a refused tunnel.
+///
 /// # Errors
 ///
 /// `Internal`, naming the state the proxy was found in.
