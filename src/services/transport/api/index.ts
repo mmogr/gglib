@@ -15,6 +15,7 @@ import * as chat from './chat';
 import * as verification from './verification';
 import * as setup from './setup';
 import * as version from './version';
+import * as remote from './remote';
 
 /**
  * Create unified API transport.
@@ -34,5 +35,6 @@ export function createApiTransport() {
     ...verification,
     ...setup,
     ...version,
+    ...remote,
   };
 }

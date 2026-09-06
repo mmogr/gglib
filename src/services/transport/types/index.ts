@@ -18,3 +18,4 @@ export * from './mcp';
 export * from './events';
 export * from './chat';
 export * from './verification';
+export * from './remote';

@@ -13,6 +13,7 @@ import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
+import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
 import { getTransport } from "./services/transport";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
@@ -59,9 +60,11 @@ function AppContent() {
   useEffect(() => {
     initServerEvents();
     initProxyEvents();
+    initRemoteEvents();
     return () => {
       cleanupServerEvents();
       cleanupProxyEvents();
+      cleanupRemoteEvents();
     };
   }, []);
 

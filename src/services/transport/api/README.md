@@ -35,6 +35,7 @@ Axum backend (HTTP response) → typed result
 | `builtin.ts` | Built-in tool listing |
 | `verification.ts` | Model verification |
 | `proxy.ts` | OpenAI-compatible proxy management |
+| `remote.ts` | The remote tunnel (ADR 0012): enable/disable/status here, connect/disconnect/kill for another machine |
 | `models/` | Local and HuggingFace model APIs |
 | `setup.ts` | First-run setup and dependency probes |
 | `sse.ts` | The server-sent-events endpoint this transport subscribes to |
