@@ -42,8 +42,10 @@ const WAIT_ONLINE: Duration = Duration::from_secs(10);
 const DRAIN: Duration = Duration::from_secs(5);
 
 /// One live serve side and the tasks that keep it honest.
-struct Live {
-    handle: Arc<modelpipe::ServeHandle>,
+///
+/// Generic over the handle so [`backend::take_if_ours`] is testable at all.
+struct Live<H = modelpipe::ServeHandle> {
+    handle: Arc<H>,
     /// Cancelled when this tunnel goes down, which is what stops both the
     /// rotation poll and the watcher following the proxy it fronts. One
     /// token for both: neither outlives the tunnel they belong to, and a

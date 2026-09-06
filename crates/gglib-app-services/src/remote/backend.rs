@@ -95,20 +95,17 @@ fn is_private(ip: IpAddr) -> bool {
 /// Refuse a tunnel whose proxy went away while it was binding, and let the
 /// half-built listener go.
 ///
-/// Nothing is watching the proxy across the span this covers, and that is
-/// the reason it exists. `enable` *reserves* the serve slot rather than
-/// holding its lock — so that `status` keeps answering — but
-/// [`follow_proxy`]'s watcher is deliberately not spawned until the tunnel
-/// is installed: it takes the slot with
-/// [`Slot::take_if`](super::slot::Slot::take_if), which reads a full slot
-/// and passes over a reservation, so a watcher started any earlier would
-/// find nothing, return, and never look again. A proxy that exits between
-/// the address being read and the install is therefore seen by nobody, and
-/// the caller is handed a pairing string for a tunnel fronting a released
-/// port: the event stream reads `remote_enabled` and nothing anywhere says
-/// why the code never worked. Failing closed is the answer; reporting
-/// success is not. Asked of `status()` rather than of the exit channel,
-/// because that also sees the exits nothing publishes ([`PROXY_POLL`]).
+/// Nothing watches the proxy across the span this covers, which is why it
+/// exists. `enable` reserves the serve slot rather than holding its lock, so
+/// `status` keeps answering — but [`follow_proxy`]'s watcher is spawned only
+/// once the tunnel is installed, because [`take_if_ours`] passes over a
+/// reservation and `watch_proxy` looks exactly once. So a proxy that exits
+/// between the address being read and the install is seen by nobody, and the
+/// caller is handed a pairing string for a tunnel fronting a released port,
+/// with nothing anywhere saying why the code never worked. Failing closed is
+/// the answer; reporting success is not. Asked of `status()` rather than the
+/// exit channel, which does not see the exits nothing publishes
+/// ([`PROXY_POLL`]).
 ///
 /// # Errors
 ///
@@ -201,42 +198,10 @@ async fn watch_proxy(
     cancel: CancellationToken,
     backend: Backend,
 ) {
-    let mut poll = tokio::time::interval_at(tokio::time::Instant::now() + PROXY_POLL, PROXY_POLL);
-    loop {
-        tokio::select! {
-            () = cancel.cancelled() => return,
-            changed = exit.changed() => {
-                // The sender outlives every proxy run, so a closed channel
-                // means the process itself is coming down.
-                if changed.is_err() {
-                    return;
-                }
-                let status = exit.borrow_and_update().clone();
-                if !still_fronting(&status, &backend) {
-                    warn!(%status, "the proxy the remote tunnel fronts exited");
-                    break;
-                }
-            }
-            _ = poll.tick() => {
-                let status = proxy.status().await;
-                if !still_fronting(&status, &backend) {
-                    warn!(%status, "the proxy the remote tunnel fronts is no longer there");
-                    break;
-                }
-            }
-        }
+    if !until_gone(&proxy, &mut exit, &cancel, &backend).await {
+        return;
     }
-
-    // Identity rather than a generation counter: the only tunnel this
-    // watcher may take down is the one it was spawned beside, and
-    // `Arc::ptr_eq` says exactly that with no second field to keep in step.
-    // A `disable` that got here first leaves nothing to match, and so does a
-    // reservation — `take_if` reads a full slot only, which is why this
-    // watcher is spawned after the install rather than before it.
-    let taken = live
-        .lock()
-        .await
-        .take_if(|l| Arc::ptr_eq(&l.handle, &handle));
+    let taken = take_if_ours(&mut *live.lock().await, &handle);
     let Some(live) = taken else { return };
     // Our own token, and the rotation poll's: the tunnel is over, so nothing
     // should still be following a key for it.
@@ -247,6 +212,68 @@ async fn watch_proxy(
     }
     info!("remote tunnel disabled with the proxy it fronted");
     emitter.emit(AppEvent::remote_disabled());
+}
+
+/// Wait until the proxy stops being the one this tunnel dials.
+///
+/// `true` when it is gone and the tunnel has to come down with it; `false`
+/// when this watcher is the thing that ended — `disable` cancelled the
+/// shared token, or the supervisor's channel closed because the process
+/// itself is coming down — in which case there is nothing left to undo and
+/// racing `disable` for the same handle would be the only thing achieved.
+///
+/// Two arms, because one of them has a hole. The exit channel is the fast
+/// path; the poll is what covers the exits nothing publishes.
+async fn until_gone(
+    proxy: &ProxyOps,
+    exit: &mut watch::Receiver<ProxyStatus>,
+    cancel: &CancellationToken,
+    backend: &Backend,
+) -> bool {
+    let mut poll = tokio::time::interval_at(tokio::time::Instant::now() + PROXY_POLL, PROXY_POLL);
+    loop {
+        tokio::select! {
+            () = cancel.cancelled() => return false,
+            changed = exit.changed() => {
+                // The sender outlives every proxy run, so a closed channel
+                // means the process itself is coming down.
+                if changed.is_err() {
+                    return false;
+                }
+                let status = exit.borrow_and_update().clone();
+                if !still_fronting(&status, backend) {
+                    warn!(%status, "the proxy the remote tunnel fronts exited");
+                    return true;
+                }
+            }
+            _ = poll.tick() => {
+                let status = proxy.status().await;
+                if !still_fronting(&status, backend) {
+                    warn!(%status, "the proxy the remote tunnel fronts is no longer there");
+                    return true;
+                }
+            }
+        }
+    }
+}
+
+/// Take the tunnel out of `slot`, but only when it is the one `mine` serves.
+///
+/// Identity rather than a generation counter: the only tunnel this watcher
+/// may take down is the one it was spawned beside, and `Arc::ptr_eq` says
+/// exactly that with no second field to keep in step. Three ways it can fail
+/// to match matter. A `disable` that got here first leaves nothing at all; a
+/// `disable` followed by a fresh `enable` leaves a *different* tunnel —
+/// taking that one down would unpair every machine paired with it, over a
+/// proxy exit that had nothing to do with it; and a slot still being filled
+/// is passed over by [`Slot::take_if`], which is why this watcher is spawned
+/// after the install rather than before it.
+///
+/// Generic over the handle only because a real `modelpipe::ServeHandle`
+/// exists nowhere but in front of a bound listener; nothing here looks
+/// inside one.
+fn take_if_ours<H>(slot: &mut Slot<Live<H>>, mine: &Arc<H>) -> Option<Live<H>> {
+    slot.take_if(|l| Arc::ptr_eq(&l.handle, mine))
 }
 
 /// Whether a proxy in this state is still the one this tunnel dials.
