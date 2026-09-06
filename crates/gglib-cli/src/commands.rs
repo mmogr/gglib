@@ -13,10 +13,11 @@ use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
 use crate::profile_args::ProfileArgs;
+use crate::proxy_bind_args::ProxyBindArgs;
 use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
-pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand};
+pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand};
 
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
@@ -276,6 +277,13 @@ pub enum Commands {
         command: DaemonCommand,
     },
 
+    /// Reach this machine's proxy from another machine — no VPN, no account
+    #[command(display_order = 24)]
+    Remote {
+        #[command(subcommand)]
+        command: RemoteCommand,
+    },
+
     /// Generate shell completion scripts (bash, zsh, fish, elvish, powershell)
     ///
     /// Prints a completion script to stdout. Pipe it into your shell's config:
@@ -312,23 +320,8 @@ pub enum Commands {
     /// launch options instead, since there is exactly one model in scope.)
     #[command(display_order = 22)]
     Proxy {
-        /// Host to bind to
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-        /// Port to bind the proxy to
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
-        /// Default context size when not specified by client.
-        /// Falls back to the app settings `default_context_size`; with neither
-        /// set, each launch is sized by the daemon — fitted to this machine
-        /// where gglib can read the device, and the built-in floor where it
-        /// cannot. Must be within the range
-        /// `gglib config settings set --default-context-size` accepts — `max`
-        /// is not supported here since no specific model is in scope for a
-        /// standalone proxy.
-        #[arg(long)]
-        default_context: Option<String>,
-
+        #[command(flatten)]
+        bind: ProxyBindArgs,
         #[command(flatten)]
         sampling: SamplingArgs,
         #[command(flatten)]

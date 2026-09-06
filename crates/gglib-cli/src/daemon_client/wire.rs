@@ -47,6 +47,56 @@ pub(crate) struct ProxyStatusDto {
     pub pinned_model: Option<String>,
 }
 
+/// Body for `POST /api/remote/enable` — the client-side twin of
+/// `gglib_axum::handlers::remote::RemoteEnableBody`.
+#[derive(Debug, Clone, Default, Serialize)]
+pub(crate) struct RemoteEnableBody {
+    pub allow_mcp: bool,
+    pub relay: Option<String>,
+    pub discovery: Option<bool>,
+}
+
+/// `POST /api/remote/enable` response: the one time the ticket and the code
+/// are handed out.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemoteEnableDto {
+    pub ticket: String,
+    pub code: String,
+    pub pairing: String,
+    pub expires_in_s: u64,
+}
+
+/// One connected peer in a remote status.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemotePeerDto {
+    pub fingerprint: String,
+    pub path: String,
+}
+
+/// `GET /api/remote/status` and the `disable` response.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemoteStatusDto {
+    pub enabled: bool,
+    #[serde(default)]
+    pub ticket_fingerprint: Option<String>,
+    #[serde(default)]
+    pub pairing_active: bool,
+    #[serde(default)]
+    pub paired: bool,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub peers: Vec<RemotePeerDto>,
+    #[serde(default)]
+    pub mcp_allowed: bool,
+    #[serde(default)]
+    pub tunnelled_requests: u64,
+    #[serde(default)]
+    pub last_tunnelled_ms: Option<i64>,
+    #[serde(default)]
+    pub last_peer: Option<String>,
+}
+
 /// `POST /api/servers/start` response.
 ///
 /// A narrowing of `gglib_app_services::types::StartServerResponse`, which also
