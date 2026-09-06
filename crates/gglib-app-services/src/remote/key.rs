@@ -1,10 +1,22 @@
-//! Which key the tunnel enforces, and whether one has to be minted first.
+//! Which key the tunnel enforces, whether one has to be minted first, and
+//! when that mint is written down.
 //!
-//! Pure: the decision over what the proxy currently demands and what
-//! settings hold. `RemoteOps` does the persisting and the waiting.
+//! The decision is pure — what the proxy currently demands against what
+//! settings hold. The write is not, and the two are separate here because
+//! *when* it happens is the whole point: minting a key puts a bearer
+//! requirement on the local proxy that outlives the tunnel, so it is
+//! deliberately the last thing `enable` does before the pairing, not the
+//! first (see [`Settled::commit`]).
 
 use gglib_core::ApiKeySource;
+use gglib_core::SettingsUpdate;
 use gglib_core::access::generate_api_key;
+use gglib_core::services::{AppCore, SETTINGS_CACHE_TTL};
+use tokio_util::sync::CancellationToken;
+use tracing::info;
+
+use crate::error::GuiError;
+use crate::proxy::ProxyOps;
 
 /// The key the tunnel will enforce.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,67 +67,114 @@ pub(super) fn decide(
     KeyDecision::Mint(generate_api_key())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// The key this tunnel will enforce, and the write it may still owe.
+pub(super) struct Settled {
+    /// The key, ready to hand to `modelpipe::serve` and to the pairing.
+    pub(super) key: String,
+    /// Whether it came from a flag or environment variable, in which case a
+    /// settings rotation will never change it and the poller has nothing to
+    /// watch.
+    pub(super) pinned: bool,
+    /// Whether it was minted here and is therefore not in settings yet.
+    minted: bool,
+}
 
-    #[test]
-    fn a_pinned_flag_key_wins_and_is_marked_pinned() {
-        let decision = decide(
-            Some(("flag-key".to_owned(), ApiKeySource::Flag)),
-            Some("stored-key"),
-        );
-        assert_eq!(
-            decision,
-            KeyDecision::Use {
-                key: "flag-key".to_owned(),
-                pinned: true
-            }
-        );
-    }
+/// Settle the key the tunnel will enforce — and write nothing.
+///
+/// Reads what the running proxy demands and what settings hold, and mints
+/// when neither has anything. A minted key is carried in the returned value
+/// until [`Settled::commit`] puts it in settings.
+///
+/// # Errors
+///
+/// `Internal` when settings cannot be read.
+pub(super) async fn settle(proxy: &ProxyOps, core: &AppCore) -> Result<Settled, GuiError> {
+    let settings = core
+        .settings()
+        .get()
+        .await
+        .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))?;
+    Ok(
+        match decide(proxy.effective_api_key(), settings.proxy_api_key.as_deref()) {
+            KeyDecision::Use { key, pinned } => Settled {
+                key,
+                pinned,
+                minted: false,
+            },
+            KeyDecision::Mint(key) => Settled {
+                key,
+                pinned: false,
+                minted: true,
+            },
+        },
+    )
+}
 
-    #[test]
-    fn a_key_the_proxy_resolved_from_settings_is_used_and_tracks() {
-        for source in [ApiKeySource::Settings, ApiKeySource::Generated] {
-            let decision = decide(Some(("running".to_owned(), source)), Some("stored"));
-            assert_eq!(
-                decision,
-                KeyDecision::Use {
-                    key: "running".to_owned(),
-                    pinned: false
-                }
-            );
+impl Settled {
+    /// Write a minted key down, and wait for the local proxy to pick it up.
+    /// A no-op for a key that was already being enforced somewhere.
+    ///
+    /// **Called once the tunnel is up, and that is the point.** This write
+    /// is not undoable in practice: it makes the loopback proxy demand a
+    /// bearer token from then on, `disable` deliberately leaves it in place
+    /// (ADR 0012, decision 2), and clearing it again would reopen the local
+    /// proxy — `/mcp` included — for anything that adopted it in between.
+    /// So it must not happen for a tunnel that never came up. Ahead of the
+    /// bind, as it used to be, every `modelpipe::serve` failure left the
+    /// machine authenticating with nothing to show for it and nothing said:
+    /// the error is the CLI's `?`, so `print_notice` — the one thing that
+    /// tells the operator the local door just locked, promised by
+    /// `docs/remote.md` "every time it runs" — never ran.
+    ///
+    /// The wait stays: the proxy's tracking policy reads settings through a
+    /// cache, and handing out a ticket before the local door is locked would
+    /// open the window the whole design exists to close. It is `enable`'s
+    /// return, not `serve`, that has to be behind it — nothing can reach a
+    /// tunnel whose ticket has not left this process.
+    ///
+    /// The cost of coming last is that
+    /// [`backend::refuse_if_gone`](super::backend::refuse_if_gone) now runs
+    /// before this wait rather than after it, so on a first enable its answer
+    /// can be a cache window old. That is the better half of the trade:
+    /// asking it afterwards would keep the answer fresh to the last instant
+    /// and pay for it with a key written for a tunnel that is then refused,
+    /// which is precisely the undisclosed state above. The staleness leaves
+    /// nothing hidden — the watcher takes the tunnel down as soon as the
+    /// install spawns it, exactly as it does for a proxy that exits a second
+    /// later, and the key and its notice both reached the operator.
+    ///
+    /// The wait is cut short by `cancel`, which is not a shortcut: the key is
+    /// already written and the caller is about to give up. Without this the
+    /// serve side would hold a `disable` for the whole window, which is the
+    /// one thing reserving the slot rather than locking it exists to stop.
+    ///
+    /// # Errors
+    ///
+    /// `Internal` when the key cannot be stored.
+    pub(super) async fn commit(
+        &self,
+        core: &AppCore,
+        cancel: &CancellationToken,
+    ) -> Result<(), GuiError> {
+        if !self.minted {
+            return Ok(());
         }
-    }
-
-    #[test]
-    fn a_stored_key_is_used_when_the_proxy_has_none_yet() {
-        let decision = decide(None, Some("  stored-key  "));
-        assert_eq!(
-            decision,
-            KeyDecision::Use {
-                key: "stored-key".to_owned(),
-                pinned: false
-            }
-        );
-    }
-
-    #[test]
-    fn nothing_anywhere_mints_a_fresh_key() {
-        for stored in [None, Some(""), Some("   ")] {
-            match decide(None, stored) {
-                KeyDecision::Mint(key) => assert!(!key.is_empty()),
-                other => panic!("expected Mint, got {other:?}"),
-            }
+        core.settings()
+            .update(SettingsUpdate {
+                proxy_api_key: Some(Some(self.key.clone())),
+                ..SettingsUpdate::default()
+            })
+            .await
+            .map_err(|e| GuiError::Internal(format!("could not store the API key: {e}")))?;
+        info!("minted an API key for the proxy; waiting for it to take effect");
+        tokio::select! {
+            () = cancel.cancelled() => {}
+            () = tokio::time::sleep(SETTINGS_CACHE_TTL) => {}
         }
-    }
-
-    #[test]
-    fn two_mints_differ() {
-        let (KeyDecision::Mint(a), KeyDecision::Mint(b)) = (decide(None, None), decide(None, None))
-        else {
-            panic!("both must mint");
-        };
-        assert_ne!(a, b);
+        Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "key_tests.rs"]
+mod key_tests;

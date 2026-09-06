@@ -40,7 +40,8 @@ remote/
   gateway.rs        — RemoteGateway: the port the proxy asks (redeem a code,
                       is /mcp open, a tunnelled request arrived)
   pairing.rs        — the one-time code: begin, redeem once, burn on the third miss
-  key.rs            — which key the tunnel enforces, or that one must be minted
+  key.rs            — which key the tunnel enforces, and when a minted one is
+                      written down
   teardown.rs       — ending a session: cancel, drain, and only then forget
   rotation.rs       — following a key rotation into the running listener
   types.rs          — what the ops are asked for and what they report
@@ -55,12 +56,22 @@ a byte reaches the daemon, and again by the proxy's own guard if it got there.
 `key.rs` decides which token that is, in order: what the running proxy
 actually demands (a `--api-key` flag is pinned and never appears in settings,
 so the stored value would be wrong); the stored `proxy_api_key`; or a fresh
-key, persisted. The last case is the loopback default — nothing minted a key
-because nothing was reachable — and `enable` waits one settings-cache window
-after writing it so the local door is locked before a ticket exists. That
-wait is also the one behaviour change a local client will notice: the loopback
-proxy now demands the key too, and disabling the tunnel does not take that
-away.
+key, minted. The last case is the loopback default — nothing minted a key
+because nothing was reachable — and it is the only case that writes anything.
+
+**That write happens after the tunnel is up, not before.** It is the one mark
+`enable` leaves on the machine, and it is not undoable in practice: the
+loopback proxy demands the key from then on, `disable` deliberately leaves it
+(ADR 0012, decision 2), and clearing it again would reopen the local proxy —
+`/mcp` included — for whatever adopted it in between. So a `modelpipe::serve`
+that fails must not have written it: the operator would be authenticating
+with nothing to show for it, and nothing would have said so, because the
+error is the CLI's `?` and its notice never runs. Everything that can fail
+comes before that write; the tunnel that precedes it is undone by dropping
+the handle. `enable` still waits one settings-cache window after writing, so
+the local door is locked before a ticket exists — it is `enable`'s *return*
+that has to be behind that wait, not the bind, and nothing can reach a tunnel
+whose ticket has not left the process.
 
 Rotation has no event to hook. The CLI writes the same SQLite file from
 another process, so `RemoteOps` polls `proxy_api_key` on the settings cache's
@@ -127,12 +138,22 @@ it was rewritten to instead of tearing down a healthy tunnel every tick.
 
 `enable` asks the same question once more before it commits, because the
 watcher cannot answer it in time: `enable` holds the `live` lock for its
-whole body — through a settings sleep and up to ten seconds of `wait_online`
-— so a watcher that saw the proxy exit in that window is parked on the lock
-until `enable` returns. Without the last check the caller gets a pairing
-string that the watcher invalidates milliseconds later, and the event stream
-reads `remote_enabled` then `remote_disabled` with nothing anywhere saying
-why the code never worked. So it fails closed and reports the exit instead.
+whole body — through up to ten seconds of `wait_online`, and on a first
+enable the settings-cache wait after it — so a watcher that saw the proxy
+exit in that window is parked on the lock until `enable` returns. Without
+that check the caller gets a pairing string the watcher invalidates
+milliseconds later, and the event stream reads `remote_enabled` then
+`remote_disabled` with nothing anywhere saying why the code never worked. So
+it fails closed and reports the exit instead.
+
+That check sits *before* the key is written, which is a trade taken
+deliberately: asking it afterwards would keep the answer fresh to the last
+instant, at the price of a minted key written for a tunnel that is then
+refused — undisclosed state, which is the thing being prevented. Asking it
+first costs a first enable's settings wait of staleness, and everything that
+window can leave behind is visible: the watcher takes the tunnel down the
+moment the lock is free, and the key and its notice both reached the
+operator.
 
 # The connect side
 
@@ -236,9 +257,11 @@ no test can drive.
 | [`connect_tests.rs`](connect_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_tests-coverage.json) |
 | [`connect_watch.rs`](connect_watch.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch-coverage.json) |
 | [`connect_watch_tests.rs`](connect_watch_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch_tests-coverage.json) |
+| [`enable_tests.rs`](enable_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enable_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enable_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enable_tests-coverage.json) |
 | [`gateway.rs`](gateway.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-coverage.json) |
 | [`gateway_tests.rs`](gateway_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-coverage.json) |
 | [`key.rs`](key.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-coverage.json) |
+| [`key_tests.rs`](key_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key_tests-coverage.json) |
 | [`lifecycle_tests.rs`](lifecycle_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-lifecycle_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-lifecycle_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-lifecycle_tests-coverage.json) |
 | [`pairing.rs`](pairing.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing-coverage.json) |
 | [`pairing_string.rs`](pairing_string.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_string-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_string-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_string-coverage.json) |

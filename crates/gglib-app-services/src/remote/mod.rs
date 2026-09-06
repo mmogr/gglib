@@ -157,3 +157,7 @@ impl RemoteGateway {
 #[cfg(test)]
 #[path = "lifecycle_tests.rs"]
 mod lifecycle_tests;
+
+#[cfg(test)]
+#[path = "enable_tests.rs"]
+mod enable_tests;
