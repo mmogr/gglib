@@ -88,8 +88,11 @@ themselves:
 
 ```bash
 gglib q --remote -m qwen3 "Summarise this" < notes.md
-gglib chat --remote -m qwen3
+gglib chat --remote qwen3
 ```
+
+`q` names the model with `-m`; `chat` names it as the positional and has no
+short flag for it.
 
 With `--remote`, the model name is forwarded to the desktop rather than
 looked up here, and the laptop's default model is not consulted, because the

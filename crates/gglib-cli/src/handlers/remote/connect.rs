@@ -58,7 +58,10 @@ pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
     eprintln!();
     eprintln!("  The other machine is now at:  {}", connected.base_url);
     eprintln!("  Any OpenAI-compatible client pointed there needs its API key; gglib's own do:");
-    eprintln!("    gglib q --remote -m <model> \"\u{2026}\"     gglib chat --remote -m <model>");
+    // The two halves do not rhyme, and cannot: `q`'s model is `-m`, `chat`'s
+    // is the positional and has no short flag. Printed as `chat --remote -m`
+    // it was a command that did not parse — `error: unexpected argument '-m'`.
+    eprintln!("    gglib q --remote -m <model> \"\u{2026}\"     gglib chat --remote <model>");
     eprintln!("  The model is one the other machine serves; without a name the request 404s.");
     eprintln!();
     eprintln!("  Close it:  gglib remote disconnect");
