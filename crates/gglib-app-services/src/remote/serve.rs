@@ -17,8 +17,11 @@ use std::sync::atomic::Ordering;
 use gglib_core::events::AppEvent;
 use gglib_core::services::SETTINGS_CACHE_TTL;
 use gglib_core::{SettingsUpdate, access};
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
+
+use gglib_runtime::proxy::ProxyStatus;
 
 use super::backend::Backend;
 use super::key::{self, KeyDecision};
@@ -51,6 +54,11 @@ impl RemoteOps {
         if let Some(busy) = self.live.lock().await.busy() {
             return Err(busy_serving(&busy));
         }
+        // Subscribed before the address is read, because the channel
+        // publishes exits and never starts: a subscription made afterwards
+        // would miss a proxy that fell over in between, and this tunnel
+        // would front a dead port for the rest of the session.
+        let proxy_exit = self.proxy.exit_receiver();
         // Before the reservation on purpose: starting the proxy is the
         // caller's own slow step and has its own guard, and holding the
         // serve slot across it would refuse a second `enable` with the
@@ -65,7 +73,9 @@ impl RemoteOps {
             .reserve(generation)
             .map_err(|busy| busy_serving(&busy))?;
 
-        let armed = self.arm(request, &addr, generation, &cancel).await;
+        let armed = self
+            .arm(request, &addr, generation, &cancel, proxy_exit)
+            .await;
         if armed.is_err() {
             self.live.lock().await.release(generation);
         }
@@ -84,6 +94,7 @@ impl RemoteOps {
         addr: &SocketAddr,
         generation: u64,
         cancel: &CancellationToken,
+        proxy_exit: watch::Receiver<ProxyStatus>,
     ) -> Result<Enabled, GuiError> {
         let (key, pinned) = self.settle_key(cancel).await?;
 
@@ -123,10 +134,10 @@ impl RemoteOps {
         //
         // Nothing in here is slow — an install, a `Mutex<Option<_>>` and an
         // atomic — which is the whole reason it may share the guard at all.
-        let rotation = CancellationToken::new();
+        let watchers = CancellationToken::new();
         let live = Live {
             handle: Arc::clone(&handle),
-            rotation: rotation.clone(),
+            cancel: watchers.clone(),
         };
         let mut slot = self.live.lock().await;
         if !slot.install(generation, live) {
@@ -145,15 +156,23 @@ impl RemoteOps {
             .begin(code.clone(), key.clone(), PAIRING_TTL);
         self.gateway.set_mcp_allowed(request.allow_mcp);
         drop(slot);
+        // Both watchers start only now, and the ordering is load-bearing.
+        // `watch_proxy` takes the slot with `take_if`, which looks at a
+        // *full* slot and passes over a reservation — so one spawned while
+        // `arm` still held the reservation would find nothing, return, and
+        // never look again, leaving a live tunnel in front of a dead proxy
+        // with nothing following it. `refuse_if_gone` covers the window up
+        // to here; from here the watcher does.
         if !pinned {
             tokio::spawn(rotation_poll(
                 Arc::clone(&self.core),
                 Arc::clone(&handle),
                 Arc::clone(&self.gateway),
                 key,
-                rotation,
+                watchers.clone(),
             ));
         }
+        super::backend::follow_proxy(self, &handle, proxy_exit, watchers, backend);
 
         let ticket = handle.ticket();
         let fingerprint = ticket.fingerprint();
@@ -183,8 +202,8 @@ impl RemoteOps {
     /// `Conflict` when nothing is enabled and nothing is arming.
     pub async fn disable(&self) -> Result<(), GuiError> {
         match self.live.lock().await.take() {
-            Taken::Value(Live { handle, rotation }) => {
-                rotation.cancel();
+            Taken::Value(Live { handle, cancel }) => {
+                cancel.cancel();
                 self.gateway.reset_session();
                 if !handle.shutdown_timeout(DRAIN).await {
                     warn!("remote tunnel drain hit its deadline; remaining requests were cut");
