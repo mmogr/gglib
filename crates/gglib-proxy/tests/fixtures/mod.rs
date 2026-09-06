@@ -3,4 +3,5 @@
 pub(crate) mod common;
 pub(crate) mod profile_harness;
 pub(crate) mod profile_mocks;
+pub(crate) mod remote;
 pub(crate) mod sse;
