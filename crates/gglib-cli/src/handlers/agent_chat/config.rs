@@ -89,7 +89,16 @@ impl From<&ChatArgs> for AgentSessionParams {
             port: args.port,
             remote: args.remote,
             tools,
-            model_name: args.model.clone(),
+            // Locally the positional names a catalog entry and `compose` looks
+            // it up, so an absent `--model` correctly leaves the wire name
+            // empty and llama-server serves whatever it loaded. With --remote
+            // there is no local catalog to resolve the positional against and
+            // the lookup is skipped, so the positional is the far machine's
+            // model name or nothing — and dropping it sends `""`, which the
+            // far proxy answers with `404 Model '' not found`.
+            model_name: args.model.clone().or_else(|| {
+                (args.remote && !args.identifier.is_empty()).then(|| args.identifier.clone())
+            }),
             retry_policy: args.retry_policy,
             profile: None,
         }
@@ -190,4 +199,79 @@ pub(crate) async fn compose(
     );
 
     Ok(agent)
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `ChatArgs` with every knob at rest, so each test states only the two
+    /// or three fields it is actually about.
+    fn chat_args() -> ChatArgs {
+        ChatArgs {
+            identifier: String::new(),
+            context: crate::shared_args::ContextArgs::default(),
+            system_prompt: None,
+            sampling: crate::shared_args::SamplingArgs::default(),
+            retry_policy: gglib_core::retry::RetryPolicy::default(),
+            no_tools: false,
+            port: None,
+            remote: false,
+            max_iterations: None,
+            tools: Vec::new(),
+            tool_timeout_ms: None,
+            max_parallel: None,
+            verbose: false,
+            model: None,
+            profile: None,
+            continue_id: None,
+            observation_tools: Vec::new(),
+            max_observation_steps: None,
+            max_stagnation_steps: None,
+        }
+    }
+
+    #[test]
+    fn remote_forwards_the_positional_when_no_model_flag_was_given() {
+        let args = ChatArgs {
+            identifier: "qwen3".into(),
+            remote: true,
+            ..chat_args()
+        };
+        assert_eq!(
+            AgentSessionParams::from(&args).model_name,
+            Some("qwen3".into())
+        );
+    }
+
+    #[test]
+    fn remote_prefers_the_model_flag_over_the_positional() {
+        let args = ChatArgs {
+            identifier: "qwen3".into(),
+            model: Some("llama3".into()),
+            remote: true,
+            ..chat_args()
+        };
+        assert_eq!(
+            AgentSessionParams::from(&args).model_name,
+            Some("llama3".into())
+        );
+    }
+
+    #[test]
+    fn locally_the_positional_is_not_the_wire_name() {
+        // The catalog lookup in `compose` resolves the positional here, and an
+        // absent `--model` still means "whatever llama-server loaded".
+        let args = ChatArgs {
+            identifier: "qwen3".into(),
+            ..chat_args()
+        };
+        let params = AgentSessionParams::from(&args);
+        assert_eq!(params.model_name, None);
+        assert_eq!(params.model_identifier, "qwen3");
+    }
 }
