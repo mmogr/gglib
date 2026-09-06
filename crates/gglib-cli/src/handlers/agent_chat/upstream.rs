@@ -66,8 +66,8 @@ async fn remote(ctx: &CliContext, banner: &BannerInfo) -> Result<Upstream> {
         .get()
         .await
         .map_err(|e| anyhow!("failed to load settings: {e}"))?
-        .remote_api_key
-        .filter(|k| !k.trim().is_empty())
+        .remote_pairing
+        .map(|stored| stored.api_key)
         .ok_or_else(|| {
             anyhow!(
                 "connected to a remote machine, but this one holds no key for it — pair again \

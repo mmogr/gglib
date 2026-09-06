@@ -11,6 +11,10 @@ use crate::domain::{InferenceConfig, InferenceProfile};
 mod settings_validate;
 pub use settings_validate::{validate_inference_config, validate_inference_profiles};
 
+#[path = "settings_remote.rs"]
+mod settings_remote;
+pub use settings_remote::RemotePairing;
+
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
 
@@ -262,27 +266,25 @@ pub struct Settings {
     pub start_at_login: Option<bool>,
 
     // ── Remote tunnel, connect side (ADR 0012) ──────────────────────
-    /// The API key of the machine this one last paired with over
-    /// `gglib remote connect`.
+    /// The machine this one paired with, and the key it issued — see
+    /// [`RemotePairing`] for why those are one value and not two.
     ///
-    /// Received, not chosen: `connect` redeems the one-time pairing code for
-    /// it through the tunnel and stores it here so later sessions need only
-    /// the ticket. It is that machine's `proxy_api_key`, and `gglib q --remote`
-    /// and `gglib chat --remote` attach it as the bearer. Nothing writes it by
-    /// hand, and `gglib config settings show` reports only whether one is held
-    /// — the value itself has no read surface, because re-pairing replaces it
-    /// and nothing needs to recover it. `gglib remote connect` with a fresh
-    /// pairing does exactly that.
-    pub remote_api_key: Option<String>,
-
-    /// The ticket `gglib remote connect` last dialled, in its canonical form.
+    /// Received, not chosen: `gglib remote connect` redeems the far
+    /// machine's one-time code through the tunnel and stores what comes back
+    /// here, so later sessions need only the ticket — or nothing, since the
+    /// ticket is part of the record. `gglib q --remote` and
+    /// `gglib chat --remote` attach the key as the bearer. Nothing writes it
+    /// by hand, and `gglib config settings show` reports the key as held or
+    /// not rather than printing it, because re-pairing replaces it and
+    /// nothing needs to read it back.
     ///
-    /// Recorded so `gglib remote connect` with no argument reconnects to the
-    /// same machine. It is an address, not a credential — reaching the far
-    /// side still takes [`Self::remote_api_key`] — and it goes stale the
-    /// moment the far side runs `enable` again, because every `enable` mints
-    /// a fresh identity.
-    pub remote_last_ticket: Option<String>,
+    /// A database written before the halves were bound holds
+    /// `remote_api_key` and `remote_last_ticket` as separate rows, and both
+    /// are ignored — no alias, deliberately. Neither is evidence about the
+    /// other, and reading the one as belonging to the other is exactly the
+    /// defect this field closes; such a machine loads as never paired and
+    /// pairs again, which a stale ticket already required of it.
+    pub remote_pairing: Option<RemotePairing>,
 }
 
 impl Settings {
@@ -323,8 +325,7 @@ impl Settings {
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,
-            remote_api_key: None,
-            remote_last_ticket: None,
+            remote_pairing: None,
         }
     }
 
@@ -417,11 +418,8 @@ impl Settings {
         if let Some(ref v) = other.start_at_login {
             self.start_at_login = *v;
         }
-        if let Some(ref v) = other.remote_api_key {
-            self.remote_api_key.clone_from(v);
-        }
-        if let Some(ref v) = other.remote_last_ticket {
-            self.remote_last_ticket.clone_from(v);
+        if let Some(ref v) = other.remote_pairing {
+            self.remote_pairing.clone_from(v);
         }
     }
 }
@@ -458,10 +456,9 @@ pub struct SettingsUpdate {
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,
-    /// See [`Settings::remote_api_key`].
-    pub remote_api_key: Option<Option<String>>,
-    /// See [`Settings::remote_last_ticket`].
-    pub remote_last_ticket: Option<Option<String>>,
+    /// See [`Settings::remote_pairing`]. Written whole or not at all: the
+    /// two halves have no separate update, which is what keeps them bound.
+    pub remote_pairing: Option<Option<RemotePairing>>,
 }
 
 /// Settings validation error.
@@ -491,10 +488,10 @@ pub enum SettingsError {
     #[error("Proxy API key cannot be blank — clear it instead to disable authentication")]
     BlankProxyApiKey,
 
-    #[error("Remote API key cannot be blank — clear it instead to forget the pairing")]
+    #[error("Remote API key cannot be blank — clear the pairing instead to forget it")]
     BlankRemoteApiKey,
 
-    #[error("Remote ticket cannot be blank — clear it instead to forget the pairing")]
+    #[error("Remote ticket cannot be blank — clear the pairing instead to forget it")]
     BlankRemoteTicket,
 }
 
@@ -556,22 +553,17 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         return Err(SettingsError::BlankProxyApiKey);
     }
 
-    // The connect side's stored pairing, same rule: a blank is neither a key
-    // nor an address, and `connect` reading one would dial nothing with
-    // nothing rather than say the pairing is gone.
-    if settings
-        .remote_api_key
-        .as_ref()
-        .is_some_and(|key| key.trim().is_empty())
-    {
-        return Err(SettingsError::BlankRemoteApiKey);
-    }
-    if settings
-        .remote_last_ticket
-        .as_ref()
-        .is_some_and(|ticket| ticket.trim().is_empty())
-    {
-        return Err(SettingsError::BlankRemoteTicket);
+    // The connect side's stored pairing, same rule on each half: a blank is
+    // neither a key nor an address, and `connect` reading one would dial
+    // nothing with nothing rather than say the pairing is gone. Clearing the
+    // record is how a pairing is forgotten.
+    if let Some(ref pairing) = settings.remote_pairing {
+        if pairing.api_key.trim().is_empty() {
+            return Err(SettingsError::BlankRemoteApiKey);
+        }
+        if pairing.ticket.trim().is_empty() {
+            return Err(SettingsError::BlankRemoteTicket);
+        }
     }
 
     // Validate inference defaults if specified

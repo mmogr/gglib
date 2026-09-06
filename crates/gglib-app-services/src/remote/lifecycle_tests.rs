@@ -6,16 +6,10 @@
 //! on top. Everything it sits on is here, and the two-machine run in ADR
 //! 0012 is what covers the rest.
 
-use gglib_core::SettingsUpdate;
 use gglib_core::events::AppEvent;
 
 use super::*;
-use crate::test_support_remote::test_remote_ops;
-
-/// Vector 1 of modelpipe's normative tickets, and the fingerprint it
-/// renders as: the first six bytes of its endpoint id, in hex.
-const TICKET: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na";
-const FINGERPRINT: &str = "d75a980182b1";
+use crate::test_support_remote::{FINGERPRINT_A, KEY_A, TICKET_A, paired_with, test_remote_ops};
 
 /// A daemon that has done nothing remote reports nothing remote. The
 /// tunnel is off by default and never persisted (ADR 0012), so a fresh
@@ -50,67 +44,44 @@ async fn a_daemon_that_has_done_nothing_remote_reports_every_side_as_off() {
 async fn a_stored_pairing_is_reported_as_a_fingerprint_and_never_as_the_ticket_or_the_key() {
     let (core, ops, _) = test_remote_ops().await;
     core.settings()
-        .update(SettingsUpdate {
-            remote_api_key: Some(Some("sk-zzq-stored".to_owned())),
-            remote_last_ticket: Some(Some(TICKET.to_owned())),
-            ..SettingsUpdate::default()
-        })
+        .update(paired_with(TICKET_A, KEY_A))
         .await
         .expect("an earlier pairing is stored");
 
     let status = ops.status().await;
     assert_eq!(
         status.stored_ticket_fingerprint.as_deref(),
-        Some(FINGERPRINT)
+        Some(FINGERPRINT_A)
     );
     assert!(status.has_remote_key);
 
     let rendered = format!("{status:?}");
-    assert!(!rendered.contains(TICKET), "{rendered}");
-    assert!(!rendered.contains("sk-zzq-stored"), "{rendered}");
+    assert!(!rendered.contains(TICKET_A), "{rendered}");
+    assert!(!rendered.contains(KEY_A), "{rendered}");
 }
 
 /// A stored ticket that no longer parses is reported as no ticket rather
-/// than as an error, and the key beside it is still reported as held.
+/// than as an error, and the key bound to it is still reported as held.
 ///
-/// The two answers are independent on purpose: a row written by a newer
-/// build, or a format bumped past v0, must not make `remote status` fail —
-/// it is the command someone runs *because* something is wrong.
+/// The two answers come off one record but do not stand or fall together: a
+/// ticket written by a newer build, or a format bumped past v0, must not
+/// make `remote status` fail — it is the command someone runs *because*
+/// something is wrong. What is lost is only the machine's name, which is
+/// what a re-pair costs anyway.
 #[tokio::test]
 async fn a_stored_ticket_that_no_longer_parses_costs_the_fingerprint_and_nothing_else() {
     let (core, ops, _) = test_remote_ops().await;
     core.settings()
-        .update(SettingsUpdate {
-            remote_api_key: Some(Some("sk-zzq-stored".to_owned())),
-            remote_last_ticket: Some(Some("pipe-from-some-later-format".to_owned())),
-            ..SettingsUpdate::default()
-        })
+        .update(paired_with("pipe-from-some-later-format", KEY_A))
         .await
         .expect("a ticket this build cannot read is stored");
 
     let status = ops.status().await;
     assert_eq!(status.stored_ticket_fingerprint, None);
-    assert!(status.has_remote_key, "the key is a separate question");
-}
-
-/// A key stored as blank is not a key. `connect` filters the same way, so
-/// the status surface agreeing with it is what stops "this machine holds a
-/// key" from being the answer that sends someone into a dial that cannot
-/// authenticate.
-#[tokio::test]
-async fn a_blank_stored_key_is_reported_as_no_key_the_way_connect_reads_it() {
-    let (core, ops, _) = test_remote_ops().await;
-    // Straight to the repository: `validate_settings` refuses a blank key
-    // through the service, which is the guard this is checking behind.
-    let mut settings = core.settings().get().await.expect("settings load");
-    settings.remote_api_key = Some("   ".to_owned());
-    core.settings()
-        .repo()
-        .save(&settings)
-        .await
-        .expect("a blank row is written past validation");
-
-    assert!(!ops.status().await.has_remote_key);
+    assert!(
+        status.has_remote_key,
+        "a key is still held; what is lost is the name of the machine it is for"
+    );
 }
 
 /// Disabling a tunnel that is not up is a conflict, and — the part worth

@@ -21,6 +21,9 @@ remote/
   mod.rs            — RemoteOps: enable / disable / status, and the rotation poll
   connect.rs        — RemoteOps: connect / disconnect / kill_remote — this
                       machine as the laptop
+  stored_pairing.rs — the record settings keep of the machine this one
+                      paired with: reading it, writing it, and what a write
+                      that fails after the code is spent has to say
   pairing_string.rs — `<ticket>[-<code>]`, taken apart
   redeem.rs         — the two requests made *through* the tunnel: redeem a
                       code for the key, and stop the far daemon
@@ -66,18 +69,22 @@ refusal.
 
 `connect` binds a loopback port here that is the far machine's proxy
 (`modelpipe::connect`). It does **not** inject `Authorization` (ADR 0012,
-decision 7): gglib's own commands attach the stored `remote_api_key`, and a
-third-party client supplies it as its API key, the ordinary arrangement. A
+decision 7): gglib's own commands attach the key from the stored pairing, and
+a third-party client supplies it as its API key, the ordinary arrangement. A
 listener that injected the key would make every process on this machine an
 authenticated client of the other one.
 
 With a `<ticket>-<code>` pairing string the code is redeemed through the
 tunnel — as the bearer, so the edge's one-time grant admits the request, and
-in the body, so the far proxy can check it — and the key that comes back is
-stored in settings with the ticket. A bare ticket needs the stored key; no
-argument dials the stored ticket. A task follows the connection's status and
-clears it when the pipe closes, so `status` never shows a port that leads
-nowhere.
+in the body, so the far proxy can check it — and the ticket and the key that
+comes back are stored as one `RemotePairing`. That binding is the point: a
+key is issued *by* the machine whose code was redeemed, so a bare ticket is
+dialled only when the stored pairing names **that** machine, by fingerprint.
+Admitting it on "some key is stored" is what let a dial to a second machine
+succeed holding the first machine's key — connected, `status` reporting a
+pairing, every request 401. No argument dials the stored ticket. A task
+follows the connection's status and clears it when the pipe closes, so
+`status` never shows a port that leads nowhere.
 
 `kill_remote` posts the confirmation word to the far proxy's shutdown route
 with the stored key, then disconnects. One-way: nothing here can start that
@@ -110,6 +117,7 @@ surface. Its `Debug` reports state and never a code or a key.
 | [`pairing_tests.rs`](pairing_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-coverage.json) |
 | [`redeem.rs`](redeem.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-coverage.json) |
 | [`rotation.rs`](rotation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-coverage.json) |
+| [`stored_pairing.rs`](stored_pairing.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-coverage.json) |
 | [`types.rs`](types.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-coverage.json) |
 <!-- module-table:end -->
 
