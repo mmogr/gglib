@@ -70,7 +70,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
         .clone()
         .filter(|key| !key.trim().is_empty());
 
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let status = handle
         .start_proxy(&StartProxyBody {
             host: Some(HOST.to_string()),

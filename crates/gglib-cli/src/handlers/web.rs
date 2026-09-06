@@ -8,17 +8,18 @@
 
 use anyhow::Result;
 
+use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::presentation::style;
 
 /// Execute the `web` command.
-pub(crate) async fn execute(share_lan: bool) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, share_lan: bool) -> Result<()> {
     if share_lan {
         // Foreground, eyes-open LAN mode — identical to `daemon run --share-lan`.
         return super::daemon::run(true, Vec::new()).await;
     }
 
-    daemon_client::ensure_daemon().await?;
+    daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
 
     let url = daemon_client::base_url();
     style::print_info_banner("Web Dashboard", "\u{1f680}");

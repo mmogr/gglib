@@ -171,7 +171,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             handlers::gui::execute(dev)?;
         }
         Commands::Web { share_lan } => {
-            handlers::web::execute(share_lan).await?;
+            handlers::web::execute(ctx, share_lan).await?;
         }
         Commands::Daemon { command } => match command {
             crate::commands::DaemonCommand::Run {
@@ -181,10 +181,10 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 handlers::daemon::run(share_lan, allowed_host).await?;
             }
             crate::commands::DaemonCommand::Status => {
-                handlers::daemon::status().await?;
+                handlers::daemon::status(ctx).await?;
             }
             crate::commands::DaemonCommand::Stop => {
-                handlers::daemon::stop().await?;
+                handlers::daemon::stop(ctx).await?;
             }
         },
         Commands::Proxy {
@@ -223,7 +223,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         .await?;
                     }
                     crate::commands::ProxyCommand::Stop => {
-                        handlers::inference::proxy::stop().await?;
+                        handlers::inference::proxy::stop(ctx).await?;
                     }
                 }
                 return Ok(());
@@ -242,7 +242,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         }
 
         // ── Remote tunnel (ADR 0012) ────────────────────────────────────────
-        Commands::Remote { command } => handlers::remote::dispatch(command).await?,
+        Commands::Remote { command } => handlers::remote::dispatch(ctx, command).await?,
 
         // ── MCP tool gateway ────────────────────────────────────────────────
         Commands::Mcp { command } => {

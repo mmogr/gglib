@@ -50,7 +50,10 @@ async fn remote(ctx: &CliContext, banner: &BannerInfo) -> Result<Upstream> {
              `gglib remote connect` first"
         );
     }
-    let handle = daemon_client::DaemonHandle { client };
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
     let status = handle.remote_status().await?;
     let Some(connection) = status.connected else {
         anyhow::bail!(
@@ -137,7 +140,8 @@ async fn resolve_port(
         );
     }
 
-    let handle = crate::daemon_client::ensure_daemon().await?;
+    let handle =
+        crate::daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let started = handle
         .start_model_server(model.id, context_length)
         .await

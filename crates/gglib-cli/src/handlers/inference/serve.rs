@@ -149,7 +149,8 @@ pub(crate) async fn execute(
 
     let proxy_config = plan.unified.to_proxy_config();
 
-    let handle = daemon_client::ensure_daemon().await?;
+    let handle =
+        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let status = handle
         .start_proxy(&StartProxyBody {
             host: Some(proxy_config.host),

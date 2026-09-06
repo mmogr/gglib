@@ -106,11 +106,16 @@ fn warn_on_build_mismatch(body: &serde_json::Value) {
     );
 }
 
-/// A connected daemon: the shared HTTP client plus the base URL.
+/// A connected daemon: the shared HTTP client plus the credential to present.
 pub(crate) struct DaemonHandle {
     /// Client for talking to the daemon. No global timeout — long calls
     /// (model start) set their own.
     pub client: reqwest::Client,
+    /// The bearer token `/api/*` wants, or `None` against an unauthenticated
+    /// daemon — which is every loopback daemon. Resolved by
+    /// [`auth::daemon_api_key`] and attached by [`DaemonHandle::request`], so
+    /// no call site decides this for itself.
+    pub api_key: Option<String>,
 }
 
 /// Find the daemon, launching it if nothing is running.
@@ -125,11 +130,11 @@ pub(crate) struct DaemonHandle {
 /// - the daemon binary cannot be spawned,
 /// - the launched daemon does not become healthy within the wait window
 ///   (the log file path is named in the error).
-pub(crate) async fn ensure_daemon() -> Result<DaemonHandle> {
+pub(crate) async fn ensure_daemon(api_key: Option<String>) -> Result<DaemonHandle> {
     let client = reqwest::Client::new();
 
     match probe(&client).await {
-        DaemonProbe::Running => return Ok(DaemonHandle { client }),
+        DaemonProbe::Running => return Ok(DaemonHandle { client, api_key }),
         DaemonProbe::ForeignServer => bail!(
             "port {DAEMON_PORT} is in use by another program (not a gglib daemon). \
              Free the port and retry."
@@ -144,7 +149,7 @@ pub(crate) async fn ensure_daemon() -> Result<DaemonHandle> {
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
         match probe(&client).await {
-            DaemonProbe::Running => return Ok(DaemonHandle { client }),
+            DaemonProbe::Running => return Ok(DaemonHandle { client, api_key }),
             DaemonProbe::ForeignServer => {
                 bail!("port {DAEMON_PORT} was taken by another program while the daemon started")
             }
@@ -191,6 +196,7 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
     Ok(log_path)
 }
 
+pub(crate) mod auth;
 mod calls;
 mod remote;
 pub(crate) mod wire;
