@@ -67,10 +67,22 @@ fn nothing_pending_rejects_everything() {
     assert_eq!(pairing.redeem(""), PairingOutcome::Rejected);
 }
 
-/// A near miss is a miss: prefix, suffix, and a different length all lose,
-/// and none of them can be told apart from the outside.
+/// `redeem` compares the bytes it is handed and forgives nothing: a prefix,
+/// a suffix, a different length and a stray space all lose, and none of them
+/// can be told apart from the outside.
+///
+/// **A claim about this function, not about the route.** The only production
+/// caller — `gglib-proxy`'s `POST /v1/remote/pair` — trims the presented code
+/// before it arrives here, deliberately, so end to end a code pasted with
+/// whitespace around it *is* accepted. That is paste-safety and not a wider
+/// code space: `"483920 "` and `"483920"` name the same six digits, so the
+/// three-attempt burn still covers the same twenty bits. Keeping the trim at
+/// the edge and strictness here is what leaves one place to read for each.
+/// The other half is pinned by
+/// `whitespace_around_a_pasted_code_is_trimmed_not_refused` in
+/// `gglib-proxy/tests/integration_remote_pair.rs`.
 #[test]
-fn near_misses_are_plain_rejections() {
+fn redeem_compares_the_bytes_it_is_handed_and_trims_nothing() {
     for wrong in ["48392", "4839200", "", "483920 ", " 483920"] {
         let pairing = armed();
         assert_eq!(pairing.redeem(wrong), PairingOutcome::Rejected, "{wrong:?}");
