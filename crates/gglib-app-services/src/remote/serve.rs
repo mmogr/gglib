@@ -20,6 +20,7 @@ use gglib_core::{SettingsUpdate, access};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
+use super::backend::Backend;
 use super::key::{self, KeyDecision};
 use super::pairing::PAIRING_TTL;
 use super::rotation::rotation_poll;
@@ -86,6 +87,8 @@ impl RemoteOps {
     ) -> Result<Enabled, GuiError> {
         let (key, pinned) = self.settle_key(cancel).await?;
 
+        let backend = Backend::at(*addr);
+
         let mut opts = modelpipe::ServeOptions::default();
         opts.auth = modelpipe::TokenPolicy::Supplied(key.clone());
         opts.relay = request.relay;
@@ -95,7 +98,8 @@ impl RemoteOps {
         opts.port_mapping = false;
         opts.discovery = request.discovery;
         opts.wait_online = Some(WAIT_ONLINE);
-        let handle = modelpipe::serve(&format!("http://{addr}"), opts)
+        opts.allow_private_backend = backend.allow_private;
+        let handle = modelpipe::serve(&backend.url, opts)
             .await
             .map_err(|e| GuiError::Internal(format!("could not start the remote tunnel: {e}")))?;
         let handle = Arc::new(handle);

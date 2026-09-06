@@ -22,6 +22,8 @@ remote/
   serve.rs          — RemoteOps: enable / disable — this machine as the desktop
   connect.rs        — RemoteOps: connect / disconnect / kill_remote — this
                       machine as the laptop
+  backend.rs        — which local address the tunnel fronts, and following
+                      the proxy that owns it
   connect_dial.rs   — the span of connect with the slot reserved and the
                       lock released: the dial, the pairing, the install
   connect_watch.rs  — following one connection until it is over, and the
@@ -72,6 +74,18 @@ through without the token; the proxy's pairing route asks `RemoteGateway`
 whether it is the code this session minted, and takes the key it stands for.
 Two minutes, one redemption, three wrong attempts. Every refusal is the same
 refusal.
+
+# The address the tunnel fronts
+
+`enable` reads the proxy's bound address once, and a *bind* address is not a
+*dial* address. modelpipe screens what it dials and refuses `0.0.0.0`
+outright — it names no host, and on Linux dialling it reaches loopback, which
+would be an accidental bypass — while a LAN address needs
+`allow_private_backend` before it will dial at all. So `backend.rs`
+rewrites a wildcard bind to the loopback literal of the same family, keeping
+the port, and sets the flag for a deliberate LAN bind, which names an
+interface loopback would not reach. Link-local and public binds stay refused,
+which is the rule and not a gap.
 
 # The connect side
 
@@ -166,6 +180,8 @@ no test can drive.
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`backend.rs`](backend.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-backend-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-backend-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-backend-coverage.json) |
+| [`backend_tests.rs`](backend_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-backend_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-backend_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-backend_tests-coverage.json) |
 | [`connect.rs`](connect.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-coverage.json) |
 | [`connect_dial.rs`](connect_dial.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-coverage.json) |
 | [`connect_race_tests.rs`](connect_race_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-coverage.json) |
