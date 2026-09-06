@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use super::pairing_string::{self, Parsed};
-use super::stored_pairing::{names_the_same_machine, remember, store_redeemed};
+use super::stored_pairing::{names_the_same_machine, settle};
 use super::types::{ConnectRequest, ConnectSnapshot, Connected};
 use super::{RemoteOps, redeem};
 use crate::error::GuiError;
@@ -108,32 +108,21 @@ impl RemoteOps {
         );
         let base_url = handle.base_url();
 
-        let paired = match code {
-            Some(code) => {
-                let key = match redeem::redeem(&base_url, &code).await {
-                    Ok(key) => key,
-                    Err(e) => {
-                        handle.shutdown_timeout(Duration::from_secs(1)).await;
-                        return Err(e);
-                    }
-                };
-                if let Err(e) = store_redeemed(&self.core, key, ticket.to_string()).await {
-                    handle.shutdown_timeout(Duration::from_secs(1)).await;
-                    return Err(e);
-                }
-                true
-            }
-            None => {
-                // The guard above refused a codeless dial with no key for
-                // this machine, so `held` is `Some`. Re-storing that key
-                // under the ticket just dialled is how the record follows a
-                // machine that moved: same identity, new addresses, same
-                // key — and it is the only write on this arm, so a dial to
-                // the machine already recorded touches nothing.
-                if let Some(held) = held.filter(|held| held.ticket != ticket.to_string()) {
-                    remember(&self.core, held.api_key.clone(), ticket.to_string()).await?;
-                }
-                false
+        // What the record owes this dial is `settle`'s, in
+        // `stored_pairing.rs`, and it is there rather than here so that it
+        // can be driven: nothing below `modelpipe::connect` is reachable in
+        // a test, and every arm of this decision is below it. The one thing
+        // that stays here is the port, which no arm may leave bound behind
+        // a `connect` that reported a failure.
+        let paired = match settle(&self.core, &ticket, held, code, async |code| {
+            redeem::redeem(&base_url, &code).await
+        })
+        .await
+        {
+            Ok(paired) => paired,
+            Err(e) => {
+                handle.shutdown_timeout(Duration::from_secs(1)).await;
+                return Err(e);
             }
         };
 

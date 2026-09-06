@@ -44,6 +44,14 @@ pub(crate) const TICKET_B: &str =
 /// ticket here that is ever dialled.
 pub(crate) const TICKET_UNREACHABLE: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaicaajcaainxaaaaaaaaaaaaaaaaaaach4qaabstehw";
 
+/// The same string again, under the name the pairing record cares about:
+/// vector 1's endpoint key at an address vector 1 does not carry, which is
+/// machine A having moved. Two names for one constant rather than two
+/// constants, so nothing can drift between them — and a second name because
+/// "unreachable" is the wrong word entirely where the claim is that a
+/// codeless dial carries the key across an address change.
+pub(crate) const TICKET_A_MOVED: &str = TICKET_UNREACHABLE;
+
 pub(crate) const KEY_A: &str = "sk-zzq-the-key-machine-a-handed-over";
 pub(crate) const KEY_B: &str = "sk-zzq-the-key-machine-b-handed-over";
 
