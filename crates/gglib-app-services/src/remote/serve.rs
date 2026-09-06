@@ -105,16 +105,30 @@ impl RemoteOps {
             .grant_once(code.clone(), PAIRING_TTL)
             .map_err(|e| GuiError::Internal(format!("could not arm the pairing code: {e}")))?;
 
-        // The slot is claimed *before* the gateway is armed. A `disable`
-        // that landed during the bind has already reset the session, and
-        // arming a pairing after it would leave a live code for a tunnel
-        // this call is about to take down.
+        // The slot is claimed and the gateway armed under **one** hold of
+        // the lock. Claiming first is not enough: dropping the guard wakes
+        // whatever `disable` is queued behind it, and on a multi-thread
+        // runtime that `disable` runs in parallel with the lines after the
+        // guard — resetting the session and taking the tunnel down while
+        // this call is still on its way to `begin`. A pairing code armed
+        // after that reset stays live for `PAIRING_TTL` on a session that
+        // is gone, and `POST /v1/remote/pair` is outside the proxy's bearer
+        // group, so anything that can reach the proxy could spend it.
+        // Under one guard there are only two things a `disable` can find:
+        // a reservation with nothing armed, or a tunnel with its code.
+        //
+        // Nothing in here is slow — an install, a `Mutex<Option<_>>` and an
+        // atomic — which is the whole reason it may share the guard at all.
         let rotation = CancellationToken::new();
         let live = Live {
             handle: Arc::clone(&handle),
             rotation: rotation.clone(),
         };
-        if !self.live.lock().await.install(generation, live) {
+        let mut slot = self.live.lock().await;
+        if !slot.install(generation, live) {
+            // Before the drain, which is the slow part this lock may not be
+            // held across.
+            drop(slot);
             if !handle.shutdown_timeout(DRAIN).await {
                 warn!("remote tunnel drain hit its deadline; remaining requests were cut");
             }
@@ -126,6 +140,7 @@ impl RemoteOps {
             .pairing
             .begin(code.clone(), key.clone(), PAIRING_TTL);
         self.gateway.set_mcp_allowed(request.allow_mcp);
+        drop(slot);
         if !pinned {
             tokio::spawn(rotation_poll(
                 Arc::clone(&self.core),
@@ -175,9 +190,10 @@ impl RemoteOps {
                 Ok(())
             }
             // Nothing is bound and no pairing is armed yet — `arm` claims
-            // the slot before it touches the gateway — so there is nothing
-            // to reset and nothing to announce. The arming call finds the
-            // slot gone and takes down whatever it built.
+            // the slot and arms the gateway under one hold of this lock, so
+            // a reservation is never a session — and there is therefore
+            // nothing to reset and nothing to announce. The arming call
+            // finds the slot gone and takes down whatever it built.
             Taken::Cancelled => {
                 info!("cancelled a remote enable that was still arming");
                 Ok(())

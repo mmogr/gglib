@@ -123,6 +123,18 @@ the slot and cancels the reservation's token, so the slow work stops instead
 of finishing for nobody — and the install says so rather than binding a port
 behind a command that already reported success.
 
+The one thing that may *not* be done after the lock is given back is arming
+the gateway. `enable` installs the tunnel and arms its pairing code under one
+hold: dropping the guard wakes whatever `disable` is queued behind it, and on
+a multi-thread runtime that `disable` runs alongside the lines that follow —
+resetting the session and taking the tunnel down while the arming is still on
+its way. A code armed after that reset stays live for `PAIRING_TTL` on a
+session that is gone, and `POST /v1/remote/pair` is outside the proxy's
+bearer group. So a reservation is never a session: a `disable` finds either a
+reservation with nothing armed, or a tunnel with its code. Both writes are
+in-memory, which is what lets them share the guard at all — the rule is that
+nothing *slow* is held across it.
+
 # When a connection is over
 
 `Closed` is modelpipe's verdict and needs no policy. `Idle` is not one: on
