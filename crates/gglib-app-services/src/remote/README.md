@@ -108,6 +108,15 @@ and is still not this tunnel's backend. The address is compared through the
 same rewrite `enable` used, so a wildcard bind matches the loopback literal
 it was rewritten to instead of tearing down a healthy tunnel every tick.
 
+`enable` asks the same question once more before it commits, because the
+watcher cannot answer it in time: `enable` holds the `live` lock for its
+whole body — through a settings sleep and up to ten seconds of `wait_online`
+— so a watcher that saw the proxy exit in that window is parked on the lock
+until `enable` returns. Without the last check the caller gets a pairing
+string that the watcher invalidates milliseconds later, and the event stream
+reads `remote_enabled` then `remote_disabled` with nothing anywhere saying
+why the code never worked. So it fails closed and reports the exit instead.
+
 # The connect side
 
 `connect` binds a loopback port here that is the far machine's proxy
