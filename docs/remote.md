@@ -135,10 +135,17 @@ new ticket, which is the cost of the property.
 **Enabling puts the key on the local proxy too.** The tunnel and the proxy
 are one listener, so enabling remote access makes the desktop's own loopback
 proxy require the API key from then on — and disabling does not take that
-away, because authentication turns on and never off by itself. gglib's own
-CLI and GUI read the key from settings and carry on; a hand-configured local
-client will start getting `401` and needs the key added once. `enable` says
-so every time it runs.
+away. gglib's own CLI and GUI read the key from settings and carry on; a
+hand-configured local client will start getting `401` and needs the key added
+once. `enable` says so every time it runs.
+
+**The proxy, and only the proxy.** The daemon's management API on
+`127.0.0.1:9887` — the door `gglib`'s own commands and the desktop app come
+through — is not affected. A daemon bound on loopback, which is the default,
+settled on no token when it started and keeps asking for none whatever
+`proxy_api_key` says later; a daemon started with `--share-lan` already had
+its own token before the tunnel existed. Enabling remote access cannot lock
+you out of the tool you enabled it with.
 
 **What the network learns.** By default the desktop publishes its address to
 n0's discovery service so the ticket keeps working when it changes network,
@@ -177,7 +184,7 @@ which is the ordinary OpenAI-compatible arrangement.
 | `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
-| A local client on the desktop starts getting `401` | Enabling put the key on the local proxy. Add the key to that client; it stays on after `disable`. |
+| A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | One session at a time. `gglib remote disable`, then `enable` for a fresh ticket and code. |
 
 ## Not yet

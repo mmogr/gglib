@@ -55,6 +55,12 @@ too — it is one listener — and disabling does not take that away. `enable`
 says so every time, because a hand-configured local client will start
 getting `401` and the person reading this is the one who has to add the key.
 
+The daemon's management API on `127.0.0.1:9887` is a different listener and is
+not touched. It settles its own token at bind — none for a loopback daemon —
+so nothing `enable` writes to `proxy_api_key` can close the door this CLI
+itself comes through. The notice says so too, because the failure it describes
+would otherwise look exactly like the one it is warning about.
+
 <!-- module-docs:end -->
 
 <details>

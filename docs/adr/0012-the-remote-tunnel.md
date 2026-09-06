@@ -38,7 +38,7 @@ delivers remote traffic to loopback, and gglib's proxy treats loopback as
 trusted in two separate places at once. `host_guard` in
 `crates/gglib-proxy/src/access/mod.rs` passes a loopback `Host` with no
 configuration at all, which is what makes the tunnel work out of the box. And
-`resolve_api_key` in `crates/gglib-runtime/src/proxy/supervisor.rs` returns
+`resolve_api_key` in `crates/gglib-runtime/src/proxy/api_key.rs` returns
 `(None, ApiKeySource::None)` for a loopback bind — deliberately, so that a
 local-only proxy is not ceremony — which means `bearer_guard` is installed
 over a policy that admits everyone. Key generation triggers on a non-loopback
@@ -90,11 +90,30 @@ proxy could stay open. It doubles the port surface, doubles the guard wiring,
 and buys a property — an unauthenticated local endpoint on a machine that is
 now reachable from outside it — that is not worth defending.
 
-Authentication turns on and never off. `BearerPolicy::tracking` in
-`crates/gglib-core/src/access/bearer.rs` keeps the bind-time token as a floor
-precisely so that clearing the stored value cannot silently reopen a listener,
-so `gglib remote disable` stops the tunnel and leaves the key in place. That
-is the floor working, not an oversight.
+Authentication turns on, and nothing turns it off by itself. `gglib remote
+disable` stops the tunnel and leaves the key in settings, so a client
+configured during the session keeps working afterwards.
+
+The floor is not what holds that, and the difference is worth stating because
+the code reads as though it were. `BearerPolicy::tracking` in
+`crates/gglib-core/src/access/bearer.rs` keeps the bind-time token as a floor,
+so a listener that bound *with* a key cannot be reopened by clearing the
+stored value. A loopback proxy binds with none — that is `resolve_api_key`'s
+whole point — and `RemoteOps::enable` starts the proxy before it mints the
+key, so the listener that enabling closes has an empty floor. It closes
+because `current()` re-reads the settings cache and finds the new value;
+`enable` sleeps one cache window before handing out a ticket for exactly that
+reason. Clear `proxy_api_key` before that daemon next restarts and `current()`
+returns `None`, `admits()` admits everyone, and the local proxy is open again.
+Restart while the key is still stored and `resolve_api_key` hands it to
+`tracking` as the bind key; from then on the floor is real.
+
+The tunnel edge does not follow it down. The rotation poller ignores a cleared
+setting, so a tunnel enabled before the clear keeps demanding the token it was
+given. That is the one credential and its two doors briefly disagreeing about
+whether it is required — the only case where they do, and the reason the
+accurate version of "on and never off" is "on, and the floor arrives at the
+next restart".
 
 Rotation had no mechanism and needed one. There is no settings-changed event
 in gglib and there cannot be a useful one: `gglib config settings set` writes
@@ -117,7 +136,8 @@ without the bearer token.
 
 The laptop POSTs `{"code": "..."}` to `POST /v1/remote/pair` on the proxy. That
 route sits **outside** the bearer-guarded group in
-`crates/gglib-proxy/src/server.rs` — it cannot require the credential it
+`crates/gglib-proxy/src/router.rs`, with its handler in
+`crates/gglib-proxy/src/remote/pair.rs` — it cannot require the credential it
 exists to hand out — and **inside** the host allowlist, which is applied
 outside the router and therefore covers it. The response carries the real
 `proxy_api_key` over the encrypted hop, and the laptop stores it in its own
@@ -178,9 +198,9 @@ client that forges the headers denies itself `/mcp` and increments a counter.
 A tunnelled peer cannot remove them, because the serve side overwrites rather
 than inherits. Neither direction of forgery grants anything.
 
-Why this route and not others: `invoke_tool` in
-`crates/gglib-proxy/src/mcp/handlers.rs` starts and drives the MCP server
-processes configured on the desktop. If one of those is a shell or filesystem
+Why this route and not others: the `invoke_tool` arm of
+`handle_meta_tools_call` in `crates/gglib-proxy/src/mcp/handlers.rs` starts
+and drives the MCP server processes configured on the desktop. If one of those is a shell or filesystem
 server — which is the ordinary reason to configure one — then a leaked bearer
 token is remote code execution on the machine at home, not merely free
 inference on it. The blast radius of the two is not comparable, so they do not
@@ -265,8 +285,90 @@ it that is only available to the right person.
   added once. This is the intended behaviour and there is no flag to opt out
   of it, because the alternative is an unauthenticated endpoint on a machine
   that is now reachable from outside.
+- **It is the proxy and only the proxy.** The daemon's management API on
+  `127.0.0.1:9887` settles its own token at bind — none at all for the
+  loopback default — and a later settings write does not reach it. That is
+  what keeps the CLI, the desktop app and the `gglib remote disable` that
+  undoes all this reachable after `enable` runs. This ADR originally reasoned
+  about the proxy and the tunnel edge and said nothing about the third
+  listener, which is how a daemon came to read the proxy's key and 401 its own
+  clients.
 - `/mcp` over the tunnel is off even for a correctly authenticated peer with
   the right key. It is a separate grant because it is a separate blast radius.
+
+## Kill criteria
+
+- If `llama-server` — or another dependency gglib fundamentally relies on —
+  ships a first-party remote transport, this defers to it and the tunnel is
+  deleted rather than carried beside it. The reading is a survey taken at each
+  pin bump, which is already a deliberate, reviewable moment:
+  `PINNED_LLAMA_RELEASE` in `crates/gglib-runtime/src/llama/download/mod.rs`
+  moves one commit at a time, and `gglib config llama status` prints the
+  version, commit and binary path of what is actually installed — whose
+  `--help` is where such a transport would announce itself. Nothing probes for
+  it: `RuntimeCapabilities` records build numbers and parser behaviour, not
+  transports. This is a person reading upstream at a moment that already
+  exists in the process, not a counter waiting to be added.
+- If the trust model itself proves unsound — the premise that a session ticket
+  plus one bearer token is enough to put a machine's proxy on the network, as
+  opposed to a guard that got its own rule wrong — this is withdrawn rather
+  than patched. The reading is the issue tracker:
+  `gh issue list --label "priority: critical" --label "component: proxy"`, and
+  the same query with `component: gui`, which is the label
+  `crates/gglib-app-services` carries and therefore where `RemoteOps` reports.
+  The issue form offers no `component: remote`, so the query returns more than
+  this feature and the judgement — premise or implementation — stays with the
+  reader. Naming that gap is the point: a criterion that pretended to a label
+  which does not exist would be unreadable in exactly the way ADR 0011's first
+  criterion was.
+- If `RemoteStatus.tunnelled_requests` stays at zero across daemon runs long
+  enough that a remote session would have shown up, the tunnel is a feature
+  nobody uses and it goes, taking the `modelpipe` dependency and both sides
+  with it. `gglib remote status` is where it and `last_tunnelled_ms` are read:
+  it prints `Requests:  N through the tunnel` on every invocation, enabled or
+  not, and a `Last one:` line once one has arrived. Both count from daemon
+  start rather than from install, so the denominator is a single daemon run
+  and a zero has to be read against how long that run was.
+
+### First reading, 2026-09-06
+
+The first evaluation of these three criteria, and it has one scope note that
+outweighs every number under it: **the tunnel has never carried traffic
+between two machines.** No two-machine test has been run and none exists in
+the suite — `modelpipe::serve` and `modelpipe::connect` are called only from
+`gglib-app-services` (`remote/mod.rs` and `remote/connect.rs`), and every test
+that exercises a tunnelled request synthesizes the markers `via: 1.1
+modelpipe` and `x-modelpipe-peer` against a proxy bound in-process.
+
+So the lines below record **not yet run**, not zero.
+[ADR 0010](0010-the-loop-guard-reads-what-came-back.md)'s first reading drew
+this distinction for a criterion nobody had exercised — "a zero here is the
+absence of the test, not its result" — and the same applies to all three here,
+more strongly: writing 0 would make a feature nobody has finished testing look
+like a feature nobody wants.
+
+- **If a dependency ships a first-party remote transport** — **not evaluated,
+  and the reading has had no occasion to be taken.** `PINNED_LLAMA_RELEASE` is
+  `b10327`, the value it held when this landed; the pin has not moved since.
+  **OPEN, and unread rather than clean.**
+- **If the trust model itself proves unsound** — **not evaluated.** The query
+  above has not been run for this note, so there is no count here, clean or
+  otherwise. Recorded as unread rather than reported as zero, because a zero
+  taken from a query nobody ran is the failure this ADR's kill criteria exist
+  to avoid. **OPEN.**
+- **If `tunnelled_requests` stays at zero** — **not yet run.** Every daemon
+  that has run this code reports `tunnelled_requests` 0 and `last_tunnelled_ms`
+  `None`, and every one of them was a daemon no second machine ever dialled.
+  This is the criterion a zero most easily misleads, and here it does not even
+  reach the ambiguity: "nobody uses the tunnel" and "nobody has yet paired two
+  machines" produce the same 0, and only the first would license deleting
+  anything. Not actionable until a two-machine session exists to count.
+  **OPEN.**
+
+**All three remain OPEN, and none has been read against traffic.** What this
+note establishes is the state the feature shipped in — reasoned through,
+guarded, and never once run end to end — so that the first person to pair two
+machines knows there is somewhere to put the number.
 
 ## Out of scope
 
