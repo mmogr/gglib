@@ -63,21 +63,56 @@ pub(super) async fn watch(
     cancel: CancellationToken,
 ) {
     let over = follow(handle.status(), || handle.status_changed(), &cancel).await;
+    conclude(
+        &live,
+        |live| live.generation() == generation,
+        over,
+        || async {
+            // The local port is this side's, and on the unreachable path
+            // modelpipe is still re-dialling behind it. Leaving it up would
+            // mean a bound port answering 502 for a machine nobody is
+            // waiting for any more; on the closed path this is idempotent
+            // and costs nothing.
+            handle.shutdown_timeout(DRAIN).await;
+        },
+        &*emitter,
+    )
+    .await;
+}
+
+/// Take the connection down and announce it, once following is over.
+///
+/// Generic over what the slot holds, for the reason [`follow`] takes its
+/// statuses through a closure: a [`LiveConnect`] carries an
+/// `Arc<ConnectHandle>`, which needs an iroh endpoint and a peer that
+/// answers, so anything written to be reachable only through one is
+/// unchecked. What that leaves here is the part with the decisions in it —
+/// that a cancelled watcher touches nothing, that a watcher whose
+/// connection was replaced takes down neither the replacement nor a dial on
+/// its way to becoming one, and that the port is released *before* the loss
+/// is announced rather than left bound behind a GUI that has already
+/// redrawn.
+async fn conclude<T, Fut>(
+    live: &Mutex<Slot<T>>,
+    is_mine: impl FnOnce(&T) -> bool,
+    over: Over,
+    shutdown: impl FnOnce() -> Fut,
+    emitter: &dyn AppEventEmitter,
+) -> bool
+where
+    Fut: Future<Output = ()>,
+{
+    // Somebody else is taking this down and announcing it. Two
+    // `RemoteDisconnected` for one connection is worse than a silent
+    // watcher — a GUI counts them — and the handle being drained here is
+    // one `disconnect` is already draining.
     if over == Over::Cancelled {
-        return;
+        return false;
     }
-    let taken = live
-        .lock()
-        .await
-        .take_if(|live| live.generation() == generation);
-    if taken.is_none() {
-        return;
+    if live.lock().await.take_if(is_mine).is_none() {
+        return false;
     }
-    // The local port is this side's, and on the unreachable path modelpipe
-    // is still re-dialling behind it. Leaving it up would mean a bound port
-    // answering 502 for a machine nobody is waiting for any more; on the
-    // closed path this is idempotent and costs nothing.
-    handle.shutdown_timeout(DRAIN).await;
+    shutdown().await;
     match over {
         Over::Unreachable => warn!(
             grace_s = IDLE_GRACE.as_secs(),
@@ -86,6 +121,7 @@ pub(super) async fn watch(
         _ => warn!("the remote connection closed; `gglib remote connect` to dial again"),
     }
     emitter.emit(AppEvent::remote_disconnected());
+    true
 }
 
 /// Wait out a connection, given where it starts and a way to ask for its
@@ -139,3 +175,7 @@ fn idle_clock(current: Option<Instant>, status: PipeStatus) -> Option<Instant> {
 #[cfg(test)]
 #[path = "connect_watch_tests.rs"]
 mod connect_watch_tests;
+
+#[cfg(test)]
+#[path = "connect_teardown_tests.rs"]
+mod connect_teardown_tests;
