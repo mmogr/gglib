@@ -83,6 +83,17 @@ async fn check(app: &axum::Router, methods: &[&str], path: &str) -> Option<Strin
     if status == StatusCode::NOT_FOUND {
         return Some(format!("{path}: 404 - no route at this path"));
     }
+    // The bearer layer is `.layer`, not `.route_layer`, so it answers before
+    // method routing. A daemon that has wrongly decided it needs a token
+    // therefore 401s every path here identically — which read as "routed" to
+    // every other arm below, and is how a total CLI lockout stayed green
+    // through this suite. These tests run under `DaemonAccess::loopback()`,
+    // which by contract requires no credential, so a 401 is never correct.
+    if status == StatusCode::UNAUTHORIZED {
+        return Some(format!(
+            "{path}: 401 - the loopback daemon is demanding a token it never bound with"
+        ));
+    }
     if status == StatusCode::METHOD_NOT_ALLOWED {
         let allowed: Vec<&str> = allow.split(',').map(str::trim).collect();
         let missing: Vec<&str> = methods

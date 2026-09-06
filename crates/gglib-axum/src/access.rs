@@ -25,6 +25,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use gglib_core::access::{BearerPolicy, is_loopback_host, normalize_host};
+use gglib_core::services::SettingsCache;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use serde_json::json;
 use tracing::warn;
@@ -81,6 +82,35 @@ impl DaemonAccess {
     #[must_use]
     pub fn api_key(&self) -> Option<&str> {
         self.policy.api_key.as_deref()
+    }
+
+    /// The bearer policy `/api/*` enforces, decided where the bind host is
+    /// still known.
+    ///
+    /// [`Self::new`] settles whether this daemon authenticates at all, and its
+    /// contract is that `api_key() == None` leaves `/api/*` unauthenticated.
+    /// This method is what makes that contract survive into the router.
+    ///
+    /// The distinction matters because [`BearerPolicy::tracking`] is not
+    /// "enforce this key" — it is "enforce whatever `proxy_api_key` says right
+    /// now". That is exactly right for a listener that bound *with* a key,
+    /// which must follow a rotation rather than pin the value it started with.
+    /// It is wrong for a listener that bound with none: `gglib remote enable`
+    /// writes `proxy_api_key` for the *proxy*, and a tracking policy here would
+    /// let that unrelated write close the management API — the door the CLI and
+    /// the desktop app come through, including the `remote disable` that would
+    /// undo it.
+    ///
+    /// So a keyless daemon gets a policy that demands nothing, permanently.
+    /// [`crate::bootstrap::start_server`] builds its access the same way and is
+    /// loopback-only by design; anything reaching this machine from another one
+    /// goes through the tunnel, which is guarded at the proxy.
+    #[must_use]
+    pub fn bearer_policy(&self, settings: Arc<SettingsCache>) -> BearerPolicy {
+        match self.api_key() {
+            Some(key) => BearerPolicy::tracking(Some(key), settings),
+            None => BearerPolicy::fixed(None),
+        }
     }
 }
 
