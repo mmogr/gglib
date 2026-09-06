@@ -146,12 +146,26 @@ impl RemoteOps {
         // Nothing in here is slow — an install, a `Mutex<Option<_>>` and an
         // atomic — which is the whole reason it may share the guard at all.
         let watchers = CancellationToken::new();
+        let mut slot = self.live.lock().await;
+        // Begun before the install so the epoch can go into `Live`, and
+        // under the same guard so the pair is still atomic: `reset_session_if`
+        // is what undoes it on the one path where the install loses.
+        let epoch = self.gateway.begin_session(
+            code.clone(),
+            settled.key.clone(),
+            PAIRING_TTL,
+            request.allow_mcp,
+        );
         let live = Live {
             handle: Arc::clone(&handle),
             cancel: watchers.clone(),
+            epoch,
         };
-        let mut slot = self.live.lock().await;
         if !slot.install(generation, live) {
+            // A `disable` took the reservation while this was arming, so the
+            // session just begun belongs to nothing. Cleared by epoch rather
+            // than outright: a later `enable` may already own the gateway.
+            self.gateway.reset_session_if(epoch);
             // Before the drain, which is the slow part this lock may not be
             // held across.
             drop(slot);
@@ -162,10 +176,6 @@ impl RemoteOps {
                 "the enable was cancelled by `gglib remote disable`".to_owned(),
             ));
         }
-        self.gateway
-            .pairing
-            .begin(code.clone(), settled.key.clone(), PAIRING_TTL);
-        self.gateway.set_mcp_allowed(request.allow_mcp);
         drop(slot);
         // Both watchers start only now, and the ordering is load-bearing.
         // `watch_proxy` takes the slot with `take_if`, which looks at a
