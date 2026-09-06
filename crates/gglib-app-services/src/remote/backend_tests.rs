@@ -39,13 +39,13 @@ fn watched() -> (
     (tx, rx, Backend::at(addr(BOUND)), CancellationToken::new())
 }
 
-/// A `Live` a test can build. The real one holds a `modelpipe::ServeHandle`,
-/// which exists nowhere but in front of a bound listener; [`take_if_ours`]
-/// never looks inside one, which is why it is generic over it.
+/// A `Live` a test can build: a real `modelpipe::ServeHandle` exists nowhere
+/// but in front of a listener, and [`take_if_ours`] never looks inside one.
 fn live_on(handle: &Arc<u8>) -> Live<u8> {
     Live {
         handle: Arc::clone(handle),
         cancel: CancellationToken::new(),
+        epoch: 1,
     }
 }
 

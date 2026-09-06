@@ -99,9 +99,22 @@ wrong code gets, which the laptop renders as "expired, used already, or
 burned by wrong attempts". None of it true, the code spent either way, and
 the operator sent to re-run `enable` on a machine that was working.
 
-Draining first costs nothing in exchange: `shutdown_timeout` closes admission
-before it waits, so the requests it protects are exactly the ones that were
-already inside.
+Draining first costs nothing on the tunnel in exchange: `shutdown_timeout`
+closes admission before it waits, so the requests it protects are exactly the
+ones that were already inside.
+
+It costs something on the *gateway*, which is what the session epoch pays
+for. Neither caller holds the `live` lock across the teardown — that would
+block `status` for the whole five seconds — so a fresh `enable` can find the
+slot empty and arm a new pairing while the previous session is still
+draining. A teardown that then cleared whatever it found would burn the code
+the operator is holding, with the same false "expired, used already, or
+burned by wrong attempts" this ordering exists to prevent, and revoke an
+`/mcp` grant that was just asked for. So `begin_session` numbers each
+session, `Live` carries the number, and `reset_session_if` clears nothing
+once a later session has taken the gateway over. Arming is what establishes
+the clean slate the superseded teardown will now never provide, so it clears
+the paired flag too.
 
 # The address the tunnel fronts
 

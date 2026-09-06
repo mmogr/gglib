@@ -47,10 +47,19 @@ impl Drain for modelpipe::ServeHandle {
 /// was working. Draining first lets that request buy the key it was minted
 /// for.
 ///
-/// It opens no window in exchange: `shutdown_timeout` closes admission
-/// before it waits, so what the drain protects is exactly the requests that
-/// were already inside — no code can be redeemed against this tunnel after
-/// this call begins.
+/// It opens no window on the tunnel in exchange: `shutdown_timeout` closes
+/// admission before it waits, so what the drain protects is exactly the
+/// requests that were already inside — no code can be redeemed against this
+/// tunnel after this call begins.
+///
+/// It does open one on the *gateway*, which is why the reset names a
+/// session. Both callers release the `live` lock before calling this (the
+/// alternative is a `status` that blocks for the whole drain), so a fresh
+/// `enable` can arm a new session while this one is still draining. Clearing
+/// whatever is armed would then wipe that new session — the same false
+/// "expired, used already, or burned" the ordering above exists to prevent,
+/// only aimed at a tunnel that is up. So the epoch this tunnel was armed
+/// under is handed back, and a superseded teardown clears nothing.
 pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) {
     // First, because it is what stops anything following a tunnel that is
     // ending: this token is the rotation poll's and the proxy watcher's.
@@ -58,9 +67,10 @@ pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) 
     if !live.handle.drain(DRAIN).await {
         warn!("remote tunnel drain hit its deadline; remaining requests were cut");
     }
-    // Last: a code shown for a session that has ended cannot outlive it, and
-    // the `/mcp` grant and the paired flag belong to the same session.
-    gateway.reset_session();
+    // Last, and only this session's: a code shown for a session that has
+    // ended cannot outlive it, and the `/mcp` grant and the paired flag
+    // belong to the same session.
+    gateway.reset_session_if(live.epoch);
 }
 
 #[cfg(test)]
@@ -76,20 +86,21 @@ mod tests {
     const CODE: &str = "483920";
     const KEY: &str = "the-desktop-key";
 
-    fn gateway() -> Arc<RemoteGateway> {
+    /// A gateway with one session armed, and the epoch that session was
+    /// armed under — which is what the `Live` a teardown is given carries.
+    fn gateway() -> (Arc<RemoteGateway>, u64) {
         let gateway = Arc::new(RemoteGateway::new(Arc::new(NoopEmitter)));
-        gateway
-            .pairing
-            .begin(CODE.to_owned(), KEY.to_owned(), PAIRING_TTL);
-        gateway
+        let epoch = gateway.begin_session(CODE.to_owned(), KEY.to_owned(), PAIRING_TTL, true);
+        (gateway, epoch)
     }
 
-    fn live<H>(handle: &Arc<H>) -> (Live<H>, CancellationToken) {
+    fn live<H>(handle: &Arc<H>, epoch: u64) -> (Live<H>, CancellationToken) {
         let cancel = CancellationToken::new();
         (
             Live {
                 handle: Arc::clone(handle),
                 cancel: cancel.clone(),
+                epoch,
             },
             cancel,
         )
@@ -128,12 +139,12 @@ mod tests {
     /// them back to a machine that was working.
     #[tokio::test]
     async fn a_redeem_still_in_flight_when_the_tunnel_goes_down_gets_the_key_it_paid_for() {
-        let gateway = gateway();
+        let (gateway, epoch) = gateway();
         let handle = Arc::new(RedeemingDrain {
             gateway: Arc::clone(&gateway),
             outcome: Mutex::new(None),
         });
-        let (live, _cancel) = live(&handle);
+        let (live, _cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
@@ -149,9 +160,9 @@ mod tests {
     /// outlived its tunnel would be a credential with no listener behind it.
     #[tokio::test]
     async fn the_pairing_does_not_outlive_the_session_it_was_armed_for() {
-        let gateway = gateway();
+        let (gateway, epoch) = gateway();
         let handle = Arc::new(Drained);
-        let (live, _cancel) = live(&handle);
+        let (live, _cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
@@ -161,15 +172,16 @@ mod tests {
             PairingOutcome::Rejected,
             "the session is over, and so is its code"
         );
+        assert!(!gateway.mcp_allowed(), "and so is its /mcp grant");
     }
 
     /// The rotation poll and the proxy watcher both hold this token. Neither
     /// may still be following a tunnel that has gone.
     #[tokio::test]
     async fn taking_a_tunnel_down_stops_what_was_following_it() {
-        let gateway = gateway();
+        let (gateway, epoch) = gateway();
         let handle = Arc::new(Drained);
-        let (live, cancel) = live(&handle);
+        let (live, cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
@@ -188,12 +200,64 @@ mod tests {
             }
         }
 
-        let gateway = gateway();
+        let (gateway, epoch) = gateway();
         let handle = Arc::new(NeverDrains);
-        let (live, _cancel) = live(&handle);
+        let (live, _cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
         assert!(!gateway.pairing.active());
+    }
+
+    /// What the `enable` that lands inside the drain arms.
+    const NEXT_CODE: &str = "111111";
+    const NEXT_KEY: &str = "the-next-desktop-key";
+
+    /// A handle that arms a fresh session while it drains — the `enable`
+    /// that arrives in the five seconds this teardown spends draining.
+    /// Neither caller of `take_down` holds the `live` lock across it, so
+    /// that `enable` finds the slot empty, succeeds, and hands somebody a
+    /// pairing string.
+    struct ArmingDrain {
+        gateway: Arc<RemoteGateway>,
+    }
+
+    impl Drain for ArmingDrain {
+        fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
+            self.gateway.begin_session(
+                NEXT_CODE.to_owned(),
+                NEXT_KEY.to_owned(),
+                PAIRING_TTL,
+                true,
+            );
+            std::future::ready(true)
+        }
+    }
+
+    /// The session that replaced this one is not this one's to end. A
+    /// teardown that cleared whatever it found would burn a code the
+    /// operator is holding — answered with the same "expired, used already,
+    /// or burned by wrong attempts" that the drain-before-clear ordering
+    /// exists to eliminate — and revoke an `/mcp` grant that was just asked
+    /// for.
+    #[tokio::test]
+    async fn a_session_armed_while_the_teardown_drained_survives_it() {
+        let (gateway, epoch) = gateway();
+        let handle = Arc::new(ArmingDrain {
+            gateway: Arc::clone(&gateway),
+        });
+        let (live, _cancel) = live(&handle, epoch);
+
+        take_down(live, &gateway).await;
+
+        assert_eq!(
+            gateway.redeem_pairing_code(NEXT_CODE, None),
+            PairingOutcome::Granted(NEXT_KEY.to_owned()),
+            "the newer session's code has to still redeem"
+        );
+        assert!(
+            gateway.mcp_allowed(),
+            "and its /mcp grant has to still be granted"
+        );
     }
 }
