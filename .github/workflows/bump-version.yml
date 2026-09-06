@@ -122,8 +122,23 @@ jobs:
 
       - name: Update lockfiles
         run: |
-          cargo generate-lockfile
-          cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+          # `--workspace` restricts the re-lock to the workspace's OWN members,
+          # so the only Cargo.lock diff is the 18 gglib-* version fields the
+          # bump just moved. `cargo generate-lockfile`, which stood here, throws
+          # the lockfile away and re-resolves every dependency from scratch
+          # against whatever the registry holds at that minute -- so a PR titled
+          # only "Bump version to X.Y.Z" carried third-party upgrades. #975 is
+          # the shipped example: 36 third-party crates moved under that title,
+          # aws-lc-rs and tokio-rustls among them.
+          #
+          # This is the Cargo half of the guard the npm step below already had.
+          #
+          # There is one Cargo.lock, not two: src-tauri is a member of the root
+          # workspace (see the `members` list in Cargo.toml), so cargo writes
+          # its resolution into the root lockfile and src-tauri/Cargo.lock does
+          # not exist. A second `--manifest-path src-tauri/Cargo.toml` call
+          # stood here and only re-resolved the root lockfile a second time.
+          cargo update --workspace
           # --package-lock-only writes the lockfile without touching node_modules.
           # It keeps every resolution the lockfile already pins, so the only diff
           # is the two root version fields -- a bump must not smuggle in a
@@ -132,8 +147,10 @@ jobs:
 
       - name: Verify lockfiles (no build)
         run: |
+          # --locked fails if the lockfile does not already satisfy every
+          # manifest, which is what proves `cargo update --workspace` left a
+          # complete lockfile rather than a stale one.
           cargo metadata --locked --format-version 1 > /dev/null
-          cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
           # The npm equivalent: `npm ci` is the one command that refuses to run
           # when package.json and package-lock.json disagree on dependencies.
           npm ci --dry-run --no-audit --no-fund > /dev/null
@@ -141,7 +158,6 @@ jobs:
       - name: Stage lockfiles
         run: |
           git add Cargo.lock package-lock.json
-          if [ -f src-tauri/Cargo.lock ]; then git add src-tauri/Cargo.lock; fi
 
       - name: Verify changes
         run: |
