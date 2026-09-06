@@ -145,8 +145,28 @@ fn print_status(status: &RemoteStatusDto) {
         );
     }
     connect::print_connection(status);
+    print_traffic(status);
+}
+
+/// The tunnelled-request count, printed only on the machine that counts it.
+///
+/// `tunnelled_requests` ticks in the proxy that *receives* tunnel-marked
+/// requests, which is the serving machine's. A machine that only dials out
+/// never sees one, so printing the count there reported a permanent `0` on a
+/// perfectly healthy connection — read twice as "it isn't working" during the
+/// first two-machine session. Keep this conditional: the connecting side is
+/// told where the number lives instead of being handed a meaningless zero.
+fn print_traffic(status: &RemoteStatusDto) {
+    if !status.enabled {
+        if status.connected.is_some() {
+            eprintln!(
+                "  Requests:  counted on the machine you dialled \u{2014} run `gglib remote status` there"
+            );
+        }
+        return;
+    }
     eprintln!(
-        "  Requests:  {} through the tunnel",
+        "  Requests:  {} served through the tunnel",
         status.tunnelled_requests
     );
     if let Some(ms) = status.last_tunnelled_ms {

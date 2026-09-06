@@ -324,11 +324,16 @@ it that is only available to the right person.
 - If `RemoteStatus.tunnelled_requests` stays at zero across daemon runs long
   enough that a remote session would have shown up, the tunnel is a feature
   nobody uses and it goes, taking the `modelpipe` dependency and both sides
-  with it. `gglib remote status` is where it and `last_tunnelled_ms` are read:
-  it prints `Requests:  N through the tunnel` on every invocation, enabled or
-  not, and a `Last one:` line once one has arrived. Both count from daemon
-  start rather than from install, so the denominator is a single daemon run
-  and a zero has to be read against how long that run was.
+  with it. `gglib remote status` **on the serving machine** — the one that ran
+  `gglib remote enable` — is where it and `last_tunnelled_ms` are read. The
+  counter ticks in the proxy that *receives* tunnel-marked requests, so the
+  serving side is the only side that has one: it prints
+  `Requests:  N served through the tunnel` while serving is on, and a
+  `Last one:` line once one has arrived. The connecting machine prints neither,
+  only a pointer to where the number lives, because a zero taken there says
+  nothing about the tunnel. Both count from daemon start rather than from
+  install, so the denominator is a single daemon run and a zero has to be read
+  against how long that run was.
 
 ### First reading, 2026-09-06
 
