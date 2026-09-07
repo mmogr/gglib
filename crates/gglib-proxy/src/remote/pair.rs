@@ -28,8 +28,11 @@ pub(crate) struct PairRequest {
 ///
 /// Every failure is the same flat 401 — wrong code, expired, spent, burned,
 /// a body that does not parse, a proxy with no tunnel at all. Telling them
-/// apart would tell a guesser which guess was close; the owner's three-attempt
-/// burn is the whole defence and it needs no help from the error text. The
+/// apart would tell a guesser which guess was close; the flat refusal needs no
+/// help from the error text. The three-attempt burn is the defence *locally* —
+/// over the tunnel a wrong code is a wrong bearer and modelpipe's edge refuses
+/// it before this handler runs, so `Pairing::attempts` never increments. See
+/// ADR 0012 decision 3, amended 2026-09-07, for what that leaves. The
 /// body is read raw and parsed here rather than through the `Json`
 /// extractor, whose own rejection would be a 400 that says what was wrong.
 pub(crate) async fn handle_remote_pair(

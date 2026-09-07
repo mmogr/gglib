@@ -40,8 +40,11 @@ and does not get the same default.
 `POST /v1/remote/pair` with `{"code":"483920"}` answers `{"api_key":"…"}`
 exactly once, and `401 invalid_pairing_code` for everything else — wrong,
 expired, spent, burned, unparseable, or a proxy with no tunnel. One refusal,
-so a guesser learns nothing about which guess was close; the owner's
-three-attempt burn is the defence.
+so a guesser learns nothing about which guess was close. The owner's
+three-attempt burn is the defence on the loopback path; over the tunnel a wrong
+code is a wrong bearer, refused at modelpipe's edge before this route runs, so
+the burn never fires there. ADR 0012 decision 3, amended 2026-09-07, records
+what that leaves.
 
 It sits outside the bearer group because it cannot demand the credential it
 hands out, and inside the Host guard like everything else. Reaching it at all
