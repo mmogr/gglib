@@ -20,3 +20,7 @@ mod execute_tests;
 #[cfg(test)]
 #[path = "bearer_tests.rs"]
 mod bearer_tests;
+
+#[cfg(test)]
+#[path = "refusal_tests.rs"]
+mod refusal_tests;

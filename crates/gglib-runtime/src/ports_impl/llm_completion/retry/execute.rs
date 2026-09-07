@@ -33,8 +33,8 @@ use super::classify::{Failure, classify};
 /// final give-up so a waiting user can be told what is happening.
 ///
 /// `far_machine` is `Some` only when `url` is the tunnel's loopback port: it
-/// supplies the bearer that port demands, which the listener there does not
-/// inject.
+/// supplies the bearer that port demands, and it is the only thing here that
+/// knows a refusal came from another machine — see [`terminal`].
 pub(crate) async fn send_with_retry(
     client: &Client,
     url: &str,
@@ -69,9 +69,10 @@ pub(crate) async fn send_with_retry(
         let Failure::Retryable {
             retry_after,
             reason,
+            ..
         } = &failure
         else {
-            return Err(anyhow!("{}", failure.reason()));
+            return Err(terminal(&failure, far_machine));
         };
 
         let elapsed = started.elapsed();
@@ -110,6 +111,42 @@ pub(crate) async fn send_with_retry(
                 ));
             }
         }
+    }
+}
+
+/// Turn a failure nothing will be retried after into the error the caller
+/// reports.
+///
+/// The far machine gets first refusal on explaining it, because only this
+/// point knows both halves: the classifier has the upstream's `code` but not
+/// who sent it, and the surface that chose the upstream knows who but is long
+/// past the request by the time an answer comes back. The classifier's own
+/// rendering is the fallback, so every failure this cannot improve on reads
+/// exactly as it did before.
+///
+/// Two conditions gate the swap and both are load-bearing. `invalid_api_key`
+/// from *this* machine's proxy means a local key is wrong, so the sentence may
+/// only win where there is a far machine at all — that is the `Option`. And a
+/// far machine can fail for reasons its key is innocent of, so the code has to
+/// agree as well — that is [`FarMachine::refusal`]. The sentence carries no
+/// status and no upstream wording, so the rendered reason is written to the
+/// log here rather than left to the caller, which would otherwise never see
+/// what the upstream actually said.
+fn terminal(failure: &Failure, far_machine: Option<&FarMachine>) -> anyhow::Error {
+    let explained = far_machine.and_then(|far| Some((far, far.refusal(failure.code())?)));
+    match explained {
+        Some((far, message)) => {
+            // The fingerprint is not a credential — `gglib remote status` and
+            // the CLI's pre-turn banner both print it — so a log reader gets
+            // the same name the user is being shown.
+            tracing::warn!(
+                fingerprint = %far.fingerprint,
+                reason = %failure.reason(),
+                "the far machine refused the stored key"
+            );
+            anyhow!(message)
+        }
+        None => anyhow!("{}", failure.reason()),
     }
 }
 

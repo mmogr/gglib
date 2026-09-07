@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use gglib_proxy::models::ErrorResponse;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
@@ -150,8 +151,57 @@ fn with_headers(
     head
 }
 
+// ─── The bodies the two real upstreams write ────────────────────────────────
+//
+// Each has exactly one home. The modelpipe literals are copied verbatim from
+// version 0.2.0's `refusal.rs`, the version `gglib-app-services` pins: the
+// interesting failures in this area were never about the logic, they were
+// about a wire shape that did not look the way the struct said it did, and a
+// paraphrase would have gone green against the bug. They live here rather
+// than beside one test because two files now read them, and a modelpipe bump
+// must have a single place to update.
+
 /// The proxy's error body for an admission timeout — the real wire shape.
 pub(super) fn admission_timeout_body() -> String {
     r#"{"error":{"message":"waited without reaching the front of the queue","type":"service_unavailable","code":"admission_timeout"}}"#
+        .to_owned()
+}
+
+/// This proxy's own 401, from `gglib_proxy::access`'s bearer guard.
+///
+/// The reason a refused key may not be explained by its `code` alone: this
+/// carries the same `invalid_api_key` a far machine's refusal does, on a path
+/// where there is no far machine and nothing to re-pair. It is not otherwise
+/// the same body — ours names a `type` and says something different — so only
+/// the `code` collides, which is exactly what makes the code insufficient.
+///
+/// Built through [`ErrorResponse`] rather than typed out, because unlike
+/// modelpipe's this shape is ours: a change to the struct's serialization
+/// reaches this body instead of silently leaving it behind. The three
+/// arguments are `access::bearer_guard`'s own.
+pub(super) fn proxy_invalid_key_body() -> String {
+    serde_json::to_string(&ErrorResponse::with_code(
+        "Missing or invalid API key. Send it as 'Authorization: Bearer <key>'.",
+        "invalid_request_error",
+        "invalid_api_key",
+    ))
+    .expect("an ErrorResponse always serializes")
+}
+
+/// modelpipe's edge 401, written before the backend is contacted at all.
+pub(super) fn edge_invalid_api_key_body() -> String {
+    r#"{"error":{"message":"invalid or missing bearer token","code":"invalid_api_key"}}"#.to_owned()
+}
+
+/// The connect side has no tunnel: the peer is away, or `keep_connected` is
+/// dialling a replacement after the laptop changed networks.
+pub(super) fn edge_tunnel_unavailable_body() -> String {
+    r#"{"error":{"message":"no tunnel to the serving side is connected right now","code":"tunnel_unavailable"}}"#
+        .to_owned()
+}
+
+/// The serving side reached for its model server and found nothing there.
+pub(super) fn edge_backend_unreachable_body() -> String {
+    r#"{"error":{"message":"the serving side could not reach its backend","code":"backend_unreachable"}}"#
         .to_owned()
 }

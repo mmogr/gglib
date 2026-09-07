@@ -29,8 +29,10 @@ The token is held in a field the struct never prints; neither it nor
 The key does not travel alone: it arrives in a [`FarMachine`], beside the
 fingerprint of the machine that issued it. Only the surface that resolved the
 remote upstream knows whose port it just chose, and the adapter it hands the
-result to holds a URL that is loopback either way — so if that identity is
-ever to be usable down here, it has to come down with the key.
+result to holds a URL that is loopback either way — so the identity comes
+down with the key, and the send loop can name the machine when that machine
+turns the key away. See `retry/` for what it then says, and for why nothing
+may key on the refusal code alone.
 
 # Layout
 
