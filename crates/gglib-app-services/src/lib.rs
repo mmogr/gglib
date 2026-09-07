@@ -13,6 +13,8 @@ use tokio as _;
 use tokio_test as _;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod test_support_remote;
 
 mod error;
 mod helpers;
