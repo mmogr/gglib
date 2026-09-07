@@ -107,6 +107,11 @@ fn is_private(ip: IpAddr) -> bool {
 /// exit channel, which does not see the exits nothing publishes
 /// ([`PROXY_POLL`]).
 ///
+/// Asked *before* [`key::Settled::commit`](super::key::Settled::commit), so
+/// on a first enable the answer can be a settings-cache window old by the
+/// time `enable` returns — the deliberate half of a trade that commit
+/// documents: asking later leaves a minted key behind for a refused tunnel.
+///
 /// # Errors
 ///
 /// `Internal`, naming the state the proxy was found in.
@@ -203,13 +208,9 @@ async fn watch_proxy(
     }
     let taken = take_if_ours(&mut *live.lock().await, &handle);
     let Some(live) = taken else { return };
-    // Our own token, and the rotation poll's: the tunnel is over, so nothing
-    // should still be following a key for it.
-    live.cancel.cancel();
-    gateway.reset_session();
-    if !live.handle.shutdown_timeout(DRAIN).await {
-        warn!("remote tunnel drain hit its deadline; remaining requests were cut");
-    }
+    // The same order `disable` ends a session in, and for the same reason —
+    // see [`teardown::take_down`].
+    super::teardown::take_down(live, &gateway).await;
     info!("remote tunnel disabled with the proxy it fronted");
     emitter.emit(AppEvent::remote_disabled());
 }

@@ -14,9 +14,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use gglib_core::access;
 use gglib_core::events::AppEvent;
-use gglib_core::services::SETTINGS_CACHE_TTL;
-use gglib_core::{SettingsUpdate, access};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -24,7 +23,7 @@ use tracing::{info, warn};
 use gglib_runtime::proxy::ProxyStatus;
 
 use super::backend::Backend;
-use super::key::{self, KeyDecision};
+use super::key;
 use super::pairing::PAIRING_TTL;
 use super::rotation::rotation_poll;
 use super::slot::{Busy, Taken};
@@ -96,12 +95,12 @@ impl RemoteOps {
         cancel: &CancellationToken,
         proxy_exit: watch::Receiver<ProxyStatus>,
     ) -> Result<Enabled, GuiError> {
-        let (key, pinned) = self.settle_key(cancel).await?;
+        let settled = key::settle(&self.proxy, &self.core).await?;
 
         let backend = Backend::at(*addr);
 
         let mut opts = modelpipe::ServeOptions::default();
-        opts.auth = modelpipe::TokenPolicy::Supplied(key.clone());
+        opts.auth = modelpipe::TokenPolicy::Supplied(settled.key.clone());
         opts.relay = request.relay;
         // A fresh identity every time: the ticket dies with the session and
         // revocation is the restart (ADR 0012, decision 4).
@@ -119,6 +118,13 @@ impl RemoteOps {
         // tunnel was binding: the watcher that takes over from here is not
         // spawned until the install below.
         super::backend::refuse_if_gone(&self.proxy, &backend, &handle).await?;
+
+        // The first and only thing this leaves on the machine, and the last
+        // point at which leaving nothing is still free: everything that can
+        // fail is above it, and the tunnel above it is undone by dropping the
+        // handle — nothing can be in flight behind a ticket that has not left
+        // this function.
+        settled.commit(&self.core, cancel).await?;
 
         let code = access::generate_pairing_code();
         handle
@@ -140,12 +146,26 @@ impl RemoteOps {
         // Nothing in here is slow — an install, a `Mutex<Option<_>>` and an
         // atomic — which is the whole reason it may share the guard at all.
         let watchers = CancellationToken::new();
+        let mut slot = self.live.lock().await;
+        // Begun before the install so the epoch can go into `Live`, and
+        // under the same guard so the pair is still atomic: `reset_session_if`
+        // is what undoes it on the one path where the install loses.
+        let epoch = self.gateway.begin_session(
+            code.clone(),
+            settled.key.clone(),
+            PAIRING_TTL,
+            request.allow_mcp,
+        );
         let live = Live {
             handle: Arc::clone(&handle),
             cancel: watchers.clone(),
+            epoch,
         };
-        let mut slot = self.live.lock().await;
         if !slot.install(generation, live) {
+            // A `disable` took the reservation while this was arming, so the
+            // session just begun belongs to nothing. Cleared by epoch rather
+            // than outright: a later `enable` may already own the gateway.
+            self.gateway.reset_session_if(epoch);
             // Before the drain, which is the slow part this lock may not be
             // held across.
             drop(slot);
@@ -156,10 +176,6 @@ impl RemoteOps {
                 "the enable was cancelled by `gglib remote disable`".to_owned(),
             ));
         }
-        self.gateway
-            .pairing
-            .begin(code.clone(), key.clone(), PAIRING_TTL);
-        self.gateway.set_mcp_allowed(request.allow_mcp);
         drop(slot);
         // Both watchers start only now, and the ordering is load-bearing.
         // `watch_proxy` takes the slot with `take_if`, which looks at a
@@ -168,12 +184,12 @@ impl RemoteOps {
         // never look again, leaving a live tunnel in front of a dead proxy
         // with nothing following it. `refuse_if_gone` covers the window up
         // to here; from here the watcher does.
-        if !pinned {
+        if !settled.pinned {
             tokio::spawn(rotation_poll(
                 Arc::clone(&self.core),
                 Arc::clone(&handle),
                 Arc::clone(&self.gateway),
-                key,
+                settled.key,
                 watchers.clone(),
             ));
         }
@@ -207,12 +223,8 @@ impl RemoteOps {
     /// `Conflict` when nothing is enabled and nothing is arming.
     pub async fn disable(&self) -> Result<(), GuiError> {
         match self.live.lock().await.take() {
-            Taken::Value(Live { handle, cancel }) => {
-                cancel.cancel();
-                self.gateway.reset_session();
-                if !handle.shutdown_timeout(DRAIN).await {
-                    warn!("remote tunnel drain hit its deadline; remaining requests were cut");
-                }
+            Taken::Value(live) => {
+                super::teardown::take_down(live, &self.gateway).await;
                 info!("remote tunnel disabled");
                 self.emitter.emit(AppEvent::remote_disabled());
                 Ok(())
@@ -229,44 +241,6 @@ impl RemoteOps {
             Taken::Empty => Err(GuiError::Conflict(
                 "remote access is not enabled".to_owned(),
             )),
-        }
-    }
-
-    /// The key the tunnel enforces, minting and persisting one first when
-    /// nothing enforces anything yet. Returns whether it is pinned.
-    async fn settle_key(&self, cancel: &CancellationToken) -> Result<(String, bool), GuiError> {
-        let settings = self
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))?;
-        match key::decide(
-            self.proxy.effective_api_key(),
-            settings.proxy_api_key.as_deref(),
-        ) {
-            KeyDecision::Use { key, pinned } => Ok((key, pinned)),
-            KeyDecision::Mint(key) => {
-                self.core
-                    .settings()
-                    .update(SettingsUpdate {
-                        proxy_api_key: Some(Some(key.clone())),
-                        ..SettingsUpdate::default()
-                    })
-                    .await
-                    .map_err(|e| GuiError::Internal(format!("could not store the API key: {e}")))?;
-                // The proxy's tracking policy reads settings through a cache;
-                // handing out a ticket before the local door is locked would
-                // open a window the whole design exists to close. Cut short
-                // by a `disable`, which is not a shortcut: the key is
-                // already written and the caller is about to give up.
-                info!("minted an API key for the proxy; waiting for it to take effect");
-                tokio::select! {
-                    () = cancel.cancelled() => {}
-                    () = tokio::time::sleep(SETTINGS_CACHE_TTL) => {}
-                }
-                Ok((key, false))
-            }
         }
     }
 }

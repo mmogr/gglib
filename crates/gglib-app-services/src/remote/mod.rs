@@ -13,6 +13,7 @@ mod rotation;
 mod serve;
 mod slot;
 mod stored_pairing;
+mod teardown;
 mod types;
 
 pub use gateway::RemoteGateway;
@@ -52,6 +53,12 @@ struct Live<H = modelpipe::ServeHandle> {
     /// token for both: neither outlives the tunnel they belong to, and a
     /// second field would only be one more thing to forget.
     cancel: CancellationToken,
+    /// Which session the gateway holds a pairing and an `/mcp` grant for on
+    /// this tunnel's behalf, from
+    /// [`RemoteGateway::begin_session`](gateway::RemoteGateway::begin_session).
+    /// Presented at teardown so a drain that took five seconds cannot clear
+    /// a session that started while it was draining.
+    epoch: u64,
 }
 
 /// The remote tunnel's lifecycle: both sides of ADR 0012.
@@ -157,3 +164,11 @@ impl RemoteGateway {
 #[cfg(test)]
 #[path = "lifecycle_tests.rs"]
 mod lifecycle_tests;
+
+#[cfg(test)]
+#[path = "enable_tests.rs"]
+mod enable_tests;
+
+#[cfg(test)]
+#[path = "serve_watch_tests.rs"]
+mod serve_watch_tests;
