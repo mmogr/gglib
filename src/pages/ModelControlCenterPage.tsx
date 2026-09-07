@@ -14,6 +14,7 @@ import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
 import { useMccLayout } from './modelControlCenter/useMccLayout';
 import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
+import { useChatSession } from './modelControlCenter/useChatSession';
 // Lazy load ChatPage to avoid loading assistant-ui until needed
 const ChatPage = lazy(() => import('./ChatPage'));
 // Lazy load BenchmarkPage to keep initial bundle small
@@ -23,13 +24,6 @@ import type { ServerViewModel } from '../hooks/useServers';
 import { SidebarTabId } from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import { getTransport } from '../services/transport';
-
-interface ChatSession {
-  serverPort: number;
-  modelId: number;
-  modelName: string;
-  initialView: 'chat' | 'console';
-}
 
 interface ModelControlCenterPageProps {
   servers: ServerViewModel[];
@@ -100,8 +94,11 @@ export default function ModelControlCenterPage({
   // HuggingFace model selection state (for preview in inspector)
   const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
   
-  // Chat session state - when set, shows ChatPage instead of model panels
-  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+  // Chat session state - when set, shows ChatPage instead of model panels.
+  // Local sessions come from a served model here; remote ones from the
+  // Remote panel, which is why the hook and not this page owns the wiring.
+  const { chatSession, setChatSession, openChatSession, closeChatSession } =
+    useChatSession(servers);
 
   // Benchmark state - when set, shows BenchmarkPage instead of model panels
   const [benchmarkModelId, setBenchmarkModelId] = useState<number | null>(null);
@@ -114,21 +111,6 @@ export default function ModelControlCenterPage({
   
   // Panel width state (percentages) - now just two columns
   const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = useMccLayout();
-
-  const openChatSession = useCallback(
-    (modelId: number, view: 'chat' | 'console') => {
-      const server = servers.find((s) => s.modelId === modelId);
-      if (server) {
-        setChatSession({
-          serverPort: server.port,
-          modelId: server.modelId,
-          modelName: server.modelName,
-          initialView: view,
-        });
-      }
-    },
-    [servers]
-  );
 
   useMccMenuActions({
     onRegisterMenuActions,
@@ -143,8 +125,9 @@ export default function ModelControlCenterPage({
     setActiveSubTab: (tab: AddDownloadSubTab) => setActiveSubTab(tab),
     triggerFilePicker: () => fileInputRef.current?.click(),
     refreshAll: handleRefreshAll,
-    chatSessionModelId: chatSession?.modelId ?? null,
-    closeChatSession: () => setChatSession(null),
+    // Only a local session can be the one whose server just stopped.
+    chatSessionModelId: chatSession?.kind === 'local' ? chatSession.modelId : null,
+    closeChatSession,
     openChatSession,
     onOpenServeModal: () => openServeModalRef.current?.(),
     showToast,
@@ -210,6 +193,7 @@ export default function ModelControlCenterPage({
   const handleServerStarted = async (serverInfo: ServerViewModel) => {
     // Server started, open chat
     setChatSession({
+      kind: 'local',
       serverPort: serverInfo.port,
       modelId: serverInfo.modelId,
       modelName: serverInfo.modelName,
@@ -217,25 +201,30 @@ export default function ModelControlCenterPage({
     });
   };
 
-  // Handler to close chat and stop server
+  // Handler to close chat and stop the server it was talking to. A remote
+  // session has no server here to stop; leaving the tunnel up is the point.
   const handleCloseChat = async () => {
-    if (chatSession) {
+    if (chatSession?.kind === 'local') {
       await stopServer(chatSession.modelId);
-      setChatSession(null);
     }
+    closeChatSession();
   };
 
   // If chat session is active, show ChatPage
   if (chatSession) {
     return (
       <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden"><div className="loading-chat">Loading chat...</div></div>}>
-        <ChatPage
-          serverPort={chatSession.serverPort}
-          modelId={chatSession.modelId}
-          modelName={chatSession.modelName}
-          initialView={chatSession.initialView}
-          onClose={handleCloseChat}
-        />
+        {chatSession.kind === 'local' ? (
+          <ChatPage
+            serverPort={chatSession.serverPort}
+            modelId={chatSession.modelId}
+            modelName={chatSession.modelName}
+            initialView={chatSession.initialView}
+            onClose={handleCloseChat}
+          />
+        ) : (
+          <ChatPage remote modelName={chatSession.modelName} onClose={handleCloseChat} />
+        )}
       </Suspense>
     );
   }

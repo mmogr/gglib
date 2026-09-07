@@ -8,9 +8,12 @@ So these tests drive the page the way a user does — click the control, assert 
 
 | File | Renders |
 |------|---------|
+| `ModelControlCenterPage.test.tsx` | The MCC's choice of screen: that the Remote panel's request opens a chat against the far machine with nothing served locally, and that closing it stops no server here |
 | `ChatPageRemote.test.tsx` | `ChatPage` in remote mode: no Console tab, no capability probe for a model this machine does not have, and no read-only claim from a local server registry that knows nothing about the far one |
 
 ## Mocking, and what must not be mocked
+
+`ChatPage` is stubbed in `ModelControlCenterPage.test.tsx` — it is lazily imported and pulls in the whole assistant-ui runtime, and what is under test there is which screen the page picks and what it hands it, both of which the stub shows. `ChatPageRemote.test.tsx` mounts the real one, so the two files together still cover the tree.
 
 What is never mocked is the path from the control to the screen. The registry, the effect that reads it and the page that renders the result are all real, because that path is the whole subject.
 
