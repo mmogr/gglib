@@ -10,6 +10,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use tracing::info;
 
+use super::first_contact::Reached;
 use crate::error::GuiError;
 
 /// How long either request may take end to end. Generous because a first
@@ -34,7 +35,11 @@ struct Paired {
 /// `ValidationFailed` for the refusal — the code is wrong, expired, spent,
 /// or the far side was not enabled with one — and `Unavailable` when the
 /// tunnel did not carry the request at all.
-pub(super) async fn redeem(base_url: &str, code: &str) -> Result<String, GuiError> {
+pub(super) async fn redeem(
+    _reached: &Reached,
+    base_url: &str,
+    code: &str,
+) -> Result<String, GuiError> {
     let client = client()?;
     let response = client
         .post(format!("{base_url}/remote/pair"))

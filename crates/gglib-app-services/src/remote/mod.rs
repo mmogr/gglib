@@ -3,6 +3,7 @@
 mod backend;
 mod connect;
 mod connect_watch;
+mod first_contact;
 mod gateway;
 mod key;
 mod pairing;
