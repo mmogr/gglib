@@ -176,10 +176,17 @@ next restart".
 > `"after a rebind the same clear is refused"` — alongside the two tests that
 > already covered exactly that,
 > `clearing_the_setting_does_not_reopen_a_closed_endpoint` and
-> `a_blank_stored_key_falls_back_rather_than_opening`. Its first half is
-> genuinely new but is not pinned by anything: it asserts the *absence* of a
-> demand on a policy whose floor is already `None`, so no production line's
-> deletion can make it fail. It documents the reopening; it does not hold it.
+> `a_blank_stored_key_falls_back_rather_than_opening`. Its first half is not
+> *uniquely* pinned either. Deleting the settings read from
+> `BearerPolicy::current` fails its `:206` assertion — but fails
+> `authentication_can_be_switched_on_at_runtime`, which asserts the same
+> transition from the same starting policy, and
+> `a_rotation_takes_effect_without_a_restart` with it. Deleting the expiry
+> check from `SettingsCache::get`'s fast path fails its `:212` assertion —
+> alongside those same two and `a_write_is_observed_after_the_window_expires`,
+> which owns that behaviour. Each of its three assertions is reachable by some
+> production deletion and none of them alone: it documents the reopening, it
+> does not hold it.
 >
 > The mechanism the bullets above actually turn on is `resolve_api_key`, and
 > that had no test module at all — which is why the missing loopback qualifier
