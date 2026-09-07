@@ -8,10 +8,8 @@ import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
+import { NewConversationModal } from '../components/NewConversationModal';
 import TwoPanelLayout from '../components/TwoPanelLayout';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Textarea } from '../components/ui/Textarea';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
@@ -419,56 +417,16 @@ export default function ChatPage({
         right={<ConsoleLogPanel serverPort={serverPort} />}
       />
 
-      {/* New Conversation Modal */}
       {isNewConversationModalOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-modal-backdrop"
-          onMouseDown={(e) => e.target === e.currentTarget && !creatingConversation && setIsNewConversationModalOpen(false)}
-        >
-          <div className="bg-surface border border-border rounded-lg p-xl w-[min(450px,90vw)] max-h-[90vh] overflow-y-auto flex flex-col gap-md">
-            <h3 className="text-lg font-semibold m-0">Start a new chat</h3>
-            <label className="flex flex-col gap-xs text-sm text-text-muted">
-              Title
-              <Input
-                className="py-sm px-md border border-border rounded-sm bg-background text-text text-sm focus:outline-none focus:border-primary"
-                value={newConversationTitle}
-                onChange={(e) => setNewConversationTitle(e.target.value)}
-                placeholder="New Chat"
-              />
-            </label>
-            <label className="flex flex-col gap-xs text-sm text-text-muted">
-              System Prompt
-              <Textarea
-                className="py-sm px-md border border-border rounded-sm bg-background text-text text-sm font-[inherit] resize-y min-h-[100px] focus:outline-none focus:border-primary"
-                value={newConversationPrompt}
-                onChange={(e) => setNewConversationPrompt(e.target.value)}
-                placeholder={DEFAULT_SYSTEM_PROMPT}
-                rows={4}
-              />
-            </label>
-            <p className="text-xs text-text-muted m-0">
-              The system prompt steers the assistant's behavior for the entire conversation.
-            </p>
-            <div className="flex justify-end gap-sm mt-sm">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setIsNewConversationModalOpen(false)}
-                disabled={creatingConversation}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={handleCreateConversation}
-                disabled={creatingConversation}
-              >
-                {creatingConversation ? 'Creating…' : 'Create chat'}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <NewConversationModal
+          title={newConversationTitle}
+          onTitleChange={setNewConversationTitle}
+          systemPrompt={newConversationPrompt}
+          onSystemPromptChange={setNewConversationPrompt}
+          creating={creatingConversation}
+          onCancel={() => setIsNewConversationModalOpen(false)}
+          onCreate={handleCreateConversation}
+        />
       )}
     </div>
   );
