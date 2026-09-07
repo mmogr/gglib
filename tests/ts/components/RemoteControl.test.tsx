@@ -104,6 +104,27 @@ describe('RemoteControl', () => {
     expect(screen.getByRole('button', { name: /^connect$/i })).toBeDisabled();
   });
 
+  it('a connection that has not named its peer yet does not name one', async () => {
+    // The window between `remote_connected` and the status read: a port is
+    // known and nothing else. The panel used to fill the gap with whichever
+    // ticket happened to be stored, which on a dial to a new machine names
+    // the machine being left.
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      stored_ticket_fingerprint: 'aabbccddeeff',
+      connected: {
+        port: 41234,
+        base_url: 'http://127.0.0.1:41234/v1',
+        ticket_fingerprint: '',
+        path: 'idle',
+      },
+    });
+    await open();
+
+    expect(screen.getByText(/reading which machine/i)).toBeInTheDocument();
+    expect(screen.queryByText(/aabbccddeeff/)).not.toBeInTheDocument();
+  });
+
   it('the connected half asks which model that machine should be asked for', async () => {
     applyRemoteStatus({
       ...IDLE_STATUS,

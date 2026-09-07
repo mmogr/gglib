@@ -124,9 +124,21 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
 
       {connected ? (
         <Stack gap="sm">
+          {/*
+            The fingerprint is empty until the status read lands — the connect
+            event carries a port and nothing else. Naming nobody is the honest
+            reading of that; "Connected to  (idle)." reads as a bug.
+          */}
           <p className="text-xs text-text-muted m-0">
-            Connected to <span className="font-mono text-text-secondary">{connected.ticket_fingerprint}</span>{' '}
-            ({connected.path}).
+            {connected.ticket_fingerprint ? (
+              <>
+                Connected to{' '}
+                <span className="font-mono text-text-secondary">{connected.ticket_fingerprint}</span>{' '}
+                ({connected.path}).
+              </>
+            ) : (
+              'Connected. Reading which machine…'
+            )}
           </p>
           <Stack gap="xs">
             <Label size="xs" muted>That machine, from here</Label>
