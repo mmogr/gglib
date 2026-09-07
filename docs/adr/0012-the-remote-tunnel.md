@@ -596,9 +596,16 @@ logged `peer{peer=d702c7dca654 path="relayed"}` followed by `POST
 > answer with the instrument it had, and the claim that "the relay is a path
 > traffic has taken" is withdrawn until one can. The fix is in flight
 > upstream — [modelpipe#50](https://github.com/mmogr/modelpipe/pull/50), a
-> watcher following `PathEvent::Selected` instead of sampling once — and this
-> becomes readable the day gglib takes that `modelpipe` version. A re-run
-> against it is what would settle the sentence; nothing in this note does.
+> watcher following `PathEvent::Selected` instead of sampling once. A re-run
+> against a version carrying it is what would settle the sentence; nothing in
+> this note does.
+>
+> **Still not readable at the 0.3 pin, 2026-09-07.** modelpipe cut `v0.3.0`
+> at `4cf01ee`, and #50 merged after it — the published tarball has neither
+> `path_watch.rs` nor `network.rs`, and its `peer::path_of` is the
+> sample-once form quoted above, unchanged. So taking 0.3 moves the pin and
+> not this sentence. The re-run waits on a modelpipe release cut from a
+> commit that contains #50.
 
 **The credential moved as decision 3 describes.** The six-digit code was
 redeemed over the encrypted hop, once, and the connecting machine reports
