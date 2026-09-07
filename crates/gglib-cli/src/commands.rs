@@ -191,9 +191,9 @@ pub enum Commands {
         /// Model ID or name
         ///
         /// Locally, omitting it falls back to the default model from settings.
-        /// With --remote the name is forwarded to the far machine as given and
-        /// there is no fallback — this machine's default is a model the far one
-        /// may not have — so omitting it lets that machine choose.
+        /// With --remote it is mandatory instead — the name is forwarded as given and
+        /// this machine's default is not consulted. Name one the far machine serves, or
+        /// the request arrives there with an empty model: 404 Model '' not found.
         #[arg(short, long)]
         model: Option<String>,
         /// Read context from file instead of stdin
