@@ -6,9 +6,13 @@
 //! on top. Everything it sits on is here, and the two-machine run in ADR
 //! 0012 is what covers the rest.
 
+use std::time::Duration;
+
 use gglib_core::events::AppEvent;
 
-use super::*;
+use super::pairing::PAIRING_TTL;
+use super::types::EnableRequest;
+use crate::error::GuiError;
 use crate::test_support_remote::{FINGERPRINT_A, KEY_A, TICKET_A, paired_with, test_remote_ops};
 
 /// A daemon that has done nothing remote reports nothing remote. The
@@ -109,4 +113,76 @@ async fn disabling_a_tunnel_that_is_not_up_is_a_conflict_that_clears_nothing() {
         "{:?}",
         events.events()
     );
+}
+
+/// What `gglib remote status` allows the daemon before it gives up
+/// (`gglib-cli/src/daemon_client/remote.rs`). A status that takes longer
+/// than this is a status nobody sees.
+const CLI_STATUS_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// `status` and `disable` answer while an `enable` is still arming.
+///
+/// `enable` held the serve slot's mutex across a five-second settings-cache
+/// window and a ten-second wait for a relay, and `status` locks the same
+/// mutex to read the serve side. Fifteen seconds is three times what the
+/// CLI gives status, so the command someone runs to find out whether the
+/// ticket is ready was the one command that could not answer while it was
+/// being made.
+///
+/// The slot is put into the state arming leaves it in, rather than reached
+/// through `enable` — that would bind the proxy's port for real on this
+/// fixture, and an iroh endpoint on top of it.
+#[tokio::test]
+async fn status_and_disable_do_not_wait_on_a_serve_side_that_is_still_arming() {
+    let (_, ops, events) = test_remote_ops().await;
+    let cancel = ops
+        .live
+        .lock()
+        .await
+        .reserve(1)
+        .expect("nothing holds the serve side");
+
+    let status = tokio::time::timeout(CLI_STATUS_TIMEOUT, ops.status())
+        .await
+        .expect("status waited on the arming past the timeout the CLI gives it");
+    assert!(
+        !status.enabled,
+        "a tunnel that is still binding is not one to report as enabled"
+    );
+
+    tokio::time::timeout(CLI_STATUS_TIMEOUT, ops.disable())
+        .await
+        .expect("disable waited on the arming it exists to give up on")
+        .expect("an arming is something to disable");
+    assert!(cancel.is_cancelled(), "the arming was not told to stop");
+    assert!(
+        !events
+            .events()
+            .iter()
+            .any(|e| matches!(e, AppEvent::RemoteDisabled)),
+        "no ticket was ever handed out, so nothing is announced as gone: {:?}",
+        events.events()
+    );
+}
+
+/// A second `enable` during an arming is refused, and told which of the two
+/// busy states it met — waiting is the thing to do, not disabling.
+#[tokio::test]
+async fn a_second_enable_while_one_is_arming_says_a_ticket_is_on_its_way() {
+    let (_, ops, _) = test_remote_ops().await;
+    let _cancel = ops
+        .live
+        .lock()
+        .await
+        .reserve(1)
+        .expect("nothing holds the serve side");
+
+    let err = ops
+        .enable(EnableRequest::default())
+        .await
+        .expect_err("one arming at a time");
+    let GuiError::Conflict(message) = err else {
+        panic!("an arming already under way is a conflict: {err:?}");
+    };
+    assert!(message.contains("already being enabled"), "{message}");
 }

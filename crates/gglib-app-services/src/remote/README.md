@@ -18,9 +18,16 @@ type.
 
 ```text
 remote/
-  mod.rs            — RemoteOps: enable / disable / status, and the rotation poll
+  mod.rs            — RemoteOps: the type, the two slots, and status
+  serve.rs          — RemoteOps: enable / disable — this machine as the desktop
   connect.rs        — RemoteOps: connect / disconnect / kill_remote — this
                       machine as the laptop
+  connect_dial.rs   — the span of connect with the slot reserved and the
+                      lock released: the dial, the pairing, the install
+  connect_watch.rs  — following one connection until it is over, and the
+                      dwell that decides when an idle peer is gone
+  slot.rs           — the one-at-a-time slot each side occupies: reserve,
+                      install, release, take
   stored_pairing.rs — the record settings keep of the machine this one
                       paired with: reading it, writing it, what a dial that
                       has come up owes it, and what a write that fails after
@@ -99,6 +106,58 @@ code. It also holds the `/mcp` grant for tunnelled requests — off unless
 `enable` was asked for it — and counts tunnelled requests for the status
 surface. Its `Debug` reports state and never a code or a key.
 
+# One at a time, without holding the lock
+
+Both sides are "there may be exactly one, and building it is slow": a dial
+that waits out an unreachable peer, an `enable` that waits five seconds for
+the settings cache and ten for a relay. Both held their slot's mutex for the
+whole of it, and `status` reads both — so the command someone runs to find
+out what is happening was the one that could not answer while anything was
+happening, and `disconnect`, whose whole job is ending a hanging connect,
+queued behind the connect it was cancelling. `tokio::sync::Mutex` is
+FIFO-fair; there is no jumping the line.
+
+`slot.rs` is the answer. A caller reserves the slot, drops the lock, does the
+slow work, and comes back to install. A teardown that lands in between takes
+the slot and cancels the reservation's token, so the slow work stops instead
+of finishing for nobody — and the install says so rather than binding a port
+behind a command that already reported success.
+
+The one thing that may *not* be done after the lock is given back is arming
+the gateway. `enable` installs the tunnel and arms its pairing code under one
+hold: dropping the guard wakes whatever `disable` is queued behind it, and on
+a multi-thread runtime that `disable` runs alongside the lines that follow —
+resetting the session and taking the tunnel down while the arming is still on
+its way. A code armed after that reset stays live for `PAIRING_TTL` on a
+session that is gone, and `POST /v1/remote/pair` is outside the proxy's
+bearer group. So a reservation is never a session: a `disable` finds either a
+reservation with nothing armed, or a tunnel with its code. Both writes are
+in-memory, which is what lets them share the guard at all — the rule is that
+nothing *slow* is held across it.
+
+# When a connection is over
+
+`Closed` is modelpipe's verdict and needs no policy. `Idle` is not one: on
+the connect side it means the peer went away and modelpipe is re-dialling,
+and it says plainly that it cannot tell a sleeping laptop from a dead one.
+Nothing here acted on it at all, so a peer that went away left `remote
+status` reporting "Connected" and every request answered 502, indefinitely.
+
+`connect_watch.rs` holds the policy: a clock starts on the first `Idle` — the
+first, not each, or a re-dial that keeps finding nobody would keep buying
+time — and ninety seconds later the connection is taken down and announced.
+Ninety because modelpipe's re-dial backoff tops out at thirty and a dial at a
+machine that is off takes iroh about thirty more, so one full cycle is around
+a minute.
+
+Deciding is only half of it. `conclude` is the other half: the slot cleared,
+the local port dropped — modelpipe is still re-dialling behind it, so leaving
+it up means a bound port answering 502 for a machine nobody is waiting for —
+and the loss announced, once. Both halves take what they act on through a
+closure, and for the same reason: a `ConnectHandle` needs an iroh endpoint
+and a peer that answers, so anything reachable only through one is a policy
+no test can drive.
+
 <!-- module-docs:end -->
 
 <details>
@@ -108,7 +167,12 @@ surface. Its `Debug` reports state and never a code or a key.
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`connect.rs`](connect.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-coverage.json) |
+| [`connect_dial.rs`](connect_dial.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-coverage.json) |
+| [`connect_race_tests.rs`](connect_race_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-coverage.json) |
+| [`connect_teardown_tests.rs`](connect_teardown_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_teardown_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_teardown_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_teardown_tests-coverage.json) |
 | [`connect_tests.rs`](connect_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_tests-coverage.json) |
+| [`connect_watch.rs`](connect_watch.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch-coverage.json) |
+| [`connect_watch_tests.rs`](connect_watch_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_watch_tests-coverage.json) |
 | [`gateway.rs`](gateway.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-coverage.json) |
 | [`gateway_tests.rs`](gateway_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-coverage.json) |
 | [`key.rs`](key.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-coverage.json) |
@@ -118,6 +182,9 @@ surface. Its `Debug` reports state and never a code or a key.
 | [`pairing_tests.rs`](pairing_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-coverage.json) |
 | [`redeem.rs`](redeem.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-coverage.json) |
 | [`rotation.rs`](rotation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-coverage.json) |
+| [`serve.rs`](serve.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-serve-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-serve-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-serve-coverage.json) |
+| [`slot.rs`](slot.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot-coverage.json) |
+| [`slot_tests.rs`](slot_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-slot_tests-coverage.json) |
 | [`stored_pairing.rs`](stored_pairing.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing-coverage.json) |
 | [`stored_pairing_tests.rs`](stored_pairing_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-stored_pairing_tests-coverage.json) |
 | [`types.rs`](types.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-types-coverage.json) |
