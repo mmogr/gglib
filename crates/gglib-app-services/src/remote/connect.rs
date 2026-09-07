@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use gglib_core::SettingsUpdate;
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use modelpipe::{ConnectError, ConnectHandle, PipeStatus};
@@ -20,6 +19,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use super::pairing_string::{self, Parsed};
+use super::stored_pairing::{names_the_same_machine, settle};
 use super::types::{ConnectRequest, ConnectSnapshot, Connected};
 use super::{RemoteOps, redeem};
 use crate::error::GuiError;
@@ -41,16 +41,22 @@ impl RemoteOps {
     /// Reach another machine: bind a loopback port here that is its proxy.
     ///
     /// With a `<ticket>-<code>` pairing, redeems the code through the tunnel
-    /// for the far machine's API key and stores it as `remote_api_key`
-    /// alongside the ticket, so later sessions need only the ticket — or
-    /// nothing, since the ticket is remembered too.
+    /// for the far machine's API key and stores the two as one
+    /// [`RemotePairing`](gglib_core::RemotePairing), so later sessions need
+    /// only the ticket — or nothing, since the ticket is part of the record.
+    ///
+    /// Without a code, the dial is admitted only when the stored pairing
+    /// names *that* machine. "Some key is stored" was the old test, and it
+    /// admitted a bare ticket for machine B on the strength of machine A's
+    /// key: connected, `status` reporting a pairing, and every request 401.
     ///
     /// # Errors
     ///
     /// `Conflict` when already connected; `ValidationFailed` for a pairing
-    /// string that does not parse, a bare ticket when no key is stored, or a
-    /// code the far side refuses; `Unavailable` when the peer cannot be
-    /// reached; `Internal` when settings cannot be written.
+    /// string that does not parse, a bare ticket for a machine this one
+    /// holds no key for, or a code the far side refuses; `Unavailable` when
+    /// the peer cannot be reached; `Internal` when settings cannot be
+    /// written.
     pub async fn connect(&self, request: ConnectRequest) -> Result<Connected, GuiError> {
         let mut live = self.live_connect.lock().await;
         if live.is_some() {
@@ -62,22 +68,25 @@ impl RemoteOps {
         let Parsed { ticket, code } = match request.pairing.as_deref() {
             Some(pairing) => pairing_string::parse(pairing).map_err(GuiError::ValidationFailed)?,
             None => {
-                let stored = settings.remote_last_ticket.as_deref().ok_or_else(|| {
+                let stored = settings.remote_pairing.as_ref().ok_or_else(|| {
                     GuiError::ValidationFailed(
                         "this machine has not connected to a remote before — give it the pairing \
                          string `gglib remote enable` showed there"
                             .to_owned(),
                     )
                 })?;
-                pairing_string::parse(stored).map_err(GuiError::ValidationFailed)?
+                pairing_string::parse(&stored.ticket).map_err(GuiError::ValidationFailed)?
             }
         };
-        let stored_key = settings
-            .remote_api_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|k| !k.is_empty());
-        if code.is_none() && stored_key.is_none() {
+        // The key this machine holds *for the machine about to be dialled*,
+        // which is the only key that means anything: one is issued by the
+        // machine whose code was redeemed, so presenting it to any other is
+        // a 401 dressed up as a working pairing.
+        let held = settings
+            .remote_pairing
+            .as_ref()
+            .filter(|stored| names_the_same_machine(stored, &ticket));
+        if code.is_none() && held.is_none() {
             return Err(GuiError::ValidationFailed(
                 "this machine holds no key for that remote — pair once with the full \
                  `<ticket>-<code>` string from `gglib remote enable`"
@@ -99,23 +108,21 @@ impl RemoteOps {
         );
         let base_url = handle.base_url();
 
-        let paired = match code {
-            Some(code) => {
-                let key = match redeem::redeem(&base_url, &code).await {
-                    Ok(key) => key,
-                    Err(e) => {
-                        handle.shutdown_timeout(Duration::from_secs(1)).await;
-                        return Err(e);
-                    }
-                };
-                self.remember(Some(key), ticket.to_string()).await?;
-                true
-            }
-            None => {
-                if settings.remote_last_ticket.as_deref() != Some(&ticket.to_string()) {
-                    self.remember(None, ticket.to_string()).await?;
-                }
-                false
+        // What the record owes this dial is `settle`'s, in
+        // `stored_pairing.rs`, and it is there rather than here so that it
+        // can be driven: nothing below `modelpipe::connect` is reachable in
+        // a test, and every arm of this decision is below it. The one thing
+        // that stays here is the port, which no arm may leave bound behind
+        // a `connect` that reported a failure.
+        let paired = match settle(&self.core, &ticket, held, code, async |code| {
+            redeem::redeem(&base_url, &code).await
+        })
+        .await
+        {
+            Ok(paired) => paired,
+            Err(e) => {
+                handle.shutdown_timeout(Duration::from_secs(1)).await;
+                return Err(e);
             }
         };
 
@@ -190,8 +197,8 @@ impl RemoteOps {
         let key = self
             .settings()
             .await?
-            .remote_api_key
-            .filter(|k| !k.trim().is_empty())
+            .remote_pairing
+            .map(|stored| stored.api_key)
             .ok_or_else(|| {
                 GuiError::ValidationFailed(
                     "this machine holds no key for the remote, so it cannot stop it".to_owned(),
@@ -220,21 +227,6 @@ impl RemoteOps {
             .get()
             .await
             .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))
-    }
-
-    /// Persist what a connection taught us: the ticket always, the key when
-    /// a code was redeemed for one.
-    async fn remember(&self, key: Option<String>, ticket: String) -> Result<(), GuiError> {
-        self.core
-            .settings()
-            .update(SettingsUpdate {
-                remote_api_key: key.map(Some),
-                remote_last_ticket: Some(Some(ticket)),
-                ..SettingsUpdate::default()
-            })
-            .await
-            .map(drop)
-            .map_err(|e| GuiError::Internal(format!("could not store the pairing: {e}")))
     }
 }
 

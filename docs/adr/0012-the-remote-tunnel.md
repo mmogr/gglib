@@ -237,7 +237,9 @@ route sits **outside** the bearer-guarded group in
 exists to hand out — and **inside** the host allowlist, which is applied
 outside the router and therefore covers it. The response carries the real
 `proxy_api_key` over the encrypted hop, and the laptop stores it in its own
-settings as `remote_api_key`. Every failure — wrong code, expired code, spent
+settings as `remote_pairing`, bound to the ticket of the machine that issued
+it — a key that outlives the machine it names is a 401 dressed up as a
+pairing. Every failure — wrong code, expired code, spent
 code, malformed body — is a flat 401 `invalid_pairing_code`, which tells an
 attacker only that they did not get in.
 
@@ -362,7 +364,8 @@ port beside that machine's local proxy. Both ends of this feature are daemon
 concerns for the same reason.
 
 That listener does **not** inject `Authorization`. gglib's own `q` and
-`chat --remote` attach the stored `remote_api_key` themselves, and a
+`chat --remote` attach the key from the stored `remote_pairing` themselves,
+and a
 third-party client pointed at the port supplies the key as its API key, which
 is the ordinary OpenAI-compatible arrangement. A listener that injected
 credentials would make every process on the laptop an authenticated client of

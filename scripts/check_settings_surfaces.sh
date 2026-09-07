@@ -74,8 +74,7 @@ declare -A EXEMPT=(
   [inference_defaults]="edited through \`gglib config inference\` and the model inspector"
   [inference_profiles]="edited through \`gglib config profile\` and the profile editor"
   [title_generation_prompt]="edited through the chat UI's title settings"
-  [remote_api_key]="received by \`gglib remote connect\` when a pairing code is redeemed, not chosen"
-  [remote_last_ticket]="recorded by \`gglib remote connect\`, not chosen"
+  [remote_pairing]="the ticket and key \`gglib remote connect\` receives when a pairing code is redeemed, not chosen"
 )
 
 echo "=== Checking every Settings field has a surface ==="

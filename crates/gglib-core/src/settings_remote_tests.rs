@@ -1,16 +1,32 @@
-//! Tests for the remote tunnel's two settings fields (ADR 0012).
+//! Tests for the remote tunnel's stored pairing (ADR 0012).
 //!
 //! Split out via `#[path]`, like `settings_tests.rs`, and separately from it
 //! because that file is at its budget.
 
 use super::*;
 
-/// The connect side's stored pairing follows the proxy key's rule: a blank is
-/// refused, a cleared field is how the pairing is forgotten.
+/// A pairing as `gglib remote connect` leaves it.
+fn pairing() -> RemotePairing {
+    RemotePairing {
+        ticket: "pipeabc".to_owned(),
+        api_key: "k".to_owned(),
+    }
+}
+
+/// Each half of the stored pairing follows the proxy key's rule: a blank is
+/// refused, and clearing the whole record is how the pairing is forgotten.
+///
+/// Blank is worth refusing on the ticket too, not only on the key. `connect`
+/// reads the ticket as the address to dial and the name of the machine whose
+/// key it holds, so a blank one would dial nothing while still claiming this
+/// machine is paired with something.
 #[test]
-fn a_blank_remote_credential_is_refused_and_a_cleared_one_is_fine() {
+fn a_blank_half_of_a_pairing_is_refused_and_a_cleared_record_is_fine() {
     let blank_key = Settings {
-        remote_api_key: Some("  ".to_owned()),
+        remote_pairing: Some(RemotePairing {
+            api_key: "  ".to_owned(),
+            ..pairing()
+        }),
         ..Default::default()
     };
     assert!(matches!(
@@ -19,7 +35,10 @@ fn a_blank_remote_credential_is_refused_and_a_cleared_one_is_fine() {
     ));
 
     let blank_ticket = Settings {
-        remote_last_ticket: Some(String::new()),
+        remote_pairing: Some(RemotePairing {
+            ticket: String::new(),
+            ..pairing()
+        }),
         ..Default::default()
     };
     assert!(matches!(
@@ -28,37 +47,62 @@ fn a_blank_remote_credential_is_refused_and_a_cleared_one_is_fine() {
     ));
 
     let mut settings = Settings {
-        remote_api_key: Some("k".to_owned()),
-        remote_last_ticket: Some("pipeabc".to_owned()),
+        remote_pairing: Some(pairing()),
         ..Default::default()
     };
     assert!(validate_settings(&settings).is_ok());
     settings.merge(&SettingsUpdate {
-        remote_api_key: Some(None),
-        remote_last_ticket: Some(None),
+        remote_pairing: Some(None),
         ..SettingsUpdate::default()
     });
-    assert_eq!(settings.remote_api_key, None);
-    assert_eq!(settings.remote_last_ticket, None);
+    assert_eq!(settings.remote_pairing, None);
     assert!(validate_settings(&settings).is_ok());
 }
 
 /// A pairing written by `connect` survives the round trip through the
-/// key-value store's JSON, and an older database without the rows loads as
-/// "never paired".
+/// key-value store's JSON as one row, and a database that has never paired
+/// loads as "never paired".
 #[test]
-fn the_remote_pairing_round_trips_and_defaults_absent() {
+fn the_stored_pairing_round_trips_as_one_value_and_defaults_absent() {
     let settings = Settings {
-        remote_api_key: Some("key".to_owned()),
-        remote_last_ticket: Some("pipeabc".to_owned()),
+        remote_pairing: Some(pairing()),
         ..Default::default()
     };
     let json = serde_json::to_string(&settings).unwrap();
     let back: Settings = serde_json::from_str(&json).unwrap();
-    assert_eq!(back.remote_api_key.as_deref(), Some("key"));
-    assert_eq!(back.remote_last_ticket.as_deref(), Some("pipeabc"));
+    assert_eq!(back.remote_pairing, Some(pairing()));
 
     let old: Settings = serde_json::from_str(r#"{"proxy_port":8080}"#).unwrap();
-    assert_eq!(old.remote_api_key, None);
-    assert_eq!(old.remote_last_ticket, None);
+    assert_eq!(old.remote_pairing, None);
+}
+
+/// The rows a build before the binding wrote are **ignored**, not folded in.
+///
+/// The two carried no evidence about each other — that is the whole defect —
+/// so reading them as a pairing would restore exactly the state this field
+/// exists to make unrepresentable: a key that belongs to whichever machine
+/// happens to be named beside it. A machine upgrading over such a database
+/// loads as never paired and pairs again, which the ticket's own staleness
+/// already asked of it.
+///
+/// An alias would be the reflex, and is a trap here rather than a shortcut:
+/// serde treats an alias as the same field, so the first save after the
+/// upgrade — which writes `remote_pairing` and cannot delete a row no
+/// current field names — leaves a database whose next load fails outright
+/// with `duplicate field`.
+#[test]
+fn the_rows_written_before_the_pairing_was_one_record_are_ignored() {
+    let legacy: Settings = serde_json::from_str(
+        r#"{"proxy_port":8080,"remote_api_key":"machine-a-key","remote_last_ticket":"pipeb"}"#,
+    )
+    .expect("a settings row this build no longer names must not fail the load");
+
+    assert_eq!(legacy.remote_pairing, None);
+    assert_eq!(legacy.proxy_port, Some(8080));
+    assert!(
+        !serde_json::to_string(&legacy)
+            .unwrap()
+            .contains("machine-a-key"),
+        "and nothing carries the orphaned key back out"
+    );
 }

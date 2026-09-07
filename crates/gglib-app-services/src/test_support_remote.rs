@@ -5,14 +5,67 @@
 //! crosses the line *joins* the baseline — the one thing the ratchet exists
 //! to stop. Splitting is the house answer to a file at its budget, the same
 //! answer `gglib-core`'s `settings_remote_tests.rs` is.
+//!
+//! It also carries the machines the tests name, because `connect_tests.rs`
+//! and `lifecycle_tests.rs` name the same ones and a second copy of a
+//! ticket is a second thing to keep true. They are modelpipe's own normative
+//! vectors from `docs/ticket-format-v0.md`, which ship in its published
+//! tarball and are asserted identical by three implementations on every one
+//! of its CI runs.
+//! `ticket_vectors.py` has no `--update` flag, deliberately, so these
+//! strings cannot drift under us.
 
 use std::sync::{Arc, Mutex};
 
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::services::AppCore;
+use gglib_core::{RemotePairing, SettingsUpdate};
 
 use crate::test_support::test_core_and_proxy;
+
+/// Vector 1: the minimal v0 ticket, no transport addresses.
+pub(crate) const TICKET_A: &str =
+    "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na";
+
+/// The first six bytes of vector 1's endpoint id, which is what a
+/// fingerprint shows.
+pub(crate) const FINGERPRINT_A: &str = "d75a980182b1";
+
+/// A *second* machine: the same minimal shape as vector 1 over the public
+/// key from RFC 8032 §7.1 TEST 2, so the two tickets name genuinely
+/// different endpoints rather than one endpoint at two addresses. Every
+/// published vector shares TEST 1's key, so no pair of them could say this.
+pub(crate) const TICKET_B: &str =
+    "pipeaa6uaf6d5bbyswusw4fkoti3p26jzgbmz4xmjfumydgvl4jk6rtayaaa2e4g6hq";
+
+/// Vector 1's key with vector 3's address set: one IPv6 address in the
+/// documentation prefix (RFC 3849), which routes nowhere anywhere. The only
+/// ticket here that is ever dialled.
+pub(crate) const TICKET_UNREACHABLE: &str = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaicaajcaainxaaaaaaaaaaaaaaaaaaach4qaabstehw";
+
+/// The same string again, under the name the pairing record cares about:
+/// vector 1's endpoint key at an address vector 1 does not carry, which is
+/// machine A having moved. Two names for one constant rather than two
+/// constants, so nothing can drift between them — and a second name because
+/// "unreachable" is the wrong word entirely where the claim is that a
+/// codeless dial carries the key across an address change.
+pub(crate) const TICKET_A_MOVED: &str = TICKET_UNREACHABLE;
+
+pub(crate) const KEY_A: &str = "sk-zzq-the-key-machine-a-handed-over";
+pub(crate) const KEY_B: &str = "sk-zzq-the-key-machine-b-handed-over";
+
+/// The pairing `connect` writes once a code has been redeemed, as a
+/// settings update.
+pub(crate) fn paired_with(ticket: &str, api_key: &str) -> SettingsUpdate {
+    SettingsUpdate {
+        remote_pairing: Some(Some(RemotePairing {
+            ticket: ticket.to_owned(),
+            api_key: api_key.to_owned(),
+        })),
+        ..SettingsUpdate::default()
+    }
+}
 
 /// An emitter that keeps what it was told, in the order it was told.
 ///

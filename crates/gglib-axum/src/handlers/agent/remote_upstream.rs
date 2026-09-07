@@ -99,8 +99,8 @@ pub(super) async fn resolve(
         .get()
         .await
         .map_err(|e| HttpError::Internal(format!("could not read settings: {e}")))?
-        .remote_api_key
-        .filter(|k| !k.trim().is_empty())
+        .remote_pairing
+        .map(|stored| stored.api_key)
         .ok_or_else(|| {
             HttpError::Conflict(
                 "connected to a remote machine, but this one holds no key for it — pair again \
