@@ -125,13 +125,14 @@ not found` from the other end. That name is remembered across a
 disconnection — the usual reconnection is the same desktop again — but it
 is only ever sent while the box is on.
 
-> **Getting a chat to use it on, as of 2026-09-07.** The GUI's chat screen
-> only opens on top of a local model already running here, and a turn is
-> refused before it is sent — `No server selected. Please serve a model
-> first.` — unless a local server is selected, though the remote path never
-> consults that port. So the box redirects a chat you already have; it
-> cannot give you one on a laptop serving nothing of its own. Serve any
-> local model to reach the screen; reaching it without one is separate work.
+*Chat on that machine*, under the model field, opens the chat screen against
+the desktop and ticks the box as it goes. It is how a laptop with no models
+of its own gets there at all: every other route into that screen starts from
+a model served here, so without it the box could be ticked and the model
+named with nowhere to type. That chat has no Console tab — the log, the port
+and the uptime belong to a process on the desktop — and closing it leaves
+both the desktop's server and the tunnel up, unlike closing a local chat,
+which stops the server it was talking to.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API

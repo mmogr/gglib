@@ -32,7 +32,8 @@ interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
   activeConversationId: number | null;
   isServerConnected: boolean;
-  serverPort: number;
+  /** Absent for a chat with another machine: no local server to title with. */
+  serverPort?: number;
   titleGenerationPrompt: string;
   onRenameConversation: (title: string) => Promise<void>;
   onClearConversation: () => Promise<void>;

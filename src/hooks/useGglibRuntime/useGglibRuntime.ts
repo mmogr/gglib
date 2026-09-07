@@ -140,8 +140,16 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     userMessage: GglibMessage,
     extraMeta: Partial<import('../../types/messages').GglibMessageCustom> = {},
   ) => {
-    // Validate server selection
-    if (!selectedServerPort) {
+    // Where this turn is going, read once: the guard below and the request
+    // body must agree about it, and two reads of a live store can disagree.
+    const destination = askTheRemote();
+
+    // Validate server selection. A remote turn has no local server to
+    // select — the daemon takes the tunnel's port and the stored key, and
+    // `selectedServerPort` travels without being consulted — so requiring
+    // one here is what made the chat screen unusable on a machine that
+    // serves nothing.
+    if (!selectedServerPort && !destination.remote) {
       const error = new Error('No server selected. Please serve a model first.');
       onError?.(error);
       return;
@@ -195,7 +203,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         // change between turns, and a preference for a machine that has
         // since disconnected is already cleared by the registry. Spread as a
         // pair so the model named for that machine cannot be left behind.
-        ...askTheRemote(),
+        ...destination,
         onSystemWarning,
       });
     } catch (error) {

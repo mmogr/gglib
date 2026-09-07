@@ -1,7 +1,7 @@
 import { FC } from 'react';
 import { Plus, X } from 'lucide-react';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
-import { Tabs } from '../ui/Tabs';
+import { Tabs, TabItem } from '../ui/Tabs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
@@ -25,6 +25,12 @@ interface ConversationListPanelProps {
   onClose: () => void;
   activeTab: ChatPageTabId;
   onTabChange: (tab: ChatPageTabId) => void;
+  /**
+   * Which views this chat actually has. Defaults to both; a chat with
+   * another machine passes the chat-only set, because its console lives on
+   * that machine.
+   */
+  tabs?: TabItem<ChatPageTabId>[];
 }
 
 const formatRelativeTime = (iso: string) => {
@@ -58,6 +64,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
   onClose,
   activeTab,
   onTabChange,
+  tabs = CHAT_PAGE_TABS,
 }) => {
   const filteredConversations = searchQuery.trim()
     ? conversations.filter(c => 
@@ -71,7 +78,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
         {/* View Tabs */}
         <div className="mb-md">
           <Tabs<ChatPageTabId>
-            tabs={CHAT_PAGE_TABS}
+            tabs={tabs}
             activeId={activeTab}
             onChange={onTabChange}
             aria-label="Chat views"

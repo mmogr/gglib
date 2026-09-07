@@ -31,7 +31,12 @@ describe('remoteRegistry', () => {
   beforeEach(() => resetRemoteState());
 
   it('starts with no status and no chat preference', () => {
-    expect(getRemoteState()).toEqual({ status: null, useForChat: false, chatModel: '' });
+    expect(getRemoteState()).toEqual({
+      status: null,
+      useForChat: false,
+      chatModel: '',
+      chatRequestedAt: null,
+    });
   });
 
   it('remote_enabled turns the serve side on with the fingerprint and a live code', () => {
