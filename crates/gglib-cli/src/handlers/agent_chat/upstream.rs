@@ -10,6 +10,7 @@
 
 use anyhow::{Context as _, Result, anyhow};
 use gglib_core::server_config::parse_ctx_size_flag;
+use gglib_runtime::FarMachine;
 
 use super::config::{AgentSessionParams, BannerInfo};
 use crate::bootstrap::CliContext;
@@ -21,8 +22,9 @@ use gglib_core::domain::InferenceConfig;
 pub(crate) struct Upstream {
     /// `http://127.0.0.1:<port>`, without the `/v1` — the adapter adds it.
     pub base_url: String,
-    /// The far machine's key on the remote path; nothing for a local server.
-    pub bearer: Option<String>,
+    /// The far machine on the remote path — its key and the fingerprint it
+    /// is known by; nothing for a local server.
+    pub far_machine: Option<FarMachine>,
 }
 
 /// Resolve the upstream for this session.
@@ -37,7 +39,7 @@ pub(crate) async fn resolve(
     let port = resolve_port(ctx, params, banner).await?;
     Ok(Upstream {
         base_url: format!("http://127.0.0.1:{port}"),
-        bearer: None,
+        far_machine: None,
     })
 }
 
@@ -89,7 +91,13 @@ async fn remote(ctx: &CliContext, banner: &BannerInfo) -> Result<Upstream> {
 
     Ok(Upstream {
         base_url: server_root(&connection.base_url),
-        bearer: Some(key),
+        // The banner above has just named this machine to the user; the key
+        // carries that name onward so a later refusal of it can name the same
+        // machine, which by then nothing downstream could look up.
+        far_machine: Some(FarMachine {
+            key,
+            fingerprint: connection.ticket_fingerprint,
+        }),
     })
 }
 

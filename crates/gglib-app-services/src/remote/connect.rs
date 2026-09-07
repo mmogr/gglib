@@ -176,7 +176,7 @@ impl RemoteOps {
     /// stored or the far side refuses it; `Unavailable` when the request did
     /// not get through.
     pub async fn kill_remote(&self) -> Result<(), GuiError> {
-        let base_url = {
+        let (base_url, fingerprint) = {
             let live = self.live_connect.lock().await;
             // A dial in flight is not a remote that can be stopped: there
             // is no port to send the shutdown through yet.
@@ -185,7 +185,7 @@ impl RemoteOps {
                     "not connected to a remote — `gglib remote connect` first".to_owned(),
                 ));
             };
-            live.handle.base_url()
+            (live.handle.base_url(), live.ticket_fingerprint.clone())
         };
         let key = self
             .settings()
@@ -197,7 +197,7 @@ impl RemoteOps {
                     "this machine holds no key for the remote, so it cannot stop it".to_owned(),
                 )
             })?;
-        redeem::kill(&base_url, &key).await?;
+        redeem::kill(&base_url, &key, &fingerprint).await?;
         // The far side is going away; take this side down before its
         // watcher reports the closed pipe as a surprise.
         self.disconnect().await

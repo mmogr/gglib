@@ -109,7 +109,7 @@ pub(crate) async fn chat(
         Some(state.proxy.agent_metrics()),
         Some(retry_observer),
         sampling,
-        upstream.bearer,
+        upstream.far_machine,
     );
 
     let messages = req.messages;

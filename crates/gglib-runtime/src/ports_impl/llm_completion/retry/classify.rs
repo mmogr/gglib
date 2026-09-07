@@ -48,11 +48,15 @@ pub(super) enum Failure {
         retry_after: Option<Duration>,
         /// Human-readable cause, for logs and the user-facing retry notice.
         reason: String,
+        /// The body's own `code` — see [`Failure::code`].
+        code: Option<String>,
     },
     /// Repeating the request would fail the same way.
     Terminal {
         /// Human-readable cause.
         reason: String,
+        /// The body's own `code` — see [`Failure::code`].
+        code: Option<String>,
     },
 }
 
@@ -60,7 +64,28 @@ impl Failure {
     /// The cause, whichever variant this is.
     pub(super) fn reason(&self) -> &str {
         match self {
-            Self::Retryable { reason, .. } | Self::Terminal { reason } => reason,
+            Self::Retryable { reason, .. } | Self::Terminal { reason, .. } => reason,
+        }
+    }
+
+    /// The upstream's own machine-readable `code`, when its body wrote one.
+    ///
+    /// Carried out beside [`reason`](Self::reason) rather than recovered from
+    /// it. A caller that wants to *act* on one specific condition — rather
+    /// than merely report it — needs the term the body's author wrote, and
+    /// the contract these module docs open with forbids reading it back out
+    /// of the rendered sentence. [`describe`] folds the discriminant, the
+    /// status and the message into one string precisely so a person can read
+    /// it; re-parsing that string is exactly the text matching ruled out
+    /// above.
+    ///
+    /// Both variants carry it because it is a fact about the body, not about
+    /// the verdict: the same parse produces it either way. Only the terminal
+    /// path reads it today, and putting it on that variant alone would encode
+    /// the current reader rather than the shape of the data.
+    pub(super) fn code(&self) -> Option<&str> {
+        match self {
+            Self::Retryable { code, .. } | Self::Terminal { code, .. } => code.as_deref(),
         }
     }
 }
@@ -79,14 +104,20 @@ pub(super) async fn classify(response: Response, now: DateTime<Utc>) -> Result<R
     let retry_after = parse_retry_after(response.headers(), now);
     let body = response.text().await.unwrap_or_default();
 
-    let (retryable, reason) = match serde_json::from_str::<ErrorResponse>(&body) {
+    // A body that is not this shape at all has no `code` to carry: whatever
+    // the truncated text holds, nothing structured was parsed out of it, and
+    // inventing one from the status would be the text matching these docs rule
+    // out wearing a different hat.
+    let (retryable, reason, code) = match serde_json::from_str::<ErrorResponse>(&body) {
         Ok(err) => (
             error_is_retryable(status, &err.error),
             describe(status, &err.error),
+            err.error.code,
         ),
         Err(_) => (
             status_is_retryable(status),
             format!("{status}: {}", truncate(&body)),
+            None,
         ),
     };
 
@@ -94,9 +125,10 @@ pub(super) async fn classify(response: Response, now: DateTime<Utc>) -> Result<R
         Failure::Retryable {
             retry_after,
             reason,
+            code,
         }
     } else {
-        Failure::Terminal { reason }
+        Failure::Terminal { reason, code }
     })
 }
 

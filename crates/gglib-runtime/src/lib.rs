@@ -39,7 +39,7 @@ pub use process::{
 };
 
 // Re-export port implementations for runtime adapters
-pub use ports_impl::{CatalogPortImpl, LlmCompletionAdapter, RuntimePortImpl};
+pub use ports_impl::{CatalogPortImpl, FarMachine, LlmCompletionAdapter, RuntimePortImpl};
 
 // Re-export composition root factory
 pub use compose::{compose_agent_loop, compose_agent_loop_with_sampling};

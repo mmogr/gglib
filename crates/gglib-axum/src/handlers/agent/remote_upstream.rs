@@ -10,6 +10,7 @@
 //! runs its own pipeline over its own models.
 
 use gglib_core::request_pipeline::{self, ModelContext};
+use gglib_runtime::FarMachine;
 
 use super::AgentChatRequest;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
@@ -18,8 +19,9 @@ use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppSta
 pub(super) struct Upstream {
     /// `http://127.0.0.1:<port>`, without the `/v1`.
     pub base_url: String,
-    /// The far machine's key on the remote path; nothing locally.
-    pub bearer: Option<String>,
+    /// The far machine on the remote path — its key and the fingerprint it
+    /// is known by; nothing locally.
+    pub far_machine: Option<FarMachine>,
     /// Resolved locally; passthrough for the remote, whose proxy resolves.
     pub model_context: ModelContext,
     /// The name that goes in the body's `model` field.
@@ -75,7 +77,7 @@ pub(super) async fn resolve(
             request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
         return Ok(Upstream {
             base_url: format!("http://127.0.0.1:{}", req.port),
-            bearer: None,
+            far_machine: None,
             model_context,
             model: req.model.clone(),
         });
@@ -110,7 +112,13 @@ pub(super) async fn resolve(
         })?;
     Ok(Upstream {
         base_url: format!("http://127.0.0.1:{}", connection.port),
-        bearer: Some(key),
+        // The fingerprint travels with the key because only this function
+        // knows both: the request that fails on a rotated key comes back to
+        // the adapter, which by then has no way to ask who was asked.
+        far_machine: Some(FarMachine {
+            key,
+            fingerprint: connection.ticket_fingerprint,
+        }),
         model_context: ModelContext::passthrough(),
         model: Some(model),
     })
