@@ -75,12 +75,17 @@ pub(super) async fn redeem(
 /// Stop the far daemon: `POST /v1/proxy/shutdown` with the confirmation word
 /// the route requires (ADR 0012, decision 7). A one-way door.
 ///
+/// `fingerprint` names the machine being stopped, for the one answer where
+/// which machine it was is the whole point: a refused key. It is the paired
+/// ticket's fingerprint, the name `gglib remote status` and the connect
+/// confirmation already print.
+///
 /// # Errors
 ///
 /// `ValidationFailed` when the stored key is refused, `Conflict` when the
 /// far proxy is not running under a daemon, `Unavailable` when the request
 /// did not get through.
-pub(super) async fn kill(base_url: &str, api_key: &str) -> Result<(), GuiError> {
+pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Result<(), GuiError> {
     let client = client()?;
     let response = client
         .post(format!("{base_url}/proxy/shutdown"))
@@ -96,11 +101,15 @@ pub(super) async fn kill(base_url: &str, api_key: &str) -> Result<(), GuiError> 
             info!("the remote daemon accepted the shutdown");
             Ok(())
         }
-        reqwest::StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(
-            "the far machine refused the stored key — its API key has changed; pair again with a \
-             fresh `gglib remote enable` there"
-                .to_owned(),
-        )),
+        // Deliberately not "its API key has changed": `connect` will dial a
+        // bare ticket for a different machine while leaving an earlier
+        // pairing's key in place, so the key can be refused by a machine
+        // whose own key never moved. The narrower claim is true in both, and
+        // is the same one the chat path's refusal makes.
+        reqwest::StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(format!(
+            "the remote machine {fingerprint} refused the stored key — it is not that machine's \
+             current API key; pair again with a fresh `gglib remote enable` there"
+        ))),
         reqwest::StatusCode::CONFLICT => Err(GuiError::Conflict(
             "the far proxy is not running under a daemon, so there is nothing to stop from here"
                 .to_owned(),
