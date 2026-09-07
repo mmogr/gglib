@@ -1,6 +1,11 @@
 import { FC, useState } from 'react';
 import { getTransport } from '../../services/transport';
-import { setRemoteChatModel, setUseRemoteForChat, useRemoteState } from '../../services/remoteRegistry';
+import {
+  requestRemoteChat,
+  setRemoteChatModel,
+  setUseRemoteForChat,
+  useRemoteState,
+} from '../../services/remoteRegistry';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { formatError } from '../../utils/errors';
@@ -29,6 +34,12 @@ interface ConnectSectionProps {
  * may not have it. Unnamed, the request would arrive there with an empty
  * model and come back `404 Model '' not found` — a real answer through a
  * working tunnel, which reads as the tunnel being broken.
+ *
+ * `Chat on that machine` is how that chat is reached. The checkbox alone was
+ * not enough: every other way into the chat screen starts from a model
+ * served here, so a laptop with no local models could say where its turns
+ * should go and then have nowhere to type them. The button turns the
+ * preference on as it opens, because opening it is the same decision.
  */
 export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
   const { status, useForChat, chatModel } = useRemoteState();
@@ -73,6 +84,14 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
     }
   };
 
+  // Both halves of one decision: the turns are routed there and the screen
+  // to type them into is put up. Setting the preference second would let the
+  // page open a chat that still pointed at a local server.
+  const handleOpenChat = () => {
+    setUseRemoteForChat(true);
+    requestRemoteChat();
+  };
+
   const handleKill = async () => {
     const ok = await confirm({
       title: 'Stop the remote daemon?',
@@ -105,9 +124,21 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
 
       {connected ? (
         <Stack gap="sm">
+          {/*
+            The fingerprint is empty until the status read lands — the connect
+            event carries a port and nothing else. Naming nobody is the honest
+            reading of that; "Connected to  (idle)." reads as a bug.
+          */}
           <p className="text-xs text-text-muted m-0">
-            Connected to <span className="font-mono text-text-secondary">{connected.ticket_fingerprint}</span>{' '}
-            ({connected.path}).
+            {connected.ticket_fingerprint ? (
+              <>
+                Connected to{' '}
+                <span className="font-mono text-text-secondary">{connected.ticket_fingerprint}</span>{' '}
+                ({connected.path}).
+              </>
+            ) : (
+              'Connected. Reading which machine…'
+            )}
           </p>
           <Stack gap="xs">
             <Label size="xs" muted>That machine, from here</Label>
@@ -138,6 +169,14 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
                 : 'As that machine spells it; “gglib model list” there is the list.'}
             </Label>
           </Stack>
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={handleOpenChat}
+            disabled={busy || !chatModel.trim()}
+          >
+            Chat on that machine
+          </Button>
           <Button variant="secondary" className="w-full" onClick={handleDisconnect} disabled={busy}>
             Disconnect
           </Button>

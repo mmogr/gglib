@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Custom hooks for the Model Control Center page's filter state, panel layout, and native menu action wiring. Keeps the page component thin by delegating all stateful logic here.
+Custom hooks for the Model Control Center page's filter state, panel layout, chat session, and native menu action wiring. Keeps the page component thin by delegating all stateful logic here.
 
 ## Key Files
 
@@ -13,6 +13,7 @@ Custom hooks for the Model Control Center page's filter state, panel layout, and
 |------|------|
 | `useMccFilters.ts` | Filter state; debounced API calls (300ms); client-side full-text search on top of server results; model addition refresh |
 | `useMccLayout.ts` | Panel resize state via `usePanelResize`; persists panel widths across sessions |
+| `useChatSession.ts` | Which chat screen is open, local or remote; opens a local one from a served model, and a remote one when the Remote panel asks |
 | `useMccMenuActions.ts` | Registers macOS menu callbacks; wires destructive operations through `ConfirmContext` |
 
 ## Filter Data Flow

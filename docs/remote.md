@@ -123,15 +123,21 @@ beside the box: the same rule as `--remote` applies for the same reason, so
 a turn sent without one is refused here rather than answered `404 Model ''
 not found` from the other end. That name is remembered across a
 disconnection — the usual reconnection is the same desktop again — but it
-is only ever sent while the box is on.
+is only ever sent while the box is on, and it belongs to the ticket it was
+typed against: connect to a *different* desktop and the field is empty
+again, because a name in one machine's catalog is not a name in another's.
+A desktop that ran `remote disable`/`enable` mints a fresh ticket and counts
+as a different one — the old ticket died with the session, so reaching it
+takes its new ticket regardless.
 
-> **Getting a chat to use it on, as of 2026-09-07.** The GUI's chat screen
-> only opens on top of a local model already running here, and a turn is
-> refused before it is sent — `No server selected. Please serve a model
-> first.` — unless a local server is selected, though the remote path never
-> consults that port. So the box redirects a chat you already have; it
-> cannot give you one on a laptop serving nothing of its own. Serve any
-> local model to reach the screen; reaching it without one is separate work.
+*Chat on that machine*, under the model field, opens the chat screen against
+the desktop and ticks the box as it goes. It is how a laptop with no models
+of its own gets there at all: every other route into that screen starts from
+a model served here, so without it the box could be ticked and the model
+named with nowhere to type. That chat has no Console tab — the log, the port
+and the uptime belong to a process on the desktop — and closing it leaves
+both the desktop's server and the tunnel up, unlike closing a local chat,
+which stops the server it was talking to.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API
@@ -164,7 +170,10 @@ there is no path that updates it — only another redemption writes it. From the
 rotation onward its requests are refused at the edge with `invalid or missing
 bearer token` — a flat refusal the tunnel writes rather than gglib, naming
 nothing, because at that point the tunnel is all that has looked at the
-request. Getting back in means `gglib remote disable` and
+request. That is still what a *third-party* client pointed at the port sees.
+gglib's own turns no longer stop there: the daemon reads the refusal's
+`invalid_api_key` code and says which machine refused, and what to do about it.
+Getting back in means `gglib remote disable` and
 `gglib remote enable` on the desktop and a fresh `<ticket>-<code>` on every
 laptop that was using the old key. The one case that survives a rotation is a
 pairing code still on screen when it lands: that code is re-armed with the new
@@ -317,7 +326,8 @@ which is the ordinary OpenAI-compatible arrangement.
 | `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote connect` again with the same string. |
 | `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
-| `invalid or missing bearer token` | The tunnel edge refused the key this laptop holds — usually because `proxy_api_key` was rotated on the desktop since you paired. Re-enable there and redeem a fresh `<ticket>-<code>`. |
+| `the remote machine <fingerprint> refused the stored key` | The key this laptop holds is not that machine's current one — usually because `proxy_api_key` was rotated there since you paired, but also if you dialled a bare ticket for a different machine. Re-enable on the desktop and redeem a fresh `<ticket>-<code>`. |
+| `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | One session at a time. `gglib remote disable`, then `enable` for a fresh ticket and code. |

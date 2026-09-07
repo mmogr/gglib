@@ -6,6 +6,10 @@
  * use-for-chat choice is a preference for a machine; when the machine goes,
  * so does the preference — otherwise the next send goes somewhere the person
  * did not mean.
+ *
+ * The model name is the same argument one step further in: it is a preference
+ * for a machine too, because it is a name in that machine's catalog and
+ * nobody else's.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -15,6 +19,7 @@ import {
   applyRemoteStatus,
   getRemoteState,
   ingestRemoteEvent,
+  requestRemoteChat,
   resetRemoteState,
   setRemoteChatModel,
   setUseRemoteForChat,
@@ -27,11 +32,20 @@ const connected = {
   path: 'direct',
 };
 
+/** A second machine: the same tunnel, a different catalog. */
+const otherMachine = { ...connected, port: 41235, ticket_fingerprint: 'ffee11223344' };
+
 describe('remoteRegistry', () => {
   beforeEach(() => resetRemoteState());
 
   it('starts with no status and no chat preference', () => {
-    expect(getRemoteState()).toEqual({ status: null, useForChat: false, chatModel: '' });
+    expect(getRemoteState()).toEqual({
+      status: null,
+      useForChat: false,
+      chatModel: '',
+      chatModelPeer: null,
+      chatRequestedAt: null,
+    });
   });
 
   it('remote_enabled turns the serve side on with the fingerprint and a live code', () => {
@@ -98,6 +112,158 @@ describe('remoteRegistry', () => {
 
     applyRemoteStatus({ ...IDLE_STATUS, connected });
     expect(getRemoteState().chatModel).toBe('qwen3');
+  });
+
+  it('the name survives the whole reconnection, event by event', () => {
+    // The same promise as above, walked the way production walks it: every
+    // event is followed by a status read, and the dial back raises
+    // `remote_connected` in between. That arm clears the routing choice, and
+    // the name has to be visibly exempt — clearing it there would empty the
+    // field on every ordinary reconnection with the suite still green.
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+
+    ingestRemoteEvent({ type: 'remote_disconnected' });
+    applyRemoteStatus(IDLE_STATUS);
+    ingestRemoteEvent({ type: 'remote_connected', port: 41234 });
+    expect(getRemoteState().chatModel).toBe('qwen3');
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    expect(getRemoteState()).toMatchObject({ chatModel: 'qwen3', chatModelPeer: '3ca82708b995' });
+  });
+
+  it('a name typed for one machine is not offered to a different one', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+
+    applyRemoteStatus(IDLE_STATUS);
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+
+    // `qwen3` is a name in the first machine's catalog. Left in the field it
+    // would be sent to a machine that never claimed it, and come back
+    // `404 Model 'qwen3' not found` from a tunnel that is working.
+    expect(getRemoteState().chatModel).toBe('');
+    expect(getRemoteState().chatModelPeer).toBe('ffee11223344');
+  });
+
+  it('a status read with nobody on the other end keeps the name', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+
+    // The production disconnection is the event *and* the status read that
+    // follows it, and it is the read that could clear the name. A
+    // disconnection is not a different machine, so it must not.
+    applyRemoteStatus(IDLE_STATUS);
+    expect(getRemoteState()).toMatchObject({ chatModel: 'qwen3', chatModelPeer: '3ca82708b995' });
+  });
+
+  it('a name typed before any connection is adopted by the machine that answers', () => {
+    // Nothing is connected, so nothing owns the name yet. Whoever answers is
+    // who it was typed for.
+    setRemoteChatModel('qwen3');
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    expect(getRemoteState().chatModel).toBe('qwen3');
+
+    // Adopted, not unowned: it is that machine's name from here on.
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+    expect(getRemoteState().chatModel).toBe('');
+  });
+
+  it('the placeholder connection names no peer, so a name typed against it is adopted', () => {
+    // The product's own path to an unattributed name, and the only one that
+    // reaches it with something typed. Dialling a second machine: the event
+    // lands, the panel flips to the connected view, and the model field is on
+    // screen before any status read has said who answered.
+    applyRemoteStatus({ ...IDLE_STATUS, connected, stored_ticket_fingerprint: '3ca82708b995' });
+    ingestRemoteEvent({ type: 'remote_disconnected' });
+    ingestRemoteEvent({ type: 'remote_connected', port: 41235 });
+    expect(getRemoteState().status?.connected?.ticket_fingerprint).toBe('');
+
+    // Typed for the machine being dialled, which is not the one whose ticket
+    // is stored. Stamping the stored fingerprint here would attribute it to
+    // the machine dialled *last*, and the status read would then wipe it.
+    setRemoteChatModel('llama3');
+    expect(getRemoteState().chatModelPeer).toBeNull();
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+    expect(getRemoteState()).toMatchObject({ chatModel: 'llama3', chatModelPeer: 'ffee11223344' });
+  });
+
+  it('a peer swap with no disconnection in between takes the routing choice too', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+    setUseRemoteForChat(true);
+    requestRemoteChat();
+
+    // An SSE gap can drop `remote_disconnected` and leave a status read as
+    // the first news of a different machine. The choice and the pending
+    // request were made about the old one, so neither transfers.
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+    expect(getRemoteState()).toMatchObject({
+      useForChat: false,
+      chatModel: '',
+      chatRequestedAt: null,
+    });
+  });
+
+  it('a dial that arrives without its disconnection still takes the routing choice', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+    setUseRemoteForChat(true);
+    requestRemoteChat();
+
+    // The other half of the SSE gap, and the likelier one: the disconnect is
+    // lost and the connect survives. `remote_connected` is only ever emitted
+    // by a fresh dial, so anything armed before it was armed for the machine
+    // that dial is replacing — including a chat screen still on its way up.
+    ingestRemoteEvent({ type: 'remote_connected', port: 41235 });
+    expect(getRemoteState()).toMatchObject({ useForChat: false, chatRequestedAt: null });
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+    expect(getRemoteState()).toMatchObject({ useForChat: false, chatModel: '' });
+  });
+
+  it('a peer swap takes the routing choice even when no model was ever named', () => {
+    // `stillAimed` reads the peer from the *status*, not from the name's
+    // attribution: the box can be ticked with the field still empty, and that
+    // choice is no more transferable than a named one.
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setUseRemoteForChat(true);
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+    expect(getRemoteState().useForChat).toBe(false);
+  });
+
+  it('the status read that replaces the placeholder keeps what was aimed at it', () => {
+    // The mirror of the case above: placeholder to real peer is the same
+    // connection learning its name, not a swap, so nothing is dropped.
+    ingestRemoteEvent({ type: 'remote_connected', port: 41234 });
+    setUseRemoteForChat(true);
+    requestRemoteChat();
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    expect(getRemoteState().useForChat).toBe(true);
+    expect(getRemoteState().chatRequestedAt).not.toBeNull();
+  });
+
+  it('a choice made during the placeholder belongs to the machine being dialled', () => {
+    // Why `stillAimed` reads the peer from the status and not from the name's
+    // attribution, which is stickier. Here the two disagree: the name is still
+    // attributed to the machine being left, while the box was ticked against
+    // the dial that is replacing it. The tick wins — the panel was showing the
+    // new connection when it was made.
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setRemoteChatModel('qwen3');
+
+    ingestRemoteEvent({ type: 'remote_connected', port: 41235 });
+    setUseRemoteForChat(true);
+    requestRemoteChat();
+
+    applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
+    expect(getRemoteState().useForChat).toBe(true);
+    expect(getRemoteState().chatRequestedAt).not.toBeNull();
+    // The name, typed for the machine being left, does not come along.
+    expect(getRemoteState().chatModel).toBe('');
   });
 
   it('a status read that shows no connection also drops the preference', () => {
