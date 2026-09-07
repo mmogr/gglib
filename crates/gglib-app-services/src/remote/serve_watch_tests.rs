@@ -84,7 +84,7 @@ async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {
 /// The proxy goes away *after* the tunnel is up. The listener cannot be
 /// re-pointed at another port, so the only honest answer is to stop
 /// fronting it — and leaving it up is worse than having no tunnel, because
-/// modelpipe 0.2.0 forwards `authorization` verbatim to whatever binds that
+/// modelpipe 0.3.0 forwards `authorization` verbatim to whatever binds that
 /// port next.
 ///
 /// This is also what pins the watcher's *start*: it takes the slot with
