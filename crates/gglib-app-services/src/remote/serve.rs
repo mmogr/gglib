@@ -14,8 +14,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use gglib_core::events::AppEvent;
 use gglib_core::access;
+use gglib_core::events::AppEvent;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};

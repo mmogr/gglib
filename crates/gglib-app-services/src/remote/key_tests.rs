@@ -154,9 +154,9 @@ async fn committing_a_key_that_was_already_stored_writes_nothing_and_waits_for_n
         std::time::Duration::from_secs(1),
         settled.commit(&core, &CancellationToken::new()),
     )
-        .await
-        .expect("a key nothing minted must not wait out the settings cache")
-        .expect("committing nothing cannot fail");
+    .await
+    .expect("a key nothing minted must not wait out the settings cache")
+    .expect("committing nothing cannot fail");
 
     assert_eq!(
         core.settings()
@@ -181,7 +181,10 @@ async fn a_cancelled_commit_stops_waiting_for_the_settings_cache() {
     let settled = settle(&proxy, &core)
         .await
         .expect("settling reads settings");
-    assert!(settled.minted, "an unset key is minted, and a mint is what waits");
+    assert!(
+        settled.minted,
+        "an unset key is minted, and a mint is what waits"
+    );
 
     let cancel = CancellationToken::new();
     cancel.cancel();
