@@ -8,7 +8,6 @@
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
 
 use gglib_core::RemotePairing;
 use gglib_core::events::AppEvent;
@@ -97,7 +96,12 @@ impl RemoteOps {
         {
             Ok(paired) => paired,
             Err(e) => {
-                handle.shutdown_timeout(Duration::from_secs(1)).await;
+                // `DRAIN`, like every other teardown here. A dial that reached
+                // nobody has nothing of its own in flight, but the port it
+                // bound has been answering `502` to anything local for as long
+                // as the gate waited, and a third-party client mid-request on
+                // it is owed the same five seconds every other path gives one.
+                handle.shutdown_timeout(DRAIN).await;
                 return Err(e);
             }
         };

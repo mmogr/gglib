@@ -112,10 +112,14 @@ where
 /// [`PipeStatus::Idle`] is the open question: it is what the connect side
 /// publishes both before it has ever reached the peer and while it is
 /// looking for one that went away, and here it can only ever be the first.
-/// A variant modelpipe adds later is read the same way, deliberately — the
-/// conservative answer to a status this build cannot read is "keep
-/// waiting", which costs the budget, where the other answer would install a
-/// pipe on the strength of a word it does not understand.
+/// A variant modelpipe adds later falls here too, and the cost of that is
+/// worth stating rather than implying: it is not "slower", it is
+/// **`gglib remote connect` stops working**. A future variant meaning
+/// *connected* would never settle, the gate would spend its whole budget and
+/// then refuse. That is still the right way round — the other answer installs
+/// a pipe on the strength of a word this build cannot read, and reports a
+/// machine as reached that may not be — but it is a refusal, and whoever takes
+/// that modelpipe version has to come back here.
 const fn settled(status: PipeStatus) -> Option<Result<Reached, NoContact>> {
     match status {
         PipeStatus::Direct | PipeStatus::Relayed => Some(Ok(Reached(()))),
@@ -160,8 +164,13 @@ fn refusal(no: &NoContact) -> GuiError {
             FIRST_CONTACT.as_secs()
         )),
         // Not the far machine's doing: before a path forms there is nothing
-        // over there to close the pipe, so this is the local listener
-        // having stopped under it.
+        // over there to close the pipe, so this is the local listener having
+        // stopped under it. modelpipe 0.3.0 newly exports
+        // `ConnectHandle::close_reason`, which answers `Shutdown` or
+        // `ListenerFailed` directly — deliberately not read here, because the
+        // gate runs while the slot is still only *reserved*, so the only
+        // `Shutdown` that could reach it is this side's own and the message
+        // would be the same either way. Read it if that ever stops being true.
         NoContact::Closed => GuiError::Unavailable(
             "the tunnel closed before the remote machine answered — nothing was sent through it"
                 .to_owned(),

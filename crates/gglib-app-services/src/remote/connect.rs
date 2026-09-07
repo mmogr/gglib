@@ -255,6 +255,11 @@ fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
         // the curve check further still, so nothing produces this today;
         // the arm stays because that is iroh's choice to revisit, not this
         // repo's, and `ConnectError` is `#[non_exhaustive]`.
+        //
+        // Deliberately NOT in `docs/remote.md`'s troubleshooting table. A
+        // sentence nobody can be shown is noise there, and the cause a reader
+        // would reach for — a ticket copied wrong — produces
+        // `pairing_string::parse`'s error instead, one guard earlier.
         ConnectError::PeerUnreachable => GuiError::ValidationFailed(
             "that pairing string names an address nobody could be at — copy it again from \
              `gglib remote enable` on the far machine"
