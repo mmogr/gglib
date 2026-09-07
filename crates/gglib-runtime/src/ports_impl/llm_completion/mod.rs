@@ -17,8 +17,11 @@ use gglib_core::{
 };
 
 mod body;
+mod far_machine;
 mod retry;
 mod stream;
+
+pub use far_machine::FarMachine;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
@@ -49,14 +52,17 @@ pub struct LlmCompletionAdapter {
     /// by model name.
     model: String,
     client: Client,
-    /// Sent as `Authorization: Bearer …` on every request, when set.
+    /// The other machine this turn is going to, when it is going to one.
     ///
-    /// `None` for a llama-server on loopback, which asks for nothing. Set for
-    /// the remote tunnel's loopback port (ADR 0012), which is the far
-    /// machine's proxy and demands its key; the listener there does not
-    /// inject one, so this side has to. Never logged and absent from every
-    /// `Debug` the adapter takes part in — the struct derives none.
-    bearer: Option<String>,
+    /// `None` for a llama-server on loopback, which asks for nothing and has
+    /// no name. Set for the remote tunnel's loopback port (ADR 0012), which
+    /// is the far machine's proxy and demands its key; the listener there
+    /// does not inject one, so this side has to. Its identity rides along
+    /// with the key because a refusal from that machine has to name it —
+    /// see [`FarMachine`]. Never logged and absent from every `Debug` the
+    /// adapter takes part in: the struct derives none, and neither does that
+    /// one.
+    far_machine: Option<FarMachine>,
     /// The caller's own sampling parameters — the top layer of the hierarchy,
     /// equivalent to what an external client sends the proxy. Written into the
     /// body by [`body::build_chat_body`] and read back out by
@@ -257,7 +263,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         let response = retry::send_with_retry(
             &self.client,
             &self.url,
-            self.bearer.as_deref(),
+            self.far_machine.as_ref(),
             &body,
             std::time::Duration::from_secs(self.send_timeout_secs),
             &self.retry_policy,

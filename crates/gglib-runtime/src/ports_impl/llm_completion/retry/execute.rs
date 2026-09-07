@@ -23,6 +23,7 @@ use gglib_core::retry::{RetryDecision, RetryPolicy, decide, jitter_unit};
 use reqwest::{Client, Response};
 use serde_json::Value;
 
+use super::super::FarMachine;
 use super::classify::{Failure, classify};
 
 /// POST `body` to `url`, retrying transient upstream failures per `policy`.
@@ -30,10 +31,14 @@ use super::classify::{Failure, classify};
 /// Returns the first successful response, with its body untouched and ready to
 /// stream. `observer`, when present, is notified of each backoff and of the
 /// final give-up so a waiting user can be told what is happening.
+///
+/// `far_machine` is `Some` only when `url` is the tunnel's loopback port: it
+/// supplies the bearer that port demands, which the listener there does not
+/// inject.
 pub(crate) async fn send_with_retry(
     client: &Client,
     url: &str,
-    bearer: Option<&str>,
+    far_machine: Option<&FarMachine>,
     body: &Value,
     send_timeout: Duration,
     policy: &RetryPolicy,
@@ -45,7 +50,14 @@ pub(crate) async fn send_with_retry(
     loop {
         attempt += 1;
 
-        let response = send_once(client, url, bearer, body, send_timeout).await?;
+        let response = send_once(
+            client,
+            url,
+            far_machine.map(|f| f.key.as_str()),
+            body,
+            send_timeout,
+        )
+        .await?;
 
         // `classify` reads nothing from a successful body, so the stream
         // decoder still receives it whole.

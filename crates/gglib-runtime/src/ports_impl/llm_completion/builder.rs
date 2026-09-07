@@ -14,7 +14,7 @@ use gglib_core::request_pipeline::ModelContext;
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
 
-use super::{DEFAULT_SEND_TIMEOUT_SECS, LlmCompletionAdapter};
+use super::{DEFAULT_SEND_TIMEOUT_SECS, FarMachine, LlmCompletionAdapter};
 
 fn completions_url(base_url: &str) -> String {
     format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
@@ -56,7 +56,7 @@ impl LlmCompletionAdapter {
             url: completions_url(&base_url.into()),
             model: model.unwrap_or_default(),
             client,
-            bearer: None,
+            far_machine: None,
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             model_context: ModelContext::passthrough(),
@@ -69,14 +69,22 @@ impl LlmCompletionAdapter {
         }
     }
 
-    /// Send `Authorization: Bearer <token>` on every request.
+    /// Point this adapter at another machine, with the key that machine
+    /// demands and the name it is known by.
     ///
-    /// For an upstream that demands a key — the remote tunnel's loopback
-    /// port, which is another machine's proxy. `None` (the default) sends
-    /// no header, which is right for a llama-server on loopback.
+    /// Sends `Authorization: Bearer <key>` on every request, and lets a
+    /// refusal from that machine be reported as such. `None` (the default)
+    /// sends no header and reports refusals as the classifier renders them,
+    /// which is right for a llama-server on loopback.
+    ///
+    /// A blank key is dropped along with the identity it arrived with, which
+    /// is `with_bearer`'s old behaviour kept intact: an empty
+    /// `Authorization: Bearer ` header is worse than no header at all. Both
+    /// resolvers already filter a blank key before building one of these, so
+    /// this is a floor rather than a path anything reaches.
     #[must_use]
-    pub fn with_bearer(mut self, bearer: Option<String>) -> Self {
-        self.bearer = bearer.filter(|b| !b.trim().is_empty());
+    pub fn with_far_machine(mut self, far_machine: Option<FarMachine>) -> Self {
+        self.far_machine = far_machine.filter(|f| !f.key.trim().is_empty());
         self
     }
 

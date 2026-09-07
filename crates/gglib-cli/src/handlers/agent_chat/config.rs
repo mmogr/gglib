@@ -195,7 +195,7 @@ pub(crate) async fn compose(
         // No proxy dashboard in the CLI process — nowhere to report reuse.
         None,
         Some(params.retry_policy),
-        upstream.bearer,
+        upstream.far_machine,
     );
 
     Ok(agent)
