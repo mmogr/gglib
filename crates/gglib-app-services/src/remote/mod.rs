@@ -273,3 +273,7 @@ impl RemoteGateway {
         gglib_core::ports::RemoteGatewayPort::mcp_allowed(self)
     }
 }
+
+#[cfg(test)]
+#[path = "lifecycle_tests.rs"]
+mod lifecycle_tests;

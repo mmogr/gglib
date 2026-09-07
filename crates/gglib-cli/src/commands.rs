@@ -110,7 +110,9 @@ pub enum Commands {
     /// Chat with a model interactively, or manage chat history
     #[command(display_order = 11, subcommand_negates_reqs = true)]
     Chat {
-        /// Name or ID of the model to chat with (optional when resuming with --continue)
+        /// Name or ID of the model to chat with (optional when resuming with
+        /// --continue). With --remote it is the far machine's model name, sent
+        /// as typed; the ID form is local-only and means nothing there.
         #[arg(default_value = "")]
         identifier: String,
         #[command(flatten)]
@@ -147,10 +149,8 @@ pub enum Commands {
         max_parallel: Option<usize>,
         /// Model name put in the request body, overriding the positional
         ///
-        /// Locally, omitting it lets llama-server serve whichever model it
-        /// loaded. With --remote there is no local catalog and no default to
-        /// fall back on, so the positional is forwarded as the far machine's
-        /// model name when this flag is absent.
+        /// Omitted locally, llama-server serves whichever model it loaded;
+        /// omitted with --remote, the positional is forwarded instead.
         #[arg(long)]
         model: Option<String>,
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
@@ -191,9 +191,9 @@ pub enum Commands {
         /// Model ID or name
         ///
         /// Locally, omitting it falls back to the default model from settings.
-        /// With --remote the name is forwarded to the far machine as given and
-        /// there is no fallback — this machine's default is a model the far one
-        /// may not have — so omitting it lets that machine choose.
+        /// With --remote it is mandatory instead — the name is forwarded as given and
+        /// this machine's default is not consulted. Name one the far machine serves, or
+        /// the request arrives there with an empty model: 404 Model '' not found.
         #[arg(short, long)]
         model: Option<String>,
         /// Read context from file instead of stdin

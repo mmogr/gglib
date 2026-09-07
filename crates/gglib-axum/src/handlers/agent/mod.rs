@@ -98,7 +98,9 @@ pub(crate) async fn chat(
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
-        req.model.clone(),
+        // `upstream`, not `req`: the two paths mean opposite things by an
+        // absent model, and `resolve` is where that was already decided.
+        upstream.model,
         upstream.model_context,
         state.mcp.clone(),
         tool_filter,

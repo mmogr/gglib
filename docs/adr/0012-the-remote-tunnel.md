@@ -1,9 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (amended 2026-09-06 — see the note in the first reading
-  and the second reading; amended 2026-09-07 — see the note under decision 2
-  on how authentication is turned back off)
+- **Date:** 2026-09-05 (amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -209,6 +207,21 @@ zero, on the same terms the proxy already accepts. A key supplied by
 key is never overridden by anything in settings; the poller respects that
 rather than working around it.
 
+> **Amended 2026-09-07 — the collaborator named here does not exist.**
+> `BearerPolicy` appears nowhere in `crates/gglib-app-services`; nothing in
+> `RemoteOps` constructs one or calls `current()`. What the poller actually
+> does is read `Settings::proxy_api_key` through `AppCore` directly, on the
+> same `SETTINGS_CACHE_TTL` cadence, skipping a value that is cleared or
+> unchanged and calling `ServeHandle::set_token` otherwise
+> (`remote/rotation.rs`). The pinned precedence this paragraph promises is
+> real, and arrives from somewhere else entirely: `settle_key` asks
+> `key::decide` about `ProxyOps::effective_api_key()`, and `enable` simply
+> does not spawn the poller at all when the answer is pinned
+> (`remote/mod.rs`). So the behaviour is what this section describes and the
+> mechanism is not. Recorded rather than quietly corrected, because the next
+> person to go looking for `BearerPolicy::current()` in `RemoteOps` will spend
+> the search finding nothing.
+
 ### 3. Pairing moves a one-time code, not the key
 
 `gglib remote enable` prints the ticket and a six-digit numeric code. The code
@@ -233,6 +246,40 @@ three things together: the three-attempt burn, the 120-second window, and the
 fact that reaching the route at all requires the ticket, which carries an
 endpoint id nobody can guess. Guessing the code without the ticket is not a
 slower attack, it is a different one.
+
+> **Amended 2026-09-07 — the three defences are each real, and no single path
+> has all three.** Read out of the code rather than reasoned about, and it
+> splits by which door the guess arrives at.
+>
+> **Through the tunnel, the burn never fires.** `redeem.rs` sends the code
+> twice on purpose — as the bearer, so the edge's one-time grant admits the
+> request, and in the body, so this route can check it. That makes a *wrong*
+> code a wrong bearer. modelpipe's `Credential::admits` finds it is neither
+> the enforced token nor a live grant, and the edge answers with its own
+> `401 invalid_api_key` without forwarding anything, exactly as decision 2
+> says it should. `handle_remote_pair` therefore never runs,
+> `Pairing::attempts` never increments, and no third wrong code burns
+> anything. What is left guarding ~20 bits is the 120-second window and the
+> ticket — two of the three — with the number of guesses bounded only by how
+> many requests fit in the window. (modelpipe caps a peer at 64 concurrent
+> streams, which is a concurrency budget, not a rate limit.) The burn is still
+> reachable, but only by a peer already holding the real key and sending a
+> wrong code in the body, which is not the attacker it was written for.
+>
+> **Locally, the burn fires and the ticket is not required at all.**
+> `/v1/remote/pair` sits outside the bearer group, and `host_allowed` admits
+> any loopback `Host` unconditionally — the same loopback trust the Context
+> section is about, reaching the one route deliberately left outside the
+> credential. `redeem_pairing_code` uses the peer fingerprint only for the
+> event it emits, never as a condition. So any process on the serving machine
+> can POST three wrong codes to `http://127.0.0.1:8080/v1/remote/pair` and
+> kill a pairing that is on screen, holding neither ticket nor key; one that
+> guesses right is handed the key.
+>
+> Decision 3 stands. The code is still not a standing credential, it still
+> dies on use and in two minutes, and a tunnelled guesser still needs the
+> ticket. The sentence that does not stand is "defended by three things
+> together", which is true of neither path this feature actually has.
 
 Rejected: **bundling the key into the pairing string.** It makes the printed
 string a standing credential, so a photograph of the screen — or a screen
@@ -505,6 +552,15 @@ other tunnelled one. What shows inference crossed is the increment past 1, not
 the number being non-zero. Recorded because the next person to read this
 counter will otherwise be one ahead of the prompts they remember sending.
 
+> **Amended 2026-09-07 — the quoted line has since changed wording, and the
+> quote above is right.** [#986](https://github.com/mmogr/gglib/pull/986)
+> landed later the same evening and made it read
+> `Requests:  N served through the tunnel`, printed only on the serving
+> machine; the third kill criterion above was rewritten with it, which is why
+> the two strings differ in one document. `Requests:  0 through the tunnel` is
+> what the build this session ran actually printed, and it is left exactly as
+> it was read.
+
 **Both transport paths were exercised, so the relay is a path traffic has
 taken rather than one the design merely provides for.** On the home network
 both sides reported `Path:      direct`: the hole punch held and no relay was
@@ -513,6 +569,33 @@ phone hotspot — ticket `dc82a49cf02c`, connect side on port 36073, the
 connecting machine appearing under a new fingerprint — and the serving machine
 logged `peer{peer=d702c7dca654 path="relayed"}` followed by `POST
 /v1/chat/completions status=200 outcome="forwarded"`.
+
+> **Amended 2026-09-07 — weakened, because the instrument cannot carry this
+> sentence.** In the `modelpipe` version this ran against — 0.2, the pin —
+> `peer::path_of` reads `Connection::paths()` once and is never asked again
+> for the life of a connection. The serve side samples it at accept and hands
+> the answer to the peer registry, which has no per-peer path mutator; the
+> connect side samples it at dial and re-samples only on a re-dial. `path_of`
+> also folds "no selected path yet" into `Relayed` deliberately, as the
+> conservative reading of an unfinished handshake.
+>
+> The two halves are therefore not equally strong. `Path: direct` on the home
+> network is a positive reading: a selected non-relay path existed at the
+> moment it was taken, and nothing else prints `direct`. `path="relayed"` on
+> the hotspot was taken at accept, before the punch had had time to succeed or
+> fail, and a session that hole-punches a moment later goes on reporting
+> `relayed` for the rest of its life. The `status=200` that followed it is
+> real; which path carried it is not something this build could see. So the
+> line says *the relay was not ruled out*, not *the relay carried it*.
+>
+> What the session establishes is the direct path, exercised and observed.
+> Whether traffic ever crossed a relay is a question the evening could not
+> answer with the instrument it had, and the claim that "the relay is a path
+> traffic has taken" is withdrawn until one can. The fix is in flight
+> upstream — [modelpipe#50](https://github.com/mmogr/modelpipe/pull/50), a
+> watcher following `PathEvent::Selected` instead of sampling once — and this
+> becomes readable the day gglib takes that `modelpipe` version. A re-run
+> against it is what would settle the sentence; nothing in this note does.
 
 **The credential moved as decision 3 describes.** The six-digit code was
 redeemed over the encrypted hop, once, and the connecting machine reports
@@ -542,7 +625,9 @@ door in decision 7 opens.
 
 **All three remain OPEN**, and only the third moved at all. What the session
 settles is that the feature does what the Decision section says it does:
-across two operating systems, on both transport paths, with the key moving
+across two operating systems, ~~on both transport paths~~ (struck 2026-09-07:
+on the direct path, with the relay neither observed nor ruled out — see the
+amendment above), with the key moving
 once and the kill switch reachable from outside. What it does not settle is
 use — one evening and one peer cannot distinguish a tunnel people want from a
 tunnel that merely works. Two gaps are worth naming rather than leaving to be
@@ -552,13 +637,59 @@ the connect listener with the key as its API key — is still untried. And a
 single evening says nothing about a tunnel left up for days, which is the
 shape the rotation poller and the per-session identity were designed against.
 
+### Third reading, 2026-09-07 — the trust-model query, run
+
+Both earlier readings recorded the second criterion as unread, on the grounds
+that a zero from a query nobody ran is the failure these criteria exist to
+avoid. The query has now been run, and this note exists for that one line.
+
+The other two are **not** re-read here and stay where the second reading left
+them: `PINNED_LLAMA_RELEASE` is still `b10327` and the pin has not moved, so
+the survey still has had no occasion to be taken; and `tunnelled_requests` has
+not been re-read, which by this criterion's own terms is all that can be said —
+it counts from daemon start and the daemons that produced the second reading
+have stopped, so there is no surface that could report on the interval.
+
+- **If the trust model itself proves unsound** — **0, and the zero is 0 of 0.**
+  `gh issue list -R mmogr/gglib --label "priority: critical" --label
+  "component: proxy"` returns nothing, and the same query with `component: gui`
+  returns nothing. The denominator is the part that matters and it is not 14:
+  fourteen issues are open, and **not one of them carries `priority: critical`
+  at all**. The label exists — `gh label list` shows it, "Blocking issues,
+  security, data loss" — and the bucket is empty repo-wide. So this reading
+  cannot distinguish "no critical trust-model issue has been filed" from "this
+  repo does not triage with that label", and the two license very different
+  conclusions. Answered rather than clean. **OPEN.**
+
+One thing not to fix. The criterion names the missing `component: remote`
+label and argues for naming that gap rather than pretending to a label that
+does not exist; nothing in this reading overturns that argument. Adding
+`component: remote` to the issue form would narrow a query this ADR widened on
+purpose — a change of mind about how the criterion is read, not housekeeping.
+The reading that would actually make this line clean is a `priority: critical`
+label somebody uses.
+
 ## Out of scope
 
 Named here so that their absence reads as a decision rather than an oversight.
 
-- **A phone client.** iroh compiles to wasm and would run relay-only, still
-  end-to-end encrypted. That is a product, with its own surface and its own
+- **A phone client.** ~~iroh compiles to wasm and would run relay-only, still
+  end-to-end encrypted.~~ That is a product, with its own surface and its own
   release story, not a flag on this one.
+
+  > **Amended 2026-09-07 — the technical reason was already out of date when
+  > this was accepted; the decision is not.** wasm-and-relay-only was not the
+  > state of the art on 2026-09-05.
+  > [#963](https://github.com/mmogr/gglib/issues/963) — opened 2026-08-30, six
+  > days before this ADR, and the issue this whole feature answers — records it
+  > in its own out-of-scope note: iroh 1.0 shipped official Swift/Kotlin
+  > bindings, so a native iroh-speaking mobile client is buildable, getting the
+  > same direct-or-relay behaviour every other peer gets rather than being
+  > relay-only by construction. A phone client stays out of scope for the reason
+  > the bullet gives second — it is a product with its own surface and its own
+  > release story — which was always the stronger of the two. What is withdrawn
+  > is the capability claim in front of it, which was wrong, and which is the
+  > kind of sentence that gets read as *we looked and it cannot be done*.
 - **LAN and mDNS pairing.** gglib already carries `mdns-sd` in the CLI, so
   discovering a desktop on the same network without moving a ticket is
   plausible. It is a different trust model — presence on a network as

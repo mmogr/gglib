@@ -62,6 +62,42 @@ end
 '
 
 # ---------------------------------------------------------------------------
+# bump-version.yml must re-lock the workspace, not re-resolve the graph
+# ---------------------------------------------------------------------------
+#
+# `cargo generate-lockfile` throws Cargo.lock away and re-resolves every
+# dependency against whatever the registry holds that minute, so a PR titled
+# only "Bump version to X.Y.Z" carries third-party upgrades nobody reviewed.
+# #975 shipped exactly that: 36 third-party crates moved under that title,
+# aws-lc-rs and tokio-rustls among them. `cargo update --workspace` re-locks
+# only the workspace's own members, which is the whole job of a version bump.
+#
+# Nothing else can catch a regression here. The bump workflow runs on
+# workflow_dispatch, its output is a bot PR whose diff is expected to be large,
+# and a reviewer scanning "Bump version" has no reason to read 250 lockfile
+# lines. The one-word edit that reintroduces it is invisible until it ships.
+
+echo ""
+echo "Checking bump-version.yml re-locks rather than re-resolves..."
+BUMP=".github/workflows/bump-version.yml"
+if [ -f "$BUMP" ]; then
+    if grep -qE '^[^#]*cargo[[:space:]]+generate-lockfile' "$BUMP"; then
+        echo -e "\033[0;31m✗\033[0m $BUMP runs 'cargo generate-lockfile', which re-resolves every"
+        echo "  dependency from scratch. A version bump must move only the workspace's own"
+        echo "  crates: use 'cargo update --workspace'. See ADR-adjacent note in the workflow."
+        grep -nE '^[^#]*cargo[[:space:]]+generate-lockfile' "$BUMP" | sed 's/^/    /'
+        exit 1
+    fi
+    if ! grep -qE '^[^#]*cargo[[:space:]]+update[[:space:]]+--workspace' "$BUMP"; then
+        echo -e "\033[0;31m✗\033[0m $BUMP no longer runs 'cargo update --workspace', so nothing"
+        echo "  moves the workspace crate versions in Cargo.lock and 'cargo metadata --locked'"
+        echo "  will fail the bump."
+        exit 1
+    fi
+    echo -e "\033[0;32m✓\033[0m bump-version.yml re-locks the workspace only"
+fi
+
+# ---------------------------------------------------------------------------
 # badges.yml names module paths that must still exist in the tree
 # ---------------------------------------------------------------------------
 #

@@ -144,12 +144,17 @@ pub(crate) struct AgentChatRequest {
     ///   and can be executed.
     pub tool_filter: Option<Vec<String>>,
 
-    /// Optional model-name override forwarded to llama-server.
+    /// The model name forwarded to whichever machine serves this turn.
     ///
-    /// When `None` (or omitted from the request body), the adapter lets
-    /// llama-server pick the loaded model, which is the normal case.  Supply a
-    /// value only when the server exposes multiple models and the caller needs
-    /// to target a specific one.
+    /// Locally it is optional: `None` (or omitted) lets llama-server pick the
+    /// model it loaded, which is the normal case, and a value is only needed
+    /// when the server exposes several.
+    ///
+    /// With [`Self::remote`] it is **required**. There is no catalog here for
+    /// the far machine's names, and this machine's default is deliberately not
+    /// substituted, because the far machine may not have it — so a request
+    /// that names none is refused with a `400` rather than arriving there as
+    /// `"model": ""` and coming back `404 Model '' not found`.
     #[serde(default)]
     pub model: Option<String>,
 

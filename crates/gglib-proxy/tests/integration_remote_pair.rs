@@ -116,6 +116,40 @@ async fn the_right_code_is_traded_for_the_key_exactly_once() {
     cancel.cancel();
 }
 
+/// Whitespace around a pasted code is trimmed off; whitespace inside it is
+/// not.
+///
+/// The trim is the route's, and it is deliberate. A pairing string is copied
+/// out of one terminal and into another, where a trailing space or a soft
+/// wrap rides along with it, and a refusal there costs one of the three
+/// attempts that are the pairing's whole defence. It widens nothing:
+/// `" 483920\n"` and `"483920"` name the same six digits, so a guesser gains
+/// no codes from it — which is why the trim lives here, at the edge, and
+/// `Pairing::redeem` on the other side of `RemoteGatewayPort` still compares
+/// byte for byte (`redeem_compares_the_bytes_it_is_handed_and_trims_nothing`
+/// in `gglib-app-services`).
+///
+/// The stub gateway compares exactly, so an untrimmed code reaching it is a
+/// refusal and this test is what says the route trimmed.
+#[tokio::test]
+async fn whitespace_around_a_pasted_code_is_trimmed_not_refused() {
+    let (base, _, cancel, _) = paired_proxy().await;
+
+    let inner = pair(&base, serde_json::json!({ "code": "483 920" })).await;
+    assert_eq!(
+        inner.status(),
+        StatusCode::UNAUTHORIZED,
+        "the ends are trimmed; the middle is not"
+    );
+
+    let res = pair(&base, serde_json::json!({ "code": "  483920\n" })).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["api_key"], KEY);
+
+    cancel.cancel();
+}
+
 /// Every way of being wrong is the same refusal, and the third wrong code
 /// burns the pairing so the right one is dead too.
 #[tokio::test]

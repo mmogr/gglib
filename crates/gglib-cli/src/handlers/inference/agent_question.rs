@@ -105,11 +105,14 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
 
     // Resolve `--profile` or a `{model}:{profile}` suffix before anything asks
     // the daemon to start `model_identifier` — the suffix must not reach lookup.
-    let selection = super::profile_selection::select(
+    // With `--remote` nothing here starts and nothing here is looked up, so the
+    // suffix is left on for the far proxy to resolve against its own profiles.
+    let selection = super::profile_selection::select_for_upstream(
         ctx.catalog.as_ref(),
         settings.inference_profiles.as_deref().unwrap_or_default(),
         &params.model_identifier,
         profile.as_deref(),
+        remote,
     )
     .await?;
     let params = AgentSessionParams {

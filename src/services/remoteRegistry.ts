@@ -12,6 +12,10 @@
  *   upstream a GUI turn should pick, and it is cleared when the connection
  *   goes, because a preference for a machine that is gone is a surprise on
  *   the next send.
+ * - `chatModel` — the far machine's name for the model those turns ask for.
+ *   Also client-side only, and mandatory on that path: this machine's
+ *   default is deliberately not sent, because the far one may not have it
+ *   (`docs/remote.md`).
  */
 
 import { createEventStore } from './createEventStore';
@@ -23,6 +27,17 @@ export interface RemoteState {
   status: RemoteStatus | null;
   /** Send chat turns to the connected machine rather than a local server. */
   useForChat: boolean;
+  /**
+   * The model name those turns carry, as the far machine spells it.
+   *
+   * Empty until someone types one. It outlives a disconnection on purpose:
+   * the ordinary reconnection is the stored ticket dialled again, the same
+   * machine serving the same models, and retyping the name each time buys
+   * nothing. It cannot be sent to a machine nobody chose, because it is only
+   * read while `useForChat` is on and that does not survive the connection
+   * going.
+   */
+  chatModel: string;
 }
 
 /** A status with nothing on: what a fresh daemon reports. */
@@ -42,7 +57,7 @@ export const IDLE_STATUS: RemoteStatus = {
   has_remote_key: false,
 };
 
-const INITIAL: RemoteState = { status: null, useForChat: false };
+const INITIAL: RemoteState = { status: null, useForChat: false, chatModel: '' };
 
 const store = createEventStore<RemoteState>(INITIAL);
 
@@ -50,6 +65,7 @@ const store = createEventStore<RemoteState>(INITIAL);
 export function applyRemoteStatus(status: RemoteStatus): void {
   const prev = store.getState();
   store.setState({
+    ...prev,
     status,
     // A preference for a machine that is gone does not survive its going.
     useForChat: prev.useForChat && status.connected !== null,
@@ -115,7 +131,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       });
       break;
     case 'remote_disconnected':
-      store.setState({ status: { ...status, connected: null }, useForChat: false });
+      store.setState({ ...prev, status: { ...status, connected: null }, useForChat: false });
       break;
   }
 }
@@ -125,6 +141,16 @@ export function setUseRemoteForChat(useForChat: boolean): void {
   const prev = store.getState();
   // Only meaningful while connected; the flag is never left armed for later.
   store.setState({ ...prev, useForChat: useForChat && prev.status?.connected != null });
+}
+
+/**
+ * The model name chat turns should ask the connected machine for.
+ *
+ * Stored as typed — trimming and the "you named none" refusal both live on
+ * the send path, so what the field shows is what the panel was given.
+ */
+export function setRemoteChatModel(chatModel: string): void {
+  store.setState({ ...store.getState(), chatModel });
 }
 
 /** Reset (used during cleanup / hot-reload). */

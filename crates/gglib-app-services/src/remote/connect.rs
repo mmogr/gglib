@@ -284,3 +284,7 @@ async fn watch(
         emitter.emit(AppEvent::remote_disconnected());
     }
 }
+
+#[cfg(test)]
+#[path = "connect_tests.rs"]
+mod connect_tests;
