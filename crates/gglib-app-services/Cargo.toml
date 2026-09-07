@@ -64,6 +64,11 @@ futures-util = "0.3"
 ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
 
 [dev-dependencies]
+# The same tokio as above, plus the virtual clock. Declared rather than left
+# to feature unification: `tokio::time::pause()` is load-bearing in the
+# remote backend's watcher tests, and a dependency elsewhere in the graph
+# dropping `test-util` must not be what breaks them.
+tokio = { workspace = true, features = ["test-util"] }
 tokio-test = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }
 tempfile = { workspace = true }
