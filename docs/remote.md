@@ -123,7 +123,12 @@ beside the box: the same rule as `--remote` applies for the same reason, so
 a turn sent without one is refused here rather than answered `404 Model ''
 not found` from the other end. That name is remembered across a
 disconnection — the usual reconnection is the same desktop again — but it
-is only ever sent while the box is on.
+is only ever sent while the box is on, and it belongs to the ticket it was
+typed against: connect to a *different* desktop and the field is empty
+again, because a name in one machine's catalog is not a name in another's.
+A desktop that ran `remote disable`/`enable` mints a fresh ticket and counts
+as a different one — the old ticket died with the session, so reaching it
+takes its new ticket regardless.
 
 *Chat on that machine*, under the model field, opens the chat screen against
 the desktop and ticks the box as it goes. It is how a laptop with no models
