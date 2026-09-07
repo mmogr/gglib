@@ -13,7 +13,7 @@ The two halves of the `RemoteControl` popover ([ADR 0012](../../../docs/adr/0012
 |------|------|
 | `ServeSection.tsx` | This machine as the desktop: enable (with the `/mcp` grant off by default), the status lines, disable |
 | `PairingReveal.tsx` | The ticket and the code, shown once: `enable`'s answer is the only time the daemon hands them out. Counts the code down and leaves at zero; the parent drops it the moment a device pairs |
-| `ConnectSection.tsx` | This machine as the laptop: the pairing string, the connected port as an `EndpointCopyBar`, the use-for-chat choice, disconnect, and the one-way door behind a confirm |
+| `ConnectSection.tsx` | This machine as the laptop: the pairing string, the connected port as an `EndpointCopyBar`, the use-for-chat choice and the far machine's model name, disconnect, and the one-way door behind a confirm |
 
 ## What is deliberately not here
 

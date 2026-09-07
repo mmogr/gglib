@@ -103,7 +103,12 @@ tunnel, which is easy to misread as the tunnel being broken.
 **The GUI's chat** goes to the desktop when the Remote popover's *Use it for
 chat* box is checked. The choice is per window and is cleared the moment the
 connection goes, so a later turn cannot silently land on a machine you
-stopped thinking about.
+stopped thinking about. Name the desktop's model in *Model on that machine*
+beside the box: the same rule as `--remote` applies for the same reason, so
+a turn sent without one is refused here rather than answered `404 Model ''
+not found` from the other end. That name is remembered across a
+disconnection — the usual reconnection is the same desktop again — but it
+is only ever sent while the box is on.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API
