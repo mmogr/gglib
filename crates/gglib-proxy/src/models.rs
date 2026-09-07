@@ -386,9 +386,21 @@ pub struct ErrorResponse {
 }
 
 /// Error detail within an error response.
+///
+/// This proxy is not the only author of this shape: a remote turn is fronted
+/// by modelpipe, whose edge writes `{"error":{"message":…,"code":…}}` with no
+/// `type` key. So the fields are only as required as the least complete author
+/// makes them, and `message` is the one every author sends.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorDetail {
     pub message: String,
+    /// Defaulted because modelpipe omits it. Without that, a modelpipe refusal
+    /// fails to deserialize at all and the agent's retry classifier drops to
+    /// reading the body as raw text — which is how "the far machine is being
+    /// re-dialled" reached the user as a JSON blob and was never retried. An
+    /// absent key parses as empty, which is not a retryable discriminant, so a
+    /// body that names no type still asserts nothing about retrying.
+    #[serde(default)]
     pub r#type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
