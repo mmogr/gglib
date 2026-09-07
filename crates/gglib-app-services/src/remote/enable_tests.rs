@@ -24,7 +24,7 @@ use crate::error::GuiError;
 use crate::test_support::test_core_and_proxy;
 
 #[derive(Default)]
-struct Recording(Mutex<Vec<AppEvent>>);
+pub(super) struct Recording(pub(super) Mutex<Vec<AppEvent>>);
 
 impl AppEventEmitter for Recording {
     fn emit(&self, event: AppEvent) {
@@ -35,7 +35,7 @@ impl AppEventEmitter for Recording {
 /// A port nothing is listening on, so `ensure_running` binds rather than
 /// colliding with whatever holds the default 8080 on this machine — a
 /// developer's own daemon, most of the time.
-async fn free_port() -> u16 {
+pub(super) async fn free_port() -> u16 {
     let probe = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("a loopback port for the test proxy");
@@ -45,7 +45,7 @@ async fn free_port() -> u16 {
 /// A `RemoteOps` over the fixture, with the proxy port pointed somewhere
 /// free. Nothing is running yet: `enable` starts the proxy itself, which is
 /// the path being tested.
-async fn ops() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recording>, RemoteOps) {
+pub(super) async fn ops() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recording>, RemoteOps) {
     let (core, proxy) = test_core_and_proxy().await;
     core.settings()
         .update(SettingsUpdate {
