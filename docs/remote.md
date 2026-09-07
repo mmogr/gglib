@@ -63,11 +63,14 @@ pairs or the code runs out.
 
 ### The laptop: `connect`, `disconnect`, `kill`
 
-`gglib remote connect <ticket>-<code>` dials the ticket, redeems the code
-through the tunnel for the desktop's API key, stores the key and the ticket,
-and binds a loopback port that is now the desktop's proxy. It prints the
-port. Later, `gglib remote connect <ticket>` uses the stored key, and
-`gglib remote connect` with no argument dials the stored ticket.
+`gglib remote connect <ticket>-<code>` binds a loopback port that is now the
+desktop's proxy, waits up to thirty seconds for the desktop to answer, then
+redeems the code through the tunnel for its API key and stores the key and the
+ticket. It prints the port. The waiting is in that position on purpose: the
+port is bound before anything has reached the far machine, and a code redeemed
+down a pipe that reached nobody is spent for nothing. Later,
+`gglib remote connect <ticket>` uses the stored key, and `gglib remote connect`
+with no argument dials the stored ticket.
 
 | Flag | Effect |
 |------|--------|
