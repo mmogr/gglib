@@ -1,8 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (amended 2026-09-07 — see the dated notes under
-  decisions 2 and 3, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -115,6 +114,87 @@ given. That is the one credential and its two doors briefly disagreeing about
 whether it is required — the only case where they do, and the reason the
 accurate version of "on and never off" is "on, and the floor arrives at the
 next restart".
+
+> **Amended 2026-09-07 — what the operator is supposed to do about it.** The
+> two paragraphs above describe the reopening as a property of the code, which
+> it is, and stop there. That leaves the one question a reader arrives with
+> unanswered, and `gglib remote enable` prints "authentication turns on and
+> never off by itself", which invites the reader to go looking. So, plainly:
+>
+> - **On a proxy that binds loopback, turning it back off is `gglib config
+>   settings unset proxy-api-key`, followed by rebinding the proxy** — `gglib
+>   proxy stop` and start it again, or `gglib daemon stop`, which takes the
+>   listener down with everything else. `settings set --proxy-api-key ""` is
+>   not it and is refused — `Proxy API key cannot be blank — clear it instead
+>   to disable authentication`. Emptying the field in the desktop app's
+>   settings sends `null` and clears it the same way `unset` does. The
+>   loopback qualifier is load-bearing; the next bullet is why.
+> - **Off loopback the same procedure mints a key rather than removing one.**
+>   `--host` is first-class on both commands — `ProxyBindArgs` in
+>   `crates/gglib-cli/src/proxy_bind_args.rs` for `gglib proxy`, and
+>   `ServeOptions` in `crates/gglib-cli/src/shared_args.rs` for `gglib serve`
+>   — and a bind that is not loopback never reaches the `ApiKeySource::None`
+>   return. With the setting cleared,
+>   `resolve_api_key` falls past the `Settings` branch, finds
+>   `is_loopback_host("0.0.0.0")` false, calls `generate_api_key()` — and
+>   then **writes the result back into `settings.proxy_api_key`**
+>   (`crates/gglib-runtime/src/proxy/api_key.rs`). So the rebind repopulates
+>   the field the operator just cleared and the endpoint comes back closed on
+>   a credential nobody has read. `gglib config settings show` prints it
+>   unmasked, which is the recovery. This is deliberate — an endpoint on a
+>   network is not left open — but stating the procedure without the
+>   qualifier told a `--host 0.0.0.0` operator to lock themselves out, which
+>   is what this bullet exists to stop.
+> - **The rebind is the load-bearing half, and its order is the opposite of
+>   what it looks like.** `resolve_api_key` runs at bind, in
+>   `ProxySupervisor`'s start path — not at daemon start — so unsetting alone
+>   works only against the listener `enable` closed, which bound on loopback
+>   with an empty floor. Once a proxy has bound with the key stored,
+>   `resolve_api_key` hands it to `tracking` as the bind key and unsetting no
+>   longer opens anything. Unset *then* rebind; rebind then unset leaves it
+>   closed.
+> - **`/mcp` is inside what reopens.** It sits in the bearer-guarded group in
+>   `crates/gglib-proxy/src/router.rs` like every other protected route, so an
+>   unset that lands before the rebind takes the tool gateway back to
+>   unauthenticated along with `/v1/*`. That is the pre-`enable` posture of a
+>   loopback proxy rather than a new hole — decision 5's tunnel gate is
+>   independent of the bearer and still refuses tunnelled `/mcp` — but the
+>   two guards named in *Context* are both off at that moment, and this ADR
+>   exists because that combination is easy to reach by accident.
+> - **A running tunnel does not reopen with it.** `rotation_poll` ignores a
+>   cleared setting, so the tunnel edge keeps demanding the token it was given
+>   until `disable`. The clear opens the local door only.
+>
+> **What holds the sentences above, and what does not.**
+> `clearing_reopens_a_listener_that_bound_on_loopback` in
+> `crates/gglib-core/src/access/bearer_tests.rs` was described here as pinning
+> both halves. It does not, and the correction belongs in the record next to
+> the claim. Delete `stored.or_else(|| self.floor.clone())` from
+> `BearerPolicy::current` and its *second* half fails — at
+> `"after a rebind the same clear is refused"` — alongside the two tests that
+> already covered exactly that,
+> `clearing_the_setting_does_not_reopen_a_closed_endpoint` and
+> `a_blank_stored_key_falls_back_rather_than_opening`. Its first half is not
+> *uniquely* pinned either. Deleting the settings read from
+> `BearerPolicy::current` fails its `:206` assertion — but fails
+> `authentication_can_be_switched_on_at_runtime`, which asserts the same
+> transition from the same starting policy, and
+> `a_rotation_takes_effect_without_a_restart` with it. Deleting the expiry
+> check from `SettingsCache::get`'s fast path fails its `:212` assertion —
+> alongside those same two and `a_write_is_observed_after_the_window_expires`,
+> which owns that behaviour. Each of its three assertions is reachable by some
+> production deletion and none of them alone: it documents the reopening, it
+> does not hold it.
+>
+> The mechanism the bullets above actually turn on is `resolve_api_key`, and
+> that had no test module at all — which is why the missing loopback qualifier
+> survived review. `crates/gglib-runtime/src/proxy/api_key.rs` now carries one:
+> `a_loopback_bind_asks_for_no_token_and_stores_none` (deleting the
+> `is_loopback_host` early return fails it),
+> `a_non_loopback_bind_mints_a_token_and_writes_it_back` (deleting the
+> write-back fails it), `a_stored_key_is_honoured_on_a_loopback_bind` (moving
+> the loopback check above the `Settings` branch fails it) and
+> `a_configured_key_outranks_both_the_store_and_the_host`.
 
 Rotation had no mechanism and needed one. There is no settings-changed event
 in gglib and there cannot be a useful one: `gglib config settings set` writes

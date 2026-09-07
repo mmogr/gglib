@@ -182,6 +182,51 @@ mod policy {
         );
     }
 
+    /// The case the floor does *not* cover, and the reason "on and never off"
+    /// is only true of a listener that bound with a key.
+    ///
+    /// `resolve_api_key` returns `None` for a loopback bind, so the policy in
+    /// front of a default local proxy is `tracking(None, ..)` — an empty
+    /// floor. `gglib remote enable` mints `proxy_api_key` *after* that
+    /// listener is already up, so the write closes it and a clear reopens it,
+    /// `/mcp` included. Only the next proxy *bind* gives it a floor, because
+    /// only then is the stored key what it binds with — `resolve_api_key`
+    /// runs in the supervisor's start path, not at daemon start.
+    ///
+    /// Both halves are asserted together: the pair is the behaviour, and
+    /// either one alone reads as a rule it is not (ADR 0012, decision 2).
+    #[tokio::test]
+    async fn clearing_reopens_a_listener_that_bound_on_loopback() {
+        // The daemon session in which `remote enable` ran: bound open, key
+        // minted into settings afterwards.
+        let repo = Rotatable::new(None);
+        let enabled = BearerPolicy::tracking(None, live(Arc::clone(&repo)));
+
+        repo.rotate_to(Some("minted-by-remote-enable"));
+        assert!(
+            !enabled.admits(None).await,
+            "enabling the tunnel closes the local proxy it shares a listener with"
+        );
+
+        repo.rotate_to(None);
+        assert!(
+            enabled.admits(None).await,
+            "clearing reopens it: the bind key was None, so there is no floor to fall back to"
+        );
+
+        // The next bind resolves the stored key and hands it over as the bind
+        // key. That, not the setting, is where the floor comes from.
+        let repo = Rotatable::new(Some("minted-by-remote-enable"));
+        let restarted =
+            BearerPolicy::tracking(Some("minted-by-remote-enable"), live(Arc::clone(&repo)));
+
+        repo.rotate_to(None);
+        assert!(
+            !restarted.admits(None).await,
+            "after a rebind the same clear is refused — the floor is real from here on"
+        );
+    }
+
     /// A blank stored value is not a credential. Settings validation refuses
     /// one, and if it arrives anyway it must not read as "auth is off".
     #[tokio::test]

@@ -205,6 +205,70 @@ away. gglib's own CLI and GUI read the key from settings and carry on; a
 hand-configured local client will start getting `401` and needs the key added
 once. `enable` says so every time it runs.
 
+**Turning it back off on a loopback proxy: unset, then rebind — in that
+order.** `enable` says authentication never turns off by itself, and it does
+not, but there is a supported way to turn it off by hand. It works on a proxy
+that binds loopback, which is the default and what `enable` assumes. A proxy
+bound anywhere else is covered two paragraphs down, and this procedure does
+not do what it looks like there:
+
+```
+gglib config settings unset proxy-api-key
+gglib proxy stop        # then start it again on loopback — the default host
+```
+
+`gglib config settings set --proxy-api-key ""` is *not* it; a blank would read
+as "authentication is on" while accepting `Bearer ` from anyone, so it is
+refused with `Proxy API key cannot be blank — clear it instead to disable
+authentication`. Emptying the API key box in the desktop app's settings does
+the same thing `unset` does.
+
+The order is the part that surprises people, because it is the opposite of the
+intuition. What matters is the proxy *rebinding*: the token it demands is
+settled when the listener binds, so a listener that is already up has to go
+down and come back. Unsetting alone reopens the proxy only while the listener
+that `enable` closed is still up — that one bound on loopback before the key
+existed, so it has no bind-time token to fall back on. Once a proxy has
+*bound* with the key in settings, that key becomes its floor and unsetting no
+longer opens anything. So unset first and rebind second. Rebind first and the
+unset does nothing, which reads as the command having failed when it has not.
+`gglib daemon stop` takes the proxy down with everything else and works the
+same way.
+
+**Off loopback the same two commands mint a new key instead of removing one.**
+If the proxy you are restarting binds a non-loopback host — `gglib proxy --host
+0.0.0.0`, a LAN address, a hostname — the rebind does not reopen it. It takes a
+different branch: `resolve_api_key`
+(`crates/gglib-runtime/src/proxy/api_key.rs`) finds no `--api-key`, finds
+nothing stored because you have just cleared it, sees a host that is not
+loopback, and *generates* a key rather than binding open — an endpoint on a
+network gets a token whether or not anyone asked for one. It then writes that
+key back into `proxy_api_key`, so the setting you cleared is populated again,
+with a value you have never seen. The proxy comes back closed, your existing
+clients start getting `401`, and the `unset` reads as having done nothing.
+
+Read the new key with `gglib config settings show`, which prints
+`proxy_api_key` in full rather than masking it. Then either hand it to the
+clients, or set one you choose with `gglib config settings set
+--proxy-api-key <key>`.
+
+There is no supported way to run an unauthenticated non-loopback proxy, and
+that is the point rather than an accident of this procedure: the only path
+that returns no token at all is the loopback one. If the endpoint must be
+open, bind it to loopback and put whatever you trust — an SSH tunnel, a
+reverse proxy — in front of it.
+
+Back on loopback, two things do not come back with the reopening. A tunnel
+that is still running keeps demanding the token it was handed — key rotation
+follows a *changed* key, not
+a cleared one — so this opens the local door only; `gglib remote disable`
+closes the remote one. And `/mcp` *does* come back open, along with `/v1/*`,
+because it sits behind the same bearer guard. That is the ordinary posture of
+a loopback proxy that never enabled remote access, not a new hole, but it is
+worth knowing before you unset on a machine with a shell MCP server
+configured. [ADR 0012](adr/0012-the-remote-tunnel.md), decision 2, has the
+mechanism.
+
 **The proxy, and only the proxy.** The daemon's management API on
 `127.0.0.1:9887` — the door `gglib`'s own commands and the desktop app come
 through — is not affected. A daemon bound on loopback, which is the default,
