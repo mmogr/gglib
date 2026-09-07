@@ -8,7 +8,6 @@
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
 
 use gglib_core::RemotePairing;
 use gglib_core::events::AppEvent;
@@ -17,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use super::super::connect_watch::watch;
+use super::super::first_contact::{once_reached, wait};
 use super::super::stored_pairing::settle;
 use super::super::types::{ConnectRequest, Connected};
 use super::super::{RemoteOps, redeem};
@@ -56,12 +56,26 @@ impl RemoteOps {
         };
         let base_url = handle.base_url();
 
-        // Deliberately *not* cancellable from here on. A redeem that is
-        // abandoned half way still burns the far machine's one-time code,
-        // and the recovery for that costs a walk to the other machine — so
-        // a `disconnect` racing this one waits the twenty seconds the
-        // request is bounded by and takes the connection down afterwards,
-        // with the key safely stored.
+        // Reach the far machine *before* redeeming anything through it.
+        // `modelpipe::connect` hands back a bound port and dials behind it,
+        // so up to here nothing has been in touch with the other end: a
+        // redeem sent now would spend the one-time code on the `502` the
+        // edge answers while there is no peer, and a pipe that had reached
+        // nobody would install and read as Connected for the ninety seconds
+        // `connect_watch` allows an idle one. `once_reached` keeps the two
+        // in that order by handing the redeem a `Reached` only the waiting
+        // can mint, rather than by being written above it —
+        // `first_contact.rs` carries that argument in full.
+        //
+        // Cancellable, unlike what follows it. Waiting up to thirty seconds
+        // is exactly when somebody types `gglib remote disconnect`, and
+        // giving up costs nothing while nothing has been spent.
+        //
+        // The redeem, from there, is deliberately *not* cancellable: one
+        // abandoned half way still burns the code, and the recovery for
+        // that costs a walk to the other machine — so a `disconnect` racing
+        // it waits the twenty seconds the request is bounded by and takes
+        // the connection down afterwards, with the key safely stored.
         //
         // What the record owes this dial is `settle`'s, in
         // `stored_pairing.rs`, and it is there rather than here so that it
@@ -69,14 +83,25 @@ impl RemoteOps {
         // a test, and every arm of that decision is below it. The one thing
         // that stays here is the port, which no arm may leave bound behind
         // a `dial` that reported a failure.
-        let paired = match settle(&self.core, ticket, held.as_ref(), code, async |code| {
-            redeem::redeem(&base_url, &code).await
-        })
+        let paired = match once_reached(
+            wait(handle.status(), || handle.status_changed(), cancel),
+            |reached| {
+                let over = base_url.as_str();
+                settle(&self.core, ticket, held.as_ref(), code, async move |code| {
+                    redeem::redeem(&reached, over, &code).await
+                })
+            },
+        )
         .await
         {
             Ok(paired) => paired,
             Err(e) => {
-                handle.shutdown_timeout(Duration::from_secs(1)).await;
+                // `DRAIN`, like every other teardown here. A dial that reached
+                // nobody has nothing of its own in flight, but the port it
+                // bound has been answering `502` to anything local for as long
+                // as the gate waited, and a third-party client mid-request on
+                // it is owed the same five seconds every other path gives one.
+                handle.shutdown_timeout(DRAIN).await;
                 return Err(e);
             }
         };

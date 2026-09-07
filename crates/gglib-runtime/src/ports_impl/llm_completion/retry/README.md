@@ -56,6 +56,30 @@ alone whenever the body offers neither field — a `500` blob and a bare
 `{"error":{"message":…}}` get the same answer, which is the answer the status
 gives.
 
+# What a terminal failure says
+
+Classification renders one string for logs, and until now that string was also
+the whole of what the caller was told. That is enough for a local upstream and
+not enough for a remote one: a laptop whose stored key has gone stale — the
+desktop rotated its `proxy_api_key` — got `401 Unauthorized invalid_api_key:
+invalid or missing bearer token`, which names no machine and offers no remedy.
+
+So the classified failure carries the upstream's own `code` out beside the
+rendered reason, and the far machine — passed in by whichever surface chose
+the remote upstream, and the only thing here that knows one was involved — is
+offered the chance to say something better before the reason is used. Today
+that is only `invalid_api_key`, which becomes a sentence naming the machine by
+its ticket fingerprint and pointing at `gglib remote enable` on it.
+
+Both halves of that condition are load-bearing. The code alone is not enough:
+gglib's own proxy answers a bad key with the same `invalid_api_key`, and
+telling someone to re-pair a machine that is not in the picture is worse than
+saying nothing. Being remote alone is not enough either: a far machine whose
+model server is down fails terminally too, and its key is fine. The rendered
+sentence carries no status and none of the upstream's own wording, so the
+rendered reason is written to the log at that point rather than left to the
+caller.
+
 <!-- module-docs:end -->
 
 <details>
@@ -71,6 +95,7 @@ gives.
 | [`execute_tests.rs`](execute_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-execute_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-execute_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-execute_tests-coverage.json) |
 | [`headers.rs`](headers.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-headers-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-headers-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-headers-coverage.json) |
 | [`headers_tests.rs`](headers_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-headers_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-headers_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-headers_tests-coverage.json) |
+| [`refusal_tests.rs`](refusal_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-refusal_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-refusal_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-refusal_tests-coverage.json) |
 | [`test_server.rs`](test_server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-test_server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-test_server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-retry-test_server-coverage.json) |
 <!-- module-table:end -->
 

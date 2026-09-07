@@ -176,7 +176,7 @@ impl RemoteOps {
     /// stored or the far side refuses it; `Unavailable` when the request did
     /// not get through.
     pub async fn kill_remote(&self) -> Result<(), GuiError> {
-        let base_url = {
+        let (base_url, fingerprint) = {
             let live = self.live_connect.lock().await;
             // A dial in flight is not a remote that can be stopped: there
             // is no port to send the shutdown through yet.
@@ -185,7 +185,7 @@ impl RemoteOps {
                     "not connected to a remote — `gglib remote connect` first".to_owned(),
                 ));
             };
-            live.handle.base_url()
+            (live.handle.base_url(), live.ticket_fingerprint.clone())
         };
         let key = self
             .settings()
@@ -197,7 +197,7 @@ impl RemoteOps {
                     "this machine holds no key for the remote, so it cannot stop it".to_owned(),
                 )
             })?;
-        redeem::kill(&base_url, &key).await?;
+        redeem::kill(&base_url, &key, &fingerprint).await?;
         // The far side is going away; take this side down before its
         // watcher reports the closed pipe as a surprise.
         self.disconnect().await
@@ -239,16 +239,30 @@ fn busy_dialling(busy: &Busy) -> GuiError {
 ///
 /// A conflict rather than a failure: nothing went wrong with the dial, it
 /// was simply no longer wanted by the time it finished.
-fn cancelled() -> GuiError {
+pub(super) fn cancelled() -> GuiError {
     GuiError::Conflict("the connect was cancelled by `gglib remote disconnect`".to_owned())
 }
 
 /// A `ConnectError` as the person who typed `connect` needs to hear it.
 fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
     match e {
-        ConnectError::PeerUnreachable => GuiError::Unavailable(
-            "the remote machine could not be reached — it may be off, offline, or its ticket \
-             replaced by a newer `gglib remote enable` there"
+        // One producer left at modelpipe 0.3.0, and it is not a machine
+        // that is off: `transport::addr_from`, for a ticket whose endpoint
+        // id is not a curve point. A peer that is merely *absent* is no
+        // longer reported here at all — `connect` now returns as soon as
+        // the local port is bound, and waiting for the machine is
+        // `first_contact`'s, which is where that sentence went. iroh defers
+        // the curve check further still, so nothing produces this today;
+        // the arm stays because that is iroh's choice to revisit, not this
+        // repo's, and `ConnectError` is `#[non_exhaustive]`.
+        //
+        // Deliberately NOT in `docs/remote.md`'s troubleshooting table. A
+        // sentence nobody can be shown is noise there, and the cause a reader
+        // would reach for — a ticket copied wrong — produces
+        // `pairing_string::parse`'s error instead, one guard earlier.
+        ConnectError::PeerUnreachable => GuiError::ValidationFailed(
+            "that pairing string names an address nobody could be at — copy it again from \
+             `gglib remote enable` on the far machine"
                 .to_owned(),
         ),
         ConnectError::Bind(err) => GuiError::Conflict(format!(
@@ -269,3 +283,7 @@ mod connect_tests;
 #[cfg(test)]
 #[path = "connect_race_tests.rs"]
 mod connect_race_tests;
+
+#[cfg(test)]
+#[path = "connect_gate_tests.rs"]
+mod connect_gate_tests;

@@ -10,15 +10,25 @@ use std::time::Duration;
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
 
+use super::super::FarMachine;
 use super::send_with_retry;
 use super::test_server::{TestServer, sse};
 
-async fn send(server: &TestServer, bearer: Option<&str>) {
+/// The key only ever reaches the wire as a far machine's, so that is the only
+/// way to put one there.
+fn machine_holding(key: &str) -> FarMachine {
+    FarMachine {
+        key: key.to_owned(),
+        fingerprint: "3ca82708b995".to_owned(),
+    }
+}
+
+async fn send(server: &TestServer, far: Option<&FarMachine>) {
     let url = format!("{}/v1/chat/completions", server.base_url);
     send_with_retry(
         &Client::new(),
         &url,
-        bearer,
+        far,
         &serde_json::json!({"model": "test"}),
         Duration::from_secs(5),
         &RetryPolicy::default(),
@@ -37,7 +47,7 @@ fn authorization_line(head: &str) -> Option<String> {
 #[tokio::test]
 async fn a_bearer_is_sent_as_the_authorization_header() {
     let server = TestServer::start(vec![sse(&["[DONE]"])]).await;
-    send(&server, Some("far-machine-key")).await;
+    send(&server, Some(&machine_holding("far-machine-key"))).await;
     let heads = server.request_heads();
     assert_eq!(heads.len(), 1);
     assert_eq!(

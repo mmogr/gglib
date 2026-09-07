@@ -140,7 +140,7 @@ pub(super) async fn refuse_if_gone(
 ///
 /// Leaving it up is worse than having no tunnel. The port stops being this
 /// daemon's the moment the proxy lets go of it, another local process may
-/// bind it, and modelpipe 0.2.0 forwards `Authorization` verbatim — so
+/// bind it, and modelpipe 0.3.0 forwards `Authorization` verbatim — so
 /// whatever answers there next is handed the tunnelled request *and* the
 /// gglib key that came with it.
 ///

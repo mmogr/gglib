@@ -1,33 +1,33 @@
 //! Classification tests, against the bodies the two real upstreams write.
 //!
-//! Every literal below is copied verbatim from modelpipe 0.2.0's `refusal.rs`,
-//! the version gglib pins. That is the point of the file: the interesting
-//! failures here were never about the logic, they were about a wire shape
-//! that did not look the way the struct said it did, and a test that
-//! paraphrased the body would have gone green against the bug. This proxy's
-//! own body is not copied — it has a single home in
-//! [`admission_timeout_body`], which the sibling retry tests already share.
+//! No body that a real upstream writes is spelled out here. That is the point
+//! of the file: the interesting failures were never about the logic, they
+//! were about a wire shape that did not look the way the struct said it did,
+//! and a test that paraphrased the body would have gone green against the
+//! bug. So each of those has a single home in
+//! [`test_server`](super::test_server) — the modelpipe ones copied verbatim
+//! from version 0.2.0's `refusal.rs`, this proxy's own built through
+//! [`ErrorResponse`](gglib_proxy::models::ErrorResponse) — and a modelpipe
+//! bump has one place to update however many test files read them.
+//!
+//! The literals that remain are deliberately *not* anybody's wire shape.
+//! `{"error":{"message":"boom"}}` and an HTML blob are the arguments to the
+//! rules under test — a body naming no discriminant, a body that is not this
+//! envelope at all — and a reader has to see them at the assertion to know
+//! what is being asserted. Naming them would hide the input, not share it.
 
 use chrono::Utc;
 use reqwest::Client;
 
 use super::classify::{Failure, classify};
-use super::test_server::{TestServer, admission_timeout_body, json};
+use super::test_server::{
+    TestServer, admission_timeout_body, edge_backend_unreachable_body, edge_invalid_api_key_body,
+    edge_tunnel_unavailable_body, json,
+};
 
 // modelpipe's edge writes `{"error":{"message":…,"code":…}}` — no `type` key —
 // and answers all three of its gateway refusals with 502, so neither the
 // discriminant this proxy uses nor the status can tell them apart on its own.
-
-/// The connect side has no tunnel: the peer is away, or `keep_connected` is
-/// dialling a replacement after the laptop changed networks.
-const TUNNEL_UNAVAILABLE: &str = r#"{"error":{"message":"no tunnel to the serving side is connected right now","code":"tunnel_unavailable"}}"#;
-
-/// The serving side reached for its model server and found nothing there.
-const BACKEND_UNREACHABLE: &str = r#"{"error":{"message":"the serving side could not reach its backend","code":"backend_unreachable"}}"#;
-
-/// The edge's own 401, written before the backend is contacted at all.
-const INVALID_API_KEY: &str =
-    r#"{"error":{"message":"invalid or missing bearer token","code":"invalid_api_key"}}"#;
 
 /// Serve `body` once and hand the response to `classify`.
 ///
@@ -56,7 +56,7 @@ async fn classify_body(status: u16, reason: &str, body: &str) -> Failure {
 /// retry.
 #[tokio::test]
 async fn a_tunnel_being_redialled_is_retryable() {
-    let failure = classify_body(502, "Bad Gateway", TUNNEL_UNAVAILABLE).await;
+    let failure = classify_body(502, "Bad Gateway", &edge_tunnel_unavailable_body()).await;
 
     assert!(
         matches!(failure, Failure::Retryable { .. }),
@@ -68,7 +68,7 @@ async fn a_tunnel_being_redialled_is_retryable() {
 /// it, and repeating a request cannot start a process that is not running.
 #[tokio::test]
 async fn a_backend_the_serving_side_cannot_reach_is_terminal() {
-    let failure = classify_body(502, "Bad Gateway", BACKEND_UNREACHABLE).await;
+    let failure = classify_body(502, "Bad Gateway", &edge_backend_unreachable_body()).await;
 
     assert!(
         matches!(failure, Failure::Terminal { .. }),
@@ -82,7 +82,7 @@ async fn a_backend_the_serving_side_cannot_reach_is_terminal() {
 /// on, and the `code` stands in for the missing discriminant as its label.
 #[tokio::test]
 async fn a_refusal_with_no_type_reads_as_the_sentence_modelpipe_wrote() {
-    let reason = classify_body(401, "Unauthorized", INVALID_API_KEY)
+    let reason = classify_body(401, "Unauthorized", &edge_invalid_api_key_body())
         .await
         .reason()
         .to_owned();
@@ -90,6 +90,42 @@ async fn a_refusal_with_no_type_reads_as_the_sentence_modelpipe_wrote() {
     assert_eq!(
         reason, "401 Unauthorized invalid_api_key: invalid or missing bearer token",
         "the code labels the message when there is no type to"
+    );
+}
+
+/// The `code` survives classification as itself, not only folded into the
+/// rendered reason.
+///
+/// A caller that has to act on one specific condition cannot read the term
+/// back out of the sentence — that is the text matching this module opens by
+/// forbidding — so the term has to travel beside it. The three cases are the
+/// three a body can be in: a code that was written, a parseable body that
+/// wrote none, and a body that was never this shape at all.
+#[tokio::test]
+async fn the_code_the_body_wrote_survives_beside_the_rendered_reason() {
+    assert_eq!(
+        classify_body(401, "Unauthorized", &edge_invalid_api_key_body())
+            .await
+            .code(),
+        Some("invalid_api_key")
+    );
+    assert_eq!(
+        classify_body(
+            500,
+            "Internal Server Error",
+            r#"{"error":{"message":"boom"}}"#
+        )
+        .await
+        .code(),
+        None,
+        "a body that wrote no code has none to carry"
+    );
+    assert_eq!(
+        classify_body(503, "Service Unavailable", "<html>upstream down</html>")
+            .await
+            .code(),
+        None,
+        "nothing structured was parsed, so nothing structured is claimed"
     );
 }
 
