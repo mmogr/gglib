@@ -123,7 +123,10 @@ async fn waiting<T>(port: u16, dial: &JoinHandle<T>) {
                 "the dial ran to its end without ever waiting for the far machine, so the \
                  one-time code went out down a pipe that had reached nobody"
             );
-            if TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.is_ok() {
+            if TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+                .await
+                .is_ok()
+            {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;

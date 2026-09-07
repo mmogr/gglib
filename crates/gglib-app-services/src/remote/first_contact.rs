@@ -18,7 +18,7 @@
 //! connection that never existed.
 //!
 //! Written over statuses rather than over a [`modelpipe::ConnectHandle`],
-//! for the reason [`super::connect_watch::follow`] is: the timing *is* the
+//! for the reason `connect_watch::follow` is: the timing *is* the
 //! policy, and a policy nothing can drive is a comment with a timer attached.
 
 use std::future::Future;

@@ -57,7 +57,11 @@ async fn a_machine_that_never_answers_is_given_up_on_at_the_budget() {
 
     let waited = tokio::time::timeout(
         RUNAWAY,
-        wait(PipeStatus::Idle, || next_from(&rx), &CancellationToken::new()),
+        wait(
+            PipeStatus::Idle,
+            || next_from(&rx),
+            &CancellationToken::new(),
+        ),
     )
     .await
     .expect("the deadline never fired, so the dial is still waiting");
@@ -66,7 +70,10 @@ async fn a_machine_that_never_answers_is_given_up_on_at_the_budget() {
     let GuiError::Unavailable(message) = refusal(&NoContact::Never) else {
         panic!("a machine that is off is not the caller's to fix");
     };
-    assert!(message.contains("did not answer within 30 seconds"), "{message}");
+    assert!(
+        message.contains("did not answer within 30 seconds"),
+        "{message}"
+    );
     assert!(message.contains("gglib remote enable"), "{message}");
 }
 
@@ -80,7 +87,11 @@ async fn a_relayed_path_is_first_contact_just_as_a_direct_one_is() {
 
         let waited = tokio::time::timeout(
             RUNAWAY,
-            wait(PipeStatus::Idle, || next_from(&rx), &CancellationToken::new()),
+            wait(
+                PipeStatus::Idle,
+                || next_from(&rx),
+                &CancellationToken::new(),
+            ),
         )
         .await
         .expect("a path formed, so the gate had its answer");
@@ -124,7 +135,11 @@ async fn a_pipe_that_closes_before_it_connects_ends_the_wait_at_once() {
 
     let waited = tokio::time::timeout(
         RUNAWAY,
-        wait(PipeStatus::Idle, || next_from(&rx), &CancellationToken::new()),
+        wait(
+            PipeStatus::Idle,
+            || next_from(&rx),
+            &CancellationToken::new(),
+        ),
     )
     .await
     .expect("a closed pipe is an answer");
@@ -207,5 +222,8 @@ async fn what_the_dial_pays_for_is_paid_once_the_machine_answers() {
         .await;
 
     assert_eq!(out.expect("contact was made"), "the far machine's key");
-    assert!(spent.load(Ordering::SeqCst), "the pairing was never redeemed");
+    assert!(
+        spent.load(Ordering::SeqCst),
+        "the pairing was never redeemed"
+    );
 }
