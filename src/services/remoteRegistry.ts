@@ -16,6 +16,12 @@
  *   Also client-side only, and mandatory on that path: this machine's
  *   default is deliberately not sent, because the far one may not have it
  *   (`docs/remote.md`).
+ * - `chatRequestedAt` — a request from the Remote panel to put the chat
+ *   screen on screen, aimed at the far machine. The panel is mounted in the
+ *   model library's header and the chat screen replaces the whole Model
+ *   Control Center, so neither can reach the other by props; this store is
+ *   the seam between them. It is one-shot: the page clears it as it opens,
+ *   so asking twice opens twice.
  */
 
 import { createEventStore } from './createEventStore';
@@ -38,6 +44,14 @@ export interface RemoteState {
    * going.
    */
   chatModel: string;
+  /**
+   * When the panel last asked for the chat screen, or `null` for not asked.
+   *
+   * A timestamp rather than a boolean because it is an event, not a mode:
+   * the page reacts to the value changing and clears it again, so a second
+   * request after the first was served is a second distinct value.
+   */
+  chatRequestedAt: number | null;
 }
 
 /** A status with nothing on: what a fresh daemon reports. */
@@ -57,7 +71,12 @@ export const IDLE_STATUS: RemoteStatus = {
   has_remote_key: false,
 };
 
-const INITIAL: RemoteState = { status: null, useForChat: false, chatModel: '' };
+const INITIAL: RemoteState = {
+  status: null,
+  useForChat: false,
+  chatModel: '',
+  chatRequestedAt: null,
+};
 
 const store = createEventStore<RemoteState>(INITIAL);
 
@@ -67,8 +86,10 @@ export function applyRemoteStatus(status: RemoteStatus): void {
   store.setState({
     ...prev,
     status,
-    // A preference for a machine that is gone does not survive its going.
+    // A preference for a machine that is gone does not survive its going,
+    // and neither does a request to open a chat screen against it.
     useForChat: prev.useForChat && status.connected !== null,
+    chatRequestedAt: status.connected !== null ? prev.chatRequestedAt : null,
   });
 }
 
@@ -131,7 +152,12 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       });
       break;
     case 'remote_disconnected':
-      store.setState({ ...prev, status: { ...status, connected: null }, useForChat: false });
+      store.setState({
+        ...prev,
+        status: { ...status, connected: null },
+        useForChat: false,
+        chatRequestedAt: null,
+      });
       break;
   }
 }
@@ -151,6 +177,23 @@ export function setUseRemoteForChat(useForChat: boolean): void {
  */
 export function setRemoteChatModel(chatModel: string): void {
   store.setState({ ...store.getState(), chatModel });
+}
+
+/**
+ * Ask for the chat screen, pointed at the connected machine.
+ *
+ * Refused while nothing is connected: the screen would have no upstream and
+ * the first send would be the place the user found out.
+ */
+export function requestRemoteChat(): void {
+  const prev = store.getState();
+  if (prev.status?.connected == null) return;
+  store.setState({ ...prev, chatRequestedAt: Date.now() });
+}
+
+/** Served: the page has the request and the next one must be distinct. */
+export function clearRemoteChatRequest(): void {
+  store.setState({ ...store.getState(), chatRequestedAt: null });
 }
 
 /** Reset (used during cleanup / hot-reload). */

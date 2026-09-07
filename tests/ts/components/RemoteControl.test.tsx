@@ -126,6 +126,34 @@ describe('RemoteControl', () => {
     expect(screen.queryByText(/name one before sending/i)).not.toBeInTheDocument();
   });
 
+  it('chat on that machine is dead until a model is named, then routes and asks', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      connected: {
+        port: 41234,
+        base_url: 'http://127.0.0.1:41234/v1',
+        ticket_fingerprint: '3ca82708b995',
+        path: 'direct',
+      },
+    });
+    const user = await open();
+
+    // Nothing named, nothing to open: the far machine answers to its own
+    // names and this side has no catalog to guess one from.
+    const openChat = screen.getByRole('button', { name: /chat on that machine/i });
+    expect(openChat).toBeDisabled();
+    expect(getRemoteState().chatRequestedAt).toBeNull();
+
+    await user.type(screen.getByLabelText(/model on that machine/i), 'qwen3');
+    expect(openChat).toBeEnabled();
+    await user.click(openChat);
+
+    // Both halves of the one decision: the turns are routed there and the
+    // page is asked for the screen to type them into.
+    expect(getRemoteState().useForChat).toBe(true);
+    expect(getRemoteState().chatRequestedAt).toEqual(expect.any(Number));
+  });
+
   it('a remembered pairing lets connect dial it with an empty box', async () => {
     applyRemoteStatus({ ...IDLE_STATUS, stored_ticket_fingerprint: '3ca82708b995', has_remote_key: true });
     connectRemote.mockResolvedValue({
