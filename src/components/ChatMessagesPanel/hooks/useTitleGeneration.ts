@@ -16,8 +16,8 @@ export interface UseTitleGenerationOptions {
   activeConversation: ConversationSummary | null;
   /** Currently active conversation ID */
   activeConversationId: number | null;
-  /** Server port for AI title generation */
-  serverPort: number;
+  /** Server port for AI title generation; absent when the chat is remote. */
+  serverPort?: number;
   /** Prompt template for title generation */
   titleGenerationPrompt: string;
   /** Callback to rename conversation */

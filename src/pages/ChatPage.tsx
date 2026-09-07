@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePanelResize } from '../hooks/usePanelResize';
-import { type ChatPageTabId } from './chatTabs';
+import { type ChatPageTabId, CHAT_PAGE_TABS, REMOTE_CHAT_PAGE_TABS } from './chatTabs';
 import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
@@ -22,25 +22,41 @@ import type { ConversationSummary } from '../services/transport';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
-interface ChatPageProps {
-  serverPort: number;
-  modelId: number;
+/**
+ * Whose model is answering.
+ *
+ * The local arm is a server started here: a port to talk to, a model id the
+ * registry knows, a console to read. The remote arm is the machine on the
+ * other end of the tunnel — the daemon supplies its port and key per turn,
+ * so neither exists on this side, and a union rather than optional numbers
+ * is what stops the console and the health subscription being handed
+ * placeholders they would report as a dead server.
+ */
+type ChatPageProps = {
   modelName: string;
   contextLength?: number;
   serverStartTime?: number; // Unix timestamp in seconds
   initialView?: 'chat' | 'console'; // Which view to show initially
   onClose: () => Promise<void>; // Stops server and exits
-}
+} & (
+  | { remote?: false; serverPort: number; modelId: number }
+  | { remote: true; serverPort?: undefined; modelId?: undefined }
+);
 
-export default function ChatPage({
-  serverPort,
-  modelId,
-  modelName,
-  contextLength,
-  serverStartTime,
-  initialView = 'chat',
-  onClose,
-}: ChatPageProps) {
+export default function ChatPage(props: ChatPageProps) {
+  // Destructured for the body, but `props` is kept: the checker can narrow
+  // `props.remote` and correlate the port and id with it, and cannot do that
+  // for locals it has already separated.
+  const {
+    serverPort,
+    modelId,
+    modelName,
+    contextLength,
+    serverStartTime,
+    initialView = 'chat',
+    remote = false,
+    onClose,
+  } = props;
   // Tab state
   const [activeTab, setActiveTab] = useState<ChatPageTabId>(initialView);
   
@@ -78,6 +94,10 @@ export default function ChatPage({
   const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
   const [toolFormat, setToolFormat] = useState<string | null>(null);
   useEffect(() => {
+    // Nothing to ask about remotely: the capability is read from this
+    // machine's server registry and the model is on the other machine.
+    // `null` is already the permissive answer, which is the right one here.
+    if (modelId === undefined) return;
     let cancelled = false;
     getTransport().getServerToolSupport(modelId)
       .then((data) => {
@@ -107,19 +127,26 @@ export default function ChatPage({
 
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
-  // because ChatPage is only opened when a server is already running
-  const serverState = useServerState(modelId);
-  const isServerRunning = serverState?.status !== 'stopped' && serverState?.status !== 'crashed';
+  // because ChatPage is only opened when a server is already running.
+  // A remote session subscribes to nothing — this registry only knows servers
+  // started here, so its silence about the far machine must not be read as
+  // that machine being down and the composer locked.
+  const serverState = useServerState(modelId ?? -1);
+  const isServerRunning =
+    remote || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
 
-  // Show toast only on status transition to stopped/crashed (not on remount)
+  // Show toast only on status transition to stopped/crashed (not on remount).
+  // Never for a remote chat: whatever this machine's registry is reporting,
+  // it is not the model answering, and saying the chat is read-only when it
+  // is not is worse than saying nothing.
   useEffect(() => {
     const prev = prevStatusRef.current;
     const next = serverState?.status;
 
-    if (prev !== next && (next === 'stopped' || next === 'crashed')) {
+    if (!remote && prev !== next && (next === 'stopped' || next === 'crashed')) {
       showToast(
         next === 'crashed'
           ? 'Server crashed. Chat is now read-only.'
@@ -129,7 +156,7 @@ export default function ChatPage({
     }
 
     prevStatusRef.current = next;
-  }, [serverState?.status, showToast]);
+  }, [remote, serverState?.status, showToast]);
 
   // Sync conversations
   const syncConversations = useCallback(
@@ -363,6 +390,7 @@ export default function ChatPage({
               onClose={onClose}
               activeTab={activeTab}
               onTabChange={setActiveTab}
+              tabs={remote ? REMOTE_CHAT_PAGE_TABS : CHAT_PAGE_TABS}
             />
           }
           right={
@@ -393,29 +421,33 @@ export default function ChatPage({
 
       </AssistantRuntimeProvider>
 
-      {/* Console Tab Content - always mounted, hidden when not active */}
-      <TwoPanelLayout
-        ref={activeTab === 'console' ? layoutRef : undefined}
-        isHidden={activeTab !== 'console'}
-        className="flex-1 min-h-0"
-        leftWidth={leftPanelWidth}
-        onResizeStart={handlePointerDown}
-        onKeyboardResize={handleKeyboardResize}
-        leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
-        left={
-          <ConsoleInfoPanel
-            modelId={modelId}
-            modelName={modelName}
-            serverPort={serverPort}
-            contextLength={contextLength}
-            startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
-            onStopServer={onClose}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-          />
-        }
-        right={<ConsoleLogPanel serverPort={serverPort} />}
-      />
+      {/* Console Tab Content - always mounted, hidden when not active.
+          Absent entirely for a remote chat: the process it reports on is on
+          the other machine, so there is no id, port or log to hand it. */}
+      {!props.remote && (
+        <TwoPanelLayout
+          ref={activeTab === 'console' ? layoutRef : undefined}
+          isHidden={activeTab !== 'console'}
+          className="flex-1 min-h-0"
+          leftWidth={leftPanelWidth}
+          onResizeStart={handlePointerDown}
+          onKeyboardResize={handleKeyboardResize}
+          leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
+          left={
+            <ConsoleInfoPanel
+              modelId={props.modelId}
+              modelName={modelName}
+              serverPort={props.serverPort}
+              contextLength={contextLength}
+              startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
+              onStopServer={onClose}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
+          }
+          right={<ConsoleLogPanel serverPort={props.serverPort} />}
+        />
+      )}
 
       {isNewConversationModalOpen && (
         <NewConversationModal
