@@ -167,3 +167,7 @@ mod lifecycle_tests;
 #[cfg(test)]
 #[path = "enable_tests.rs"]
 mod enable_tests;
+
+#[cfg(test)]
+#[path = "serve_watch_tests.rs"]
+mod serve_watch_tests;
