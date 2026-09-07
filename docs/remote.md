@@ -105,15 +105,13 @@ chat* box is checked. The choice is per window and is cleared the moment the
 connection goes, so a later turn cannot silently land on a machine you
 stopped thinking about.
 
-> **Not working as of 2026-09-07.** The box routes the turn to the desktop
-> correctly, and the turn then fails there. The GUI sends no model name, and
-> the remote path deliberately resolves nothing against this machine's
-> catalog, so the request arrives with an empty model and comes back
-> `404 Model '' not found` — the same failure described just above for a
-> `--remote` command with no `-m`, except that the popover gives you nowhere
-> to name a model. `gglib chat --remote` was fixed in
-> [#987](https://github.com/mmogr/gglib/pull/987); the GUI's own chat was
-> not. Use the CLI for remote turns until this note goes away.
+> **Getting a chat to use it on, as of 2026-09-07.** The GUI's chat screen
+> only opens on top of a local model already running here, and a turn is
+> refused before it is sent — `No server selected. Please serve a model
+> first.` — unless a local server is selected, though the remote path never
+> consults that port. So the box redirects a chat you already have; it
+> cannot give you one on a laptop serving nothing of its own. Serve any
+> local model to reach the screen; reaching it without one is separate work.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API
