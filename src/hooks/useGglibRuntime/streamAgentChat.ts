@@ -68,7 +68,12 @@ export interface StreamAgentChatOptions {
   turnId: string;
   getMessages: () => GglibMessage[];
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>;
-  selectedServerPort: number;
+  /**
+   * The local server this turn is for. Absent for a remote turn, which has
+   * none: the body still carries a `port` because the wire type requires a
+   * number, and the backend does not consult it on that branch.
+   */
+  selectedServerPort?: number;
   abortSignal?: AbortSignal;
   conversationId?: number;
   mkAssistantMessage: (custom?: GglibMessageCustom) => GglibMessage;
@@ -212,7 +217,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         ...(authHeaders as Record<string, string>),
       },
       body: JSON.stringify({
-        port: selectedServerPort,
+        port: selectedServerPort ?? 0,
         messages: wireMessages,
         config: agentConfig,
         tool_filter: toolFilter,
