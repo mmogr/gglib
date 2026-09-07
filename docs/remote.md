@@ -88,8 +88,11 @@ themselves:
 
 ```bash
 gglib q --remote -m qwen3 "Summarise this" < notes.md
-gglib chat --remote -m qwen3
+gglib chat --remote qwen3
 ```
+
+`q` names the model with `-m`; `chat` names it as the positional and has no
+short flag for it.
 
 With `--remote`, the model name is forwarded to the desktop rather than
 looked up here, and the laptop's default model is not consulted, because the
@@ -98,7 +101,16 @@ name one the desktop serves, or the request arrives there with an empty model
 and comes back `404 Model '' not found` — a real answer from a working
 tunnel, which is easy to misread as the tunnel being broken.
 `gglib model list` on the desktop is the list to choose from. `--remote` and
-`--port` are exclusive: they name different machines.
+`--port` are exclusive: they name different machines. The ID form the
+positional also accepts is local-only — `gglib chat 7 --remote` sends
+`"model": "7"` and comes back `404 Model '7' not found`.
+
+A `{model}:{profile}` suffix travels with the name and is resolved by the
+desktop against **its** profiles, which are the ones that govern how it
+samples — `gglib chat qwen3:coding --remote`. A suffix the desktop does not
+know comes back as a 404 listing the profiles it has. `--profile` is refused
+with `--remote` for the same reason: it names a profile configured on the
+laptop, and there is no way for it to reach the machine that would apply it.
 
 **The GUI's chat** goes to the desktop when the Remote popover's *Use it for
 chat* box is checked. The choice is per window and is cleared the moment the
