@@ -142,12 +142,23 @@ The new key reaches the tunnel edge; it reaches no machine that already
 paired. A laptop keeps whatever it was handed when it redeemed its code, and
 there is no path that updates it — only another redemption writes it. From the
 rotation onward its requests are refused at the edge with `invalid or missing
-bearer token`, a message the tunnel writes rather than gglib, so it names no
-machine and offers no remedy. Getting back in means `gglib remote disable` and
+bearer token` — a flat refusal the tunnel writes rather than gglib, naming
+nothing, because at that point the tunnel is all that has looked at the
+request. Getting back in means `gglib remote disable` and
 `gglib remote enable` on the desktop and a fresh `<ticket>-<code>` on every
 laptop that was using the old key. The one case that survives a rotation is a
 pairing code still on screen when it lands: that code is re-armed with the new
 key and redeems normally.
+
+**The key is not something to type in.** There is no
+`gglib config settings set --remote-api-key`, and that is deliberate rather
+than missing: the laptop's copy is written only by `gglib remote connect`,
+which redeems a code and stores the key *together with the ticket it came
+from*. A hand-set key could name a machine the stored ticket does not, which
+is exactly the desync — connected, holding the wrong machine's key, every
+request refused — that keying the record by ticket fingerprint exists to make
+impossible. `scripts/check_settings_surfaces.sh` records the exemption with
+that reason. Pair again instead; it is one command on each side.
 
 **Pairing moves a one-time code, not the key.** The six-digit code is
 granted once at the tunnel edge, lives two minutes, dies on first use, and
