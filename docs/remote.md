@@ -63,11 +63,14 @@ pairs or the code runs out.
 
 ### The laptop: `connect`, `disconnect`, `kill`
 
-`gglib remote connect <ticket>-<code>` dials the ticket, redeems the code
-through the tunnel for the desktop's API key, stores the key and the ticket,
-and binds a loopback port that is now the desktop's proxy. It prints the
-port. Later, `gglib remote connect <ticket>` uses the stored key, and
-`gglib remote connect` with no argument dials the stored ticket.
+`gglib remote connect <ticket>-<code>` binds a loopback port that is now the
+desktop's proxy, waits up to thirty seconds for the desktop to answer, then
+redeems the code through the tunnel for its API key and stores the key and the
+ticket. It prints the port. The waiting is in that position on purpose: the
+port is bound before anything has reached the far machine, and a code redeemed
+down a pipe that reached nobody is spent for nothing. Later,
+`gglib remote connect <ticket>` uses the stored key, and `gglib remote connect`
+with no argument dials the stored ticket.
 
 | Flag | Effect |
 |------|--------|
@@ -310,7 +313,8 @@ which is the ordinary OpenAI-compatible arrangement.
 
 | You see | It means |
 |---------|----------|
-| `the remote machine could not be reached` | The desktop is off, offline, or has run `enable` again since (a new ticket). Ask for the new pairing. |
+| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has run `enable` again since (a new ticket). `connect` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. Ask for the new pairing. |
+| `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote connect` again with the same string. |
 | `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
 | `invalid or missing bearer token` | The tunnel edge refused the key this laptop holds — usually because `proxy_api_key` was rotated on the desktop since you paired. Re-enable there and redeem a fresh `<ticket>-<code>`. |
