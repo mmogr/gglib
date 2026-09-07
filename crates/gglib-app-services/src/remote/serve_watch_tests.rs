@@ -12,6 +12,7 @@ use std::sync::Arc;
 use gglib_core::SettingsUpdate;
 use gglib_core::events::AppEvent;
 use gglib_core::services::AppCore;
+use gglib_runtime::proxy::ProxyStatus;
 
 use super::enable_tests::{Recording, ops};
 use super::*;
@@ -53,10 +54,29 @@ const fn offline() -> EnableRequest {
 async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {
     let (_core, proxy, events, ops) = ops_with_key().await;
 
+    // Stopped on a state change, not on a clock. The fixture leaves the proxy
+    // down, so `ensure_running` starting it is an observable transition and
+    // this lands in the span between that and the check — every time, on any
+    // machine.
+    //
+    // A `sleep` here cannot do that. The span's width is `modelpipe::serve`'s
+    // `wait_online`, which is however long the endpoint takes to reach a
+    // relay: measured at 3.6s on a developer machine and under 1s on CI, where
+    // a one-second sleep landed *after* the check and the enable succeeded.
+    // That is the test failing to make its own claim, not the code changing.
     let stopping = tokio::spawn({
         let proxy = Arc::clone(&proxy);
         async move {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let started = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+                while !matches!(proxy.status().await, ProxyStatus::Running { .. }) {
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+            })
+            .await;
+            assert!(
+                started.is_ok(),
+                "`enable` never started the proxy it fronts"
+            );
             proxy.stop().await.expect("the test proxy stops");
         }
     });
