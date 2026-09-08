@@ -76,12 +76,33 @@ pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {
     if status.enabled {
         anyhow::bail!("the daemon reported remote access still enabled after disable");
     }
-    eprintln!("  Remote access is off. The ticket is dead; a later `enable` mints a new one.");
-    eprintln!(
-        "  The API key stays in settings \u{2014} authentication turns on and never off by itself."
-    );
+    for line in DISABLE_NOTICE {
+        eprintln!("{line}");
+    }
     Ok(())
 }
+
+/// What `gglib remote disable` prints once the tunnel is down.
+///
+/// A constant so the wording is pinned by a test rather than by nobody. The
+/// sentence this replaced — "authentication turns on and never off by itself"
+/// — is true of a listener that bound with a key already in settings, and
+/// false of the ordinary case this command ends: `enable` mints the key into a
+/// proxy that is *already* bound on loopback, and a loopback bind resolves no
+/// key, so that listener has no bind-time floor and clearing `proxy_api_key`
+/// reopens it, `/mcp` included. `clearing_reopens_a_listener_that_bound_on_loopback`
+/// in `gglib-core`'s `access::bearer_tests` asserts exactly that.
+///
+/// Which of the two a running listener is, this side cannot see: `disable`
+/// talks to the daemon over HTTP and never learns the proxy's bind. So the
+/// notice names the dependency and points at the command that shows the state,
+/// rather than asserting a rule that holds in one case only. `docs/remote.md`
+/// carries both cases in full, and ADR 0012 the reasoning.
+const DISABLE_NOTICE: [&str; 3] = [
+    "  Remote access is off. The ticket is dead; a later `enable` mints a new one.",
+    "  The API key stays in settings \u{2014} whether the proxy still demands it depends",
+    "  on the bind its listener came up with. `gglib config settings show` prints it.",
+];
 
 /// Execute `gglib remote status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
@@ -194,5 +215,55 @@ fn ago(unix_ms: i64) -> String {
         s if s < 60 => format!("{s}s ago"),
         s if s < 3600 => format!("{}m ago", s / 60),
         s => format!("{}h ago", s / 3600),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// [#1005]: the notice may keep the half that is always true and must not
+    /// keep the half that is true of one bind only. Asserted on the constant
+    /// rather than on captured stderr because `disable` cannot be reached
+    /// without a daemon, and the string is the whole of what this fixes.
+    ///
+    /// [#1005]: https://github.com/mmogr/gglib/issues/1005
+    #[test]
+    fn the_disable_notice_says_the_key_stays_without_claiming_it_can_never_go() {
+        let notice = DISABLE_NOTICE.join(" ");
+
+        assert!(
+            notice.contains("The API key stays in settings"),
+            "the part that holds for every bind is still said: {notice}"
+        );
+        assert!(
+            !notice.contains("never off by itself"),
+            "the unqualified claim is gone: {notice}"
+        );
+        assert!(
+            notice.contains("depends"),
+            "what replaced it names the bind it depends on: {notice}"
+        );
+        assert!(
+            notice.contains("gglib config settings show"),
+            "the operator is pointed at the state rather than left to infer it: {notice}"
+        );
+    }
+
+    /// The banner is printed a line at a time, so a line that outgrew the
+    /// terminal would wrap into the two-space indent every other line carries.
+    #[test]
+    fn every_line_of_the_disable_notice_fits_a_narrow_terminal() {
+        for line in DISABLE_NOTICE {
+            assert!(
+                line.starts_with("  "),
+                "the banner's indent is part of the line: {line:?}"
+            );
+            assert!(
+                line.chars().count() <= 80,
+                "{} chars is past an 80-column terminal: {line:?}",
+                line.chars().count()
+            );
+        }
     }
 }
