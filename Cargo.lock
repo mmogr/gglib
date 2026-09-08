@@ -2672,6 +2672,7 @@ dependencies = [
  "gglib-proxy",
  "gglib-sse",
  "http-body-util",
+ "modelpipe",
  "regex",
  "reqwest 0.13.4",
  "serde",
