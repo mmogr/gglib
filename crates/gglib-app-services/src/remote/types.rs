@@ -18,6 +18,15 @@ pub struct EnableRequest {
     /// off removes that contact and the property that a ticket keeps working
     /// after this machine changes network.
     pub discovery: bool,
+    /// Keep this machine's endpoint key on disk, so the ticket survives a
+    /// daemon restart and a device pairs once rather than every session.
+    ///
+    /// Off by default, which is ADR 0012 decision 4 unchanged: a fresh
+    /// identity means a leaked ticket is dead at the next restart, and
+    /// restarting is something people do anyway. Turning this on trades that
+    /// free revocation for a ticket that lasts, and revocation becomes
+    /// deleting a file someone has to remember exists.
+    pub keep_identity: bool,
 }
 
 /// What `enable` hands back, exactly once: the ticket and the pairing code

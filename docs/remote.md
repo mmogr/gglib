@@ -46,7 +46,31 @@ text instead.
 | `--allow-mcp` | Let requests arriving through the tunnel reach `/mcp`. Off by default; see [What the other machine can reach](#what-the-other-machine-can-reach). |
 | `--relay URL` | Use a self-hosted iroh relay instead of the public ones. |
 | `--no-discovery` | Do not publish to or resolve through n0's discovery service. The ticket then carries only the paths it was minted with and stops working if the machine changes network. Advanced. |
+| `--keep-identity` | Keep this machine's endpoint key, so the ticket survives a restart and a paired device does not have to pair again. See below. |
 | `--no-qr` | Plain text; no alternate screen. |
+
+### Pairing once instead of every session
+
+By default a restart mints a new endpoint key, so the ticket changes and every
+device pairs again. That is the point: a leaked ticket is dead at the next
+restart, and revoking one costs nothing you were not going to do anyway.
+
+It is also the right trade for a laptop and the wrong one for a phone. Re-pairing
+a laptop is a paste; re-pairing a phone is finding the desktop, waking a screen
+and pointing a camera at it, every time the machine reboots.
+
+`gglib remote enable --keep-identity` stores the endpoint key at
+`<data root>/data/remote_identity` and reuses it, so the ticket lasts and the
+phone pairs once. What you give up is stated plainly: revocation stops being a
+reboot and becomes deleting that file and restarting — which re-pairs every
+device, exactly as a reboot used to. The file is created `0600` and refused if
+anything else can read it.
+
+Leave discovery on when you use it. A lasting ticket names an endpoint rather
+than an address, and discovery is what turns that name back into an address
+after the machine changes network. `--keep-identity --no-discovery` together
+give a ticket that never expires and stops resolving the moment the desktop
+moves.
 
 `gglib remote status` shows both sides: whether the tunnel is up, the
 ticket's fingerprint (never the ticket), whether the code is still live,

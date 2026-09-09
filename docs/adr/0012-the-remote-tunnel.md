@@ -1,7 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -314,6 +314,35 @@ session. The pairing string is `<ticket>-<code>` — base32 tickets never contai
 whole thing, which the ticket format tolerates by parsing
 case-insensitively.
 
+> **Amended 2026-09-09 — the alternative is now available, opt in, and the
+> default is unchanged.** `gglib remote enable --keep-identity` passes
+> modelpipe a stored endpoint key at `<data root>/data/remote_identity`, so
+> the ticket survives a restart and a device pairs once instead of every
+> session. Without the flag `identity` is still `None` and this decision reads
+> exactly as it did.
+>
+> What changed is not the argument above but who it is being made for. The
+> paragraph weighs free revocation against *saved typing*, and typing is what
+> it costs a laptop: the person is already at a keyboard with the ticket on
+> screen beside them. It costs a **phone** a camera, a QR code on a screen in
+> another room, and a walk to that room — every time the desktop reboots,
+> which is not a thing people do rarely. Against that, "restarting is
+> something people do anyway" stops being the argument for free revocation and
+> becomes the argument against the feature being usable.
+>
+> So the trade is offered rather than made. The default stays where the
+> reasoning above puts it, because that reasoning is right for a machine that
+> can re-pair cheaply. `--keep-identity` is for the one that cannot, and it
+> says what it costs: revocation stops being a reboot and becomes deleting
+> `remote_identity` and restarting, which is the same re-pairing of every
+> device that used to happen by accident. modelpipe mints the file `0600` and
+> refuses to read one others can read.
+>
+> The file sits under `data/` rather than beside `pids/`, and that is
+> load-bearing rather than tidy: a debug build resolves the data root to the
+> repository checkout, where `.gitignore` covers `/data`. A private key a
+> level up would be untracked in a working tree rather than ignored by it.
+
 ### 5. `/mcp` is refused over the tunnel unless asked for
 
 Tunnelled requests get 403 `mcp_not_allowed_over_tunnel` on `/mcp` by default.
@@ -401,11 +430,23 @@ it that is only available to the right person.
 
 - The ticket has to be moved to the laptop every session. This is the direct
   price of decision 4 and the thing most likely to be re-litigated; the
-  counter-argument is in modelpipe's ADR 0002 and it is not weak.
+  counter-argument is in modelpipe's ADR 0002 and it is not weak. *Amended
+  2026-09-09: it was re-litigated, and `--keep-identity` is the answer — opt
+  in, default unchanged. See the note under decision 4.*
 - `--no-discovery` and a per-session identity interact badly by construction:
   a ticket that carries only its minting addresses, from an endpoint that will
   not exist next time, is nearly useless. Both flags are documented; the
   combination is not recommended.
+
+  > **Amended 2026-09-09 — with `--keep-identity` this inverts, and the two
+  > flags become opposites rather than a bad pair.** A stored identity is
+  > exactly what makes discovery worth having: the endpoint keeps its name
+  > across a restart, and discovery is what turns that lasting name into a
+  > reachable address after the machine changes network. Turning discovery off
+  > *and* keeping the identity gives a ticket that lasts forever and stops
+  > resolving the moment the desktop moves — which is the worst of both, and
+  > is now the combination not to recommend. `--keep-identity` on its own,
+  > with discovery left on, is the one that pays.
 - Rotation is eventually consistent within 5 s. A revoked key keeps working at
   the tunnel edge for up to one settings-cache window.
 

@@ -54,6 +54,7 @@ pub(crate) struct RemoteEnableBody {
     pub allow_mcp: bool,
     pub relay: Option<String>,
     pub discovery: Option<bool>,
+    pub keep_identity: bool,
 }
 
 /// `POST /api/remote/enable` response: the one time the ticket and the code

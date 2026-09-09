@@ -24,6 +24,10 @@ pub(crate) struct RemoteEnableBody {
     /// Publish to and resolve through n0's discovery service. Omitted is on.
     #[serde(default)]
     pub discovery: Option<bool>,
+    /// Keep this machine's endpoint key on disk so the ticket survives a
+    /// restart. Omitted is off, which is a fresh identity per session.
+    #[serde(default)]
+    pub keep_identity: bool,
 }
 
 impl RemoteEnableBody {
@@ -32,6 +36,7 @@ impl RemoteEnableBody {
             allow_mcp: self.allow_mcp,
             relay: self.relay,
             discovery: self.discovery.unwrap_or(true),
+            keep_identity: self.keep_identity,
         }
     }
 }
@@ -234,6 +239,28 @@ mod tests {
         assert!(!req.allow_mcp);
         assert!(req.relay.is_none());
         assert!(req.discovery, "discovery is on unless switched off");
+        assert!(
+            !req.keep_identity,
+            "a body that says nothing must not leave a key on the machine"
+        );
+    }
+
+    /// An old client posts a body with no `keep_identity` at all. It has to
+    /// mean the same thing as `false`, or upgrading the daemon would start
+    /// writing a key to disk for callers that never asked for one.
+    #[test]
+    fn a_body_written_before_the_flag_existed_keeps_no_key() {
+        let body: RemoteEnableBody =
+            serde_json::from_str(r#"{"allow_mcp":false,"discovery":true}"#).unwrap();
+        assert!(!body.into_request().keep_identity);
+    }
+
+    #[test]
+    fn keeping_the_identity_is_carried_through() {
+        let body: RemoteEnableBody = serde_json::from_str(r#"{"keep_identity":true}"#).unwrap();
+        let req = body.into_request();
+        assert!(req.keep_identity);
+        assert!(req.discovery, "the two switches are independent");
     }
 
     #[test]

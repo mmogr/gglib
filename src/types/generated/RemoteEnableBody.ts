@@ -16,4 +16,9 @@ relay: string | null,
 /**
  * Publish to and resolve through n0's discovery service. Omitted is on.
  */
-discovery: boolean | null, };
+discovery: boolean | null, 
+/**
+ * Keep this machine's endpoint key on disk so the ticket survives a
+ * restart. Omitted is off, which is a fresh identity per session.
+ */
+keep_identity: boolean, };

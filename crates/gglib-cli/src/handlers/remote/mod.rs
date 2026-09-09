@@ -21,6 +21,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             allow_mcp,
             relay,
             no_discovery,
+            keep_identity,
             no_qr,
         } => {
             enable(
@@ -29,6 +30,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
                     allow_mcp,
                     relay,
                     no_discovery,
+                    keep_identity,
                     no_qr,
                 },
             )
