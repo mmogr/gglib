@@ -126,6 +126,34 @@ async fn tunnel_to(proxy_url: &str) -> (modelpipe::ServeHandle, modelpipe::Conne
     (serving, connected, base)
 }
 
+/// modelpipe's one retryable 502, and the only one.
+///
+/// The connect side writes this while there is no peer to forward to. The
+/// other two — `bad_gateway` and `backend_unreachable` — are written by the
+/// *serving* side about a model server that is stopped or wedged behind a
+/// pipe that is working, and no amount of waiting fixes those.
+///
+/// gglib's product code draws exactly this line, for exactly this reason: see
+/// `code_is_retryable` in
+/// `gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs`. It is
+/// restated here rather than shared because `gglib-proxy` does not depend on
+/// `gglib-runtime` and must not start in order to spell one string.
+const TUNNEL_UNAVAILABLE: &str = "tunnel_unavailable";
+
+/// What a request came back with. Carries the body rather than the
+/// `Response`, because reading the body is how one 502 is told from another
+/// and reading it consumes the response.
+struct Answer {
+    status: StatusCode,
+    body: String,
+}
+
+impl Answer {
+    fn json(&self) -> serde_json::Value {
+        serde_json::from_str(&self.body).unwrap_or_else(|e| panic!("not JSON ({e}): {}", self.body))
+    }
+}
+
 /// Wait for the pipe to actually carry traffic.
 ///
 /// `connect` returns once the local port is bound, not once the far side is
@@ -133,7 +161,22 @@ async fn tunnel_to(proxy_url: &str) -> (modelpipe::ServeHandle, modelpipe::Conne
 /// existence. Polling a real request rather than the status: what this suite
 /// is about is whether a request arrives, and a status that says `Direct` is
 /// one layer short of that claim.
-async fn get(url: &str, key: Option<&str>) -> reqwest::Response {
+///
+/// **That window has two exits, and this used to cover only one.** A request
+/// issued before the peer is reached can fail at the transport — which
+/// arrives as `Err` and was retried — or be answered `502 tunnel_unavailable`
+/// by the connecting side's own edge, which is a perfectly well-formed HTTP
+/// response and so arrived as `Ok` and was handed back as the final answer.
+/// On this Mac it took the second exit every time, and both tests failed in
+/// under a fifth of a second with the deadline never engaging. The design was
+/// right; the predicate was one status code short.
+///
+/// `Client::new()` stays inside the loop deliberately. On Linux it eagerly
+/// reads the system trust store while macOS does not, and that difference is
+/// the leading explanation for why this suite has been green in CI and red
+/// here. Hoisting it is a change to the thing under measurement and does not
+/// belong in the same commit as the fix.
+async fn get(url: &str, key: Option<&str>) -> Answer {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         let mut request = Client::new().get(url);
@@ -141,11 +184,25 @@ async fn get(url: &str, key: Option<&str>) -> reqwest::Response {
             request = request.bearer_auth(key);
         }
         match request.timeout(Duration::from_secs(5)).send().await {
-            Ok(response) => return response,
-            Err(error) if std::time::Instant::now() < deadline => {
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                if status != StatusCode::BAD_GATEWAY || !body.contains(TUNNEL_UNAVAILABLE) {
+                    return Answer { status, body };
+                }
                 // The pipe is still forming. Not a flake being papered over:
                 // the contract says `connect` returns before the far side is
                 // reached, so this window is documented behaviour.
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the edge answered `{TUNNEL_UNAVAILABLE}` for the whole deadline, \
+                     so the far side was never reached: {body}"
+                );
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(error) if std::time::Instant::now() < deadline => {
+                // The other exit from the same window: the listener is bound
+                // but nothing is behind it yet.
                 let _ = error;
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
@@ -163,7 +220,7 @@ async fn a_request_through_the_tunnel_reaches_the_proxy_and_is_answered() {
 
     let response = get(&format!("{base}/models"), Some(KEY)).await;
     assert_eq!(
-        response.status(),
+        response.status,
         StatusCode::OK,
         "a bearer-carrying request through the tunnel reaches the proxy"
     );
@@ -171,7 +228,7 @@ async fn a_request_through_the_tunnel_reaches_the_proxy_and_is_answered() {
     // The catalog is empty, so the interesting part is the shape rather than
     // the contents: this is gglib's own `/v1/models` answering, not the
     // tunnel inventing a reply.
-    let body: serde_json::Value = response.json().await.unwrap();
+    let body = response.json();
     assert_eq!(body["object"], "list", "gglib's own models payload: {body}");
 
     connected.shutdown().await;
@@ -191,19 +248,19 @@ async fn a_request_through_the_tunnel_without_the_key_is_refused() {
     // Warm the pipe with a good request first, so a refusal below cannot be
     // a connection that had not formed yet wearing a 401's clothes.
     assert_eq!(
-        get(&format!("{base}/models"), Some(KEY)).await.status(),
+        get(&format!("{base}/models"), Some(KEY)).await.status,
         StatusCode::OK
     );
 
     let refused = get(&format!("{base}/models"), None).await;
     assert_eq!(
-        refused.status(),
+        refused.status,
         StatusCode::UNAUTHORIZED,
         "reaching loopback through a tunnel is not being on this machine"
     );
 
     let wrong = get(&format!("{base}/models"), Some("sk-not-the-key")).await;
-    assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
 
     connected.shutdown().await;
     serving.shutdown().await;
