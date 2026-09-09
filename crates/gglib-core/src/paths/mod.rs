@@ -7,6 +7,7 @@ mod llama;
 mod models;
 mod pids;
 mod platform;
+mod remote;
 mod resolver;
 mod slots;
 
@@ -39,6 +40,9 @@ pub use models::{
 
 // PID tracking
 pub use pids::pids_dir;
+
+// The remote tunnel's stored endpoint key
+pub use remote::remote_identity_path;
 
 // Directory operations
 pub use ensure::{DirectoryCreationStrategy, ensure_directory};

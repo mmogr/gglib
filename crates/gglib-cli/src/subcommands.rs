@@ -136,6 +136,14 @@ pub enum RemoteCommand {
         /// stops working if this machine changes network.
         #[arg(long)]
         no_discovery: bool,
+        /// Keep this machine's endpoint key, so the ticket survives a restart
+        ///
+        /// Without this a restart mints a new ticket and every paired device
+        /// pairs again, which is what makes a leaked ticket free to revoke.
+        /// With it the ticket lasts, and revoking becomes deleting the key
+        /// file under the data directory.
+        #[arg(long)]
+        keep_identity: bool,
         /// Print the pairing as plain text instead of the QR screen
         #[arg(long)]
         no_qr: bool,

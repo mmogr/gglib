@@ -17,6 +17,8 @@ pub(crate) struct EnableArgs {
     pub relay: Option<String>,
     /// Do not publish to or resolve through n0's discovery service.
     pub no_discovery: bool,
+    /// Keep this machine's endpoint key, so the ticket survives a restart.
+    pub keep_identity: bool,
     /// Print the pairing string as text; no QR, no alternate screen.
     pub no_qr: bool,
 }
@@ -42,6 +44,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             allow_mcp: args.allow_mcp,
             relay: args.relay,
             discovery: Some(!args.no_discovery),
+            keep_identity: args.keep_identity,
         })
         .await?;
 

@@ -102,16 +102,14 @@ impl RemoteOps {
         let mut opts = modelpipe::ServeOptions::default();
         opts.auth = modelpipe::TokenPolicy::Supplied(settled.key.clone());
         opts.relay = request.relay;
-        // A fresh identity every time: the ticket dies with the session and
-        // revocation is the restart (ADR 0012, decision 4).
-        opts.identity = None;
+        opts.identity = identity_for(request.keep_identity)?;
         opts.port_mapping = false;
         opts.discovery = request.discovery;
         opts.wait_online = Some(WAIT_ONLINE);
         opts.allow_private_backend = backend.allow_private;
-        let handle = modelpipe::serve(&backend.url, opts)
-            .await
-            .map_err(|e| GuiError::Internal(format!("could not start the remote tunnel: {e}")))?;
+        let handle = modelpipe::serve(&backend.url, opts).await.map_err(|e| {
+            GuiError::Internal(format!("could not start the remote tunnel: {}", chain(&e)))
+        })?;
         let handle = Arc::new(handle);
 
         // The last moment anything notices a proxy that went away while the
@@ -243,6 +241,43 @@ impl RemoteOps {
             )),
         }
     }
+}
+
+/// Where this session's endpoint key comes from, if it comes from anywhere.
+///
+/// A fresh identity every time unless asked otherwise: the ticket dies with
+/// the session and revocation is the restart (ADR 0012, decision 4, amended).
+/// `--keep-identity` is the other side of that trade — the ticket outlives the
+/// daemon, and revoking it becomes deleting this file rather than restarting.
+///
+/// Separate from `arm` so the decision can be read without binding an endpoint
+/// or writing a key: `arm` is a network call and a file, and this is neither.
+pub(super) fn identity_for(keep: bool) -> Result<Option<std::path::PathBuf>, GuiError> {
+    if !keep {
+        return Ok(None);
+    }
+    gglib_core::paths::remote_identity_path()
+        .map(Some)
+        .map_err(|e| GuiError::Internal(format!("could not place the stored endpoint key: {e}")))
+}
+
+/// An error and everything under it, joined into one sentence.
+///
+/// modelpipe's `Display` for `ServeError::Identity` says only that the file
+/// cannot be used and leaves the reason to its source, on the stated grounds
+/// that anyhow prints the chain. Nothing on this path uses anyhow, so
+/// formatting with `{e}` alone dropped the half that says what to do about it
+/// — "the identity file is readable by others (mode 0644) — chmod 600 it" —
+/// and left the operator with a sentence naming a path and no fault.
+fn chain(error: &dyn std::error::Error) -> String {
+    let mut sentence = error.to_string();
+    let mut source = error.source();
+    while let Some(next) = source {
+        sentence.push_str(": ");
+        sentence.push_str(&next.to_string());
+        source = next.source();
+    }
+    sentence
 }
 
 /// A serve side that is already taken, as the person who typed the command
