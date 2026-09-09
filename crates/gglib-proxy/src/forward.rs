@@ -325,12 +325,26 @@ const REPAIR_KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from
 /// client explicitly requested them disabled — the proxy always needs this
 /// data for its own bookkeeping.
 ///
+/// Because `return_progress` is the proxy's own override and not the client's
+/// request, the returned flag records whether the *client* asked for progress
+/// frames. It decides whether `prompt_progress` frames are forwarded
+/// downstream (see [`stream_response_to_channel`]): a `prompt_progress` chunk
+/// carries no `choices` key, which is a llama.cpp extension and not valid
+/// `OpenAI` streaming JSON, so clients that validate chunks against the
+/// `OpenAI` schema (anything on the Vercel AI SDK — `OpenCode`, and others)
+/// abort the turn on the first one. Asking upstream for data the proxy needs
+/// must not make the proxy's own wire format non-conforming.
+///
 /// Safety: if the body is not a JSON object the original bytes are forwarded
 /// unchanged.  No panic paths — every operation returns an `Option`/`Result`
 /// and is handled explicitly.
-fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
+fn inject_streaming_body_overrides(body: Bytes) -> (Bytes, bool) {
     match serde_json::from_slice::<serde_json::Value>(&body) {
         Ok(mut value) => {
+            let client_wants_progress = value
+                .get("return_progress")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
             if let Some(obj) = value.as_object_mut() {
                 let stream_opts = obj
                     .entry("stream_options")
@@ -340,9 +354,14 @@ fn inject_streaming_body_overrides(body: Bytes) -> Bytes {
                 }
                 obj.insert("return_progress".to_owned(), serde_json::Value::Bool(true));
             }
-            serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body)
+            (
+                serde_json::to_vec(&value).map(Bytes::from).unwrap_or(body),
+                client_wants_progress,
+            )
         }
-        Err(_) => body, // not JSON — forward as-is
+        // Not JSON — forward as-is. Nothing asked for progress frames, so
+        // nothing gets them.
+        Err(_) => (body, false),
     }
 }
 
@@ -759,7 +778,7 @@ pub(crate) async fn forward_chat_completion(
         // Inject `stream_options.include_usage` and top-level
         // `return_progress` overrides — see `inject_streaming_body_overrides`
         // doc comment for why each is needed.
-        let body = inject_streaming_body_overrides(body);
+        let (body, client_wants_progress) = inject_streaming_body_overrides(body);
 
         // Byte count of the payload actually forwarded upstream, paired with
         // the usage frame's prompt-token count after streaming to calibrate
@@ -808,6 +827,7 @@ pub(crate) async fn forward_chat_completion(
             Arc::clone(&metrics),
             snapshot_seq,
             forwarded_chars,
+            client_wants_progress,
             permit,
             config,
             session_id,
@@ -928,8 +948,12 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
 ///
 /// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
 /// records them on `connection` (the dashboard registry entry for this
-/// request) as a side effect — the frame is still encoded and forwarded to
-/// the client unchanged; this never alters what the client receives.
+/// request). The frame itself is forwarded only when `client_wants_progress`
+/// — i.e. when the client's own request body carried `return_progress: true`.
+/// The proxy forces that flag on upstream for its own bookkeeping (see
+/// [`inject_streaming_body_overrides`]), and a `prompt_progress` chunk has no
+/// `choices` key, so re-emitting it unasked puts a non-`OpenAI` chunk in front
+/// of every schema-validating client.
 /// Everything a streaming turn needs to re-issue itself as a tool-call repair.
 ///
 /// Carried into the stream because the decision cannot be made until the call
@@ -951,6 +975,7 @@ pub(crate) async fn stream_response_to_channel(
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
+    client_wants_progress: bool,
 ) -> StreamOutcome {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
@@ -1022,7 +1047,13 @@ pub(crate) async fn stream_response_to_channel(
                     time_ms,
                 } => {
                     connection.update_progress(*processed, *total, *cached, *time_ms);
-                    encoder.encode(&ev).map(Bytes::from)
+                    // Dropped unless the client asked for progress: the proxy
+                    // needed the data, the client did not order the chunk.
+                    if client_wants_progress {
+                        encoder.encode(&ev).map(Bytes::from)
+                    } else {
+                        None
+                    }
                 }
                 LlmStreamEvent::NormalizationError { kind, raw } => {
                     // Surface the discarded body as visible assistant text
