@@ -1,7 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (fourth reading 2026-09-09 — a phone on cellular, direct; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -719,6 +719,89 @@ does not exist; nothing in this reading overturns that argument. Adding
 purpose — a change of mind about how the criterion is read, not housekeeping.
 The reading that would actually make this line clean is a `priority: critical`
 label somebody uses.
+
+### Fourth reading, 2026-09-09 — a phone, on cellular, direct
+
+The session the first three readings were waiting for. A native iOS client on
+a phone with wifi off reached this machine's proxy and held a conversation
+with the model on it.
+
+- **Serving:** this Mac, gglib 0.17.0 (`06c6737b`), modelpipe **0.4**.
+- **Connecting:** an iPhone on cellular, wifi off, running ggchat 0.2.0 in its
+  Release configuration — which is the build that dials, the DEBUG one mocks.
+- **Model:** Qwen3.5-4B (Q8_0), loaded on demand.
+
+```
+14:18:13  Path: direct   Peer: 3d808fece3d9 (direct)   Requests: 1
+          Last one: 18s ago, from 68e9b9bbbe94
+14:19:20  Path: direct   Peer: 107de8f76fd4 (direct)   Requests: 4
+          Last one: 29s ago, from 107de8f76fd4
+```
+
+**The connect side is no longer only gglib.** The second reading named this
+gap and it is now half closed, which is worth stating precisely rather than
+generously. What that reading asked for was decision 7's arrangement — a
+third-party OpenAI-compatible client pointed at *gglib's own connect
+listener*, with the key as its API key. That is still untried. What happened
+instead is one layer in: ggchat embeds modelpipe itself through a Swift
+binding and points an ordinary OpenAI-compatible provider at the loopback URL
+**modelpipe** bound, with the redeemed key as the API key. Same shape, a
+different listener. The half that is closed is that something other than
+gglib's CLI has now driven this feature end to end; the half that is not is
+that gglib's connect listener has still only ever been talked to by gglib.
+
+**Direct, from a phone, through carrier-grade NAT.** The hole punch beat the
+carrier without a relay carrying a byte. Three peer fingerprints appear across
+two minutes because pairing dials twice by design — `68e9b9bbbe94` was the
+pairing pipe, hung up as soon as the code was redeemed, and the others are the
+session that replaced it and its successor after a background.
+
+**And the relay is still not exercised**, so the sentence struck on 2026-09-07
+stays struck. The status read `direct` at the first look and never moved: no
+migration was observed, only its outcome. Reading against the 0.4 pin was
+supposed to make a migration legible where the 0.3 pin could not, and it may
+well have — but a path that was direct before anyone looked cannot demonstrate
+a watcher that follows one. That is the same instrument limitation the second
+reading recorded, arrived at from the other direction, and it will take a
+network hostile enough to start relayed to settle.
+
+**What the session cost, and it is the most useful thing in this note.**
+The first attempt failed and burned a pairing code. ggchat sent the redeem the
+instant `connect` returned — and `connect` returns when the *local port is
+bound*, not when the peer answers. The tunnel's own edge answers `502` in that
+gap because there is nothing to forward to, and decision 3's code, which dies
+on use, died on that 502.
+
+This is worth recording here rather than only in the app's tracker, because it
+is a property of the decision and not of the client. A one-time code plus a
+dial that returns early is a sharp edge that *every* connecting implementation
+has to know about. gglib's own connect side has guarded it from the start and
+says so in `first_contact.rs`. A second implementation, written against a seam
+document that states the early return as behaviour 2, walked into it anyway —
+on a LAN often enough to look like a wrong code, and on cellular every time,
+because the hole punch takes about two seconds and the redeem takes
+microseconds. The design is sound and the trap is real; what this reading adds
+is that the trap is not discoverable from the outside without a phone.
+
+- **If a dependency ships a first-party remote transport** — **still not
+  evaluated.** `PINNED_LLAMA_RELEASE` has not moved, so the survey still has
+  had no occasion to be taken. **OPEN, and unread rather than clean.**
+- **If the trust model itself proves unsound** — **not re-run.** The third
+  reading's answer stands, including its caveat that the bucket is empty
+  repo-wide. A session in which the feature worked is not evidence about the
+  premise. **OPEN.**
+- **If `tunnelled_requests` stays at zero** — **4 in one daemon run**: one
+  pairing POST and three requests behind a single prompt and its reply. The
+  same arithmetic as the second reading and from a different kind of machine,
+  which is the point: the counter is now readable from a phone, where before
+  it had only ever been read between two desktops. It still says nothing about
+  use. **OPEN.**
+
+**All three remain OPEN.** What this reading settles is the thing #963 was
+opened to get: the models are on the phone, anywhere, with no VPN, no account
+and nobody in the path. What it does not settle is a tunnel left up for days,
+the relay path, or whether anyone reaches for it tomorrow — and the last of
+those is the only one that decides whether this feature was worth building.
 
 ## Out of scope
 
