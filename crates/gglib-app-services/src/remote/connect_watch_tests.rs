@@ -1,16 +1,18 @@
-//! Tests for when a connection is over.
+//! Tests for what the watcher tells people, and when it nudges.
 //!
-//! On a paused clock, so ninety seconds of grace cost nothing: tokio
-//! advances time itself once every task is waiting, which is exactly the
-//! shape of this loop — one deadline and one status to wait for.
+//! On a paused clock, so thirty seconds of grace and a minute between
+//! nudges cost nothing: tokio advances time itself once every task is
+//! waiting, which is exactly the shape of this loop — one deadline and one
+//! status to wait for.
 //!
 //! The statuses arrive through a channel rather than from a real
 //! `ConnectHandle`, which would need an iroh endpoint and a peer to take
-//! away, and the teardown through another closure over a slot of plain
-//! `u64`s. That is why [`super::follow`] and [`super::conclude`] take both:
-//! a policy nothing can drive is a comment with a timer attached, and the
-//! whole of this file would otherwise be reachable only from a two-machine
-//! run.
+//! away; the nudge is a counter; the reports are a channel too. That is why
+//! [`super::follow`] takes all three through closures: a policy nothing can
+//! drive is a comment with a timer attached, and the whole of this file
+//! would otherwise be reachable only from a two-machine run.
+
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -28,7 +30,7 @@ fn source() -> (UnboundedSender<PipeStatus>, Source) {
 ///
 /// A closed channel is a pipe that has stopped changing, which is what
 /// being away *is* — so this waits for ever rather than panicking, and
-/// leaves the dwell deadline as the only thing that can still fire.
+/// leaves the deadlines as the only things that can still fire.
 async fn next_from(source: &Source) -> PipeStatus {
     match source.lock().await.recv().await {
         Some(status) => status,
@@ -41,171 +43,213 @@ async fn next_from(source: &Source) -> PipeStatus {
 const SLACK: Duration = Duration::from_secs(1);
 
 /// **Every call to [`super::follow`] here is wrapped in a timeout**, even
-/// the ones whose claim is not about time. `follow` has two arms that never
-/// resolve on their own — a status source with nothing left to say, and the
-/// `pending()` that stands in for "no deadline right now" — so a regression
-/// that stops the dwell from arming, or drops the `Closed` arm, does not
-/// make these tests fail. It makes them *hang*, and a hung test takes the
-/// whole CI job's budget with it rather than naming the line that broke.
-/// The paused clock makes the wrapper free.
-const RUNAWAY: Duration = IDLE_GRACE.saturating_mul(3);
+/// the ones whose claim is not about time. `follow` has arms that never
+/// resolve on their own, so a regression that drops the `Closed` arm does
+/// not make these tests fail — it makes them *hang*, and a hung test takes
+/// the whole CI job's budget with it rather than naming the line that
+/// broke. The paused clock makes the wrapper free.
+const RUNAWAY: Duration = Duration::from_secs(600);
 
-/// A peer that goes away and stays away is given up on.
-///
-/// The defect: nothing here ever acted on `Idle`, so a laptop that closed
-/// its lid left `gglib remote status` saying "Connected" and every request
-/// answered 502 — measured at twenty minutes on the serve side, and
-/// unbounded on this one.
-#[tokio::test(start_paused = true)]
-async fn a_peer_that_stays_away_past_the_grace_is_given_up_on() {
-    let (tx, rx) = source();
-    tx.send(PipeStatus::Idle).expect("the loop is listening");
-    drop(tx);
-
-    let over = tokio::time::timeout(
-        RUNAWAY,
-        follow(
-            PipeStatus::Direct,
-            || next_from(&rx),
-            &CancellationToken::new(),
-        ),
-    )
-    .await
-    .expect("the dwell never fired, so the peer is still being waited on");
-
-    assert_eq!(over, Over::Unreachable);
+/// A `follow` under test: its reports, its nudge count, and its outcome
+/// once it ends.
+struct Followed {
+    reports: UnboundedReceiver<Presence>,
+    nudges: Arc<AtomicUsize>,
+    over: tokio::task::JoinHandle<Over>,
+    cancel: CancellationToken,
 }
 
-/// A peer that comes back inside the grace is not.
-///
-/// This is why the policy is a dwell and not a break on the first `Idle`:
-/// `Idle` is what modelpipe publishes *while* it re-dials, and tearing the
-/// connection down on it would take away a pipe that was healing itself.
-#[tokio::test(start_paused = true)]
-async fn a_peer_that_comes_back_inside_the_grace_keeps_its_connection() {
-    let (tx, rx) = source();
-    tokio::spawn(async move {
-        tx.send(PipeStatus::Idle).expect("the loop is listening");
-        tokio::time::sleep(IDLE_GRACE / 2).await;
-        tx.send(PipeStatus::Direct).expect("the loop is listening");
-        // Held open, so the loop waits on a status that never comes rather
-        // than on a closed channel — a peer that is simply connected.
-        tokio::time::sleep(IDLE_GRACE * 10).await;
-    });
-
-    // The one place the timeout is the assertion rather than a guard
-    // against a hang: outliving it is what "kept its connection" means.
-    let waited = tokio::time::timeout(
-        RUNAWAY,
+fn follow_from(initial: PipeStatus, source: Source) -> Followed {
+    let (report_tx, reports) = unbounded_channel();
+    let nudges = Arc::new(AtomicUsize::new(0));
+    let cancel = CancellationToken::new();
+    let counted = Arc::clone(&nudges);
+    let token = cancel.clone();
+    let over = tokio::spawn(async move {
         follow(
-            PipeStatus::Direct,
-            || next_from(&rx),
-            &CancellationToken::new(),
-        ),
-    )
-    .await;
+            initial,
+            || next_from(&source),
+            || {
+                let counted = Arc::clone(&counted);
+                async move {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                }
+            },
+            &token,
+            |presence| {
+                let _ = report_tx.send(presence);
+            },
+        )
+        .await
+    });
+    Followed {
+        reports,
+        nudges,
+        over,
+        cancel,
+    }
+}
 
+/// The next report inside `within`, or `None` when nothing was said.
+async fn said(followed: &mut Followed, within: Duration) -> Option<Presence> {
+    tokio::time::timeout(within, followed.reports.recv())
+        .await
+        .ok()
+        .flatten()
+}
+
+/// A peer that goes away and stays away is called away — and the
+/// connection is *kept*, which is the whole change: nothing here ends.
+///
+/// The defect this replaces: ninety seconds of `Idle` tore the port down,
+/// so a closed laptop lid was a dead port, and a different port next time.
+#[tokio::test(start_paused = true)]
+async fn a_peer_away_past_the_grace_is_called_away_and_the_connection_is_kept() {
+    let (tx, source) = source();
+    let mut followed = follow_from(PipeStatus::Direct, source);
+    tx.send(PipeStatus::Idle).unwrap();
+
+    assert_eq!(
+        said(&mut followed, AWAY_AFTER + SLACK).await,
+        Some(Presence::Away),
+        "called away once the grace has passed"
+    );
+    tokio::time::sleep(AWAY_AFTER * 4).await;
     assert!(
-        waited.is_err(),
-        "the connection was given up on despite the peer coming back: {waited:?}"
+        !followed.over.is_finished(),
+        "still following: being away is not being over"
+    );
+
+    tx.send(PipeStatus::Direct).unwrap();
+    assert_eq!(
+        said(&mut followed, SLACK).await,
+        Some(Presence::Here),
+        "and called back when the far machine answers"
+    );
+    followed.cancel.cancel();
+    assert_eq!(
+        tokio::time::timeout(RUNAWAY, followed.over)
+            .await
+            .unwrap()
+            .unwrap(),
+        Over::Cancelled
     );
 }
 
-/// A second `Idle` does not restart the clock.
-///
-/// A re-dial that finds nobody publishes `Idle` again, and there is no
-/// bound on how many times it can: a clock that restarted on each one
-/// would never expire, which is the same defect wearing a timer.
+/// A blip — idle, then back inside the grace — says nothing. Announcing
+/// every re-dial that finds the peer straight back would flap the status
+/// for nothing.
 #[tokio::test(start_paused = true)]
-async fn a_second_idle_report_does_not_buy_the_peer_more_time() {
-    let (tx, rx) = source();
-    tokio::spawn(async move {
-        tx.send(PipeStatus::Idle).expect("the loop is listening");
-        tokio::time::sleep(IDLE_GRACE / 2).await;
-        tx.send(PipeStatus::Idle).expect("the loop is listening");
-        tokio::time::sleep(IDLE_GRACE * 10).await;
-    });
+async fn a_blip_inside_the_grace_says_nothing() {
+    let (tx, source) = source();
+    let mut followed = follow_from(PipeStatus::Direct, source);
+    tx.send(PipeStatus::Idle).unwrap();
+    tokio::time::sleep(AWAY_AFTER / 2).await;
+    tx.send(PipeStatus::Relayed).unwrap();
 
-    let over = tokio::time::timeout(
-        IDLE_GRACE + SLACK,
-        follow(
-            PipeStatus::Direct,
-            || next_from(&rx),
-            &CancellationToken::new(),
-        ),
-    )
-    .await
-    .expect("the deadline is the first idle's, not the last one's");
+    assert_eq!(said(&mut followed, AWAY_AFTER * 2).await, None);
+    assert_eq!(followed.nudges.load(Ordering::SeqCst), 0, "nor nudged");
+    followed.cancel.cancel();
+}
 
-    assert_eq!(over, Over::Unreachable);
+/// Only the first `Idle` starts the clock: a re-dial that finds nobody
+/// reports idle again, and that must not buy the peer more time before it
+/// is called away.
+#[tokio::test(start_paused = true)]
+async fn a_second_idle_report_does_not_put_off_being_called_away() {
+    let (tx, source) = source();
+    let mut followed = follow_from(PipeStatus::Direct, source);
+    tx.send(PipeStatus::Idle).unwrap();
+    tokio::time::sleep(AWAY_AFTER / 2).await;
+    tx.send(PipeStatus::Idle).unwrap();
+
+    assert_eq!(
+        said(&mut followed, AWAY_AFTER / 2 + SLACK).await,
+        Some(Presence::Away),
+        "called away at the grace from the *first* idle"
+    );
+    followed.cancel.cancel();
+}
+
+/// While the far machine is away, the transport is told the network may
+/// have changed — once on being called away, then every minute — because a
+/// suspend can leave the dialling socket on an interface that is gone, and
+/// that is the one case modelpipe's own re-dial cannot fix from inside.
+#[tokio::test(start_paused = true)]
+async fn while_away_the_transport_is_nudged_on_arrival_and_every_minute() {
+    let (tx, source) = source();
+    let mut followed = follow_from(PipeStatus::Idle, source);
+
+    assert_eq!(
+        said(&mut followed, AWAY_AFTER + SLACK).await,
+        Some(Presence::Away)
+    );
+    tokio::time::sleep(SLACK).await;
+    assert_eq!(
+        followed.nudges.load(Ordering::SeqCst),
+        1,
+        "nudged on being called away"
+    );
+    tokio::time::sleep(NUDGE_EVERY).await;
+    assert_eq!(
+        followed.nudges.load(Ordering::SeqCst),
+        2,
+        "and again a minute later"
+    );
+    tokio::time::sleep(NUDGE_EVERY).await;
+    assert_eq!(followed.nudges.load(Ordering::SeqCst), 3);
+
+    tx.send(PipeStatus::Direct).unwrap();
+    assert_eq!(said(&mut followed, SLACK).await, Some(Presence::Here));
+    tokio::time::sleep(NUDGE_EVERY * 3).await;
+    assert_eq!(
+        followed.nudges.load(Ordering::SeqCst),
+        3,
+        "nothing to nudge about once it is back"
+    );
+    followed.cancel.cancel();
 }
 
 /// A pipe that is already idle when the watcher starts is on the clock from
-/// that moment.
-///
-/// `status_changed` snapshots when it is polled, so a pipe that went idle
-/// between the install and the first call has nothing left to report — and
-/// a loop that only ever waited would never start the clock at all.
+/// the start: the first `status_changed` would otherwise wait for a change
+/// that never comes.
 #[tokio::test(start_paused = true)]
 async fn a_pipe_that_is_already_idle_is_on_the_clock_from_the_start() {
-    let (tx, rx) = source();
-    drop(tx);
-
-    let over = tokio::time::timeout(
-        IDLE_GRACE + SLACK,
-        follow(
-            PipeStatus::Idle,
-            || next_from(&rx),
-            &CancellationToken::new(),
-        ),
-    )
-    .await
-    .expect("nothing started the clock");
-
-    assert_eq!(over, Over::Unreachable);
+    let (_tx, source) = source();
+    let mut followed = follow_from(PipeStatus::Idle, source);
+    assert_eq!(
+        said(&mut followed, AWAY_AFTER + SLACK).await,
+        Some(Presence::Away)
+    );
+    followed.cancel.cancel();
 }
 
-/// modelpipe's own verdict ends it at once, with no grace involved.
-///
-/// The deadline is half the grace on purpose: it is the "at once" half of
-/// the claim. A loop that dropped the `Closed` arm and let the dwell decide
-/// would still return `Unreachable` eventually, and only a deadline shorter
-/// than the grace can tell that apart from this.
+/// `Closed` is modelpipe's verdict and needs no grace: this side shut the
+/// pipe, or its listener died, and either way there is nothing to wait for.
 #[tokio::test(start_paused = true)]
 async fn a_closed_pipe_is_over_immediately() {
-    let (tx, rx) = source();
-    tx.send(PipeStatus::Closed).expect("the loop is listening");
-
-    let over = tokio::time::timeout(
-        IDLE_GRACE / 2,
-        follow(
-            PipeStatus::Relayed,
-            || next_from(&rx),
-            &CancellationToken::new(),
-        ),
-    )
-    .await
-    .expect("modelpipe's own verdict was left to the dwell to rediscover");
-
-    assert_eq!(over, Over::Closed);
+    let (tx, source) = source();
+    let followed = follow_from(PipeStatus::Direct, source);
+    tx.send(PipeStatus::Closed).unwrap();
+    assert_eq!(
+        tokio::time::timeout(RUNAWAY, followed.over)
+            .await
+            .unwrap()
+            .unwrap(),
+        Over::Closed
+    );
 }
 
-/// A cancelled watcher says it was cancelled, which is what stops it
-/// clearing a slot and announcing a disconnection `disconnect` has already
-/// announced.
 #[tokio::test(start_paused = true)]
 async fn a_cancelled_watcher_leaves_the_teardown_to_whoever_cancelled_it() {
-    let (tx, rx) = source();
-    tx.send(PipeStatus::Idle).expect("the loop is listening");
-    let cancel = CancellationToken::new();
-    cancel.cancel();
-
-    let over = tokio::time::timeout(
-        IDLE_GRACE / 2,
-        follow(PipeStatus::Direct, || next_from(&rx), &cancel),
-    )
-    .await
-    .expect("a cancelled watcher was left waiting on the peer it was told to stop watching");
-
-    assert_eq!(over, Over::Cancelled);
+    let (_tx, source) = source();
+    let followed = follow_from(PipeStatus::Idle, source);
+    followed.cancel.cancel();
+    assert_eq!(
+        tokio::time::timeout(RUNAWAY, followed.over)
+            .await
+            .unwrap()
+            .unwrap(),
+        Over::Cancelled
+    );
 }

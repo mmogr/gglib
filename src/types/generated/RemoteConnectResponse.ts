@@ -19,4 +19,9 @@ ticket_fingerprint: string,
 /**
  * Whether this call redeemed a pairing code and stored the key.
  */
-paired: boolean, };
+paired: boolean, 
+/**
+ * The port this machine wanted and could not have, when it had to take
+ * another; `None` when the address stayed put.
+ */
+moved_from: number | null, };

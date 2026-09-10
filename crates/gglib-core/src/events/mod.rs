@@ -207,6 +207,20 @@ pub enum AppEvent {
 
     /// The connect side was taken down.
     RemoteDisconnected,
+
+    /// The far machine has been away past the grace. The port stays bound
+    /// and is still being dialled; this says so, so a client is not left
+    /// reading "connected" over nothing.
+    RemoteAway {
+        /// The loopback port that is still bound.
+        port: u16,
+    },
+
+    /// The far machine answered again after being away.
+    RemoteBack {
+        /// The loopback port, unchanged.
+        port: u16,
+    },
 }
 
 impl AppEvent {
@@ -241,6 +255,8 @@ impl AppEvent {
             Self::RemotePaired { .. } => "remote:paired",
             Self::RemoteConnected { .. } => "remote:connected",
             Self::RemoteDisconnected => "remote:disconnected",
+            Self::RemoteAway { .. } => "remote:away",
+            Self::RemoteBack { .. } => "remote:back",
         }
     }
 }

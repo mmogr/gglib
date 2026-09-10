@@ -63,6 +63,7 @@ pub(crate) fn paired_with(ticket: &str, api_key: &str) -> SettingsUpdate {
             ticket: ticket.to_owned(),
             api_key: api_key.to_owned(),
             default_model: None,
+            port: None,
         })),
         ..SettingsUpdate::default()
     }
@@ -119,4 +120,21 @@ pub(crate) async fn test_remote_ops() -> (Arc<AppCore>, Arc<crate::RemoteOps>, A
     let gateway = Arc::new(crate::RemoteGateway::new(Arc::clone(&emitter)));
     let ops = crate::RemoteOps::new(proxy, Arc::clone(&core), gateway, emitter);
     (core, Arc::new(ops), events)
+}
+
+/// One of the vectors above as the `Ticket` the code under test takes.
+///
+/// Here rather than in either test module because both halves of `settle`
+/// are tested in their own file now, and a second `parse().expect()` is a
+/// second place for the panic message to be wrong.
+pub(crate) fn ticket(s: &str) -> modelpipe::Ticket {
+    s.parse().expect("a normative ticket vector parses")
+}
+
+/// The redemption a codeless dial must not reach.
+///
+/// A closure that cannot be called is a stronger claim than one that
+/// records that it was not.
+pub(crate) async fn never_redeems(_code: String) -> Result<String, crate::GuiError> {
+    unreachable!("a dial with no code has nothing to redeem")
 }

@@ -30,6 +30,10 @@ const connected = {
   base_url: 'http://127.0.0.1:41234/v1',
   ticket_fingerprint: '3ca82708b995',
   path: 'direct',
+  // Here rather than away: everything below is about which machine the
+  // chat fields follow, and a machine that is answering is the case those
+  // rules are written for. The away arm has its own tests.
+  away_for_s: null,
 };
 
 /** A second machine: the same tunnel, a different catalog. */
@@ -271,5 +275,42 @@ describe('remoteRegistry', () => {
     setUseRemoteForChat(true);
     applyRemoteStatus(IDLE_STATUS);
     expect(getRemoteState().useForChat).toBe(false);
+  });
+
+  it('a machine that goes away keeps the connection, the choice and the model', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setUseRemoteForChat(true);
+    setRemoteChatModel('qwen3');
+
+    ingestRemoteEvent({ type: 'remote_away', port: 41234 });
+
+    // The port is still bound and still dialling, so nothing about this is a
+    // disconnection: the panel says away, and everything aimed at that
+    // machine is waiting for it rather than being cleared.
+    expect(getRemoteState().status?.connected?.away_for_s).toBe(0);
+    expect(getRemoteState().status?.connected?.port).toBe(41234);
+    expect(getRemoteState().useForChat).toBe(true);
+    expect(getRemoteState().chatModel).toBe('qwen3');
+  });
+
+  it('a machine that answers again is here, with nothing to re-type', () => {
+    applyRemoteStatus({ ...IDLE_STATUS, connected });
+    setUseRemoteForChat(true);
+    setRemoteChatModel('qwen3');
+    ingestRemoteEvent({ type: 'remote_away', port: 41234 });
+
+    ingestRemoteEvent({ type: 'remote_back', port: 41234 });
+
+    expect(getRemoteState().status?.connected?.away_for_s).toBeNull();
+    expect(getRemoteState().useForChat).toBe(true);
+    expect(getRemoteState().chatModel).toBe('qwen3');
+  });
+
+  it('an away event with nothing connected changes nothing', () => {
+    // The watcher is the only source of these and it only runs behind a
+    // live connection, but a status read can race one in and leave the
+    // store empty; a spread onto `null` would invent a connection.
+    ingestRemoteEvent({ type: 'remote_away', port: 41234 });
+    expect(getRemoteState().status).toBeNull();
   });
 });

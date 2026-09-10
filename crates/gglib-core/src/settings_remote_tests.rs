@@ -11,6 +11,7 @@ fn pairing() -> RemotePairing {
         ticket: "pipeabc".to_owned(),
         api_key: "k".to_owned(),
         default_model: None,
+        port: None,
     }
 }
 
@@ -27,6 +28,7 @@ fn a_blank_half_of_a_pairing_is_refused_and_a_cleared_record_is_fine() {
         remote_pairing: Some(RemotePairing {
             api_key: "  ".to_owned(),
             default_model: None,
+            port: None,
             ..pairing()
         }),
         ..Default::default()
@@ -117,8 +119,10 @@ fn a_pairing_stored_before_the_remembered_model_still_loads() {
     let row = r#"{"ticket":"pipeabc","apiKey":"k"}"#;
     let loaded: RemotePairing = serde_json::from_str(row).expect("an older record loads");
     assert_eq!(loaded.default_model, None);
+    assert_eq!(loaded.port, None);
     let with = RemotePairing {
         default_model: Some("qwen3".to_owned()),
+        port: None,
         ..pairing()
     };
     let round: RemotePairing =

@@ -13,21 +13,11 @@
 
 use super::*;
 use crate::test_support::test_core;
-use crate::test_support_remote::{KEY_A, KEY_B, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with};
+use crate::test_support_remote::{KEY_A, KEY_B, TICKET_A, TICKET_B, paired_with, ticket};
 
 /// A plausible six-digit code, never checked here: what the far machine
 /// makes of it is the far machine's, and `redeem` is the seam.
 const CODE: &str = "483920";
-
-/// The redemption a codeless dial must not reach. A closure that cannot be
-/// called is a stronger claim than one that records that it was not.
-async fn never_redeems(_code: String) -> Result<String, GuiError> {
-    unreachable!("a dial with no code has nothing to redeem")
-}
-
-fn ticket(s: &str) -> Ticket {
-    s.parse().expect("a normative ticket vector parses")
-}
 
 /// A second pairing replaces the first whole, rather than half of it.
 ///
@@ -42,6 +32,7 @@ fn record(ticket: &str, api_key: &str) -> RemotePairing {
         ticket: ticket.to_owned(),
         api_key: api_key.to_owned(),
         default_model: None,
+        port: None,
     }
 }
 
@@ -83,7 +74,7 @@ async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
 async fn a_pairing_that_cannot_be_stored_says_the_code_is_already_spent() {
     let core = test_core().await;
 
-    let err = store_redeemed(&core, "   ".to_owned(), TICKET_A.to_owned())
+    let err = store_redeemed(&core, "   ".to_owned(), TICKET_A.to_owned(), 8180)
         .await
         .expect_err("a blank key is not a key, and settings refuse it");
     let GuiError::Internal(message) = err else {
@@ -111,6 +102,7 @@ async fn a_redeemed_code_is_stored_under_the_ticket_that_was_dialled() {
         &ticket(TICKET_B),
         None,
         Some(CODE.to_owned()),
+        8180,
         async |code| {
             assert_eq!(code, CODE, "the code redeemed was not the code parsed");
             Ok(KEY_B.to_owned())
@@ -152,6 +144,7 @@ async fn a_redeemed_key_that_cannot_be_stored_says_the_code_is_already_spent() {
         Some(CODE.to_owned()),
         // A far side that answers with a blank key: the failure mode the
         // store really has, and the code is spent either way.
+        8180,
         async |_code| Ok("   ".to_owned()),
     )
     .await
@@ -170,92 +163,5 @@ async fn a_redeemed_key_that_cannot_be_stored_says_the_code_is_already_spent() {
             .remote_pairing
             .is_none(),
         "a refused write left half a record behind"
-    );
-}
-
-/// The same machine at a new address carries its key forward.
-///
-/// What makes the ticket the mutable half of the record. A machine hands out
-/// a different ticket on every `enable` and at every address change, so a
-/// codeless dial with the newer string is the same pairing, not a new one —
-/// and the key, which only that machine could have issued, has to come with
-/// it. Drop the write and the record keeps naming an address the machine has
-/// left.
-#[tokio::test]
-async fn the_same_machine_at_a_new_address_carries_its_key_forward() {
-    let core = test_core().await;
-    core.settings()
-        .update(paired_with(TICKET_A, KEY_A))
-        .await
-        .expect("machine A's pairing is stored");
-    let held = RemotePairing {
-        ticket: TICKET_A.to_owned(),
-        api_key: KEY_A.to_owned(),
-        default_model: None,
-    };
-    let moved = ticket(TICKET_A_MOVED);
-    assert_eq!(
-        moved.fingerprint(),
-        ticket(TICKET_A).fingerprint(),
-        "the premise: these two strings are one machine"
-    );
-
-    let paired = settle(&core, &moved, Some(&held), None, never_redeems)
-        .await
-        .expect("a dial with no code still owes the record the new ticket");
-
-    assert!(!paired, "no code was redeemed, so nothing was paired");
-    let stored = core
-        .settings()
-        .get()
-        .await
-        .expect("settings load")
-        .remote_pairing
-        .expect("a pairing is stored");
-    assert_eq!(
-        stored.ticket,
-        moved.to_string(),
-        "the record did not follow the machine to its new address"
-    );
-    assert_ne!(
-        stored.ticket, TICKET_A,
-        "the record still names the address the machine left"
-    );
-    assert_eq!(
-        stored.api_key, KEY_A,
-        "the key that machine issued did not come forward with it"
-    );
-}
-
-/// A dial to the machine already recorded writes nothing.
-///
-/// The other half of the same claim, and the reason the write is behind a
-/// guard rather than unconditional: re-dialling the stored ticket is the
-/// ordinary case, and it has nothing to teach settings. `held` is a
-/// parameter here rather than something `settle` reads, which is what makes
-/// the absence visible — a store left empty stays empty only if no write
-/// happened at all.
-#[tokio::test]
-async fn a_dial_to_the_machine_already_recorded_writes_nothing() {
-    let core = test_core().await;
-    let held = RemotePairing {
-        ticket: TICKET_A.to_owned(),
-        api_key: KEY_A.to_owned(),
-        default_model: None,
-    };
-
-    let paired = settle(&core, &ticket(TICKET_A), Some(&held), None, never_redeems)
-        .await
-        .expect("re-dialling the stored ticket is not a failure");
-
-    assert!(!paired, "no code was redeemed, so nothing was paired");
-    assert!(
-        core.settings()
-            .get()
-            .await
-            .expect("settings load")
-            .remote_pairing
-            .is_none(),
-        "a dial to the machine already recorded wrote the record back"
     );
 }

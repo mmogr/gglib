@@ -84,4 +84,6 @@ fn remote_event_names_and_shape() {
         AppEvent::remote_disconnected().event_name(),
         "remote:disconnected"
     );
+    assert_eq!(AppEvent::remote_away(8180).event_name(), "remote:away");
+    assert_eq!(AppEvent::remote_back(8180).event_name(), "remote:back");
 }

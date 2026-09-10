@@ -7,7 +7,7 @@
 //! as its API key.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
@@ -36,6 +36,10 @@ pub(super) struct LiveConnect {
     /// cannot take down the next one.
     generation: u64,
     watcher: CancellationToken,
+    /// Unix milliseconds of the moment the watcher called the far machine
+    /// away, or negative while it is here. Written by the watcher, read by
+    /// `status`; the port is bound either way.
+    away_since: Arc<AtomicI64>,
 }
 
 impl LiveConnect {
@@ -211,6 +215,13 @@ impl RemoteOps {
             base_url: live.handle.base_url(),
             ticket_fingerprint: live.ticket_fingerprint.clone(),
             path: live.handle.status().as_str().to_owned(),
+            away_for_s: {
+                let since = live.away_since.load(Ordering::Relaxed);
+                (since >= 0).then(|| {
+                    u64::try_from((super::connect_watch::unix_ms() - since).max(0) / 1000)
+                        .unwrap_or(0)
+                })
+            },
         })
     }
 

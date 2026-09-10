@@ -19,4 +19,9 @@ ticket_fingerprint: string,
 /**
  * How this side is reaching the peer: `idle`, `direct`, `relayed`.
  */
-path: string, };
+path: string, 
+/**
+ * Seconds the far machine has been away, or `None` while it is here.
+ * The port stays bound either way.
+ */
+away_for_s: number | null, };

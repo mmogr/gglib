@@ -96,9 +96,26 @@ down a pipe that reached nobody is spent for nothing. Later,
 `gglib remote connect <ticket>` uses the stored key, and `gglib remote connect`
 with no argument dials the stored ticket.
 
+**The port stays put.** The first connection binds `8180`; every later one
+tries the port the pairing was last reachable on, so a client you pointed
+at `http://127.0.0.1:8180/v1` once stays pointed at the desktop. Stable, not
+fixed: if something else has taken that port, `connect` binds the next free
+one, says so, and remembers *that* one instead. `--port` pins it, and is
+remembered the same way.
+
+**The port stays bound while the desktop is away.** A desktop that reboots,
+sleeps, or changes network does not end the connection here: the port keeps
+answering, with `502 tunnel_unavailable`, and the tunnel keeps dialling — for
+as long as `connect` is up, with a backoff, and with a nudge to rebind its
+socket every minute in case this laptop changed network while suspended.
+After thirty seconds of that, `gglib remote status` and the popover say
+**away** and for how long, rather than "connected" over nothing; when the
+desktop answers, they say so. Nothing needs typing at either end. Only
+`gglib remote disconnect`, or this daemon stopping, ends the connection.
+
 | Flag | Effect |
 |------|--------|
-| `--port N` | Bind this loopback port instead of a free one. |
+| `--port N` | Bind this loopback port, and remember it, instead of the last one used or `8180`. |
 | `--relay URL` | This side's self-hosted relay. |
 | `--no-discovery` | Dial only the paths the ticket carries. |
 
@@ -374,6 +391,8 @@ which is the ordinary OpenAI-compatible arrangement.
 |---------|----------|
 | `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has run `enable` again since (a new ticket). `connect` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. Ask for the new pairing. |
 | `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote connect` again with the same string. |
+| `Connected: … — away 3m` in `gglib remote status` | The desktop has not answered for that long. The port here is still bound and still dialling; nothing to do but wait for the desktop, or wake it. |
+| `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |
 | `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
 | `the remote machine <fingerprint> refused the stored key` | The key this laptop holds is not that machine's current one — usually because `proxy_api_key` was rotated there since you paired, but also if you dialled a bare ticket for a different machine. Re-enable on the desktop and redeem a fresh `<ticket>-<code>`. |

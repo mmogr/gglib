@@ -57,6 +57,13 @@ pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
         eprintln!("  \u{2705} Connected to {}.", connected.ticket_fingerprint);
     }
     eprintln!();
+    if let Some(wanted) = connected.moved_from {
+        eprintln!(
+            "  Port {wanted} was taken by something else, so this is on {} instead — and that \
+             is the port remembered for next time.",
+            connected.base_url
+        );
+    }
     eprintln!("  The other machine is now at:  {}", connected.base_url);
     eprintln!("  Any OpenAI-compatible client pointed there needs its API key; gglib's own do:");
     // The two halves do not rhyme, and cannot: `q`'s model is `-m`, `chat`'s
@@ -96,12 +103,19 @@ pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
 /// The connect side's lines of `gglib remote status`.
 pub(super) fn print_connection(status: &RemoteStatusDto) {
     match &status.connected {
-        Some(c) => {
-            eprintln!(
+        Some(c) => match c.away_for_s {
+            Some(secs) => eprintln!(
+                "  Connected: {}  at {}  \u{2014} away {}; the address stays, and it reconnects when \
+                 that machine is back",
+                c.ticket_fingerprint,
+                c.base_url,
+                for_how_long(secs)
+            ),
+            None => eprintln!(
                 "  Connected: {}  at {}  ({})",
                 c.ticket_fingerprint, c.base_url, c.path
-            );
-        }
+            ),
+        },
         None => match (&status.stored_ticket_fingerprint, status.has_remote_key) {
             (Some(fp), true) => {
                 eprintln!("  Connected: no \u{2014} `gglib remote connect` dials {fp} again");
@@ -113,5 +127,41 @@ pub(super) fn print_connection(status: &RemoteStatusDto) {
             }
             (None, _) => eprintln!("  Connected: no \u{2014} never paired with another machine"),
         },
+    }
+}
+
+/// Seconds as a person reads them: `40s`, `3m`, `2h`.
+fn for_how_long(secs: u64) -> String {
+    match secs {
+        s if s < 60 => format!("{s}s"),
+        s if s < 3600 => format!("{}m", s / 60),
+        s => format!("{}h", s / 3600),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::for_how_long;
+
+    /// The away line reads in the unit a person would have used.
+    ///
+    /// The status line is the only place this machine says how long the far
+    /// one has been gone, and it is read at a glance: seconds while it could
+    /// still be a blip, minutes for a lid that is closed, hours for a desktop
+    /// that is off. Truncation, not rounding — "away 1m" at sixty-one seconds
+    /// is the honest half of a figure that is about to change anyway.
+    #[test]
+    fn how_long_a_machine_has_been_away_reads_in_the_unit_that_fits() {
+        assert_eq!(for_how_long(0), "0s");
+        assert_eq!(for_how_long(59), "59s");
+        assert_eq!(for_how_long(60), "1m");
+        assert_eq!(for_how_long(61), "1m");
+        assert_eq!(for_how_long(3599), "59m");
+        assert_eq!(for_how_long(3600), "1h");
+        assert_eq!(
+            for_how_long(86_400),
+            "24h",
+            "a day away is still hours, not days"
+        );
     }
 }

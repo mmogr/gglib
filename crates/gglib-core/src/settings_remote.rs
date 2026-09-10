@@ -65,6 +65,18 @@ pub struct RemotePairing {
     /// field existed loads as nothing remembered yet.
     #[serde(default)]
     pub default_model: Option<String>,
+
+    /// The loopback port the paired machine was last reachable at here,
+    /// tried first next time so the address a client was configured
+    /// against stays the address.
+    ///
+    /// Stable rather than fixed: a port can be taken by something else
+    /// between two sessions, and `connect` then binds the next free one,
+    /// says so, and remembers *that*. `--port` pins it, and is remembered
+    /// the same way. `#[serde(default)]` for the reason the field above
+    /// gives.
+    #[serde(default)]
+    pub port: Option<u16>,
 }
 
 impl Settings {

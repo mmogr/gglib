@@ -137,4 +137,12 @@ peer: string | null, } | { "type": "remote_connected",
 /**
  * The loopback port the tunnel is bound to on this machine.
  */
-port: number, } | { "type": "remote_disconnected" };
+port: number, } | { "type": "remote_disconnected" } | { "type": "remote_away", 
+/**
+ * The loopback port that is still bound.
+ */
+port: number, } | { "type": "remote_back", 
+/**
+ * The loopback port, unchanged.
+ */
+port: number, };
