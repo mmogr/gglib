@@ -1555,3 +1555,14 @@ fn normalize_non_streaming_body(
 #[cfg(test)]
 #[path = "forward_tests.rs"]
 mod forward_tests;
+
+/// Request shaping. Its own module because `forward_tests.rs` is frozen at its
+/// current size by the complexity ratchet.
+#[cfg(test)]
+#[path = "forward_shaping_tests.rs"]
+mod forward_shaping_tests;
+
+/// What the client is sent when it did not ask for the proxy's pre-fill data.
+#[cfg(test)]
+#[path = "forward_progress_tests.rs"]
+mod forward_progress_tests;
