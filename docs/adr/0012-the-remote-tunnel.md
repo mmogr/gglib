@@ -1,7 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (fourth reading 2026-09-09 — a phone on cellular, direct; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (fourth reading 2026-09-09 — a phone on cellular, direct; **amended 2026-09-10 — decision 4 reversed: the identity always lasts, `--keep-identity` removed, `remote_enabled` added**; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -337,6 +337,63 @@ case-insensitively.
 > `remote_identity` and restarting, which is the same re-pairing of every
 > device that used to happen by accident. modelpipe mints the file `0600` and
 > refuses to read one others can read.
+>
+
+> **Amended 2026-09-10 — this decision is reversed. The identity always
+> lasts, and `--keep-identity` is gone.** `enable` writes the endpoint key to
+> `<data root>/data/remote_identity` unconditionally, and `remote_enabled`
+> makes remote access a switch the daemon honours at startup. There is no
+> flag, because there is no longer a choice to offer.
+>
+> The 2026-09-09 amendment above offered the trade rather than making it, and
+> a fortnight of using it settled the question it left open: nobody chose the
+> default. Every machine that mattered ran `--keep-identity`, because every
+> machine that mattered had a phone or a laptop pointed at it. A default
+> nobody keeps is not a default, it is a step.
+>
+> But the reversal does not rest on that. It rests on what became true
+> underneath it.
+>
+> **The argument above was never about identities; it was about decision 3's
+> arithmetic.** Six digits and two minutes are enough because a guesser must
+> find the listener first, and a fresh identity per session is what made
+> finding it hard. A lasting ticket removes that step, so the honest reading
+> of decision 3 is that it depended on decision 4 and nobody had written that
+> down. Under the 2026-09-09 amendment, `--keep-identity` quietly weakened
+> the pairing code for anyone who used it — which was, per above, everyone.
+>
+> What closes it is that the counting moved to where the guesses arrive.
+> modelpipe 0.5's `grant_once_bounded` burns a grant at the edge after three
+> wrong bearers, so a guesser gets three tries at the tunnel rather than
+> unlimited tries at a route the old counter sat behind. gglib's own
+> `MAX_ATTEMPTS` never saw those attempts: it counts redemptions reaching the
+> proxy, and a wrong bearer never reached it. Decision 3's arithmetic is
+> restored by the burn, not by the identity, and it is now restored where it
+> is actually enforced.
+>
+> **A ticket is not a credential.** This is the reframing the original
+> paragraph gets wrong by calling it "bearer material". A ticket names a
+> machine and says how to reach it; everything behind it takes a key this
+> side issued, and per-device keys make that key revocable one device at a
+> time. Treating an address as a secret bought a revocation nobody was
+> reaching for, and charged for it daily.
+>
+> **What this costs, kept in plain sight.** A lasting endpoint key is a
+> lasting identifier: a machine that publishes to n0's discovery service is
+> announcing the same name every day, so anyone watching discovery learns
+> when it is up. That is a presence leak, it is real, and it is the price.
+> It buys pairing once instead of every reboot. `--no-discovery` avoids the
+> leak and costs resolution when the machine changes network, and `enable`
+> now says so in two lines rather than one, because with a lasting ticket
+> that flag's failure is permanent rather than lasting until the next
+> `enable`.
+>
+> Revoking is deleting `remote_identity`, and `gglib remote status` prints
+> the path, because a revocation nobody can find is not one.
+>
+> **Decision 2 is retained, explicitly.** Device keys never reach the local
+> proxy, the local lock stays, and deletion is still deferred. Nothing here
+> touches that.
 >
 > The file sits under `data/` rather than beside `pids/`, and that is
 > load-bearing rather than tidy: a debug build resolves the data root to the

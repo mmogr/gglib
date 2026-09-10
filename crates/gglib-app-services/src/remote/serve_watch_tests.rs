@@ -44,7 +44,6 @@ const fn offline() -> EnableRequest {
         discovery: false,
         // A stored key would be a file on the machine running the tests, and
         // this request exists precisely to touch nothing outside the process.
-        keep_identity: false,
     }
 }
 
@@ -205,25 +204,22 @@ async fn a_proxy_that_leaves_during_the_key_wait_does_not_outlive_its_tunnel() {
     );
 }
 
-/// The default leaves nothing on the machine, and the flag names a file the
-/// data directory already ignores.
+/// The identity is one file, in the directory the repository already ignores.
 ///
 /// Read here rather than through `enable`: asking `enable` would bind an
 /// endpoint and write a real key into whatever data directory the test run
 /// resolves to, which is the repository itself in a debug build. The decision
 /// is the thing under test, and it is separable from acting on it.
+///
+/// There is no longer a "keep it" case to contrast with — the identity always
+/// lasts (ADR 0012 decision 4, reversed) — so what is worth pinning is *where*
+/// it goes. A key written outside `data/` would be committed by the next
+/// person who ran `git add -A`.
 #[test]
-fn a_session_keeps_no_key_unless_it_is_asked_to() {
-    assert!(
-        super::serve::identity_for(false)
-            .expect("no path to resolve")
-            .is_none(),
-        "a plain enable must leave nothing behind to revoke later"
-    );
-
-    let kept = super::serve::identity_for(true)
+fn the_endpoint_key_lands_where_the_repository_ignores_it() {
+    let kept = super::serve::identity_path()
         .expect("the identity path did not resolve")
-        .expect("keeping the identity must name a file");
+        .expect("the identity always names a file now");
     assert!(kept.ends_with("remote_identity"));
     assert_eq!(
         kept.parent().and_then(|p| p.file_name()),

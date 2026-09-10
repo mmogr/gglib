@@ -14,28 +14,39 @@ fn an_empty_body_is_the_safe_default() {
     assert!(!req.allow_mcp);
     assert!(req.relay.is_none());
     assert!(req.discovery, "discovery is on unless switched off");
-    assert!(
-        !req.keep_identity,
-        "a body that says nothing must not leave a key on the machine"
-    );
 }
 
-/// An old client posts a body with no `keep_identity` at all. It has to
-/// mean the same thing as `false`, or upgrading the daemon would start
-/// writing a key to disk for callers that never asked for one.
+/// A client built against the old shape still gets a 200.
+///
+/// `keep_identity` asked for what every `enable` now does anyway, so the
+/// field is accepted and dropped rather than rejected: a desktop app or
+/// script that still sends it must not get a 422 for a word that stopped
+/// meaning anything. Both values are tested because both must be inert —
+/// `false` especially, since it used to mean "mint a throwaway identity"
+/// and must no longer be able to ask for one.
 #[test]
-fn a_body_written_before_the_flag_existed_keeps_no_key() {
+fn a_body_that_still_sends_keep_identity_is_accepted_and_the_flag_ignored() {
+    for sent in ["true", "false"] {
+        let body: RemoteEnableBody =
+            serde_json::from_str(&format!(r#"{{"keep_identity":{sent}}}"#))
+                .expect("a body from an older client still deserialises");
+        let req = body.into_request();
+        assert!(
+            req.discovery,
+            "keep_identity={sent} must not disturb anything else"
+        );
+        assert!(!req.allow_mcp, "keep_identity={sent} is not a grant");
+    }
+}
+
+/// A body written before the flag existed, and one written after it is gone.
+#[test]
+fn a_body_without_the_flag_is_unremarkable() {
     let body: RemoteEnableBody =
         serde_json::from_str(r#"{"allow_mcp":false,"discovery":true}"#).unwrap();
-    assert!(!body.into_request().keep_identity);
-}
-
-#[test]
-fn keeping_the_identity_is_carried_through() {
-    let body: RemoteEnableBody = serde_json::from_str(r#"{"keep_identity":true}"#).unwrap();
     let req = body.into_request();
-    assert!(req.keep_identity);
-    assert!(req.discovery, "the two switches are independent");
+    assert!(req.discovery);
+    assert!(!req.allow_mcp);
 }
 
 #[test]

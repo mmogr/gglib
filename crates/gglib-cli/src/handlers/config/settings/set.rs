@@ -108,6 +108,10 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         start_at_login: args.start_at_login.map(Some),
         // Written by `gglib remote connect`, never by hand (ADR 0012).
         remote_pairing: None,
+        // Written by `gglib remote enable`/`disable`, never by hand: setting
+        // this by hand would say a machine is reachable with nothing bound.
+        remote_enabled: None,
+        remote_serve: None,
     };
 
     // Pre-validate: merge the prospective update into a local copy and validate

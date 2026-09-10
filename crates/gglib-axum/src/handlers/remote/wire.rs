@@ -24,10 +24,15 @@ pub(crate) struct RemoteEnableBody {
     /// Publish to and resolve through n0's discovery service. Omitted is on.
     #[serde(default)]
     pub discovery: Option<bool>,
-    /// Keep this machine's endpoint key on disk so the ticket survives a
-    /// restart. Omitted is off, which is a fresh identity per session.
-    #[serde(default)]
-    pub keep_identity: bool,
+    /// Accepted and ignored.
+    ///
+    /// The identity is always kept now, so this asks for what it already
+    /// gets. Kept on the wire for one release so a desktop app or script
+    /// built against the old shape still posts a body this deserialises
+    /// rather than getting a 422 for a field that no longer means anything;
+    /// removing it is a follow-up, not a surprise.
+    #[serde(default, rename = "keep_identity")]
+    pub _keep_identity: bool,
 }
 
 impl RemoteEnableBody {
@@ -36,7 +41,6 @@ impl RemoteEnableBody {
             allow_mcp: self.allow_mcp,
             relay: self.relay,
             discovery: self.discovery.unwrap_or(true),
-            keep_identity: self.keep_identity,
         }
     }
 }
@@ -212,6 +216,10 @@ pub(crate) struct RemoteStatus {
     pub stored_ticket_fingerprint: Option<String>,
     /// Whether this machine holds a key from an earlier pairing.
     pub has_remote_key: bool,
+    /// Whether this machine comes back reachable after a restart.
+    pub remote_enabled: bool,
+    /// Where the endpoint key is kept; deleting it revokes the ticket.
+    pub identity_path: Option<String>,
 }
 
 impl From<RemoteStatusSnapshot> for RemoteStatus {
@@ -234,6 +242,8 @@ impl From<RemoteStatusSnapshot> for RemoteStatus {
             connected: s.connected.map(RemoteConnection::from),
             stored_ticket_fingerprint: s.stored_ticket_fingerprint,
             has_remote_key: s.has_remote_key,
+            remote_enabled: s.remote_enabled,
+            identity_path: s.identity_path,
         }
     }
 }

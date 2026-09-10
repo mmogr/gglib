@@ -13,7 +13,7 @@ pub use settings_validate::{validate_inference_config, validate_inference_profil
 
 #[path = "settings_remote.rs"]
 mod settings_remote;
-pub use settings_remote::RemotePairing;
+pub use settings_remote::{RemotePairing, RemoteServe};
 
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
@@ -293,6 +293,11 @@ pub struct Settings {
     /// defect this field closes; such a machine loads as never paired and
     /// pairs again, which a stale ticket already required of it.
     pub remote_pairing: Option<RemotePairing>,
+
+    /// Reachable across restarts, and how — see [`RemoteServe`].
+    pub remote_enabled: Option<bool>,
+    /// See [`RemoteServe`].
+    pub remote_serve: Option<RemoteServe>,
 }
 
 impl Settings {
@@ -334,6 +339,8 @@ impl Settings {
             close_to_tray: None,
             start_at_login: None,
             remote_pairing: None,
+            remote_enabled: None,
+            remote_serve: None,
         }
     }
 
@@ -465,6 +472,10 @@ pub struct SettingsUpdate {
     /// See [`Settings::remote_pairing`]. Written whole or not at all: the
     /// two halves have no separate update, which is what keeps them bound.
     pub remote_pairing: Option<Option<RemotePairing>>,
+    /// See [`Settings::remote_enabled`].
+    pub remote_enabled: Option<Option<bool>>,
+    /// See [`Settings::remote_serve`]. Written whole, like the pairing.
+    pub remote_serve: Option<Option<RemoteServe>>,
 }
 
 /// Settings validation error.

@@ -26,7 +26,7 @@ use super::backend::Backend;
 use super::key;
 use super::pairing::PAIRING_TTL;
 use super::rotation::rotation_poll;
-use super::slot::{Busy, Taken};
+use super::slot::Busy;
 use super::types::{EnableRequest, Enabled};
 use super::{DRAIN, Live, RemoteOps, WAIT_ONLINE};
 use crate::error::GuiError;
@@ -72,6 +72,15 @@ impl RemoteOps {
             .reserve(generation)
             .map_err(|busy| busy_serving(&busy))?;
 
+        // The switch and the flags are written before the tunnel binds, not
+        // after: `arm` can take fifteen seconds and a daemon killed inside
+        // that window should come back up serving, because a person has
+        // already said they want this machine reachable. A switch on with
+        // nothing bound is recoverable — `resume` arms it. The reverse, a
+        // bound tunnel nobody recorded, comes back down at the next restart
+        // for no reason a person could see.
+        self.remember_enabled(&request).await?;
+
         let armed = self
             .arm(request, &addr, generation, &cancel, proxy_exit)
             .await;
@@ -102,7 +111,7 @@ impl RemoteOps {
         let mut opts = modelpipe::ServeOptions::default();
         opts.auth = modelpipe::TokenPolicy::Supplied(settled.key.clone());
         opts.relay = request.relay;
-        opts.identity = identity_for(request.keep_identity)?;
+        opts.identity = identity_path()?;
         opts.port_mapping = false;
         opts.discovery = request.discovery;
         opts.wait_online = Some(WAIT_ONLINE);
@@ -206,56 +215,30 @@ impl RemoteOps {
             expires_in_s: PAIRING_TTL.as_secs(),
         })
     }
-
-    /// Take the tunnel down. The ticket is dead from this moment; the key
-    /// stays in settings, because the local proxy has demanded it since
-    /// `enable` ran and withdrawing it would break whatever adopted it
-    /// (ADR 0012, decision 2).
-    ///
-    /// Also gives up on an `enable` that is still arming, which nothing
-    /// could do while that call held the mutex for its whole fifteen
-    /// seconds.
-    ///
-    /// # Errors
-    ///
-    /// `Conflict` when nothing is enabled and nothing is arming.
-    pub async fn disable(&self) -> Result<(), GuiError> {
-        match self.live.lock().await.take() {
-            Taken::Value(live) => {
-                super::teardown::take_down(live, &self.gateway).await;
-                info!("remote tunnel disabled");
-                self.emitter.emit(AppEvent::remote_disabled());
-                Ok(())
-            }
-            // Nothing is bound and no pairing is armed yet — `arm` claims
-            // the slot and arms the gateway under one hold of this lock, so
-            // a reservation is never a session — and there is therefore
-            // nothing to reset and nothing to announce. The arming call
-            // finds the slot gone and takes down whatever it built.
-            Taken::Cancelled => {
-                info!("cancelled a remote enable that was still arming");
-                Ok(())
-            }
-            Taken::Empty => Err(GuiError::Conflict(
-                "remote access is not enabled".to_owned(),
-            )),
-        }
-    }
 }
 
-/// Where this session's endpoint key comes from, if it comes from anywhere.
+/// Where this machine's endpoint key lives.
 ///
-/// A fresh identity every time unless asked otherwise: the ticket dies with
-/// the session and revocation is the restart (ADR 0012, decision 4, amended).
-/// `--keep-identity` is the other side of that trade — the ticket outlives the
-/// daemon, and revoking it becomes deleting this file rather than restarting.
+/// Always the same file now (ADR 0012, decision 4, reversed — see the
+/// amendment dated 2026-09-10). A ticket names a machine; it is not a
+/// credential, and reaching anything behind it still takes a key this side
+/// issued. Minting a new one every session made the address change for a
+/// reason nobody outside this process could see, so every paired device
+/// paired again after a reboot — paying a real cost daily to buy a
+/// revocation nobody was reaching for.
 ///
-/// Separate from `arm` so the decision can be read without binding an endpoint
-/// or writing a key: `arm` is a network call and a file, and this is neither.
-pub(super) fn identity_for(keep: bool) -> Result<Option<std::path::PathBuf>, GuiError> {
-    if !keep {
-        return Ok(None);
-    }
+/// What made that trade defensible was the arithmetic in decision 3: six
+/// digits and two minutes are enough only while a guesser has to find the
+/// listener first. A lasting ticket removes that step, so the counting had
+/// to move to where the guesses arrive — modelpipe 0.5's
+/// `grant_once_bounded`, which burns a grant at the edge. Revoking is now
+/// deleting this file, and it is a thing a person does deliberately rather
+/// than a side effect of a restart.
+///
+/// Separate from `arm` so the decision can be read without binding an
+/// endpoint or writing a key: `arm` is a network call and a file, and this
+/// is neither.
+pub(super) fn identity_path() -> Result<Option<std::path::PathBuf>, GuiError> {
     gglib_core::paths::remote_identity_path()
         .map(Some)
         .map_err(|e| GuiError::Internal(format!("could not place the stored endpoint key: {e}")))

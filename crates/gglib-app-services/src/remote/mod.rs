@@ -11,6 +11,7 @@ mod pairing_string;
 mod redeem;
 mod rotation;
 mod serve;
+mod serve_switch;
 mod slot;
 mod stored_pairing;
 mod teardown;
@@ -116,13 +117,11 @@ impl RemoteOps {
         // Both answers come off one record, which is what makes them
         // agree: a key is held *for* the machine the fingerprint names, and
         // there is no longer a shape in which they can describe two.
-        let stored = self
-            .core
-            .settings()
-            .get()
-            .await
-            .ok()
-            .and_then(|s| s.remote_pairing);
+        let settings = self.core.settings().get().await.ok();
+        let remote_enabled = settings
+            .as_ref()
+            .is_some_and(|s| s.remote_enabled == Some(true));
+        let stored = settings.and_then(|s| s.remote_pairing);
         let stored_ticket_fingerprint = stored.as_ref().and_then(stored_pairing::fingerprint);
         let has_remote_key = stored.is_some();
         let connected = self.connect_snapshot().await;
@@ -138,6 +137,11 @@ impl RemoteOps {
             connected,
             stored_ticket_fingerprint,
             has_remote_key,
+            remote_enabled,
+            identity_path: serve::identity_path()
+                .ok()
+                .flatten()
+                .map(|p| p.display().to_string()),
             ..RemoteStatusSnapshot::default()
         };
         if let Some(Live { handle, .. }) = live.full() {
