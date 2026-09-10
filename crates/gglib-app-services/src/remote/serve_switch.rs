@@ -51,7 +51,7 @@ impl RemoteOps {
     ///
     /// Reads the switch rather than taking a request, because nobody is
     /// typing: this is the machine doing again what it was told to do once.
-    /// Serving needs [`Settings::remote_serve`] — the flags `enable` was
+    /// Serving needs [`gglib_core::Settings::remote_serve`] — the flags `enable` was
     /// given — and its absence means the switch was never set by an
     /// `enable`, so there is nothing to reproduce and this does nothing.
     ///
