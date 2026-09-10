@@ -39,6 +39,10 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// response, no further retries occur; mid-stream failures become inline
 /// error frames, exactly as before.
 ///
+/// `client_wants_progress` is passed through to
+/// [`stream_response_to_channel`], which forwards `prompt_progress` frames
+/// only when the client's own request asked for them.
+///
 /// When `config` and `session_id` are both `Some` (KV cache enabled), the KV
 /// cache is saved via [`save_after_generation`] immediately after
 /// [`stream_response_to_channel`] returns — before the semaphore `permit`
@@ -58,6 +62,7 @@ pub(crate) fn spawn_and_return(
     context_metrics: Arc<crate::metrics::ContextMetricsStore>,
     snapshot_seq: u64,
     forwarded_chars: usize,
+    client_wants_progress: bool,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
     session_id: Option<String>,
@@ -210,6 +215,7 @@ pub(crate) fn spawn_and_return(
                     tx,
                     &connection,
                     repair,
+                    client_wants_progress,
                 )
                 .await;
                 if outcome.repair_attempted {
