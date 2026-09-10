@@ -418,9 +418,7 @@ impl Settings {
         if let Some(ref v) = other.start_at_login {
             self.start_at_login = *v;
         }
-        if let Some(ref v) = other.remote_pairing {
-            self.remote_pairing.clone_from(v);
-        }
+        self.merge_remote(other);
     }
 }
 
@@ -553,18 +551,7 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         return Err(SettingsError::BlankProxyApiKey);
     }
 
-    // The connect side's stored pairing, same rule on each half: a blank is
-    // neither a key nor an address, and `connect` reading one would dial
-    // nothing with nothing rather than say the pairing is gone. Clearing the
-    // record is how a pairing is forgotten.
-    if let Some(ref pairing) = settings.remote_pairing {
-        if pairing.api_key.trim().is_empty() {
-            return Err(SettingsError::BlankRemoteApiKey);
-        }
-        if pairing.ticket.trim().is_empty() {
-            return Err(SettingsError::BlankRemoteTicket);
-        }
-    }
+    settings_remote::validate_remote(settings)?;
 
     // Validate inference defaults if specified
     if let Some(ref inference_config) = settings.inference_defaults {
