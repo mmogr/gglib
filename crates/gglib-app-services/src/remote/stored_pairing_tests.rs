@@ -36,14 +36,23 @@ fn ticket(s: &str) -> Ticket {
 /// machine B's ticket. There is no longer a call that can do it: the two
 /// halves are one `RemotePairing` and `remember` writes both or neither, so
 /// the key that outlives the machine that issued it has no shape to live in.
+/// A pairing as `remember` is handed one.
+fn record(ticket: &str, api_key: &str) -> RemotePairing {
+    RemotePairing {
+        ticket: ticket.to_owned(),
+        api_key: api_key.to_owned(),
+        default_model: None,
+    }
+}
+
 #[tokio::test]
 async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
     let core = test_core().await;
 
-    remember(&core, KEY_A.to_owned(), TICKET_A.to_owned())
+    remember(&core, record(TICKET_A, KEY_A))
         .await
         .expect("machine A's pairing is stored");
-    remember(&core, KEY_B.to_owned(), TICKET_B.to_owned())
+    remember(&core, record(TICKET_B, KEY_B))
         .await
         .expect("machine B's pairing replaces it");
 
@@ -182,6 +191,7 @@ async fn the_same_machine_at_a_new_address_carries_its_key_forward() {
     let held = RemotePairing {
         ticket: TICKET_A.to_owned(),
         api_key: KEY_A.to_owned(),
+        default_model: None,
     };
     let moved = ticket(TICKET_A_MOVED);
     assert_eq!(
@@ -231,6 +241,7 @@ async fn a_dial_to_the_machine_already_recorded_writes_nothing() {
     let held = RemotePairing {
         ticket: TICKET_A.to_owned(),
         api_key: KEY_A.to_owned(),
+        default_model: None,
     };
 
     let paired = settle(&core, &ticket(TICKET_A), Some(&held), None, never_redeems)

@@ -29,6 +29,7 @@
 //! pool and cannot be built in a unit test. The narrow signature is what makes
 //! the conflict and not-found paths testable at all.
 
+use crate::target::Target;
 use anyhow::{Result, anyhow, bail};
 
 use gglib_core::domain::InferenceProfile;
@@ -71,13 +72,13 @@ pub(crate) struct ProfileSelection {
 /// reproduce the silent-default bug this branch exists to remove. The suffix
 /// form does travel, and the message says so.
 pub(crate) async fn select_for_upstream(
+    target: Target,
     catalog: &dyn ModelCatalogPort,
     profiles: &[InferenceProfile],
     identifier: &str,
     flag: Option<&str>,
-    remote: bool,
 ) -> Result<ProfileSelection> {
-    if !remote {
+    if target == Target::Local {
         return select(catalog, profiles, identifier, flag).await;
     }
     if let Some(name) = flag {
@@ -95,6 +96,35 @@ pub(crate) async fn select_for_upstream(
         model: identifier.to_owned(),
         profile: None,
     })
+}
+
+/// [`select_for_upstream`] for a command that may be resuming.
+///
+/// Locally, with nothing typed, the identifier is about to come from
+/// storage and there is nothing to select yet — that is
+/// [`resume_profile`]'s moment. On the paired machine the selection runs
+/// regardless, so a `--profile` cannot be silently dropped on a resume
+/// there: the far machine owns both the model name and the profile list,
+/// and the whole identifier is its wire name, stored, replayed and forwarded
+/// verbatim.
+///
+/// # Errors
+///
+/// Everything [`select_for_upstream`] reports.
+pub(crate) async fn select_before_resume(
+    target: Target,
+    catalog: &dyn ModelCatalogPort,
+    profiles: &[InferenceProfile],
+    identifier: &str,
+    flag: Option<&str>,
+    typed_this_invocation: bool,
+) -> Result<Option<ProfileSelection>> {
+    if target == Target::Local && !typed_this_invocation {
+        return Ok(None);
+    }
+    select_for_upstream(target, catalog, profiles, identifier, flag)
+        .await
+        .map(Some)
 }
 
 /// Resolve an identifier and an optional `--profile` into a model and profile.
@@ -165,11 +195,18 @@ pub(crate) async fn select(
 /// ever resume again, which is a steep price for a profile the user may not
 /// even want any more.
 pub(crate) async fn resume_profile(
+    target: Target,
     catalog: &dyn ModelCatalogPort,
     profiles: &[InferenceProfile],
     identifier: &mut String,
     flag: Option<&str>,
 ) -> Result<Option<InferenceProfile>> {
+    // Not on the paired machine: the stored suffix is that machine's, this
+    // catalog cannot judge it, and stripping it here is what made a resumed
+    // remote session drop its profile without saying so.
+    if target == Target::Remote {
+        return Ok(None);
+    }
     let stored = match resolve_route(identifier, profiles, catalog).await {
         ModelRoute::Bare(model) => (model.to_owned(), None),
         ModelRoute::Profiled { model, profile } => (model.to_owned(), Some(profile.clone())),

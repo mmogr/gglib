@@ -56,6 +56,10 @@ pub struct Cli {
     #[arg(short = 'v', long = "verbose", global = true)]
     pub verbose: bool,
 
+    /// Do this on the machine this one is paired with (`gglib remote status` names it)
+    #[arg(long, global = true)]
+    pub remote: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -100,26 +104,35 @@ mod tests {
         }
     }
 
-    /// `--remote` and `--port` name different machines, so they are exclusive;
-    /// and `--remote` reaches both commands that compose an agent session.
+    /// `--remote` and `--port` name different machines, so they are exclusive
+    /// — and the exclusion holds across the parent/subcommand line, since the
+    /// flag is the root's and the port is the subcommand's.
     #[test]
     fn remote_and_port_are_exclusive_on_both_agent_commands() {
         assert!(Cli::try_parse_from(["gglib", "q", "--remote", "--port", "9000", "hi"]).is_err());
         assert!(Cli::try_parse_from(["gglib", "chat", "--remote", "--port", "9000", "m"]).is_err());
 
         let cli = Cli::parse_from(["gglib", "q", "--remote", "hi"]);
+        assert!(cli.remote);
         match cli.command {
-            Some(Commands::Question { upstream, .. }) => {
-                assert!(upstream.remote);
-                assert_eq!(upstream.port, None);
-            }
+            Some(Commands::Question { upstream, .. }) => assert_eq!(upstream.port, None),
             _ => panic!("expected the Question variant"),
         }
         let cli = Cli::parse_from(["gglib", "chat", "--remote"]);
-        match cli.command {
-            Some(Commands::Chat { upstream, .. }) => assert!(upstream.remote),
-            _ => panic!("expected the Chat variant"),
-        }
+        assert!(cli.remote);
+        assert!(matches!(cli.command, Some(Commands::Chat { .. })));
+    }
+
+    /// One flag, declared once (ADR 0013): it parses before the subcommand
+    /// and after it, on a command that uses it and on one that will refuse
+    /// it — the refusal is `dispatch`'s, not the parser's, so that every
+    /// command is told about the flag in the same words.
+    #[test]
+    fn remote_is_one_global_flag_every_subcommand_accepts() {
+        assert!(Cli::parse_from(["gglib", "--remote", "model", "list"]).remote);
+        assert!(Cli::parse_from(["gglib", "model", "list", "--remote"]).remote);
+        assert!(Cli::parse_from(["gglib", "remote", "status", "--remote"]).remote);
+        assert!(!Cli::parse_from(["gglib", "model", "list"]).remote);
     }
 
     /// The command list in `help_template` is a hand-written string, so adding

@@ -1,5 +1,4 @@
 use super::*;
-
 use std::collections::HashSet;
 
 use async_trait::async_trait;
@@ -203,6 +202,7 @@ async fn a_resume_lets_the_flag_beat_a_stored_suffix() {
     ];
 
     let selected = resume_profile(
+        Target::Local,
         &NamedCatalog::new(&["qwen"]),
         &profiles,
         &mut identifier,
@@ -220,6 +220,7 @@ async fn a_resume_lets_the_flag_beat_a_stored_suffix() {
 async fn a_resume_survives_a_deleted_stored_profile() {
     let mut identifier = "qwen:gone".to_owned();
     let selected = resume_profile(
+        Target::Local,
         &NamedCatalog::new(&["qwen"]),
         &profiles(),
         &mut identifier,
@@ -246,11 +247,11 @@ async fn upstream(
     remote: bool,
 ) -> Result<ProfileSelection> {
     select_for_upstream(
+        Target::from_flag(remote),
         &NamedCatalog::new(&["qwen"]),
         profiles,
         identifier,
         flag,
-        remote,
     )
     .await
 }

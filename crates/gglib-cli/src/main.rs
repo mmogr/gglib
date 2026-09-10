@@ -25,5 +25,5 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     };
 
-    dispatch(&ctx, command, cli.verbose).await
+    dispatch(&ctx, command, cli.verbose, cli.remote).await
 }

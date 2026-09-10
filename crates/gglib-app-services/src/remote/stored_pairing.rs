@@ -82,7 +82,14 @@ pub(super) async fn settle(
             // only write on this arm, so a dial to the machine already
             // recorded touches nothing.
             if let Some(held) = held.filter(|held| held.ticket != ticket.to_string()) {
-                remember(core, held.api_key.clone(), ticket.to_string()).await?;
+                remember(
+                    core,
+                    RemotePairing {
+                        ticket: ticket.to_string(),
+                        ..held.clone()
+                    },
+                )
+                .await?;
             }
             Ok(false)
         }
@@ -94,19 +101,18 @@ pub(super) async fn settle(
 /// There is deliberately no way to write half of it. The two were separate
 /// `SettingsUpdate` fields, and the codeless arm of `connect` passed `None`
 /// for the key — which does not clear the old key, it leaves it exactly
-/// where it was, now filed under a ticket for somebody else.
+/// where it was, now filed under a ticket for somebody else. The record is
+/// taken whole for the same reason: a dial to a machine that moved keeps
+/// what this machine remembered about it, and a fresh pairing starts with
+/// nothing remembered.
 ///
 /// # Errors
 ///
 /// `Internal` when settings cannot be written.
-pub(super) async fn remember(
-    core: &AppCore,
-    api_key: String,
-    ticket: String,
-) -> Result<(), GuiError> {
+pub(super) async fn remember(core: &AppCore, pairing: RemotePairing) -> Result<(), GuiError> {
     core.settings()
         .update(SettingsUpdate {
-            remote_pairing: Some(Some(RemotePairing { ticket, api_key })),
+            remote_pairing: Some(Some(pairing)),
             ..SettingsUpdate::default()
         })
         .await
@@ -128,7 +134,16 @@ pub(super) async fn store_redeemed(
     api_key: String,
     ticket: String,
 ) -> Result<(), GuiError> {
-    remember(core, api_key, ticket).await.map_err(spent_code)
+    remember(
+        core,
+        RemotePairing {
+            ticket,
+            api_key,
+            default_model: None,
+        },
+    )
+    .await
+    .map_err(spent_code)
 }
 
 /// A failure to store a pairing whose code has already been spent.

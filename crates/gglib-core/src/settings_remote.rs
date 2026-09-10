@@ -52,6 +52,19 @@ pub struct RemotePairing {
     /// before it is made, so there is no state left for such a record to
     /// describe.
     pub api_key: String,
+
+    /// The model a `--remote` turn is for when the command line names none:
+    /// the one this machine last asked that machine for.
+    ///
+    /// Remembered rather than configured — there is no flag and no setting
+    /// to type it into — because the alternative was naming the model on
+    /// every turn, and the model a person asks a machine for is the one
+    /// they asked it for last time. Per pairing, not global: it is a name
+    /// in *that* machine's catalogue, and it goes with the record when the
+    /// pairing does. `#[serde(default)]` so a record written before the
+    /// field existed loads as nothing remembered yet.
+    #[serde(default)]
+    pub default_model: Option<String>,
 }
 
 impl Settings {

@@ -62,6 +62,7 @@ pub(crate) fn paired_with(ticket: &str, api_key: &str) -> SettingsUpdate {
         remote_pairing: Some(Some(RemotePairing {
             ticket: ticket.to_owned(),
             api_key: api_key.to_owned(),
+            default_model: None,
         })),
         ..SettingsUpdate::default()
     }

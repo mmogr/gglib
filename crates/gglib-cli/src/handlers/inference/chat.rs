@@ -6,6 +6,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::shared_args::{ContextArgs, SamplingArgs};
+use crate::target::Target;
 
 /// Arguments for the chat command.
 #[derive(Debug, Clone)]
@@ -20,8 +21,8 @@ pub(crate) struct ChatArgs {
     /// Disable tools — run as a plain LLM chat.
     pub no_tools: bool,
     pub port: Option<u16>,
-    /// Drive the machine on the other end of `gglib remote connect`.
-    pub remote: bool,
+    /// Which machine the turn runs on (ADR 0013).
+    pub target: Target,
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,
