@@ -1,6 +1,7 @@
-//! `gglib remote connect`, `disconnect` and `kill`: this machine as the laptop.
-
-use std::io::{IsTerminal as _, Write as _};
+//! `gglib remote connect` and `disconnect`: this machine as the laptop.
+//!
+//! Stopping the far machine used to live here as `kill`; it is
+//! `gglib daemon stop --remote` now (ADR 0013), beside the local stop.
 
 use anyhow::Result;
 
@@ -92,52 +93,6 @@ pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
 
 /// Execute `gglib remote kill`.
 ///
-/// Asks first, because the far side cannot be restarted from here. `--yes`
-/// skips the question; so does a stdin that is not a terminal, on the theory
-/// that a script passing `kill` has read the help.
-pub(crate) async fn kill(ctx: &CliContext, yes: bool) -> Result<()> {
-    let client = reqwest::Client::new();
-    match daemon_client::probe(&client).await {
-        DaemonProbe::Running => {}
-        _ => {
-            anyhow::bail!("the daemon is not running, so nothing is connected to a remote");
-        }
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
-    };
-    let status = handle.remote_status().await?;
-    let Some(connection) = status.connected.as_ref() else {
-        anyhow::bail!("not connected to a remote \u{2014} `gglib remote connect` first");
-    };
-
-    if !yes && std::io::stdin().is_terminal() && !confirm(&connection.ticket_fingerprint)? {
-        eprintln!("  Left it running.");
-        return Ok(());
-    }
-    handle.remote_kill().await?;
-    eprintln!(
-        "  \u{1f6d1} The remote daemon ({}) is stopping, and this side is disconnected.",
-        connection.ticket_fingerprint
-    );
-    eprintln!("  Nothing brings it back except someone at that machine.");
-    Ok(())
-}
-
-/// The question, and the one answer that means yes.
-fn confirm(fingerprint: &str) -> Result<bool> {
-    eprintln!(
-        "  This stops the gglib daemon on {fingerprint}: its proxy, its models, its downloads."
-    );
-    eprintln!("  It cannot be started again from here.");
-    eprint!("  Type `shutdown` to go ahead: ");
-    std::io::stderr().flush()?;
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
-    Ok(input.trim() == "shutdown")
-}
-
 /// The connect side's lines of `gglib remote status`.
 pub(super) fn print_connection(status: &RemoteStatusDto) {
     match &status.connected {

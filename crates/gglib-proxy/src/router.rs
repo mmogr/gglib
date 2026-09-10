@@ -56,6 +56,10 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     // before it has any credentials to poll with.
     let mut protected = Router::new()
         .route("/v1/models", get(crate::models_endpoint::list_models))
+        .route(
+            "/v1/models/{name}/load",
+            post(crate::load_endpoint::load_model),
+        )
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))
@@ -138,3 +142,7 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "router_tests.rs"]
+mod router_tests;

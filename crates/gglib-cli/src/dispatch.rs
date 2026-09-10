@@ -43,7 +43,7 @@ pub async fn dispatch(
 
         // ── Grouped: model management ───────────────────────────────────────
         Commands::Model { command } => {
-            handlers::model::dispatch(ctx, command).await?;
+            handlers::model::dispatch(ctx, command, target).await?;
         }
 
         // ── Grouped: configuration & system ─────────────────────────────────
@@ -64,6 +64,7 @@ pub async fn dispatch(
         } => {
             handlers::inference::serve::execute(
                 ctx,
+                target,
                 identifier,
                 context,
                 options,
@@ -194,8 +195,8 @@ pub async fn dispatch(
             crate::commands::DaemonCommand::Status => {
                 handlers::daemon::status(ctx).await?;
             }
-            crate::commands::DaemonCommand::Stop => {
-                handlers::daemon::stop(ctx).await?;
+            crate::commands::DaemonCommand::Stop { yes } => {
+                handlers::daemon::stop(ctx, target, yes).await?;
             }
         },
         Commands::Proxy {
@@ -214,7 +215,9 @@ pub async fn dispatch(
                         port: dash_port,
                         api_key,
                     } => {
-                        let key = resolve_client_api_key(ctx, api_key).await;
+                        let (dash_host, dash_port, key) = target
+                            .proxy_endpoint(ctx, dash_host, dash_port, api_key)
+                            .await?;
                         handlers::proxy_dashboard::execute(dash_host, dash_port, key.as_deref())
                             .await?;
                     }
@@ -224,7 +227,9 @@ pub async fn dispatch(
                         session_id,
                         api_key,
                     } => {
-                        let key = resolve_client_api_key(ctx, api_key).await;
+                        let (clear_host, clear_port, key) = target
+                            .proxy_endpoint(ctx, clear_host, clear_port, api_key)
+                            .await?;
                         handlers::proxy_cache_clear::execute(
                             &clear_host,
                             clear_port,
@@ -272,28 +277,4 @@ pub async fn dispatch(
     }
 
     Ok(())
-}
-
-/// The key a `gglib proxy` subcommand should present to an already-running
-/// proxy.
-///
-/// `--api-key`/`GGLIB_API_KEY` first, then the stored `proxy_api_key`. The
-/// stored fallback is what makes `gglib proxy dashboard` keep working with no
-/// extra flag against a proxy that generated its own key — the same settings
-/// row the proxy wrote it to.
-///
-/// An unreadable settings store yields `None` rather than an error: the target
-/// proxy may well be unauthenticated, and failing the command outright would
-/// turn a maybe-irrelevant local problem into a hard stop.
-async fn resolve_client_api_key(ctx: &CliContext, flag: Option<String>) -> Option<String> {
-    if flag.is_some() {
-        return flag;
-    }
-    ctx.app
-        .settings()
-        .get()
-        .await
-        .ok()
-        .and_then(|s| s.proxy_api_key)
-        .filter(|key| !key.trim().is_empty())
 }

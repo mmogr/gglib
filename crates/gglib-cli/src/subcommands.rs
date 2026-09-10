@@ -104,7 +104,16 @@ pub enum DaemonCommand {
     /// Show whether the daemon is running, and what it is doing
     Status,
     /// Stop the running daemon (and every llama-server it owns)
-    Stop,
+    Stop {
+        /// With --remote: stop the paired machine's daemon without asking
+        ///
+        /// That stop is a one-way door — nothing brings that daemon back
+        /// except someone at the machine — so it asks first on a terminal.
+        /// Locally the daemon can always be started again, and this flag
+        /// does nothing.
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
 
 /// Subcommands available under `gglib remote`.
@@ -174,13 +183,4 @@ pub enum RemoteCommand {
     },
     /// Close the local port; the far machine and the stored pairing stay
     Disconnect,
-    /// Stop the far machine's daemon through the tunnel, then disconnect
-    ///
-    /// A one-way door: nothing brings that daemon back except someone at
-    /// the machine. Asks before doing it unless --yes is given.
-    Kill {
-        /// Do not ask for confirmation
-        #[arg(long, short = 'y')]
-        yes: bool,
-    },
 }

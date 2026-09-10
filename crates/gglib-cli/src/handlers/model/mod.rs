@@ -18,6 +18,7 @@ use gglib_app_services::{ModelDeps, ModelOps};
 
 use crate::bootstrap::CliContext;
 use crate::model_commands::ModelCommand;
+use crate::target::Target;
 
 /// `ModelOps` for a one-shot CLI command.
 ///
@@ -40,7 +41,11 @@ pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
 }
 
 /// Dispatch a `model` subcommand to its handler.
-pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
+pub(crate) async fn dispatch(
+    ctx: &CliContext,
+    command: ModelCommand,
+    target: Target,
+) -> Result<()> {
     match command {
         ModelCommand::Add {
             file_path,
@@ -58,6 +63,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<
             tags,
         } => {
             list::execute(
+                target,
                 ctx,
                 list::ListArgs {
                     sort,

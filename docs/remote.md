@@ -85,7 +85,7 @@ The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
 pairs or the code runs out.
 
-### The laptop: `connect`, `disconnect`, `kill`
+### The laptop: `connect`, `disconnect`
 
 `gglib remote connect <ticket>-<code>` binds a loopback port that is now the
 desktop's proxy, waits up to thirty seconds for the desktop to answer, then
@@ -103,10 +103,12 @@ with no argument dials the stored ticket.
 | `--no-discovery` | Dial only the paths the ticket carries. |
 
 `gglib remote disconnect` closes the port; the desktop and the stored pairing
-are unaffected. `gglib remote kill` is different in kind: it stops the
-desktop's daemon through the tunnel — proxy, models, downloads — and then
-disconnects. It asks you to type `shutdown` first, because nothing can start
-that daemon again from the laptop. `--yes` skips the question for scripts.
+are unaffected. Stopping the *desktop* from the laptop is not a `remote`
+command at all: it is `gglib daemon stop --remote`, the same command that
+stops the daemon here, pointed at the other machine. It stops that daemon
+through the tunnel — proxy, models, downloads — and then disconnects, and it
+asks you to type `shutdown` first, because nothing can start that daemon
+again from the laptop. `--yes` skips the question for scripts.
 
 ## Using it
 
@@ -141,12 +143,27 @@ know comes back as a 404 listing the profiles it has. `--profile` is refused
 with `--remote` for the same reason: it names a profile configured on the
 laptop, and there is no way for it to reach the machine that would apply it.
 
-**What `--remote` reaches** is a short list: `chat` and `q`. Every other
-command is about this machine — `model pull` changes what is on a machine,
-and that is done at the machine; `remote` manages the pairing itself — and
-refuses the flag with a sentence naming what it does reach, rather than
-ignoring it. `--remote` and `--port` are exclusive: they name different
-machines. [ADR 0013](adr/0013-the-target-is-a-value.md) has the reasoning.
+**What `--remote` reaches** is the *use* side of the desktop, and the line
+is: you can use what is on that machine, and you cannot change what is on
+it.
+
+| Command | With `--remote` |
+|---|---|
+| `chat`, `q` | A turn on the desktop, as above. |
+| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the name and a numeric `--ctx-size` travel. |
+| `model list` | The desktop's catalogue as its proxy publishes it — the names a turn can ask for, and the context each would be served with. |
+| `proxy dashboard` | The desktop proxy's live dashboard, through the tunnel. |
+| `proxy cache-clear` | Clear the desktop proxy's prompt cache. |
+| `daemon stop` | Stop the desktop's daemon. Asks you to type `shutdown`; `--yes` for scripts. |
+
+Every other command is about this machine — `model pull` and `model remove`
+change what is on a machine, and that is done at the machine; `config`
+writes settings; `remote` manages the pairing itself — and refuses the flag
+with a sentence naming what it does reach, rather than ignoring it.
+`proxy stop --remote` is refused with its own sentence, because the far
+proxy is what carries the request. `--remote` and `--port` are exclusive:
+they name different machines. [ADR 0013](adr/0013-the-target-is-a-value.md)
+has the reasoning.
 
 **The GUI's chat** goes to the desktop when the Remote popover's *Use it for
 chat* box is checked. The choice is per window and is cleared the moment the

@@ -15,19 +15,67 @@ use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
 use crate::presentation::style;
 use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+use crate::target::Target;
+
+#[path = "serve_far.rs"]
+mod serve_far;
 use gglib_app_services::launch_options::{ProxyGlobals, plan_pinned_launch};
 use gglib_app_services::types::StartServerRequest;
 use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::llama::{CliPrompt, ensure_llama_initialized};
+use serve_far::serve_far;
 
 use super::shared::{log_inference_info, log_mlock_info};
 
-/// Execute the serve command.
+/// Execute the serve command: here, or on the paired machine.
 ///
-/// Resolves the model's launch options locally (the full cascade), asks the
-/// daemon to start the proxy pinned to it, and attaches the dashboard.
+/// On the paired machine "serve" is what the word can mean there: have the
+/// model resident now, so the first turn does not wait. Only the name and
+/// `--ctx-size` travel; every other flag configures a proxy on *this*
+/// machine, and there is no proxy of this machine's on that one to
+/// configure.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
+    ctx: &CliContext,
+    target: Target,
+    identifier: String,
+    context: ContextArgs,
+    options: ServeOptions,
+    sampling: SamplingArgs,
+    profile_flag: Option<String>,
+    mtp: MtpArgs,
+    cache: CacheArgs,
+    access: AccessArgs,
+    verbose: bool,
+) -> Result<()> {
+    let far_identifier = identifier.clone();
+    let far_ctx_size = context.ctx_size.clone();
+    target
+        .run(
+            async move || {
+                serve_here(
+                    ctx,
+                    identifier,
+                    context,
+                    options,
+                    sampling,
+                    profile_flag,
+                    mtp,
+                    cache,
+                    access,
+                    verbose,
+                )
+                .await
+            },
+            async move || serve_far(ctx, target, &far_identifier, far_ctx_size.as_deref()).await,
+        )
+        .await
+}
+
+/// Resolve the model's launch options locally (the full cascade), ask the
+/// daemon to start the proxy pinned to it, and attach the dashboard.
+#[allow(clippy::too_many_arguments)]
+async fn serve_here(
     ctx: &CliContext,
     identifier: String,
     context: ContextArgs,
