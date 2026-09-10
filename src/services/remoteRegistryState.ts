@@ -36,9 +36,10 @@ export interface RemoteState {
    * next status read adopts it. Meaningless while `chatModel` is empty, which
    * is the one case nothing reads it: stamping a peer onto no name is free.
    *
-   * A fingerprint is a *serve session*, not a machine: the far side mints a
-   * fresh identity on every `remote enable`, and the old ticket died with the
-   * old session, so that is the right granularity anyway.
+   * A fingerprint used to be a *serve session* rather than a machine, because
+   * the far side minted a fresh identity on every `enable`. It now keeps one,
+   * so a fingerprint is the machine — and this field holds a choice across
+   * that machine restarting, which is exactly what it could not do before.
    */
   chatModelPeer: string | null;
   /**
@@ -66,6 +67,8 @@ export const IDLE_STATUS: RemoteStatus = {
   connected: null,
   stored_ticket_fingerprint: null,
   has_remote_key: false,
+  remote_enabled: false,
+  identity_path: null,
 };
 
 export const INITIAL: RemoteState = {
