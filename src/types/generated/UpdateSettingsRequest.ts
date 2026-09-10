@@ -8,7 +8,7 @@ import type { InferenceProfile } from "./InferenceProfile";
  * Every field is `Option<Option<T>>` with `serde_with::rust::double_option`
  * so an explicit JSON `null` (clear the setting) is distinguished from an
  * omitted key (leave unchanged) — the same pattern used by
- * [`UpdateModelRequest::server_defaults`].
+ * [`UpdateModelRequest::server_defaults`](super::UpdateModelRequest::server_defaults).
  */
 export type UpdateSettingsRequest = { defaultDownloadPath?: string | null, defaultContextSize?: number | null, proxyPort?: number | null, llamaBasePort?: number | null, maxDownloadQueueSize?: number | null, showMemoryFitIndicators?: boolean | null, maxToolIterations?: number | null, maxStagnationSteps?: number | null, 
 /**

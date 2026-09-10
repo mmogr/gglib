@@ -309,7 +309,7 @@ echo -e "${GREEN}✅ every Settings field is reachable${NC} (${checked} checked,
 # Nothing typechecks this. The struct compiles, the DTO round trips, and the
 # setting is simply unclearable.
 
-UPDATE_REQ_RS="crates/gglib-app-services/src/types.rs"
+UPDATE_REQ_RS="crates/gglib-app-services/src/types_settings.rs"
 
 if [ ! -f "$UPDATE_REQ_RS" ]; then
   echo -e "${RED}❌ ${UPDATE_REQ_RS} does not exist${NC}"

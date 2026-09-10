@@ -1,10 +1,16 @@
-//! The connect side's stored pairing (ADR 0012), as one value.
+//! The remote tunnel's settings (ADR 0012): the connect side's stored
+//! pairing as one value, and the remote half of merging and validating.
 //!
 //! Split out via `#[path]`, the way `settings_validate.rs` is, and for the
 //! same reason: `settings.rs` sits exactly on its ratchet baseline, so a type
-//! that carries its own doc comment cannot live in it.
+//! that carries its own doc comment cannot live in it — and neither can the
+//! arms that grow with it. `merge` and `validate_settings` each call into
+//! here once, so a remote field added later touches `settings.rs` by one
+//! line for its declaration and nothing else.
 
 use serde::{Deserialize, Serialize};
+
+use super::{Settings, SettingsError, SettingsUpdate};
 
 /// The machine `gglib remote connect` paired with, and the key that machine
 /// issued — one record, because they are one fact.
@@ -46,4 +52,31 @@ pub struct RemotePairing {
     /// before it is made, so there is no state left for such a record to
     /// describe.
     pub api_key: String,
+}
+
+impl Settings {
+    /// Apply the remote half of `other`: every remote field, and only those.
+    pub(super) fn merge_remote(&mut self, other: &SettingsUpdate) {
+        if let Some(ref v) = other.remote_pairing {
+            self.remote_pairing.clone_from(v);
+        }
+    }
+}
+
+/// The remote half of [`validate_settings`](super::validate_settings).
+///
+/// The connect side's stored pairing, same rule on each half: a blank is
+/// neither a key nor an address, and `connect` reading one would dial
+/// nothing with nothing rather than say the pairing is gone. Clearing the
+/// record is how a pairing is forgotten.
+pub(super) fn validate_remote(settings: &Settings) -> Result<(), SettingsError> {
+    if let Some(ref pairing) = settings.remote_pairing {
+        if pairing.api_key.trim().is_empty() {
+            return Err(SettingsError::BlankRemoteApiKey);
+        }
+        if pairing.ticket.trim().is_empty() {
+            return Err(SettingsError::BlankRemoteTicket);
+        }
+    }
+    Ok(())
 }
