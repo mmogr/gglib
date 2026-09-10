@@ -102,7 +102,7 @@ serde_json = "1.0"
 # puts a real tunnel in front of a real proxy. Every other remote test
 # synthesises the edge's headers, which proves what the proxy does with a
 # request that claims to have come through a tunnel rather than one that did.
-modelpipe = "0.4"
+modelpipe = "0.5"
 
 [lints.rustdoc]
 # Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
