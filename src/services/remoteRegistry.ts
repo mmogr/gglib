@@ -31,72 +31,12 @@
 import { createEventStore } from './createEventStore';
 import type { RemoteEvent } from './transport/types/events';
 import type { RemoteStatus } from './transport/types/remote';
+import { IDLE_STATUS, INITIAL, type RemoteState } from './remoteRegistryState';
 
-export interface RemoteState {
-  /** The last status the daemon reported, or `null` before hydration. */
-  status: RemoteStatus | null;
-  /** Send chat turns to the connected machine rather than a local server. */
-  useForChat: boolean;
-  /**
-   * The model name those turns carry, as the far machine spells it.
-   *
-   * Empty until someone types one. It outlives a disconnection on purpose:
-   * the ordinary reconnection is the stored ticket dialled again, the same
-   * machine serving the same models, and retyping the name each time buys
-   * nothing. It cannot be sent to a machine nobody chose, because it is only
-   * read while `useForChat` is on and that does not survive the connection
-   * going.
-   */
-  chatModel: string;
-  /**
-   * The peer `chatModel` was typed for, by ticket fingerprint.
-   *
-   * A model name is only a name in one catalog, so this is what lets the
-   * field survive that peer coming back without following the user to a
-   * different one. `null` means no peer is known for what the field holds —
-   * nothing connected when it was typed, or only the placeholder — and the
-   * next status read adopts it. Meaningless while `chatModel` is empty, which
-   * is the one case nothing reads it: stamping a peer onto no name is free.
-   *
-   * A fingerprint is a *serve session*, not a machine: the far side mints a
-   * fresh identity on every `remote enable`, and the old ticket died with the
-   * old session, so that is the right granularity anyway.
-   */
-  chatModelPeer: string | null;
-  /**
-   * When the panel last asked for the chat screen, or `null` for not asked.
-   *
-   * A timestamp rather than a boolean because it is an event, not a mode:
-   * the page reacts to the value changing and clears it again, so a second
-   * request after the first was served is a second distinct value.
-   */
-  chatRequestedAt: number | null;
-}
-
-/** A status with nothing on: what a fresh daemon reports. */
-export const IDLE_STATUS: RemoteStatus = {
-  enabled: false,
-  ticket_fingerprint: null,
-  pairing_active: false,
-  paired: false,
-  path: null,
-  peers: [],
-  mcp_allowed: false,
-  tunnelled_requests: 0,
-  last_tunnelled_ms: null,
-  last_peer: null,
-  connected: null,
-  stored_ticket_fingerprint: null,
-  has_remote_key: false,
-};
-
-const INITIAL: RemoteState = {
-  status: null,
-  useForChat: false,
-  chatModel: '',
-  chatModelPeer: null,
-  chatRequestedAt: null,
-};
+// The shape moved to `remoteRegistryState.ts`; the registry stays the seam
+// every caller already imports from, so it hands both on rather than making
+// eight components learn a second module name.
+export { IDLE_STATUS, type RemoteState };
 
 const store = createEventStore<RemoteState>(INITIAL);
 
@@ -218,6 +158,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
             base_url: `http://127.0.0.1:${evt.port}/v1`,
             ticket_fingerprint: '',
             path: 'idle',
+            away_for_s: null,
           },
         },
         // Only a fresh dial emits this, so anything already armed was armed
@@ -239,6 +180,25 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
         useForChat: false,
         chatRequestedAt: null,
       });
+      break;
+    // The port stays bound either way; these only change what is said
+    // about the machine behind it. The status read that follows carries the
+    // exact figure; `0` here is "just now".
+    case 'remote_away':
+      if (status.connected) {
+        store.setState({
+          ...prev,
+          status: { ...status, connected: { ...status.connected, away_for_s: 0 } },
+        });
+      }
+      break;
+    case 'remote_back':
+      if (status.connected) {
+        store.setState({
+          ...prev,
+          status: { ...status, connected: { ...status.connected, away_for_s: null } },
+        });
+      }
       break;
   }
 }

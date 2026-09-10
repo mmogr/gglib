@@ -15,6 +15,13 @@ import { Input } from '../ui/Input';
 import { Label, Stack } from '../primitives';
 import { EndpointCopyBar, ProxyStatusPill } from '../proxy';
 
+/** Seconds as a person reads them: `40s`, `3m`, `2h`. */
+function awayFor(secs: number): string {
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+  return `${Math.floor(secs / 3600)}h`;
+}
+
 interface ConnectSectionProps {
   onNotice: (message: string, kind: 'success' | 'error' | 'info') => void;
 }
@@ -134,7 +141,9 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
               <>
                 Connected to{' '}
                 <span className="font-mono text-text-secondary">{connected.ticket_fingerprint}</span>{' '}
-                ({connected.path}).
+                {connected.away_for_s === null
+                  ? `(${connected.path}).`
+                  : `— away ${awayFor(connected.away_for_s)}; the address stays, and it reconnects when that machine is back.`}
               </>
             ) : (
               'Connected. Reading which machine…'

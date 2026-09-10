@@ -78,44 +78,6 @@ impl AppEventEmitter for Steps {
     }
 }
 
-/// A peer given up on has its port dropped and *then* its loss announced.
-///
-/// The other half of 5.4, and the half a person sees. The dwell deciding
-/// the peer is gone changes nothing on its own: `remote status` reads
-/// `live_connect`, so until the slot is cleared it still reports
-/// "Connected", the loopback port is still bound in front of a machine that
-/// is not there, and no GUI has been told anything.
-///
-/// The order is asserted, not just the two calls. It is the claim
-/// `conclude`'s own doc makes, and the two are indistinguishable to a test
-/// that only asks whether each happened.
-#[tokio::test]
-async fn a_peer_given_up_on_is_cleared_and_its_loss_announced() {
-    let live = holding(7);
-    let steps = Steps::default();
-
-    let cleared = conclude(
-        &live,
-        |live| *live == 7,
-        Over::Unreachable,
-        || steps.run(),
-        &steps,
-    )
-    .await;
-
-    assert!(cleared);
-    assert!(
-        live.lock().await.full().is_none(),
-        "the slot was not cleared"
-    );
-    assert_eq!(
-        steps.taken(),
-        [SHUTDOWN, ANNOUNCED],
-        "the port is dropped before the loss is announced, or a GUI redraws in front of a port \
-         that is still bound"
-    );
-}
-
 /// A closed pipe ends the same way, in the same order. modelpipe's verdict
 /// and this side's differ in what they warn about and in nothing else.
 #[tokio::test]
@@ -181,7 +143,7 @@ async fn a_watcher_whose_connection_was_replaced_leaves_the_replacement_alone() 
     let cleared = conclude(
         &live,
         |live| *live == 7,
-        Over::Unreachable,
+        Over::Closed,
         || steps.run(),
         &steps,
     )
@@ -216,7 +178,7 @@ async fn a_late_watcher_leaves_a_dial_that_replaced_it_alone() {
     let cleared = conclude(
         &live,
         |live| *live == 7,
-        Over::Unreachable,
+        Over::Closed,
         || steps.run(),
         &steps,
     )

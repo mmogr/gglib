@@ -32,4 +32,14 @@ impl AppEvent {
     pub const fn remote_disconnected() -> Self {
         Self::RemoteDisconnected
     }
+
+    /// Create a [`AppEvent::RemoteAway`] event.
+    pub const fn remote_away(port: u16) -> Self {
+        Self::RemoteAway { port }
+    }
+
+    /// Create a [`AppEvent::RemoteBack`] event.
+    pub const fn remote_back(port: u16) -> Self {
+        Self::RemoteBack { port }
+    }
 }

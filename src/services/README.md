@@ -70,6 +70,7 @@ belongs here.
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |
 | `remoteRegistry.ts` | External store for the remote tunnel (ADR 0012): the daemon's status, both sides, plus this window's use-for-chat choice and the model name those turns carry, kept against the ticket it was typed against |
+| `remoteRegistryState.ts` | What that store holds and what an empty tunnel looks like: the `RemoteState` shape and `IDLE_STATUS`, split out so the registry file stays under budget |
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
 | `createEventStore.ts` | Shared factory behind both registries — subscribe-before-fetch with an `eventVersion` guard |
 | `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |

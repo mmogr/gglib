@@ -1,23 +1,37 @@
-//! Following one connection until it is over, and deciding when that is.
+//! Following one connection: whether the far machine is here, and when the
+//! connection is over.
 //!
-//! `Closed` is modelpipe's answer and needs no policy. `Idle` is not an
-//! answer: on the connect side it means the peer went away and
-//! `peer::keep_connected` is looking for it again, and modelpipe says
-//! plainly that it cannot tell a sleeping laptop from a dead one and leaves
-//! the policy to whoever is watching. This file is that policy — which is
-//! why [`follow`] takes the statuses through a closure rather than reading
-//! the handle itself: the timing *is* the policy, and a policy nothing can
-//! exercise is a comment.
+//! modelpipe gives up on nothing. On the connect side [`PipeStatus::Idle`]
+//! means the peer is not reachable *and is being dialled again*, with a
+//! backoff, for as long as the pipe is held; [`PipeStatus::Closed`] is a
+//! local decision — this side shut the pipe, or its own listener died —
+//! and never the far machine's absence. So there is no policy for giving up
+//! here. There was one — ninety seconds of `Idle` and the port was torn
+//! down — and it was the thing that turned a closed laptop lid into a dead
+//! port, and a different port the next morning. The port stays bound now,
+//! whatever the far machine is doing, and answers `502` until it is back.
+//!
+//! What this file decides instead is what to *tell* people, and when to
+//! nudge the transport. A peer away past [`AWAY_AFTER`] is announced as
+//! away — so `gglib remote status` and the popover stop saying "connected"
+//! over nothing — and announced back when it answers. While it is away,
+//! modelpipe is told every [`NUDGE_EVERY`] that the network may have
+//! changed, which is its cue to rebind a socket left on an interface that
+//! no longer exists: a laptop that changed network while suspended is the
+//! case it names. Both are policy, so [`follow`] takes the statuses and the
+//! nudge through closures rather than reading a handle — a policy nothing
+//! can exercise is a comment with a timer attached.
 
 use std::future::Future;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use modelpipe::{ConnectHandle, PipeStatus};
 use tokio::sync::Mutex;
-// `tokio::time`'s clock, not `std`'s: the deadline below is a tokio timer,
+// `tokio::time`'s clock, not `std`'s: the deadlines below are tokio timers,
 // and a clock the runtime cannot advance makes the dwell untestable — a
 // paused-time test would restart it to the same instant every time and
 // agree with whatever it was given.
@@ -28,51 +42,84 @@ use tracing::{info, warn};
 use super::connect::{DRAIN, LiveConnect};
 use super::slot::Slot;
 
-/// How long the pipe may sit `Idle` before this side gives up on it.
+/// How long the pipe may sit `Idle` before the far machine is called away.
 ///
-/// It has to outlast modelpipe's own patience or it would tear down a pipe
-/// that was about to heal: its re-dial backoff tops out at thirty seconds,
-/// and a dial at a machine that is simply switched off takes iroh about
-/// thirty more to give up on, so one full attempt-plus-wait is around a
-/// minute. Ninety seconds clears that with room, and is short enough that
-/// `gglib remote status` stops calling a machine that has been off for two
-/// minutes "Connected" — which is what it did for ever, because nothing
-/// here ever acted on `Idle` at all.
-const IDLE_GRACE: Duration = Duration::from_secs(90);
+/// A re-dial that finds the peer straight back — a dropped packet, a relay
+/// hiccup — is over inside modelpipe's first retry, and announcing it would
+/// flap the status for nothing. Thirty seconds outlasts that and is still
+/// short enough that a status read a minute after the lid closed says what
+/// is true.
+pub(super) const AWAY_AFTER: Duration = Duration::from_secs(30);
+
+/// How often, while away, modelpipe is told the network may have changed.
+///
+/// It re-dials on its own; the nudge is for the socket underneath, which a
+/// suspend can leave bound to an interface that is gone. Once a minute is
+/// cheap and is about as long as a person waits before asking why.
+pub(super) const NUDGE_EVERY: Duration = Duration::from_secs(60);
 
 /// Why following a connection stopped.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Over {
     /// A teardown said so; the connection is somebody else's to clean up.
     Cancelled,
-    /// modelpipe's own verdict, and terminal.
+    /// modelpipe's own verdict, and terminal: this side closed it.
     Closed,
-    /// The peer has been away longer than [`IDLE_GRACE`]. This side's
-    /// verdict, not modelpipe's.
-    Unreachable,
 }
 
-/// Follow the connection until it is over, then clear it and say so —
-/// unless a newer connection has taken its place, or `disconnect` already
-/// did.
+/// What the watcher tells the rest of the daemon about the far machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Presence {
+    /// Idle past [`AWAY_AFTER`]; still being dialled.
+    Away,
+    /// Answering again.
+    Here,
+}
+
+/// Follow the connection until it is over, announcing the far machine's
+/// comings and goings on the way; then clear the slot and say so — unless
+/// a newer connection has taken its place, or `disconnect` already did.
+///
+/// `away_since` is the clock `status` reads: unix milliseconds of the
+/// moment the far machine was called away, or negative while it is here.
 pub(super) async fn watch(
     live: Arc<Mutex<Slot<LiveConnect>>>,
     handle: Arc<ConnectHandle>,
     generation: u64,
     emitter: Arc<dyn AppEventEmitter>,
     cancel: CancellationToken,
+    away_since: Arc<AtomicI64>,
+    port: u16,
 ) {
-    let over = follow(handle.status(), || handle.status_changed(), &cancel).await;
+    let over = follow(
+        handle.status(),
+        || handle.status_changed(),
+        || handle.notify_network_change(),
+        &cancel,
+        |presence| match presence {
+            Presence::Away => {
+                away_since.store(unix_ms(), Ordering::Relaxed);
+                warn!(
+                    port,
+                    "the remote is away; the port stays bound and it is being dialled"
+                );
+                emitter.emit(AppEvent::remote_away(port));
+            }
+            Presence::Here => {
+                away_since.store(-1, Ordering::Relaxed);
+                info!(port, "the remote is back");
+                emitter.emit(AppEvent::remote_back(port));
+            }
+        },
+    )
+    .await;
     conclude(
         &live,
         |live| live.generation() == generation,
         over,
         || async {
-            // The local port is this side's, and on the unreachable path
-            // modelpipe is still re-dialling behind it. Leaving it up would
-            // mean a bound port answering 502 for a machine nobody is
-            // waiting for any more; on the closed path this is idempotent
-            // and costs nothing.
+            // Idempotent on the closed path and costs nothing; kept so a
+            // watcher that concludes always leaves the port released.
             handle.shutdown_timeout(DRAIN).await;
         },
         &*emitter,
@@ -113,46 +160,66 @@ where
         return false;
     }
     shutdown().await;
-    match over {
-        Over::Unreachable => warn!(
-            grace_s = IDLE_GRACE.as_secs(),
-            "the remote has been unreachable past the grace; `gglib remote connect` to dial again"
-        ),
-        _ => warn!("the remote connection closed; `gglib remote connect` to dial again"),
-    }
+    warn!("the remote connection closed; `gglib remote connect` to dial again");
     emitter.emit(AppEvent::remote_disconnected());
     true
 }
 
-/// Wait out a connection, given where it starts and a way to ask for its
-/// next status.
-async fn follow<F, Fut>(initial: PipeStatus, next: F, cancel: &CancellationToken) -> Over
+/// Wait out a connection, given where it starts, a way to ask for its next
+/// status, and a way to nudge the transport; report the far machine's
+/// presence as it changes.
+async fn follow<F, Fut, N, NFut>(
+    initial: PipeStatus,
+    next: F,
+    nudge: N,
+    cancel: &CancellationToken,
+    mut report: impl FnMut(Presence),
+) -> Over
 where
     F: Fn() -> Fut,
     Fut: Future<Output = PipeStatus>,
+    N: Fn() -> NFut,
+    NFut: Future<Output = ()>,
 {
     // Read before waiting: `status_changed` snapshots at the moment it is
     // polled, so a pipe that went idle between the install and the first
     // call has nothing left to report and the clock would never start.
     let mut idle_since = idle_clock(None, initial);
+    let mut away = false;
+    let mut next_nudge: Option<Instant> = None;
     loop {
-        // Armed only while the pipe is idle. `pending()` is the arm that
-        // says "there is no deadline right now" without a timer to cancel.
-        let dwell = async {
-            match idle_since {
-                Some(since) => tokio::time::sleep_until(since + IDLE_GRACE).await,
-                None => std::future::pending().await,
+        // One deadline at a time: the away threshold while the pipe is idle
+        // and not yet called away, the next nudge while it is away, nothing
+        // while the far machine is here. `pending()` is the arm that says
+        // "there is no deadline right now" without a timer to cancel.
+        let deadline = async {
+            match (away, idle_since, next_nudge) {
+                (false, Some(since), _) => tokio::time::sleep_until(since + AWAY_AFTER).await,
+                (true, _, Some(at)) => tokio::time::sleep_until(at).await,
+                _ => std::future::pending().await,
             }
         };
         tokio::select! {
             () = cancel.cancelled() => return Over::Cancelled,
-            () = dwell => return Over::Unreachable,
+            () = deadline => {
+                if !away {
+                    away = true;
+                    report(Presence::Away);
+                }
+                nudge().await;
+                next_nudge = Some(Instant::now() + NUDGE_EVERY);
+            }
             status = next() => {
                 info!(path = status.as_str(), "remote connection path changed");
                 if status == PipeStatus::Closed {
                     return Over::Closed;
                 }
                 idle_since = idle_clock(idle_since, status);
+                if idle_since.is_none() && away {
+                    away = false;
+                    next_nudge = None;
+                    report(Presence::Here);
+                }
             }
         }
     }
@@ -163,13 +230,22 @@ where
 ///
 /// Only the *first* `Idle` starts it. Restarting on every report would let
 /// a peer that goes from idle to idle — which is what a re-dial that finds
-/// nobody looks like from here — hold a dead connection open for ever,
-/// which is the state this whole policy exists to end.
+/// nobody looks like from here — put off being called away for ever.
 fn idle_clock(current: Option<Instant>, status: PipeStatus) -> Option<Instant> {
     match status {
         PipeStatus::Idle => current.or_else(|| Some(Instant::now())),
         _ => None,
     }
+}
+
+/// Now, as unix milliseconds — what `away_since` stores and `status`
+/// subtracts from.
+pub(super) fn unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_millis()).ok())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

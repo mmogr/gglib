@@ -86,6 +86,9 @@ pub(crate) struct RemoteConnectDto {
     pub base_url: String,
     pub ticket_fingerprint: String,
     pub paired: bool,
+    /// The port this machine wanted and could not have, when it moved.
+    #[serde(default)]
+    pub moved_from: Option<u16>,
 }
 
 /// The connect side in a remote status, while it is up. Narrowed like
@@ -95,6 +98,9 @@ pub(crate) struct RemoteConnectionDto {
     pub base_url: String,
     pub ticket_fingerprint: String,
     pub path: String,
+    /// Seconds the far machine has been away, or `None` while it is here.
+    #[serde(default)]
+    pub away_for_s: Option<u64>,
 }
 
 /// One connected peer in a remote status.

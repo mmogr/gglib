@@ -29,6 +29,14 @@ pub const DAEMON_PORT: u16 = 9887;
 /// Default base port for llama-server instance allocation.
 pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 
+/// The loopback port `gglib remote connect` tries first for the paired
+/// machine.
+///
+/// A client configured against it once stays configured. Clear of the proxy
+/// (8080), the daemon (9887) and the llama-server range (9000 upward); taken
+/// by something else, the next free port is used and remembered instead.
+pub const DEFAULT_REMOTE_PORT: u16 = 8180;
+
 /// Default context size for models when not specified by the user.
 pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
 

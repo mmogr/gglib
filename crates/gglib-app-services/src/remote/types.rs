@@ -71,6 +71,10 @@ pub struct Connected {
     /// Whether this call redeemed a pairing code and stored the key, as
     /// opposed to reusing a key from an earlier pairing.
     pub paired: bool,
+    /// The port this machine tried first and could not have — the remembered
+    /// one, or the default — when it had to take another. `None` when the
+    /// address stayed put.
+    pub moved_from: Option<u16>,
 }
 
 /// The connect side, while it is up.
@@ -84,6 +88,10 @@ pub struct ConnectSnapshot {
     pub ticket_fingerprint: String,
     /// How this side is reaching the peer: `idle`, `direct`, `relayed`.
     pub path: String,
+    /// How long the far machine has been away — idle past the grace, still
+    /// being dialled — or `None` while it is here. The port stays bound
+    /// either way; this is what tells a person which.
+    pub away_for_s: Option<u64>,
 }
 
 /// The tunnel as the status surface sees it.

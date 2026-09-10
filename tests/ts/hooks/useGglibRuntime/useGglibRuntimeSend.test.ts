@@ -58,6 +58,7 @@ describe('useGglibRuntime send path', () => {
         base_url: 'http://127.0.0.1:41234/v1',
         ticket_fingerprint: '3ca82708b995',
         path: 'direct',
+        away_for_s: null,
       },
     });
     setRemoteChatModel('qwen3');
@@ -78,6 +79,7 @@ describe('useGglibRuntime send path', () => {
         base_url: 'http://127.0.0.1:41234/v1',
         ticket_fingerprint: '3ca82708b995',
         path: 'direct',
+        away_for_s: null,
       },
     });
     setRemoteChatModel('qwen3');

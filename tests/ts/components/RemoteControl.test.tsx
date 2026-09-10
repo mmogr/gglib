@@ -117,6 +117,7 @@ describe('RemoteControl', () => {
         base_url: 'http://127.0.0.1:41234/v1',
         ticket_fingerprint: '',
         path: 'idle',
+        away_for_s: null,
       },
     });
     await open();
@@ -133,6 +134,7 @@ describe('RemoteControl', () => {
         base_url: 'http://127.0.0.1:41234/v1',
         ticket_fingerprint: '3ca82708b995',
         path: 'direct',
+        away_for_s: null,
       },
     });
     const user = await open();
@@ -155,6 +157,7 @@ describe('RemoteControl', () => {
         base_url: 'http://127.0.0.1:41234/v1',
         ticket_fingerprint: '3ca82708b995',
         path: 'direct',
+        away_for_s: null,
       },
     });
     const user = await open();

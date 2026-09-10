@@ -66,26 +66,32 @@ pub(super) async fn settle(
     ticket: &Ticket,
     held: Option<&RemotePairing>,
     code: Option<String>,
+    port: u16,
     redeem: impl AsyncFnOnce(String) -> Result<String, GuiError>,
 ) -> Result<bool, GuiError> {
     match code {
         Some(code) => {
             let key = redeem(code).await?;
-            store_redeemed(core, key, ticket.to_string()).await?;
+            store_redeemed(core, key, ticket.to_string(), port).await?;
             Ok(true)
         }
         None => {
             // The caller refused a codeless dial with no key for this
             // machine, so `held` is `Some`. Re-storing that key under the
             // ticket just dialled is how the record follows a machine that
-            // moved: same identity, new addresses, same key — and it is the
-            // only write on this arm, so a dial to the machine already
-            // recorded touches nothing.
-            if let Some(held) = held.filter(|held| held.ticket != ticket.to_string()) {
+            // moved: same identity, new addresses, same key — and under the
+            // port just bound, which is how the address a client was
+            // configured against stays the address. It is the only write on
+            // this arm, so a dial to the machine already recorded, on the
+            // port already recorded, touches nothing.
+            if let Some(held) =
+                held.filter(|held| held.ticket != ticket.to_string() || held.port != Some(port))
+            {
                 remember(
                     core,
                     RemotePairing {
                         ticket: ticket.to_string(),
+                        port: Some(port),
                         ..held.clone()
                     },
                 )
@@ -133,6 +139,7 @@ pub(super) async fn store_redeemed(
     core: &AppCore,
     api_key: String,
     ticket: String,
+    port: u16,
 ) -> Result<(), GuiError> {
     remember(
         core,
@@ -140,6 +147,7 @@ pub(super) async fn store_redeemed(
             ticket,
             api_key,
             default_model: None,
+            port: Some(port),
         },
     )
     .await
@@ -169,3 +177,7 @@ fn spent_code(e: GuiError) -> GuiError {
 #[cfg(test)]
 #[path = "stored_pairing_tests.rs"]
 mod stored_pairing_tests;
+
+#[cfg(test)]
+#[path = "stored_pairing_redial_tests.rs"]
+mod stored_pairing_redial_tests;
