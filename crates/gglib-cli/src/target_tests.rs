@@ -16,15 +16,29 @@ fn parsed(argv: &[&str]) -> Commands {
 
 // ── The table ────────────────────────────────────────────────────────────
 
+/// The use side, and the line it does not cross: a turn, loading a model,
+/// the catalogue, the dashboard, the cache, stopping the machine — and
+/// nothing that changes what is on it.
 #[test]
-fn the_two_agent_commands_use_a_machine_and_everything_else_is_about_this_one() {
-    assert_eq!(reach(&parsed(&["gglib", "chat"])).1, Reach::Use);
-    assert_eq!(reach(&parsed(&["gglib", "q", "hi"])).1, Reach::Use);
+fn the_use_side_reaches_the_machine_and_everything_else_is_about_this_one() {
     for argv in [
-        &["gglib", "model", "list"][..],
+        &["gglib", "chat"][..],
+        &["gglib", "q", "hi"],
+        &["gglib", "serve", "qwen3"],
+        &["gglib", "model", "list"],
+        &["gglib", "proxy", "dashboard"],
+        &["gglib", "proxy", "cache-clear"],
+        &["gglib", "daemon", "stop"],
+    ] {
+        let (name, reach) = reach(&parsed(argv));
+        assert_eq!(reach, Reach::Use, "{name}");
+    }
+    for argv in [
+        &["gglib", "model", "remove", "qwen3"][..],
         &["gglib", "remote", "status"],
         &["gglib", "proxy"],
         &["gglib", "daemon", "status"],
+        &["gglib", "config", "settings", "show"],
         &["gglib", "completions", "bash"],
     ] {
         let (name, reach) = reach(&parsed(argv));
@@ -33,12 +47,24 @@ fn the_two_agent_commands_use_a_machine_and_everything_else_is_about_this_one() 
     }
 }
 
+/// `proxy stop` is about this machine for a reason the general sentence
+/// would get wrong, so it gets its own — and it names what to run instead.
+#[test]
+fn stopping_the_far_proxy_is_refused_with_the_command_that_stops_the_machine() {
+    let err = Target::Remote
+        .admit(&parsed(&["gglib", "proxy", "stop"]))
+        .expect_err("refused");
+    let text = err.to_string();
+    assert!(text.starts_with("`gglib proxy stop` --remote:"), "{text}");
+    assert!(text.contains("gglib daemon stop --remote"), "{text}");
+}
+
 /// The refusal is one sentence and it names both halves: the command that
 /// stays local, and what `--remote` does reach.
 #[test]
 fn a_local_command_refuses_remote_with_the_one_sentence() {
     let err = Target::Remote
-        .admit(&parsed(&["gglib", "model", "list"]))
+        .admit(&parsed(&["gglib", "model", "remove", "qwen3"]))
         .expect_err("refused");
     let text = err.to_string();
     assert!(

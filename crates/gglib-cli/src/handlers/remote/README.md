@@ -15,7 +15,7 @@ remote/
   enable.rs       — `gglib remote enable`: bring the tunnel up, show the pairing
   pairing_tui.rs  — the pairing screen: QR + code in the alternate buffer,
                     gone the moment a device pairs or the code expires
-  connect.rs      — `connect`, `disconnect`, `kill`: this machine as the laptop
+  connect.rs      — `connect`, `disconnect`: this machine as the laptop
 ```
 
 # The other side
@@ -28,10 +28,9 @@ all the stored ticket is dialled. The daemon reports the loopback port that
 is now the far machine, and this prints it with the reminder that a client
 pointed there supplies the key itself — the port does not inject it.
 
-`kill` is the one-way door. It asks for the word `shutdown` on a terminal
-(`--yes` skips the question; a non-terminal stdin does too, since a script
-that passes `kill` has read the help) and then the far daemon stops entirely
-— proxy, models, downloads — and nothing restarts it from here.
+Stopping the far machine is `gglib daemon stop --remote` (ADR 0013): a
+`daemon` command pointed at another machine, beside the local stop, asking
+the same question first.
 
 # What `enable` shows, and where
 

@@ -22,6 +22,10 @@ use gglib_core::domain::{ModelListQuery, apply_query};
 use crate::bootstrap::CliContext;
 use crate::model_commands::{CliModelSortBy, CliSortOrder};
 use crate::presentation::{print_separator, truncate_string};
+use crate::target::Target;
+
+#[path = "list_far.rs"]
+mod list_far;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public surface
@@ -38,8 +42,19 @@ pub(crate) struct ListArgs {
     pub tags: Vec<String>,
 }
 
-/// Execute the list command.
-pub(crate) async fn execute(ctx: &CliContext, args: ListArgs) -> Result<()> {
+/// Execute the list command: this machine's catalogue, or the paired
+/// machine's as its proxy publishes it.
+pub(crate) async fn execute(target: Target, ctx: &CliContext, args: ListArgs) -> Result<()> {
+    target
+        .run(
+            async || list_here(ctx, args).await,
+            async || list_far::execute(ctx, target).await,
+        )
+        .await
+}
+
+/// This machine's catalogue, sorted and filtered as asked.
+async fn list_here(ctx: &CliContext, args: ListArgs) -> Result<()> {
     let models = fetch_models(ctx, &args).await?;
 
     if models.is_empty() {

@@ -26,12 +26,15 @@ use gglib_core::{RemotePairing, SettingsUpdate};
 use gglib_runtime::FarMachine;
 
 use crate::bootstrap::CliContext;
-use crate::commands::Commands;
+use crate::commands::{Commands, DaemonCommand, ProxyCommand};
 use crate::handlers::agent_chat::config::{AgentSessionParams, BannerInfo};
 use crate::handlers::agent_chat::upstream;
+use crate::model_commands::ModelCommand;
 
 #[path = "target_remote.rs"]
 mod remote;
+#[path = "target_use.rs"]
+mod use_side;
 use remote::remote_upstream;
 
 /// The machine a command runs against.
@@ -51,6 +54,9 @@ pub(crate) enum Target {
 pub(crate) enum Reach {
     /// The command is about this machine, and stays so.
     Local,
+    /// The command is about this machine for a reason the general sentence
+    /// would get wrong, so the refusal says this instead.
+    LocalBecause(&'static str),
     /// The command uses a machine, and `--remote` says which.
     Use,
 }
@@ -64,25 +70,51 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
     match command {
         Commands::Chat { .. } => ("chat", Reach::Use),
         Commands::Question { .. } => ("q", Reach::Use),
+        // Loading a model is using the machine; everything else under
+        // `model` changes what is on it.
+        Commands::Serve { .. } => ("serve", Reach::Use),
+        Commands::Model { command } => match command {
+            ModelCommand::List { .. } => ("model list", Reach::Use),
+            _ => ("model", Reach::Local),
+        },
+        // Stopping the far daemon is the one door ADR 0012 opened on purpose
+        // (its `remote kill`); it lives under `daemon` now, beside the local
+        // stop, and asks the same question first.
+        Commands::Daemon { command } => match command {
+            DaemonCommand::Stop { .. } => ("daemon stop", Reach::Use),
+            _ => ("daemon", Reach::Local),
+        },
+        // Reading the far proxy's dashboard and clearing its cache are its
+        // own routes, already through the tunnel. Stopping it is not a thing
+        // the tunnel can survive, and the sentence says what to run instead.
+        Commands::Proxy { command, .. } => match command {
+            Some(ProxyCommand::Dashboard { .. }) => ("proxy dashboard", Reach::Use),
+            Some(ProxyCommand::CacheClear { .. }) => ("proxy cache-clear", Reach::Use),
+            Some(ProxyCommand::Stop) => (
+                "proxy stop",
+                Reach::LocalBecause(
+                    "the far proxy is what carries a remote request, so stopping it from here \
+                     would cut the tunnel from under itself. `gglib daemon stop --remote` \
+                     stops that machine, proxy and all, and asks first.",
+                ),
+            ),
+            None => ("proxy", Reach::Local),
+        },
         Commands::Up { .. } => ("up", Reach::Local),
-        Commands::Model { .. } => ("model", Reach::Local),
         Commands::Config { .. } => ("config", Reach::Local),
         Commands::Mcp { .. } => ("mcp", Reach::Local),
-        Commands::Serve { .. } => ("serve", Reach::Local),
         Commands::Benchmark { .. } => ("benchmark", Reach::Local),
         Commands::Gui { .. } => ("gui", Reach::Local),
         Commands::Web { .. } => ("web", Reach::Local),
-        Commands::Daemon { .. } => ("daemon", Reach::Local),
         Commands::Remote { .. } => ("remote", Reach::Local),
         Commands::Completions { .. } => ("completions", Reach::Local),
-        Commands::Proxy { .. } => ("proxy", Reach::Local),
     }
 }
 
 /// The commands `--remote` reaches, as the refusal names them. A list
 /// rather than derived from [`reach`], so that the sentence a person reads
 /// is written by a person and stays in the order they would say it.
-const REACHES: &str = "chat, q";
+const REACHES: &str = "chat, q, serve, model list, proxy dashboard, proxy cache-clear, daemon stop";
 
 impl Target {
     pub(crate) const fn from_flag(remote: bool) -> Self {
@@ -101,6 +133,7 @@ impl Target {
                 "`gglib {name}` is about this machine, and --remote does not change that. \
                  What --remote reaches on the paired machine: {REACHES}."
             ),
+            (Self::Remote, Reach::LocalBecause(why)) => bail!("`gglib {name}` --remote: {why}"),
             (Self::Local, _) | (Self::Remote, Reach::Use) => Ok(()),
         }
     }

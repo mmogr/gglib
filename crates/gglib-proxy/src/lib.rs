@@ -26,6 +26,7 @@ pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
 pub(crate) mod forward;
+pub(crate) mod load_endpoint;
 pub(crate) mod loop_guard;
 pub(crate) mod mcp;
 pub(crate) mod metrics;

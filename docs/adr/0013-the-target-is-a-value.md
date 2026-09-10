@@ -62,8 +62,16 @@ catalogue, its proxy's status, stopping it. It may never change what is on
 it: no pulling or removing models, no writing settings. The reasons are in
 ADR 0012's context (a leaked key must not be a leaked machine) and one more:
 settings hold the key and the bind, and a machine whose settings can be
-changed through its own tunnel can be locked away from its owner. Today the
-table reaches `chat` and `q`; the rest of the *use* side follows.
+changed through its own tunnel can be locked away from its owner. The table
+reaches `chat`, `q`, `serve`, `model list`, `proxy dashboard`,
+`proxy cache-clear` and `daemon stop`, and the proxy's own route table —
+the only thing the tunnel carries — is pinned by a test to that same line,
+so a route added to the proxy has to say which side it is on.
+
+`daemon stop --remote` absorbs what was `gglib remote kill`: stopping the
+far machine is a `daemon` command pointed at another machine, not a
+pairing command. `proxy stop --remote` is refused with its own sentence,
+because the far proxy is what carries the request.
 
 ### 4. A turn remembers the model it asked that machine for
 

@@ -2,11 +2,14 @@
 
 mod mdns;
 
+use std::io::{IsTerminal as _, Write as _};
+
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonProbe};
 use crate::presentation::style;
+use crate::target::Target;
 use gglib_axum::{DaemonLock, DaemonOptions, run_daemon};
 use gglib_core::{CorsConfig, DAEMON_PORT};
 
@@ -93,8 +96,19 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
     Ok(())
 }
 
-/// Execute `gglib daemon stop`: request shutdown and wait for it to land.
-pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
+/// Execute `gglib daemon stop`: this machine's daemon, or with `--remote`
+/// the paired machine's, through the tunnel.
+pub(crate) async fn stop(ctx: &CliContext, target: Target, yes: bool) -> Result<()> {
+    target
+        .run(
+            async || stop_here(ctx).await,
+            async || stop_far(ctx, yes).await,
+        )
+        .await
+}
+
+/// Request shutdown from the daemon on this machine and wait for it to land.
+async fn stop_here(ctx: &CliContext) -> Result<()> {
     let client = reqwest::Client::new();
 
     match daemon_client::probe(&client).await {
@@ -146,4 +160,53 @@ fn print_share_lan_warning() {
     eprintln!("     holding it can download models and start or stop inference on");
     eprintln!("     this machine. Only use this on networks you trust.");
     eprintln!();
+}
+
+/// Stop the paired machine's daemon through the tunnel, then disconnect.
+///
+/// Asks first, because the far side cannot be restarted from here. `--yes`
+/// skips the question; so does a stdin that is not a terminal, on the theory
+/// that a script passing `--remote --yes` has read the help. The stop itself
+/// is this machine's daemon's to carry out: it owns the tunnel, it already
+/// does this for the desktop app, and the request it sends asks the far
+/// proxy to type the same word.
+async fn stop_far(ctx: &CliContext, yes: bool) -> Result<()> {
+    let client = reqwest::Client::new();
+    match daemon_client::probe(&client).await {
+        DaemonProbe::Running => {}
+        _ => anyhow::bail!("the daemon is not running, so nothing is connected to a remote"),
+    }
+    let handle = daemon_client::DaemonHandle {
+        client,
+        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    };
+    let status = handle.remote_status().await?;
+    let Some(connection) = status.connected.as_ref() else {
+        anyhow::bail!("not connected to a remote \u{2014} `gglib remote connect` first");
+    };
+
+    if !yes && std::io::stdin().is_terminal() && !confirm(&connection.ticket_fingerprint)? {
+        eprintln!("  Left it running.");
+        return Ok(());
+    }
+    handle.remote_kill().await?;
+    eprintln!(
+        "  \u{1f6d1} The remote daemon ({}) is stopping, and this side is disconnected.",
+        connection.ticket_fingerprint
+    );
+    eprintln!("  Nothing brings it back except someone at that machine.");
+    Ok(())
+}
+
+/// The question, and the one answer that means yes.
+fn confirm(fingerprint: &str) -> Result<bool> {
+    eprintln!(
+        "  This stops the gglib daemon on {fingerprint}: its proxy, its models, its downloads."
+    );
+    eprintln!("  It cannot be started again from here.");
+    eprint!("  Type `shutdown` to go ahead: ");
+    std::io::stderr().flush()?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    Ok(input.trim() == "shutdown")
 }

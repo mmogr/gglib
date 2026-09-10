@@ -4,7 +4,7 @@ mod connect;
 mod enable;
 mod pairing_tui;
 
-use connect::{ConnectArgs, connect, disconnect, kill};
+use connect::{ConnectArgs, connect, disconnect};
 use enable::{EnableArgs, enable};
 
 use anyhow::Result;
@@ -56,7 +56,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             .await
         }
         RemoteCommand::Disconnect => disconnect(ctx).await,
-        RemoteCommand::Kill { yes } => kill(ctx, yes).await,
     }
 }
 
