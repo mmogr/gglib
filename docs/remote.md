@@ -110,27 +110,29 @@ that daemon again from the laptop. `--yes` skips the question for scripts.
 
 ## Using it
 
-**gglib's own commands** take `--remote` and attach the stored key
-themselves:
+**gglib's own commands** take `--remote`, one flag that means the same
+thing everywhere it is accepted: do this on the machine this one is paired
+with. It is declared once, on `gglib` itself, so it goes before the
+subcommand or after it:
 
 ```bash
 gglib q --remote -m qwen3 "Summarise this" < notes.md
 gglib chat --remote qwen3
+gglib chat --remote            # the same machine, the same model, remembered
 ```
 
 `q` names the model with `-m`; `chat` names it as the positional and has no
-short flag for it.
-
-With `--remote`, the model name is forwarded to the desktop rather than
-looked up here, and the laptop's default model is not consulted, because the
-desktop may not have it. That makes the name mandatory rather than optional:
-name one the desktop serves, or the request arrives there with an empty model
-and comes back `404 Model '' not found` — a real answer from a working
-tunnel, which is easy to misread as the tunnel being broken.
-`gglib model list` on the desktop is the list to choose from. `--remote` and
-`--port` are exclusive: they name different machines. The ID form the
-positional also accepts is local-only — `gglib chat 7 --remote` sends
-`"model": "7"` and comes back `404 Model '7' not found`.
+short flag for it. With `--remote` the name is forwarded to the desktop
+rather than looked up here, and resolved against the desktop's catalogue
+and profiles, not this machine's. Name it the first time; after that
+`--remote` remembers the model you last asked that machine for — per
+pairing, because it is a name in that machine's catalogue — and a turn that
+names none uses it. Before anything is remembered, a turn that names none
+is refused here with a sentence that says so, rather than answered
+`404 Model '' not found` from the other end. `gglib model list` on the
+desktop is the list to choose from. The ID form the positional also accepts
+is local-only — `gglib chat 7 --remote` sends `"model": "7"` and comes back
+`404 Model '7' not found`.
 
 A `{model}:{profile}` suffix travels with the name and is resolved by the
 desktop against **its** profiles, which are the ones that govern how it
@@ -138,6 +140,13 @@ samples — `gglib chat qwen3:coding --remote`. A suffix the desktop does not
 know comes back as a 404 listing the profiles it has. `--profile` is refused
 with `--remote` for the same reason: it names a profile configured on the
 laptop, and there is no way for it to reach the machine that would apply it.
+
+**What `--remote` reaches** is a short list: `chat` and `q`. Every other
+command is about this machine — `model pull` changes what is on a machine,
+and that is done at the machine; `remote` manages the pairing itself — and
+refuses the flag with a sentence naming what it does reach, rather than
+ignoring it. `--remote` and `--port` are exclusive: they name different
+machines. [ADR 0013](adr/0013-the-target-is-a-value.md) has the reasoning.
 
 **The GUI's chat** goes to the desktop when the Remote popover's *Use it for
 chat* box is checked. The choice is per window and is cleared the moment the

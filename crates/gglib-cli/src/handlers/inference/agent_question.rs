@@ -22,6 +22,7 @@ use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
 use crate::handlers::inference::shared::resolve_max_iterations;
 use crate::shared_args::{ContextArgs, SamplingArgs};
+use crate::target::Target;
 
 /// System prompt for the agentic question mode.
 const SYSTEM_PROMPT: &str = "\
@@ -41,8 +42,8 @@ pub(crate) struct QuestionArgs {
     pub model_arg: Option<String>,
     pub file: Option<String>,
     pub port: Option<u16>,
-    /// Drive the machine on the other end of `gglib remote connect`.
-    pub remote: bool,
+    /// Which machine the turn runs on (ADR 0013).
+    pub target: Target,
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,
@@ -66,7 +67,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         model_arg,
         file,
         port,
-        remote,
+        target,
         max_iterations,
         tools,
         tool_timeout_ms,
@@ -86,7 +87,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         model_identifier: model_arg.clone().unwrap_or_default(),
         ctx_size: context.ctx_size,
         port,
-        remote,
+        target,
         tools: tools.clone(),
         model_name: model_arg.clone(),
         // `gglib q` takes no retry flag; the environment defaults apply.
@@ -105,49 +106,48 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
 
     // Resolve `--profile` or a `{model}:{profile}` suffix before anything asks
     // the daemon to start `model_identifier` — the suffix must not reach lookup.
-    // With `--remote` nothing here starts and nothing here is looked up, so the
-    // suffix is left on for the far proxy to resolve against its own profiles.
+    // What that means on the paired machine, whose profiles these are not, is
+    // `profile_selection`'s to say.
     let selection = super::profile_selection::select_for_upstream(
+        target,
         ctx.catalog.as_ref(),
         settings.inference_profiles.as_deref().unwrap_or_default(),
         &params.model_identifier,
         profile.as_deref(),
-        remote,
     )
     .await?;
+    // Both, from the stripped name: `model_name` is what goes in the request
+    // body, and a `{model}:{profile}` suffix there would ask the upstream
+    // for a model that does not exist.
+    let model_name = params.model_name.as_ref().map(|_| selection.model.clone());
+    // A turn with no model named: this machine's default here, the model
+    // last asked for there — and either way the wire name follows the
+    // target's rule.
+    let default_id = settings.default_model_id;
+    let model_identifier = target
+        .model_for_turn(ctx, selection.model, async || {
+            let default_id = default_id.ok_or_else(|| {
+                anyhow!(
+                    "No model specified and no default model set.\n\
+                     Use --model <id-or-name> or set a default:\n  \
+                     gglib config default <id-or-name>"
+                )
+            })?;
+            let model = ctx
+                .app
+                .models()
+                .get_by_id(default_id)
+                .await
+                .map_err(|e| anyhow!("failed to load default model: {e}"))?
+                .ok_or_else(|| anyhow!("default model (ID: {default_id}) not found"))?;
+            Ok(model.name)
+        })
+        .await?;
     let params = AgentSessionParams {
-        // Both, from the stripped name: `model_name` is what goes in the
-        // request body, and a `{model}:{profile}` suffix there would ask the
-        // upstream for a model that does not exist.
-        model_name: params.model_name.as_ref().map(|_| selection.model.clone()),
-        model_identifier: selection.model,
+        model_name: target.wire_model_name(model_name, &model_identifier),
+        model_identifier,
         profile: selection.profile,
         ..params
-    };
-
-    // No model and `--remote`: the far machine serves whatever it serves, and
-    // this machine's default is a model it may not even have.
-    let params = if params.model_identifier.is_empty() && !remote {
-        let default_id = settings.default_model_id.ok_or_else(|| {
-            anyhow!(
-                "No model specified and no default model set.\n\
-                 Use --model <id-or-name> or set a default:\n  \
-                 gglib config default <id-or-name>"
-            )
-        })?;
-        let model = ctx
-            .app
-            .models()
-            .get_by_id(default_id)
-            .await
-            .map_err(|e| anyhow!("failed to load default model: {e}"))?
-            .ok_or_else(|| anyhow!("default model (ID: {default_id}) not found"))?;
-        AgentSessionParams {
-            model_identifier: model.name.clone(),
-            ..params
-        }
-    } else {
-        params
     };
 
     let inference_config = sampling.into_inference_config();

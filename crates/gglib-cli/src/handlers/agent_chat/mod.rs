@@ -46,13 +46,9 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // Strip any `{model}:{profile}` suffix before a conversation is created:
     // the identifier is persisted, and a stored suffix would come back on
     // every resume as a profile the user did not type this time — colliding
-    // with their `--profile` and making the session unresumable.
-    //
-    // Under `--remote` the suffix is left on instead, and the branch runs even
-    // with nothing typed so that a `--profile` cannot be silently dropped on a
-    // resume either. The far machine owns both the model name and the profile
-    // list, so the whole identifier is its wire name and is stored, replayed
-    // and forwarded verbatim.
+    // with their `--profile` and making the session unresumable. What that
+    // means on the paired machine, whose profiles these are not, is
+    // `profile_selection`'s to say.
     let profile_settings = ctx.app.settings().get().await?;
     let configured_profiles = profile_settings
         .inference_profiles
@@ -60,15 +56,16 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         .unwrap_or_default();
     let typed_this_invocation = !args.identifier.is_empty();
     let mut selected_profile = None;
-    if typed_this_invocation || args.remote {
-        let selection = crate::handlers::inference::profile_selection::select_for_upstream(
-            ctx.catalog.as_ref(),
-            configured_profiles,
-            &args.identifier,
-            args.profile.as_deref(),
-            args.remote,
-        )
-        .await?;
+    if let Some(selection) = crate::handlers::inference::profile_selection::select_before_resume(
+        args.target,
+        ctx.catalog.as_ref(),
+        configured_profiles,
+        &args.identifier,
+        args.profile.as_deref(),
+        typed_this_invocation,
+    )
+    .await?
+    {
         args.identifier = selection.model;
         selected_profile = selection.profile;
     }
@@ -78,9 +75,12 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         args = merged_args;
         (Some(conv), prior)
     } else {
-        if args.identifier.is_empty() {
-            bail!("model identifier is required (use --continue <ID> to resume a session)");
-        }
+        args.identifier = args
+            .target
+            .model_for_turn(ctx, std::mem::take(&mut args.identifier), async || {
+                bail!("model identifier is required (use --continue <ID> to resume a session)")
+            })
+            .await?;
         let (conv, prior) = new_conversation(ctx, &args).await;
         (conv, prior)
     };
@@ -105,12 +105,10 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // On a resume the identifier came from storage, not from this command
     // line. An explicit `--profile` is therefore the only thing the user
     // actually typed, and it wins over any suffix an older conversation
-    // recorded rather than colliding with it. Not on the remote path: the
-    // stored suffix is the far machine's, this catalog cannot judge it, and
-    // stripping it here is what made a resumed remote session drop its
-    // profile without saying so.
-    if !typed_this_invocation && !args.remote {
+    // recorded rather than colliding with it.
+    if !typed_this_invocation {
         selected_profile = crate::handlers::inference::profile_selection::resume_profile(
+            args.target,
             ctx.catalog.as_ref(),
             configured_profiles,
             &mut args.identifier,

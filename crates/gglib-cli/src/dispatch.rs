@@ -9,6 +9,7 @@
 //! forward only the fields each handler actually needs, which keeps the
 //! coupling between the dispatch layer and each handler as narrow as possible.
 
+use crate::target::Target;
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
@@ -23,7 +24,17 @@ use crate::handlers;
 /// * `command` — The command to execute, as parsed by Clap.
 /// * `verbose` — Value of the global `--verbose` flag; forwarded only to
 ///   handlers that expose a verbosity knob.
-pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Result<()> {
+/// * `remote`  — Value of the global `--remote` flag (ADR 0013). Becomes the
+///   [`Target`] every command that uses a machine is told; every other
+///   command refuses it here, in one sentence, before anything runs.
+pub async fn dispatch(
+    ctx: &CliContext,
+    command: Commands,
+    verbose: bool,
+    remote: bool,
+) -> Result<()> {
+    let target = Target::from_flag(remote);
+    target.admit(&command)?;
     match command {
         // ── Getting started ─────────────────────────────────────────────────
         Commands::Up { yes, model, port } => {
@@ -101,7 +112,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     retry_policy: retry.into_policy(),
                     no_tools,
                     port: upstream.port,
-                    remote: upstream.remote,
+                    target,
                     max_iterations,
                     tools,
                     tool_timeout_ms,
@@ -149,7 +160,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 model_arg: model,
                 file,
                 port: upstream.port,
-                remote: upstream.remote,
+                target,
                 max_iterations,
                 tools: effective_tools,
                 tool_timeout_ms,

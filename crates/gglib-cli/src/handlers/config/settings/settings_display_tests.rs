@@ -146,6 +146,7 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
         remote_pairing: Some(RemotePairing {
             ticket: "ticket-abc".to_owned(),
             api_key: "the-other-machines-key".to_owned(),
+            default_model: None,
         }),
         ..Default::default()
     };

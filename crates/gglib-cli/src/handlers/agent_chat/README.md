@@ -10,8 +10,9 @@ Interactive agentic chat handler for `gglib chat`.
 Entry point: [`run`].  Sub-modules keep each concern small and
 independently readable:
 - [`config`]   — resolves MCP tools + sampling, composes an [`gglib_core::ports::AgentLoopPort`]
-- [`upstream`] — which machine answers: a llama-server here (`--port`, or one the
-  daemon starts) or the remote tunnel's port with the pairing's key (`--remote`)
+- [`upstream`] — the llama-server a local session talks to: one already running
+  here (`--port`) or one the daemon starts. Which *machine* answers is
+  `crate::target`'s decision (ADR 0013), not this module's
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
 - [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
 - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input

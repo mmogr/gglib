@@ -1,6 +1,7 @@
 //! Maps [`AgentSessionParams`] to an [`AgentLoopPort`] composition root.
-//! Which upstream it talks to — a llama-server here or the remote tunnel's
-//! port — is [`super::upstream`]'s decision.
+//! Which machine it talks to, and everything that follows from that, is
+//! the [`Target`]'s decision (ADR 0013); a llama-server here is
+//! [`super::upstream`]'s.
 //!
 //! The only public surface is [`compose`], which returns the ready-to-use
 //! `Arc<dyn AgentLoopPort>`. The llama-server itself belongs to the daemon —
@@ -16,13 +17,12 @@ use std::sync::Arc;
 use anyhow::Result;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
-use gglib_core::request_pipeline;
 use gglib_runtime::compose_agent_loop_with_sampling;
 
-use super::upstream;
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::handlers::inference::shared::resolve_inference_config;
+use crate::target::Target;
 
 // =============================================================================
 // Types
@@ -41,9 +41,9 @@ pub(crate) struct AgentSessionParams {
     pub ctx_size: Option<String>,
     /// When set, reuse an already-running llama-server instead of auto-starting.
     pub port: Option<u16>,
-    /// Drive the machine on the other end of `gglib remote connect` (ADR 0012)
-    /// instead of anything here. `port` is then not consulted.
-    pub remote: bool,
+    /// Which machine the turn runs on (ADR 0013). `port` is consulted only
+    /// on this one.
+    pub target: Target,
     /// Tool allowlist (empty = all tools visible).
     pub tools: Vec<String>,
     /// Model-name override forwarded to llama-server routing.
@@ -87,18 +87,11 @@ impl From<&ChatArgs> for AgentSessionParams {
             model_identifier: args.identifier.clone(),
             ctx_size: args.context.ctx_size.clone(),
             port: args.port,
-            remote: args.remote,
+            target: args.target,
             tools,
-            // Locally the positional names a catalog entry and `compose` looks
-            // it up, so an absent `--model` correctly leaves the wire name
-            // empty and llama-server serves whatever it loaded. With --remote
-            // there is no local catalog to resolve the positional against and
-            // the lookup is skipped, so the positional is the far machine's
-            // model name or nothing — and dropping it sends `""`, which the
-            // far proxy answers with `404 Model '' not found`.
-            model_name: args.model.clone().or_else(|| {
-                (args.remote && !args.identifier.is_empty()).then(|| args.identifier.clone())
-            }),
+            model_name: args
+                .target
+                .wire_model_name(args.model.clone(), &args.identifier),
             retry_policy: args.retry_policy,
             profile: None,
         }
@@ -125,27 +118,21 @@ pub(crate) async fn compose(
     banner: &BannerInfo,
 ) -> Result<Arc<dyn AgentLoopPort>> {
     // 1. Resolve the upstream — a llama-server here (reused, or started by
-    //    the daemon) or the remote machine's tunnel port.
-    let upstream = upstream::resolve(ctx, params, banner).await?;
+    //    the daemon) or the paired machine's tunnel port.
+    let upstream = params.target.upstream(ctx, params, banner).await?;
 
     // 2. Resolve inference parameters via the 4-level hierarchy.
     //    Look up the model so model-level defaults can be applied.  When the
     //    identifier is unknown (external port reuse with no catalog entry) the
-    //    sampling is forwarded as-is — and so is the remote case: the far
-    //    proxy runs the ladder over *its* models, and this catalog's entry of
-    //    the same name, if any, describes a different file.
+    //    sampling is forwarded as-is — and the target says whether this
+    //    catalog is the one that applies at all.
     //    The provenance travels with the values so a later stage can say which
     //    rung supplied each one; an unknown identifier yields none, because no
     //    ladder was run.
-    let local_model = if params.remote {
-        None
-    } else {
-        ctx.app
-            .models()
-            .find_by_identifier(&params.model_identifier)
-            .await
-            .ok()
-    };
+    let local_model = params
+        .target
+        .local_model(ctx, &params.model_identifier)
+        .await;
     let (resolved_sampling, _sources) = match local_model {
         Some(model) => {
             let named = sampling.clone().unwrap_or_default();
@@ -176,13 +163,10 @@ pub(crate) async fn compose(
     } else {
         Some(params.tools.iter().cloned().collect())
     };
-    // The remote's models are not in this catalog; passthrough lets the far
-    // proxy shape the request, which it does for every client.
-    let model_context = if params.remote {
-        request_pipeline::ModelContext::passthrough()
-    } else {
-        request_pipeline::resolve(ctx.catalog.as_ref(), Some(&params.model_identifier)).await
-    };
+    let model_context = params
+        .target
+        .model_context(ctx, &params.model_identifier)
+        .await;
     let agent = compose_agent_loop_with_sampling(
         upstream.base_url,
         ctx.http_client.clone(),
@@ -220,7 +204,7 @@ mod tests {
             retry_policy: gglib_core::retry::RetryPolicy::default(),
             no_tools: false,
             port: None,
-            remote: false,
+            target: Target::Local,
             max_iterations: None,
             tools: Vec::new(),
             tool_timeout_ms: None,
@@ -239,7 +223,7 @@ mod tests {
     fn remote_forwards_the_positional_when_no_model_flag_was_given() {
         let args = ChatArgs {
             identifier: "qwen3".into(),
-            remote: true,
+            target: Target::Remote,
             ..chat_args()
         };
         assert_eq!(
@@ -253,7 +237,7 @@ mod tests {
         let args = ChatArgs {
             identifier: "qwen3".into(),
             model: Some("llama3".into()),
-            remote: true,
+            target: Target::Remote,
             ..chat_args()
         };
         assert_eq!(
