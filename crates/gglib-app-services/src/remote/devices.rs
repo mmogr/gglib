@@ -44,6 +44,7 @@ impl RemoteOps {
     /// or when remote access went down while this was preparing; `Internal`
     /// when a store cannot be written or the edge refuses the token or the
     /// grant.
+    ///
     pub async fn invite(&self) -> Result<OfferedPairing, GuiError> {
         let Some(enabled) = self.invite_if_up().await? else {
             return Err(GuiError::Conflict(
@@ -161,6 +162,7 @@ impl RemoteOps {
                 id: d.id,
                 label: d.label,
                 joined_at: d.joined_at,
+                redeemed_at: d.redeemed_at,
                 last_seen: d.last_seen,
             })
             .collect())

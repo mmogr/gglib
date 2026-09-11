@@ -132,6 +132,9 @@ async fn remember(ops: &RemoteOps, id: &str, key: &str) -> Result<(), GuiError> 
         id: id.to_owned(),
         label: None,
         joined_at: now_ms(),
+        // Minted, not taken. `roster_sync` stamps this when the code is
+        // redeemed, which is what tells an unspent invite from a device.
+        redeemed_at: None,
         last_seen: None,
     });
     write_roster(&ops.core, roster).await

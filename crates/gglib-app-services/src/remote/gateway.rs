@@ -139,6 +139,7 @@ impl RemoteGatewayPort for RemoteGateway {
             self.note(Note::Joined {
                 device: device.clone(),
                 label: name.map(str::to_owned),
+                at_ms: super::roster::now_ms(),
             });
             self.emitter
                 .emit(AppEvent::remote_paired(peer.map(str::to_owned)));

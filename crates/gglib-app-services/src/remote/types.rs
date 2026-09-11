@@ -185,6 +185,9 @@ pub struct DeviceView {
     /// Unix milliseconds at which its invite was minted — not when the
     /// device redeemed it, and an invite nobody redeems keeps the row.
     pub joined_at: i64,
+    /// Unix milliseconds at which a device redeemed this row's invite, or
+    /// `None` if none ever has — an invite that was minted and never taken.
+    pub redeemed_at: Option<i64>,
     /// Unix milliseconds of the last request that arrived under its key,
     /// written at most once a minute. Advisory: a local process can forge
     /// the marker headers, though not to name a device this machine never

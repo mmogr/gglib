@@ -23,7 +23,7 @@ mod types;
 
 pub use gateway::RemoteGateway;
 pub use types::{
-    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, OfferedPairing,
+    ConnectRequest, ConnectSnapshot, Connected, DeviceView, EnableRequest, Enabled, OfferedPairing,
     RemoteStatusSnapshot,
 };
 

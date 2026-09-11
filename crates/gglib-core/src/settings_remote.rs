@@ -169,6 +169,20 @@ pub struct Device {
     /// behind, which is why it is listed rather than swept on a timer.
     pub joined_at: i64,
 
+    /// Unix milliseconds at which a device redeemed this row's invite, or
+    /// `None` if none ever has.
+    ///
+    /// The counterpart to [`joined_at`](Self::joined_at), which is when the
+    /// invite was *minted*: a row with a `joined_at` and no `redeemed_at` is
+    /// an invite nobody took, and is listed as such rather than swept on a
+    /// timer. Written by the roster's writer rather than on the request
+    /// path, so it is advisory in the same way a label is — which is why a
+    /// row is only ever called never-joined when `last_seen` is empty too.
+    /// A device that has made a request has plainly joined, whatever this
+    /// says.
+    #[serde(default)]
+    pub redeemed_at: Option<i64>,
+
     /// Unix milliseconds of the last request that arrived bearing this
     /// device's token, or `None` if none has since the daemon started.
     ///
