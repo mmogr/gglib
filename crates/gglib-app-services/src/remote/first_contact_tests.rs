@@ -74,7 +74,18 @@ async fn a_machine_that_never_answers_is_given_up_on_at_the_budget() {
         message.contains("did not answer within 30 seconds"),
         "{message}"
     );
-    assert!(message.contains("gglib remote enable"), "{message}");
+    // What it must *not* say is that the ticket went stale on its own. The
+    // endpoint key lasts (ADR 0012 decision 4, reversed), so pointing an
+    // operator at a re-run `enable` here sends them to spend an invite on a
+    // machine that is simply switched off.
+    assert!(
+        message.contains("endpoint key deleted"),
+        "the refusal must name the one thing that does retire a ticket: {message}"
+    );
+    assert!(
+        !message.contains("replaced by a newer"),
+        "a ticket is not replaced by a later enable any more: {message}"
+    );
 }
 
 /// A relayed path is contact. Reading only `Direct` would refuse every

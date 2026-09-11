@@ -82,6 +82,12 @@ pub(crate) struct RemoteEnableResponse {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    /// Whether tunnelled requests may reach `/mcp` on the session this call
+    /// ended up talking about — which is not always the one the caller asked
+    /// for. An `--invite` against a tunnel that is already up leaves the
+    /// flags alone, so a surface that echoed the request back would state a
+    /// grant the daemon did not make.
+    pub mcp_allowed: bool,
 }
 
 impl From<Enabled> for RemoteEnableResponse {
@@ -93,6 +99,7 @@ impl From<Enabled> for RemoteEnableResponse {
             pairing: pairing.as_ref().map(|p| p.pairing.clone()),
             expires_in_s: pairing.as_ref().map(|p| p.expires_in_s),
             device: pairing.map(|p| p.device),
+            mcp_allowed: e.mcp_allowed,
         }
     }
 }

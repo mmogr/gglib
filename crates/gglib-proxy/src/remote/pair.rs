@@ -42,21 +42,42 @@ pub(crate) struct PairRequest {
 /// needs it to be long, and the only bound otherwise is axum's body limit.
 const MAX_LABEL: usize = 64;
 
-/// A label fit to store: trimmed, control characters dropped, and cut to
-/// [`MAX_LABEL`] characters.
+/// A label fit to store: invisible characters dropped, cut to [`MAX_LABEL`]
+/// characters, then trimmed.
 ///
 /// Dropped rather than escaped, and counted in characters rather than bytes,
 /// because this is read by a person and rendered in two surfaces that have no
 /// say in what arrives here. Nothing depends on the value, so a label that
-/// loses its tail is a cosmetic loss and an unbounded one is not.
+/// loses its tail is a cosmetic loss and an unbounded one is not. See
+/// [`is_invisible`] for what goes and why.
 fn label(name: Option<String>) -> Option<String> {
     let cleaned: String = name?
         .chars()
-        .filter(|c| !c.is_control())
+        .filter(|c| !is_invisible(*c))
         .take(MAX_LABEL)
         .collect();
     let trimmed = cleaned.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
+}
+
+/// Characters a label has no use for and a terminal or a browser would act
+/// on.
+///
+/// `char::is_control` alone covers only the C0/C1 range, which leaves the
+/// ones that actually matter here: the bidirectional overrides, which let a
+/// device make its listed name render as a different device's, and the line
+/// and paragraph separators, which break a row across two. Dropped rather
+/// than escaped, for the same reason the rest is.
+fn is_invisible(c: char) -> bool {
+    c.is_control()
+        || matches!(c,
+            '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{feff}')
 }
 
 /// Redeem a pairing code.

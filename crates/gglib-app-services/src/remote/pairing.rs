@@ -91,6 +91,19 @@ impl Pairing {
         self.lock().take().map(|pending| pending.device)
     }
 
+    /// The same, but only when the pending code was armed for `device`.
+    ///
+    /// An invite for some *other* device is none of a `forget`'s business:
+    /// retiring the laptop must not cancel the code a person is currently
+    /// typing into their phone.
+    pub(crate) fn withdraw_if(&self, device: &str) -> Option<String> {
+        let mut slot = self.lock();
+        if slot.as_ref().is_none_or(|pending| pending.device != device) {
+            return None;
+        }
+        slot.take().map(|pending| pending.device)
+    }
+
     /// Present a code. Exactly one presentation can ever be `Granted`.
     ///
     /// Expiry is checked first, so a code that timed out is dead whatever is

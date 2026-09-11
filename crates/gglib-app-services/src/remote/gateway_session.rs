@@ -97,6 +97,20 @@ impl RemoteGateway {
         Offered::Armed
     }
 
+    /// Clear an open invite when it belongs to `device`, and say so.
+    ///
+    /// No epoch here, and that is the difference from
+    /// [`withdraw_pairing`](Self::withdraw_pairing): the caller is `forget`,
+    /// which works with the tunnel down and holds no session of its own. What
+    /// it knows is a device id, and an invite for a device that is being
+    /// retired is one nobody should be able to spend — a code redeemed after
+    /// the edge stopped holding its key hands the joining machine a
+    /// credential that admits nowhere.
+    pub(in crate::remote) fn withdraw_pairing_for(&self, device: &str) -> Option<String> {
+        let _session = self.session();
+        self.pairing.withdraw_if(device)
+    }
+
     /// Clear the pairing session `epoch` owns and say which device it was
     /// for, so the caller can retire a key nobody will now fetch.
     pub(in crate::remote) fn withdraw_pairing(&self, epoch: u64) -> Option<String> {

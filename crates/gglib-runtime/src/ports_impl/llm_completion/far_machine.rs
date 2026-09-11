@@ -92,8 +92,10 @@ impl FarMachine {
     pub(super) fn refusal(&self, code: Option<&str>) -> Option<String> {
         (code == Some(INVALID_API_KEY)).then(|| {
             format!(
-                "the remote machine {} refused the stored key — it is not that machine's current \
-                 API key; pair again with a fresh `gglib remote enable --invite` there",
+                "the remote machine {} is not admitting this device's key — it has either \
+                 stopped trusting this device, or a key rotation there is still reaching the \
+                 tunnel, which clears itself within a few seconds. If waiting does not fix it, \
+                 pair again with a fresh `gglib remote enable --invite` there",
                 self.fingerprint
             )
         })

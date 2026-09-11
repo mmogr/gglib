@@ -29,4 +29,12 @@ expires_in_s?: number,
 /**
  * The device the code will issue a key to, when there is one.
  */
-device?: string, };
+device?: string, 
+/**
+ * Whether tunnelled requests may reach `/mcp` on the session this call
+ * ended up talking about — which is not always the one the caller asked
+ * for. An `--invite` against a tunnel that is already up leaves the
+ * flags alone, so a surface that echoed the request back would state a
+ * grant the daemon did not make.
+ */
+mcp_allowed: boolean, };

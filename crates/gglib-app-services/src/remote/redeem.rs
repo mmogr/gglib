@@ -108,8 +108,10 @@ pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Re
         // whose own key never moved. The narrower claim is true in both, and
         // is the same one the chat path's refusal makes.
         reqwest::StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(format!(
-            "the remote machine {fingerprint} refused the stored key — it is not that machine's \
-             current API key; pair again with a fresh `gglib remote enable --invite` there"
+            "the remote machine {fingerprint} is not admitting this device's key — it has \
+             either stopped trusting this device, or a key rotation there is still reaching the \
+             tunnel, which clears itself within a few seconds. If waiting does not fix it, pair \
+             again with a fresh `gglib remote enable --invite` there"
         ))),
         reqwest::StatusCode::CONFLICT => Err(GuiError::Conflict(
             "the far proxy is not running under a daemon, so there is nothing to stop from here"

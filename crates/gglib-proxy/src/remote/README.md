@@ -69,8 +69,13 @@ the burn never fires there. ADR 0012 decision 3, amended 2026-09-07, records
 what that leaves.
 
 It sits outside the bearer group because it cannot demand the credential it
-hands out, and inside the Host guard like everything else. Reaching it at all
-requires the ticket and the tunnel edge's own one-time grant.
+hands out, and inside the Host guard like everything else. From the far side
+that means the ticket plus the edge's own one-time grant; from this machine's
+loopback it means nothing at all, which is what the three-attempt burn is for.
+A request the edge admitted on a *device* key is refused here before its code
+is read: a machine that already holds one has no reason to pair, and leaving
+it open would let a compromised device burn invites and guess at a second
+identity.
 
 <!-- module-docs:end -->
 

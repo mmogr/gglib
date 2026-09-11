@@ -39,6 +39,15 @@ pub struct Enabled {
     /// `None` is the ordinary case: the tunnel is up and no device is being
     /// paired right now: only an `enable` asked to invite offers one.
     pub pairing: Option<OfferedPairing>,
+    /// Whether tunnelled requests may reach `/mcp` on the session this call
+    /// ended up talking about.
+    ///
+    /// Reported rather than echoed, because the two can differ: an
+    /// `enable --invite` against a tunnel that is already up offers a code
+    /// and leaves the flags alone, so a caller that repeated its own
+    /// `--allow-mcp` back to the operator would be describing a grant the
+    /// daemon did not make.
+    pub mcp_allowed: bool,
 }
 
 /// A pairing code on offer, and what is worth knowing about it.

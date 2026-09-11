@@ -5,6 +5,7 @@ mod connect;
 mod connect_watch;
 mod device_keys;
 mod devices;
+mod enrolment;
 mod first_contact;
 mod gateway;
 mod key;

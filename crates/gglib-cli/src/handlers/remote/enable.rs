@@ -61,13 +61,13 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     // screen at every enable.
     if enabled.code.is_none() {
         print_up(&enabled);
-        print_notice(args.allow_mcp);
+        print_notice(enabled.mcp_allowed);
         return Ok(());
     }
 
     if args.no_qr || !std::io::stdout().is_terminal() {
         print_plain(&enabled);
-        print_notice(args.allow_mcp);
+        print_notice(enabled.mcp_allowed);
         return Ok(());
     }
 
@@ -79,7 +79,8 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
                 None => eprintln!("  \u{2705} A device paired."),
             }
             eprintln!(
-                "  It holds the API key now; the tunnel stays up until `gglib remote disable`."
+                "  It holds a key of its own now; the tunnel stays up until \
+                 `gglib remote disable`, and forgetting that device retires only its key."
             );
         }
         Outcome::Expired => {
@@ -97,7 +98,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             );
         }
     }
-    print_notice(args.allow_mcp);
+    print_notice(enabled.mcp_allowed);
     Ok(())
 }
 
@@ -128,6 +129,12 @@ fn print_up(enabled: &RemoteEnableDto) {
 }
 
 /// What enabling changed on *this* machine, said every time.
+///
+/// Takes the daemon's answer rather than the flag this process sent. An
+/// `--invite` against a tunnel that is already up is answered by that
+/// session, whose `/mcp` grant is whatever the `enable` that armed it set —
+/// so echoing the flag back would tell an operator that `--allow-mcp` took
+/// when it did not, or that `/mcp` is closed when it is open.
 fn print_notice(allow_mcp: bool) {
     eprintln!();
     eprintln!(

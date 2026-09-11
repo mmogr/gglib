@@ -26,10 +26,10 @@ use super::key;
 use super::key::identity_path;
 use super::pairing::Offer;
 use super::rotation::rotation_poll;
-use super::slot::Busy;
+use super::serve_switch::busy_serving;
 use super::types::{EnableRequest, Enabled};
 use super::{DRAIN, Live, RemoteOps, WAIT_ONLINE};
-use super::{device_keys, devices, roster};
+use super::{device_keys, enrolment, roster};
 use crate::error::GuiError;
 
 impl RemoteOps {
@@ -175,21 +175,25 @@ impl RemoteOps {
         // this function.
         settled.commit(&self.core, cancel).await?;
 
-        // The slot is claimed and the gateway armed under **one** hold of
+        // The slot is claimed and the session begun under **one** hold of
         // the lock. Claiming first is not enough: dropping the guard wakes
         // whatever `disable` is queued behind it, and on a multi-thread
         // runtime that `disable` runs in parallel with the lines after the
-        // guard — resetting the session and taking the tunnel down while
-        // this call is still on its way to `begin`. A pairing code armed
-        // after that reset stays live for `PAIRING_TTL` on a session that
-        // is gone, and `POST /v1/remote/pair` is outside the proxy's bearer
-        // group, so anything that can reach the proxy could spend it.
-        // Under one guard there are only two things a `disable` can find:
-        // a reservation with nothing armed, or a tunnel with its code.
+        // guard — taking the tunnel down while this call is still on its
+        // way to `begin_session`, which would then start a session nothing
+        // owns. Under one guard a `disable` finds either a reservation or a
+        // tunnel, never something in between.
         //
-        // Nothing in here is slow — an install, a `Mutex<Option<_>>`, an
-        // atomic and one small file read — which is the whole reason it may
-        // share the guard at all.
+        // The pairing code is *not* armed here: `offer` does that after the
+        // guard, on the epoch this returns. What keeps that safe is
+        // `reset_session_if` retiring the epoch, so a code cannot be armed
+        // against a session that ended — a live `PAIRING_TTL` grant on a
+        // dead tunnel would be spendable by anything local, since
+        // `POST /v1/remote/pair` sits outside the proxy's bearer group.
+        //
+        // Nothing in here is slow: an install, a `Mutex<Option<_>>`, an
+        // atomic, one small file read, and a wait on `roster` that only a
+        // concurrent roster write can hold up.
         let watchers = CancellationToken::new();
         let mut slot = self.live.lock().await;
         // Begun before the install so the epoch can go into `Live`, and
@@ -255,10 +259,14 @@ impl RemoteOps {
 
         let ticket = ticket.to_string();
         let pairing = match offer {
-            Offer::Code => Some(devices::offer(self, &handle, epoch, &ticket).await?),
+            Offer::Code => Some(enrolment::offer(self, &handle, epoch, &ticket).await?),
             Offer::Silent => None,
         };
-        Ok(Enabled { ticket, pairing })
+        Ok(Enabled {
+            ticket,
+            pairing,
+            mcp_allowed: request.allow_mcp,
+        })
     }
 }
 
@@ -279,22 +287,4 @@ fn chain(error: &dyn std::error::Error) -> String {
         source = next.source();
     }
     sentence
-}
-
-/// A serve side that is already taken, as the person who typed the command
-/// needs to hear it.
-fn busy_serving(busy: &Busy) -> GuiError {
-    GuiError::Conflict(
-        match busy {
-            Busy::Filling => {
-                "remote access is already being enabled — wait for the ticket, or \
-                 `gglib remote disable` to give up on it"
-            }
-            Busy::Full => {
-                "remote access is already enabled — `--invite` pairs another device without \
-                 taking it down, and `gglib remote disable` first is what changes its flags"
-            }
-        }
-        .to_owned(),
-    )
 }

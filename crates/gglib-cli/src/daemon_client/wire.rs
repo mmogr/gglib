@@ -68,6 +68,10 @@ pub(crate) struct RemoteEnableDto {
     pub code: Option<String>,
     pub pairing: Option<String>,
     pub expires_in_s: Option<u64>,
+    /// What the daemon says about `/mcp` on the session it acted on, which
+    /// is not always the one this call asked for: `--invite` against a
+    /// tunnel that is already up leaves the flags alone.
+    pub mcp_allowed: bool,
 }
 
 /// `POST /api/remote/connect` request body. Mirrors
