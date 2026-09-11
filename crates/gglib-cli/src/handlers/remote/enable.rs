@@ -17,8 +17,6 @@ pub(crate) struct EnableArgs {
     pub relay: Option<String>,
     /// Do not publish to or resolve through n0's discovery service.
     pub no_discovery: bool,
-    /// Keep this machine's endpoint key, so the ticket survives a restart.
-    pub keep_identity: bool,
     /// Print the pairing string as text; no QR, no alternate screen.
     pub no_qr: bool,
 }
@@ -33,9 +31,17 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
 
     if args.no_discovery {
+        // Worth two lines now rather than one. The ticket used to die at the
+        // next restart, so "stops working" meant "until you enable again".
+        // It lasts now, and a ticket minted without discovery keeps only the
+        // paths it had — so this is the flag that can leave a device holding
+        // an address that will never resolve again.
         eprintln!(
-            "  note: --no-discovery means this ticket carries only the paths it was minted with; \
-             it stops working if this machine changes network."
+            "  note: --no-discovery means this ticket carries only the paths it was minted with."
+        );
+        eprintln!(
+            "        It stops resolving the moment this machine changes network, and stays that \
+             way — paired devices need a new pairing."
         );
     }
     eprintln!("  Enabling remote access\u{2026} (finding a relay can take a few seconds)");
@@ -44,7 +50,6 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             allow_mcp: args.allow_mcp,
             relay: args.relay,
             discovery: Some(!args.no_discovery),
-            keep_identity: args.keep_identity,
         })
         .await?;
 

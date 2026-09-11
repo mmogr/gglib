@@ -37,10 +37,12 @@ pub struct RemotePairing {
     /// The ticket that machine handed out, in its canonical form.
     ///
     /// An address rather than a credential — reaching the far side still
-    /// takes [`Self::api_key`] — and it goes stale the moment that machine
-    /// runs `enable` again, because every `enable` mints a fresh identity. A
-    /// later dial to the *same* machine at a new address replaces this and
-    /// keeps the key, which is what makes the ticket the mutable half.
+    /// takes [`Self::api_key`]. It used to go stale every time that machine
+    /// ran `enable`, because each one minted a fresh identity; identities
+    /// last now, so a ticket stays good across the far machine's restarts
+    /// and a device pairs once. A later dial to the *same* machine at a new
+    /// address still replaces this and keeps the key, which is what makes
+    /// the ticket the mutable half.
     pub ticket: String,
 
     /// That machine's API key: its `proxy_api_key`, received by redeeming
@@ -79,11 +81,76 @@ pub struct RemotePairing {
     pub port: Option<u16>,
 }
 
+/// How this machine was told to put its proxy on the tunnel, kept so a
+/// restart arms it the same way.
+///
+/// Its companion is [`Settings::remote_enabled`], the switch `gglib remote
+/// enable` and `disable` set and the one thing the daemon reads at startup
+/// to decide whether to bring the tunnel back up. That field mirrors
+/// `proxy_autostart` deliberately — same shape, same tri-state, same reason:
+/// a machine you reach from elsewhere is not a feature you want to remember
+/// to switch on after every reboot. Neither is ever typed; there is no flag
+/// for either, because the flag *is* the command.
+///
+/// This record is the other half — the flags that `enable` was given, so a
+/// resumed tunnel is armed the way it was enabled. Without it a restart
+/// would quietly change behaviour, and `--allow-mcp` is a deliberate
+/// decision on one machine: silently forgetting it is the failure that
+/// matters, not the noise of remembering. Absent means never enabled.
+///
+/// The flags `gglib remote enable` accepts, and nothing else: this is a
+/// record of a decision, not a place to configure one. There is no CLI path
+/// that writes it directly and no GUI field for it — `enable` writes it
+/// whole, the way `remote_pairing` is written whole, because the flags were
+/// one decision taken at one moment and a half-applied set of them is not a
+/// state anybody asked for.
+///
+/// Persisted as one `settings_kv` row holding a JSON object, camelCase
+/// inside, matching `remote_pairing`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteServe {
+    /// Whether requests arriving through the tunnel may reach `/mcp`.
+    ///
+    /// Off unless asked for, and the one flag here with teeth: `invoke_tool`
+    /// starts the MCP servers configured on this machine, so a leaked key
+    /// with a shell server configured is remote code execution. Surviving a
+    /// restart is the point — silently dropping it would be a security
+    /// posture that changes when nobody is looking.
+    #[serde(default)]
+    pub allow_mcp: bool,
+
+    /// A self-hosted relay URL, or `None` for n0's public relays.
+    #[serde(default)]
+    pub relay: Option<String>,
+
+    /// Whether to publish to, and resolve through, n0's discovery service.
+    ///
+    /// `true` unless `--no-discovery` was given. With a lasting identity
+    /// this matters more than it did: the ticket now outlives the session,
+    /// so a ticket minted without discovery keeps only the paths it was
+    /// minted with and stops resolving the moment this machine changes
+    /// network — for good, not until the next `enable`.
+    #[serde(default = "default_true")]
+    pub discovery: bool,
+}
+
+/// `serde(default)` for a field whose absence means yes.
+const fn default_true() -> bool {
+    true
+}
+
 impl Settings {
     /// Apply the remote half of `other`: every remote field, and only those.
     pub(super) fn merge_remote(&mut self, other: &SettingsUpdate) {
         if let Some(ref v) = other.remote_pairing {
             self.remote_pairing.clone_from(v);
+        }
+        if let Some(v) = other.remote_enabled {
+            self.remote_enabled = v;
+        }
+        if let Some(ref v) = other.remote_serve {
+            self.remote_serve.clone_from(v);
         }
     }
 }

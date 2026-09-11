@@ -91,7 +91,8 @@ impl Default for DaemonOptions {
 ///    non-loopback binds — then bind `{host}:{DAEMON_PORT}` and serve the
 ///    management API (+ SPA when a frontend build is found).
 /// 5. Honour `proxy_autostart` so the OpenAI endpoint comes up with the
-///    daemon rather than with the desktop app.
+///    daemon rather than with the desktop app, then `remote_enabled` so a
+///    machine told once to be reachable is reachable again after a reboot.
 /// 6. On SIGINT/SIGTERM/shutdown-route: drain the proxy, stop every child,
 ///    audit pidfiles — under a force-exit watchdog.
 ///
@@ -195,6 +196,21 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
         }
         Ok(_) => {}
         Err(e) => warn!("could not read settings for proxy autostart: {e}"),
+    }
+
+    // 5b. Put the tunnel back up if this machine was told to be reachable.
+    //     Spawned rather than awaited, like the autostart above: arming can
+    //     take fifteen seconds against a relay, and the management API must
+    //     be answering long before that — a `gglib remote status` run while
+    //     this is still working is exactly how someone checks on it.
+    //
+    //     `resume` reads the switch itself and reports its own failures. It
+    //     arms the serving side; the connect side is left alone, because a
+    //     stored pairing is an address this machine can dial whenever it
+    //     next wants to, not a session to restore.
+    {
+        let remote = Arc::clone(&state.remote);
+        tokio::spawn(async move { remote.resume().await });
     }
 
     // 6. Serve until signalled, then tear down in order.

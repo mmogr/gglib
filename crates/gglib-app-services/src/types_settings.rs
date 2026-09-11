@@ -224,6 +224,12 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             start_at_login: request.start_at_login,
             // Written by `gglib remote connect`, never from the settings UI.
             remote_pairing: None,
+            // Written by `gglib remote enable`/`disable`. Remote access is
+            // switched by the command that arms the tunnel, not by a field
+            // in a settings form — a request that could set this to `true`
+            // would claim a machine is reachable without anything binding.
+            remote_enabled: None,
+            remote_serve: None,
         }
     }
 }

@@ -124,10 +124,12 @@ pub enum DaemonCommand {
 pub enum RemoteCommand {
     /// Put this machine's proxy on another machine, and show the pairing
     ///
-    /// Brings the tunnel up on the daemon, mints a fresh ticket and a
-    /// six-digit pairing code, and shows both once. The code lives two
-    /// minutes and is spent on first use. Enabling also puts the API key on
-    /// the local proxy, and disabling does not take that away.
+    /// Brings the tunnel up on the daemon and shows a six-digit pairing code
+    /// once; the code lives two minutes and is spent on first use. Remote
+    /// access stays on until `disable`, including across restarts, and this
+    /// machine keeps the same address — a device pairs once, not every
+    /// session. Enabling also puts the API key on the local proxy, and
+    /// disabling does not take that away.
     Enable {
         /// Let requests arriving through the tunnel reach /mcp
         ///
@@ -145,14 +147,6 @@ pub enum RemoteCommand {
         /// stops working if this machine changes network.
         #[arg(long)]
         no_discovery: bool,
-        /// Keep this machine's endpoint key, so the ticket survives a restart
-        ///
-        /// Without this a restart mints a new ticket and every paired device
-        /// pairs again, which is what makes a leaked ticket free to revoke.
-        /// With it the ticket lasts, and revoking becomes deleting the key
-        /// file under the data directory.
-        #[arg(long)]
-        keep_identity: bool,
         /// Print the pairing as plain text instead of the QR screen
         #[arg(long)]
         no_qr: bool,

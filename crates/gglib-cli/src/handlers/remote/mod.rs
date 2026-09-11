@@ -21,7 +21,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             allow_mcp,
             relay,
             no_discovery,
-            keep_identity,
             no_qr,
         } => {
             enable(
@@ -30,7 +29,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
                     allow_mcp,
                     relay,
                     no_discovery,
-                    keep_identity,
                     no_qr,
                 },
             )
@@ -135,12 +133,35 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
 /// The status, one line per fact.
 fn print_status(status: &RemoteStatusDto) {
     if !status.enabled {
-        eprintln!("  Serving:   off \u{2014} `gglib remote enable` to broadcast this machine");
+        // The switch being on with nothing bound is worth its own sentence:
+        // it is a machine that failed to arm at boot, or is still arming,
+        // and "off" alone would send someone to `enable` for a thing that
+        // is already enabled.
+        if status.remote_enabled {
+            eprintln!(
+                "  Serving:   switched on, but nothing is bound \u{2014} still arming, or it \
+                 could not reach a relay"
+            );
+        } else {
+            eprintln!("  Serving:   off \u{2014} `gglib remote enable` to broadcast this machine");
+        }
     } else {
         eprintln!(
             "  Serving:   on   (ticket {})",
             status.ticket_fingerprint.as_deref().unwrap_or("?")
         );
+        // The ticket lasts now, so where the key lives is operational
+        // knowledge rather than trivia: deleting that file is how a ticket
+        // is revoked, and it is the only way.
+        if let Some(path) = &status.identity_path {
+            eprintln!("  Identity:  lasting \u{2014} same ticket after a restart");
+            eprintln!("             {path}");
+        }
+        if !status.remote_enabled {
+            eprintln!(
+                "  After a restart: off \u{2014} this tunnel was not switched on by `enable`"
+            );
+        }
         eprintln!(
             "  Pairing:   {}",
             match (status.pairing_active, status.paired) {

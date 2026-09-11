@@ -54,7 +54,6 @@ pub(crate) struct RemoteEnableBody {
     pub allow_mcp: bool,
     pub relay: Option<String>,
     pub discovery: Option<bool>,
-    pub keep_identity: bool,
 }
 
 /// `POST /api/remote/enable` response: the one time the ticket and the code
@@ -138,6 +137,12 @@ pub(crate) struct RemoteStatusDto {
     pub stored_ticket_fingerprint: Option<String>,
     #[serde(default)]
     pub has_remote_key: bool,
+    /// Whether this machine comes back reachable after a restart.
+    #[serde(default)]
+    pub remote_enabled: bool,
+    /// Where the endpoint key is kept; deleting it revokes the ticket.
+    #[serde(default)]
+    pub identity_path: Option<String>,
 }
 
 /// `POST /api/servers/start` response.

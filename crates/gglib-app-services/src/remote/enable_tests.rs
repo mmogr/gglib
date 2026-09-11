@@ -16,6 +16,8 @@
 use std::sync::{Arc, Mutex};
 
 use gglib_core::SettingsUpdate;
+
+use crate::test_support_remote::test_remote_ops;
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 
@@ -88,7 +90,6 @@ async fn an_enable_that_cannot_bring_the_tunnel_up_leaves_no_key_on_the_local_pr
             // Refused by modelpipe's first and cheapest check.
             relay: Some("not a relay url".to_owned()),
             discovery: false,
-            keep_identity: false,
         })
         .await
         .expect_err("a relay value modelpipe refuses cannot produce a tunnel");
@@ -121,7 +122,6 @@ async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
         allow_mcp: true,
         relay: Some("not a relay url".to_owned()),
         discovery: false,
-        keep_identity: false,
     })
     .await
     .expect_err("a relay value modelpipe refuses cannot produce a tunnel");
@@ -155,7 +155,6 @@ async fn a_failed_enable_leaves_the_next_one_free_to_run() {
                 allow_mcp: false,
                 relay: Some("not a relay url".to_owned()),
                 discovery: false,
-                keep_identity: false,
             })
             .await
             .expect_err("a relay value modelpipe refuses cannot produce a tunnel");
@@ -166,4 +165,115 @@ async fn a_failed_enable_leaves_the_next_one_free_to_run() {
     }
 
     proxy.stop().await.expect("the proxy the test started");
+}
+
+/// A machine nobody switched on does not arm itself at boot.
+///
+/// The daemon calls `resume` unconditionally at startup, so the switch is
+/// the only thing standing between a fresh install and a tunnel nobody asked
+/// for. Reaching `enable` at all here would try to bind an endpoint against
+/// a relay, so a resume that returns without touching the network is exactly
+/// the observation: nothing armed, nothing recorded, nothing emitted.
+#[tokio::test]
+async fn a_machine_that_was_never_enabled_does_not_resume() {
+    let (core, ops, events) = test_remote_ops().await;
+
+    ops.resume().await;
+
+    assert!(
+        !ops.status().await.enabled,
+        "resume must not arm a tunnel on a machine that never asked for one"
+    );
+    assert!(
+        events.events().is_empty(),
+        "a resume that does nothing must say nothing"
+    );
+    let settings = core.settings().get().await.expect("settings readable");
+    assert_eq!(
+        settings.remote_enabled, None,
+        "resume reads the switch; it must not write it"
+    );
+}
+
+/// The switch is on but the flags are gone — the one shape `resume` refuses.
+///
+/// `enable` writes both together, so this is a hand-edited or half-migrated
+/// database rather than anything the code produces. Arming anyway would pick
+/// defaults, and the default for `--allow-mcp` is off while the machine's
+/// last real answer might have been on: guessing the security posture of a
+/// tunnel is worse than not arming it.
+#[tokio::test]
+async fn the_switch_without_the_flags_does_not_arm() {
+    let (core, ops, _events) = test_remote_ops().await;
+    core.settings()
+        .update(SettingsUpdate {
+            remote_enabled: Some(Some(true)),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("the switch is writable");
+
+    ops.resume().await;
+
+    assert!(
+        !ops.status().await.enabled,
+        "a switch with no recorded flags must not be guessed at"
+    );
+}
+
+/// `disable` turns the switch off even when nothing is bound here.
+///
+/// The case that matters: a daemon restarted, failed to arm, and a person
+/// then typed `disable`. The old code answered `Conflict` and changed
+/// nothing, so the next boot would have tried to arm all over again — the
+/// command would have looked like it did something and would not have.
+#[tokio::test]
+async fn disable_clears_the_switch_even_with_nothing_bound() {
+    let (core, ops, _events) = test_remote_ops().await;
+    core.settings()
+        .update(SettingsUpdate {
+            remote_enabled: Some(Some(true)),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("the switch is writable");
+
+    let refused = ops.disable().await;
+
+    assert!(
+        refused.is_err(),
+        "nothing was bound, so the caller still hears that"
+    );
+    let settings = core.settings().get().await.expect("settings readable");
+    assert_eq!(
+        settings.remote_enabled,
+        Some(false),
+        "the switch must be off regardless: the refusal is about this process, \
+         the switch is about the next one"
+    );
+}
+
+/// Shutting the daemon down is not a person switching remote access off.
+///
+/// If it were, the switch would be false after every clean exit and `resume`
+/// would never fire — which is the whole feature.
+#[tokio::test]
+async fn shutting_down_leaves_the_switch_alone() {
+    let (core, ops, _events) = test_remote_ops().await;
+    core.settings()
+        .update(SettingsUpdate {
+            remote_enabled: Some(Some(true)),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("the switch is writable");
+
+    let _ = ops.shut_down().await;
+
+    let settings = core.settings().get().await.expect("settings readable");
+    assert_eq!(
+        settings.remote_enabled,
+        Some(true),
+        "a daemon stopping must leave the machine meant to be reachable"
+    );
 }

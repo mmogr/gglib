@@ -45,32 +45,37 @@ text instead.
 |------|--------|
 | `--allow-mcp` | Let requests arriving through the tunnel reach `/mcp`. Off by default; see [What the other machine can reach](#what-the-other-machine-can-reach). |
 | `--relay URL` | Use a self-hosted iroh relay instead of the public ones. |
-| `--no-discovery` | Do not publish to or resolve through n0's discovery service. The ticket then carries only the paths it was minted with and stops working if the machine changes network. Advanced. |
-| `--keep-identity` | Keep this machine's endpoint key, so the ticket survives a restart and a paired device does not have to pair again. See below. |
+| `--no-discovery` | Do not publish to or resolve through n0's discovery service. The ticket then carries only the paths it was minted with, and stops resolving for good the moment the machine changes network. Advanced. |
 | `--no-qr` | Plain text; no alternate screen. |
 
-### Pairing once instead of every session
+### You pair once
 
-By default a restart mints a new endpoint key, so the ticket changes and every
-device pairs again. That is the point: a leaked ticket is dead at the next
-restart, and revoking one costs nothing you were not going to do anyway.
+`enable` is a switch, not a session. It stays on until you run `disable`,
+including across reboots: the daemon brings the tunnel back up at startup with
+the same flags you enabled it with, and the machine keeps the same endpoint
+key — so its ticket is the same ticket, and a device that paired yesterday
+still works today.
 
-It is also the right trade for a laptop and the wrong one for a phone. Re-pairing
-a laptop is a paste; re-pairing a phone is finding the desktop, waking a screen
-and pointing a camera at it, every time the machine reboots.
+The key lives at `<data root>/data/remote_identity`, created `0600` and refused
+if anything else can read it. `gglib remote status` prints the path.
 
-`gglib remote enable --keep-identity` stores the endpoint key at
-`<data root>/data/remote_identity` and reuses it, so the ticket lasts and the
-phone pairs once. What you give up is stated plainly: revocation stops being a
-reboot and becomes deleting that file and restarting — which re-pairs every
-device, exactly as a reboot used to. The file is created `0600` and refused if
-anything else can read it.
+**Revoking is deleting that file.** It is deliberate rather than accidental,
+which is the change: this used to happen at every reboot, re-pairing every
+device as a side effect nobody asked for. Deleting it re-pairs every device,
+once, when you mean it.
 
-Leave discovery on when you use it. A lasting ticket names an endpoint rather
-than an address, and discovery is what turns that name back into an address
-after the machine changes network. `--keep-identity --no-discovery` together
-give a ticket that never expires and stops resolving the moment the desktop
-moves.
+Two things worth knowing about the trade:
+
+A lasting endpoint key is a lasting name. A machine publishing to n0's
+discovery service announces the same name every day, so anyone watching
+discovery can tell when it is up. That is a presence leak and it is the price
+of pairing once.
+
+`--no-discovery` avoids it and costs more than it used to. Discovery is what
+turns an endpoint name back into an address after the machine changes network;
+without it the ticket carries only the paths it was minted with, and now that
+the ticket lasts, "stops resolving" means for good rather than until the next
+`enable`. Paired devices then need a new pairing.
 
 `gglib remote status` shows both sides: whether the tunnel is up, the
 ticket's fingerprint (never the ticket), whether the code is still live,

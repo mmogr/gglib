@@ -113,9 +113,14 @@ pub(super) async fn perform_shutdown(state: &AppState) {
     });
 
     // 0. Take the remote tunnel down first, so nothing new arrives from
-    //    outside while the rest is dismantled; its ticket dies here. "Not
-    //    enabled" is the usual answer.
-    if let Err(e) = state.remote.disable().await {
+    //    outside while the rest is dismantled. "Not enabled" is the usual
+    //    answer.
+    //
+    //    `shut_down`, not `disable`: the switch says whether this machine is
+    //    meant to be reachable, and stopping the daemon is not an answer to
+    //    that question. The ticket survives now too — it is this machine's
+    //    address, and it is the same one when the daemon comes back.
+    if let Err(e) = state.remote.shut_down().await {
         tracing::debug!("remote disable during shutdown: {e}");
     }
     //    And the connect side, so a client on the loopback port hears a
