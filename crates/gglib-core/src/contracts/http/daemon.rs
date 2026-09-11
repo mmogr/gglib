@@ -49,6 +49,15 @@ pub const REMOTE_DISCONNECT_PATH: &str = "/api/remote/disconnect";
 /// Stop the far daemon through the tunnel, then disconnect.
 pub const REMOTE_KILL_PATH: &str = "/api/remote/kill";
 
+/// Mint a key for one new device and offer a code that hands it over.
+///
+/// Needs the tunnel already up; `POST /api/remote/enable` with `invite`
+/// still does both in one call, for a first run.
+pub const REMOTE_INVITE_PATH: &str = "/api/remote/invite";
+
+/// Every device this machine has issued a key to.
+pub const REMOTE_DEVICES_PATH: &str = "/api/remote/devices";
+
 /// Download queue: `POST` enqueues, `GET` returns the snapshot.
 ///
 /// One path for both verbs. The snapshot handler was once double-mounted at
@@ -100,6 +109,8 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], REMOTE_CONNECT_PATH),
     (&["POST"], REMOTE_DISCONNECT_PATH),
     (&["POST"], REMOTE_KILL_PATH),
+    (&["POST"], REMOTE_INVITE_PATH),
+    (&["GET"], REMOTE_DEVICES_PATH),
     (&["GET", "POST"], DOWNLOADS_QUEUE_PATH),
     (&["GET"], MODELS_LIST_PATH),
     (&["POST"], BENCHMARK_COMPARE_PATH),
@@ -111,6 +122,21 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
 
 /// The verbs [`benchmark_tune_apply_path`] is called with.
 pub const BENCHMARK_TUNE_APPLY_METHODS: &[&str] = &["POST"];
+
+/// Retire one device, interpolating `device` into [`REMOTE_DEVICES_PATH`].
+///
+/// The id is a path segment rather than a body, because `DELETE` with one is
+/// poorly served by enough of the stack to be worth avoiding, and because
+/// the daemon already names a resource this way at `/api/mcp/servers/{id}`.
+/// A device id is `[A-Za-z0-9._-]` by construction — the edge will hold a
+/// token under nothing else — so there is nothing here to escape.
+#[must_use]
+pub fn remote_forget_path(device: &str) -> String {
+    format!("{REMOTE_DEVICES_PATH}/{device}")
+}
+
+/// The verbs [`remote_forget_path`] is called with.
+pub const REMOTE_FORGET_METHODS: &[&str] = &["DELETE"];
 
 /// Every key the CLI puts in a `POST /api/proxy/start` body.
 ///

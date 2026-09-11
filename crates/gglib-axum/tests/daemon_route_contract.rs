@@ -132,10 +132,15 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
             broken.push(format!("  {complaint}"));
         }
     }
-    // The one parameterized path, instantiated from its own definition rather
-    // than a second copy of the template.
+    // The parameterized paths, instantiated from their own definitions rather
+    // than a second copy of each template. `CLI_ROUTE_CONTRACT` holds only
+    // fixed paths, so these would otherwise go unswept.
     let apply = daemon::benchmark_tune_apply_path(1);
     if let Some(complaint) = check(&app, daemon::BENCHMARK_TUNE_APPLY_METHODS, &apply).await {
+        broken.push(format!("  {complaint}"));
+    }
+    let forget = daemon::remote_forget_path("dev-0a1b2c3d");
+    if let Some(complaint) = check(&app, daemon::REMOTE_FORGET_METHODS, &forget).await {
         broken.push(format!("  {complaint}"));
     }
 
