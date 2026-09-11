@@ -126,7 +126,12 @@ pub struct RemoteStatusSnapshot {
     pub ticket_fingerprint: Option<String>,
     /// Whether a pairing code is still redeemable.
     pub pairing_active: bool,
-    /// Whether a device redeemed the code this session.
+    /// Whether a device redeemed the code now on offer.
+    ///
+    /// Per code, not per session: offering a new one clears it, so a second
+    /// `invite` against a live tunnel does not inherit the first device's
+    /// answer. Says nothing about the roster — a machine with devices paired
+    /// months ago reports `false` until it offers a code and one is taken.
     pub paired: bool,
     /// The aggregate transport path: `idle`, `direct`, `relayed`.
     pub path: Option<String>,

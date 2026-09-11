@@ -151,6 +151,35 @@ fn arming_a_session_starts_it_unpaired() {
     assert!(!gateway.paired());
 }
 
+/// A second code on a live session says nobody has taken *it* yet.
+///
+/// `paired` used to move only when a session began or ended, so one device
+/// pairing left it true for the rest of the session. `enable --invite`
+/// against a tunnel that is already up — the path that exists so pairing a
+/// second device costs nobody else their connection — would then have the
+/// pairing screen break out on the first device's answer, name that device,
+/// and stop watching, while the second code stayed redeemable unwatched.
+#[test]
+fn offering_a_second_code_says_nobody_has_taken_it_yet() {
+    let (_, gateway) = gateway();
+    let epoch = arm_with(&gateway, "483920", "the-key", false);
+    gateway.redeem_pairing_code("483920", Some("3ca82708b995"), None);
+    assert!(gateway.paired());
+
+    let offered = gateway.offer_pairing(
+        epoch,
+        "111111".to_owned(),
+        "the-next-key".to_owned(),
+        "dev-4e5f6a7b".to_owned(),
+        PAIRING_TTL,
+    );
+    assert_eq!(offered, Offered::Armed, "the session is still the live one");
+    assert!(
+        !gateway.paired(),
+        "the first device's answer is not an answer for this code"
+    );
+}
+
 /// A session begun without a code arms none, and clears whatever the last
 /// one left. This is what a restart does: the daemon puts the tunnel back
 /// because the switch says to, and nobody is watching for a pairing string.

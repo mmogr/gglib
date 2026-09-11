@@ -225,7 +225,8 @@ pub(crate) struct RemoteStatus {
     pub ticket_fingerprint: Option<String>,
     /// Whether a pairing code is still redeemable.
     pub pairing_active: bool,
-    /// Whether a device redeemed the code this session.
+    /// Whether a device redeemed the code now on offer. Per code, not per
+    /// session, and says nothing about the roster.
     pub paired: bool,
     /// Aggregate transport path: `idle`, `direct`, `relayed`.
     pub path: Option<String>,

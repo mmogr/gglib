@@ -19,7 +19,8 @@ ticket_fingerprint: string | null,
  */
 pairing_active: boolean, 
 /**
- * Whether a device redeemed the code this session.
+ * Whether a device redeemed the code now on offer. Per code, not per
+ * session, and says nothing about the roster.
  */
 paired: boolean, 
 /**

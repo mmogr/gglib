@@ -78,6 +78,16 @@ impl RemoteGateway {
     ///
     /// Read and act under the one lock, so an `enable` landing between the
     /// check and the arm cannot be armed over.
+    ///
+    /// **The paired flag is cleared here, not only when a session begins or
+    /// ends.** It answers "has the code now on offer been taken?", and a
+    /// session outlives any one code: `invite` arms a second one against a
+    /// tunnel that is already up, which is the point of offering a code
+    /// without taking every other device down. Left set from the first
+    /// device, it would have the pairing screen report success — naming that
+    /// first device, off `last_peer` — within a second of the second code
+    /// being shown, and stop watching while the code stayed live and
+    /// redeemable for the rest of its `ttl`.
     pub(in crate::remote) fn offer_pairing(
         &self,
         epoch: u64,
@@ -94,6 +104,7 @@ impl RemoteGateway {
             return Offered::AlreadyOpen;
         }
         self.pairing.begin_for(code, key, device, ttl);
+        self.paired.store(false, Ordering::Relaxed);
         Offered::Armed
     }
 
