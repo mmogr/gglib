@@ -102,3 +102,10 @@ AGENTS.md
 # over src/types/generated. `make bindings` deletes it on every run, so a
 # tracked copy shows up as mass deletions on any clean clone.
 src/types/generated.new/
+
+# Where ts-rs writes when `TS_RS_EXPORT_DIR` does not reach it — its default
+# is `<crate>/bindings`, so a scoped `cargo test export_bindings_` run drops a
+# second copy of every generated type beside the crate that declared it.
+# `make bindings-check` only inspects src/types/generated, so 242 of these
+# were committed once without any gate noticing.
+crates/*/bindings/
