@@ -23,6 +23,16 @@ use fixtures::remote::StubGateway;
 
 const TOKEN: &str = "sk-zzq-proxy-token";
 
+/// The device name the edge writes on a request a named token admitted.
+///
+/// Every tunnelled request below carries one, because under
+/// `TokenPolicy::Named` every legitimate tunnelled request does — and one
+/// that does not is refused by the device gate before the `/mcp` gate is
+/// consulted, which `integration_remote_shutdown.rs` pins. Without it these
+/// tests would all read `device_not_paired` and stop saying anything about
+/// `/mcp` at all.
+const DEVICE: &str = "dev-0a1b2c3d";
+
 async fn spawn_proxy(access: ProxyAccessConfig) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -93,7 +103,8 @@ async fn mcp_initialize(base: &str, tunnelled: bool) -> reqwest::Response {
     if tunnelled {
         req = req
             .header("via", "1.1 modelpipe")
-            .header("x-modelpipe-peer", "3ca82708b995");
+            .header("x-modelpipe-peer", "3ca82708b995")
+            .header("x-modelpipe-device", DEVICE);
     }
     req.send().await.unwrap()
 }
@@ -141,7 +152,7 @@ async fn an_allowed_tunnel_reaches_mcp() {
 }
 
 /// The bearer guard runs first: an unauthenticated tunnelled request is a
-/// 401, and the gate never learns it existed.
+/// 401, and neither gate inside it learns it existed.
 #[tokio::test]
 async fn the_bearer_guard_still_comes_first() {
     let (base, cancel, _) = tunnelled_proxy(false).await;
@@ -198,6 +209,7 @@ async fn tunnelled_requests_are_counted_and_local_ones_are_not() {
         .bearer_auth(TOKEN)
         .header("via", "1.1 modelpipe")
         .header("x-modelpipe-peer", "3ca82708b995")
+        .header("x-modelpipe-device", DEVICE)
         .send()
         .await
         .unwrap();
@@ -210,6 +222,11 @@ async fn tunnelled_requests_are_counted_and_local_ones_are_not() {
     assert_eq!(
         gateway.last_peer.lock().unwrap().as_deref(),
         Some("3ca82708b995")
+    );
+    assert_eq!(
+        gateway.last_device.lock().unwrap().as_deref(),
+        Some(DEVICE),
+        "the durable half of who is talking reaches the owner too"
     );
 
     // Refused by the Host guard before the marker runs: not counted.

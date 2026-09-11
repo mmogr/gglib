@@ -74,9 +74,24 @@ describe('RemoteControl', () => {
     const user = await open();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
 
-    expect(enableRemote).toHaveBeenCalledWith({ allow_mcp: false });
+    // `invite: true`, because this button is the only way to pair a device
+    // from the GUI: the daemon's plain `enable` is a switch and hands out
+    // nothing.
+    expect(enableRemote).toHaveBeenCalledWith({ allow_mcp: false, invite: true });
     expect(await screen.findByText('483920')).toBeInTheDocument();
     expect(screen.getByText(`gglib remote connect ${TICKET}-483920`)).toBeInTheDocument();
+  });
+
+  it('shows no pairing at all when the daemon answered without a code', async () => {
+    // The shape a plain `enable` returns. Rendering it would put an empty
+    // code under a countdown reading 0s — a pairing that looks expired,
+    // which is the one thing the absence must not be mistaken for.
+    enableRemote.mockResolvedValue({ ticket: TICKET });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /enable remote access/i }));
+
+    expect(screen.queryByText(/On the other machine/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/expires in/i)).not.toBeInTheDocument();
   });
 
   it('connect is dead with nothing to dial, and alive once a string is typed', async () => {

@@ -9,7 +9,9 @@ mod access_tests;
 mod host_tests;
 
 pub use bearer::{BearerPolicy, bearer_matches};
-pub use device_keys::{DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys};
+pub use device_keys::{
+    DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys,
+};
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 
 use std::sync::Arc;
@@ -65,6 +67,24 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 #[must_use]
 pub fn generate_api_key() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+
+/// Mint an identifier for a paired device.
+///
+/// Thirty-two random bits as eight lowercase hex behind a `dev-` prefix —
+/// inside modelpipe's rule for a token name, and a different shape from the
+/// twelve-hex peer fingerprint it will sit beside on a status line, so the
+/// two cannot be read as one.
+///
+/// **Independent of the device's key, deliberately.** This travels to the
+/// backend as `X-Modelpipe-Device` on every request that device makes, and
+/// lands in the tunnel's exchange log, the proxy's log, and `gglib remote
+/// list` output that people paste into bug reports. An identifier derived
+/// from a live credential is needless coupling at best.
+#[must_use]
+pub fn generate_device_id() -> String {
+    let draw = u32::try_from(uuid::Uuid::new_v4().as_u128() & 0xffff_ffff).unwrap_or(0);
+    format!("dev-{draw:08x}")
 }
 
 /// Mint a six-digit pairing code for `gglib remote enable`.

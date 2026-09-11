@@ -90,6 +90,7 @@ async fn an_enable_that_cannot_bring_the_tunnel_up_leaves_no_key_on_the_local_pr
             // Refused by modelpipe's first and cheapest check.
             relay: Some("not a relay url".to_owned()),
             discovery: false,
+            invite: false,
         })
         .await
         .expect_err("a relay value modelpipe refuses cannot produce a tunnel");
@@ -122,6 +123,7 @@ async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
         allow_mcp: true,
         relay: Some("not a relay url".to_owned()),
         discovery: false,
+        invite: false,
     })
     .await
     .expect_err("a relay value modelpipe refuses cannot produce a tunnel");
@@ -155,6 +157,7 @@ async fn a_failed_enable_leaves_the_next_one_free_to_run() {
                 allow_mcp: false,
                 relay: Some("not a relay url".to_owned()),
                 discovery: false,
+                invite: false,
             })
             .await
             .expect_err("a relay value modelpipe refuses cannot produce a tunnel");

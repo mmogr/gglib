@@ -42,7 +42,10 @@ fn a_corrupt_file_is_an_error_and_not_an_empty_roster() {
     std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
     std::fs::write(&path, b"{ not json").expect("write");
 
-    assert!(load(&path).is_err(), "a corrupt roster must not read as empty");
+    assert!(
+        load(&path).is_err(),
+        "a corrupt roster must not read as empty"
+    );
 }
 
 /// The keys are secrets and the file sits in a directory a debug build
@@ -57,8 +60,15 @@ fn the_file_is_written_unreadable_to_anybody_else() {
     keys.insert("dev-0a1b2c3d".to_owned(), "sk-secret".to_owned());
     store(&path, &keys).expect("store");
 
-    let mode = std::fs::metadata(&path).expect("metadata").permissions().mode();
-    assert_eq!(mode & 0o077, 0, "group and other must have nothing: {mode:o}");
+    let mode = std::fs::metadata(&path)
+        .expect("metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode & 0o077,
+        0,
+        "group and other must have nothing: {mode:o}"
+    );
 }
 
 /// A crash mid-write must leave the previous roster rather than a truncated
@@ -72,6 +82,9 @@ fn a_rewrite_leaves_no_temporary_behind() {
     keys.insert("dev-4e5f6a7b".to_owned(), "sk-two".to_owned());
     store(&path, &keys).expect("second");
 
-    assert!(!path.with_extension("tmp").exists(), "the staging file is gone");
+    assert!(
+        !path.with_extension("tmp").exists(),
+        "the staging file is gone"
+    );
     assert_eq!(load(&path).expect("load").len(), 2);
 }

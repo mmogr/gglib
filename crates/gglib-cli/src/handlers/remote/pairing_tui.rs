@@ -42,9 +42,11 @@ pub(super) fn qr(pairing: &str) -> Option<String> {
 
 /// Show the pairing until a device pairs, the code expires, or Ctrl-C.
 pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Result<Outcome> {
-    let ttl = Duration::from_secs(enabled.expires_in_s);
+    // Only reached when `enable` offered a code; the caller guards on it.
+    let ttl = Duration::from_secs(enabled.expires_in_s.unwrap_or_default());
     let started = Instant::now();
-    let rendered = qr(&enabled.pairing);
+    let pairing = enabled.pairing.as_deref().unwrap_or_default();
+    let rendered = qr(pairing);
 
     let mut out = stdout();
     execute!(out, terminal::EnterAlternateScreen, cursor::Hide)?;
@@ -105,10 +107,12 @@ fn draw(
     }
     writeln!(out, "  On the other machine:\r")?;
     writeln!(out, "\r")?;
-    writeln!(out, "    gglib remote connect {}\r", enabled.pairing)?;
+    let pairing = enabled.pairing.as_deref().unwrap_or_default();
+    writeln!(out, "    gglib remote connect {pairing}\r")?;
     writeln!(out, "\r")?;
     writeln!(out, "  ticket  {}\r", enabled.ticket)?;
-    writeln!(out, "  code    {}\r", enabled.code)?;
+    let code = enabled.code.as_deref().unwrap_or_default();
+    writeln!(out, "  code    {code}\r")?;
     writeln!(out, "\r")?;
     writeln!(
         out,

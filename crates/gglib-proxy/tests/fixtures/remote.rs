@@ -21,8 +21,13 @@ pub(crate) struct StubGateway {
     pub(crate) tunnelled: AtomicUsize,
     /// The peer fingerprint on the most recent tunnelled request.
     pub(crate) last_peer: Mutex<Option<String>>,
+    /// The device name the edge said admitted the most recent tunnelled
+    /// request, when it named one.
+    pub(crate) last_device: Mutex<Option<String>>,
     /// The peer fingerprint presented with the redeemed code.
     pub(crate) paired_peer: Mutex<Option<String>>,
+    /// What the joining device called itself, when it said.
+    pub(crate) paired_name: Mutex<Option<String>>,
 }
 
 impl StubGateway {
@@ -35,7 +40,9 @@ impl StubGateway {
             misses: AtomicUsize::new(0),
             tunnelled: AtomicUsize::new(0),
             last_peer: Mutex::new(None),
+            last_device: Mutex::new(None),
             paired_peer: Mutex::new(None),
+            paired_name: Mutex::new(None),
         }
     }
 }
@@ -47,14 +54,23 @@ impl std::fmt::Debug for StubGateway {
 }
 
 impl RemoteGatewayPort for StubGateway {
-    fn redeem_pairing_code(&self, code: &str, peer: Option<&str>) -> PairingOutcome {
+    fn redeem_pairing_code(
+        &self,
+        code: &str,
+        peer: Option<&str>,
+        name: Option<&str>,
+    ) -> PairingOutcome {
         if self.spent.load(Ordering::SeqCst) {
             return PairingOutcome::Rejected;
         }
         if code == self.code {
             self.spent.store(true, Ordering::SeqCst);
             *self.paired_peer.lock().unwrap() = peer.map(str::to_owned);
-            return PairingOutcome::Granted(self.key.clone());
+            *self.paired_name.lock().unwrap() = name.map(str::to_owned);
+            return PairingOutcome::Granted {
+                key: self.key.clone(),
+                device: "dev-0a1b2c3d".to_owned(),
+            };
         }
         if self.misses.fetch_add(1, Ordering::SeqCst) + 1 >= 3 {
             self.spent.store(true, Ordering::SeqCst);
@@ -66,8 +82,9 @@ impl RemoteGatewayPort for StubGateway {
         self.mcp_allowed.load(Ordering::SeqCst)
     }
 
-    fn note_tunnelled_request(&self, peer: Option<&str>) {
+    fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
         self.tunnelled.fetch_add(1, Ordering::SeqCst);
         *self.last_peer.lock().unwrap() = peer.map(str::to_owned);
+        *self.last_device.lock().unwrap() = device.map(str::to_owned);
     }
 }

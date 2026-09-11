@@ -3,8 +3,8 @@
 <!-- module-docs:start -->
 
 The proxy's side of the remote tunnel ([ADR 0012](../../../../docs/adr/0012-the-remote-tunnel.md)):
-one middleware that reads the tunnel's markers, one gate on `/mcp`, and one
-route that redeems a pairing code for the key.
+one middleware that reads the tunnel's markers, two gates that use what it
+read, and one route that redeems a pairing code for a device's key.
 
 The proxy never sees the tunnel. What it has is a
 [`RemoteGatewayPort`](gglib_core::ports::RemoteGatewayPort) on its
@@ -15,15 +15,37 @@ is this code the one this session minted, may a tunnelled request reach
 # The markers
 
 The serve side sets `Via: 1.1 modelpipe` and `X-Modelpipe-Peer: <fingerprint>`
-on every request it forwards, after removing any copy the client sent.
-[`remote_marker`] reads them into a [`Tunnelled`] extension and tells the
-owner a request arrived.
+on every request it forwards, after removing any copy the client sent, and
+`X-Modelpipe-Device: <name>` when a *named* token admitted it — never for a
+one-time grant. [`remote_marker`] reads all three into a [`Tunnelled`]
+extension and tells the owner a request arrived.
+
+The peer fingerprint is minted per process on the connecting side, so it
+names a run rather than a device: a laptop that restarts arrives under a new
+one. The device name is the durable identity, because this side issued it.
 
 **They are restrictive only.** A local client can write these headers too,
-and what it gains is a refusal on `/mcp` and a tick on a counter. Nothing is
-granted on the marker's say-so and nothing ever should be. The direction
-that matters holds: a tunnelled peer cannot make its request look local,
-because the edge overwrites rather than inherits.
+and what it gains is a refusal — on `/mcp`, or now from [`device_gate()`] — and
+a tick on a counter. Nothing is granted on the marker's say-so and nothing
+ever should be; a forged device name buys nothing, because the key it would
+have to accompany is checked at the edge, not here. The direction that
+matters holds: a tunnelled peer cannot make its request look local, because
+the edge overwrites rather than inherits.
+
+# The device gate
+
+[`device_gate()`] is a `route_layer` on the protected group, inside the bearer
+guard, refusing any tunnelled request the edge did not name a device for.
+
+It exists because `ServeOptions::backend_auth` took the second door away.
+The edge replaces the client's `Authorization` with the backend's own bearer
+on every admitted request, so `bearer_guard` now validates a header modelpipe
+wrote microseconds earlier and cannot refuse anything that crossed the
+tunnel. That includes the request a **pairing grant** admits — and a grant is
+one request at any path the holder likes, because the edge cannot scope it.
+Without this gate a single guessed six-digit code would buy one fully
+authenticated request to any protected route, `POST /v1/proxy/shutdown`
+among them.
 
 # The `/mcp` gate
 
@@ -58,6 +80,7 @@ requires the ticket and the tunnel edge's own one-time grant.
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`device_gate.rs`](device_gate.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-device_gate-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-device_gate-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-device_gate-coverage.json) |
 | [`marker.rs`](marker.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-marker-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-marker-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-marker-coverage.json) |
 | [`marker_tests.rs`](marker_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-marker_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-marker_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-marker_tests-coverage.json) |
 | [`mcp_guard.rs`](mcp_guard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-mcp_guard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-mcp_guard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-remote-mcp_guard-coverage.json) |

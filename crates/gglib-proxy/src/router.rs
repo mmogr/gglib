@@ -11,8 +11,9 @@
 //!     remote_marker      every route: is this request tunnelled?
 //!       (route match)
 //!         bearer_guard   the protected group only
-//!           mcp_tunnel_guard   /mcp only: tunnelled ⇒ needs --allow-mcp
-//!             handler
+//!           device_gate  the protected group: tunnelled ⇒ names a device
+//!             mcp_tunnel_guard   /mcp only: tunnelled ⇒ needs --allow-mcp
+//!               handler
 //! ```
 //!
 //! `/health` and `/v1/remote/pair` sit outside the bearer group on purpose:
@@ -81,6 +82,12 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         ApiKeySource::Flag => BearerPolicy::pinned(access.api_key.as_deref().unwrap_or_default()),
         _ => BearerPolicy::tracking(access.api_key.as_deref(), Arc::clone(&state.settings)),
     };
+    // Inside the bearer guard, because the earlier `route_layer` is the inner
+    // one: a request that fails the bearer never reaches this, and one that
+    // passes it still has to name a device. That ordering is the point —
+    // `ServeOptions::backend_auth` makes the bearer a header modelpipe wrote,
+    // so for tunnelled traffic this is the only check left that can refuse.
+    protected = protected.route_layer(axum::middleware::from_fn(crate::remote::device_gate));
     protected = protected.route_layer(axum::middleware::from_fn_with_state(
         policy,
         crate::access::bearer_guard,

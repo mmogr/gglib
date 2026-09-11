@@ -18,20 +18,43 @@ pub struct EnableRequest {
     /// off removes that contact and the property that a ticket keeps working
     /// after this machine changes network.
     pub discovery: bool,
+    /// Offer a pairing code as well as bringing the tunnel up.
+    ///
+    /// `enable` is a switch and `invite` is what pairs a device, so the two
+    /// are separate verbs — this is the flag that lets a first run be one
+    /// command rather than two. A restart never sets it: the daemon putting
+    /// the tunnel back has no audience, and a code nobody is watching for is
+    /// a live grant nobody spends.
+    pub invite: bool,
 }
 
-/// What `enable` hands back, exactly once: the ticket and the pairing code
-/// are shown to a person now and never re-read.
+/// What `enable` hands back, exactly once: the ticket, and the pairing code
+/// when one was asked for. Shown to a person now and never re-read.
 #[derive(Debug, Clone)]
 pub struct Enabled {
     /// The ticket, canonical string form.
     pub ticket: String,
-    /// The six-digit pairing code.
+    /// The six-digit pairing code, when `enable` was asked to offer one.
+    ///
+    /// `None` is the ordinary case: the tunnel is up and no device is being
+    /// paired right now: only an `enable` asked to invite offers one.
+    pub pairing: Option<OfferedPairing>,
+}
+
+/// A pairing code on offer, and what is worth knowing about it.
+///
+/// Named for what it is rather than `Pairing`, which in this module tree
+/// already means the session's live redemption state.
+#[derive(Debug, Clone)]
+pub struct OfferedPairing {
+    /// The six-digit code.
     pub code: String,
-    /// The pairing string a laptop pastes: `<ticket>-<code>`.
+    /// The string a laptop pastes: `<ticket>-<code>`.
     pub pairing: String,
     /// Seconds the code lives unused.
     pub expires_in_s: u64,
+    /// The device this code will issue a key to, once it is redeemed.
+    pub device: String,
 }
 
 /// What `connect` is asked for.
@@ -134,4 +157,26 @@ pub struct RemoteStatusSnapshot {
     /// file, which is a thing a person cannot do without being told where
     /// it is.
     pub identity_path: Option<String>,
+}
+
+/// One row of the device list: a device, and whether the tunnel in front
+/// of this machine is currently holding its key.
+#[derive(Debug, Clone)]
+pub struct DeviceView {
+    /// The name the edge holds its key under, and the value it sends back in
+    /// `X-Modelpipe-Device`. Not secret: it travels on every request.
+    pub id: String,
+    /// What the device called itself when it joined, when it said.
+    pub label: Option<String>,
+    /// Unix milliseconds at which it redeemed its invite.
+    pub joined_at: i64,
+    /// Unix milliseconds of the last request that arrived under its key,
+    /// written at most once a minute. Advisory: a local process can forge
+    /// the marker headers, though not to name a device this machine never
+    /// issued a key to.
+    pub last_seen: Option<i64>,
+    /// Whether the live listener holds this device's key — `None` when the
+    /// tunnel is down, because then nothing admits and a `false` would read
+    /// as this one device having been dropped.
+    pub admitted: Option<bool>,
 }

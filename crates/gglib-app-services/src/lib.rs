@@ -44,8 +44,8 @@ pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
 pub use remote::{
-    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, RemoteGateway, RemoteOps,
-    RemoteStatusSnapshot,
+    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, OfferedPairing,
+    RemoteGateway, RemoteOps, RemoteStatusSnapshot,
 };
 pub use sampling_explain::{
     ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,

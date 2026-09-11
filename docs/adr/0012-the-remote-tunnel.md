@@ -222,6 +222,82 @@ rather than working around it.
 > person to go looking for `BearerPolicy::current()` in `RemoteOps` will spend
 > the search finding nothing.
 
+> **Amended 2026-09-11 — one credential becomes one credential per device,
+> and the second door stops checking tunnelled traffic.** The title of this
+> decision is now half true, and saying which half is the point of this
+> amendment.
+>
+> The serve side is constructed with `TokenPolicy::Named` rather than
+> `TokenPolicy::Supplied(proxy_api_key)`. Under `Named` the listener starts
+> admitting nobody and admits only keys added by name, one per paired device,
+> minted when that device is invited. `ServeOptions::backend_auth` carries
+> `proxy_api_key`: the edge replaces the device's `Authorization` with it on
+> every admitted request, so the proxy still receives the credential it
+> demands and no device ever holds it.
+>
+> Four things follow, and each has to be recorded rather than asserted away.
+>
+> 1. **The local half of this decision survives untouched.** `enable` still
+>    force-generates and persists `proxy_api_key`, and the paragraphs above
+>    about the loopback proxy closing, the floor arriving at the next restart,
+>    and how to turn it back off are all unchanged. A device key never reaches
+>    `bearer_guard`, so nothing a device holds opens the desktop's own proxy.
+>    It was tempting to stop minting the key on the grounds that the edge no
+>    longer enforces it; that would silently reopen the local proxy, `/mcp`
+>    included, which is what this decision exists to prevent.
+> 2. **The second door no longer checks tunnelled traffic.** This decision
+>    says a bad bearer "would be refused again by the proxy's own
+>    `bearer_guard` if it got there. The second check is not redundant." With
+>    `backend_auth` set, `bearer_guard` is validating a header modelpipe wrote
+>    microseconds earlier, and cannot refuse anything that crossed the edge.
+>    That is an unavoidable consequence of per-device keys — there is no shape
+>    in which the proxy checks a credential the device holds *and* the device
+>    never holds the proxy's — and it is a real loss, not a redundancy being
+>    tidied up. For local requests the second door is the only door and is
+>    unaffected.
+> 3. **What replaced it, and what it does not cover.** A `route_layer` on the
+>    protected group refuses any tunnelled request the edge did not name a
+>    device for, with 403 `device_not_paired`. The discriminator is
+>    `X-Modelpipe-Device`, which the edge writes only when a *named* token
+>    admitted — never for a one-time grant, and there is no primary under
+>    `Named`. The case that makes it necessary: `Credential::forward` applies
+>    `backend_auth` to every admitted request including a **grant**-admitted
+>    one, and a grant is one request at any path the holder likes, because the
+>    edge cannot scope it. Without the gate, one correctly guessed six-digit
+>    code would buy a single fully authenticated request to any protected
+>    route — `POST /v1/proxy/shutdown` among them, which is irreversible
+>    without physical access. The gate is applied outside `mcp_tunnel_guard`,
+>    so a grant-admitted request is refused before `--allow-mcp` is ever
+>    consulted. What the gate does *not* address is the open question decision
+>    5 now owns: a **named** device reaches `invoke_tool` when `--allow-mcp`
+>    is on, and there are now N credentials that can rather than one.
+> 4. **What retiring a device cuts, and where the keys live.** Retiring a
+>    device is `ServeHandle::remove_token`, which gates *admission* and not
+>    delivery: a response already streaming to that device runs to completion.
+>    `gglib remote disable` is the hard stop. The keys are kept in
+>    `<data root>/data/remote_devices`, `0600`, beside the endpoint identity,
+>    and deliberately not in settings — `gglib config settings show` prints
+>    settings unmasked by design and that output is what people paste into bug
+>    reports. Hashing at rest was not an option either way: modelpipe compares
+>    named tokens in plaintext, so *where* they sit is the only lever there
+>    is. Settings keeps ids, labels and last-seen, none of which is secret.
+>
+> The cost accepted alongside: a rotation of `proxy_api_key` can 401 tunnelled
+> requests for up to two settings-cache windows while `backend_auth` and the
+> proxy's own bearer disagree. The proxy builds its own `SettingsCache` and
+> the rotation poller sleeps a full TTL between ticks, so the two phases are
+> unrelated. `set_token_with_grace` does not help — it widens *admission*, and
+> this mismatch is downstream of admission. In exchange, a rotation no longer
+> un-pairs every device, which is the wart this change exists to remove.
+>
+> One thing this does not yet surface, recorded so its absence is a known gap
+> rather than an oversight: modelpipe counts a wrong bearer against every live
+> bounded grant, so a retired device still issuing requests can burn an open
+> invite before it is typed. modelpipe 0.5 exposes no way to ask whether a
+> grant was burned, so the serving machine cannot report it. The preconditions
+> are narrow and each invite is a fresh grant, so the effect is a retry rather
+> than a lockout — but it needs an upstream API before `status` can say so.
+
 ### 3. Pairing moves a one-time code, not the key
 
 `gglib remote enable` prints the ticket and a six-digit numeric code. The code
@@ -423,6 +499,21 @@ server — which is the ordinary reason to configure one — then a leaked beare
 token is remote code execution on the machine at home, not merely free
 inference on it. The blast radius of the two is not comparable, so they do not
 get the same default.
+
+> **Amended 2026-09-11 — the leaked token is now one of several.** Under
+> per-device keys (decision 2's amendment of the same date) each paired device
+> holds a credential of its own, so with `--allow-mcp` on there are N keys
+> that reach `invoke_tool` rather than one. The default is unchanged and the
+> reasoning above is unchanged; what changes is the arithmetic behind "a
+> leaked bearer token". Retiring one device is now a real answer to a leak —
+> it used to be a rotation that cut off everybody — but the flag still grants
+> tool execution to every device at once, and there is no per-device `/mcp`
+> grant. If one is wanted, it is a new decision, not a refinement of this one.
+>
+> The gate that decision 2's amendment adds does not narrow this either. It
+> refuses tunnelled requests the edge did *not* name a device for, which is
+> the grant-admitted case; a named device passes it and reaches this guard
+> exactly as before.
 
 ### 6. What the network learns
 

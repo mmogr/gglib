@@ -112,7 +112,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         // this by hand would say a machine is reachable with nothing bound.
         remote_enabled: None,
         remote_serve: None,
-        // Written by `gglib remote invite`/`forget`, not by a settings flag.
+        // Written by inviting and forgetting devices, not by a settings flag.
         remote_devices: None,
     };
 

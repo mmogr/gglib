@@ -23,16 +23,42 @@ fn gateway() -> (Arc<Recording>, RemoteGateway) {
     (recorder, gateway)
 }
 
+/// Begin a session and offer a code on it, which is what an `enable` followed
+/// by an `invite` does. The two are separate calls in the real path because
+/// `enable` is a switch and `invite` pairs a device; these tests are about
+/// what happens once something is armed.
+pub(super) fn arm_with(gateway: &RemoteGateway, code: &str, key: &str, allow_mcp: bool) -> u64 {
+    let epoch = gateway.begin_session(allow_mcp);
+    let offered = gateway.offer_pairing(
+        epoch,
+        code.to_owned(),
+        key.to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
+    assert_eq!(offered, Offered::Armed, "the fixture must arm");
+    epoch
+}
+
 #[test]
 fn a_granted_code_marks_the_session_paired_and_says_which_peer() {
     let (events, gateway) = gateway();
-    gateway
-        .pairing
-        .begin("483920".to_owned(), "the-key".to_owned(), PAIRING_TTL);
+    gateway.pairing.begin_for(
+        "483920".to_owned(),
+        "the-key".to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
     assert!(!gateway.paired());
 
-    let outcome = gateway.redeem_pairing_code("483920", Some("3ca82708b995"));
-    assert_eq!(outcome, PairingOutcome::Granted("the-key".to_owned()));
+    let outcome = gateway.redeem_pairing_code("483920", Some("3ca82708b995"), None);
+    assert_eq!(
+        outcome,
+        PairingOutcome::Granted {
+            key: "the-key".to_owned(),
+            device: "dev-0a1b2c3d".to_owned(),
+        }
+    );
     assert!(gateway.paired());
 
     let recorded = events.0.lock().unwrap();
@@ -45,11 +71,14 @@ fn a_granted_code_marks_the_session_paired_and_says_which_peer() {
 #[test]
 fn a_rejected_code_emits_nothing_and_pairs_nobody() {
     let (events, gateway) = gateway();
-    gateway
-        .pairing
-        .begin("483920".to_owned(), "the-key".to_owned(), PAIRING_TTL);
+    gateway.pairing.begin_for(
+        "483920".to_owned(),
+        "the-key".to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
     assert_eq!(
-        gateway.redeem_pairing_code("000000", None),
+        gateway.redeem_pairing_code("000000", None, None),
         PairingOutcome::Rejected
     );
     assert!(!gateway.paired());
@@ -63,8 +92,8 @@ fn tunnelled_requests_are_counted_and_the_last_peer_remembered() {
     assert_eq!(gateway.last_tunnelled_ms(), None);
     assert_eq!(gateway.last_peer(), None);
 
-    gateway.note_tunnelled_request(Some("aaaaaaaaaaaa"));
-    gateway.note_tunnelled_request(None);
+    gateway.note_tunnelled_request(Some("aaaaaaaaaaaa"), None);
+    gateway.note_tunnelled_request(None, None);
     assert_eq!(gateway.tunnelled_requests(), 2);
     assert!(gateway.last_tunnelled_ms().is_some());
     assert_eq!(gateway.last_peer().as_deref(), Some("aaaaaaaaaaaa"));
@@ -73,14 +102,9 @@ fn tunnelled_requests_are_counted_and_the_last_peer_remembered() {
 #[test]
 fn resetting_the_session_keeps_the_history() {
     let (_, gateway) = gateway();
-    let epoch = gateway.begin_session(
-        Some("483920".to_owned()),
-        "the-key".to_owned(),
-        PAIRING_TTL,
-        true,
-    );
-    gateway.redeem_pairing_code("483920", None);
-    gateway.note_tunnelled_request(None);
+    let epoch = arm_with(&gateway, "483920", "the-key", true);
+    gateway.redeem_pairing_code("483920", None, None);
+    gateway.note_tunnelled_request(None, None);
 
     gateway.reset_session_if(epoch);
     assert!(!gateway.mcp_allowed());
@@ -96,25 +120,18 @@ fn resetting_the_session_keeps_the_history() {
 #[test]
 fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
     let (_, gateway) = gateway();
-    let first = gateway.begin_session(
-        Some("483920".to_owned()),
-        "the-key".to_owned(),
-        PAIRING_TTL,
-        true,
-    );
-    let second = gateway.begin_session(
-        Some("111111".to_owned()),
-        "the-next-key".to_owned(),
-        PAIRING_TTL,
-        true,
-    );
+    let first = arm_with(&gateway, "483920", "the-key", true);
+    let second = arm_with(&gateway, "111111", "the-next-key", true);
     assert_ne!(first, second, "each session gets its own epoch");
 
     gateway.reset_session_if(first);
     assert!(gateway.mcp_allowed(), "the second session's grant stands");
     assert_eq!(
-        gateway.redeem_pairing_code("111111", None),
-        PairingOutcome::Granted("the-next-key".to_owned()),
+        gateway.redeem_pairing_code("111111", None, None),
+        PairingOutcome::Granted {
+            key: "the-next-key".to_owned(),
+            device: "dev-0a1b2c3d".to_owned(),
+        },
         "and so does its code"
     );
 }
@@ -126,21 +143,11 @@ fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
 #[test]
 fn arming_a_session_starts_it_unpaired() {
     let (_, gateway) = gateway();
-    gateway.begin_session(
-        Some("483920".to_owned()),
-        "the-key".to_owned(),
-        PAIRING_TTL,
-        false,
-    );
-    gateway.redeem_pairing_code("483920", None);
+    arm_with(&gateway, "483920", "the-key", false);
+    gateway.redeem_pairing_code("483920", None, None);
     assert!(gateway.paired());
 
-    gateway.begin_session(
-        Some("111111".to_owned()),
-        "the-next-key".to_owned(),
-        PAIRING_TTL,
-        false,
-    );
+    arm_with(&gateway, "111111", "the-next-key", false);
     assert!(!gateway.paired());
 }
 
@@ -152,15 +159,10 @@ fn arming_a_session_starts_it_unpaired() {
 #[test]
 fn a_session_begun_without_a_code_arms_none_and_clears_the_last() {
     let (_, gateway) = gateway();
-    gateway.begin_session(
-        Some("483920".to_owned()),
-        "the-key".to_owned(),
-        PAIRING_TTL,
-        false,
-    );
+    arm_with(&gateway, "483920", "the-key", false);
     assert!(gateway.pairing.active(), "the armed session has a code");
 
-    gateway.begin_session(None, "the-key".to_owned(), PAIRING_TTL, false);
+    gateway.begin_session(false);
 
     assert!(
         !gateway.pairing.active(),
@@ -168,7 +170,7 @@ fn a_session_begun_without_a_code_arms_none_and_clears_the_last() {
     );
     assert!(
         matches!(
-            gateway.redeem_pairing_code("483920", None),
+            gateway.redeem_pairing_code("483920", None, None),
             PairingOutcome::Rejected
         ),
         "and the previous session's code is not inherited"
@@ -178,9 +180,12 @@ fn a_session_begun_without_a_code_arms_none_and_clears_the_last() {
 #[test]
 fn debug_reports_state_and_never_the_code_or_key() {
     let (_, gateway) = gateway();
-    gateway
-        .pairing
-        .begin("483920".to_owned(), "sk-zzq-secret".to_owned(), PAIRING_TTL);
+    gateway.pairing.begin_for(
+        "483920".to_owned(),
+        "sk-zzq-secret".to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
     let rendered = format!("{gateway:?}");
     assert!(!rendered.contains("483920"), "{rendered}");
     assert!(!rendered.contains("sk-zzq-secret"), "{rendered}");

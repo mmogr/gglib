@@ -22,6 +22,14 @@ use crate::server::AppState;
 #[derive(Debug, Deserialize)]
 pub(crate) struct PairRequest {
     code: Option<String>,
+    /// What the device calls itself, when it says.
+    ///
+    /// Optional and ignored when absent, so a client built before per-device
+    /// keys still pairs. It is a label for a person to read in
+    /// the device list and is sent nowhere — the name the tunnel edge
+    /// holds the key under is minted here, not accepted from the wire.
+    #[serde(default)]
+    name: Option<String>,
 }
 
 /// Redeem a pairing code.
@@ -43,24 +51,29 @@ pub(crate) async fn handle_remote_pair(
     let peer = tunnelled
         .as_ref()
         .and_then(|axum::Extension(t)| t.peer.clone());
-    let code = serde_json::from_slice::<PairRequest>(&body)
-        .ok()
-        .and_then(|b| b.code);
+    let request = serde_json::from_slice::<PairRequest>(&body).ok();
+    let name = request.as_ref().and_then(|b| b.name.clone());
+    let code = request.and_then(|b| b.code);
     let outcome = match (state.remote_gateway(), code) {
         (Some(gateway), Some(code)) if !code.trim().is_empty() => {
-            gateway.redeem_pairing_code(code.trim(), peer.as_deref())
+            gateway.redeem_pairing_code(code.trim(), peer.as_deref(), name.as_deref())
         }
         _ => PairingOutcome::Rejected,
     };
     match outcome {
-        PairingOutcome::Granted(api_key) => {
+        PairingOutcome::Granted { key, device } => {
             info!(
                 peer = peer.as_deref().unwrap_or("?"),
-                "a device redeemed the pairing code and now holds the API key"
+                device = device.as_str(),
+                "a device redeemed the pairing code and now holds a key of its own"
             );
+            // `api_key` keeps its name: two decoders pin it — gglib's own
+            // `redeem.rs` and ggchat's `PairResponse` — and renaming it would
+            // break the phone silently at runtime. `device_id` is added
+            // beside it, which an older client ignores.
             (
                 StatusCode::OK,
-                Json(serde_json::json!({ "api_key": api_key })),
+                Json(serde_json::json!({ "api_key": key, "device_id": device })),
             )
                 .into_response()
         }

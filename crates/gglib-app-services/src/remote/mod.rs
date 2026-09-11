@@ -3,12 +3,15 @@
 mod backend;
 mod connect;
 mod connect_watch;
+mod device_keys;
+mod devices;
 mod first_contact;
 mod gateway;
 mod key;
 mod pairing;
 mod pairing_string;
 mod redeem;
+mod roster;
 mod rotation;
 mod serve;
 mod serve_switch;
@@ -19,7 +22,8 @@ mod types;
 
 pub use gateway::RemoteGateway;
 pub use types::{
-    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, RemoteStatusSnapshot,
+    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, OfferedPairing,
+    RemoteStatusSnapshot,
 };
 
 use std::sync::Arc;
@@ -83,6 +87,15 @@ pub struct RemoteOps {
     connect_generation: AtomicU64,
     /// The same, for `enable`.
     enable_generation: AtomicU64,
+    /// Serialises read-modify-write over the device roster.
+    ///
+    /// `SettingsService::update` is load, merge, save with no lock of its
+    /// own, and `remote_devices` is written whole — so an `invite` pushing a
+    /// row and a `forget` retaining one would each read the roster the other
+    /// had not yet written, and one change would vanish. Separate from
+    /// `live` because the settings write is slow and `invite` must not hold
+    /// the serve slot across it.
+    roster: Arc<Mutex<()>>,
 }
 
 impl RemoteOps {
@@ -102,6 +115,7 @@ impl RemoteOps {
             live_connect: Arc::new(Mutex::new(Slot::Empty)),
             connect_generation: AtomicU64::new(0),
             enable_generation: AtomicU64::new(0),
+            roster: Arc::new(Mutex::new(())),
         }
     }
 
@@ -138,7 +152,7 @@ impl RemoteOps {
             stored_ticket_fingerprint,
             has_remote_key,
             remote_enabled,
-            identity_path: serve::identity_path()
+            identity_path: key::identity_path()
                 .ok()
                 .flatten()
                 .map(|p| p.display().to_string()),
@@ -176,3 +190,7 @@ mod enable_tests;
 #[cfg(test)]
 #[path = "serve_watch_tests.rs"]
 mod serve_watch_tests;
+
+#[cfg(test)]
+#[path = "serve_invite_tests.rs"]
+mod serve_invite_tests;

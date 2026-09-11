@@ -55,6 +55,9 @@ pub(crate) enum Offer {
 struct Pending {
     code: String,
     key: String,
+    /// The name the edge holds `key` under, handed back with it so the
+    /// device learns what it is called here.
+    device: String,
     expires: Instant,
     attempts: u8,
 }
@@ -66,25 +69,26 @@ pub(crate) struct Pairing {
 }
 
 impl Pairing {
-    /// Arm a pairing: `code` redeems for `key` until `ttl` passes.
+    /// Arm a pairing: `code` redeems for `device`'s `key` until `ttl` passes.
     ///
-    /// Replaces any pairing already armed — there is one code per session,
-    /// and re-arming is how `enable` after `disable` starts clean.
-    pub(crate) fn begin(&self, code: String, key: String, ttl: Duration) {
+    /// Replaces any pairing already armed. There is one code at a time, and
+    /// the caller decides whether replacing one is allowed — see
+    /// [`RemoteGateway::offer_pairing`](super::gateway::RemoteGateway::offer_pairing),
+    /// which refuses rather than arming over a live one.
+    pub(crate) fn begin_for(&self, code: String, key: String, device: String, ttl: Duration) {
         *self.lock() = Some(Pending {
             code,
             key,
+            device,
             expires: Instant::now() + ttl,
             attempts: 0,
         });
     }
 
-    /// The key a live pairing would hand out has changed — a rotation landed
-    /// while the code was still on the screen. Hand out the new one.
-    pub(crate) fn update_key(&self, key: String) {
-        if let Some(pending) = self.lock().as_mut() {
-            pending.key = key;
-        }
+    /// Forget a pairing that was armed but never redeemed, and say which
+    /// device it was for so its key can be retired.
+    pub(crate) fn withdraw(&self) -> Option<String> {
+        self.lock().take().map(|pending| pending.device)
     }
 
     /// Present a code. Exactly one presentation can ever be `Granted`.
@@ -103,8 +107,9 @@ impl Pairing {
         }
         if constant_time_eq(pending.code.as_bytes(), presented.as_bytes()) {
             let key = pending.key.clone();
+            let device = pending.device.clone();
             *slot = None;
-            return PairingOutcome::Granted(key);
+            return PairingOutcome::Granted { key, device };
         }
         pending.attempts += 1;
         if pending.attempts >= MAX_ATTEMPTS {

@@ -6,8 +6,6 @@ use gglib_core::services::{AppCore, SETTINGS_CACHE_TTL};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use super::gateway::RemoteGateway;
-
 /// Follow `proxy_api_key` so a rotation reaches the running listener.
 ///
 /// There is no settings-changed event in gglib and there cannot be a useful
@@ -21,7 +19,6 @@ use super::gateway::RemoteGateway;
 pub(super) async fn rotation_poll(
     core: Arc<AppCore>,
     handle: Arc<modelpipe::ServeHandle>,
-    gateway: Arc<RemoteGateway>,
     mut current: String,
     cancel: CancellationToken,
 ) {
@@ -43,10 +40,18 @@ pub(super) async fn rotation_poll(
         if next == current {
             continue;
         }
-        match handle.set_token(next.clone()) {
+        // `set_backend_auth`, never `set_token`. The listener runs
+        // `TokenPolicy::Named`, and `set_token` would give it a primary it
+        // does not have — silently turning the per-device listener back into
+        // a shared-key one on the first rotation, with no error and no log
+        // line, and making `forget` incomplete from then on.
+        //
+        // Devices are untouched by this: they hold their own keys, and what
+        // rotates is only what the edge presents to the backend in their
+        // place. Rotating the proxy's key no longer un-pairs anybody.
+        match handle.set_backend_auth(Some(next.clone())) {
             Ok(()) => {
-                info!("remote tunnel now enforces the rotated API key");
-                gateway.pairing.update_key(next.clone());
+                info!("remote tunnel now presents the rotated API key to the proxy");
                 current = next;
             }
             Err(e) => warn!("remote tunnel refused the rotated API key: {e}"),

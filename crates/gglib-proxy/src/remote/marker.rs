@@ -29,12 +29,32 @@ const VIA_PSEUDONYM: &str = "modelpipe";
 /// The header carrying the connecting peer's fingerprint.
 const PEER_HEADER: &str = "x-modelpipe-peer";
 
+/// The header naming the device token that admitted the request.
+///
+/// The edge writes it only when a *named* token admitted — never for a
+/// one-time grant, and never for the primary. Its absence is therefore what
+/// [`device_gate`](super::device_gate()) reads, and its presence is only ever
+/// used to say which paired device is talking.
+const DEVICE_HEADER: &str = "x-modelpipe-device";
+
 /// This request arrived through the tunnel.
 #[derive(Debug, Clone)]
 pub(crate) struct Tunnelled {
     /// The peer's fingerprint, when the edge sent a well-formed one: twelve
     /// hex characters, the same rule the tunnel's own log uses.
+    ///
+    /// Per-process on the connecting side, so it names a run rather than a
+    /// device: a laptop that restarts arrives under a new one.
     pub(crate) peer: Option<Arc<str>>,
+
+    /// The name the edge holds the admitting token under, when a named token
+    /// admitted the request.
+    ///
+    /// Validated against modelpipe's own rule for a name — ASCII letters,
+    /// digits, `.`, `_` and `-`, at most 64 — and dropped rather than
+    /// truncated when it fails, because it reaches a log line and a status
+    /// row. This is the durable identity of a paired device, unlike `peer`.
+    pub(crate) device: Option<Arc<str>>,
 }
 
 impl Tunnelled {
@@ -66,7 +86,18 @@ impl Tunnelled {
             .map(str::trim)
             .filter(|p| p.len() == 12 && p.bytes().all(|b| b.is_ascii_hexdigit()))
             .map(|p| Arc::from(p.to_ascii_lowercase()));
-        Some(Self { peer })
+        let device = headers
+            .get(DEVICE_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|d| {
+                !d.is_empty()
+                    && d.len() <= 64
+                    && d.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+            })
+            .map(Arc::from);
+        Some(Self { peer, device })
     }
 }
 
@@ -82,7 +113,7 @@ pub(crate) async fn remote_marker(
 ) -> Response {
     if let Some(tunnelled) = Tunnelled::from_headers(req.headers()) {
         if let Some(gateway) = state.remote_gateway() {
-            gateway.note_tunnelled_request(tunnelled.peer.as_deref());
+            gateway.note_tunnelled_request(tunnelled.peer.as_deref(), tunnelled.device.as_deref());
         }
         req.extensions_mut().insert(tunnelled);
     }

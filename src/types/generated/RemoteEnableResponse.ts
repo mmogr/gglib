@@ -10,14 +10,23 @@ export type RemoteEnableResponse = {
  */
 ticket: string, 
 /**
- * The six-digit pairing code.
+ * The six-digit pairing code, when one was asked for.
+ *
+ * Absent is the ordinary case — the tunnel is up and nothing is being
+ * paired. A surface must render the absence as "no code", not as an
+ * expired one: an empty string here would read as a pairing that had
+ * already run out.
  */
-code: string, 
+code?: string, 
 /**
- * `<ticket>-<code>`, the one string a laptop pastes.
+ * `<ticket>-<code>`, the one string a laptop pastes, when there is one.
  */
-pairing: string, 
+pairing?: string, 
 /**
- * Seconds the code lives unused.
+ * Seconds the code lives unused, when there is one.
  */
-expires_in_s: number, };
+expires_in_s?: number, 
+/**
+ * The device the code will issue a key to, when there is one.
+ */
+device?: string, };

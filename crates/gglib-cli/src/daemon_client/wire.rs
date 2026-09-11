@@ -54,6 +54,7 @@ pub(crate) struct RemoteEnableBody {
     pub allow_mcp: bool,
     pub relay: Option<String>,
     pub discovery: Option<bool>,
+    pub invite: bool,
 }
 
 /// `POST /api/remote/enable` response: the one time the ticket and the code
@@ -61,9 +62,12 @@ pub(crate) struct RemoteEnableBody {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RemoteEnableDto {
     pub ticket: String,
-    pub code: String,
-    pub pairing: String,
-    pub expires_in_s: u64,
+    /// Present only when `enable` was asked to offer a code. Absent is the
+    /// ordinary case; rendering it as an empty string would show a pairing
+    /// that had already expired rather than none at all.
+    pub code: Option<String>,
+    pub pairing: Option<String>,
+    pub expires_in_s: Option<u64>,
 }
 
 /// `POST /api/remote/connect` request body. Mirrors

@@ -150,6 +150,13 @@ pub enum RemoteCommand {
         /// Print the pairing as plain text instead of the QR screen
         #[arg(long)]
         no_qr: bool,
+        /// Offer a pairing code too, so a first run is one command
+        ///
+        /// `enable` turns this machine on and `invite` pairs a device; this
+        /// does both. A restart never does: a code nobody is watching for is
+        /// a live grant nobody spends.
+        #[arg(long)]
+        invite: bool,
     },
     /// Stop answering; `enable` brings the same ticket back
     Disable,

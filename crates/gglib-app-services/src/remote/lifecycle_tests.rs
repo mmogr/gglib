@@ -95,9 +95,12 @@ async fn a_stored_ticket_that_no_longer_parses_costs_the_fingerprint_and_nothing
 #[tokio::test]
 async fn disabling_a_tunnel_that_is_not_up_is_a_conflict_that_clears_nothing() {
     let (_, ops, events) = test_remote_ops().await;
-    ops.gateway()
-        .pairing
-        .begin("483920".to_owned(), "sk-zzq-armed".to_owned(), PAIRING_TTL);
+    ops.gateway().pairing.begin_for(
+        "483920".to_owned(),
+        "sk-zzq-armed".to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
 
     let err = ops.disable().await.expect_err("nothing is enabled");
     assert!(matches!(err, GuiError::Conflict(_)), "{err:?}");

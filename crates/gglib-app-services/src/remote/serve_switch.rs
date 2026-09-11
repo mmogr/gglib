@@ -82,6 +82,9 @@ impl RemoteOps {
             allow_mcp: serve.allow_mcp,
             relay: serve.relay,
             discovery: serve.discovery,
+            // Never on a resume, and not reachable from here by accident:
+            // `resume_arm` passes `Offer::Silent` regardless.
+            invite: false,
         };
         // No pairing code is minted here, and `resume_arm` rather than
         // `enable` is what makes that true: `enable` mints one
