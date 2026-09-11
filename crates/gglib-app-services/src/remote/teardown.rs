@@ -90,7 +90,7 @@ mod tests {
     /// armed under — which is what the `Live` a teardown is given carries.
     fn gateway() -> (Arc<RemoteGateway>, u64) {
         let gateway = Arc::new(RemoteGateway::new(Arc::new(NoopEmitter)));
-        let epoch = gateway.begin_session(CODE.to_owned(), KEY.to_owned(), PAIRING_TTL, true);
+        let epoch = gateway.begin_session(Some(CODE.to_owned()), KEY.to_owned(), PAIRING_TTL, true);
         (gateway, epoch)
     }
 
@@ -225,7 +225,7 @@ mod tests {
     impl Drain for ArmingDrain {
         fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
             self.gateway.begin_session(
-                NEXT_CODE.to_owned(),
+                Some(NEXT_CODE.to_owned()),
                 NEXT_KEY.to_owned(),
                 PAIRING_TTL,
                 true,

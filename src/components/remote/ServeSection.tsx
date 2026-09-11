@@ -65,7 +65,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
     try {
       await getTransport().disableRemote();
       setReveal(null);
-      onNotice('Remote access is off. The ticket is dead.', 'success');
+      onNotice('Remote access is off. Enabling again brings the same ticket back.', 'success');
     } catch (err) {
       onNotice(`Could not disable remote access: ${formatError(err)}`, 'error');
     } finally {

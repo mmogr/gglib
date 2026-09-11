@@ -61,16 +61,25 @@ impl RemoteGateway {
     /// what the epoch is for). Nobody has paired with a session that is only
     /// now being armed, and `status` would otherwise report the last one's
     /// answer.
+    ///
+    /// `code` is `None` when the tunnel is being put back by a restart
+    /// rather than by a person: any pairing the previous session left is
+    /// cleared and none is armed. A code nobody is watching for is a live
+    /// grant nobody spends, and the route that redeems it sits outside the
+    /// proxy's bearer group.
     pub(super) fn begin_session(
         &self,
-        code: String,
+        code: Option<String>,
         key: String,
         ttl: Duration,
         allow_mcp: bool,
     ) -> u64 {
         let mut session = self.session();
         *session += 1;
-        self.pairing.begin(code, key, ttl);
+        match code {
+            Some(code) => self.pairing.begin(code, key, ttl),
+            None => self.pairing.clear(),
+        }
         self.mcp_allowed.store(allow_mcp, Ordering::Relaxed);
         self.paired.store(false, Ordering::Relaxed);
         *session

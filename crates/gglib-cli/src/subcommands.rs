@@ -151,7 +151,7 @@ pub enum RemoteCommand {
         #[arg(long)]
         no_qr: bool,
     },
-    /// Take the tunnel down; the ticket is dead from that moment
+    /// Stop answering; `enable` brings the same ticket back
     Disable,
     /// Show the tunnel's state, its peers, and what came through it
     Status,

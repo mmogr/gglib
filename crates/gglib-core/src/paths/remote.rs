@@ -1,8 +1,10 @@
 //! Where the remote tunnel's stored endpoint key lives.
 //!
-//! Only `gglib remote enable --keep-identity` writes here, and only when it is
-//! asked to; without the flag the tunnel mints a fresh endpoint key per session
-//! and nothing is left on disk (ADR 0012, decision 4).
+//! `gglib remote enable` writes here every time, and the tunnel reuses what it
+//! finds: the endpoint key lasts, so a device pairs once instead of at every
+//! restart (ADR 0012, decision 4, reversed — see the amendment dated
+//! 2026-09-10). Deleting this file is what revokes a ticket, which is why
+//! `gglib remote status` prints its path.
 
 use std::fs;
 use std::path::PathBuf;

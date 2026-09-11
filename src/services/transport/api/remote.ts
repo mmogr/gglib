@@ -41,7 +41,7 @@ export async function enableRemote(body: Partial<RemoteEnableBody> = {}): Promis
   return post<RemoteEnableResponse>(REMOTE_ENABLE_PATH, body);
 }
 
-/** Take the tunnel down. Idempotent; the ticket is dead from this moment. */
+/** Take the tunnel down. Idempotent; nothing answers the ticket until `enable`. */
 export async function disableRemote(): Promise<RemoteStatus> {
   return post<RemoteStatus>(REMOTE_DISABLE_PATH, {});
 }

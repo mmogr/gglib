@@ -22,8 +22,8 @@ use gglib_core::events::AppEvent;
 
 use crate::error::GuiError;
 
+use super::pairing::Offer;
 use super::slot::Taken;
-
 use super::types::EnableRequest;
 
 impl RemoteOps {
@@ -83,20 +83,38 @@ impl RemoteOps {
             relay: serve.relay,
             discovery: serve.discovery,
         };
-        // No pairing code is minted here. `enable` shows a code because a
-        // person is watching for it; a resume has no audience, and a code
-        // nobody sees is a live grant nobody spends. Devices already paired
-        // hold a key and need no code; a new one runs `enable` again.
-        match self.enable(request).await {
-            Ok(_) => info!("remote access resumed from settings"),
+        // No pairing code is minted here, and `resume_arm` rather than
+        // `enable` is what makes that true: `enable` mints one
+        // unconditionally, so resuming through it opened a live two-minute
+        // grant at every boot, for a code nobody would ever read, on a
+        // ticket that no longer changes. Devices already paired hold a key
+        // and need no code; a new one runs `gglib remote enable` again.
+        match self.resume_arm(request).await {
+            Ok(()) => info!("remote access resumed from settings"),
             Err(e) => warn!("could not resume remote access: {e}"),
         }
     }
 
-    /// Take the tunnel down. The ticket is dead from this moment; the key
-    /// stays in settings, because the local proxy has demanded it since
-    /// `enable` ran and withdrawing it would break whatever adopted it
-    /// (ADR 0012, decision 2).
+    /// Put the tunnel back after a restart, arming no pairing code.
+    ///
+    /// Everything `enable` does except the code. It sits here rather than as
+    /// a flag on `enable` because the difference is about *who is asking* —
+    /// the subject of this file — and because a flag is something a future
+    /// caller can forget, while a separate entry point is not.
+    ///
+    /// # Errors
+    ///
+    /// As [`RemoteOps::enable`](crate::remote::RemoteOps::enable).
+    pub(super) async fn resume_arm(&self, request: EnableRequest) -> Result<(), GuiError> {
+        self.turn_on(request, Offer::Silent).await.map(|_| ())
+    }
+
+    /// Take the tunnel down. Nothing answers the ticket from this moment,
+    /// but nothing is revoked either — the endpoint key lasts, so `enable`
+    /// brings the same ticket back (ADR 0012, decision 4, reversed). The API
+    /// key likewise stays in settings, because the local proxy has demanded
+    /// it since `enable` ran and withdrawing it would break whatever adopted
+    /// it (ADR 0012, decision 2).
     ///
     /// Also gives up on an `enable` that is still arming, which nothing
     /// could do while that call held the mutex for its whole fifteen
