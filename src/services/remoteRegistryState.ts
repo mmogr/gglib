@@ -69,6 +69,7 @@ export const IDLE_STATUS: RemoteStatus = {
   has_remote_key: false,
   remote_enabled: false,
   identity_path: null,
+  devices: [],
 };
 
 export const INITIAL: RemoteState = {

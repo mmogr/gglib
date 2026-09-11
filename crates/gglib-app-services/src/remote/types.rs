@@ -179,8 +179,22 @@ pub struct RemoteStatusSnapshot {
     /// Always present now — the identity lasts (ADR 0012 decision 4,
     /// reversed) — and shown because revoking a ticket is deleting this
     /// file, which is a thing a person cannot do without being told where
-    /// it is.
+    /// it is. Deleting it is the *whole-machine* revocation: every paired
+    /// device loses the address at once. Retiring one is
+    /// [`RemoteOps::forget`](super::RemoteOps::forget), and leaves the rest
+    /// untouched.
     pub identity_path: Option<String>,
+    /// Every device this machine has issued a key to, and whether the live
+    /// listener is admitting each.
+    ///
+    /// Rides the status snapshot rather than being fetched on its own
+    /// because it needs no second read: the roster *is* a settings field, and
+    /// this call has already read that record to answer
+    /// [`Self::remote_enabled`]. A surface that re-reads the status therefore
+    /// gets the list with it, at no second request and no second loading
+    /// state, and the two can never disagree about whether the tunnel is up —
+    /// which they could if a list were fetched a moment after a status.
+    pub devices: Vec<DeviceView>,
 }
 
 /// One row of the device list: a device, and whether the tunnel in front

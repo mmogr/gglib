@@ -79,7 +79,11 @@ export const Modal: FC<ModalProps> = ({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-modal-backdrop p-base overflow-y-auto" />
+        {/* `data-modal-overlay` so `useClickOutside` can tell a click on the
+            dim backdrop from a click on the page: Radix renders this as a
+            sibling of the content, with no role, so `[role="dialog"]` alone
+            does not cover it. */}
+        <DialogPrimitive.Overlay data-modal-overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-modal-backdrop p-base overflow-y-auto" />
         <DialogPrimitive.Content
           className={cn(
             "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background-elevated border border-border-light rounded-lg shadow-2xl w-full max-h-[90vh] flex flex-col z-modal animate-modal-slide-in",

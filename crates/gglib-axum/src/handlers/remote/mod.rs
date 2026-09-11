@@ -2,11 +2,13 @@
 
 mod connect;
 mod devices;
+mod status;
 mod wire;
 
 pub(crate) use connect::{connect, disconnect, kill};
 pub(crate) use devices::{forget, invite, list};
-pub(crate) use wire::{RemoteEnableBody, RemoteEnableResponse, RemoteStatus};
+pub(crate) use status::RemoteStatus;
+pub(crate) use wire::{RemoteEnableBody, RemoteEnableResponse};
 
 use axum::{Json, extract::State};
 

@@ -24,15 +24,16 @@ import { appSettings } from '../fixtures/settings';
 import type { AppSettings } from '../../../src/types';
 
 const settingsRef: { current: AppSettings | null } = { current: null };
+const proxyStateRef = { current: { running: false, port: null as number | null } };
 
 vi.mock('../../../src/hooks/useSettings', () => ({
   useSettings: () => ({ settings: settingsRef.current }),
 }));
 vi.mock('../../../src/services/proxyRegistry', () => ({
-  useProxyState: () => ({ running: false, port: null }),
+  useProxyState: () => proxyStateRef.current,
 }));
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({}),
+  getTransport: () => ({ getProxyStatus: () => Promise.resolve({ pinned_model: null }) }),
 }));
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({
   clearProxyCache: vi.fn(),
@@ -58,6 +59,7 @@ async function openContextBox(settings: AppSettings | null) {
 describe('ProxyControl — the Default context placeholder', () => {
   beforeEach(() => {
     settingsRef.current = null;
+    proxyStateRef.current = { running: false, port: null };
   });
 
   it('does not claim a server default when nothing is stored', async () => {
@@ -71,5 +73,26 @@ describe('ProxyControl — the Default context placeholder', () => {
   it('names the stored default, separated, when there is one', async () => {
     const box = await openContextBox(appSettings({ defaultContextSize: 32768 }));
     expect(box).toHaveAttribute('placeholder', '32,768 (from settings)');
+  });
+});
+
+describe('ProxyControl — View Dashboard', () => {
+  beforeEach(() => {
+    proxyStateRef.current = { running: false, port: null };
+  });
+
+  it('closes the popover it opens over', async () => {
+    // A click in a dialog no longer counts as outside the popover, so the
+    // dashboard opening over it no longer closes it by accident. The button
+    // closes it on purpose now, and this is what holds that.
+    proxyStateRef.current = { running: true, port: 8080 };
+    settingsRef.current = appSettings();
+    render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    expect(screen.getByRole('heading', { name: 'OpenAI Proxy' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /view dashboard/i }));
+    expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
   });
 });

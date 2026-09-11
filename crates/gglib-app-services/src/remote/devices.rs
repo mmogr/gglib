@@ -27,6 +27,7 @@ use super::enrolment::{forget, offer};
 use super::roster::read_roster;
 use super::types::{DeviceView, Enabled};
 use crate::error::GuiError;
+use gglib_core::Device;
 
 impl RemoteOps {
     /// Offer a code that hands one new device a key of its own.
@@ -161,23 +162,42 @@ impl RemoteOps {
     ///
     /// `Internal` when the roster cannot be read.
     pub async fn list(&self) -> Result<Vec<DeviceView>, GuiError> {
+        // Settings first and the serve slot second, the order `status` reads
+        // them in. Taken the other way round, a row read mid-`forget` could
+        // come back "admitted" for a key the edge had already dropped.
+        let roster = read_roster(&self.core).await?;
         let admitting = {
             let live = self.live.lock().await;
             live.full().map(|l| l.handle.token_names())
         };
-        let roster = read_roster(&self.core).await?;
-        Ok(roster
-            .into_iter()
-            .map(|d| DeviceView {
-                // `None` with the tunnel down: nothing admits then, and
-                // saying `false` would read as "this device was dropped".
-                admitted: admitting.as_ref().map(|names| names.contains(&d.id)),
-                id: d.id,
-                label: d.label,
-                joined_at: d.joined_at,
-                redeemed_at: d.redeemed_at,
-                last_seen: d.last_seen,
-            })
-            .collect())
+        Ok(viewed(roster, admitting.as_deref()))
     }
+}
+
+/// Roster rows as the surfaces see them, given what the edge is admitting.
+///
+/// Shared with [`RemoteOps::status`](super::RemoteOps::status), which
+/// answers the same rows off the settings record it has already read. Two
+/// spellings of "is this device admitted" would be two chances to answer it
+/// differently, on the one question a person is asking the list.
+///
+/// Both callers read settings before the serve slot, so `admitted` is what
+/// the edge held when the slot was read — the later of the two reads.
+/// Mid-`forget` a row can come back "not admitted" for one read before it is
+/// gone; a device the edge had already dropped by then is never called
+/// admitted.
+pub(super) fn viewed(roster: Vec<Device>, admitting: Option<&[String]>) -> Vec<DeviceView> {
+    roster
+        .into_iter()
+        .map(|d| DeviceView {
+            // `None` with the tunnel down: nothing admits then, and saying
+            // `false` would read as "this device was dropped".
+            admitted: admitting.map(|names| names.contains(&d.id)),
+            id: d.id,
+            label: d.label,
+            joined_at: d.joined_at,
+            redeemed_at: d.redeemed_at,
+            last_seen: d.last_seen,
+        })
+        .collect()
 }

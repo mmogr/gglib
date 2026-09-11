@@ -35,6 +35,7 @@ use gglib_core::ports::AppEventEmitter;
 use gglib_core::services::AppCore;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use crate::proxy::ProxyOps;
 use connect::LiveConnect;
@@ -142,22 +143,59 @@ impl RemoteOps {
         Arc::clone(&self.gateway)
     }
 
-    /// A snapshot for the status surface: both sides, and what settings
-    /// remember of the last pairing (by fingerprint, never the ticket).
+    /// A snapshot for the status surface: both sides, what settings remember
+    /// of the last pairing (by fingerprint, never the ticket), and the
+    /// roster.
+    ///
+    /// The device list rides this call rather than having one of its own
+    /// because its read is already paid for: the roster is a settings field,
+    /// and the record is read here regardless. A surface that re-reads the
+    /// status gets the list with it, at no second read, and the list can never
+    /// disagree with the `enabled` beside it about whether anything is being
+    /// admitted.
     pub async fn status(&self) -> RemoteStatusSnapshot {
-        // Both answers come off one record, which is what makes them
-        // agree: a key is held *for* the machine the fingerprint names, and
-        // there is no longer a shape in which they can describe two.
-        let settings = self.core.settings().get().await.ok();
+        // Every settings answer below — the switch, the stored pairing and
+        // the roster — comes off one record, which is what makes them agree:
+        // a key is held *for* the machine the fingerprint names, and there is
+        // no longer a shape in which they can describe two.
+        //
+        // Swallowed because `status` is what someone runs *because* something
+        // is wrong and must not itself fail — but logged, because the
+        // fallback is an empty roster, and "no device has been paired with
+        // this machine" is a confident wrong answer on the one surface a
+        // person opens to decide what to revoke. `RemoteOps::list` returns
+        // the error; this is the trade the two make differently, on purpose.
+        let settings = match self.core.settings().get().await {
+            Ok(settings) => Some(settings),
+            Err(e) => {
+                warn!("could not read settings for remote status; reporting none: {e}");
+                None
+            }
+        };
         let remote_enabled = settings
             .as_ref()
             .is_some_and(|s| s.remote_enabled == Some(true));
-        let stored = settings.and_then(|s| s.remote_pairing);
+        let (roster, stored) = settings
+            .map(|s| (s.remote_devices.unwrap_or_default(), s.remote_pairing))
+            .unwrap_or_default();
         let stored_ticket_fingerprint = stored.as_ref().and_then(stored_pairing::fingerprint);
         let has_remote_key = stored.is_some();
         let connected = self.connect_snapshot().await;
+        // Before the lock: this touches the filesystem — `create_dir_all` on
+        // the data directory — and `status` is the call everything else waits
+        // behind. Nothing under the serve slot should be doing IO that has
+        // nothing to do with the slot.
+        let identity_path = key::identity_path()
+            .ok()
+            .flatten()
+            .map(|p| p.display().to_string());
         let live = self.live.lock().await;
+        // Under the slot, like `list`'s: what the edge holds and whether the
+        // tunnel is up have to be read at one instant or a row can come back
+        // "not admitted" from a session that had already gone.
+        let admitting = live.full().map(|l| l.handle.token_names());
         let mut snapshot = RemoteStatusSnapshot {
+            devices: devices::viewed(roster, admitting.as_deref()),
             enabled: live.full().is_some(),
             pairing_active: self.gateway.pairing.active(),
             paired: self.gateway.paired(),
@@ -169,10 +207,7 @@ impl RemoteOps {
             stored_ticket_fingerprint,
             has_remote_key,
             remote_enabled,
-            identity_path: key::identity_path()
-                .ok()
-                .flatten()
-                .map(|p| p.display().to_string()),
+            identity_path,
             ..RemoteStatusSnapshot::default()
         };
         if let Some(Live { handle, .. }) = live.full() {

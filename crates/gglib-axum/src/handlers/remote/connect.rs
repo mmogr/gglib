@@ -3,7 +3,8 @@
 use axum::{Json, extract::State};
 use gglib_app_services::GuiError;
 
-use super::wire::{RemoteConnectBody, RemoteConnectResponse, RemoteKillBody, RemoteStatus};
+use super::status::RemoteStatus;
+use super::wire::{RemoteConnectBody, RemoteConnectResponse, RemoteKillBody};
 use crate::{error::HttpError, state::AppState};
 
 /// `POST /api/remote/connect` — bind a loopback port here that is the far

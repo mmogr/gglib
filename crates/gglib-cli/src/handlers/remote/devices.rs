@@ -141,9 +141,15 @@ fn ago(at_ms: i64) -> String {
         .and_then(|d| i64::try_from(d.as_millis()).ok())
         .unwrap_or(0);
     let secs = (now - at_ms) / 1000;
-    if secs < 0 {
-        // A clock that moved backwards. "In the future" is a wrong answer a
-        // person can act on; a silent negative is not.
+    // A clock that really did move backwards. "In the future" is a wrong
+    // answer a person can act on; a silent negative is not.
+    //
+    // A minute of slack, which cannot be needed here — this reads a stamp
+    // written by the daemon on this machine — but the GUI renders the same
+    // rows against a browser clock that is not in step with it, and two
+    // surfaces describing one roster by two rules is the bug this whole
+    // column exists to avoid.
+    if secs < -60 {
         return "at an unknown time".to_owned();
     }
     match secs {

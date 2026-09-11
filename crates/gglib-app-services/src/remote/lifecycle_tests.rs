@@ -1,17 +1,22 @@
 //! Tests for [`super::RemoteOps`]'s serve side — what it reports and what
 //! it refuses.
 //!
-//! `enable` is deliberately absent: it starts the proxy, which on this
-//! fixture means binding the real proxy port, and it binds an iroh endpoint
-//! on top. Everything it sits on is here, and the two-machine run in ADR
-//! 0012 is what covers the rest.
+//! `enable` is absent from this file's own fixture: on it, `enable` starts
+//! the proxy, which means binding the real proxy port, and it binds an iroh
+//! endpoint on top. Everything it sits on is here, and the two-machine run
+//! in ADR 0012 is what covers the rest. The one test that needs the tunnel
+//! up borrows `serve_watch_tests`'s fixture instead: a real proxy on a free
+//! port, an endpoint that never reaches the network, and the lock every test
+//! that mints a real key takes.
 
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
+use gglib_core::{Device, SettingsUpdate};
 
 use super::pairing::PAIRING_TTL;
-use super::types::EnableRequest;
+use super::serve_watch_tests::{offline, ops_with_key};
+use super::types::{EnableRequest, Enabled};
 use crate::error::GuiError;
 use crate::test_support_remote::{FINGERPRINT_A, KEY_A, TICKET_A, paired_with, test_remote_ops};
 
@@ -36,6 +41,7 @@ async fn a_daemon_that_has_done_nothing_remote_reports_every_side_as_off() {
     assert_eq!(status.tunnelled_requests, 0);
     assert_eq!(status.last_tunnelled_ms, None);
     assert_eq!(status.last_peer, None);
+    assert!(status.devices.is_empty());
 }
 
 /// What settings remember of an earlier pairing reaches the status surface
@@ -62,6 +68,47 @@ async fn a_stored_pairing_is_reported_as_a_fingerprint_and_never_as_the_ticket_o
     let rendered = format!("{status:?}");
     assert!(!rendered.contains(TICKET_A), "{rendered}");
     assert!(!rendered.contains(KEY_A), "{rendered}");
+}
+
+/// The roster rides the status, and with the tunnel down no row is singled
+/// out as the one that was dropped.
+///
+/// `admitted: None` rather than `Some(false)`: nothing is admitted when
+/// nothing is listening, so a `false` here would read as this one device
+/// having been retired — on a surface a person opens precisely to decide
+/// which one to retire.
+#[tokio::test]
+async fn the_status_carries_the_roster_and_admits_nothing_with_the_tunnel_down() {
+    let (core, ops, _) = test_remote_ops().await;
+    core.settings()
+        .update(SettingsUpdate {
+            remote_devices: Some(Some(vec![Device {
+                id: "dev-0a1b2c3d".to_owned(),
+                label: Some("Matt's phone".to_owned()),
+                joined_at: 1_757_000_000_000,
+                redeemed_at: Some(1_757_000_060_000),
+                last_seen: None,
+            }])),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("a roster with one device is stored");
+
+    let status = ops.status().await;
+
+    assert!(!status.enabled, "the tunnel is down in this test");
+    let [device] = status.devices.as_slice() else {
+        panic!(
+            "one row, from the record status already reads: {:?}",
+            status.devices
+        );
+    };
+    assert_eq!(device.id, "dev-0a1b2c3d");
+    assert_eq!(device.label.as_deref(), Some("Matt's phone"));
+    assert_eq!(
+        device.admitted, None,
+        "nothing admits with the tunnel down, and `false` would read as a retirement"
+    );
 }
 
 /// A stored ticket that no longer parses is reported as no ticket rather
@@ -188,4 +235,37 @@ async fn a_second_enable_while_one_is_arming_says_a_ticket_is_on_its_way() {
         panic!("an arming already under way is a conflict: {err:?}");
     };
     assert!(message.contains("already being enabled"), "{message}");
+}
+
+/// With the tunnel up, the status says the edge is admitting a row it holds,
+/// rather than the tunnel-down `None` above.
+///
+/// This is what backs `admitted` agreeing with `enabled`: every other status
+/// test here has the tunnel down, and the axum tests build the snapshot by
+/// hand, so a roster wired in with no edge at all would pass them all.
+#[tokio::test]
+async fn the_status_admits_the_row_the_live_edge_holds() {
+    let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
+    ops.enable(offline()).await.expect("the first enable arms");
+    let invited = ops.invite().await;
+    let status = ops.status().await;
+
+    // Clean up before judging: the invite minted a real key.
+    if let Ok(Enabled {
+        pairing: Some(p), ..
+    }) = &invited
+    {
+        let _ = ops.forget(&p.device).await;
+    }
+    let stopped = ops.disable().await;
+
+    let device = invited.expect("invite").pairing.expect("a code").device;
+    let admitted = status
+        .devices
+        .iter()
+        .find(|d| d.id == device)
+        .map(|d| d.admitted);
+    assert!(status.enabled, "the tunnel is up");
+    assert_eq!(admitted, Some(Some(true)), "{:?}", status.devices);
+    stopped.expect("disable");
 }

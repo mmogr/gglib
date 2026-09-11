@@ -21,17 +21,28 @@ import type { RemoteEvent } from './transport/types/events';
 let unsubscribe: Unsubscribe | null = null;
 let eventVersion = 0;
 
-/** Re-read the status; ignored if an event arrived while it was in flight. */
-function refresh(): void {
+/** What became of one status re-read. */
+type Reread = 'applied' | 'superseded' | 'failed';
+
+/**
+ * Re-read the status; ignored if an event arrived while it was in flight.
+ *
+ * `superseded` is not a failure: the read worked, and an event overtook it,
+ * so its answer is dropped in favour of the re-read that event starts. Never
+ * rejects, so an ignored result cannot become an unhandled one.
+ */
+function refresh(): Promise<Reread> {
   const versionBeforeFetch = eventVersion;
-  getTransport()
+  return getTransport()
     .getRemoteStatus()
-    .then((status) => {
-      if (eventVersion !== versionBeforeFetch) return;
+    .then((status): Reread => {
+      if (eventVersion !== versionBeforeFetch) return 'superseded';
       applyRemoteStatus(status);
+      return 'applied';
     })
-    .catch(() => {
+    .catch((): Reread => {
       // Non-fatal: the next event, or the next open of the panel, tries again.
+      return 'failed';
     });
 }
 
@@ -48,16 +59,26 @@ export function initRemoteEvents(): void {
   unsubscribe = subscribeSseEvent('remote', (evt: RemoteEvent) => {
     eventVersion++;
     ingestRemoteEvent(evt);
-    refresh();
+    void refresh();
   });
 
   // 2. Hydration fetch — seed initial state from the daemon
-  refresh();
+  void refresh();
 }
 
-/** Ask the daemon again, for a panel that just opened. */
-export function refreshRemoteStatus(): void {
-  refresh();
+/**
+ * Ask the daemon again, for a panel that just opened or that just wrote.
+ *
+ * Resolves `true` once a read at least as new as the call has been applied,
+ * and `false` when the read failed — or was overtaken twice running, which
+ * says the state is still moving. A read an event overtook is retried once
+ * rather than reported: the read itself worked, and one started now is at
+ * least as new as both. So a caller that has just *changed* something can
+ * wait for the state to catch up, and can tell whether it did.
+ */
+export async function refreshRemoteStatus(): Promise<boolean> {
+  const first = await refresh();
+  return (first === 'superseded' ? await refresh() : first) === 'applied';
 }
 
 /**

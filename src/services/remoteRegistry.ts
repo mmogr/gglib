@@ -123,7 +123,12 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           ...status,
           enabled: true,
           ticket_fingerprint: evt.ticketFingerprint,
-          pairing_active: true,
+          // Not `pairing_active: true`. The event carries only a fingerprint
+          // and says nothing about a code, and an `enable` that was not asked
+          // to invite offers none — which is the ordinary case for bringing a
+          // paired machine back. Claiming one is live here would disable the
+          // Invite button until the status re-read that follows every event
+          // landed, and leave it disabled for good if that read failed.
           paired: false,
         },
       });
