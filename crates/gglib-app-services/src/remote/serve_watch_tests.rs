@@ -52,7 +52,12 @@ static ARMING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// something about the key. What they are about is the proxy.
 ///
 /// The fifth element is [`ARMING`]'s guard. Bind it — `let (.., _arming) =`
-/// — and leave it alone; dropping it early puts the test back in the race.
+/// — and leave it alone: dropping it early puts the test back in the race,
+/// and calling this twice in one test deadlocks on the second call.
+///
+/// The lock is taken *after* the fixture's own setup, which touches neither
+/// shared file, so the serialised span is the arming and not the database
+/// build in front of it.
 pub(super) async fn ops_with_key() -> (
     Arc<AppCore>,
     Arc<ProxyOps>,
@@ -60,7 +65,6 @@ pub(super) async fn ops_with_key() -> (
     RemoteOps,
     tokio::sync::MutexGuard<'static, ()>,
 ) {
-    let arming = ARMING.lock().await;
     let (core, proxy, events, ops) = ops().await;
     core.settings()
         .update(SettingsUpdate {
@@ -69,11 +73,11 @@ pub(super) async fn ops_with_key() -> (
         })
         .await
         .expect("settings update");
-    (core, proxy, events, ops, arming)
+    (core, proxy, events, ops, ARMING.lock().await)
 }
 
 /// [`ARMING`] for the one test here that builds its ops the other way.
-pub(super) async fn arming() -> tokio::sync::MutexGuard<'static, ()> {
+async fn arming() -> tokio::sync::MutexGuard<'static, ()> {
     ARMING.lock().await
 }
 

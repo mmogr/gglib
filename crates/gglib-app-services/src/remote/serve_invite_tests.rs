@@ -84,9 +84,14 @@ async fn a_plain_enable_brings_the_tunnel_up_and_offers_nothing() {
 /// debug build resolves to the repository checkout — the same file a
 /// developer's own daemon seeds its listener from. A test that left rows
 /// behind would arm that machine's tunnel with ids nobody issued, growing by
-/// one on every run. Forgetting them here is also the only coverage
-/// `RemoteOps::forget` has of its real path: the edge, the key file and the
-/// roster, all three.
+/// one on every run. Forgetting it here also exercises `RemoteOps::forget`
+/// on its real path: the edge, the key file and the roster, all three.
+///
+/// **Everything fallible is asserted after the cleanup**, for that reason:
+/// an assertion that fires between the mint and the forget takes the rest
+/// of the test with it and leaves a live key in the checkout — the precise
+/// outcome the cleanup exists to prevent, reached by the test failing,
+/// which is the one moment it is least likely to be noticed.
 #[tokio::test]
 async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
     let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
@@ -98,6 +103,23 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
     let enabled = ops.enable(request).await.expect("enable");
     let offered = enabled.pairing.expect("an invite was asked for");
 
+    // Gather.
+    let active = ops.status().await.pairing_active;
+    // A second invite on the tunnel that is already up, which is what
+    // `enable --invite` has to do rather than answer "already enabled".
+    let again = ops
+        .enable(EnableRequest {
+            invite: true,
+            ..offline()
+        })
+        .await;
+
+    // Clean up.
+    let held = ops.forget(&offered.device).await.expect("forget");
+    let twice = ops.forget(&offered.device).await.expect("forget");
+    ops.disable().await.expect("disable");
+
+    // Judge.
     assert_eq!(
         offered.code.len(),
         6,
@@ -112,31 +134,16 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
         "and names the device the key was minted for: {}",
         offered.device
     );
-    assert!(ops.status().await.pairing_active, "and it is redeemable");
-
-    // A second invite on the tunnel that is already up, which is what
-    // `enable --invite` has to do rather than answer "already enabled".
-    let again = ops
-        .enable(EnableRequest {
-            invite: true,
-            ..offline()
-        })
-        .await;
+    assert!(active, "and it is redeemable");
     assert!(
         matches!(&again, Err(GuiError::Conflict(m)) if m.contains("already open")),
         "an invite while one is open is refused for that reason, not for being enabled: {again:?}"
     );
-
+    assert!(held, "the device this minted was held");
     assert!(
-        ops.forget(&offered.device).await.expect("forget"),
-        "the device this minted was held"
-    );
-    assert!(
-        !ops.forget(&offered.device).await.expect("forget"),
+        !twice,
         "and forgetting it twice is false rather than an error"
     );
-
-    ops.disable().await.expect("disable");
 }
 
 /// The row a device redeemed is stamped, which is what tells it from an
