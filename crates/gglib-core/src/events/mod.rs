@@ -189,7 +189,8 @@ pub enum AppEvent {
         ticket_fingerprint: String,
     },
 
-    /// The remote tunnel was taken down; its ticket is dead.
+    /// The remote tunnel was taken down; nothing answers its ticket until
+    /// `enable` puts the same one back.
     RemoteDisabled,
 
     /// A device redeemed the pairing code and now holds the key.

@@ -24,7 +24,7 @@ use gglib_runtime::proxy::ProxyStatus;
 
 use super::backend::Backend;
 use super::key;
-use super::pairing::PAIRING_TTL;
+use super::pairing::{MAX_ATTEMPTS_AT_EDGE, Offer, PAIRING_TTL};
 use super::rotation::rotation_poll;
 use super::slot::Busy;
 use super::types::{EnableRequest, Enabled};
@@ -37,12 +37,10 @@ impl RemoteOps {
     /// Starts the proxy if it is not running; settles the key the tunnel
     /// enforces (minting and persisting one when nothing enforces anything
     /// yet — which puts a bearer requirement on the local proxy too, see
-    /// ADR 0012); binds a fresh identity; grants the pairing code once at the
-    /// tunnel edge; and starts watching settings for a rotation.
-    ///
-    /// The serve slot is reserved rather than held: everything slow happens
-    /// with the lock released, so `status` answers throughout and `disable`
-    /// can give up on an arming that is taking too long.
+    /// ADR 0012); binds the stored identity; grants the pairing code at the
+    /// edge, bounded so wrong bearers burn it; and watches for a rotation.
+    /// The slot is reserved rather than held, so everything slow happens with
+    /// the lock released and `status` answers throughout.
     ///
     /// # Errors
     ///
@@ -50,6 +48,20 @@ impl RemoteOps {
     /// while this was arming; whatever starting the proxy returns;
     /// `Internal` when settings cannot be written or the tunnel cannot bind.
     pub async fn enable(&self, request: EnableRequest) -> Result<Enabled, GuiError> {
+        // `Offer::Code` always arms one; the `Option` exists so that
+        // `Offer::Silent` cannot, not because this branch is reachable.
+        self.turn_on(request, Offer::Code).await?.ok_or_else(|| {
+            GuiError::Internal("the tunnel came up without the pairing code it armed".to_owned())
+        })
+    }
+
+    /// Bringing the tunnel up, with `offer` the one thing `enable` and
+    /// `resume_arm` differ in — so the rest cannot drift apart.
+    pub(super) async fn turn_on(
+        &self,
+        request: EnableRequest,
+        offer: Offer,
+    ) -> Result<Option<Enabled>, GuiError> {
         if let Some(busy) = self.live.lock().await.busy() {
             return Err(busy_serving(&busy));
         }
@@ -82,7 +94,7 @@ impl RemoteOps {
         self.remember_enabled(&request).await?;
 
         let armed = self
-            .arm(request, &addr, generation, &cancel, proxy_exit)
+            .arm(request, &addr, generation, &cancel, proxy_exit, offer)
             .await;
         if armed.is_err() {
             self.live.lock().await.release(generation);
@@ -103,7 +115,8 @@ impl RemoteOps {
         generation: u64,
         cancel: &CancellationToken,
         proxy_exit: watch::Receiver<ProxyStatus>,
-    ) -> Result<Enabled, GuiError> {
+        offer: Offer,
+    ) -> Result<Option<Enabled>, GuiError> {
         let settled = key::settle(&self.proxy, &self.core).await?;
 
         let backend = Backend::at(*addr);
@@ -133,10 +146,15 @@ impl RemoteOps {
         // this function.
         settled.commit(&self.core, cancel).await?;
 
-        let code = access::generate_pairing_code();
-        handle
-            .grant_once(code.clone(), PAIRING_TTL)
-            .map_err(|e| GuiError::Internal(format!("could not arm the pairing code: {e}")))?;
+        // Bounded, not bare: the ticket lasts now (ADR 0012 d.4, reversed), so
+        // anyone holding it can wait for a window and guess — as wrong
+        // *bearers*, which `Pairing::attempts` never sees but the edge does.
+        let code = matches!(offer, Offer::Code).then(access::generate_pairing_code);
+        if let Some(code) = code.clone() {
+            handle
+                .grant_once_bounded(code, PAIRING_TTL, MAX_ATTEMPTS_AT_EDGE)
+                .map_err(|e| GuiError::Internal(format!("could not arm the pairing code: {e}")))?;
+        }
 
         // The slot is claimed and the gateway armed under **one** hold of
         // the lock. Claiming first is not enough: dropping the guard wakes
@@ -208,12 +226,12 @@ impl RemoteOps {
         self.emitter.emit(AppEvent::remote_enabled(fingerprint));
 
         let ticket = ticket.to_string();
-        Ok(Enabled {
+        Ok(code.map(|code| Enabled {
             pairing: format!("{ticket}-{code}"),
             ticket,
             code,
             expires_in_s: PAIRING_TTL.as_secs(),
-        })
+        }))
     }
 }
 

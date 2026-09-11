@@ -1,11 +1,12 @@
 //! The pairing code: one code, one redemption, two minutes.
 //!
 //! Pure state behind a `std` mutex, never held across an await. The tunnel
-//! edge admits one request bearing the code (modelpipe's `grant_once`);
-//! this is the other half — the proxy's pairing route asks here whether
-//! that request's code is the one this session minted, and takes the key
-//! it stands for.
+//! edge admits one request bearing the code (modelpipe's
+//! `grant_once_bounded`); this is the other half — the proxy's pairing
+//! route asks here whether that request's code is the one this session
+//! minted, and takes the key it stands for.
 
+use std::num::NonZeroU8;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -15,12 +16,41 @@ use gglib_core::ports::PairingOutcome;
 /// How long a code lives unused.
 pub(crate) const PAIRING_TTL: Duration = Duration::from_secs(120);
 
-/// How many wrong codes burn the pairing.
+/// How many wrong codes burn the pairing, at each door that counts them.
 ///
-/// Three is enough to forgive a mistyped digit and too few to guess with:
-/// twenty bits of code, three tries, two minutes, and the ticket required
-/// to reach the route at all. ADR 0012 has the arithmetic.
+/// Three is enough to forgive a mistyped digit and too few to guess with.
+/// Two counters enforce it and neither sees the other's attempts. This one
+/// counts redemptions that reach the proxy, which a local process can spend
+/// without holding a ticket — so the ticket is not part of the arithmetic
+/// here, as ADR 0012's 2026-09-07 correction records. The tunnel edge counts
+/// the wrong bearers that never reach the proxy at all, taking the same
+/// bound as [`MAX_ATTEMPTS_AT_EDGE`].
 pub(crate) const MAX_ATTEMPTS: u8 = 3;
+
+/// [`MAX_ATTEMPTS`] in the shape modelpipe's edge takes it.
+///
+/// Converted once rather than written twice: two literals that could drift
+/// apart would be two different promises about the same code.
+pub(crate) const MAX_ATTEMPTS_AT_EDGE: NonZeroU8 = match NonZeroU8::new(MAX_ATTEMPTS) {
+    Some(bound) => bound,
+    None => panic!("MAX_ATTEMPTS is not zero"),
+};
+
+/// Whether an arming offers a pairing code at all.
+///
+/// A person running `gglib remote enable` is watching for one. A daemon
+/// putting the tunnel back at startup is not, and a code nobody is watching
+/// for is a live grant nobody spends — for the two minutes it takes to
+/// expire, on a route outside the proxy's bearer group, at every boot. The
+/// distinction is a type rather than a `bool` so that the silent path cannot
+/// be reached by forgetting an argument.
+#[derive(Clone, Copy)]
+pub(crate) enum Offer {
+    /// Mint a code and grant it once at the edge.
+    Code,
+    /// Arm the tunnel and nothing else.
+    Silent,
+}
 
 struct Pending {
     code: String,

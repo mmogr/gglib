@@ -21,8 +21,8 @@ gglib q --remote -m <a name from that list> "What does this error mean?"
 
 That is the whole first pairing. Afterwards the laptop remembers both the
 ticket and the key it received, so the next session is
-`gglib remote connect` with nothing after it, as long as the desktop has not
-run `enable` again since.
+`gglib remote connect` with nothing after it — and it stays that way across
+restarts on both machines, because the desktop keeps its endpoint key.
 
 ## The two sides
 
@@ -277,10 +277,14 @@ refusal is the same flat refusal; a guesser learns nothing.
 > with three POSTs. [ADR 0012](adr/0012-the-remote-tunnel.md), decision 3, has
 > the arithmetic.
 
-**A fresh identity every session.** `enable` mints a new ticket each time and
-never writes it to disk. Revocation is `gglib remote disable`: the old ticket
-reaches nobody afterwards. A laptop that paired before has to be handed the
-new ticket, which is the cost of the property.
+**One identity, kept.** `enable` reuses this machine's stored endpoint key, so
+the ticket is the same ticket every time and a device pairs once rather than
+every session. `gglib remote disable` stops answering — the ticket reaches
+nobody while the tunnel is down — but it does not revoke anything: `enable`
+brings the same address back. Revoking is deleting the endpoint key, which
+`gglib remote status` prints the path to, and it re-pairs every device at
+once. What a lasting name costs in return is under
+[How it stays private](#how-it-stays-private) below.
 
 **Enabling puts the key on the local proxy too.** The tunnel and the proxy
 are one listener, so enabling remote access makes the desktop's own loopback
@@ -394,7 +398,7 @@ which is the ordinary OpenAI-compatible arrangement.
 
 | You see | It means |
 |---------|----------|
-| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has run `enable` again since (a new ticket). `connect` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. Ask for the new pairing. |
+| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has had its endpoint key deleted since. `connect` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port stays bound and reconnects when it wakes. |
 | `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote connect` again with the same string. |
 | `Connected: … — away 3m` in `gglib remote status` | The desktop has not answered for that long. The port here is still bound and still dialling; nothing to do but wait for the desktop, or wake it. |
 | `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |
