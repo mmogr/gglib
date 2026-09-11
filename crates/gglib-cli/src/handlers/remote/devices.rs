@@ -23,7 +23,7 @@ pub(crate) async fn list(ctx: &CliContext) -> Result<()> {
     style::print_info_banner("Devices", "\u{1f4f1}");
     if devices.is_empty() {
         eprintln!("  No device has been paired with this machine.");
-        eprintln!("  `gglib remote invite` turns it on and pairs the first one.");
+        eprintln!("  `gglib remote enable --invite` turns it on and pairs the first one.");
         style::print_banner_close();
         return Ok(());
     }

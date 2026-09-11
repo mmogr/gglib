@@ -68,7 +68,7 @@ export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onExpired, onCop
       <Label size="xs" muted>On the other machine</Label>
       <div className="flex gap-sm items-center">
         <code className="flex-1 bg-surface-elevated p-sm rounded-base text-xs font-mono break-all">
-          gglib remote connect {reveal.pairing}
+          gglib remote join {reveal.pairing}
         </code>
         <Button
           variant="ghost"

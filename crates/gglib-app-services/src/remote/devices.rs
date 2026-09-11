@@ -56,7 +56,7 @@ impl RemoteOps {
         let Some(enabled) = self.invite_if_up().await? else {
             return Err(GuiError::Conflict(
                 "remote access is not enabled — run `gglib remote enable` first, or \
-                 `gglib remote invite` to do both"
+                 `gglib remote enable --invite` to do both"
                     .to_owned(),
             ));
         };

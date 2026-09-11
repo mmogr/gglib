@@ -29,17 +29,28 @@ pub(crate) struct ConnectArgs {
     pub under_old_name: bool,
 }
 
+/// What `connect` prints to say what it is called now.
+///
+/// A constant so a test can pin it, because this is the one string whose
+/// entire job is to name **both** commands — and a sweep that renamed
+/// `connect` to `join` everywhere reduced it to "`gglib remote join` is
+/// `gglib remote join` now" without a single gate noticing. A message that
+/// exists to explain a rename is exactly the message a rename breaks.
+const RENAME_NOTICE: [&str; 3] = [
+    "  note: `gglib remote connect` is `gglib remote join` now.",
+    "        The old name still works this release and does the same thing;",
+    "        nothing about a pairing you already have changes.",
+];
+
 /// Execute `gglib remote join`.
 pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
 
     if args.under_old_name {
-        eprintln!("  note: `gglib remote join` is `gglib remote join` now.");
-        eprintln!(
-            "        The old name still works this release and does the same thing; \
-             nothing about a pairing you already have changes."
-        );
+        for line in RENAME_NOTICE {
+            eprintln!("{line}");
+        }
     }
     let first_pairing = args
         .pairing
@@ -181,3 +192,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "connect_tests.rs"]
+mod connect_tests;
