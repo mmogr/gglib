@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 mod bearer;
+mod device_keys;
 mod host;
 
 #[cfg(test)]
@@ -8,6 +9,7 @@ mod access_tests;
 mod host_tests;
 
 pub use bearer::{BearerPolicy, bearer_matches};
+pub use device_keys::{DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys};
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 
 use std::sync::Arc;

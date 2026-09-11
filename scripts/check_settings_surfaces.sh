@@ -77,6 +77,7 @@ declare -A EXEMPT=(
   [remote_pairing]="the ticket and key \`gglib remote connect\` receives when a pairing code is redeemed, not chosen"
   [remote_enabled]="the switch \`gglib remote enable\`/\`disable\` set; a settings field that could claim a machine is reachable with nothing bound would be a lie"
   [remote_serve]="the flags \`gglib remote enable\` was given, recorded so a restart arms the tunnel the same way, not configured"
+  [remote_devices]="the devices \`gglib remote invite\` issued a key to and \`forget\` retires; the keys themselves are not in settings at all"
 )
 
 echo "=== Checking every Settings field has a surface ==="
