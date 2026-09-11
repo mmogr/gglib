@@ -364,6 +364,21 @@ bindings-check: bindings ## Fail if the committed bindings are stale
 		echo "  Usually a type that was renamed or deleted in Rust. Commit or remove them."; \
 		exit 1; \
 	 fi
+	@# The other place ts-rs writes: `<crate>/bindings` is its default, taken
+	@# whenever TS_RS_EXPORT_DIR does not reach cargo — which a scoped
+	@# `cargo test export_bindings_` run does not carry. The gate above looks
+	@# only at $(BINDINGS_DIR), so a second copy of every generated type was
+	@# once committed beside the crates without anything noticing. .gitignore
+	@# stops them being tracked; this stops them being written and left.
+	@strays=$$(find crates -type d -name bindings -not -path '*/node_modules/*' 2>/dev/null); \
+	 if [ -n "$$strays" ]; then \
+		echo "$$strays"; \
+		echo ""; \
+		echo "✗ ts-rs wrote to its default directory instead of $(BINDINGS_DIR)."; \
+		echo "  TS_RS_EXPORT_DIR did not reach cargo. Remove these and re-run"; \
+		echo "  'make bindings', which exports through the staging directory."; \
+		exit 1; \
+	 fi
 	@echo "✓ bindings match the Rust they are generated from"
 
 ##@ Cleaning
