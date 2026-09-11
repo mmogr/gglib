@@ -4,7 +4,7 @@ use std::io::IsTerminal as _;
 
 use anyhow::Result;
 
-use super::enable::print_notice;
+use super::enable::{Arming, print_notice};
 use super::pairing_tui::{self, Outcome};
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, RemoteEnableDto};
@@ -27,7 +27,7 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
 
     if no_qr || !std::io::stdout().is_terminal() {
         print_plain(&offered);
-        print_notice(offered.mcp_allowed);
+        print_notice(offered.mcp_allowed, Arming::Invite);
         return Ok(());
     }
 
@@ -56,7 +56,7 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
             eprintln!("  Left the pairing screen. The tunnel is still up; nothing was retired.");
         }
     }
-    print_notice(offered.mcp_allowed);
+    print_notice(offered.mcp_allowed, Arming::Invite);
     Ok(())
 }
 

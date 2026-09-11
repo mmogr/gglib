@@ -61,13 +61,13 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     // screen at every enable.
     if enabled.code.is_none() {
         print_up(&enabled);
-        print_notice(enabled.mcp_allowed);
+        print_notice(enabled.mcp_allowed, Arming::Enable);
         return Ok(());
     }
 
     if args.no_qr || !std::io::stdout().is_terminal() {
         print_plain(&enabled);
-        print_notice(enabled.mcp_allowed);
+        print_notice(enabled.mcp_allowed, Arming::Enable);
         return Ok(());
     }
 
@@ -98,7 +98,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             );
         }
     }
-    print_notice(enabled.mcp_allowed);
+    print_notice(enabled.mcp_allowed, Arming::Enable);
     Ok(())
 }
 
@@ -135,20 +135,57 @@ fn print_up(enabled: &RemoteEnableDto) {
 /// session, whose `/mcp` grant is whatever the `enable` that armed it set —
 /// so echoing the flag back would tell an operator that `--allow-mcp` took
 /// when it did not, or that `/mcp` is closed when it is open.
-pub(super) fn print_notice(allow_mcp: bool) {
+///
+/// `Arming::Enable` says the switch was just thrown; `Arming::Invite` says it
+/// was already on and only a device was added. The difference is not
+/// decoration: "the local proxy *now* requires the API key" and "pass
+/// `--allow-mcp`" are both true of `enable` and both false of `invite`, which
+/// changed no flag and has no such flag to pass.
+pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!();
-    eprintln!(
-        "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key too \u{2014} \
-         gglib's own clients read it from settings; a hand-configured client needs it added once."
-    );
-    eprintln!(
-        "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock you out \
-         of `gglib` or the app."
-    );
-    if allow_mcp {
-        eprintln!("  /mcp is reachable through the tunnel (--allow-mcp).");
-    } else {
-        eprintln!("  /mcp is not reachable through the tunnel; pass --allow-mcp to change that.");
+    match arming {
+        Arming::Enable => {
+            eprintln!(
+                "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key \
+                 too \u{2014} gglib's own clients read it from settings; a hand-configured client \
+                 needs it added once."
+            );
+            eprintln!(
+                "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock \
+                 you out of `gglib` or the app."
+            );
+        }
+        Arming::Invite => {
+            eprintln!(
+                "  Remote access was already on and still is; this added a device and changed \
+                 nothing else about the session."
+            );
+        }
+    }
+    match (allow_mcp, arming) {
+        (true, _) => eprintln!("  /mcp is reachable through the tunnel."),
+        (false, Arming::Enable) => {
+            eprintln!(
+                "  /mcp is not reachable through the tunnel; pass --allow-mcp to change that."
+            );
+        }
+        // `invite` has no such flag: the grant belongs to the session `enable`
+        // armed, and changing it means `disable` and `enable` again.
+        (false, Arming::Invite) => {
+            eprintln!(
+                "  /mcp is not reachable through the tunnel; that is the session's setting, \
+                 changed by `disable` and `enable --allow-mcp`."
+            );
+        }
     }
     eprintln!("  Stop broadcasting:  gglib remote disable");
+}
+
+/// Which command is printing the closing notice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Arming {
+    /// `enable`: the switch was just thrown.
+    Enable,
+    /// `invite`: it was already on, and a device was added to it.
+    Invite,
 }
