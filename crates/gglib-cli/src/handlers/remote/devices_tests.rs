@@ -102,3 +102,37 @@ fn a_row_is_not_called_unadmitted_merely_because_the_tunnel_is_down() {
 fn a_timestamp_ahead_of_the_clock_is_not_rendered_as_a_duration() {
     assert_eq!(ago(now() + 600_000), "at an unknown time");
 }
+
+/// An id that is not one is refused here rather than sent.
+///
+/// This is not tidiness. The id is interpolated into a request path, and an
+/// HTTP client resolves `..` the way a browser does — so `../../models/7`
+/// would not fail, it would `DELETE` a *model*. Every id this machine mints
+/// is `dev-` and eight hex digits; everything below is something only a
+/// person's shell produces.
+#[test]
+fn an_id_that_could_leave_the_devices_route_is_not_a_device_id() {
+    for escape in [
+        "../../models/7",
+        "..",
+        "dev-0a1b2c3d/../../mcp/servers/3",
+        "dev 0a1b2c3d",
+        "dev-0a1b2c3d?force=1",
+        "dev-0a1b2c3d#x",
+        "",
+    ] {
+        assert!(
+            !is_device_id(escape),
+            "this reaches a route nobody named: {escape:?}"
+        );
+    }
+}
+
+/// And the ones that are, are — including the punctuation modelpipe allows
+/// in a token name, so a future id shape is not refused by this check.
+#[test]
+fn the_ids_this_machine_mints_are_device_ids() {
+    for ok in ["dev-0a1b2c3d", "dev-00000000", "a", "A.b_c-9"] {
+        assert!(is_device_id(ok), "{ok:?}");
+    }
+}

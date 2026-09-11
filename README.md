@@ -181,7 +181,7 @@ All interfaces share the same database and model directory.
 | Desktop GUI | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md) |
 | Web UI | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) |
 | Dashboard | `gglib proxy dashboard` | Live terminal view of connections, cache, and requests |
-| Remote access | `gglib remote enable` / `connect` | One machine's models on another, end-to-end encrypted — [docs](docs/remote.md) |
+| Remote access | `gglib remote enable` / `join` | One machine's models on another, end-to-end encrypted — [docs](docs/remote.md) |
 
 `gglib proxy dashboard` streams live proxy state to your terminal:
 

@@ -331,7 +331,8 @@ rather than working around it.
 `gglib remote enable --invite`, which does both in one command for a first
 run. (Until 2026-09-11 a plain `enable` was the only thing that printed one;
 it is a switch now and hands out nothing.) The code lives 120 seconds, is
-spent on first use, and is burned after three wrong attempts. Under it, the desktop calls `ServeHandle::grant_once(code, 120s)`,
+spent on first use, and is burned after three wrong attempts. Under it, the
+desktop calls `ServeHandle::grant_once(code, 120s)`,
 which admits exactly one request bearing that code through the tunnel edge
 without the bearer token.
 

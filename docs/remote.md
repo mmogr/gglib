@@ -82,8 +82,8 @@ recognise is a revocation you should be willing to make, not merely tidying.
 $ gglib remote list
   ID            DEVICE
   dev-4e5f6a7b  Matt's MacBook  (last seen 4m ago)
-  dev-0a1b2c3d  Matt's iPhone   (no requests yet)
-  dev-9c2b77f1  —               (invited 3d ago, never joined)
+  dev-0a1b2c3d  Matt's iPhone  (no requests yet)
+  dev-9c2b77f1  —  (invited 3d ago, never joined)
 
   Retire one:  gglib remote forget <id>
 ```
@@ -207,14 +207,14 @@ with no argument dials the stored ticket.
 **The port stays put.** The first connection binds `8180`; every later one
 tries the port the pairing was last reachable on, so a client you pointed
 at `http://127.0.0.1:8180/v1` once stays pointed at the desktop. Stable, not
-fixed: if something else has taken that port, `connect` binds the next free
+fixed: if something else has taken that port, `join` binds the next free
 one, says so, and remembers *that* one instead. `--port` pins it, and is
 remembered the same way.
 
 **The port stays bound while the desktop is away.** A desktop that reboots,
 sleeps, or changes network does not end the connection here: the port keeps
 answering, with `502 tunnel_unavailable`, and the tunnel keeps dialling — for
-as long as `connect` is up, with a backoff, and with a nudge to rebind its
+as long as the connection is up, with a backoff, and with a nudge to rebind its
 socket every minute in case this laptop changed network while suspended.
 After thirty seconds of that, `gglib remote status` and the popover say
 **away** and for how long, rather than "connected" over nothing; when the
@@ -314,7 +314,7 @@ both the desktop's server and the tunnel up, unlike closing a local chat,
 which stops the server it was talking to.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
-port `connect` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
+port `join` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
 device key as its API key. The port does not add the key for you — that is
 deliberate; see [Why the port does not inject the key](#why-the-port-does-not-inject-the-key).
 The key is the one this laptop was given when it paired — its own device
@@ -518,7 +518,7 @@ here is one the desktop can retire on its own.
 
 | You see | It means |
 |---------|----------|
-| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has had its endpoint key deleted since. `connect` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port stays bound and reconnects when it wakes. |
+| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has had its endpoint key deleted since. `join` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port stays bound and reconnects when it wakes. |
 | `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote join` again with the same string. |
 | `Connected: … — away 3m` in `gglib remote status` | The desktop has not answered for that long. The port here is still bound and still dialling; nothing to do but wait for the desktop, or wake it. |
 | `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |

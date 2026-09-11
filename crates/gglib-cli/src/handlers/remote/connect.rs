@@ -125,8 +125,6 @@ pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
     Ok(())
 }
 
-/// Execute `gglib remote kill`.
-///
 /// The connect side's lines of `gglib remote status`.
 pub(super) fn print_connection(status: &RemoteStatusDto) {
     match &status.connected {

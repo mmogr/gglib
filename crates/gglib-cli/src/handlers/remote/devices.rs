@@ -41,6 +41,19 @@ pub(crate) async fn list(ctx: &CliContext) -> Result<()> {
 
 /// Execute `gglib remote forget`.
 pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
+    // Checked here because this is the only place the id is not already a
+    // device id: everywhere else it came from the roster, and here it came
+    // from a person's shell. It is interpolated into a request path, and
+    // reqwest resolves dot-segments the way a browser does, so an id with a
+    // `..` in it does not fail — it reaches a *different route*. Saying "not
+    // a device id" is both the safe answer and the useful one, since the
+    // alternative is a 405 from somewhere the person never named.
+    if !is_device_id(device) {
+        eprintln!("  {device} is not a device id.");
+        eprintln!("  Ids look like dev-0a1b2c3d; `gglib remote list` shows this machine's.");
+        return Ok(());
+    }
+
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
     let answer = handle.remote_forget(device).await?;
@@ -82,6 +95,24 @@ fn describe(d: &RemoteDeviceDto) -> String {
         // special for it.
         None => format!("{name}  ({seen}; tunnel down)"),
     }
+}
+
+/// The shape every id this machine mints has, and the widest shape the edge
+/// will hold a token under.
+///
+/// Deliberately a shape test rather than a roster lookup: an id that is not
+/// one cannot be held, so there is nothing to ask the daemon, and refusing
+/// it here means the roster's own answer ("this machine holds no device
+/// called …") keeps its one meaning.
+fn is_device_id(device: &str) -> bool {
+    device.len() <= 64
+        && device
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+        // At least one letter or digit, which is what rules out `.` and
+        // `..` — both of which pass the charset above, and both of which
+        // are the whole of the problem. It also covers the empty string.
+        && device.bytes().any(|b| b.is_ascii_alphanumeric())
 }
 
 /// A coarse "how long ago", for a column a person scans rather than measures.

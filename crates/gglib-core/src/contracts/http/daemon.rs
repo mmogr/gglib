@@ -128,8 +128,13 @@ pub const BENCHMARK_TUNE_APPLY_METHODS: &[&str] = &["POST"];
 /// The id is a path segment rather than a body, because `DELETE` with one is
 /// poorly served by enough of the stack to be worth avoiding, and because
 /// the daemon already names a resource this way at `/api/mcp/servers/{id}`.
-/// A device id is `[A-Za-z0-9._-]` by construction — the edge will hold a
-/// token under nothing else — so there is nothing here to escape.
+/// **Not escaped, and the caller owes the charset.** Every id this crate
+/// mints is `[A-Za-z0-9._-]` and the edge holds tokens under nothing else,
+/// so an id that came from the roster is safe to interpolate. One that came
+/// from a person's shell is not: an HTTP client resolves dot-segments the
+/// way a browser does, so `../../models/7` here is a `DELETE` of a different
+/// route. `gglib remote forget` checks the shape before it calls this; any
+/// new caller taking an id from outside the roster must do the same.
 #[must_use]
 pub fn remote_forget_path(device: &str) -> String {
     format!("{REMOTE_DEVICES_PATH}/{device}")

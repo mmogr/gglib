@@ -56,18 +56,38 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
         })
         .await?;
 
+    // Asked for `/mcp` and told it is closed: the flag did not take, and the
+    // only way that happens is `--invite` finding a tunnel already up. A
+    // plain `enable` against a live one is refused as a conflict and never
+    // reaches here, and an arm that honoured the flag would answer `true` —
+    // so this is that case, exactly, and the session was armed by an earlier
+    // `enable` whose grant this one cannot change.
+    let arming = if args.allow_mcp && !enabled.mcp_allowed {
+        eprintln!(
+            "  note: --allow-mcp did not take. Remote access was already on, and a session's \
+             /mcp grant"
+        );
+        eprintln!(
+            "        belongs to the enable that armed it \u{2014} `gglib remote disable`, then \
+             `enable --allow-mcp`."
+        );
+        Arming::Invite
+    } else {
+        Arming::Enable
+    };
+
     // No code asked for, so there is nothing to show and nothing to wait on.
     // Rendering the absence as a pairing would put an expired-looking one on
     // screen at every enable.
     if enabled.code.is_none() {
         print_up(&enabled);
-        print_notice(enabled.mcp_allowed, Arming::Enable);
+        print_notice(enabled.mcp_allowed, arming);
         return Ok(());
     }
 
     if args.no_qr || !std::io::stdout().is_terminal() {
         print_plain(&enabled);
-        print_notice(enabled.mcp_allowed, Arming::Enable);
+        print_notice(enabled.mcp_allowed, arming);
         return Ok(());
     }
 
@@ -86,8 +106,8 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
         Outcome::Expired => {
             eprintln!();
             eprintln!(
-                "  The pairing code expired and nobody paired. The tunnel is up; the ticket is \
-                 still valid for a device that already holds the key."
+                "  The pairing code expired and nobody paired. The tunnel is up, and every \
+                 device that already holds a key of its own is unaffected."
             );
             eprintln!("  Run `gglib remote invite` again for a fresh code.");
         }
@@ -98,7 +118,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             );
         }
     }
-    print_notice(enabled.mcp_allowed, Arming::Enable);
+    print_notice(enabled.mcp_allowed, arming);
     Ok(())
 }
 
@@ -125,7 +145,7 @@ fn print_plain(enabled: &RemoteEnableDto) {
 fn print_up(enabled: &RemoteEnableDto) {
     eprintln!("  Remote access is on, and stays on across restarts.");
     eprintln!("  Ticket:  {}", enabled.ticket);
-    eprintln!("  No device is being paired. `enable --invite` offers a code.");
+    eprintln!("  No device is being paired. `gglib remote invite` offers a code.");
 }
 
 /// What enabling changed on *this* machine, said every time.
@@ -139,8 +159,13 @@ fn print_up(enabled: &RemoteEnableDto) {
 /// `Arming::Enable` says the switch was just thrown; `Arming::Invite` says it
 /// was already on and only a device was added. The difference is not
 /// decoration: "the local proxy *now* requires the API key" and "pass
-/// `--allow-mcp`" are both true of `enable` and both false of `invite`, which
-/// changed no flag and has no such flag to pass.
+/// `--allow-mcp`" are both true of a switch being thrown and both false when
+/// it was already on — where no flag changed, and recommending `--allow-mcp`
+/// is recommending what the person just did.
+///
+/// So `Arming::Invite` is not only `invite`'s. `enable --invite` against a
+/// tunnel that is already up is answered by that same session, and is the
+/// same event under another name.
 pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!();
     match arming {

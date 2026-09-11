@@ -74,10 +74,10 @@ declare -A EXEMPT=(
   [inference_defaults]="edited through \`gglib config inference\` and the model inspector"
   [inference_profiles]="edited through \`gglib config profile\` and the profile editor"
   [title_generation_prompt]="edited through the chat UI's title settings"
-  [remote_pairing]="the ticket and key \`gglib remote connect\` receives when a pairing code is redeemed, not chosen"
+  [remote_pairing]="the ticket and key \`gglib remote join\` receives when a pairing code is redeemed, not chosen"
   [remote_enabled]="the switch \`gglib remote enable\`/\`disable\` set; a settings field that could claim a machine is reachable with nothing bound would be a lie"
   [remote_serve]="the flags \`gglib remote enable\` was given, recorded so a restart arms the tunnel the same way, not configured"
-  [remote_devices]="the devices \`gglib remote enable --invite\` issued a key to, retired by forgetting one; the keys themselves are not in settings at all"
+  [remote_devices]="the devices \`gglib remote invite\` issued a key to, retired by forgetting one; the keys themselves are not in settings at all"
 )
 
 echo "=== Checking every Settings field has a surface ==="
