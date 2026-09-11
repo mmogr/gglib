@@ -157,9 +157,7 @@ impl RemoteOps {
             .map(|d| DeviceView {
                 // `None` with the tunnel down: nothing admits then, and
                 // saying `false` would read as "this device was dropped".
-                admitted: admitting
-                    .as_ref()
-                    .map(|names| names.iter().any(|name| *name == d.id)),
+                admitted: admitting.as_ref().map(|names| names.contains(&d.id)),
                 id: d.id,
                 label: d.label,
                 joined_at: d.joined_at,
