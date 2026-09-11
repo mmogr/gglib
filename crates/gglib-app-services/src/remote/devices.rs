@@ -45,16 +45,26 @@ impl RemoteOps {
     /// when a store cannot be written or the edge refuses the token or the
     /// grant.
     ///
-    pub async fn invite(&self) -> Result<OfferedPairing, GuiError> {
+    /// Answers with the whole [`Enabled`], not the [`OfferedPairing`] inside
+    /// it, because the ticket is half of what a person is shown: the pairing
+    /// screen draws it and the plain-text form prints it, and
+    /// `OfferedPairing` does not carry one. The session already knows it, so
+    /// handing it back costs nothing and saves every surface from splitting
+    /// the pairing string to recover it.
+    pub async fn invite(&self) -> Result<Enabled, GuiError> {
         let Some(enabled) = self.invite_if_up().await? else {
             return Err(GuiError::Conflict(
-                "remote access is not enabled — `gglib remote enable --invite` does both"
+                "remote access is not enabled — run `gglib remote enable` first, or \
+                 `gglib remote enable --invite` to do both"
                     .to_owned(),
             ));
         };
-        enabled.pairing.ok_or_else(|| {
-            GuiError::Internal("the invite came back without the code it armed".to_owned())
-        })
+        if enabled.pairing.is_none() {
+            return Err(GuiError::Internal(
+                "the invite came back without the code it armed".to_owned(),
+            ));
+        }
+        Ok(enabled)
     }
 
     /// The same, against a tunnel that may or may not be up: `Ok(None)` means
