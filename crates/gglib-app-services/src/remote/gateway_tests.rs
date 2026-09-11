@@ -73,7 +73,12 @@ fn tunnelled_requests_are_counted_and_the_last_peer_remembered() {
 #[test]
 fn resetting_the_session_keeps_the_history() {
     let (_, gateway) = gateway();
-    let epoch = gateway.begin_session("483920".to_owned(), "the-key".to_owned(), PAIRING_TTL, true);
+    let epoch = gateway.begin_session(
+        Some("483920".to_owned()),
+        "the-key".to_owned(),
+        PAIRING_TTL,
+        true,
+    );
     gateway.redeem_pairing_code("483920", None);
     gateway.note_tunnelled_request(None);
 
@@ -91,9 +96,14 @@ fn resetting_the_session_keeps_the_history() {
 #[test]
 fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
     let (_, gateway) = gateway();
-    let first = gateway.begin_session("483920".to_owned(), "the-key".to_owned(), PAIRING_TTL, true);
+    let first = gateway.begin_session(
+        Some("483920".to_owned()),
+        "the-key".to_owned(),
+        PAIRING_TTL,
+        true,
+    );
     let second = gateway.begin_session(
-        "111111".to_owned(),
+        Some("111111".to_owned()),
         "the-next-key".to_owned(),
         PAIRING_TTL,
         true,
@@ -117,7 +127,7 @@ fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
 fn arming_a_session_starts_it_unpaired() {
     let (_, gateway) = gateway();
     gateway.begin_session(
-        "483920".to_owned(),
+        Some("483920".to_owned()),
         "the-key".to_owned(),
         PAIRING_TTL,
         false,
@@ -126,12 +136,43 @@ fn arming_a_session_starts_it_unpaired() {
     assert!(gateway.paired());
 
     gateway.begin_session(
-        "111111".to_owned(),
+        Some("111111".to_owned()),
         "the-next-key".to_owned(),
         PAIRING_TTL,
         false,
     );
     assert!(!gateway.paired());
+}
+
+/// A session begun without a code arms none, and clears whatever the last
+/// one left. This is what a restart does: the daemon puts the tunnel back
+/// because the switch says to, and nobody is watching for a pairing string.
+/// Inheriting the previous session's code would leave one redeemable that
+/// no person ever saw, for two minutes, at every boot.
+#[test]
+fn a_session_begun_without_a_code_arms_none_and_clears_the_last() {
+    let (_, gateway) = gateway();
+    gateway.begin_session(
+        Some("483920".to_owned()),
+        "the-key".to_owned(),
+        PAIRING_TTL,
+        false,
+    );
+    assert!(gateway.pairing.active(), "the armed session has a code");
+
+    gateway.begin_session(None, "the-key".to_owned(), PAIRING_TTL, false);
+
+    assert!(
+        !gateway.pairing.active(),
+        "a session begun without a code has none redeemable"
+    );
+    assert!(
+        matches!(
+            gateway.redeem_pairing_code("483920", None),
+            PairingOutcome::Rejected
+        ),
+        "and the previous session's code is not inherited"
+    );
 }
 
 #[test]
