@@ -47,9 +47,9 @@ OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model open
 
 ## From another machine
 
-When this machine is connected to another with `gglib remote connect`
+When this machine is connected to another with `gglib remote join`
 ([Remote access](remote.md)), the other machine's proxy is at
-`http://127.0.0.1:<port>/v1` here — the port `connect` printed, also shown
+`http://127.0.0.1:<port>/v1` here — the port `join` printed, also shown
 by `gglib remote status`. Every recipe above works against it with two
 changes: that port instead of `8080`, and the *other* machine's API key
 instead of a placeholder. The key is that machine's `proxy_api_key`

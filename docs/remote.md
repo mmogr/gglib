@@ -15,14 +15,19 @@ gglib model list
 #   → the names this machine serves; the laptop needs one of them
 
 # On the laptop, within those two minutes:
-gglib remote connect <ticket>-<code>
+gglib remote join <ticket>-<code>
 gglib q --remote -m <a name from that list> "What does this error mean?"
 ```
 
 That is the whole first pairing. Afterwards the laptop remembers both the
 ticket and the key it received, so the next session is
-`gglib remote connect` with nothing after it — and it stays that way across
+`gglib remote join` with nothing after it — and it stays that way across
 restarts on both machines, because the desktop keeps its endpoint key.
+
+To pair a second device later, `gglib remote invite` on the desktop: it
+offers another code against the tunnel that is already up, so nobody else
+loses their connection. `gglib remote list` shows what is paired and
+`gglib remote forget <id>` retires one of them.
 
 `--invite` is there because `enable` on its own is a switch: it turns this
 machine on and hands nothing out. Every device gets a key of its own, minted
@@ -37,7 +42,7 @@ a switch and a restart puts it back, with the same endpoint key, the same
 ticket and the same paired devices; the connecting side is not, and the
 laptop dials again from the pairing it stored.
 
-### The desktop: `enable`, `status`, `disable`
+### The desktop: `enable`, `invite`, `list`, `forget`, `status`, `disable`
 
 `gglib remote enable` starts the proxy if it is not running and puts the
 tunnel in front of it. On its own it hands out nothing: it prints the ticket
@@ -53,13 +58,43 @@ A restart never invites. The daemon brings the tunnel back up with the flags
 you enabled it with, minus this one: a code nobody is watching for is a live
 grant nobody spends, on a ticket that no longer changes between sessions.
 
+`gglib remote invite` is the same offer without the switch, for every device
+after the first. It needs the tunnel already up and leaves it exactly as it
+was — the flags, the ticket, and every device already using it — so pairing
+a second machine costs nobody else their connection. It takes `--no-qr` and
+nothing else; to change the flags, `disable` and `enable` again.
+
+`gglib remote list` shows what this machine has issued a key to, and
+`gglib remote forget <id>` retires one of them. A row that reads
+**"invited …, never joined"** is a code that was offered and never redeemed:
+the key was minted and never transmitted, so in the ordinary case nobody
+holds it and forgetting it is tidying rather than revocation.
+
+Ordinary, not certain. The marker that says a device redeemed is written by a
+background task and can be lost — to a crash between the redemption and the
+write, and to any row a build older than this one wrote for a device that
+paired and never made a request. Such a row reads as never joined when it was
+not. The list errs this way on purpose, because the other direction would
+call an unspent invite a device; but it means `forget` on a row you do not
+recognise is a revocation you should be willing to make, not merely tidying.
+
+```console
+$ gglib remote list
+  ID            DEVICE
+  dev-4e5f6a7b  Matt's MacBook  (last seen 4m ago)
+  dev-0a1b2c3d  Matt's iPhone  (no requests yet)
+  dev-9c2b77f1  —  (invited 3d ago, never joined)
+
+  Retire one:  gglib remote forget <id>
+```
+
 | Flag | Effect |
 |------|--------|
 | `--allow-mcp` | Let requests arriving through the tunnel reach `/mcp`. Off by default; see [What the other machine can reach](#what-the-other-machine-can-reach). |
 | `--relay URL` | Use a self-hosted iroh relay instead of the public ones. |
 | `--no-discovery` | Do not publish to or resolve through n0's discovery service. The ticket then carries only the paths it was minted with, and stops resolving for good the moment the machine changes network. Advanced. |
 | `--no-qr` | Plain text; no alternate screen. |
-| `--invite` | Also mint a key for one new device and a code that hands it over, so a first run is one command. |
+| `--invite` | Also mint a key for one new device and a code that hands it over, so a first run is one command. Afterwards, `gglib remote invite`. |
 
 ### You pair once
 
@@ -142,9 +177,10 @@ a key is refused by the pairing route before its code is read, so one that
 has been compromised cannot burn the invite you are typing, or trade it for a
 second identity that would outlive the first being retired.
 
-**`enable --invite` works while remote access is already on.** It offers a
-code against the tunnel that is up rather than refusing, so pairing a second
-device costs nobody else their connection. It leaves the flags alone —
+**Pairing a second device never disturbs the first.** `gglib remote invite`
+— and `enable --invite` against a tunnel that is already up, which does the
+same thing — offers a code against the live session rather than refusing. It
+leaves the flags alone —
 changing `--allow-mcp` or `--relay` still means `disable` and `enable` again,
 and the ticket is the same one afterwards.
 
@@ -153,28 +189,32 @@ per-device keys holds the old shared key, and the edge no longer admits it.
 Invite each device once and they are back; nothing else about the machine
 changes, and the ticket is the same ticket.
 
-### The laptop: `connect`, `disconnect`
+### The laptop: `join`, `disconnect`
 
-`gglib remote connect <ticket>-<code>` binds a loopback port that is now the
+`gglib remote join` was called `gglib remote connect`, and still answers to
+it for one release — the old name prints a note saying so and does exactly
+what it did before. Nothing about a pairing you already have changes.
+
+`gglib remote join <ticket>-<code>` binds a loopback port that is now the
 desktop's proxy, waits up to thirty seconds for the desktop to answer, then
 redeems the code through the tunnel for its API key and stores the key and the
 ticket. It prints the port. The waiting is in that position on purpose: the
 port is bound before anything has reached the far machine, and a code redeemed
 down a pipe that reached nobody is spent for nothing. Later,
-`gglib remote connect <ticket>` uses the stored key, and `gglib remote connect`
+`gglib remote join <ticket>` uses the stored key, and `gglib remote join`
 with no argument dials the stored ticket.
 
 **The port stays put.** The first connection binds `8180`; every later one
 tries the port the pairing was last reachable on, so a client you pointed
 at `http://127.0.0.1:8180/v1` once stays pointed at the desktop. Stable, not
-fixed: if something else has taken that port, `connect` binds the next free
+fixed: if something else has taken that port, `join` binds the next free
 one, says so, and remembers *that* one instead. `--port` pins it, and is
 remembered the same way.
 
 **The port stays bound while the desktop is away.** A desktop that reboots,
 sleeps, or changes network does not end the connection here: the port keeps
 answering, with `502 tunnel_unavailable`, and the tunnel keeps dialling — for
-as long as `connect` is up, with a backoff, and with a nudge to rebind its
+as long as the connection is up, with a backoff, and with a nudge to rebind its
 socket every minute in case this laptop changed network while suspended.
 After thirty seconds of that, `gglib remote status` and the popover say
 **away** and for how long, rather than "connected" over nothing; when the
@@ -274,7 +314,7 @@ both the desktop's server and the tunnel up, unlike closing a local chat,
 which stops the server it was talking to.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
-port `connect` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
+port `join` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
 device key as its API key. The port does not add the key for you — that is
 deliberate; see [Why the port does not inject the key](#why-the-port-does-not-inject-the-key).
 The key is the one this laptop was given when it paired — its own device
@@ -324,7 +364,7 @@ credential for the proxy — that one clears itself within a few seconds.
 
 **The key is not something to type in.** There is no
 `gglib config settings set --remote-api-key`, and that is deliberate rather
-than missing: the laptop's copy is written only by `gglib remote connect`,
+than missing: the laptop's copy is written only by `gglib remote join`,
 which redeems a code and stores the key *together with the ticket it came
 from*. A hand-set key could name a machine the stored ticket does not, which
 is exactly the desync — connected, holding the wrong machine's key, every
@@ -478,18 +518,19 @@ here is one the desktop can retire on its own.
 
 | You see | It means |
 |---------|----------|
-| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has had its endpoint key deleted since. `connect` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port stays bound and reconnects when it wakes. |
-| `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote connect` again with the same string. |
+| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has had its endpoint key deleted since. `join` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port stays bound and reconnects when it wakes. |
+| `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote join` again with the same string. |
 | `Connected: … — away 3m` in `gglib remote status` | The desktop has not answered for that long. The port here is still bound and still dialling; nothing to do but wait for the desktop, or wake it. |
 | `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |
-| `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
+| `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote invite` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
 | `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
-| `403 device_not_paired` | The request reached the desktop's proxy without the tunnel naming a device — a pairing code used as an API key, or a forged marker on the desktop itself. Pair properly: `gglib remote enable --invite` there, and redeem the code here. |
+| `403 device_not_paired` | The request reached the desktop's proxy without the tunnel naming a device — a pairing code used as an API key, or a forged marker on the desktop itself. Pair properly: `gglib remote invite` there, and redeem the code here. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
-| `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote enable --invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
+| `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
+| A row in `gglib remote list` reads `invited …, never joined` | A code was offered for that device and nobody redeemed it. The key was minted but never transmitted, so nobody holds it; `gglib remote forget <id>` tidies the row away. Unspent invites are listed rather than swept on a timer, so that what the machine issued is always visible. |
 
 ## Not yet
 

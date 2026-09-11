@@ -41,6 +41,7 @@ pub(crate) mod error;
 pub(crate) mod handlers;
 pub(crate) mod proxy_watch;
 pub(crate) mod routes;
+pub(crate) mod routes_remote;
 pub(crate) mod sse;
 pub(crate) mod state;
 pub(crate) mod ui;

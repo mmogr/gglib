@@ -108,7 +108,7 @@ fn draw(
     writeln!(out, "  On the other machine:\r")?;
     writeln!(out, "\r")?;
     let pairing = enabled.pairing.as_deref().unwrap_or_default();
-    writeln!(out, "    gglib remote connect {pairing}\r")?;
+    writeln!(out, "    gglib remote join {pairing}\r")?;
     writeln!(out, "\r")?;
     writeln!(out, "  ticket  {}\r", enabled.ticket)?;
     let code = enabled.code.as_deref().unwrap_or_default();

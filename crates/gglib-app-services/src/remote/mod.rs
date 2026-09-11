@@ -23,7 +23,7 @@ mod types;
 
 pub use gateway::RemoteGateway;
 pub use types::{
-    ConnectRequest, ConnectSnapshot, Connected, EnableRequest, Enabled, OfferedPairing,
+    ConnectRequest, ConnectSnapshot, Connected, DeviceView, EnableRequest, Enabled, OfferedPairing,
     RemoteStatusSnapshot,
 };
 
@@ -69,10 +69,14 @@ struct Live<H = modelpipe::ServeHandle> {
 
 /// The remote tunnel's lifecycle: both sides of ADR 0012.
 ///
-/// Off by default and never persisted: `enable` arms the serve side and
-/// `connect` the connect side for this daemon only, and nothing brings
-/// either back on a restart. The two are independent — a machine can be
-/// both the desktop for one peer and the laptop to another.
+/// Off by default, and the two sides differ in what a restart does. The
+/// serve side is a switch: `remote_enabled` is persisted and the daemon
+/// arms the tunnel again at startup with the flags it was enabled with, on
+/// the same endpoint key, so paired devices keep working. The connect side
+/// is not: `join` binds a loopback port for this daemon only, and the
+/// laptop dials again from the pairing it stored. The two are independent —
+/// a machine can be both the desktop for one peer and the laptop to
+/// another.
 pub struct RemoteOps {
     proxy: Arc<ProxyOps>,
     core: Arc<AppCore>,

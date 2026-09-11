@@ -222,7 +222,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,
-            // Written by `gglib remote connect`, never from the settings UI.
+            // Written by `gglib remote join`, never from the settings UI.
             remote_pairing: None,
             // Written by `gglib remote enable`/`disable`. Remote access is
             // switched by the command that arms the tunnel, not by a field

@@ -82,9 +82,68 @@ fn a_rewrite_leaves_no_temporary_behind() {
     keys.insert("dev-4e5f6a7b".to_owned(), "sk-two".to_owned());
     store(&path, &keys).expect("second");
 
-    assert!(
-        !path.with_extension("tmp").exists(),
-        "the staging file is gone"
-    );
+    assert_eq!(staging_files(&path), 0, "the staging file is gone");
     assert_eq!(load(&path).expect("load").len(), 2);
+}
+
+/// Concurrent writers must not fail each other.
+///
+/// The staging file used to be one fixed `.tmp` sibling, so two writers wrote
+/// the same name: the first renamed it away and the second's own `rename`
+/// answered `NotFound` — a hard error for a write that was entirely valid.
+/// Two `RemoteOps` in one process is all it takes, which is what a test
+/// binary building an app per test does, and CI found it before a person did.
+#[test]
+fn writers_racing_on_one_path_do_not_fail_each_other() {
+    let path = temp();
+    let attempts = 16;
+
+    let failures: Vec<String> = std::thread::scope(|scope| {
+        // The `collect` is what makes this a race: it spawns every writer
+        // before any is joined. Fused into the `filter_map` below, each
+        // thread would be joined the moment it was spawned and the test
+        // would pass against the very bug it exists to catch.
+        #[allow(clippy::needless_collect)]
+        let handles: Vec<_> = (0..attempts)
+            .map(|i| {
+                let path = path.clone();
+                scope.spawn(move || {
+                    let mut keys = DeviceKeys::new();
+                    keys.insert(format!("dev-{i:08x}"), format!("sk-{i}"));
+                    store(&path, &keys).err().map(|e| e.to_string())
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .filter_map(|h| h.join().expect("writer panicked"))
+            .collect()
+    });
+
+    assert!(
+        failures.is_empty(),
+        "every writer's rename must find its own staging file: {failures:?}"
+    );
+    assert_eq!(
+        load(&path).expect("load").len(),
+        1,
+        "and the file is one writer's whole map, never a blend of two"
+    );
+    assert_eq!(staging_files(&path), 0, "no staging file is left behind");
+}
+
+/// How many staging siblings sit beside `path`. Named per writer now, so the
+/// count matters rather than one predictable name.
+fn staging_files(path: &std::path::Path) -> usize {
+    let dir = path.parent().expect("the key file has a directory");
+    let stem = path.file_name().expect("the key file has a name");
+    std::fs::read_dir(dir)
+        .expect("read the key directory")
+        .filter_map(Result::ok)
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with(&*stem.to_string_lossy()) && name.contains(".tmp")
+        })
+        .count()
 }

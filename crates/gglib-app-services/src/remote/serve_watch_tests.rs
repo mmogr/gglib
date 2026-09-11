@@ -23,10 +23,48 @@ use super::*;
 use crate::error::GuiError;
 use crate::proxy::ProxyOps;
 
+/// Held for as long as one test has a real tunnel armed.
+///
+/// Every `RemoteOps` in this binary is a different object, but there is only
+/// one of each of the two files an arm touches, because both resolve from a
+/// process-wide path:
+///
+/// - `data/remote_identity`, which modelpipe creates with `create_new` — two
+///   listeners starting at once is an *error* there on purpose, so that
+///   neither silently overwrites the other's key and serves a ticket nobody
+///   holds. On a checkout where the file does not exist yet, which is every
+///   CI run, two arms in the same instant means one of them fails with
+///   `File exists`.
+/// - `data/remote_devices`, where `forget` is a read-modify-write and each
+///   `RemoteOps` holds its own `roster` lock — so two of them are two locks
+///   over one file, and one test's write can carry back a key another test
+///   believed it had removed, leaving it in the developer's checkout for
+///   their own `enable` to seed onto their tunnel.
+///
+/// Production has one daemon, one `RemoteOps` and one arm at a time, which
+/// is what makes both safe there; only a test binary has several. Rather
+/// than ask each test to remember, the fixture below hands the guard out
+/// with the ops, so a test that arms cannot fail to hold it.
+static ARMING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// A key already in settings, so `Settled::commit` has nothing to mint and
 /// the tests over it do not each spend a settings-cache window proving
 /// something about the key. What they are about is the proxy.
-pub(super) async fn ops_with_key() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recording>, RemoteOps) {
+///
+/// The fifth element is [`ARMING`]'s guard. Bind it — `let (.., _arming) =`
+/// — and leave it alone: dropping it early puts the test back in the race,
+/// and calling this twice in one test deadlocks on the second call.
+///
+/// The lock is taken *after* the fixture's own setup, which touches neither
+/// shared file, so the serialised span is the arming and not the database
+/// build in front of it.
+pub(super) async fn ops_with_key() -> (
+    Arc<AppCore>,
+    Arc<ProxyOps>,
+    Arc<Recording>,
+    RemoteOps,
+    tokio::sync::MutexGuard<'static, ()>,
+) {
     let (core, proxy, events, ops) = ops().await;
     core.settings()
         .update(SettingsUpdate {
@@ -35,7 +73,12 @@ pub(super) async fn ops_with_key() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recordin
         })
         .await
         .expect("settings update");
-    (core, proxy, events, ops)
+    (core, proxy, events, ops, ARMING.lock().await)
+}
+
+/// [`ARMING`] for the one test here that builds its ops the other way.
+async fn arming() -> tokio::sync::MutexGuard<'static, ()> {
+    ARMING.lock().await
 }
 
 /// A request that stays off the network: no relay to reach and no discovery
@@ -59,7 +102,7 @@ pub(super) const fn offline() -> EnableRequest {
 /// between this and a pairing string for a tunnel fronting a released port.
 #[tokio::test]
 async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {
-    let (_core, proxy, events, ops) = ops_with_key().await;
+    let (_core, proxy, events, ops, _arming) = ops_with_key().await;
 
     // Stopped on a state change, not on a clock. The fixture leaves the proxy
     // down, so `ensure_running` starting it is an observable transition and
@@ -121,7 +164,7 @@ async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {
 /// comes down.
 #[tokio::test]
 async fn a_tunnel_comes_down_with_the_proxy_it_fronts() {
-    let (_core, proxy, events, ops) = ops_with_key().await;
+    let (_core, proxy, events, ops, _arming) = ops_with_key().await;
     ops.enable(offline()).await.expect("the tunnel comes up");
     assert!(ops.status().await.enabled, "the tunnel is up to begin with");
 
@@ -168,6 +211,8 @@ async fn a_tunnel_comes_down_with_the_proxy_it_fronts() {
 /// `watch_proxy` looks exactly once before returning.
 #[tokio::test]
 async fn a_proxy_that_leaves_during_the_key_wait_does_not_outlive_its_tunnel() {
+    // `ops()` rather than `ops_with_key()`, so the guard is taken by hand.
+    let _arming = arming().await;
     let (_core, proxy, events, ops) = ops().await;
 
     let stopping = tokio::spawn({

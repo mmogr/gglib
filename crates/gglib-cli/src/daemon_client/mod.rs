@@ -202,6 +202,6 @@ mod remote;
 pub(crate) mod wire;
 
 pub(crate) use wire::{
-    QueueDownloadBody, RemoteConnectBody, RemoteEnableBody, RemoteEnableDto, RemoteStatusDto,
-    StartProxyBody,
+    QueueDownloadBody, RemoteConnectBody, RemoteDeviceDto, RemoteEnableBody, RemoteEnableDto,
+    RemoteStatusDto, StartProxyBody,
 };

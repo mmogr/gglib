@@ -47,6 +47,41 @@ pub(crate) struct ProxyStatusDto {
     pub pinned_model: Option<String>,
 }
 
+/// One row of `GET /api/remote/devices`.
+///
+/// A narrowing of `gglib_axum::handlers::remote::RemoteDevice`: every field
+/// the terminal renders, and `#[serde(default)]` on each optional one so a
+/// daemon older than this client still decodes.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemoteDeviceDto {
+    /// The name the edge holds the key under, and what `forget` takes.
+    pub id: String,
+    /// What the device called itself at join, when it said.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Unix milliseconds at which the invite was minted.
+    #[serde(default)]
+    pub joined_at: i64,
+    /// Unix milliseconds at which a device redeemed it, or `None` if none
+    /// ever did — an invite nobody took.
+    #[serde(default)]
+    pub redeemed_at: Option<i64>,
+    /// Unix milliseconds of the last request under its key.
+    #[serde(default)]
+    pub last_seen: Option<i64>,
+    /// Whether the edge admits it now, or `None` with the tunnel down.
+    #[serde(default)]
+    pub admitted: Option<bool>,
+}
+
+/// `DELETE /api/remote/devices/{device}` response.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RemoteForgottenDto {
+    /// Whether this machine held anything under that name.
+    #[serde(default)]
+    pub forgotten: bool,
+}
+
 /// Body for `POST /api/remote/enable` — the client-side twin of
 /// `gglib_axum::handlers::remote::RemoteEnableBody`.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -72,6 +107,11 @@ pub(crate) struct RemoteEnableDto {
     /// is not always the one this call asked for: `--invite` against a
     /// tunnel that is already up leaves the flags alone.
     pub mcp_allowed: bool,
+    /// Whether the tunnel was already up and this call answered from that
+    /// session. The flags sent with it were ignored if so, which is the only
+    /// way to know that `--allow-mcp` did not take.
+    #[serde(default)]
+    pub already_up: bool,
 }
 
 /// `POST /api/remote/connect` request body. Mirrors

@@ -56,18 +56,42 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
         })
         .await?;
 
+    // The daemon says whether it armed a session or answered from one that
+    // was already running; this is not inferred. Inference from `mcp_allowed`
+    // would catch only "asked for /mcp and told no" and leave the commoner
+    // `enable --invite` with no flags reading as a fresh arm — which is the
+    // case that goes on to recommend `--allow-mcp`, a flag that cannot take
+    // on a session it did not arm.
+    let arming = if enabled.already_up {
+        // Every flag sent with this call was ignored, so say so for the one
+        // that has a visible effect and that someone passes on purpose.
+        if args.allow_mcp && !enabled.mcp_allowed {
+            eprintln!(
+                "  note: --allow-mcp did not take. Remote access was already on, and a \
+                 session's /mcp grant"
+            );
+            eprintln!(
+                "        belongs to the enable that armed it \u{2014} `gglib remote disable`, \
+                 then `enable --allow-mcp`."
+            );
+        }
+        Arming::Invite
+    } else {
+        Arming::Enable
+    };
+
     // No code asked for, so there is nothing to show and nothing to wait on.
     // Rendering the absence as a pairing would put an expired-looking one on
     // screen at every enable.
     if enabled.code.is_none() {
         print_up(&enabled);
-        print_notice(enabled.mcp_allowed);
+        print_notice(enabled.mcp_allowed, arming);
         return Ok(());
     }
 
     if args.no_qr || !std::io::stdout().is_terminal() {
         print_plain(&enabled);
-        print_notice(enabled.mcp_allowed);
+        print_notice(enabled.mcp_allowed, arming);
         return Ok(());
     }
 
@@ -86,10 +110,10 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
         Outcome::Expired => {
             eprintln!();
             eprintln!(
-                "  The pairing code expired and nobody paired. The tunnel is up; the ticket is \
-                 still valid for a device that already holds the key."
+                "  The pairing code expired and nobody paired. The tunnel is up, and every \
+                 device that already holds a key of its own is unaffected."
             );
-            eprintln!("  Run `gglib remote enable --invite` again for a fresh code.");
+            eprintln!("  Run `gglib remote invite` again for a fresh code.");
         }
         Outcome::Interrupted => {
             eprintln!();
@@ -98,7 +122,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             );
         }
     }
-    print_notice(enabled.mcp_allowed);
+    print_notice(enabled.mcp_allowed, arming);
     Ok(())
 }
 
@@ -118,14 +142,14 @@ fn print_plain(enabled: &RemoteEnableDto) {
     println!("code:    {code}");
     eprintln!();
     eprintln!("  On the other machine, within {expires}s:");
-    eprintln!("    gglib remote connect {pairing}");
+    eprintln!("    gglib remote join {pairing}");
 }
 
 /// The tunnel is up and no device is being paired right now.
 fn print_up(enabled: &RemoteEnableDto) {
     eprintln!("  Remote access is on, and stays on across restarts.");
     eprintln!("  Ticket:  {}", enabled.ticket);
-    eprintln!("  No device is being paired. `enable --invite` offers a code.");
+    eprintln!("  No device is being paired. `gglib remote invite` offers a code.");
 }
 
 /// What enabling changed on *this* machine, said every time.
@@ -135,20 +159,63 @@ fn print_up(enabled: &RemoteEnableDto) {
 /// session, whose `/mcp` grant is whatever the `enable` that armed it set —
 /// so echoing the flag back would tell an operator that `--allow-mcp` took
 /// when it did not, or that `/mcp` is closed when it is open.
-fn print_notice(allow_mcp: bool) {
+///
+/// `Arming::Enable` says the switch was just thrown; `Arming::Invite` says it
+/// was already on and only a device was added. The difference is not
+/// decoration: "the local proxy *now* requires the API key" and "pass
+/// `--allow-mcp`" are both true of a switch being thrown and both false when
+/// it was already on — where no flag changed, and recommending `--allow-mcp`
+/// is recommending what the person just did.
+///
+/// So `Arming::Invite` is not only `invite`'s. `enable --invite` against a
+/// tunnel that is already up is answered by that same session, and is the
+/// same event under another name — which is why the daemon reports
+/// `already_up` rather than leaving the caller to guess from what came back.
+pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!();
-    eprintln!(
-        "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key too \u{2014} \
-         gglib's own clients read it from settings; a hand-configured client needs it added once."
-    );
-    eprintln!(
-        "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock you out \
-         of `gglib` or the app."
-    );
-    if allow_mcp {
-        eprintln!("  /mcp is reachable through the tunnel (--allow-mcp).");
-    } else {
-        eprintln!("  /mcp is not reachable through the tunnel; pass --allow-mcp to change that.");
+    match arming {
+        Arming::Enable => {
+            eprintln!(
+                "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key \
+                 too \u{2014} gglib's own clients read it from settings; a hand-configured client \
+                 needs it added once."
+            );
+            eprintln!(
+                "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock \
+                 you out of `gglib` or the app."
+            );
+        }
+        Arming::Invite => {
+            eprintln!(
+                "  Remote access was already on and still is; this added a device and changed \
+                 nothing else about the session."
+            );
+        }
+    }
+    match (allow_mcp, arming) {
+        (true, _) => eprintln!("  /mcp is reachable through the tunnel."),
+        (false, Arming::Enable) => {
+            eprintln!(
+                "  /mcp is not reachable through the tunnel; pass --allow-mcp to change that."
+            );
+        }
+        // `invite` has no such flag: the grant belongs to the session `enable`
+        // armed, and changing it means `disable` and `enable` again.
+        (false, Arming::Invite) => {
+            eprintln!(
+                "  /mcp is not reachable through the tunnel; that is the session's setting, \
+                 changed by `disable` and `enable --allow-mcp`."
+            );
+        }
     }
     eprintln!("  Stop broadcasting:  gglib remote disable");
+}
+
+/// Which command is printing the closing notice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Arming {
+    /// `enable`: the switch was just thrown.
+    Enable,
+    /// `invite`: it was already on, and a device was added to it.
+    Invite,
 }

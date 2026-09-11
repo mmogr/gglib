@@ -58,10 +58,12 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 /// Routes are organized into domain groups:
 /// - `/models/*`  — CRUD, tags, verification, downloads, HuggingFace discovery
 /// - `/config/*`  — settings, system setup
+/// - `/remote/*`  — the tunnel and the devices it admits (ADR 0012)
 pub(crate) fn api_routes() -> Router<AppState> {
     Router::new()
         .nest("/models", model_routes())
         .nest("/config", config_routes())
+        .nest("/remote", crate::routes_remote::remote_routes())
         .route("/version", get(handlers::version::get_version))
         // Servers API
         .route("/servers", get(handlers::servers::list))
@@ -103,13 +105,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/start", post(handlers::proxy::start))
         .route("/proxy/start-pinned", post(handlers::proxy::start_pinned))
         .route("/proxy/stop", post(handlers::proxy::stop))
-        // Remote tunnel (ADR 0012)
-        .route("/remote/enable", post(handlers::remote::enable))
-        .route("/remote/disable", post(handlers::remote::disable))
-        .route("/remote/status", get(handlers::remote::status))
-        .route("/remote/connect", post(handlers::remote::connect))
-        .route("/remote/disconnect", post(handlers::remote::disconnect))
-        .route("/remote/kill", post(handlers::remote::kill))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
         // Events (SSE)

@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::paths::{PathError, remote_identity_path};
 
@@ -56,6 +57,13 @@ pub fn load(path: &Path) -> io::Result<DeviceKeys> {
 /// is a listener that admits some devices and not others, with nothing saying
 /// which.
 ///
+/// **The temporary file is named per writer, not per path.** A fixed
+/// `.tmp` sibling makes two concurrent writers collide on one filename:
+/// both write it, the first renames it away, and the second fails at its own
+/// `rename` with `NotFound` — an error raised for a write that was perfectly
+/// valid. The rename is what makes this atomic, and it only does so if each
+/// writer has its own thing to rename.
+///
 /// # Errors
 ///
 /// [`io::Error`] from creating the directory, writing, setting the mode, or
@@ -66,11 +74,25 @@ pub fn store(path: &Path, keys: &DeviceKeys) -> io::Result<()> {
     }
     let json = serde_json::to_vec_pretty(keys).map_err(io::Error::other)?;
 
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, &json)?;
-    restrict(&tmp)?;
-    fs::rename(&tmp, path)
+    let tmp = path.with_extension(format!(
+        "tmp.{}.{}",
+        std::process::id(),
+        NEXT_TMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    let written = fs::write(&tmp, &json)
+        .and_then(|()| restrict(&tmp))
+        .and_then(|()| fs::rename(&tmp, path));
+    if written.is_err() {
+        // Best effort: a temporary nobody renamed is litter beside a `0600`
+        // secret, and the error being returned is the one that matters.
+        let _ = fs::remove_file(&tmp);
+    }
+    written
 }
+
+/// Distinguishes one writer's temporary file from another's within a process;
+/// the pid does it across processes.
+static NEXT_TMP: AtomicU64 = AtomicU64::new(0);
 
 /// `0600` where the platform has a notion of it.
 #[cfg(unix)]

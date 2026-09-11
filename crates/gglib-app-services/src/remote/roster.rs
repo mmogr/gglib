@@ -39,6 +39,13 @@ pub(crate) enum Note {
         device: String,
         /// What it calls itself, when it said.
         label: Option<String>,
+        /// Unix milliseconds, read on the request path.
+        ///
+        /// Taken where the redemption happened rather than where it is
+        /// written, for the same reason [`Note::Seen`] carries one: this
+        /// queue is drained by a task, and a timestamp stamped at the far
+        /// end would record when settings got around to it.
+        at_ms: i64,
     },
     /// A request arrived bearing a device's token.
     Seen {
@@ -80,9 +87,18 @@ async fn roster_sync(core: Arc<AppCore>, lock: Arc<Mutex<()>>, mut notes: Unboun
     let mut last_written: HashMap<String, i64> = HashMap::new();
     while let Some(note) = notes.recv().await {
         match note {
-            Note::Joined { device, label } => {
-                if let Err(e) = apply(&core, &lock, &device, |d| d.label.clone_from(&label)).await {
-                    warn!(device = %device, "could not record what a device calls itself: {e}");
+            Note::Joined {
+                device,
+                label,
+                at_ms,
+            } => {
+                let write = apply(&core, &lock, &device, |d| {
+                    d.label.clone_from(&label);
+                    d.redeemed_at = Some(at_ms);
+                })
+                .await;
+                if let Err(e) = write {
+                    warn!(device = %device, "could not record a device as joined: {e}");
                 }
             }
             Note::Seen { device, at_ms } => {

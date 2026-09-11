@@ -53,7 +53,7 @@ pub(super) async fn redeem(
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         return Err(GuiError::ValidationFailed(
             "the far machine refused the pairing code — it may have expired (two minutes), been \
-             used already, or been burned by wrong attempts; run `gglib remote enable --invite` there \
+             used already, or been burned by wrong attempts; run `gglib remote invite` there \
              again"
                 .to_owned(),
         ));
@@ -111,7 +111,7 @@ pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Re
             "the remote machine {fingerprint} is not admitting this device's key — it has \
              either stopped trusting this device, or a key rotation there is still reaching the \
              tunnel, which clears itself within a few seconds. If waiting does not fix it, pair \
-             again with a fresh `gglib remote enable --invite` there"
+             again with a fresh `gglib remote invite` there"
         ))),
         reqwest::StatusCode::CONFLICT => Err(GuiError::Conflict(
             "the far proxy is not running under a daemon, so there is nothing to stop from here"

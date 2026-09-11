@@ -92,7 +92,7 @@ impl RemoteOps {
         // unconditionally, so resuming through it opened a live two-minute
         // grant at every boot, for a code nobody would ever read, on a
         // ticket that no longer changes. Devices already paired hold a key
-        // and need no code; a new one runs `gglib remote enable` again.
+        // and need no code; a new one is added with `gglib remote invite`.
         match self.resume_arm(request).await {
             Ok(()) => info!("remote access resumed from settings"),
             Err(e) => warn!("could not resume remote access: {e}"),

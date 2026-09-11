@@ -81,7 +81,7 @@ async fn a_pairing_that_cannot_be_stored_says_the_code_is_already_spent() {
         panic!("a store that failed is not the caller's to fix: {err:?}");
     };
     assert!(message.contains("already spent"), "{message}");
-    assert!(message.contains("gglib remote enable"), "{message}");
+    assert!(message.contains("gglib remote invite"), "{message}");
 }
 
 /// A redeemed code leaves the key filed under the ticket that was dialled.
@@ -154,7 +154,7 @@ async fn a_redeemed_key_that_cannot_be_stored_says_the_code_is_already_spent() {
         panic!("a store that failed is not the caller's to fix: {err:?}");
     };
     assert!(message.contains("already spent"), "{message}");
-    assert!(message.contains("gglib remote enable"), "{message}");
+    assert!(message.contains("gglib remote invite"), "{message}");
     assert!(
         core.settings()
             .get()

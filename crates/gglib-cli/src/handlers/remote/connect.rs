@@ -1,4 +1,6 @@
-//! `gglib remote connect` and `disconnect`: this machine as the laptop.
+//! `gglib remote join` and `disconnect`: this machine as the laptop.
+//!
+//! `connect` is the name `join` had, and still reaches this for one release.
 //!
 //! Stopping the far machine used to live here as `kill`; it is
 //! `gglib daemon stop --remote` now (ADR 0013), beside the local stop.
@@ -8,7 +10,7 @@ use anyhow::Result;
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonProbe, RemoteConnectBody, RemoteStatusDto};
 
-/// What `gglib remote connect` was asked for.
+/// What `gglib remote join` was asked for.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ConnectArgs {
     /// `<ticket>-<code>`, a bare ticket, or `None` for the last one.
@@ -19,12 +21,37 @@ pub(crate) struct ConnectArgs {
     pub relay: Option<String>,
     /// Dial only the paths the ticket carries.
     pub no_discovery: bool,
+    /// Whether the person typed `connect` rather than `join`.
+    ///
+    /// Only the hint depends on it. Saying nothing when `join` was typed is
+    /// the point: a deprecation notice on the command that replaced the
+    /// deprecated one teaches the wrong thing.
+    pub under_old_name: bool,
 }
 
-/// Execute `gglib remote connect`.
+/// What `connect` prints to say what it is called now.
+///
+/// A constant so a test can pin it, because this is the one string whose
+/// entire job is to name **both** commands — and a sweep that renamed
+/// `connect` to `join` everywhere reduced it to "`gglib remote join` is
+/// `gglib remote join` now" without a single gate noticing. A message that
+/// exists to explain a rename is exactly the message a rename breaks.
+const RENAME_NOTICE: [&str; 3] = [
+    "  note: `gglib remote connect` is `gglib remote join` now.",
+    "        The old name still works this release and does the same thing;",
+    "        nothing about a pairing you already have changes.",
+];
+
+/// Execute `gglib remote join`.
 pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+
+    if args.under_old_name {
+        for line in RENAME_NOTICE {
+            eprintln!("{line}");
+        }
+    }
     let first_pairing = args
         .pairing
         .as_deref()
@@ -94,12 +121,10 @@ pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
     if status.connected.is_some() {
         anyhow::bail!("the daemon reported the connection still up after disconnect");
     }
-    eprintln!("  Disconnected. The pairing is remembered; `gglib remote connect` dials it again.");
+    eprintln!("  Disconnected. The pairing is remembered; `gglib remote join` dials it again.");
     Ok(())
 }
 
-/// Execute `gglib remote kill`.
-///
 /// The connect side's lines of `gglib remote status`.
 pub(super) fn print_connection(status: &RemoteStatusDto) {
     match &status.connected {
@@ -118,7 +143,7 @@ pub(super) fn print_connection(status: &RemoteStatusDto) {
         },
         None => match (&status.stored_ticket_fingerprint, status.has_remote_key) {
             (Some(fp), true) => {
-                eprintln!("  Connected: no \u{2014} `gglib remote connect` dials {fp} again");
+                eprintln!("  Connected: no \u{2014} `gglib remote join` dials {fp} again");
             }
             (Some(fp), false) => {
                 eprintln!(
@@ -165,3 +190,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "connect_tests.rs"]
+mod connect_tests;

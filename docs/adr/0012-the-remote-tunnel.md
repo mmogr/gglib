@@ -1,7 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (fourth reading 2026-09-09 — a phone on cellular, direct; **amended 2026-09-10 — decision 4 reversed: the identity always lasts, `--keep-identity` removed, `remote_enabled` added**; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (fourth reading 2026-09-09 — a phone on cellular, direct; **amended 2026-09-11 — decision 2: one credential becomes one per device, with the five consequences listed there, and decision 5's note that a leaked token is now one of several; then the verbs those keys needed: `invite`, `list`, `forget`, and `connect` renamed `join`, a redeemed marker on the roster row, and unspent invites listed rather than swept**; **amended 2026-09-10 — decision 4 reversed: the identity always lasts, `--keep-identity` removed, `remote_enabled` added**; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -292,7 +292,22 @@ rather than working around it.
 >    settings unmasked by design and that output is what people paste into bug
 >    reports. Hashing at rest was not an option either way: modelpipe compares
 >    named tokens in plaintext, so *where* they sit is the only lever there
->    is. Settings keeps ids, labels and last-seen, none of which is secret.
+>    is. Settings keeps ids, labels, when the invite was minted, when a device
+>    redeemed it, and when it was last seen — none of which is secret.
+>
+>    *Amended 2026-09-11.* The redeemed marker was added when the surfaces
+>    landed, because without it the roster cannot answer the question a person
+>    asks of it. `joined_at` is when the code was **minted** — the row and the
+>    key are written before the code is shown, so that a device cannot end up
+>    holding a key this side has no record of — so an invite nobody redeemed
+>    and a device that paired a minute ago and has not yet made a request read
+>    identically. Unspent invites are **listed rather than swept on a timer**
+>    (what the machine issued should be visible, and the key was never
+>    transmitted so nobody holds it), which makes telling them apart the whole
+>    job of the list. Both the marker and `last_seen` are written by background
+>    tasks and either can be lost, so a row is called never-joined only when
+>    **both** are empty: whichever write went missing, a device that has
+>    plainly made requests is never described as one that never arrived.
 >
 > The cost accepted alongside: a rotation of `proxy_api_key` can 401 tunnelled
 > requests for up to two settings-cache windows while `backend_auth` and the
@@ -312,9 +327,12 @@ rather than working around it.
 
 ### 3. Pairing moves a one-time code, not the key
 
-`gglib remote enable` prints the ticket and a six-digit numeric code. The code
-lives 120 seconds, is spent on first use, and is burned after three wrong
-attempts. Under it, the desktop calls `ServeHandle::grant_once(code, 120s)`,
+`gglib remote invite` prints the ticket and a six-digit numeric code, as does
+`gglib remote enable --invite`, which does both in one command for a first
+run. (Until 2026-09-11 a plain `enable` was the only thing that printed one;
+it is a switch now and hands out nothing.) The code lives 120 seconds, is
+spent on first use, and is burned after three wrong attempts. Under it, the
+desktop calls `ServeHandle::grant_once(code, 120s)`,
 which admits exactly one request bearing that code through the tunnel edge
 without the bearer token.
 

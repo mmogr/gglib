@@ -24,7 +24,7 @@ the servers it owns, the model resolved against this catalog) or the machine
 on the other end of the remote tunnel (`"remote": true`: the port the tunnel
 bound, the key from the pairing as the bearer, and no shaping, because the
 far proxy runs its own pipeline). Not connected, or connected without a key,
-is a `409` that names `gglib remote connect`.
+is a `409` that names `gglib remote join`.
 
 It also settles the request's `model`, because the two paths mean opposite
 things by an absent one. Locally an absence is the ordinary case and means

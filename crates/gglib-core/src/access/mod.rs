@@ -87,7 +87,7 @@ pub fn generate_device_id() -> String {
     format!("dev-{draw:08x}")
 }
 
-/// Mint a six-digit pairing code for `gglib remote enable --invite`.
+/// Mint a six-digit pairing code for `gglib remote invite`.
 ///
 /// Zero-padded decimal, so it is something a person reads off one screen
 /// and types into another. Its entropy is deliberately small — about twenty

@@ -114,7 +114,7 @@ where
 /// looking for one that went away, and here it can only ever be the first.
 /// A variant modelpipe adds later falls here too, and the cost of that is
 /// worth stating rather than implying: it is not "slower", it is
-/// **`gglib remote connect` stops working**. A future variant meaning
+/// **`gglib remote join` stops working**. A future variant meaning
 /// *connected* would never settle, the gate would spend its whole budget and
 /// then refuse. That is still the right way round — the other answer installs
 /// a pipe on the strength of a word this build cannot read, and reports a
@@ -151,7 +151,7 @@ where
 }
 
 /// A dial that never reached the far machine, as the person who typed
-/// `gglib remote connect` needs to hear it.
+/// `gglib remote join` needs to hear it.
 fn refusal(no: &NoContact) -> GuiError {
     match no {
         // The sentence `connect_error` used to print for

@@ -15,9 +15,9 @@ use super::types::EnableRequest;
 use crate::error::GuiError;
 use crate::test_support_remote::{FINGERPRINT_A, KEY_A, TICKET_A, paired_with, test_remote_ops};
 
-/// A daemon that has done nothing remote reports nothing remote. The
-/// tunnel is off by default and never persisted (ADR 0012), so a fresh
-/// process is this and only this.
+/// A daemon that has done nothing remote reports nothing remote. The tunnel
+/// is off by default (ADR 0012) and the switch that would bring it back is
+/// unset here, so a fresh process is this and only this.
 #[tokio::test]
 async fn a_daemon_that_has_done_nothing_remote_reports_every_side_as_off() {
     let (_, ops, _) = test_remote_ops().await;

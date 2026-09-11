@@ -19,7 +19,7 @@ port: number,
  * Drive the machine on the other end of the remote tunnel instead of a
  * local llama-server (ADR 0012).
  *
- * The daemon must be connected (`gglib remote connect`) and hold the key
+ * The daemon must be connected (`gglib remote join`) and hold the key
  * from that pairing; the loop then talks to the tunnel's loopback port
  * with that key, and `port` is not consulted. Absent means local, so an
  * older client is unchanged.

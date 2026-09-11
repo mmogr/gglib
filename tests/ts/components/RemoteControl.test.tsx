@@ -79,7 +79,7 @@ describe('RemoteControl', () => {
     // nothing.
     expect(enableRemote).toHaveBeenCalledWith({ allow_mcp: false, invite: true });
     expect(await screen.findByText('483920')).toBeInTheDocument();
-    expect(screen.getByText(`gglib remote connect ${TICKET}-483920`)).toBeInTheDocument();
+    expect(screen.getByText(`gglib remote join ${TICKET}-483920`)).toBeInTheDocument();
   });
 
   it('shows no pairing at all when the daemon answered without a code', async () => {

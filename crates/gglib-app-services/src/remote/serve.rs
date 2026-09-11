@@ -266,6 +266,9 @@ impl RemoteOps {
             ticket,
             pairing,
             mcp_allowed: request.allow_mcp,
+            // This path armed the session, so the request's flags are the
+            // session's flags and every one of them took.
+            already_up: false,
         })
     }
 }

@@ -64,7 +64,7 @@ pub(crate) async fn device_gate(req: Request, next: Next) -> Response {
         StatusCode::FORBIDDEN,
         Json(ErrorResponse::with_code(
             "This request did not arrive on a device key. Pair this device by \
-             running `gglib remote enable --invite` on the serving machine and \
+             running `gglib remote invite` on the serving machine and \
              redeeming the code it prints.",
             "invalid_request_error",
             "device_not_paired",

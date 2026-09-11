@@ -25,7 +25,7 @@ use tracing::{info, warn};
 use super::RemoteOps;
 use super::enrolment::{forget, offer};
 use super::roster::read_roster;
-use super::types::{DeviceView, Enabled, OfferedPairing};
+use super::types::{DeviceView, Enabled};
 use crate::error::GuiError;
 
 impl RemoteOps {
@@ -44,16 +44,28 @@ impl RemoteOps {
     /// or when remote access went down while this was preparing; `Internal`
     /// when a store cannot be written or the edge refuses the token or the
     /// grant.
-    pub async fn invite(&self) -> Result<OfferedPairing, GuiError> {
+    ///
+    /// Answers with the whole [`Enabled`], not the
+    /// [`OfferedPairing`](super::types::OfferedPairing) inside it, because
+    /// the ticket is half of what a person is shown: the pairing screen
+    /// draws it and the plain-text form prints it, and `OfferedPairing`
+    /// does not carry one. The session already knows it, so
+    /// handing it back costs nothing and saves every surface from splitting
+    /// the pairing string to recover it.
+    pub async fn invite(&self) -> Result<Enabled, GuiError> {
         let Some(enabled) = self.invite_if_up().await? else {
             return Err(GuiError::Conflict(
-                "remote access is not enabled — `gglib remote enable --invite` does both"
+                "remote access is not enabled — run `gglib remote enable` first, or \
+                 `gglib remote enable --invite` to do both"
                     .to_owned(),
             ));
         };
-        enabled.pairing.ok_or_else(|| {
-            GuiError::Internal("the invite came back without the code it armed".to_owned())
-        })
+        if enabled.pairing.is_none() {
+            return Err(GuiError::Internal(
+                "the invite came back without the code it armed".to_owned(),
+            ));
+        }
+        Ok(enabled)
     }
 
     /// The same, against a tunnel that may or may not be up: `Ok(None)` means
@@ -86,6 +98,8 @@ impl RemoteOps {
             // The live session's answer, not the caller's flag: this path
             // deliberately leaves the flags where `enable` set them.
             mcp_allowed: gglib_core::ports::RemoteGatewayPort::mcp_allowed(&*self.gateway),
+            // This *is* the path that finds it already up; there is no other.
+            already_up: true,
         }))
     }
 
@@ -161,6 +175,7 @@ impl RemoteOps {
                 id: d.id,
                 label: d.label,
                 joined_at: d.joined_at,
+                redeemed_at: d.redeemed_at,
                 last_seen: d.last_seen,
             })
             .collect())
