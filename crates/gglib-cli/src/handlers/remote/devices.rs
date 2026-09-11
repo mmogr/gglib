@@ -49,9 +49,17 @@ pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
     // a device id" is both the safe answer and the useful one, since the
     // alternative is a 405 from somewhere the person never named.
     if !is_device_id(device) {
-        eprintln!("  {device} is not a device id.");
-        eprintln!("  Ids look like dev-0a1b2c3d; `gglib remote list` shows this machine's.");
-        return Ok(());
+        // Quoted, because by construction this string failed the charset —
+        // it can carry escape sequences, a newline, or ten kilobytes, and it
+        // is about to be printed to a terminal.
+        //
+        // And an error, not `Ok`: "this machine holds no device by that
+        // name" is a success because the outcome asked for was reached, and
+        // that argument does not carry over to a name that could not name a
+        // device at all. `forget "$id" && echo retired` must not say retired.
+        anyhow::bail!(
+            "{device:?} is not a device id.\n               Ids look like dev-0a1b2c3d; `gglib remote list` shows this machine's."
+        );
     }
 
     let handle =
@@ -97,13 +105,23 @@ fn describe(d: &RemoteDeviceDto) -> String {
     }
 }
 
-/// The shape every id this machine mints has, and the widest shape the edge
-/// will hold a token under.
+/// The shape every id this machine mints has.
+///
+/// Narrower than the edge by one rule: modelpipe's `valid_name` is non-empty,
+/// at most 64, and `[A-Za-z0-9._-]`, which admits `.` and `..` — and those
+/// are the whole of the problem here, because this value is interpolated
+/// into a request path. So an alphanumeric is required as well. Nothing this
+/// machine mints is excluded by it.
 ///
 /// Deliberately a shape test rather than a roster lookup: an id that is not
 /// one cannot be held, so there is nothing to ask the daemon, and refusing
 /// it here means the roster's own answer ("this machine holds no device
 /// called …") keeps its one meaning.
+///
+/// [`forget`] calls this before it builds a path. Its two tests below reach
+/// it directly, so they do not pin that call — the guarantee they give is
+/// about the predicate, and the call site is one line with a `bail!` under
+/// it.
 fn is_device_id(device: &str) -> bool {
     device.len() <= 64
         && device

@@ -50,13 +50,22 @@ remote/
 # Two keys, two doors
 
 The listener enforces a key **per device** (`TokenPolicy::Named`), and none of
-them is the proxy's. A device presents its own; the edge names the device on
-the way through, and `backend_auth` puts the proxy's key on the request
-afterwards, so a device key never reaches the proxy and the proxy's key never
-reaches a device. A tunnelled request arriving without a named device is
-refused `403 device_not_paired` before a byte reaches the daemon. Retiring one
-device is `forget`; the proxy's own key is unaffected by all of it, and
-rotating it re-pairs nobody.
+them is the proxy's. A device presents its own; the edge names it in
+`X-Modelpipe-Device` on the way through, and `backend_auth` replaces the
+`Authorization` header with the proxy's key, so a device key never reaches
+the proxy and the proxy's key never reaches a device.
+
+The two doors do different work, and the second is not a repeat of the first.
+The edge refuses a key it does not hold. But a pairing grant admits exactly
+one request bearing *no* device, at whatever path the holder of a guessed code
+likes — the edge cannot scope it — so the request that names no device is
+refused at the second door instead, by `gglib-proxy`'s `device_gate`, with
+`403 device_not_paired`. That gate sits *inside* `bearer_guard`, and has to:
+`backend_auth` means the bearer is a header modelpipe itself wrote, so for
+tunnelled traffic the device name is the only thing left that can refuse.
+
+Retiring one device is `forget`; the proxy's own key is unaffected by all of
+it, and rotating it re-pairs nobody.
 
 `key.rs` decides the *proxy's* key — the one behind the second door — in
 order: what the running proxy
@@ -81,12 +90,18 @@ whose ticket has not left the process.
 
 Rotation has no event to hook. The CLI writes the same SQLite file from
 another process, so `RemoteOps` polls `proxy_api_key` on the settings cache's
-cadence and calls `ServeHandle::set_token` when it changes; a pinned key is
-never watched, because nothing in settings may override it.
+cadence and calls `ServeHandle::set_backend_auth` when it changes — **never
+`set_token`**, which would give the listener a primary key it does not have
+and quietly turn the per-device door back into a shared one. A rotation
+therefore changes what the edge forwards and nothing about who it admits: no
+device is re-paired, and none needs to be. A pinned key is never watched,
+because nothing in settings may override it.
 
 # Pairing
 
-`enable` returns the ticket and a six-digit code exactly once. The code is
+`enable --invite` — and `invite`, against a session already up — returns the
+ticket and a six-digit code exactly once. A plain `enable` is a switch and
+returns no code at all. The code is
 granted at the tunnel edge (`grant_once`) so one request bearing it gets
 through without the token; the proxy's pairing route asks `RemoteGateway`
 whether it is the code this session minted, and takes the key it stands for.

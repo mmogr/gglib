@@ -107,6 +107,11 @@ pub(crate) struct RemoteEnableDto {
     /// is not always the one this call asked for: `--invite` against a
     /// tunnel that is already up leaves the flags alone.
     pub mcp_allowed: bool,
+    /// Whether the tunnel was already up and this call answered from that
+    /// session. The flags sent with it were ignored if so, which is the only
+    /// way to know that `--allow-mcp` did not take.
+    #[serde(default)]
+    pub already_up: bool,
 }
 
 /// `POST /api/remote/connect` request body. Mirrors

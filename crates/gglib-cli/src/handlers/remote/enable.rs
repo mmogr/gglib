@@ -56,21 +56,25 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
         })
         .await?;
 
-    // Asked for `/mcp` and told it is closed: the flag did not take, and the
-    // only way that happens is `--invite` finding a tunnel already up. A
-    // plain `enable` against a live one is refused as a conflict and never
-    // reaches here, and an arm that honoured the flag would answer `true` —
-    // so this is that case, exactly, and the session was armed by an earlier
-    // `enable` whose grant this one cannot change.
-    let arming = if args.allow_mcp && !enabled.mcp_allowed {
-        eprintln!(
-            "  note: --allow-mcp did not take. Remote access was already on, and a session's \
-             /mcp grant"
-        );
-        eprintln!(
-            "        belongs to the enable that armed it \u{2014} `gglib remote disable`, then \
-             `enable --allow-mcp`."
-        );
+    // The daemon says whether it armed a session or answered from one that
+    // was already running; this is not inferred. Inference from `mcp_allowed`
+    // would catch only "asked for /mcp and told no" and leave the commoner
+    // `enable --invite` with no flags reading as a fresh arm — which is the
+    // case that goes on to recommend `--allow-mcp`, a flag that cannot take
+    // on a session it did not arm.
+    let arming = if enabled.already_up {
+        // Every flag sent with this call was ignored, so say so for the one
+        // that has a visible effect and that someone passes on purpose.
+        if args.allow_mcp && !enabled.mcp_allowed {
+            eprintln!(
+                "  note: --allow-mcp did not take. Remote access was already on, and a \
+                 session's /mcp grant"
+            );
+            eprintln!(
+                "        belongs to the enable that armed it \u{2014} `gglib remote disable`, \
+                 then `enable --allow-mcp`."
+            );
+        }
         Arming::Invite
     } else {
         Arming::Enable
@@ -165,7 +169,8 @@ fn print_up(enabled: &RemoteEnableDto) {
 ///
 /// So `Arming::Invite` is not only `invite`'s. `enable --invite` against a
 /// tunnel that is already up is answered by that same session, and is the
-/// same event under another name.
+/// same event under another name — which is why the daemon reports
+/// `already_up` rather than leaving the caller to guess from what came back.
 pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!();
     match arming {

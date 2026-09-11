@@ -101,6 +101,7 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
         ..offline()
     };
     let enabled = ops.enable(request).await.expect("enable");
+    let armed_already_up = enabled.already_up;
     let offered = enabled.pairing.expect("an invite was asked for");
 
     // Gather.
@@ -114,10 +115,22 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
         })
         .await;
 
-    // Clean up.
-    let held = ops.forget(&offered.device).await.expect("forget");
-    let twice = ops.forget(&offered.device).await.expect("forget");
-    ops.disable().await.expect("disable");
+    // Clean up. Including whatever the second invite minted: it is supposed
+    // to have been refused, but if the regression the assertion below guards
+    // against ever lands, it minted a device of its own — and forgetting only
+    // the first would leave exactly the row this test exists to keep out of
+    // the checkout, on the one path that is there to catch it.
+    if let Ok(Enabled {
+        pairing: Some(second),
+        ..
+    }) = &again
+    {
+        let _ = ops.forget(&second.device).await;
+    }
+    // Gathered, not asserted: a panic here skips the rest of the cleanup.
+    let held = ops.forget(&offered.device).await;
+    let twice = ops.forget(&offered.device).await;
+    let stopped = ops.disable().await;
 
     // Judge.
     assert_eq!(
@@ -136,14 +149,19 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
     );
     assert!(active, "and it is redeemable");
     assert!(
+        !armed_already_up,
+        "this call armed the session, so every flag it sent took"
+    );
+    assert!(
         matches!(&again, Err(GuiError::Conflict(m)) if m.contains("already open")),
         "an invite while one is open is refused for that reason, not for being enabled: {again:?}"
     );
-    assert!(held, "the device this minted was held");
+    assert!(held.expect("forget"), "the device this minted was held");
     assert!(
-        !twice,
+        !twice.expect("forget"),
         "and forgetting it twice is false rather than an error"
     );
+    stopped.expect("disable");
 }
 
 /// The row a device redeemed is stamped, which is what tells it from an
@@ -187,10 +205,16 @@ async fn redeeming_an_invite_stamps_the_row_it_was_minted_for() {
     // so the stamp lands a moment after the redemption rather than with it.
     let joined = settled(&ops, &offered.device, |d| d.redeemed_at.is_some()).await;
 
-    let forgotten = ops.forget(&offered.device).await.expect("forget");
-    ops.disable().await.expect("disable");
+    // Gathered, not asserted: a panic in the first would skip the second, and
+    // this test's whole point is that the key it minted does not survive it.
+    let forgotten = ops.forget(&offered.device).await;
+    let stopped = ops.disable().await;
 
-    assert!(forgotten, "the device this minted was held");
+    assert!(
+        forgotten.expect("forget"),
+        "the device this minted was held"
+    );
+    stopped.expect("disable");
     let minted = minted.expect("the invite wrote a roster row");
     assert!(minted.joined_at > 0, "the mint is stamped");
     assert!(
@@ -243,4 +267,33 @@ async fn settled(
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
     None
+}
+
+/// An invite onto a session already running says it armed nothing.
+///
+/// Such a call's flags are ignored — the grants belong to the `enable` that
+/// armed the session — so a surface must tell the two apart before saying
+/// what it changed, and cannot infer it: only "asked for `/mcp`, told no" is
+/// visible in the rest of the answer, and `enable --invite` with no flags is
+/// both the commoner case and indistinguishable from a fresh arm without it.
+#[tokio::test]
+async fn an_invite_onto_a_running_session_reports_that_it_armed_nothing() {
+    let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
+    ops.enable(offline()).await.expect("the first enable arms");
+
+    let second = ops.invite().await;
+
+    // Clean up before judging: this minted a real key.
+    if let Ok(Enabled {
+        pairing: Some(p), ..
+    }) = &second
+    {
+        let _ = ops.forget(&p.device).await;
+    }
+    let stopped = ops.disable().await;
+
+    let second = second.expect("an invite onto a live session is offered");
+    assert!(second.already_up, "it answered from the running session");
+    assert!(second.pairing.is_some(), "and still offered a code");
+    stopped.expect("disable");
 }

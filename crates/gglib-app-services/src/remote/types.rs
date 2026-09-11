@@ -48,6 +48,16 @@ pub struct Enabled {
     /// `--allow-mcp` back to the operator would be describing a grant the
     /// daemon did not make.
     pub mcp_allowed: bool,
+    /// Whether this call found the tunnel already up and answered from that
+    /// session rather than arming one.
+    ///
+    /// The flags of the request are ignored on that path — the session's
+    /// grants belong to the `enable` that armed it — so a caller cannot say
+    /// what it changed without knowing which happened. Inferring it from
+    /// [`Self::mcp_allowed`] only works when the caller asked for `/mcp` and
+    /// was told no; every other combination is indistinguishable, which is
+    /// why this is a field and not a guess.
+    pub already_up: bool,
 }
 
 /// A pairing code on offer, and what is worth knowing about it.
