@@ -82,6 +82,7 @@ fn restrict(path: &Path) -> io::Result<()> {
 /// Windows has no mode to set; the file inherits the directory's ACL, which is
 /// the same protection the endpoint identity gets there.
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)] // the Unix twin really can fail
 fn restrict(_path: &Path) -> io::Result<()> {
     Ok(())
 }
