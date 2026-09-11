@@ -161,13 +161,22 @@ pub(super) async fn forget(
     let _guard = ops.roster.lock().await;
     let mut keys = read_keys()?;
     let had_key = keys.remove(id).is_some();
-    write_keys(&keys)?;
+    // Each store is written only if this changed it. Retiring a device this
+    // machine never issued a key to is an answer, not an edit: replacing two
+    // files to record nothing is work whose only effects are the ones that
+    // can go wrong. The key store is process-wide, so a no-op forget would
+    // still take its turn at replacing it.
+    if had_key {
+        write_keys(&keys)?;
+    }
 
     let mut roster = read_roster(&ops.core).await?;
     let before = roster.len();
     roster.retain(|d| d.id != id);
     let had_row = roster.len() != before;
-    write_roster(&ops.core, roster).await?;
+    if had_row {
+        write_roster(&ops.core, roster).await?;
+    }
     Ok(had_key || had_row)
 }
 
