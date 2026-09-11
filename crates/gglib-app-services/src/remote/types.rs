@@ -168,7 +168,8 @@ pub struct DeviceView {
     pub id: String,
     /// What the device called itself when it joined, when it said.
     pub label: Option<String>,
-    /// Unix milliseconds at which it redeemed its invite.
+    /// Unix milliseconds at which its invite was minted — not when the
+    /// device redeemed it, and an invite nobody redeems keeps the row.
     pub joined_at: i64,
     /// Unix milliseconds of the last request that arrived under its key,
     /// written at most once a minute. Advisory: a local process can forge

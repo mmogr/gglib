@@ -12,6 +12,11 @@
 //!   guessable inside its window;
 //! * it is still behind the Host guard, like everything else on this port.
 //!
+//! A fifth belongs to per-device keys and is pinned next door, in
+//! `integration_remote_devices.rs`: a device that already holds a key is
+//! refused here before its code is looked at, so it can neither redeem nor
+//! burn an invite meant for somebody else.
+//!
 //! Uses the real `gglib_proxy::serve` with a stub for the tunnel's owner.
 
 use std::sync::Arc;

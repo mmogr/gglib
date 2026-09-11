@@ -7,7 +7,10 @@
 //! a screen.
 //!
 //! Outside the bearer group, because it cannot demand the credential it
-//! exists to hand out. Inside the Host guard like everything else.
+//! exists to hand out. Inside the Host guard like everything else — and, for
+//! tunnelled requests, behind one check of its own: a device that already
+//! holds a key has no business here, and is refused before the code is looked
+//! at. See [`handle_remote_pair`].
 
 use axum::{Json, body::Bytes, extract::State, http::StatusCode, response::IntoResponse};
 use gglib_core::ports::PairingOutcome;
@@ -32,6 +35,30 @@ pub(crate) struct PairRequest {
     name: Option<String>,
 }
 
+/// The longest label kept, in characters.
+///
+/// This value comes off the wire from a machine that has not paired yet, and
+/// ends up in a settings row and then in terminal output. Nothing downstream
+/// needs it to be long, and the only bound otherwise is axum's body limit.
+const MAX_LABEL: usize = 64;
+
+/// A label fit to store: trimmed, control characters dropped, and cut to
+/// [`MAX_LABEL`] characters.
+///
+/// Dropped rather than escaped, and counted in characters rather than bytes,
+/// because this is read by a person and rendered in two surfaces that have no
+/// say in what arrives here. Nothing depends on the value, so a label that
+/// loses its tail is a cosmetic loss and an unbounded one is not.
+fn label(name: Option<String>) -> Option<String> {
+    let cleaned: String = name?
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(MAX_LABEL)
+        .collect();
+    let trimmed = cleaned.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_owned())
+}
+
 /// Redeem a pairing code.
 ///
 /// Every failure is the same flat 401 — wrong code, expired, spent, burned,
@@ -43,6 +70,18 @@ pub(crate) struct PairRequest {
 /// ADR 0012 decision 3, amended 2026-09-07, for what that leaves. The
 /// body is read raw and parsed here rather than through the `Json`
 /// extractor, whose own rejection would be a 400 that says what was wrong.
+///
+/// **A request the edge admitted on a device key never gets here.** This
+/// route is outside the bearer group, so under `TokenPolicy::Named` a paired
+/// device reaches it the way it reaches any other path — with its own valid
+/// bearer, which is not the one-time grant this route is for. What that buys
+/// a device that has been compromised is two things worth closing: three
+/// wrong codes clear whatever invite is open, so a retired-but-not-yet-
+/// forgotten laptop can burn every code a person types; and three guesses per
+/// invite at a *second* identity, which would survive that laptop being
+/// forgotten. Neither is something a device that already holds a key has any
+/// reason to do, so the refusal costs nothing. It is the same flat 401 as
+/// every other refusal here.
 pub(crate) async fn handle_remote_pair(
     State(state): State<AppState>,
     tunnelled: Option<axum::Extension<Tunnelled>>,
@@ -51,12 +90,16 @@ pub(crate) async fn handle_remote_pair(
     let peer = tunnelled
         .as_ref()
         .and_then(|axum::Extension(t)| t.peer.clone());
+    let already_paired = tunnelled
+        .as_ref()
+        .is_some_and(|axum::Extension(t)| t.device.is_some());
     let request = serde_json::from_slice::<PairRequest>(&body).ok();
     let name = request.as_ref().and_then(|b| b.name.clone());
     let code = request.and_then(|b| b.code);
     let outcome = match (state.remote_gateway(), code) {
+        _ if already_paired => PairingOutcome::Rejected,
         (Some(gateway), Some(code)) if !code.trim().is_empty() => {
-            gateway.redeem_pairing_code(code.trim(), peer.as_deref(), name.as_deref())
+            gateway.redeem_pairing_code(code.trim(), peer.as_deref(), label(name).as_deref())
         }
         _ => PairingOutcome::Rejected,
     };
@@ -80,13 +123,13 @@ pub(crate) async fn handle_remote_pair(
         PairingOutcome::Rejected => {
             warn!(
                 peer = peer.as_deref().unwrap_or("?"),
-                "refused a pairing attempt"
+                already_paired, "refused a pairing attempt"
             );
             (
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorResponse::with_code(
-                    "That pairing code was not accepted. Run `gglib remote enable` on the \
-                     serving machine for a fresh one.",
+                    "That pairing code was not accepted. Run \
+                     `gglib remote enable --invite` on the serving machine for a fresh one.",
                     "invalid_request_error",
                     "invalid_pairing_code",
                 )),

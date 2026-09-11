@@ -170,7 +170,8 @@ pub(super) async fn store_redeemed(
 fn spent_code(e: GuiError) -> GuiError {
     GuiError::Internal(format!(
         "{e} — the pairing code was already spent redeeming this key, so `gglib remote connect` \
-         cannot be retried with it; run `gglib remote enable` on the other machine for a new one"
+         cannot be retried with it; run `gglib remote enable --invite` on the other machine for a \
+         new one"
     ))
 }
 

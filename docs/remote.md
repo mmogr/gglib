@@ -32,9 +32,10 @@ when you invite it, so pairing is a separate act from being reachable — see
 ## The two sides
 
 Both sides live in the gglib daemon, so both survive the terminal that
-started them and both are gone when the daemon stops. Nothing is persisted
-across a restart on the desktop side; the laptop keeps only the pairing
-described below.
+started them. They differ in what comes back afterwards: the desktop side is
+a switch and a restart puts it back, with the same endpoint key, the same
+ticket and the same paired devices; the connecting side is not, and the
+laptop dials again from the pairing it stored.
 
 ### The desktop: `enable`, `status`, `disable`
 
@@ -95,8 +96,9 @@ which peers are connected and by what path, and how many requests this machine
 has *served* through the tunnel. That last number is counted where the requests
 arrive, so it is printed only on the machine that is serving; the connecting
 side has nothing to count and is told to read the number over there rather than
-shown a zero of its own. `gglib remote disable` takes the tunnel down; the
-ticket is dead from that moment.
+shown a zero of its own. `gglib remote disable` takes the tunnel down;
+nothing answers the ticket until the next `enable`, which brings the same one
+back.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
@@ -134,6 +136,17 @@ that is `gglib remote disable`.
 every request the device makes and lands in logs at both ends. The name a
 device calls itself is a label for you to read, and nothing is granted on the
 strength of it.
+
+**Pairing is for machines that have not paired.** A device that already holds
+a key is refused by the pairing route before its code is read, so one that
+has been compromised cannot burn the invite you are typing, or trade it for a
+second identity that would outlive the first being retired.
+
+**`enable --invite` works while remote access is already on.** It offers a
+code against the tunnel that is up rather than refusing, so pairing a second
+device costs nobody else their connection. It leaves the flags alone —
+changing `--allow-mcp` or `--relay` still means `disable` and `enable` again,
+and the ticket is the same one afterwards.
 
 **Upgrading breaks existing pairings, once.** A machine that paired before
 per-device keys holds the old shared key, and the edge no longer admits it.
@@ -248,9 +261,8 @@ disconnection — the usual reconnection is the same desktop again — but it
 is only ever sent while the box is on, and it belongs to the ticket it was
 typed against: connect to a *different* desktop and the field is empty
 again, because a name in one machine's catalog is not a name in another's.
-A desktop that ran `remote disable`/`enable` mints a fresh ticket and counts
-as a different one — the old ticket died with the session, so reaching it
-takes its new ticket regardless.
+A desktop that ran `remote disable`/`enable` is the same machine with the
+same ticket, so nothing has to be re-entered there either.
 
 *Chat on that machine*, under the model field, opens the chat screen against
 the desktop and ticks the box as it goes. It is how a laptop with no models
@@ -262,8 +274,8 @@ both the desktop's server and the tunnel up, unlike closing a local chat,
 which stops the server it was talking to.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
-port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API
-key as its API key. The port does not add the key for you — that is
+port `connect` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
+device key as its API key. The port does not add the key for you — that is
 deliberate; see [Why the port does not inject the key](#why-the-port-does-not-inject-the-key).
 The key is the one this laptop was given when it paired — its own device
 key, not the desktop's `proxy_api_key`, which never leaves the desktop.
@@ -477,7 +489,7 @@ here is one the desktop can retire on its own.
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
-| `gglib remote enable` says it is already enabled | One session at a time. `gglib remote disable`, then `enable` for a fresh ticket and code. |
+| `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote enable --invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
 
 ## Not yet
 

@@ -78,16 +78,16 @@ pub fn generate_api_key() -> String {
 ///
 /// **Independent of the device's key, deliberately.** This travels to the
 /// backend as `X-Modelpipe-Device` on every request that device makes, and
-/// lands in the tunnel's exchange log, the proxy's log, and `gglib remote
-/// list` output that people paste into bug reports. An identifier derived
-/// from a live credential is needless coupling at best.
+/// lands in the tunnel's exchange log, the proxy's log, and device-list
+/// output that people paste into bug reports. An identifier derived from a
+/// live credential is needless coupling at best.
 #[must_use]
 pub fn generate_device_id() -> String {
     let draw = u32::try_from(uuid::Uuid::new_v4().as_u128() & 0xffff_ffff).unwrap_or(0);
     format!("dev-{draw:08x}")
 }
 
-/// Mint a six-digit pairing code for `gglib remote enable`.
+/// Mint a six-digit pairing code for `gglib remote enable --invite`.
 ///
 /// Zero-padded decimal, so it is something a person reads off one screen
 /// and types into another. Its entropy is deliberately small — about twenty

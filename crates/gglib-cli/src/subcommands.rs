@@ -165,9 +165,10 @@ pub enum RemoteCommand {
     /// Reach another machine's proxy: bind a local port here that is it
     ///
     /// First time, paste the whole `<ticket>-<code>` string that machine's
-    /// `gglib remote enable` showed; the code is redeemed through the tunnel
-    /// for that machine's API key, which is stored here. Afterwards the
-    /// ticket alone will do, and with no argument the last ticket is dialled.
+    /// `gglib remote enable --invite` showed; the code is redeemed through
+    /// the tunnel for a key of this device's own, which is stored here.
+    /// Afterwards the ticket alone will do, and with no argument the last
+    /// ticket is dialled.
     Connect {
         /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
         pairing: Option<String>,

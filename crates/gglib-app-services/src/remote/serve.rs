@@ -49,6 +49,15 @@ impl RemoteOps {
     /// while this was arming; whatever starting the proxy returns;
     /// `Internal` when settings cannot be written or the tunnel cannot bind.
     pub async fn enable(&self, request: EnableRequest) -> Result<Enabled, GuiError> {
+        // Already serving, and asked to invite: a code on the live session
+        // rather than "already enabled". The alternative is telling someone
+        // to `disable` first, which drops every device already using the
+        // tunnel in order to add one. `invite_if_up` has the rest.
+        if request.invite
+            && let Some(enabled) = self.invite_if_up().await?
+        {
+            return Ok(enabled);
+        }
         // Read here rather than inside `arm`, so that `resume_arm` — which
         // builds its request from stored flags — cannot offer a code however
         // those flags are written. The switch is not where an invite lives.
@@ -149,16 +158,22 @@ impl RemoteOps {
         // spawned until the install below.
         super::backend::refuse_if_gone(&self.proxy, &backend, &handle).await?;
 
+        // Read before the commit below, not after. Under `Named` the listener
+        // starts closed, so this is what makes the machine reachable at all —
+        // and a key file that cannot be parsed is refused rather than
+        // softened into an empty roster. Doing that *after* the commit would
+        // fail an enable that had already minted and persisted
+        // `proxy_api_key`, locking the local proxy on the way out. The seed
+        // itself happens under the install guard below; this read is what
+        // makes an unreadable file fail while failing is still free.
+        let devices = device_keys::read_keys()?;
+
         // The first and only thing this leaves on the machine, and the last
         // point at which leaving nothing is still free: everything that can
         // fail is above it, and the tunnel above it is undone by dropping the
         // handle — nothing can be in flight behind a ticket that has not left
         // this function.
         settled.commit(&self.core, cancel).await?;
-
-        // Every device this machine issued a key to, put back: under `Named`
-        // the listener starts closed and admits nothing until this runs.
-        device_keys::seed(&handle).await?;
 
         // The slot is claimed and the gateway armed under **one** hold of
         // the lock. Claiming first is not enough: dropping the guard wakes
@@ -172,8 +187,9 @@ impl RemoteOps {
         // Under one guard there are only two things a `disable` can find:
         // a reservation with nothing armed, or a tunnel with its code.
         //
-        // Nothing in here is slow — an install, a `Mutex<Option<_>>` and an
-        // atomic — which is the whole reason it may share the guard at all.
+        // Nothing in here is slow — an install, a `Mutex<Option<_>>`, an
+        // atomic and one small file read — which is the whole reason it may
+        // share the guard at all.
         let watchers = CancellationToken::new();
         let mut slot = self.live.lock().await;
         // Begun before the install so the epoch can go into `Live`, and
@@ -200,6 +216,20 @@ impl RemoteOps {
                 "the enable was cancelled by `gglib remote disable`".to_owned(),
             ));
         }
+        // Under the guard, which is what makes a `forget` racing an arm come
+        // out right; `device_keys::seed` has the reasoning.
+        device_keys::seed(self, &handle, devices).await;
+        // The roster's writer, under the same guard as the install. The
+        // gateway takes notes on the request path, where it may not await,
+        // and this is the other end of that channel — here rather than below
+        // because a `disable` landing after the guard is released clears the
+        // channel, and this would then put one back for a session that had
+        // already ended. Non-blocking: a channel and a spawn.
+        roster::start(
+            &self.gateway,
+            Arc::clone(&self.core),
+            Arc::clone(&self.roster),
+        );
         drop(slot);
         // Both watchers start only now, and the ordering is load-bearing.
         // `watch_proxy` takes the slot with `take_if`, which looks at a
@@ -216,13 +246,6 @@ impl RemoteOps {
                 watchers.clone(),
             ));
         }
-        // The roster's writer: the gateway takes notes on the request path,
-        // where it may not await, and this is the other end of that channel.
-        roster::start(
-            &self.gateway,
-            Arc::clone(&self.core),
-            Arc::clone(&self.roster),
-        );
         super::backend::follow_proxy(self, &handle, proxy_exit, watchers, backend);
 
         let ticket = handle.ticket();
@@ -268,8 +291,8 @@ fn busy_serving(busy: &Busy) -> GuiError {
                  `gglib remote disable` to give up on it"
             }
             Busy::Full => {
-                "remote access is already enabled — `gglib remote disable` first to mint a new \
-                 ticket"
+                "remote access is already enabled — `--invite` pairs another device without \
+                 taking it down, and `gglib remote disable` first is what changes its flags"
             }
         }
         .to_owned(),

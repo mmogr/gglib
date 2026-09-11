@@ -87,7 +87,8 @@ pub struct RemoteOps {
     connect_generation: AtomicU64,
     /// The same, for `enable`.
     enable_generation: AtomicU64,
-    /// Serialises read-modify-write over the device roster.
+    /// Serialises read-modify-write over the device roster *and its key
+    /// file*, which are written together and must not interleave.
     ///
     /// `SettingsService::update` is load, merge, save with no lock of its
     /// own, and `remote_devices` is written whole — so an `invite` pushing a
@@ -95,6 +96,17 @@ pub struct RemoteOps {
     /// had not yet written, and one change would vanish. Separate from
     /// `live` because the settings write is slow and `invite` must not hold
     /// the serve slot across it.
+    ///
+    /// **It covers the roster's own writers and nothing else.** Every other
+    /// caller of `SettingsService::update` — `disable` clearing the switch,
+    /// `connect` storing a pairing, the settings form, `gglib config settings
+    /// set` — loads and saves the whole record without taking this, so one
+    /// landing across a roster write still drops a row. That is a property of
+    /// the settings service rather than of this lock, and it predates the
+    /// roster; what the roster adds is the first writer driven by traffic
+    /// rather than by a person (`last_seen`, at most once a minute per
+    /// device), which makes the collision likelier than it was. The fix
+    /// belongs in `SettingsService`, not here.
     roster: Arc<Mutex<()>>,
 }
 

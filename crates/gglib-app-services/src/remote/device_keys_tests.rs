@@ -3,14 +3,15 @@
 //! The policy is a decision rather than an implementation detail, and it had
 //! to be made explicitly: aborting on one bad row locks every device out for
 //! the sake of one, and continuing silently drops a device while the roster
-//! still lists it. The choice is to continue and log, which is why `list`
+//! still lists it. The choice is to continue and log, which is why the device list
 //! reports whether the listener is actually holding each row — the two stores
 //! are allowed to disagree, and a person has to be able to see that they do.
 //!
-//! [`super::seed_into`] rather than [`super::seed`] on purpose: `seed` reads
-//! the machine's own key file, which in a debug build is a real file in the
+//! Keys are passed in rather than read: [`super::read_keys`] reads the
+//! machine's own key file, which in a debug build is a real file in the
 //! repository checkout, and the policy is separable from where the keys came
-//! from.
+//! from. That split is also why this half cannot fail — `arm` reads the file
+//! while failing is still free, and seeds after the point of no return.
 
 use gglib_core::access::DeviceKeys;
 
@@ -49,7 +50,7 @@ fn keys(rows: &[(&str, &str)]) -> DeviceKeys {
 async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
     let handle = listener().await;
 
-    let seeded = seed_into(
+    seed_into(
         &handle,
         keys(&[
             ("dev-0a1b2c3d", "sk-zzq-one"),
@@ -58,13 +59,12 @@ async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
         ]),
     );
 
-    assert_eq!(seeded, 2, "the two well-formed rows were taken");
     let mut held = handle.token_names();
     held.sort();
     assert_eq!(
         held,
         vec!["dev-0a1b2c3d".to_owned(), "dev-11112222".to_owned()],
-        "and the listener holds exactly those"
+        "the two well-formed rows were taken and the third cost them nothing"
     );
 
     handle.shutdown().await;
@@ -77,7 +77,7 @@ async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
 async fn an_empty_roster_seeds_nothing() {
     let handle = listener().await;
 
-    assert_eq!(seed_into(&handle, DeviceKeys::new()), 0);
+    seed_into(&handle, DeviceKeys::new());
     assert!(handle.token_names().is_empty());
 
     handle.shutdown().await;

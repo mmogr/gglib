@@ -17,7 +17,9 @@ use std::time::Duration;
 use reqwest::StatusCode;
 
 mod fixtures;
-use fixtures::tunnel::{DEVICE, DEVICE_KEY, get, spawn_proxy, spawn_proxy_demanding, tunnel_to};
+use fixtures::tunnel::{
+    CODE, DEVICE, DEVICE_KEY, get, spawn_proxy, spawn_proxy_demanding, tunnel_to,
+};
 
 /// Forgetting a device, end to end: the key that worked a moment ago stops
 /// being admitted, and nothing else is disturbed.
@@ -174,5 +176,73 @@ async fn a_rotation_leaves_every_paired_device_where_it_was() {
 
     connected.shutdown().await;
     serving.shutdown().await;
+    cancel.cancel();
+}
+
+/// A device that already holds a key gets nothing from `POST /v1/remote/pair`,
+/// and cannot spend the invite meant for somebody else.
+///
+/// That route is outside the bearer group — it cannot demand the credential
+/// it exists to hand out — so under `TokenPolicy::Named` a paired device
+/// reaches it the way it reaches any other path: the edge admits it on its
+/// own key and marks the request with its device name. Two things that buys a
+/// device which has been compromised, both closed by refusing it before the
+/// code is looked at — burning every invite a person types, three wrong codes
+/// at a time, and three guesses per invite at a second identity that would
+/// outlive the first being forgotten.
+///
+/// The markers are set by hand here rather than piped: what is under test is
+/// the handler's reading of them, and a real tunnel cannot produce the
+/// grant-admitted and device-admitted requests in one session anyway. The
+/// peer fingerprint is deliberately the same on both — it names a process on
+/// the far side, not a device, and must never become the discriminator.
+#[tokio::test]
+async fn a_device_that_is_already_paired_cannot_redeem_or_burn_a_code() {
+    let (proxy_url, cancel, gateway) = spawn_proxy().await;
+
+    for attempt in 0..5 {
+        let res = reqwest::Client::new()
+            .post(format!("{proxy_url}/v1/remote/pair"))
+            .header("via", "1.1 modelpipe")
+            .header("x-modelpipe-peer", "3ca82708b995")
+            .header("x-modelpipe-device", DEVICE)
+            .json(&serde_json::json!({ "code": CODE }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::UNAUTHORIZED,
+            "attempt {attempt}: the right code is still refused on a device key"
+        );
+        let body: serde_json::Value = res.json().await.unwrap();
+        assert_eq!(
+            body["error"]["code"], "invalid_pairing_code",
+            "flat refusal"
+        );
+    }
+
+    // Five is past the three-attempt burn, and the invite is untouched: the
+    // handler never reached the gateway, so a paired device cannot spend
+    // somebody else's budget.
+    let honest = reqwest::Client::new()
+        .post(format!("{proxy_url}/v1/remote/pair"))
+        .header("via", "1.1 modelpipe")
+        .header("x-modelpipe-peer", "3ca82708b995")
+        .json(&serde_json::json!({ "code": CODE, "name": "Matt\u{2019}s laptop" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        honest.status(),
+        StatusCode::OK,
+        "the invite a person is holding survived a paired device hammering it"
+    );
+    assert_eq!(
+        gateway.paired_name.lock().unwrap().as_deref(),
+        Some("Matt\u{2019}s laptop"),
+        "and the grant-admitted request is the one that redeemed it"
+    );
+
     cancel.cancel();
 }

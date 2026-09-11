@@ -93,7 +93,7 @@ impl FarMachine {
         (code == Some(INVALID_API_KEY)).then(|| {
             format!(
                 "the remote machine {} refused the stored key — it is not that machine's current \
-                 API key; pair again with a fresh `gglib remote enable` there",
+                 API key; pair again with a fresh `gglib remote enable --invite` there",
                 self.fingerprint
             )
         })

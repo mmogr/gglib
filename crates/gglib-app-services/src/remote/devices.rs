@@ -29,7 +29,7 @@ use super::device_keys::{read_keys, write_keys};
 use super::gateway::Offered;
 use super::pairing::{MAX_ATTEMPTS_AT_EDGE, PAIRING_TTL};
 use super::roster::{now_ms, read_roster, write_roster};
-use super::types::{DeviceView, OfferedPairing};
+use super::types::{DeviceView, Enabled, OfferedPairing};
 use crate::error::GuiError;
 
 impl RemoteOps {
@@ -49,17 +49,45 @@ impl RemoteOps {
     /// when a store cannot be written or the edge refuses the token or the
     /// grant.
     pub async fn invite(&self) -> Result<OfferedPairing, GuiError> {
+        let Some(enabled) = self.invite_if_up().await? else {
+            return Err(GuiError::Conflict(
+                "remote access is not enabled — `gglib remote enable --invite` does both"
+                    .to_owned(),
+            ));
+        };
+        enabled.pairing.ok_or_else(|| {
+            GuiError::Internal("the invite came back without the code it armed".to_owned())
+        })
+    }
+
+    /// The same, against a tunnel that may or may not be up: `Ok(None)` means
+    /// there was nothing to invite onto.
+    ///
+    /// Shared with `enable --invite`, which is what makes that command work
+    /// on a machine that is already serving instead of answering "already
+    /// enabled". Without it a person who needs to pair a second device is
+    /// told to `disable` first, which drops every device already using the
+    /// tunnel — and every string in this codebase that points at
+    /// `enable --invite` would be pointing at a refusal.
+    ///
+    /// The flags in that request are *not* applied to a session already
+    /// running; only the code is new. `disable` and `enable` again to change
+    /// them, which is the one thing that has to be said out loud, because
+    /// `--allow-mcp` alongside `--invite` would otherwise look like it took.
+    pub(super) async fn invite_if_up(&self) -> Result<Option<Enabled>, GuiError> {
         let armed = {
             let live = self.live.lock().await;
             live.full().map(|l| (Arc::clone(&l.handle), l.epoch))
         };
         let Some((handle, epoch)) = armed else {
-            return Err(GuiError::Conflict(
-                "remote access is not enabled — `gglib remote enable` first".to_owned(),
-            ));
+            return Ok(None);
         };
         let ticket = handle.ticket().to_string();
-        offer(self, &handle, epoch, &ticket).await
+        let pairing = offer(self, &handle, epoch, &ticket).await?;
+        Ok(Some(Enabled {
+            ticket,
+            pairing: Some(pairing),
+        }))
     }
 
     /// Stop admitting one device and forget it. `false` when this machine
@@ -149,8 +177,11 @@ pub(super) async fn offer(
     let (id, key) = mint(handle)?;
 
     if let Err(e) = remember(ops, &id, &key).await {
-        // Nothing else to unwind: the stores are what `remember` failed at.
-        handle.remove_token(&id);
+        // Both stores, not just the token: `remember` writes the key file
+        // first and the roster second, so a roster failure leaves a key
+        // behind that `seed` would install at the next arm — an id admitted
+        // at the edge that no roster row accounts for and no `list` shows.
+        forget_quietly(ops, handle, &id).await;
         return Err(e);
     }
 

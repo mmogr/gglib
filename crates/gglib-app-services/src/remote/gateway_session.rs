@@ -125,11 +125,23 @@ impl RemoteGateway {
     /// Read and act under the one lock, which is the reason the epoch is not
     /// a bare atomic: an `enable` landing between a load and the clears
     /// would be wiped by a teardown that had just decided to leave it alone.
+    ///
+    /// **The epoch is counted up here too, not only in
+    /// [`begin_session`](Self::begin_session).** Without that, an epoch whose
+    /// session ended with no successor still matches, and every guard in this
+    /// file that asks "is this still my session?" answers yes for a session
+    /// that is gone. The reachable case is an `invite`: it reads the epoch
+    /// under the serve slot, releases it, mints a key and writes two stores —
+    /// and a `disable` landing in that window would leave `offer_pairing`
+    /// arming a live two-minute code against a tunnel that is down, on a
+    /// route that sits outside the proxy's bearer group. Ending a session has
+    /// to retire its name along with its state.
     pub(in crate::remote) fn reset_session_if(&self, epoch: u64) {
-        let session = self.session();
+        let mut session = self.session();
         if *session != epoch {
             return;
         }
+        *session += 1;
         self.pairing.clear();
         self.mcp_allowed.store(false, Ordering::Relaxed);
         self.paired.store(false, Ordering::Relaxed);

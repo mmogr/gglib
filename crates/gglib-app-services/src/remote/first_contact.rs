@@ -160,7 +160,7 @@ fn refusal(no: &NoContact) -> GuiError {
         // from `connect` at all, it is a handle that keeps trying.
         NoContact::Never => GuiError::Unavailable(format!(
             "the remote machine did not answer within {} seconds — it may be off, offline, or \
-             its ticket replaced by a newer `gglib remote enable` there",
+             its ticket replaced by a newer `gglib remote enable --invite` there",
             FIRST_CONTACT.as_secs()
         )),
         // Not the far machine's doing: before a path forms there is nothing

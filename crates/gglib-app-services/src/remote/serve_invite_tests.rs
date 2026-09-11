@@ -12,6 +12,7 @@ use gglib_core::SettingsUpdate;
 
 use super::serve_watch_tests::{offline, ops_with_key};
 use super::*;
+use crate::error::GuiError;
 
 /// A restart puts the tunnel back and arms no pairing code.
 ///
@@ -77,6 +78,15 @@ async fn a_plain_enable_brings_the_tunnel_up_and_offers_nothing() {
 
 /// The contrast, so the tests above cannot pass by arming nothing at all:
 /// asked for an invite, `enable` mints a device key and a code for it.
+///
+/// **This one forgets what it minted, and the cleanup is not politeness.**
+/// `invite` writes a real key into `<data root>/data/remote_devices`, which a
+/// debug build resolves to the repository checkout — the same file a
+/// developer's own daemon seeds its listener from. A test that left rows
+/// behind would arm that machine's tunnel with ids nobody issued, growing by
+/// one on every run. Forgetting them here is also the only coverage
+/// `RemoteOps::forget` has of its real path: the edge, the key file and the
+/// roster, all three.
 #[tokio::test]
 async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
     let (_core, _proxy, _events, ops) = ops_with_key().await;
@@ -103,6 +113,28 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
         offered.device
     );
     assert!(ops.status().await.pairing_active, "and it is redeemable");
+
+    // A second invite on the tunnel that is already up, which is what
+    // `enable --invite` has to do rather than answer "already enabled".
+    let again = ops
+        .enable(EnableRequest {
+            invite: true,
+            ..offline()
+        })
+        .await;
+    assert!(
+        matches!(&again, Err(GuiError::Conflict(m)) if m.contains("already open")),
+        "an invite while one is open is refused for that reason, not for being enabled: {again:?}"
+    );
+
+    assert!(
+        ops.forget(&offered.device).await.expect("forget"),
+        "the device this minted was held"
+    );
+    assert!(
+        !ops.forget(&offered.device).await.expect("forget"),
+        "and forgetting it twice is false rather than an error"
+    );
 
     ops.disable().await.expect("disable");
 }

@@ -28,9 +28,11 @@ const TOKEN: &str = "sk-zzq-proxy-token";
 /// Every tunnelled request below carries one, because under
 /// `TokenPolicy::Named` every legitimate tunnelled request does — and one
 /// that does not is refused by the device gate before the `/mcp` gate is
-/// consulted, which `integration_remote_shutdown.rs` pins. Without it these
-/// tests would all read `device_not_paired` and stop saying anything about
-/// `/mcp` at all.
+/// consulted. Without it these tests would all read `device_not_paired` and
+/// stop saying anything about `/mcp` at all — the header is what keeps this
+/// file about its own subject. The gate itself is pinned in
+/// `integration_remote_shutdown.rs`, and over a live pipe in
+/// `integration_remote_devices.rs`.
 const DEVICE: &str = "dev-0a1b2c3d";
 
 async fn spawn_proxy(access: ProxyAccessConfig) -> (String, CancellationToken) {

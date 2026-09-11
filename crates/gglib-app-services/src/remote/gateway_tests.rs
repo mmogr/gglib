@@ -191,3 +191,47 @@ fn debug_reports_state_and_never_the_code_or_key() {
     assert!(!rendered.contains("sk-zzq-secret"), "{rendered}");
     assert!(rendered.contains("pairing_active: true"), "{rendered}");
 }
+
+/// A session that ended takes its name with it, so nothing armed against it
+/// afterwards.
+///
+/// The other half of the epoch guard, and the half that was missing: the
+/// tests above cover a teardown *superseded by a newer session*, where the
+/// epochs differ because `begin_session` moved the counter. With no successor
+/// nothing moved it, so the dead epoch still matched and `offer_pairing`
+/// armed a live two-minute code against a tunnel that was down —
+/// `POST /v1/remote/pair` sits outside the proxy's bearer group, so anything
+/// local could spend it.
+///
+/// The window is real rather than theoretical: `invite` reads the epoch under
+/// the serve slot, releases it, then mints a key and writes two stores before
+/// it comes back here.
+#[test]
+fn a_code_cannot_be_offered_against_a_session_that_has_ended() {
+    let (_recorder, gateway) = gateway();
+    let epoch = gateway.begin_session(true);
+
+    // The teardown, with nothing taking the tunnel's place.
+    gateway.reset_session_if(epoch);
+
+    assert_eq!(
+        gateway.offer_pairing(
+            epoch,
+            "483920".to_owned(),
+            "sk-zzq-a-device-key".to_owned(),
+            "dev-0a1b2c3d".to_owned(),
+            PAIRING_TTL,
+        ),
+        Offered::Superseded,
+        "the epoch a dead session was armed under must stop matching"
+    );
+    assert!(
+        !gateway.pairing.active(),
+        "and nothing is redeemable against a tunnel that is down"
+    );
+    assert_eq!(
+        gateway.withdraw_pairing(epoch),
+        None,
+        "nor can a dead epoch reach into whatever comes next"
+    );
+}

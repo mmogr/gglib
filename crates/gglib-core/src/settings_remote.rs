@@ -161,7 +161,12 @@ pub struct Device {
     #[serde(default)]
     pub label: Option<String>,
 
-    /// Unix milliseconds at which the device redeemed its invite.
+    /// Unix milliseconds at which this device's invite was minted.
+    ///
+    /// Not when it redeemed one: the row and the key are written before the
+    /// code is shown, so that a device cannot end up holding a key this side
+    /// has no record of. An invite nobody redeems therefore leaves a row
+    /// behind, which is why it is listed rather than swept on a timer.
     pub joined_at: i64,
 
     /// Unix milliseconds of the last request that arrived bearing this

@@ -235,7 +235,7 @@ rather than working around it.
 > every admitted request, so the proxy still receives the credential it
 > demands and no device ever holds it.
 >
-> Four things follow, and each has to be recorded rather than asserted away.
+> Five things follow, and each has to be recorded rather than asserted away.
 >
 > 1. **The local half of this decision survives untouched.** `enable` still
 >    force-generates and persists `proxy_api_key`, and the paragraphs above
@@ -271,7 +271,19 @@ rather than working around it.
 >    consulted. What the gate does *not* address is the open question decision
 >    5 now owns: a **named** device reaches `invoke_tool` when `--allow-mcp`
 >    is on, and there are now N credentials that can rather than one.
-> 4. **What retiring a device cuts, and where the keys live.** Retiring a
+> 4. **`POST /v1/remote/pair` refuses a device that already holds a key.**
+>    That route is outside the bearer group by decision 3's design — it cannot
+>    demand the credential it exists to hand out — and under `Named` a paired
+>    device reaches it with its own valid bearer, which the edge admits for
+>    any path. Decision 3 says a wrong code over the tunnel is a wrong bearer
+>    the edge refuses before this handler runs; that stops being true for a
+>    device that has one. Left open it would let a compromised but
+>    not-yet-retired laptop burn every invite a person types, three wrong
+>    codes at a time, and take three guesses per invite at a second identity
+>    that would survive the first being forgotten. A request the edge named a
+>    device for is therefore refused before the code is looked at, with the
+>    same flat 401 as every other refusal here.
+> 5. **What retiring a device cuts, and where the keys live.** Retiring a
 >    device is `ServeHandle::remove_token`, which gates *admission* and not
 >    delivery: a response already streaming to that device runs to completion.
 >    `gglib remote disable` is the hard stop. The keys are kept in

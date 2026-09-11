@@ -90,7 +90,7 @@ impl RemoteOps {
                 let stored = settings.remote_pairing.as_ref().ok_or_else(|| {
                     GuiError::ValidationFailed(
                         "this machine has not connected to a remote before — give it the pairing \
-                         string `gglib remote enable` showed there"
+                         string `gglib remote enable --invite` showed there"
                             .to_owned(),
                     )
                 })?;
@@ -108,7 +108,7 @@ impl RemoteOps {
         if code.is_none() && held.is_none() {
             return Err(GuiError::ValidationFailed(
                 "this machine holds no key for that remote — pair once with the full \
-                 `<ticket>-<code>` string from `gglib remote enable`"
+                 `<ticket>-<code>` string from `gglib remote enable --invite`"
                     .to_owned(),
             ));
         }
@@ -273,7 +273,7 @@ fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
         // `pairing_string::parse`'s error instead, one guard earlier.
         ConnectError::PeerUnreachable => GuiError::ValidationFailed(
             "that pairing string names an address nobody could be at — copy it again from \
-             `gglib remote enable` on the far machine"
+             `gglib remote enable --invite` on the far machine"
                 .to_owned(),
         ),
         ConnectError::Bind(err) => GuiError::Conflict(format!(

@@ -88,7 +88,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
                 "  The pairing code expired and nobody paired. The tunnel is up; the ticket is \
                  still valid for a device that already holds the key."
             );
-            eprintln!("  Run `gglib remote disable` then `gglib remote enable` for a fresh code.");
+            eprintln!("  Run `gglib remote enable --invite` again for a fresh code.");
         }
         Outcome::Interrupted => {
             eprintln!();

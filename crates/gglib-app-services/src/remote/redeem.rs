@@ -53,7 +53,8 @@ pub(super) async fn redeem(
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         return Err(GuiError::ValidationFailed(
             "the far machine refused the pairing code — it may have expired (two minutes), been \
-             used already, or been burned by wrong attempts; run `gglib remote enable` there again"
+             used already, or been burned by wrong attempts; run `gglib remote enable --invite` there \
+             again"
                 .to_owned(),
         ));
     }
@@ -108,7 +109,7 @@ pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Re
         // is the same one the chat path's refusal makes.
         reqwest::StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(format!(
             "the remote machine {fingerprint} refused the stored key — it is not that machine's \
-             current API key; pair again with a fresh `gglib remote enable` there"
+             current API key; pair again with a fresh `gglib remote enable --invite` there"
         ))),
         reqwest::StatusCode::CONFLICT => Err(GuiError::Conflict(
             "the far proxy is not running under a daemon, so there is nothing to stop from here"

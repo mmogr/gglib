@@ -180,7 +180,7 @@ impl super::Target {
             .ok_or_else(|| {
                 anyhow!(
                     "connected to a remote machine, but this one holds no key for it — pair again \
-                     with the full `<ticket>-<code>` string from `gglib remote enable` there"
+                     with the full `<ticket>-<code>` string from `gglib remote enable --invite` there"
                 )
             })?;
         let port = reqwest::Url::parse(&connection.base_url)
