@@ -47,13 +47,19 @@ remote/
   types.rs          — what the ops are asked for and what they report
 ```
 
-# One key, two doors
+# Two keys, two doors
 
-The listener enforces the **same** bearer token the proxy enforces
-(`TokenPolicy::Supplied`). A wrong token is refused at the tunnel edge before
-a byte reaches the daemon, and again by the proxy's own guard if it got there.
+The listener enforces a key **per device** (`TokenPolicy::Named`), and none of
+them is the proxy's. A device presents its own; the edge names the device on
+the way through, and `backend_auth` puts the proxy's key on the request
+afterwards, so a device key never reaches the proxy and the proxy's key never
+reaches a device. A tunnelled request arriving without a named device is
+refused `403 device_not_paired` before a byte reaches the daemon. Retiring one
+device is `forget`; the proxy's own key is unaffected by all of it, and
+rotating it re-pairs nobody.
 
-`key.rs` decides which token that is, in order: what the running proxy
+`key.rs` decides the *proxy's* key — the one behind the second door — in
+order: what the running proxy
 actually demands (a `--api-key` flag is pinned and never appears in settings,
 so the stored value would be wrong); the stored `proxy_api_key`; or a fresh
 key, minted. The last case is the loopback default — nothing minted a key
