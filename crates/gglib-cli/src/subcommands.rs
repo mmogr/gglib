@@ -118,8 +118,9 @@ pub enum DaemonCommand {
 
 /// Subcommands available under `gglib remote`.
 ///
-/// Both sides of ADR 0012. Off by default and never persisted: `enable` arms
-/// the serve side and `connect` the connect side for the running daemon only.
+/// Both sides of ADR 0012, and they persist differently: `enable` is a
+/// switch the daemon honours again at startup, while `join` binds a
+/// loopback port for the running daemon only.
 #[derive(Subcommand)]
 pub enum RemoteCommand {
     /// Put this machine's proxy on another machine, and show the pairing

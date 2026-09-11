@@ -67,8 +67,16 @@ nothing else; to change the flags, `disable` and `enable` again.
 `gglib remote list` shows what this machine has issued a key to, and
 `gglib remote forget <id>` retires one of them. A row that reads
 **"invited …, never joined"** is a code that was offered and never redeemed:
-the key was minted and never transmitted, so nobody holds it, and forgetting
-it is tidying rather than revocation.
+the key was minted and never transmitted, so in the ordinary case nobody
+holds it and forgetting it is tidying rather than revocation.
+
+Ordinary, not certain. The marker that says a device redeemed is written by a
+background task and can be lost — to a crash between the redemption and the
+write, and to any row a build older than this one wrote for a device that
+paired and never made a request. Such a row reads as never joined when it was
+not. The list errs this way on purpose, because the other direction would
+call an unspent invite a device; but it means `forget` on a row you do not
+recognise is a revocation you should be willing to make, not merely tidying.
 
 ```console
 $ gglib remote list
