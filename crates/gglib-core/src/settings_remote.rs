@@ -135,6 +135,52 @@ pub struct RemoteServe {
     pub discovery: bool,
 }
 
+/// One device this machine has issued a key to.
+///
+/// The roster, and only the roster: **no key field**. A device's key is a
+/// secret and lives in the `0600` file beside the endpoint identity, not
+/// here — `gglib config settings show` prints `proxy_api_key` unmasked by
+/// design, and that output gets pasted into bug reports. One shared key
+/// there was a known cost; every device key there would quietly undo what
+/// per-device revocation is for.
+///
+/// `id` is what modelpipe is told, and it travels to the backend as
+/// `X-Modelpipe-Device` on every request that device makes, so it is
+/// generated from the CSPRNG rather than derived from the key: an
+/// identifier that falls out of a live credential is needless coupling at
+/// best. `label` is for a person to read and is sent nowhere, because
+/// modelpipe's names are `[A-Za-z0-9._-]{1,64}` and "Matt's iPhone" is not
+/// one.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Device {
+    /// The name the tunnel edge holds this device's token under.
+    pub id: String,
+
+    /// What a person calls it, when the device said so at join.
+    #[serde(default)]
+    pub label: Option<String>,
+
+    /// Unix milliseconds at which this device's invite was minted.
+    ///
+    /// Not when it redeemed one: the row and the key are written before the
+    /// code is shown, so that a device cannot end up holding a key this side
+    /// has no record of. An invite nobody redeems therefore leaves a row
+    /// behind, which is why it is listed rather than swept on a timer.
+    pub joined_at: i64,
+
+    /// Unix milliseconds of the last request that arrived bearing this
+    /// device's token, or `None` if none has since the daemon started.
+    ///
+    /// Advisory, like the tunnelled request counter: it is written from a
+    /// background task rather than the request path, and a local process
+    /// that forges the marker headers can move it. Nothing is granted on
+    /// it — it exists so a person deciding what to `forget` can see which
+    /// row is still in use.
+    #[serde(default)]
+    pub last_seen: Option<i64>,
+}
+
 /// `serde(default)` for a field whose absence means yes.
 const fn default_true() -> bool {
     true
@@ -151,6 +197,9 @@ impl Settings {
         }
         if let Some(ref v) = other.remote_serve {
             self.remote_serve.clone_from(v);
+        }
+        if let Some(ref v) = other.remote_devices {
+            self.remote_devices.clone_from(v);
         }
     }
 }
@@ -170,5 +219,24 @@ pub(super) fn validate_remote(settings: &Settings) -> Result<(), SettingsError> 
             return Err(SettingsError::BlankRemoteTicket);
         }
     }
+    // A row whose id is not a name modelpipe will hold is a row that cannot
+    // be seeded, and the failure would land at the next `enable` rather than
+    // at the write that caused it.
+    for device in settings.remote_devices.iter().flatten() {
+        if !valid_device_id(&device.id) {
+            return Err(SettingsError::InvalidDeviceId(device.id.clone()));
+        }
+    }
     Ok(())
+}
+
+/// modelpipe's rule for a token name, applied before a row is written
+/// rather than when the listener refuses it: ASCII letters, digits, `.`,
+/// `_` and `-`, one to sixty-four bytes.
+fn valid_device_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }

@@ -9,7 +9,7 @@ reasoning; this page has the commands.
 
 ```bash
 # On the desktop (the machine with the models):
-gglib remote enable
+gglib remote enable --invite
 #   → shows a ticket and a six-digit code, once, for two minutes
 gglib model list
 #   → the names this machine serves; the laptop needs one of them
@@ -24,22 +24,34 @@ ticket and the key it received, so the next session is
 `gglib remote connect` with nothing after it — and it stays that way across
 restarts on both machines, because the desktop keeps its endpoint key.
 
+`--invite` is there because `enable` on its own is a switch: it turns this
+machine on and hands nothing out. Every device gets a key of its own, minted
+when you invite it, so pairing is a separate act from being reachable — see
+[A key per device](#a-key-per-device).
+
 ## The two sides
 
 Both sides live in the gglib daemon, so both survive the terminal that
-started them and both are gone when the daemon stops. Nothing is persisted
-across a restart on the desktop side; the laptop keeps only the pairing
-described below.
+started them. They differ in what comes back afterwards: the desktop side is
+a switch and a restart puts it back, with the same endpoint key, the same
+ticket and the same paired devices; the connecting side is not, and the
+laptop dials again from the pairing it stored.
 
 ### The desktop: `enable`, `status`, `disable`
 
-`gglib remote enable` starts the proxy if it is not running, puts the tunnel
-in front of it, and shows the pairing in the terminal's alternate screen —
-a QR code, the ticket, and the code — the way `less` shows a file: leaving
-the screen restores the terminal, and nothing is left in the scrollback. The
-screen goes away by itself the moment a device pairs or the code expires.
-`--no-qr`, or a stdout that is not a terminal, prints the pairing as plain
-text instead.
+`gglib remote enable` starts the proxy if it is not running and puts the
+tunnel in front of it. On its own it hands out nothing: it prints the ticket
+and says the machine is reachable, and that is all. Adding `--invite` also
+mints a key for one new device and a six-digit code that hands it over once,
+shown in the terminal's alternate screen — a QR code, the ticket, and the
+code — the way `less` shows a file: leaving the screen restores the terminal,
+and nothing is left in the scrollback. The screen goes away by itself the
+moment a device pairs or the code expires. `--no-qr`, or a stdout that is not
+a terminal, prints the pairing as plain text instead.
+
+A restart never invites. The daemon brings the tunnel back up with the flags
+you enabled it with, minus this one: a code nobody is watching for is a live
+grant nobody spends, on a ticket that no longer changes between sessions.
 
 | Flag | Effect |
 |------|--------|
@@ -47,6 +59,7 @@ text instead.
 | `--relay URL` | Use a self-hosted iroh relay instead of the public ones. |
 | `--no-discovery` | Do not publish to or resolve through n0's discovery service. The ticket then carries only the paths it was minted with, and stops resolving for good the moment the machine changes network. Advanced. |
 | `--no-qr` | Plain text; no alternate screen. |
+| `--invite` | Also mint a key for one new device and a code that hands it over, so a first run is one command. |
 
 ### You pair once
 
@@ -83,12 +96,62 @@ which peers are connected and by what path, and how many requests this machine
 has *served* through the tunnel. That last number is counted where the requests
 arrive, so it is printed only on the machine that is serving; the connecting
 side has nothing to count and is told to read the number over there rather than
-shown a zero of its own. `gglib remote disable` takes the tunnel down; the
-ticket is dead from that moment.
+shown a zero of its own. `gglib remote disable` takes the tunnel down;
+nothing answers the ticket until the next `enable`, which brings the same one
+back.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
 pairs or the code runs out.
+
+### A key per device
+
+Every device that pairs gets a key of its own, minted on the desktop at the
+moment you invite it and never shared with another device. The tunnel edge
+holds them by name and admits nothing else.
+
+That is what makes losing a laptop survivable. Under one shared key the only
+revocation was rotating it, which cut off every device at once and made
+re-pairing all of them the price of retiring one. Now retiring a device stops
+that device and nothing else, and **rotating `proxy_api_key` un-pairs
+nobody** — a rotation changes only what the tunnel presents to the proxy on
+the far side of the edge, which no device ever sees.
+
+The desktop keeps two records, in two places, on purpose:
+
+* **The keys** are in `<data root>/data/remote_devices`, beside the endpoint
+  key and with the same `0600` posture. Not in settings: `gglib config
+  settings show` prints settings unmasked by design, so that a rotated key
+  can be recovered, and that output is what people paste into bug reports.
+* **Everything readable about a device** — the id the edge knows it as, what
+  it called itself, when it joined, when it was last seen — is in settings,
+  where nothing about it is secret.
+
+**Retiring a device stops admission, not delivery.** The edge refuses that
+device's key from the next request onward; a response already streaming to it
+runs to completion. If what you need is for a machine to stop answering *now*,
+that is `gglib remote disable`.
+
+**A device id is not a secret and is not private.** It travels as a header on
+every request the device makes and lands in logs at both ends. The name a
+device calls itself is a label for you to read, and nothing is granted on the
+strength of it.
+
+**Pairing is for machines that have not paired.** A device that already holds
+a key is refused by the pairing route before its code is read, so one that
+has been compromised cannot burn the invite you are typing, or trade it for a
+second identity that would outlive the first being retired.
+
+**`enable --invite` works while remote access is already on.** It offers a
+code against the tunnel that is up rather than refusing, so pairing a second
+device costs nobody else their connection. It leaves the flags alone —
+changing `--allow-mcp` or `--relay` still means `disable` and `enable` again,
+and the ticket is the same one afterwards.
+
+**Upgrading breaks existing pairings, once.** A machine that paired before
+per-device keys holds the old shared key, and the edge no longer admits it.
+Invite each device once and they are back; nothing else about the machine
+changes, and the ticket is the same ticket.
 
 ### The laptop: `connect`, `disconnect`
 
@@ -198,9 +261,8 @@ disconnection — the usual reconnection is the same desktop again — but it
 is only ever sent while the box is on, and it belongs to the ticket it was
 typed against: connect to a *different* desktop and the field is empty
 again, because a name in one machine's catalog is not a name in another's.
-A desktop that ran `remote disable`/`enable` mints a fresh ticket and counts
-as a different one — the old ticket died with the session, so reaching it
-takes its new ticket regardless.
+A desktop that ran `remote disable`/`enable` is the same machine with the
+same ticket, so nothing has to be re-entered there either.
 
 *Chat on that machine*, under the model field, opens the chat screen against
 the desktop and ticks the box as it goes. It is how a laptop with no models
@@ -212,12 +274,14 @@ both the desktop's server and the tunnel up, unlike closing a local chat,
 which stops the server it was talking to.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
-port `connect` printed, `http://127.0.0.1:<port>/v1`, with the desktop's API
-key as its API key. The port does not add the key for you — that is
+port `connect` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
+device key as its API key. The port does not add the key for you — that is
 deliberate; see [Why the port does not inject the key](#why-the-port-does-not-inject-the-key).
-The key is the desktop's `proxy_api_key`, which `gglib config settings show`
-prints on the desktop. The per-client recipes in [clients.md](clients.md)
-apply unchanged apart from the port and the key.
+The key is the one this laptop was given when it paired — its own device
+key, not the desktop's `proxy_api_key`, which never leaves the desktop.
+`gglib remote status` here says whether this machine holds one. The per-client
+recipes in [clients.md](clients.md) apply unchanged apart from the port and
+the key.
 
 ## How it stays private
 
@@ -228,28 +292,35 @@ cannot be hole-punched, a relay carries the packets — and sees ciphertext,
 who is talking to whom, and how much. Never content. `--relay` moves even
 that to a server you run.
 
-**One key, two doors.** The tunnel enforces the same bearer token the
-desktop's proxy enforces. A request without it is refused at the tunnel edge
-before a byte reaches the daemon, and again by the proxy if it somehow got
-there. Rotating the key on the desktop (`gglib config settings set
---proxy-api-key`) reaches the running tunnel within a few seconds.
+**Two doors, two different keys.** A request arriving through the tunnel is
+checked twice, and the checks are no longer the same check. At the edge it
+must present a key the desktop issued to *that device*; nothing else is
+admitted, the desktop's own `proxy_api_key` included. Past the edge the
+tunnel replaces the device's key with the desktop's, so what reaches the
+proxy is the credential the proxy demands and the device key stops at the
+edge — a device never holds anything that would open the desktop's loopback
+proxy.
 
-**Rotating the key un-pairs every laptop.** That is the same sentence read
-from the other end, and it needs saying on its own because nothing warns you.
-The new key reaches the tunnel edge; it reaches no machine that already
-paired. A laptop keeps whatever it was handed when it redeemed its code, and
-there is no path that updates it — only another redemption writes it. From the
-rotation onward its requests are refused at the edge with `invalid or missing
-bearer token` — a flat refusal the tunnel writes rather than gglib, naming
-nothing, because at that point the tunnel is all that has looked at the
-request. That is still what a *third-party* client pointed at the port sees.
-gglib's own turns no longer stop there: the daemon reads the refusal's
-`invalid_api_key` code and says which machine refused, and what to do about it.
-Getting back in means `gglib remote disable` and
-`gglib remote enable` on the desktop and a fresh `<ticket>-<code>` on every
-laptop that was using the old key. The one case that survives a rotation is a
-pairing code still on screen when it lands: that code is re-armed with the new
-key and redeems normally.
+That second check can therefore no longer refuse a tunnelled request on its
+own: it is validating a header the tunnel wrote microseconds earlier. What
+stands in its place is a check that the edge named a device at all. Only a
+named key makes it do so, so a request admitted by a one-time pairing code —
+which the edge cannot restrict to one route — is refused before it reaches
+anything, with `403 device_not_paired`.
+
+Rotating the key on the desktop (`gglib config settings set
+--proxy-api-key`) reaches the running tunnel within a few seconds and changes
+only that last hop. No device notices, and none has to re-pair.
+
+**A device that is refused says so flatly.** `invalid or missing bearer
+token` is what the tunnel writes when a key is not admitted — naming nothing,
+because at that point the tunnel is all that has looked at the request. That
+is what a *third-party* client pointed at the loopback port sees. gglib's own
+turns do not stop there: the daemon reads the refusal's `invalid_api_key`
+code and says which machine refused and what to do about it. The cause is no
+longer a rotation, which un-pairs nobody; it is that the desktop has retired
+this device, or that the two are mid-rotation and the edge has a stale
+credential for the proxy — that one clears itself within a few seconds.
 
 **The key is not something to type in.** There is no
 `gglib config settings set --remote-api-key`, and that is deliberate rather
@@ -264,9 +335,10 @@ that reason. Pair again instead; it is one command on each side.
 **Pairing moves a one-time code, not the key.** The six-digit code is
 granted once at the tunnel edge, lives two minutes, dies on first use, and
 is burned by the third wrong attempt — and it is useless without the ticket,
-which is the only way to reach the route that accepts it. The key itself
-travels once, inside the encrypted tunnel, in exchange for that code. Every
-refusal is the same flat refusal; a guesser learns nothing.
+which is the only way to reach the route that accepts it. The key it buys is
+minted for this one device and travels once, inside the encrypted tunnel, in
+exchange for that code. Every refusal is the same flat refusal; a guesser
+learns nothing.
 
 > **Corrected 2026-09-07.** Any one path gets two of those three, not all
 > three. Over the tunnel a wrong code is a wrong bearer and is refused at the
@@ -281,9 +353,9 @@ refusal is the same flat refusal; a guesser learns nothing.
 the ticket is the same ticket every time and a device pairs once rather than
 every session. `gglib remote disable` stops answering — the ticket reaches
 nobody while the tunnel is down — but it does not revoke anything: `enable`
-brings the same address back. Revoking is deleting the endpoint key, which
-`gglib remote status` prints the path to, and it re-pairs every device at
-once. What a lasting name costs in return is under
+brings the same address back. Retiring one device is the per-device
+revocation; deleting the endpoint key, which `gglib remote status` prints the
+path to, is the whole-machine one, and re-pairs everything at once. What a lasting name costs in return is under
 [How it stays private](#how-it-stays-private) below.
 
 **Enabling puts the key on the local proxy too.** The tunnel and the proxy
@@ -384,6 +456,12 @@ a `403` naming the flag; local clients are unaffected. The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
 remove or forge to its advantage — forging it only denies yourself `/mcp`.
 
+A tunnelled request the edge did not admit on a *device* key reaches nothing
+at all: `403 device_not_paired`, before any of the above is consulted. In
+practice that is the one request a live pairing code buys, which would
+otherwise arrive at any route it liked carrying the proxy's own credential.
+Local clients are unaffected — they carry no marker.
+
 ## Why the port does not inject the key
 
 The laptop's port could add `Authorization` to every request passing
@@ -392,7 +470,9 @@ configuration. It does not, on purpose: that would make every process on
 the laptop an authenticated client of the desktop, which is a larger grant
 than the one you made when you paired. gglib's own commands attach the key
 because you asked them to; a third-party client supplies it as its API key,
-which is the ordinary OpenAI-compatible arrangement.
+which is the ordinary OpenAI-compatible arrangement. The key in question is
+this device's own, which is also what bounds the mistake: a key that leaks
+here is one the desktop can retire on its own.
 
 ## Troubleshooting
 
@@ -404,11 +484,12 @@ which is the ordinary OpenAI-compatible arrangement.
 | `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |
 | `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote enable` on the desktop again. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
-| `the remote machine <fingerprint> refused the stored key` | The key this laptop holds is not that machine's current one — usually because `proxy_api_key` was rotated there since you paired, but also if you dialled a bare ticket for a different machine. Re-enable on the desktop and redeem a fresh `<ticket>-<code>`. |
+| `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
+| `403 device_not_paired` | The request reached the desktop's proxy without the tunnel naming a device — a pairing code used as an API key, or a forged marker on the desktop itself. Pair properly: `gglib remote enable --invite` there, and redeem the code here. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
-| `gglib remote enable` says it is already enabled | One session at a time. `gglib remote disable`, then `enable` for a fresh ticket and code. |
+| `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote enable --invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
 
 ## Not yet
 

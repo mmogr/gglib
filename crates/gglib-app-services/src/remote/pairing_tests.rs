@@ -11,7 +11,12 @@ const KEY: &str = "sk-zzq-the-real-key";
 
 fn armed() -> Pairing {
     let pairing = Pairing::default();
-    pairing.begin(CODE.to_owned(), KEY.to_owned(), PAIRING_TTL);
+    pairing.begin_for(
+        CODE.to_owned(),
+        KEY.to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
     pairing
 }
 
@@ -20,7 +25,10 @@ fn the_right_code_is_granted_once_and_then_rejected() {
     let pairing = armed();
     assert_eq!(
         pairing.redeem(CODE),
-        PairingOutcome::Granted(KEY.to_owned())
+        PairingOutcome::Granted {
+            key: KEY.to_owned(),
+            device: "dev-0a1b2c3d".to_owned(),
+        }
     );
     assert_eq!(pairing.redeem(CODE), PairingOutcome::Rejected, "spent");
     assert!(!pairing.active());
@@ -34,7 +42,10 @@ fn a_wrong_code_is_rejected_and_the_right_one_still_works_within_the_budget() {
     assert!(pairing.active(), "two misses leave it armed");
     assert_eq!(
         pairing.redeem(CODE),
-        PairingOutcome::Granted(KEY.to_owned())
+        PairingOutcome::Granted {
+            key: KEY.to_owned(),
+            device: "dev-0a1b2c3d".to_owned(),
+        }
     );
 }
 
@@ -55,7 +66,12 @@ fn the_third_wrong_code_burns_the_pairing() {
 #[test]
 fn an_expired_code_is_rejected_whatever_is_presented() {
     let pairing = Pairing::default();
-    pairing.begin(CODE.to_owned(), KEY.to_owned(), Duration::ZERO);
+    pairing.begin_for(
+        CODE.to_owned(),
+        KEY.to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        Duration::ZERO,
+    );
     assert!(!pairing.active());
     assert_eq!(pairing.redeem(CODE), PairingOutcome::Rejected);
 }
@@ -89,13 +105,24 @@ fn redeem_compares_the_bytes_it_is_handed_and_trims_nothing() {
     }
 }
 
+/// A pairing hands out the key it was armed with, and a rotation of the
+/// *proxy's* key does not reach into it.
+///
+/// It used to: `Pairing::update_key` existed because a redemption handed out
+/// `proxy_api_key`, so a rotation landing while the code was on screen had to
+/// hand out the new one. A device now redeems for a key of its own, which no
+/// rotation touches — and keeping that path would have overwritten the
+/// device's key with the backend credential, giving the joining device the
+/// one thing `backend_auth` exists to keep off it.
 #[test]
-fn a_rotation_during_pairing_hands_out_the_new_key() {
+fn a_pairing_hands_out_the_key_it_was_armed_with() {
     let pairing = armed();
-    pairing.update_key("sk-zzq-rotated".to_owned());
     assert_eq!(
         pairing.redeem(CODE),
-        PairingOutcome::Granted("sk-zzq-rotated".to_owned())
+        PairingOutcome::Granted {
+            key: KEY.to_owned(),
+            device: "dev-0a1b2c3d".to_owned(),
+        }
     );
 }
 
@@ -110,10 +137,43 @@ fn clearing_forgets_the_code() {
 #[test]
 fn re_arming_replaces_the_previous_code() {
     let pairing = armed();
-    pairing.begin("111111".to_owned(), "other-key".to_owned(), PAIRING_TTL);
+    pairing.begin_for(
+        "111111".to_owned(),
+        "other-key".to_owned(),
+        "dev-0a1b2c3d".to_owned(),
+        PAIRING_TTL,
+    );
     assert_eq!(pairing.redeem(CODE), PairingOutcome::Rejected, "old code");
     assert_eq!(
         pairing.redeem("111111"),
-        PairingOutcome::Granted("other-key".to_owned())
+        PairingOutcome::Granted {
+            key: "other-key".to_owned(),
+            device: "dev-0a1b2c3d".to_owned(),
+        }
     );
+}
+
+/// `withdraw_if` retires a code only when it belongs to the device named.
+///
+/// It exists for `forget`: a code still on screen for a device being retired
+/// would otherwise redeem for a key the edge has just stopped holding — a
+/// device that pairs, shows a green checkmark, and is refused on its first
+/// real request. The `if` is the other half: retiring the laptop must not
+/// cancel the code a person is at that moment typing into their phone.
+#[test]
+fn withdrawing_for_a_device_leaves_another_devices_code_alone() {
+    let pairing = armed();
+    assert_eq!(pairing.withdraw_if("dev-99887766"), None, "not its code");
+    assert!(pairing.active(), "and it is still redeemable");
+
+    assert_eq!(
+        pairing.withdraw_if("dev-0a1b2c3d"),
+        Some("dev-0a1b2c3d".to_owned())
+    );
+    assert!(!pairing.active());
+    assert_eq!(pairing.redeem(CODE), PairingOutcome::Rejected);
+
+    // Nothing pending is not an error, which is what lets `forget` call it
+    // unconditionally.
+    assert_eq!(pairing.withdraw_if("dev-0a1b2c3d"), None);
 }

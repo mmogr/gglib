@@ -10,12 +10,20 @@
 use std::fmt;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, PairingOutcome, RemoteGatewayPort};
 
+use tokio::sync::mpsc::UnboundedSender;
+
 use super::pairing::Pairing;
+use super::roster::Note;
+
+#[path = "gateway_session.rs"]
+mod session;
+
+pub(super) use session::Offered;
 
 /// The tunnel's side of the proxy's questions.
 pub struct RemoteGateway {
@@ -34,6 +42,12 @@ pub struct RemoteGateway {
     /// sentinel for "never".
     last_tunnelled_ms: AtomicI64,
     last_peer: Mutex<Option<String>>,
+    /// Where roster changes go to be persisted, while a tunnel is up.
+    ///
+    /// Installed by `arm` and dropped by the teardown, so a note taken with
+    /// no tunnel — which cannot happen, since nothing is admitted then — is
+    /// discarded rather than queued for a task that will never read it.
+    notes: Mutex<Option<UnboundedSender<Note>>>,
     emitter: std::sync::Arc<dyn AppEventEmitter>,
 }
 
@@ -47,69 +61,9 @@ impl RemoteGateway {
             tunnelled_requests: AtomicU64::new(0),
             last_tunnelled_ms: AtomicI64::new(-1),
             last_peer: Mutex::new(None),
+            notes: Mutex::new(None),
             emitter,
         }
-    }
-
-    /// Arm a session — `code` redeems for `key` for `ttl`, and `/mcp` is
-    /// open to tunnelled requests or it is not — and say which session that
-    /// is. The number comes back for [`Self::reset_session_if`].
-    ///
-    /// The paired flag is cleared here as well as there, because a teardown
-    /// is not guaranteed to run: the session this replaces may still be
-    /// draining, and its teardown will decline to touch anything (that is
-    /// what the epoch is for). Nobody has paired with a session that is only
-    /// now being armed, and `status` would otherwise report the last one's
-    /// answer.
-    ///
-    /// `code` is `None` when the tunnel is being put back by a restart
-    /// rather than by a person: any pairing the previous session left is
-    /// cleared and none is armed. A code nobody is watching for is a live
-    /// grant nobody spends, and the route that redeems it sits outside the
-    /// proxy's bearer group.
-    pub(super) fn begin_session(
-        &self,
-        code: Option<String>,
-        key: String,
-        ttl: Duration,
-        allow_mcp: bool,
-    ) -> u64 {
-        let mut session = self.session();
-        *session += 1;
-        match code {
-            Some(code) => self.pairing.begin(code, key, ttl),
-            None => self.pairing.clear(),
-        }
-        self.mcp_allowed.store(allow_mcp, Ordering::Relaxed);
-        self.paired.store(false, Ordering::Relaxed);
-        *session
-    }
-
-    /// Reset everything session `epoch` owns — the pairing, the `/mcp`
-    /// grant, and the paired flag — unless a later session has taken the
-    /// gateway over since. The request counters are history and stay.
-    ///
-    /// The guard is not defensive: a teardown takes its time. `take_down`
-    /// drains for up to `DRAIN` before it gets here, and neither of its
-    /// callers holds the `live` lock while it does — holding it would block
-    /// `status` for the whole drain. So a `disable` and a fresh `enable` can
-    /// overlap, and a teardown that cleared unconditionally would wipe the
-    /// session that replaced it: the operator would be handed a pairing
-    /// string that answers `Rejected` — "expired, used already, or burned by
-    /// wrong attempts", none of it true — and an `/mcp` grant revoked
-    /// without a word.
-    ///
-    /// Read and act under the one lock, which is the reason the epoch is not
-    /// a bare atomic: an `enable` landing between a load and the clears
-    /// would be wiped by a teardown that had just decided to leave it alone.
-    pub(super) fn reset_session_if(&self, epoch: u64) {
-        let session = self.session();
-        if *session != epoch {
-            return;
-        }
-        self.pairing.clear();
-        self.mcp_allowed.store(false, Ordering::Relaxed);
-        self.paired.store(false, Ordering::Relaxed);
     }
 
     // Nothing panics while holding this lock; recovering the guard is the
@@ -133,6 +87,32 @@ impl RemoteGateway {
         (ms >= 0).then_some(ms)
     }
 
+    /// Hand roster notes to `sender` until the session ends.
+    ///
+    /// Replacing the previous sender drops it, which is what ends the
+    /// `roster_sync` a superseded session left running — so an `arm` that
+    /// raced a teardown cannot leave two writers on one roster.
+    pub(super) fn take_notes(&self, sender: UnboundedSender<Note>) {
+        *self
+            .notes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(sender);
+    }
+
+    /// Send a note if anybody is listening. Never blocks: the channel is
+    /// unbounded, and a closed one means the tunnel went while this request
+    /// was in flight, which the roster will learn from the next arm anyway.
+    fn note(&self, note: Note) {
+        if let Some(sender) = self
+            .notes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+        {
+            let _ = sender.send(note);
+        }
+    }
+
     pub(super) fn last_peer(&self) -> Option<String> {
         self.last_peer
             .lock()
@@ -142,10 +122,24 @@ impl RemoteGateway {
 }
 
 impl RemoteGatewayPort for RemoteGateway {
-    fn redeem_pairing_code(&self, code: &str, peer: Option<&str>) -> PairingOutcome {
+    fn redeem_pairing_code(
+        &self,
+        code: &str,
+        peer: Option<&str>,
+        name: Option<&str>,
+    ) -> PairingOutcome {
         let outcome = self.pairing.redeem(code);
-        if matches!(outcome, PairingOutcome::Granted(_)) {
+        if let PairingOutcome::Granted { device, .. } = &outcome {
             self.paired.store(true, Ordering::Relaxed);
+            // The roster row is written by `roster_sync`, not here: this runs
+            // on the request path and the port is synchronous by contract, so
+            // a settings write is not available. What the device called
+            // itself is a label, and a label learned microseconds before a
+            // crash is not worth an `await` on every tunnelled request.
+            self.note(Note::Joined {
+                device: device.clone(),
+                label: name.map(str::to_owned),
+            });
             self.emitter
                 .emit(AppEvent::remote_paired(peer.map(str::to_owned)));
         }
@@ -156,7 +150,7 @@ impl RemoteGatewayPort for RemoteGateway {
         self.mcp_allowed.load(Ordering::Relaxed)
     }
 
-    fn note_tunnelled_request(&self, peer: Option<&str>) {
+    fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
         self.tunnelled_requests.fetch_add(1, Ordering::Relaxed);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -169,6 +163,18 @@ impl RemoteGatewayPort for RemoteGateway {
                 .last_peer
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(peer.to_owned());
+        }
+        // Advisory, exactly as the counter above is. `roster_sync` debounces
+        // the write and drops an id the roster does not know, so a local
+        // process forging the markers cannot invent a device or move one it
+        // has no key for.
+        if let Some(device) = device
+            && now >= 0
+        {
+            self.note(Note::Seen {
+                device: device.to_owned(),
+                at_ms: now,
+            });
         }
     }
 }

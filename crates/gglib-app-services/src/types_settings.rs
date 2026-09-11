@@ -230,6 +230,9 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             // would claim a machine is reachable without anything binding.
             remote_enabled: None,
             remote_serve: None,
+            // Written by inviting and forgetting devices, which mint and retire a
+            // key at the tunnel edge. A settings form cannot do either.
+            remote_devices: None,
         }
     }
 }

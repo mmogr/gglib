@@ -19,6 +19,8 @@ pub(crate) struct EnableArgs {
     pub no_discovery: bool,
     /// Print the pairing string as text; no QR, no alternate screen.
     pub no_qr: bool,
+    /// Offer a pairing code as well, so a first run is one command.
+    pub invite: bool,
 }
 
 /// Execute `gglib remote enable`.
@@ -50,12 +52,22 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             allow_mcp: args.allow_mcp,
             relay: args.relay,
             discovery: Some(!args.no_discovery),
+            invite: args.invite,
         })
         .await?;
 
+    // No code asked for, so there is nothing to show and nothing to wait on.
+    // Rendering the absence as a pairing would put an expired-looking one on
+    // screen at every enable.
+    if enabled.code.is_none() {
+        print_up(&enabled);
+        print_notice(enabled.mcp_allowed);
+        return Ok(());
+    }
+
     if args.no_qr || !std::io::stdout().is_terminal() {
         print_plain(&enabled);
-        print_notice(args.allow_mcp);
+        print_notice(enabled.mcp_allowed);
         return Ok(());
     }
 
@@ -67,7 +79,8 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
                 None => eprintln!("  \u{2705} A device paired."),
             }
             eprintln!(
-                "  It holds the API key now; the tunnel stays up until `gglib remote disable`."
+                "  It holds a key of its own now; the tunnel stays up until \
+                 `gglib remote disable`, and forgetting that device retires only its key."
             );
         }
         Outcome::Expired => {
@@ -76,7 +89,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
                 "  The pairing code expired and nobody paired. The tunnel is up; the ticket is \
                  still valid for a device that already holds the key."
             );
-            eprintln!("  Run `gglib remote disable` then `gglib remote enable` for a fresh code.");
+            eprintln!("  Run `gglib remote enable --invite` again for a fresh code.");
         }
         Outcome::Interrupted => {
             eprintln!();
@@ -85,22 +98,43 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             );
         }
     }
-    print_notice(args.allow_mcp);
+    print_notice(enabled.mcp_allowed);
     Ok(())
 }
 
 /// The pairing as plain text: for scripts, pipes, and terminals that cannot
 /// draw. Everything printed here is a credential for two minutes.
 fn print_plain(enabled: &RemoteEnableDto) {
-    println!("pairing: {}", enabled.pairing);
+    let (Some(pairing), Some(code), Some(expires)) = (
+        enabled.pairing.as_deref(),
+        enabled.code.as_deref(),
+        enabled.expires_in_s,
+    ) else {
+        print_up(enabled);
+        return;
+    };
+    println!("pairing: {pairing}");
     println!("ticket:  {}", enabled.ticket);
-    println!("code:    {}", enabled.code);
+    println!("code:    {code}");
     eprintln!();
-    eprintln!("  On the other machine, within {}s:", enabled.expires_in_s);
-    eprintln!("    gglib remote connect {}", enabled.pairing);
+    eprintln!("  On the other machine, within {expires}s:");
+    eprintln!("    gglib remote connect {pairing}");
+}
+
+/// The tunnel is up and no device is being paired right now.
+fn print_up(enabled: &RemoteEnableDto) {
+    eprintln!("  Remote access is on, and stays on across restarts.");
+    eprintln!("  Ticket:  {}", enabled.ticket);
+    eprintln!("  No device is being paired. `enable --invite` offers a code.");
 }
 
 /// What enabling changed on *this* machine, said every time.
+///
+/// Takes the daemon's answer rather than the flag this process sent. An
+/// `--invite` against a tunnel that is already up is answered by that
+/// session, whose `/mcp` grant is whatever the `enable` that armed it set —
+/// so echoing the flag back would tell an operator that `--allow-mcp` took
+/// when it did not, or that `/mcp` is closed when it is open.
 fn print_notice(allow_mcp: bool) {
     eprintln!();
     eprintln!(

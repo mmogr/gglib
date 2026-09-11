@@ -8,7 +8,7 @@ import { Checkbox } from '../ui/Checkbox';
 import { Label, Stack } from '../primitives';
 import { ProxyStatusPill } from '../proxy';
 import { PairingReveal } from './PairingReveal';
-import type { RemoteEnableResponse } from '../../services/transport/types/remote';
+import type { Pairing } from './PairingReveal';
 
 interface ServeSectionProps {
   onNotice: (message: string, kind: 'success' | 'error' | 'info') => void;
@@ -26,7 +26,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   const { status } = useRemoteState();
   const [allowMcp, setAllowMcp] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [reveal, setReveal] = useState<RemoteEnableResponse | null>(null);
+  const [reveal, setReveal] = useState<Pairing | null>(null);
 
   const enabled = status?.enabled ?? false;
   const paired = status?.paired ?? false;
@@ -46,8 +46,24 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   const handleEnable = async () => {
     setBusy(true);
     try {
-      const answer = await getTransport().enableRemote({ allow_mcp: allowMcp });
-      setReveal(answer);
+      // `invite: true` because this button is the only way to pair a device
+      // from the GUI. The daemon's plain `enable` hands nothing out — and a
+      // resume never does — so without this the popover would bring the
+      // tunnel up with no way to get a device onto it.
+      const answer = await getTransport().enableRemote({
+        allow_mcp: allowMcp,
+        invite: true,
+      });
+      // Present together or not at all; the daemon sends all three or none.
+      setReveal(
+        answer.pairing && answer.code && answer.expires_in_s !== undefined
+          ? {
+              pairing: answer.pairing,
+              code: answer.code,
+              expires_in_s: answer.expires_in_s,
+            }
+          : null,
+      );
       refreshRemoteStatus();
       onNotice(
         'Remote access is on. The local proxy now requires the API key too.',

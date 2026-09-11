@@ -80,10 +80,37 @@ impl Far {
     ) -> Result<T> {
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
+            // Not a rotation. Under per-device keys the machine's own
+            // `proxy_api_key` is not what this key is, and rotating it
+            // reaches no device — so telling someone to re-pair after a
+            // rotation would have them spend an invite on a problem they do
+            // not have, and miss the one they do.
             bail!(
-                "the remote machine {} refused the stored key — usually because `proxy_api_key` \
-                 was rotated there since you paired. Re-enable on that machine and redeem a \
-                 fresh `<ticket>-<code>` here.",
+                "the remote machine {} is not admitting this device's key — either it has \
+                 stopped trusting this device, or a key rotation there is still reaching the \
+                 tunnel, which clears itself within a few seconds. If waiting does not fix it, \
+                 run `gglib remote enable --invite` on that machine and redeem the fresh \
+                 `<ticket>-<code>` here.",
+                self.fingerprint
+            );
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            // The device gate, which only ever sees a request the tunnel let
+            // in without naming a device — a pairing code presented as an API
+            // key, most likely. Worth its own sentence: the generic branch
+            // below would hand back the proxy's message with no hint that the
+            // fix is to pair properly rather than to retry.
+            let text = response.text().await?;
+            if text.contains("device_not_paired") {
+                bail!(
+                    "the remote machine {} refused this request because the tunnel did not name \
+                     a paired device. Run `gglib remote enable --invite` there and redeem the \
+                     `<ticket>-<code>` it prints.",
+                    self.fingerprint
+                );
+            }
+            bail!(
+                "the remote machine {} answered {status}: {text}",
                 self.fingerprint
             );
         }
@@ -153,7 +180,7 @@ impl super::Target {
             .ok_or_else(|| {
                 anyhow!(
                     "connected to a remote machine, but this one holds no key for it — pair again \
-                     with the full `<ticket>-<code>` string from `gglib remote enable` there"
+                     with the full `<ticket>-<code>` string from `gglib remote enable --invite` there"
                 )
             })?;
         let port = reqwest::Url::parse(&connection.base_url)

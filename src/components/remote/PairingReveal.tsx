@@ -3,10 +3,25 @@ import { ClipboardCopy } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Label, Stack } from '../primitives';
-import type { RemoteEnableResponse } from '../../services/transport/types/remote';
+/**
+ * The three fields this needs, all present.
+ *
+ * Not `RemoteEnableResponse`: on that type they are optional, because an
+ * `enable` that was not asked to invite carries none of them. Narrowing here
+ * is what stops the absence rendering as a pairing that has already run out —
+ * an empty code under a countdown reading `0s`.
+ */
+export interface Pairing {
+  /** `<ticket>-<code>`, the one string the other machine pastes. */
+  pairing: string;
+  /** The six digits, shown large and copied on their own. */
+  code: string;
+  /** Seconds the code lives unused, counted down from here. */
+  expires_in_s: number;
+}
 
 interface PairingRevealProps {
-  reveal: RemoteEnableResponse;
+  reveal: Pairing;
   /** Fires once when the code's lifetime runs out; the caller drops the reveal. */
   onExpired: () => void;
   /** Called after a value reaches the clipboard, for the caller's toast. */

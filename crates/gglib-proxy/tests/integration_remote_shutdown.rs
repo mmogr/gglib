@@ -4,9 +4,12 @@
 //! The daemon already has `POST /api/daemon/shutdown`, and it is on a port a
 //! remote client cannot reach: the tunnel forwards to exactly one backend,
 //! this proxy. So the route lives here, inside the bearer-guarded group, and
-//! these tests pin the three things that make it safe to expose:
+//! these tests pin the four things that make it safe to expose:
 //!
 //! * it is behind the token, like everything else in that group;
+//! * a request that crossed the tunnel must have come in on a *device* key,
+//!   because `backend_auth` leaves the token check unable to refuse one that
+//!   did not;
 //! * it will not fire without an explicit confirmation, because it is a
 //!   one-way door — nothing brings the daemon back but physical access;
 //! * it says so rather than pretending when there is no daemon to stop.
@@ -181,6 +184,61 @@ async fn a_proxy_with_no_daemon_says_so() {
         .unwrap();
 
     assert_eq!(res.status(), StatusCode::CONFLICT);
+
+    cancel.cancel();
+}
+
+/// The fourth thing that makes this route safe to expose, added with
+/// per-device keys: the request must have come in on a device key.
+///
+/// `ServeOptions::backend_auth` means the bearer on a tunnelled request is a
+/// header modelpipe wrote microseconds earlier, so `bearer_guard` can no
+/// longer refuse anything that crossed the tunnel — including the one request
+/// a pairing **grant** admits, which the edge cannot scope to a path. The
+/// device gate is what refuses that, and this is the route where being wrong
+/// costs the most: nothing brings the daemon back but physical access.
+///
+/// Synthesised rather than piped, deliberately. The real grant is pinned over
+/// a live tunnel in `integration_remote_devices.rs`; this one is here because
+/// an unrelated change to the router's layer order would quietly reopen it,
+/// and this file is where somebody looks when they touch this route.
+#[tokio::test]
+async fn a_tunnelled_request_with_no_device_cannot_stop_anything() {
+    let daemon = CancellationToken::new();
+    let (base, cancel) = spawn_proxy(with_key("secret123"), Some(daemon.clone())).await;
+
+    let res = Client::new()
+        .post(format!("{base}/v1/proxy/shutdown"))
+        .bearer_auth("secret123")
+        .header("via", "1.1 modelpipe")
+        .header("x-modelpipe-peer", "3ca82708b995")
+        .json(&serde_json::json!({ "confirm": "shutdown" }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "device_not_paired");
+    assert!(
+        !daemon.is_cancelled(),
+        "a request the gate refused must not have stopped anything"
+    );
+
+    // Named by a device, the same request goes through — so the refusal above
+    // is the missing header and not the marker.
+    let named = Client::new()
+        .post(format!("{base}/v1/proxy/shutdown"))
+        .bearer_auth("secret123")
+        .header("via", "1.1 modelpipe")
+        .header("x-modelpipe-peer", "3ca82708b995")
+        .header("x-modelpipe-device", "dev-0a1b2c3d")
+        .json(&serde_json::json!({ "confirm": "shutdown" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(named.status(), StatusCode::ACCEPTED);
+    assert!(daemon.is_cancelled());
 
     cancel.cancel();
 }

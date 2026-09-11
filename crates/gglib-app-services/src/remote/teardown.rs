@@ -90,7 +90,14 @@ mod tests {
     /// armed under — which is what the `Live` a teardown is given carries.
     fn gateway() -> (Arc<RemoteGateway>, u64) {
         let gateway = Arc::new(RemoteGateway::new(Arc::new(NoopEmitter)));
-        let epoch = gateway.begin_session(Some(CODE.to_owned()), KEY.to_owned(), PAIRING_TTL, true);
+        let epoch = gateway.begin_session(true);
+        gateway.offer_pairing(
+            epoch,
+            CODE.to_owned(),
+            KEY.to_owned(),
+            "dev-0a1b2c3d".to_owned(),
+            PAIRING_TTL,
+        );
         (gateway, epoch)
     }
 
@@ -127,7 +134,9 @@ mod tests {
 
     impl Drain for RedeemingDrain {
         fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
-            let outcome = self.gateway.redeem_pairing_code(CODE, Some("3ca82708b995"));
+            let outcome = self
+                .gateway
+                .redeem_pairing_code(CODE, Some("3ca82708b995"), None);
             *self.outcome.lock().unwrap() = Some(outcome);
             std::future::ready(true)
         }
@@ -150,7 +159,10 @@ mod tests {
 
         assert_eq!(
             *handle.outcome.lock().unwrap(),
-            Some(PairingOutcome::Granted(KEY.to_owned())),
+            Some(PairingOutcome::Granted {
+                key: KEY.to_owned(),
+                device: "dev-0a1b2c3d".to_owned(),
+            }),
             "the pairing has to still be armed while the drain runs"
         );
     }
@@ -168,7 +180,7 @@ mod tests {
 
         assert!(!gateway.pairing.active());
         assert_eq!(
-            gateway.redeem_pairing_code(CODE, None),
+            gateway.redeem_pairing_code(CODE, None, None),
             PairingOutcome::Rejected,
             "the session is over, and so is its code"
         );
@@ -224,11 +236,13 @@ mod tests {
 
     impl Drain for ArmingDrain {
         fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
-            self.gateway.begin_session(
-                Some(NEXT_CODE.to_owned()),
+            let epoch = self.gateway.begin_session(true);
+            self.gateway.offer_pairing(
+                epoch,
+                NEXT_CODE.to_owned(),
                 NEXT_KEY.to_owned(),
+                "dev-4e5f6a7b".to_owned(),
                 PAIRING_TTL,
-                true,
             );
             std::future::ready(true)
         }
@@ -251,8 +265,11 @@ mod tests {
         take_down(live, &gateway).await;
 
         assert_eq!(
-            gateway.redeem_pairing_code(NEXT_CODE, None),
-            PairingOutcome::Granted(NEXT_KEY.to_owned()),
+            gateway.redeem_pairing_code(NEXT_CODE, None, None),
+            PairingOutcome::Granted {
+                key: NEXT_KEY.to_owned(),
+                device: "dev-4e5f6a7b".to_owned(),
+            },
             "the newer session's code has to still redeem"
         );
         assert!(

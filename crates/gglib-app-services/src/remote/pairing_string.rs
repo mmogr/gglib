@@ -32,7 +32,7 @@ pub(super) fn parse(input: &str) -> Result<Parsed, String> {
     let input = input.trim();
     if input.is_empty() {
         return Err(
-            "a pairing string is `<ticket>-<code>` as shown by `gglib remote enable`, \
+            "a pairing string is `<ticket>-<code>` as shown by `gglib remote enable --invite`, \
                     or a bare ticket once this machine holds the key"
                 .to_owned(),
         );

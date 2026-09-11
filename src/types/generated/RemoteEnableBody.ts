@@ -26,4 +26,13 @@ discovery: boolean | null,
  * rather than getting a 422 for a field that no longer means anything;
  * removing it is a follow-up, not a surprise.
  */
-keep_identity: boolean, };
+keep_identity: boolean, 
+/**
+ * Offer a pairing code as well as bringing the tunnel up.
+ *
+ * `enable` is a switch and `invite` is what pairs a device, so a first
+ * run is two commands unless this is set. Omitted is off, which is what
+ * a restart wants: a code nobody is watching for is a live grant nobody
+ * spends.
+ */
+invite: boolean, };

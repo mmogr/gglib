@@ -13,7 +13,7 @@ pub use settings_validate::{validate_inference_config, validate_inference_profil
 
 #[path = "settings_remote.rs"]
 mod settings_remote;
-pub use settings_remote::{RemotePairing, RemoteServe};
+pub use settings_remote::{Device, RemotePairing, RemoteServe};
 
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
@@ -298,6 +298,8 @@ pub struct Settings {
     pub remote_enabled: Option<bool>,
     /// See [`RemoteServe`].
     pub remote_serve: Option<RemoteServe>,
+    /// The roster of paired devices, keys excluded — see [`Device`].
+    pub remote_devices: Option<Vec<Device>>,
 }
 
 impl Settings {
@@ -341,6 +343,7 @@ impl Settings {
             remote_pairing: None,
             remote_enabled: None,
             remote_serve: None,
+            remote_devices: None,
         }
     }
 
@@ -476,6 +479,8 @@ pub struct SettingsUpdate {
     pub remote_enabled: Option<Option<bool>>,
     /// See [`Settings::remote_serve`]. Written whole, like the pairing.
     pub remote_serve: Option<Option<RemoteServe>>,
+    /// See [`Settings::remote_devices`]. Written whole.
+    pub remote_devices: Option<Option<Vec<Device>>>,
 }
 
 /// Settings validation error.
@@ -510,6 +515,10 @@ pub enum SettingsError {
 
     #[error("Remote ticket cannot be blank — clear the pairing instead to forget it")]
     BlankRemoteTicket,
+
+    /// An id the tunnel edge would refuse to hold a token under.
+    #[error("Device id {0:?} must be 1-64 of ASCII letters, digits, '.', '_' or '-'")]
+    InvalidDeviceId(String),
 }
 
 /// Validate settings values.

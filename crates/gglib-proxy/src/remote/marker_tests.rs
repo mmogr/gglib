@@ -73,3 +73,54 @@ fn the_peer_header_alone_marks_nothing() {
         "the Via is what says a request was tunnelled"
     );
 }
+
+/// The device name is read the way the edge writes it, and anything outside
+/// modelpipe's own rule for a token name is dropped rather than kept.
+///
+/// Dropped and not truncated, because this value reaches a log line, a
+/// settings row and a terminal. A truncated name would be a *different*
+/// device's id with no way to tell, which is worse than none: the gate
+/// refuses a request with no device, and refusing is always the safe answer
+/// here.
+#[test]
+fn the_device_name_is_read_and_a_malformed_one_is_dropped() {
+    let named = Tunnelled::from_headers(&headers(&[
+        ("via", "1.1 modelpipe"),
+        ("x-modelpipe-device", "dev-0a1b2c3d"),
+    ]))
+    .expect("tunnelled");
+    assert_eq!(named.device.as_deref(), Some("dev-0a1b2c3d"));
+
+    for bad in [
+        "",
+        "   ",
+        "dev 0a1b2c3d",
+        "dev/0a1b2c3d",
+        "dev\u{e9}",
+        &"d".repeat(65),
+    ] {
+        let read = Tunnelled::from_headers(&headers(&[
+            ("via", "1.1 modelpipe"),
+            ("x-modelpipe-device", bad),
+        ]))
+        .expect("still tunnelled");
+        assert_eq!(read.device, None, "{bad:?} must not be kept");
+    }
+
+    // Sixty-four is inside the rule, so the bound is the right way round.
+    let long = "d".repeat(64);
+    let read = Tunnelled::from_headers(&headers(&[
+        ("via", "1.1 modelpipe"),
+        ("x-modelpipe-device", &long),
+    ]))
+    .expect("tunnelled");
+    assert_eq!(read.device.as_deref(), Some(long.as_str()));
+}
+
+/// A device name without the `Via` is nothing at all, exactly as the peer
+/// header alone is. The marker is what says a request crossed the tunnel;
+/// the device says which key admitted it once it did.
+#[test]
+fn the_device_header_alone_marks_nothing() {
+    assert!(Tunnelled::from_headers(&headers(&[("x-modelpipe-device", "dev-0a1b2c3d")])).is_none());
+}

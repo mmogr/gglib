@@ -33,6 +33,14 @@ pub(crate) struct RemoteEnableBody {
     /// removing it is a follow-up, not a surprise.
     #[serde(default, rename = "keep_identity")]
     pub _keep_identity: bool,
+    /// Offer a pairing code as well as bringing the tunnel up.
+    ///
+    /// `enable` is a switch and `invite` is what pairs a device, so a first
+    /// run is two commands unless this is set. Omitted is off, which is what
+    /// a restart wants: a code nobody is watching for is a live grant nobody
+    /// spends.
+    #[serde(default)]
+    pub invite: bool,
 }
 
 impl RemoteEnableBody {
@@ -41,6 +49,7 @@ impl RemoteEnableBody {
             allow_mcp: self.allow_mcp,
             relay: self.relay,
             discovery: self.discovery.unwrap_or(true),
+            invite: self.invite,
         }
     }
 }
@@ -52,22 +61,45 @@ impl RemoteEnableBody {
 pub(crate) struct RemoteEnableResponse {
     /// The ticket, canonical lowercase form.
     pub ticket: String,
-    /// The six-digit pairing code.
-    pub code: String,
-    /// `<ticket>-<code>`, the one string a laptop pastes.
-    pub pairing: String,
-    /// Seconds the code lives unused.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub expires_in_s: u64,
+    /// The six-digit pairing code, when one was asked for.
+    ///
+    /// Absent is the ordinary case — the tunnel is up and nothing is being
+    /// paired. A surface must render the absence as "no code", not as an
+    /// expired one: an empty string here would read as a pairing that had
+    /// already run out.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// `<ticket>-<code>`, the one string a laptop pastes, when there is one.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pairing: Option<String>,
+    /// Seconds the code lives unused, when there is one.
+    #[cfg_attr(feature = "ts-bindings", ts(optional, type = "number"))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in_s: Option<u64>,
+    /// The device the code will issue a key to, when there is one.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// Whether tunnelled requests may reach `/mcp` on the session this call
+    /// ended up talking about — which is not always the one the caller asked
+    /// for. An `--invite` against a tunnel that is already up leaves the
+    /// flags alone, so a surface that echoed the request back would state a
+    /// grant the daemon did not make.
+    pub mcp_allowed: bool,
 }
 
 impl From<Enabled> for RemoteEnableResponse {
     fn from(e: Enabled) -> Self {
+        let pairing = e.pairing;
         Self {
             ticket: e.ticket,
-            code: e.code,
-            pairing: e.pairing,
-            expires_in_s: e.expires_in_s,
+            code: pairing.as_ref().map(|p| p.code.clone()),
+            pairing: pairing.as_ref().map(|p| p.pairing.clone()),
+            expires_in_s: pairing.as_ref().map(|p| p.expires_in_s),
+            device: pairing.map(|p| p.device),
+            mcp_allowed: e.mcp_allowed,
         }
     }
 }
@@ -193,7 +225,8 @@ pub(crate) struct RemoteStatus {
     pub ticket_fingerprint: Option<String>,
     /// Whether a pairing code is still redeemable.
     pub pairing_active: bool,
-    /// Whether a device redeemed the code this session.
+    /// Whether a device redeemed the code now on offer. Per code, not per
+    /// session, and says nothing about the roster.
     pub paired: bool,
     /// Aggregate transport path: `idle`, `direct`, `relayed`.
     pub path: Option<String>,

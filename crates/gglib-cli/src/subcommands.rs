@@ -150,6 +150,13 @@ pub enum RemoteCommand {
         /// Print the pairing as plain text instead of the QR screen
         #[arg(long)]
         no_qr: bool,
+        /// Offer a pairing code too, so a first run is one command
+        ///
+        /// `enable` turns this machine on and `invite` pairs a device; this
+        /// does both. A restart never does: a code nobody is watching for is
+        /// a live grant nobody spends.
+        #[arg(long)]
+        invite: bool,
     },
     /// Stop answering; `enable` brings the same ticket back
     Disable,
@@ -158,9 +165,10 @@ pub enum RemoteCommand {
     /// Reach another machine's proxy: bind a local port here that is it
     ///
     /// First time, paste the whole `<ticket>-<code>` string that machine's
-    /// `gglib remote enable` showed; the code is redeemed through the tunnel
-    /// for that machine's API key, which is stored here. Afterwards the
-    /// ticket alone will do, and with no argument the last ticket is dialled.
+    /// `gglib remote enable --invite` showed; the code is redeemed through
+    /// the tunnel for a key of this device's own, which is stored here.
+    /// Afterwards the ticket alone will do, and with no argument the last
+    /// ticket is dialled.
     Connect {
         /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
         pairing: Option<String>,

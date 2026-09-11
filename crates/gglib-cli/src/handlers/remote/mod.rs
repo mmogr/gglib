@@ -22,6 +22,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             relay,
             no_discovery,
             no_qr,
+            invite,
         } => {
             enable(
                 ctx,
@@ -30,6 +31,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
                     relay,
                     no_discovery,
                     no_qr,
+                    invite,
                 },
             )
             .await

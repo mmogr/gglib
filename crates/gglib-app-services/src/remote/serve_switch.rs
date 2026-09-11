@@ -23,6 +23,7 @@ use gglib_core::events::AppEvent;
 use crate::error::GuiError;
 
 use super::pairing::Offer;
+use super::slot::Busy;
 use super::slot::Taken;
 use super::types::EnableRequest;
 
@@ -82,6 +83,9 @@ impl RemoteOps {
             allow_mcp: serve.allow_mcp,
             relay: serve.relay,
             discovery: serve.discovery,
+            // Never on a resume, and not reachable from here by accident:
+            // `resume_arm` passes `Offer::Silent` regardless.
+            invite: false,
         };
         // No pairing code is minted here, and `resume_arm` rather than
         // `enable` is what makes that true: `enable` mints one
@@ -163,8 +167,8 @@ impl RemoteOps {
                 self.emitter.emit(AppEvent::remote_disabled());
                 Ok(())
             }
-            // Nothing is bound and no pairing is armed yet — `arm` claims
-            // the slot and arms the gateway under one hold of this lock, so
+            // Nothing is bound and no session has begun — `arm` claims the
+            // slot and calls `begin_session` under one hold of this lock, so
             // a reservation is never a session — and there is therefore
             // nothing to reset and nothing to announce. The arming call
             // finds the slot gone and takes down whatever it built.
@@ -177,4 +181,22 @@ impl RemoteOps {
             )),
         }
     }
+}
+
+/// A serve side that is already taken, as the person who typed the command
+/// needs to hear it.
+pub(super) fn busy_serving(busy: &Busy) -> GuiError {
+    GuiError::Conflict(
+        match busy {
+            Busy::Filling => {
+                "remote access is already being enabled — wait for the ticket, or \
+                 `gglib remote disable` to give up on it"
+            }
+            Busy::Full => {
+                "remote access is already enabled — `--invite` pairs another device without \
+                 taking it down, and `gglib remote disable` first is what changes its flags"
+            }
+        }
+        .to_owned(),
+    )
 }

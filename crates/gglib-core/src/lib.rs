@@ -57,7 +57,8 @@ pub use ports::{
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
     DAEMON_PORT, DEFAULT_CONTEXT_SIZE, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT,
-    DEFAULT_REMOTE_PORT, RemotePairing, RemoteServe, Settings, SettingsUpdate, validate_settings,
+    DEFAULT_REMOTE_PORT, Device, RemotePairing, RemoteServe, Settings, SettingsUpdate,
+    validate_settings,
 };
 
 // Re-export origin validation utility

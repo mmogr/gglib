@@ -14,7 +14,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use gglib_core::access;
 use gglib_core::events::AppEvent;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -24,11 +23,13 @@ use gglib_runtime::proxy::ProxyStatus;
 
 use super::backend::Backend;
 use super::key;
-use super::pairing::{MAX_ATTEMPTS_AT_EDGE, Offer, PAIRING_TTL};
+use super::key::identity_path;
+use super::pairing::Offer;
 use super::rotation::rotation_poll;
-use super::slot::Busy;
+use super::serve_switch::busy_serving;
 use super::types::{EnableRequest, Enabled};
 use super::{DRAIN, Live, RemoteOps, WAIT_ONLINE};
+use super::{device_keys, enrolment, roster};
 use crate::error::GuiError;
 
 impl RemoteOps {
@@ -48,11 +49,24 @@ impl RemoteOps {
     /// while this was arming; whatever starting the proxy returns;
     /// `Internal` when settings cannot be written or the tunnel cannot bind.
     pub async fn enable(&self, request: EnableRequest) -> Result<Enabled, GuiError> {
-        // `Offer::Code` always arms one; the `Option` exists so that
-        // `Offer::Silent` cannot, not because this branch is reachable.
-        self.turn_on(request, Offer::Code).await?.ok_or_else(|| {
-            GuiError::Internal("the tunnel came up without the pairing code it armed".to_owned())
-        })
+        // Already serving, and asked to invite: a code on the live session
+        // rather than "already enabled". The alternative is telling someone
+        // to `disable` first, which drops every device already using the
+        // tunnel in order to add one. `invite_if_up` has the rest.
+        if request.invite
+            && let Some(enabled) = self.invite_if_up().await?
+        {
+            return Ok(enabled);
+        }
+        // Read here rather than inside `arm`, so that `resume_arm` — which
+        // builds its request from stored flags — cannot offer a code however
+        // those flags are written. The switch is not where an invite lives.
+        let offer = if request.invite {
+            Offer::Code
+        } else {
+            Offer::Silent
+        };
+        self.turn_on(request, offer).await
     }
 
     /// Bringing the tunnel up, with `offer` the one thing `enable` and
@@ -61,7 +75,7 @@ impl RemoteOps {
         &self,
         request: EnableRequest,
         offer: Offer,
-    ) -> Result<Option<Enabled>, GuiError> {
+    ) -> Result<Enabled, GuiError> {
         if let Some(busy) = self.live.lock().await.busy() {
             return Err(busy_serving(&busy));
         }
@@ -116,13 +130,18 @@ impl RemoteOps {
         cancel: &CancellationToken,
         proxy_exit: watch::Receiver<ProxyStatus>,
         offer: Offer,
-    ) -> Result<Option<Enabled>, GuiError> {
+    ) -> Result<Enabled, GuiError> {
         let settled = key::settle(&self.proxy, &self.core).await?;
 
         let backend = Backend::at(*addr);
 
         let mut opts = modelpipe::ServeOptions::default();
-        opts.auth = modelpipe::TokenPolicy::Supplied(settled.key.clone());
+        // Named, not Supplied: nothing admits but the tokens seeded below and
+        // a live grant. `backend_auth` keeps the proxy's own credential off
+        // every device — the edge presents it upstream in the device's place,
+        // so ADR 0012 decision 2's local lock is untouched.
+        opts.auth = modelpipe::TokenPolicy::Named;
+        opts.backend_auth = Some(settled.key.clone());
         opts.relay = request.relay;
         opts.identity = identity_path()?;
         opts.port_mapping = false;
@@ -139,6 +158,16 @@ impl RemoteOps {
         // spawned until the install below.
         super::backend::refuse_if_gone(&self.proxy, &backend, &handle).await?;
 
+        // Read before the commit below, not after. Under `Named` the listener
+        // starts closed, so this is what makes the machine reachable at all —
+        // and a key file that cannot be parsed is refused rather than
+        // softened into an empty roster. Doing that *after* the commit would
+        // fail an enable that had already minted and persisted
+        // `proxy_api_key`, locking the local proxy on the way out. The seed
+        // itself happens under the install guard below; this read is what
+        // makes an unreadable file fail while failing is still free.
+        let devices = device_keys::read_keys()?;
+
         // The first and only thing this leaves on the machine, and the last
         // point at which leaving nothing is still free: everything that can
         // fail is above it, and the tunnel above it is undone by dropping the
@@ -146,41 +175,31 @@ impl RemoteOps {
         // this function.
         settled.commit(&self.core, cancel).await?;
 
-        // Bounded, not bare: the ticket lasts now (ADR 0012 d.4, reversed), so
-        // anyone holding it can wait for a window and guess — as wrong
-        // *bearers*, which `Pairing::attempts` never sees but the edge does.
-        let code = matches!(offer, Offer::Code).then(access::generate_pairing_code);
-        if let Some(code) = code.clone() {
-            handle
-                .grant_once_bounded(code, PAIRING_TTL, MAX_ATTEMPTS_AT_EDGE)
-                .map_err(|e| GuiError::Internal(format!("could not arm the pairing code: {e}")))?;
-        }
-
-        // The slot is claimed and the gateway armed under **one** hold of
+        // The slot is claimed and the session begun under **one** hold of
         // the lock. Claiming first is not enough: dropping the guard wakes
         // whatever `disable` is queued behind it, and on a multi-thread
         // runtime that `disable` runs in parallel with the lines after the
-        // guard — resetting the session and taking the tunnel down while
-        // this call is still on its way to `begin`. A pairing code armed
-        // after that reset stays live for `PAIRING_TTL` on a session that
-        // is gone, and `POST /v1/remote/pair` is outside the proxy's bearer
-        // group, so anything that can reach the proxy could spend it.
-        // Under one guard there are only two things a `disable` can find:
-        // a reservation with nothing armed, or a tunnel with its code.
+        // guard — taking the tunnel down while this call is still on its
+        // way to `begin_session`, which would then start a session nothing
+        // owns. Under one guard a `disable` finds either a reservation or a
+        // tunnel, never something in between.
         //
-        // Nothing in here is slow — an install, a `Mutex<Option<_>>` and an
-        // atomic — which is the whole reason it may share the guard at all.
+        // The pairing code is *not* armed here: `offer` does that after the
+        // guard, on the epoch this returns. What keeps that safe is
+        // `reset_session_if` retiring the epoch, so a code cannot be armed
+        // against a session that ended — a live `PAIRING_TTL` grant on a
+        // dead tunnel would be spendable by anything local, since
+        // `POST /v1/remote/pair` sits outside the proxy's bearer group.
+        //
+        // Nothing in here is slow: an install, a `Mutex<Option<_>>`, an
+        // atomic, one small file read, and a wait on `roster` that only a
+        // concurrent roster write can hold up.
         let watchers = CancellationToken::new();
         let mut slot = self.live.lock().await;
         // Begun before the install so the epoch can go into `Live`, and
         // under the same guard so the pair is still atomic: `reset_session_if`
         // is what undoes it on the one path where the install loses.
-        let epoch = self.gateway.begin_session(
-            code.clone(),
-            settled.key.clone(),
-            PAIRING_TTL,
-            request.allow_mcp,
-        );
+        let epoch = self.gateway.begin_session(request.allow_mcp);
         let live = Live {
             handle: Arc::clone(&handle),
             cancel: watchers.clone(),
@@ -201,6 +220,20 @@ impl RemoteOps {
                 "the enable was cancelled by `gglib remote disable`".to_owned(),
             ));
         }
+        // Under the guard, which is what makes a `forget` racing an arm come
+        // out right; `device_keys::seed` has the reasoning.
+        device_keys::seed(self, &handle, devices).await;
+        // The roster's writer, under the same guard as the install. The
+        // gateway takes notes on the request path, where it may not await,
+        // and this is the other end of that channel — here rather than below
+        // because a `disable` landing after the guard is released clears the
+        // channel, and this would then put one back for a session that had
+        // already ended. Non-blocking: a channel and a spawn.
+        roster::start(
+            &self.gateway,
+            Arc::clone(&self.core),
+            Arc::clone(&self.roster),
+        );
         drop(slot);
         // Both watchers start only now, and the ordering is load-bearing.
         // `watch_proxy` takes the slot with `take_if`, which looks at a
@@ -213,7 +246,6 @@ impl RemoteOps {
             tokio::spawn(rotation_poll(
                 Arc::clone(&self.core),
                 Arc::clone(&handle),
-                Arc::clone(&self.gateway),
                 settled.key,
                 watchers.clone(),
             ));
@@ -226,40 +258,16 @@ impl RemoteOps {
         self.emitter.emit(AppEvent::remote_enabled(fingerprint));
 
         let ticket = ticket.to_string();
-        Ok(code.map(|code| Enabled {
-            pairing: format!("{ticket}-{code}"),
+        let pairing = match offer {
+            Offer::Code => Some(enrolment::offer(self, &handle, epoch, &ticket).await?),
+            Offer::Silent => None,
+        };
+        Ok(Enabled {
             ticket,
-            code,
-            expires_in_s: PAIRING_TTL.as_secs(),
-        }))
+            pairing,
+            mcp_allowed: request.allow_mcp,
+        })
     }
-}
-
-/// Where this machine's endpoint key lives.
-///
-/// Always the same file now (ADR 0012, decision 4, reversed — see the
-/// amendment dated 2026-09-10). A ticket names a machine; it is not a
-/// credential, and reaching anything behind it still takes a key this side
-/// issued. Minting a new one every session made the address change for a
-/// reason nobody outside this process could see, so every paired device
-/// paired again after a reboot — paying a real cost daily to buy a
-/// revocation nobody was reaching for.
-///
-/// What made that trade defensible was the arithmetic in decision 3: six
-/// digits and two minutes are enough only while a guesser has to find the
-/// listener first. A lasting ticket removes that step, so the counting had
-/// to move to where the guesses arrive — modelpipe 0.5's
-/// `grant_once_bounded`, which burns a grant at the edge. Revoking is now
-/// deleting this file, and it is a thing a person does deliberately rather
-/// than a side effect of a restart.
-///
-/// Separate from `arm` so the decision can be read without binding an
-/// endpoint or writing a key: `arm` is a network call and a file, and this
-/// is neither.
-pub(super) fn identity_path() -> Result<Option<std::path::PathBuf>, GuiError> {
-    gglib_core::paths::remote_identity_path()
-        .map(Some)
-        .map_err(|e| GuiError::Internal(format!("could not place the stored endpoint key: {e}")))
 }
 
 /// An error and everything under it, joined into one sentence.
@@ -279,22 +287,4 @@ fn chain(error: &dyn std::error::Error) -> String {
         source = next.source();
     }
     sentence
-}
-
-/// A serve side that is already taken, as the person who typed the command
-/// needs to hear it.
-fn busy_serving(busy: &Busy) -> GuiError {
-    GuiError::Conflict(
-        match busy {
-            Busy::Filling => {
-                "remote access is already being enabled — wait for the ticket, or \
-                 `gglib remote disable` to give up on it"
-            }
-            Busy::Full => {
-                "remote access is already enabled — `gglib remote disable` first to mint a new \
-                 ticket"
-            }
-        }
-        .to_owned(),
-    )
 }
