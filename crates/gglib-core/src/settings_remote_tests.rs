@@ -5,7 +5,7 @@
 
 use super::*;
 
-/// A pairing as `gglib remote connect` leaves it.
+/// A pairing as `gglib remote join` leaves it.
 fn pairing() -> RemotePairing {
     RemotePairing {
         ticket: "pipeabc".to_owned(),

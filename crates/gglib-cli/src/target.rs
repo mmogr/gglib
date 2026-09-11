@@ -43,7 +43,7 @@ pub(crate) enum Target {
     /// This machine: its daemon, its catalogue, its profiles.
     #[default]
     Local,
-    /// The machine on the other end of `gglib remote connect` (ADR 0012):
+    /// The machine on the other end of `gglib remote join` (ADR 0012):
     /// its proxy through the tunnel's loopback port, its catalogue, its
     /// profiles, and the key this machine received when it paired.
     Remote,
@@ -248,7 +248,7 @@ async fn remembered_model(ctx: &CliContext, typed: String) -> Result<String> {
         .map_err(|e| anyhow!("failed to load settings: {e}"))?;
     let Some(pairing) = settings.remote_pairing else {
         bail!(
-            "this machine has not paired with a remote — `gglib remote connect <ticket>-<code>` \
+            "this machine has not paired with a remote — `gglib remote join <ticket>-<code>` \
              first"
         );
     };

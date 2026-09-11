@@ -75,7 +75,7 @@ async fn a_far_machines_refused_key_names_the_machine_and_the_remedy() {
         "the message must name the machine that refused: {message}"
     );
     assert!(
-        message.contains("gglib remote enable"),
+        message.contains("gglib remote invite"),
         "the message must say how to fix it: {message}"
     );
 }

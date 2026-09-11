@@ -150,7 +150,7 @@ pub(crate) async fn handle_remote_pair(
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorResponse::with_code(
                     "That pairing code was not accepted. Run \
-                     `gglib remote enable --invite` on the serving machine for a fresh one.",
+                     `gglib remote invite` on the serving machine for a fresh one.",
                     "invalid_request_error",
                     "invalid_pairing_code",
                 )),

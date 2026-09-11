@@ -95,7 +95,7 @@ impl FarMachine {
                 "the remote machine {} is not admitting this device's key — it has either \
                  stopped trusting this device, or a key rotation there is still reaching the \
                  tunnel, which clears itself within a few seconds. If waiting does not fix it, \
-                 pair again with a fresh `gglib remote enable --invite` there",
+                 pair again with a fresh `gglib remote invite` there",
                 self.fingerprint
             )
         })

@@ -106,7 +106,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         proxy_autostart: args.proxy_autostart.map(Some),
         close_to_tray: args.close_to_tray.map(Some),
         start_at_login: args.start_at_login.map(Some),
-        // Written by `gglib remote connect`, never by hand (ADR 0012).
+        // Written by `gglib remote join`, never by hand (ADR 0012).
         remote_pairing: None,
         // Written by `gglib remote enable`/`disable`, never by hand: setting
         // this by hand would say a machine is reachable with nothing bound.

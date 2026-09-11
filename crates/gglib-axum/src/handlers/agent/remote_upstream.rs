@@ -65,7 +65,7 @@ fn remote_model(req: &AgentChatRequest) -> Result<String, HttpError> {
 ///
 /// Locally, whatever `validate_port` says. Remotely, `409` when this machine
 /// is not connected, or is connected but holds no key — both are things
-/// `gglib remote connect` fixes, and the message says so — and `400` when the
+/// `gglib remote join` fixes, and the message says so — and `400` when the
 /// body named no model, which nothing downstream can fix.
 pub(super) async fn resolve(
     state: &AppState,
@@ -90,7 +90,7 @@ pub(super) async fn resolve(
 
     let Some(connection) = state.remote.status().await.connected else {
         return Err(HttpError::Conflict(
-            "not connected to a remote machine — `gglib remote connect` first".to_owned(),
+            "not connected to a remote machine — `gglib remote join` first".to_owned(),
         ));
     };
     // The core settings, not the GUI's `AppSettings`: the key is deliberately

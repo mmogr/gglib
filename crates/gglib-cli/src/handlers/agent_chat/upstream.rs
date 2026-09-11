@@ -3,7 +3,7 @@
 //! Two answers to one question: `--port` names a llama-server already
 //! running here, and nothing named asks the daemon to start the model here.
 //! Both resolve to a loopback port with no credential. The third answer —
-//! the machine on the other end of `gglib remote connect` — is
+//! the machine on the other end of `gglib remote join` — is
 //! [`Target`](crate::target::Target)'s, and lives with the other decisions
 //! that depend on which machine a turn runs on.
 

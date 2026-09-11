@@ -160,7 +160,7 @@ where
         return false;
     }
     shutdown().await;
-    warn!("the remote connection closed; `gglib remote connect` to dial again");
+    warn!("the remote connection closed; `gglib remote join` to dial again");
     emitter.emit(AppEvent::remote_disconnected());
     true
 }

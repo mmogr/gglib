@@ -223,10 +223,10 @@ relay that can read a request.
 
 ```bash
 # desktop
-gglib remote enable                      # shows a ticket + six-digit code, once
+gglib remote enable --invite             # shows a ticket + six-digit code, once
 
 # laptop, within two minutes
-gglib remote connect <ticket>-<code>     # binds a local port that is the desktop
+gglib remote join <ticket>-<code>        # binds a local port that is the desktop
 gglib q --remote -m <model> "Why is this test flaky?"   # a model the desktop serves
 ```
 

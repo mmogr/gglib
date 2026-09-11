@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Settings, SettingsError, SettingsUpdate};
 
-/// The machine `gglib remote connect` paired with, and the key that machine
+/// The machine `gglib remote join` paired with, and the key that machine
 /// issued — one record, because they are one fact.
 ///
 /// They were two settings rows, `remote_last_ticket` and `remote_api_key`,
@@ -25,7 +25,7 @@ use super::{Settings, SettingsError, SettingsUpdate};
 /// disagreement unrepresentable rather than merely wrong, and gives the
 /// stale-key question — *whose* key is this? — an answer.
 ///
-/// Written only by `gglib remote connect`: there is no CLI flag and no GUI
+/// Written only by `gglib remote join`: there is no CLI flag and no GUI
 /// control, and `gglib config settings show` reports the key as held-or-not
 /// rather than printing it.
 /// Persisted as one `settings_kv` row holding a JSON object, the way

@@ -104,7 +104,7 @@ pub(crate) async fn spawn_proxy_demanding(
 /// Put a tunnel in front of the proxy and dial it, returning the loopback base
 /// URL the far side is now reachable at.
 ///
-/// This is `gglib remote enable --invite` on one machine and a redemption on
+/// This is `gglib remote invite` on one machine and a redemption on
 /// the other, with the daemon and the CLI taken out of the middle:
 /// the listener runs `TokenPolicy::Named` and holds exactly one device's key,
 /// and [`PROXY_KEY`] is the backend credential the edge swaps in.

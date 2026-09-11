@@ -29,7 +29,7 @@ pub const DAEMON_PORT: u16 = 9887;
 /// Default base port for llama-server instance allocation.
 pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 
-/// The loopback port `gglib remote connect` tries first for the paired
+/// The loopback port `gglib remote join` tries first for the paired
 /// machine.
 ///
 /// A client configured against it once stays configured. Clear of the proxy
@@ -277,7 +277,7 @@ pub struct Settings {
     /// The machine this one paired with, and the key it issued — see
     /// [`RemotePairing`] for why those are one value and not two.
     ///
-    /// Received, not chosen: `gglib remote connect` redeems the far
+    /// Received, not chosen: `gglib remote join` redeems the far
     /// machine's one-time code through the tunnel and stores what comes back
     /// here, so later sessions need only the ticket — or nothing, since the
     /// ticket is part of the record. `gglib q --remote` and

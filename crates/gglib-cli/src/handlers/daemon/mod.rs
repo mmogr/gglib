@@ -182,7 +182,7 @@ async fn stop_far(ctx: &CliContext, yes: bool) -> Result<()> {
     };
     let status = handle.remote_status().await?;
     let Some(connection) = status.connected.as_ref() else {
-        anyhow::bail!("not connected to a remote \u{2014} `gglib remote connect` first");
+        anyhow::bail!("not connected to a remote \u{2014} `gglib remote join` first");
     };
 
     if !yes && std::io::stdin().is_terminal() && !confirm(&connection.ticket_fingerprint)? {

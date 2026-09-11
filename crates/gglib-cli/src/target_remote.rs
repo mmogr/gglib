@@ -89,7 +89,7 @@ impl Far {
                 "the remote machine {} is not admitting this device's key — either it has \
                  stopped trusting this device, or a key rotation there is still reaching the \
                  tunnel, which clears itself within a few seconds. If waiting does not fix it, \
-                 run `gglib remote enable --invite` on that machine and redeem the fresh \
+                 run `gglib remote invite` on that machine and redeem the fresh \
                  `<ticket>-<code>` here.",
                 self.fingerprint
             );
@@ -104,7 +104,7 @@ impl Far {
             if text.contains("device_not_paired") {
                 bail!(
                     "the remote machine {} refused this request because the tunnel did not name \
-                     a paired device. Run `gglib remote enable --invite` there and redeem the \
+                     a paired device. Run `gglib remote invite` there and redeem the \
                      `<ticket>-<code>` it prints.",
                     self.fingerprint
                 );
@@ -156,7 +156,7 @@ impl super::Target {
         if !matches!(daemon_client::probe(&client).await, DaemonProbe::Running) {
             bail!(
                 "--remote needs the daemon running and connected to the other machine: \
-                 `gglib remote connect` first"
+                 `gglib remote join` first"
             );
         }
         let handle = daemon_client::DaemonHandle {
@@ -166,7 +166,7 @@ impl super::Target {
         let status = handle.remote_status().await?;
         let Some(connection) = status.connected else {
             bail!(
-                "not connected to a remote machine — `gglib remote connect [<ticket>-<code>]` first"
+                "not connected to a remote machine — `gglib remote join [<ticket>-<code>]` first"
             );
         };
         let key = ctx
@@ -180,7 +180,7 @@ impl super::Target {
             .ok_or_else(|| {
                 anyhow!(
                     "connected to a remote machine, but this one holds no key for it — pair again \
-                     with the full `<ticket>-<code>` string from `gglib remote enable --invite` there"
+                     with the full `<ticket>-<code>` string from `gglib remote invite` there"
                 )
             })?;
         let port = reqwest::Url::parse(&connection.base_url)
