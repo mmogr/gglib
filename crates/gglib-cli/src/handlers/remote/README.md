@@ -12,15 +12,35 @@ over `/api/remote/*` on the daemon; the tunnel itself lives in
 ```text
 remote/
   mod.rs          — disable, status, and the shared status printer
-  enable.rs       — `gglib remote enable`: bring the tunnel up, show the pairing
+  enable.rs       — `gglib remote enable`: bring the tunnel up; `--invite`
+                    also pairs a device, so a first run is one command
+  invite.rs       — `gglib remote invite`: pair one more device, changing
+                    nothing about the session the others are using
+  devices.rs      — `list`, `forget`: who may use the tunnel
   pairing_tui.rs  — the pairing screen: QR + code in the alternate buffer,
                     gone the moment a device pairs or the code expires
-  connect.rs      — `connect`, `disconnect`: this machine as the laptop
+  connect.rs      — `join` (and `connect`, its old name): this machine as
+                    the laptop, plus `disconnect`
 ```
+
+# Who may use it
+
+Every device that pairs gets a key of its own, so `forget` retires one and
+leaves the rest connected. The list has to distinguish two rows that look
+alike: a device that paired and has not made a request yet, and an invite
+nobody ever redeemed. **A row is called never-joined only when it has neither
+`redeemed_at` nor `last_seen`** — both are written by background tasks and
+either can be lost, so one alone would eventually libel a real device.
+
+`invite` needs the tunnel already up and leaves it untouched: the flags it was
+enabled with, the ticket, and every device already on it. `enable --invite`
+remains, because a first run should not be two commands.
 
 # The other side
 
-`connect` takes the string `enable` showed on the other machine. With the
+`join` takes the string `invite` showed on the other machine. `connect` is
+the name it had and still reaches the same handler for one release, printing
+a `note:` that says so. With the
 `-<code>` suffix it is a first pairing: the daemon dials the ticket, redeems
 the code through the tunnel for that machine's API key, and stores both the
 key and the ticket. Without it the stored key is used; with no argument at
@@ -69,7 +89,10 @@ would otherwise look exactly like the one it is warning about.
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`connect.rs`](connect.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-connect-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-connect-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-connect-coverage.json) |
+| [`devices.rs`](devices.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices-coverage.json) |
+| [`devices_tests.rs`](devices_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices_tests-coverage.json) |
 | [`enable.rs`](enable.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable-coverage.json) |
+| [`invite.rs`](invite.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-coverage.json) |
 | [`mod_tests.rs`](mod_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-coverage.json) |
 | [`pairing_tui.rs`](pairing_tui.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-coverage.json) |
 <!-- module-table:end -->

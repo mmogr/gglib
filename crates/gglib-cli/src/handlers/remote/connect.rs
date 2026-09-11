@@ -1,4 +1,6 @@
-//! `gglib remote connect` and `disconnect`: this machine as the laptop.
+//! `gglib remote join` and `disconnect`: this machine as the laptop.
+//!
+//! `connect` is the name `join` had, and still reaches this for one release.
 //!
 //! Stopping the far machine used to live here as `kill`; it is
 //! `gglib daemon stop --remote` now (ADR 0013), beside the local stop.
@@ -19,12 +21,26 @@ pub(crate) struct ConnectArgs {
     pub relay: Option<String>,
     /// Dial only the paths the ticket carries.
     pub no_discovery: bool,
+    /// Whether the person typed `connect` rather than `join`.
+    ///
+    /// Only the hint depends on it. Saying nothing when `join` was typed is
+    /// the point: a deprecation notice on the command that replaced the
+    /// deprecated one teaches the wrong thing.
+    pub under_old_name: bool,
 }
 
 /// Execute `gglib remote connect`.
 pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+
+    if args.under_old_name {
+        eprintln!("  note: `gglib remote connect` is `gglib remote join` now.");
+        eprintln!(
+            "        The old name still works this release and does the same thing; \
+             nothing about a pairing you already have changes."
+        );
+    }
     let first_pairing = args
         .pairing
         .as_deref()

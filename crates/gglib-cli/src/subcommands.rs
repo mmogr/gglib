@@ -162,13 +162,50 @@ pub enum RemoteCommand {
     Disable,
     /// Show the tunnel's state, its peers, and what came through it
     Status,
-    /// Reach another machine's proxy: bind a local port here that is it
+    /// Pair one more device with this machine
+    ///
+    /// Mints a key for one new device and shows a six-digit code that hands
+    /// it over, once. Needs remote access already on, and leaves it exactly
+    /// as it was: every device already using the tunnel keeps working.
+    Invite {
+        /// Print the pairing as plain text instead of the QR screen
+        #[arg(long)]
+        no_qr: bool,
+    },
+    /// List the devices this machine has issued a key to
+    List,
+    /// Stop admitting one device; the others are untouched
+    ///
+    /// Retires that device's key at the tunnel edge and forgets its row.
+    /// This is the per-device revocation; deleting the endpoint identity
+    /// that `status` names is the one that revokes everything at once.
+    Forget {
+        /// The device id, as `gglib remote list` shows it
+        device: String,
+    },
+    /// Join another machine: bind a local port here that is its proxy
     ///
     /// First time, paste the whole `<ticket>-<code>` string that machine's
-    /// `gglib remote enable --invite` showed; the code is redeemed through
-    /// the tunnel for a key of this device's own, which is stored here.
-    /// Afterwards the ticket alone will do, and with no argument the last
-    /// ticket is dialled.
+    /// `gglib remote invite` showed; the code is redeemed through the tunnel
+    /// for a key of this device's own, which is stored here. Afterwards the
+    /// ticket alone will do, and with no argument the last ticket is
+    /// dialled.
+    Join {
+        /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
+        pairing: Option<String>,
+        /// Loopback port to bind here (default: a free one)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Self-hosted relay URL for this side (default: iroh's public relays)
+        #[arg(long)]
+        relay: Option<String>,
+        /// Do not resolve through n0's discovery service; dial only the
+        /// paths the ticket carries
+        #[arg(long)]
+        no_discovery: bool,
+    },
+    /// The old name for `join`, kept for one release
+    #[command(hide = true)]
     Connect {
         /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
         pairing: Option<String>,

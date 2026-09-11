@@ -25,7 +25,7 @@ use tracing::{info, warn};
 use super::RemoteOps;
 use super::enrolment::{forget, offer};
 use super::roster::read_roster;
-use super::types::{DeviceView, Enabled, OfferedPairing};
+use super::types::{DeviceView, Enabled};
 use crate::error::GuiError;
 
 impl RemoteOps {
@@ -45,10 +45,11 @@ impl RemoteOps {
     /// when a store cannot be written or the edge refuses the token or the
     /// grant.
     ///
-    /// Answers with the whole [`Enabled`], not the [`OfferedPairing`] inside
-    /// it, because the ticket is half of what a person is shown: the pairing
-    /// screen draws it and the plain-text form prints it, and
-    /// `OfferedPairing` does not carry one. The session already knows it, so
+    /// Answers with the whole [`Enabled`], not the
+    /// [`OfferedPairing`](super::types::OfferedPairing) inside it, because
+    /// the ticket is half of what a person is shown: the pairing screen
+    /// draws it and the plain-text form prints it, and `OfferedPairing`
+    /// does not carry one. The session already knows it, so
     /// handing it back costs nothing and saves every surface from splitting
     /// the pairing string to recover it.
     pub async fn invite(&self) -> Result<Enabled, GuiError> {

@@ -1,11 +1,15 @@
 #![doc = include_str!("README.md")]
 
 mod connect;
+mod devices;
 mod enable;
+mod invite;
 mod pairing_tui;
 
 use connect::{ConnectArgs, connect, disconnect};
+use devices::{forget, list};
 use enable::{EnableArgs, enable};
+use invite::invite;
 
 use anyhow::Result;
 
@@ -38,6 +42,30 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
         }
         RemoteCommand::Disable => disable(ctx).await,
         RemoteCommand::Status => status(ctx).await,
+        RemoteCommand::Invite { no_qr } => invite(ctx, no_qr).await,
+        RemoteCommand::List => list(ctx).await,
+        RemoteCommand::Forget { device } => forget(ctx, &device).await,
+        RemoteCommand::Join {
+            pairing,
+            port,
+            relay,
+            no_discovery,
+        } => {
+            connect(
+                ctx,
+                ConnectArgs {
+                    pairing,
+                    port,
+                    relay,
+                    no_discovery,
+                    under_old_name: false,
+                },
+            )
+            .await
+        }
+        // The same handler under the name it had for one release. Two arms
+        // rather than an or-pattern, because which name was typed is the
+        // one thing that differs and an or-pattern cannot say.
         RemoteCommand::Connect {
             pairing,
             port,
@@ -51,6 +79,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
                     port,
                     relay,
                     no_discovery,
+                    under_old_name: true,
                 },
             )
             .await

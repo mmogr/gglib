@@ -135,7 +135,7 @@ fn print_up(enabled: &RemoteEnableDto) {
 /// session, whose `/mcp` grant is whatever the `enable` that armed it set —
 /// so echoing the flag back would tell an operator that `--allow-mcp` took
 /// when it did not, or that `/mcp` is closed when it is open.
-fn print_notice(allow_mcp: bool) {
+pub(super) fn print_notice(allow_mcp: bool) {
     eprintln!();
     eprintln!(
         "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key too \u{2014} \

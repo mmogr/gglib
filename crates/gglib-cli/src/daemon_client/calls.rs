@@ -45,6 +45,11 @@ impl DaemonHandle {
         self.request(reqwest::Method::POST, path)
     }
 
+    /// [`Self::request`] for a DELETE.
+    pub(super) fn delete(&self, path: &str) -> reqwest::RequestBuilder {
+        self.request(reqwest::Method::DELETE, path)
+    }
+
     /// Read an HTTP response, surfacing non-2xx bodies as errors.
     pub(super) async fn expect_ok(response: reqwest::Response) -> Result<reqwest::Response> {
         let status = response.status();
