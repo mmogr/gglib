@@ -14,18 +14,6 @@ use super::serve_watch_tests::{offline, ops_with_key};
 use super::*;
 use crate::error::GuiError;
 
-/// Serialises the tests that mint a real device key.
-///
-/// The key store is resolved from a process-wide path, and each test builds
-/// its own `RemoteOps` with its own `roster` lock — so two of them are two
-/// locks over one file, and `forget` is a read-modify-write. Interleaved,
-/// one test's write can carry the other's key back, leaving it in the
-/// developer's checkout for their own `enable` to seed onto their tunnel:
-/// the outcome the cleanup below exists to prevent, arrived at by a route
-/// the cleanup cannot see. Production has one daemon and one `RemoteOps`,
-/// where the roster lock does serialise this; only a test binary has two.
-static MINTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
 /// A restart puts the tunnel back and arms no pairing code.
 ///
 /// `resume` used to reach the tunnel through `enable`, which mints a code
@@ -36,7 +24,7 @@ static MINTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// asking to pair something.
 #[tokio::test]
 async fn a_resume_puts_the_tunnel_back_without_opening_a_pairing_window() {
-    let (core, _proxy, _events, ops) = ops_with_key().await;
+    let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
     // The state `enable` leaves behind: the switch on, and the flags it was
     // given, which is what `resume` arms from.
     core.settings()
@@ -74,7 +62,7 @@ async fn a_resume_puts_the_tunnel_back_without_opening_a_pairing_window() {
 /// tunnel and nothing else.
 #[tokio::test]
 async fn a_plain_enable_brings_the_tunnel_up_and_offers_nothing() {
-    let (_core, _proxy, _events, ops) = ops_with_key().await;
+    let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
 
     let enabled = ops.enable(offline()).await.expect("enable");
 
@@ -101,8 +89,7 @@ async fn a_plain_enable_brings_the_tunnel_up_and_offers_nothing() {
 /// roster, all three.
 #[tokio::test]
 async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
-    let _minting = MINTING.lock().await;
-    let (_core, _proxy, _events, ops) = ops_with_key().await;
+    let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
 
     let request = EnableRequest {
         invite: true,
@@ -171,8 +158,7 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
 /// cleans up exactly as a green one does.
 #[tokio::test]
 async fn redeeming_an_invite_stamps_the_row_it_was_minted_for() {
-    let _minting = MINTING.lock().await;
-    let (_core, _proxy, _events, ops) = ops_with_key().await;
+    let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
 
     let enabled = ops
         .enable(EnableRequest {
