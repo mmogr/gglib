@@ -67,6 +67,13 @@ rotation. Decision 2 needs a long-lived object to call `set_token` on. Put
 another way, the placement is not a preference about layering; it is a
 precondition for the credential model below.
 
+> **Amended 2026-09-12 — the call is no longer `set_token`.** Under
+> `TokenPolicy::Named` the long-lived object receives `add_token` at each
+> invite, `remove_token` at each `forget`, and `set_backend_auth` at each
+> rotation of `proxy_api_key` (decision 2's amendment of 2026-09-11). All
+> three arrive while the listener is up, so the placement argument holds for
+> each of them.
+
 ### 2. One credential, checked at two doors
 
 modelpipe's serve side is constructed with
@@ -325,6 +332,27 @@ rather than working around it.
 > are narrow and each invite is a fresh grant, so the effect is a retry rather
 > than a lockout — but it needs an upstream API before `status` can say so.
 
+> **Amended 2026-09-12 — the poller calls `set_backend_auth`, not
+> `set_token`.** Since 2026-09-11 `rotation_poll` hands a changed
+> `proxy_api_key` to `ServeHandle::set_backend_auth`, which changes only what
+> the edge presents to the proxy. It must never call `set_token`: under
+> `Named` that would give the listener a primary key and turn it back into a
+> shared-key listener with no error (`remote/rotation.rs`). The skip of a
+> cleared or unchanged value, and the pinned case that never spawns the
+> poller, are as the 2026-09-07 note describes.
+
+> **Amended 2026-09-12 — under `Named` the edge never asks for the proxy's
+> key, so a clear cannot reach it.** The paragraph beginning "The tunnel edge
+> does not follow it down", and the 2026-09-07 bullet "A running tunnel does
+> not reopen with it", say the edge keeps demanding `proxy_api_key` after a
+> clear. Since 2026-09-11 it has never demanded it: the edge admits only
+> device keys and live codes, and refuses the proxy's own key. The conclusion
+> stands for a different reason. A clear touches no device key, so the edge
+> refuses what it refused before, and `rotation_poll` ignores the clear, so
+> `backend_auth` goes on presenting the old key to a proxy that no longer asks
+> for one. The clear opens the local door only. Item 1 above calls these
+> paragraphs unchanged, and this is the one mechanism in them that changed.
+
 ### 3. Pairing moves a one-time code, not the key
 
 `gglib remote invite` prints the ticket and a six-digit numeric code, as does
@@ -388,6 +416,21 @@ slower attack, it is a different one.
 > dies on use and in two minutes, and a tunnelled guesser still needs the
 > ticket. The sentence that does not stand is "defended by three things
 > together", which is true of neither path this feature actually has.
+
+> **Amended 2026-09-12 — three things above describe the design before
+> 2026-09-10 and 2026-09-11.** The response to `POST /v1/remote/pair` carries
+> a key minted for that one device when it was invited, not `proxy_api_key`,
+> which no device paired since holds (decision 2's amendment of 2026-09-11).
+> The grant is `grant_once_bounded`, which still admits exactly one request
+> bearing the code, within the two minutes, without a device key;
+> `grant_once` under *Out of scope* means this call. And the burn now fires
+> through the tunnel: the edge counts wrong bearers and drops the grant at the
+> third (decision 4's amendment of 2026-09-10), so the finding above that
+> "through the tunnel, the burn never fires" describes builds before that
+> date. The ticket still carries an endpoint id nobody can guess, but it
+> lasts, so the arithmetic rests on the burn and the window rather than on
+> the ticket. The local path is as the 2026-09-07 note says: the proxy's
+> counter fires, and the ticket is not needed.
 
 Rejected: **bundling the key into the pairing string.** It makes the printed
 string a standing credential, so a photograph of the screen — or a screen
@@ -506,6 +549,16 @@ case-insensitively.
 > repository checkout, where `.gitignore` covers `/data`. A private key a
 > level up would be untracked in a working tree rather than ignored by it.
 
+> **Amended 2026-09-12 — deleting `remote_identity` revokes no key.** Since
+> 2026-09-11 a device is admitted by its own key, and every key in
+> `data/remote_devices` is put back on the listener whatever identity it
+> binds with. Deleting the identity retires the address from the next arm and
+> leaves every key admitted, so the revocation this amendment names is
+> `gglib remote forget`, one device at a time. A client that learns the new
+> ticket and still holds its key is let in; `gglib remote join` asks for a
+> fresh code first, and pairing again mints a second key while the first
+> stays admitted.
+
 ### 5. `/mcp` is refused over the tunnel unless asked for
 
 Tunnelled requests get 403 `mcp_not_allowed_over_tunnel` on `/mcp` by default.
@@ -590,6 +643,12 @@ nothing can restart any of it until someone is at the machine. That asymmetry
 is correct. A remote start would be a remote start, and there is no version of
 it that is only available to the right person.
 
+> **Amended 2026-09-12 — the verb moved on 2026-09-10.** `gglib remote kill`
+> is now `gglib daemon stop --remote`
+> ([ADR 0013](0013-the-target-is-a-value.md), decision 3): stopping the far machine is a
+> `daemon` command pointed at another machine, not a pairing command. It is
+> the same one-way door.
+
 ## Consequences
 
 **Good:**
@@ -600,8 +659,31 @@ it that is only available to the right person.
 - One credential to reason about. The token that gets a request through the
   tunnel edge is the token the proxy checks, so there is one answer to "what
   is my key" and one place to rotate it.
+
+  > **Amended 2026-09-12 — no longer one credential; see decision 2's
+  > amendment of 2026-09-11.** Each device holds a key of its own, which the
+  > edge admits by name and replaces with `proxy_api_key` before the request
+  > reaches the proxy. The proxy's key still has one answer and one place to
+  > rotate it, and no device paired since holds it. A device that paired under
+  > the shared key was handed `proxy_api_key` itself and keeps it until it
+  > pairs again; the edge no longer admits it, and one rotation of
+  > `proxy_api_key` makes that copy worthless at the proxy too. A device is
+  > retired on its own, with `gglib remote forget`. What this gives up is the
+  > second check on tunnelled traffic: the proxy validates a header the edge
+  > wrote and cannot refuse anything that crossed it, and the device gate
+  > stands in its place (items 2 and 3 of that amendment).
 - A ticket alone is useless, and it expires when the session does. A code
   alone is useless, and it expires in two minutes or on first use.
+
+  > **Amended 2026-09-12 — the ticket no longer expires with the session;
+  > decision 4 was reversed on 2026-09-10.** The identity lasts, so a ticket
+  > lasts as long as `data/remote_identity` does. Deleting that file retires
+  > every ticket the next time the listener binds — a daemon restart, or
+  > `disable` then `enable` — because modelpipe reads it only then. It
+  > retires no device key: every key in `data/remote_devices` is put back on
+  > the new listener, so a device is still cut off with `gglib remote forget`.
+  > A ticket alone is still useless: under `TokenPolicy::Named` the listener
+  > admits only a device's key or a live code.
 - The GUI gets a Remote toggle for free, because the logic is daemon-side.
 
 **Costs, accepted:**
@@ -611,6 +693,14 @@ it that is only available to the right person.
   counter-argument is in modelpipe's ADR 0002 and it is not weak. *Amended
   2026-09-09: it was re-litigated, and `--keep-identity` is the answer — opt
   in, default unchanged. See the note under decision 4.*
+
+  > **Amended 2026-09-12 — this cost is gone, and a different one replaced
+  > it.** Decision 4 was reversed on 2026-09-10 and `--keep-identity` removed:
+  > every identity lasts, so a ticket is moved once per device rather than
+  > once per session. The price is a lasting identifier. A machine that
+  > publishes to n0's discovery service announces the same endpoint id every
+  > day, so anyone watching discovery learns when it is up; decision 4's
+  > amendment of 2026-09-10 accepts that as the cost.
 - `--no-discovery` and a per-session identity interact badly by construction:
   a ticket that carries only its minting addresses, from an endpoint that will
   not exist next time, is nearly useless. Both flags are documented; the
@@ -625,8 +715,25 @@ it that is only available to the right person.
   > resolving the moment the desktop moves — which is the worst of both, and
   > is now the combination not to recommend. `--keep-identity` on its own,
   > with discovery left on, is the one that pays.
+
+  > **Amended 2026-09-12 — every identity lasts now, so the pair above is
+  > `--no-discovery` alone.** The 2026-09-09 conclusion stands with the
+  > removed flag taken out of it: `--no-discovery` gives a ticket that lasts
+  > and stops resolving when the machine changes network.
 - Rotation is eventually consistent within 5 s. A revoked key keeps working at
   the tunnel edge for up to one settings-cache window.
+
+  > **Amended 2026-09-12 — neither sentence holds under per-device keys.** A
+  > device's key is retired by `gglib remote forget`, which calls
+  > `ServeHandle::remove_token` before it touches either store, so the edge
+  > refuses that device from the next request onward; a response already
+  > streaming to it runs to completion (decision 2's amendment of 2026-09-11,
+  > item 5). The proxy's own key is never admitted at the edge under
+  > `TokenPolicy::Named`, so a revoked one cannot keep working there. A
+  > rotation of it costs the opposite: the poller hands the new key to
+  > `set_backend_auth` once per settings-cache window, and tunnelled requests
+  > can be refused with 401 for up to two windows while the edge and the proxy
+  > disagree — the cost that amendment accepts.
 
 **Stated plainly, because it will surprise people:**
 
@@ -673,6 +780,13 @@ it that is only available to the right person.
   reader. Naming that gap is the point: a criterion that pretended to a label
   which does not exist would be unreadable in exactly the way ADR 0011's first
   criterion was.
+
+  > **Amended 2026-09-12 — the premise has changed twice since this was
+  > written.** The ticket lasts (decision 4, reversed 2026-09-10) and the
+  > bearer token is one per device (decision 2, amended 2026-09-11), so the
+  > premise now reads *a lasting ticket plus a key per device*. The reading
+  > is unchanged: the same two queries, and still no `component: remote`
+  > label.
 - If `RemoteStatus.tunnelled_requests` stays at zero across daemon runs long
   enough that a remote session would have shown up, the tunnel is a feature
   nobody uses and it goes, taking the `modelpipe` dependency and both sides
@@ -1002,6 +1116,13 @@ Named here so that their absence reads as a decision rather than an oversight.
   > release story — which was always the stronger of the two. What is withdrawn
   > is the capability claim in front of it, which was wrong, and which is the
   > kind of sentence that gets read as *we looked and it cannot be done*.
+
+  > **Amended 2026-09-12 — built, as its own product, which is what this
+  > bullet said it would have to be.** [ggchat](https://github.com/mmogr/ggchat)
+  > is a native iOS and macOS client that embeds modelpipe through a Swift
+  > binding, and the fourth reading records it reaching this machine from a
+  > phone on cellular. gglib carries no phone code, and a phone client stays
+  > out of scope here.
 - **LAN and mDNS pairing.** gglib already carries `mdns-sd` in the CLI, so
   discovering a desktop on the same network without moving a ticket is
   plausible. It is a different trust model — presence on a network as
