@@ -13,7 +13,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -57,6 +57,13 @@ pub fn load(path: &Path) -> io::Result<DeviceKeys> {
 /// is a listener that admits some devices and not others, with nothing saying
 /// which.
 ///
+/// The temporary file is `0600` from the moment it exists, not from a chmod
+/// once the keys are already in it; `create_private` says why. A temporary a
+/// crash leaves behind is therefore no more readable than the file it would
+/// have replaced, and it is not swept here: another process may be mid-write
+/// on a temporary of its own, and deleting that one brings back the rename
+/// collision the per-writer names below exist to prevent.
+///
 /// **The temporary file is named per writer, not per path.** A fixed
 /// `.tmp` sibling makes two concurrent writers collide on one filename:
 /// both write it, the first renames it away, and the second fails at its own
@@ -66,8 +73,8 @@ pub fn load(path: &Path) -> io::Result<DeviceKeys> {
 ///
 /// # Errors
 ///
-/// [`io::Error`] from creating the directory, writing, setting the mode, or
-/// the rename.
+/// [`io::Error`] from creating the directory, creating or writing the
+/// temporary file, setting its mode, or the rename.
 pub fn store(path: &Path, keys: &DeviceKeys) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -79,8 +86,15 @@ pub fn store(path: &Path, keys: &DeviceKeys) -> io::Result<()> {
         std::process::id(),
         NEXT_TMP.fetch_add(1, Ordering::Relaxed)
     ));
-    let written = fs::write(&tmp, &json)
-        .and_then(|()| restrict(&tmp))
+    // `restrict` before a byte is written rather than after: the mode asked of
+    // `open` only applies to a file it creates, and a leftover under this name
+    // — a recycled pid after a reboot starts the counter again — keeps the
+    // mode it was born with.
+    let written = create_private(&tmp)
+        .and_then(|mut file| {
+            restrict(&tmp)?;
+            file.write_all(&json)
+        })
         .and_then(|()| fs::rename(&tmp, path));
     if written.is_err() {
         // Best effort: a temporary nobody renamed is litter beside a `0600`
@@ -93,6 +107,36 @@ pub fn store(path: &Path, keys: &DeviceKeys) -> io::Result<()> {
 /// Distinguishes one writer's temporary file from another's within a process;
 /// the pid does it across processes.
 static NEXT_TMP: AtomicU64 = AtomicU64::new(0);
+
+/// Open the temporary file for writing, `0600` from the moment it exists.
+///
+/// `fs::write` creates with `0666` less the umask, which is `0644` on most
+/// machines, and a mode set afterwards leaves a window in which every device
+/// key is on disk and readable by anyone on the machine. A crash inside that
+/// window leaves them that way for good, under a name nothing goes back to.
+/// Asking `open` for the mode closes the window; it is how modelpipe creates
+/// the endpoint identity beside this file.
+///
+/// The mode only applies to a file this call creates. A leftover under the
+/// same name keeps the mode it has, which is why `store` still calls
+/// `restrict` before it writes.
+#[cfg(unix)]
+fn create_private(path: &Path) -> io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+}
+
+/// Windows has no mode to ask for, so this is the plain create `fs::write`
+/// always did; `restrict` says what protects the file there.
+#[cfg(not(unix))]
+fn create_private(path: &Path) -> io::Result<fs::File> {
+    fs::File::create(path)
+}
 
 /// `0600` where the platform has a notion of it.
 #[cfg(unix)]

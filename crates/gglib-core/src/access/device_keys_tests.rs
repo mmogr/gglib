@@ -71,6 +71,37 @@ fn the_file_is_written_unreadable_to_anybody_else() {
     );
 }
 
+/// The finished file's mode is not the whole story: every key passes through
+/// the temporary file first, and one created `0644` and tightened after the
+/// write is readable by anybody until the chmod, and for good if the process
+/// dies in between. So the create step is checked on its own, before
+/// `restrict` has had a chance to hide it.
+///
+/// It bites wherever the bug does. Under the usual `022` umask a plain create
+/// is `0644`; under one that already hides group and other, such as `077`, a
+/// plain create is `0600` too, there is no window, and this cannot tell the
+/// two apart. The umask is not set here to force the question: it is
+/// process-wide, and these tests run in parallel.
+#[cfg(unix)]
+#[test]
+fn the_staging_file_is_unreadable_to_anybody_else_before_any_chmod() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = temp();
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    create_private(&path).expect("create the staging file");
+
+    let mode = std::fs::metadata(&path)
+        .expect("metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode & 0o077,
+        0,
+        "group and other must have nothing from the first byte: {mode:o}"
+    );
+}
+
 /// A crash mid-write must leave the previous roster rather than a truncated
 /// one, so the write goes to a sibling and renames.
 #[test]
