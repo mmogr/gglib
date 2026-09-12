@@ -164,7 +164,11 @@ export const DevicesSection: FC<DevicesSectionProps> = ({ onNotice }) => {
  */
 function describe(device: RemoteDevice): string {
   if (device.redeemed_at === null && device.last_seen === null) {
-    return `invited ${ago(device.joined_at)}, never joined`;
+    // An invite the edge has stopped honouring is still one nobody took, and
+    // worth saying twice: a half-unwound invite leaves exactly this row. The
+    // CLI's `describe` says the same of it.
+    const invited = `invited ${ago(device.joined_at)}, never joined`;
+    return device.admitted === false ? `${invited} · not admitted` : invited;
   }
   const seen = device.last_seen === null ? 'no requests yet' : `last seen ${ago(device.last_seen)}`;
   if (device.admitted === null) return `${seen} · tunnel down`;

@@ -105,7 +105,13 @@ impl RemoteOps {
         // nothing bound is recoverable — `resume` arms it. The reverse, a
         // bound tunnel nobody recorded, comes back down at the next restart
         // for no reason a person could see.
-        self.remember_enabled(&request).await?;
+        //
+        // A write that fails gives the slot back, or it would read as an arm
+        // on its way until someone ran `disable`.
+        if let Err(e) = self.remember_enabled(&request).await {
+            self.live.lock().await.release(generation);
+            return Err(e);
+        }
 
         let armed = self
             .arm(request, &addr, generation, &cancel, proxy_exit, offer)

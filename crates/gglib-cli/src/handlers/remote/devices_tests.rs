@@ -40,6 +40,41 @@ fn an_invite_nobody_took_says_it_was_never_joined() {
     );
 }
 
+/// An invite the edge no longer admits says so, as well as saying nobody
+/// took it.
+///
+/// That row is what an invite leaves when unwinding it stops part-way: the
+/// edge drops the key first and the stores after, so a failed write keeps a
+/// row nothing admits, and "never joined" alone would read as an unspent
+/// code. The tunnel being down is the other half: nothing is admitted then,
+/// so an invite is no more "not admitted" than any other row.
+#[test]
+fn an_invite_the_edge_no_longer_admits_says_both() {
+    let refused = RemoteDeviceDto {
+        admitted: Some(false),
+        ..unredeemed()
+    };
+    let line = describe(&refused);
+    assert!(
+        line.contains("never joined"),
+        "it is still an invite nobody took: {line}"
+    );
+    assert!(
+        line.contains("not admitted"),
+        "and the edge is refusing its key: {line}"
+    );
+
+    let down = RemoteDeviceDto {
+        admitted: None,
+        ..unredeemed()
+    };
+    let line = describe(&down);
+    assert!(
+        !line.contains("not admitted"),
+        "the tunnel being down singles out no row: {line}"
+    );
+}
+
 /// The second opinion. `redeemed_at` is written by a background task and can
 /// be lost; `last_seen` is written by another. A device that has plainly made
 /// requests must never be called one that never arrived, whichever write went

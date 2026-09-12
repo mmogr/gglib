@@ -199,7 +199,9 @@ fn print_status(status: &RemoteStatusDto) {
             match (status.pairing_active, status.paired) {
                 (true, _) => "code live, waiting for a device",
                 (false, true) => "paired",
-                (false, false) => "code expired or spent, nobody paired",
+                // Not "expired or spent": `forget` and `disable` withdraw a
+                // code too, and the status cannot tell which of them it was.
+                (false, false) => "no code live, nobody paired",
             }
         );
         eprintln!("  Path:      {}", status.path.as_deref().unwrap_or("idle"));

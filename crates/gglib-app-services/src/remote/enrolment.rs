@@ -142,10 +142,19 @@ async fn remember(ops: &RemoteOps, id: &str, key: &str) -> Result<(), GuiError> 
 
 /// Stop admitting `id`, and forget it.
 ///
-/// The edge first and settings second: `remove_token` is what actually stops
-/// admission, and a crash between the two leaves a device gone from the
-/// roster but still admitted until the next arm — the safer way round than
-/// the reverse.
+/// The edge first, then the key file, then the roster: `remember`'s order
+/// reversed. The roster goes last because it is only what `list` shows, while
+/// the other two are what admit — so stopping part-way leaves a row that
+/// nothing admits, and never a key admitted that no row accounts for, which no
+/// surface would show and nobody would know to retire.
+///
+/// While the tunnel is up, that row reads "not admitted". Stopped before the
+/// key file is written, the file still holds the key, and the next arm seeds
+/// it back as though this never ran; stopped before the roster is written, the
+/// key is gone for good and the row stays. With the tunnel down no
+/// `remove_token` ran, so a stop before the key file has changed nothing, and
+/// `list` says "tunnel down" of every row. Either way, running `forget` again
+/// finishes the job.
 ///
 /// # Errors
 ///
