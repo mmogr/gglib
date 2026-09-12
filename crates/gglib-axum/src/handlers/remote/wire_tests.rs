@@ -1,10 +1,10 @@
-//! Tests for the remote tunnel's request and response shapes.
+//! Tests for what the remote tunnel is asked.
 //!
 //! A `#[path]` sibling rather than an inline `mod tests`, because the two
 //! together crossed the 300-line budget `scripts/check_rust_complexity.sh`
-//! allows and the shapes are what the file is for. The conversions are the
-//! subject here: what a default body means, and what each snapshot turns
-//! into on the wire.
+//! allows and the shapes are what the file is for. The subject here is what
+//! a body means when it is empty, and what an older client's body still
+//! means; `status_tests.rs` has the answers.
 
 use super::*;
 
@@ -64,19 +64,4 @@ fn an_empty_connect_body_reuses_the_last_ticket_on_a_free_port() {
     assert!(req.pairing.is_none());
     assert!(req.port.is_none());
     assert!(req.discovery);
-}
-
-/// The status never carries the ticket, whatever the snapshot holds.
-#[test]
-fn the_status_has_no_field_that_could_hold_a_ticket() {
-    let status = RemoteStatus::from(RemoteStatusSnapshot {
-        enabled: true,
-        ticket_fingerprint: Some("3ca82708b995".to_owned()),
-        stored_ticket_fingerprint: Some("aabbccddeeff".to_owned()),
-        ..RemoteStatusSnapshot::default()
-    });
-    let json = serde_json::to_string(&status).unwrap();
-    assert!(json.contains("\"ticket_fingerprint\":\"3ca82708b995\""));
-    assert!(!json.contains("\"ticket\":"), "{json}");
-    assert!(!json.contains("pipe"), "{json}");
 }

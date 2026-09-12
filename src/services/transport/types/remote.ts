@@ -14,3 +14,5 @@ export type { RemoteEnableBody } from '../../../types/generated/RemoteEnableBody
 export type { RemoteEnableResponse } from '../../../types/generated/RemoteEnableResponse';
 export type { RemoteConnectBody } from '../../../types/generated/RemoteConnectBody';
 export type { RemoteConnectResponse } from '../../../types/generated/RemoteConnectResponse';
+export type { RemoteDevice } from '../../../types/generated/RemoteDevice';
+export type { RemoteForgotten } from '../../../types/generated/RemoteForgotten';

@@ -31,11 +31,12 @@ interface PairingRevealProps {
 /**
  * The ticket and the pairing code, shown once.
  *
- * `enable` answers with these exactly once and the daemon never hands them
- * out again, so this is the whole window in which a person can get them to
- * the other machine. The countdown is the code's: when it reaches zero the
- * reveal is gone, the way the CLI's pairing screen leaves the terminal, and
- * the caller also drops it the moment a device pairs.
+ * The daemon answers with a code exactly once — to `enable --invite` or to
+ * `invite` — and never hands that code out again, so this is the whole window
+ * in which a person can get it to the other machine. The countdown is the
+ * code's: when it reaches zero the reveal is gone, the way the CLI's pairing
+ * screen leaves the terminal, and the caller also drops it the moment a
+ * device pairs or the daemon stops holding the code.
  */
 export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onExpired, onCopied }) => {
   const [left, setLeft] = useState(reveal.expires_in_s);

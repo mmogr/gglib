@@ -25,12 +25,33 @@ export function useClickOutside<T extends HTMLElement>(
     if (!enabled) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      // A dialog is "outside" every dropdown by construction — it is
+      // portalled to the body — so without this, the first click in a
+      // confirm opened from inside a panel closes the panel underneath it,
+      // and cancelling leaves the person nowhere near what they were doing.
+      //
+      // A caller that *wants* the dropdown closed when it opens a dialog
+      // should close it in the same handler rather than rely on this, which
+      // is what `ProxyControl`'s View Dashboard now does: it used to close
+      // by accident, and an accident is not a behaviour to inherit.
+      if (
+        target instanceof Element &&
+        target.closest('[role="dialog"], [data-modal-overlay]')
+      ) {
+        return;
+      }
+      if (ref.current && !ref.current.contains(target)) {
         handler();
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
+      // A dialog consumes Escape on a capture listener and marks it handled,
+      // but does not stop it propagating — so without this the same keypress
+      // that closes a confirm also closes the panel it was opened from, which
+      // is the keyboard half of the same bug the dialog check above fixes.
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         handler();
       }

@@ -39,14 +39,10 @@ device?: string,
  */
 mcp_allowed: boolean, 
 /**
- * Whether the tunnel was already up and this call answered from that
- * session instead of arming one.
- *
- * `true` for every `POST /api/remote/invite`, and for an `enable` with
- * `invite` set that found a session running. On that path the request's
- * other flags were ignored, so a surface that wants to say what it
- * changed has to read this rather than infer it: only the combination
- * "asked for `/mcp`, told no" is distinguishable from `mcp_allowed`
- * alone.
+ * Whether the tunnel was already up and this answered from that session
+ * rather than arming one — true for every `invite`, and for an `enable`
+ * with `invite` set that found one running. The request's other flags
+ * were ignored on that path, and a surface cannot infer it: only "asked
+ * for `/mcp`, told no" shows in the rest of the answer.
  */
 already_up: boolean, };

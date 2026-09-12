@@ -52,17 +52,27 @@ describe('remoteRegistry', () => {
     });
   });
 
-  it('remote_enabled turns the serve side on with the fingerprint and a live code', () => {
+  /**
+   * The event carries a fingerprint and nothing else — in particular it does
+   * not say whether a code was offered, and an `enable` that was not asked to
+   * invite offers none. That is now the ordinary way a paired machine comes
+   * back, so assuming a live code here would tell the panel to disable its
+   * Invite button until the status re-read that follows every event landed,
+   * and for good if that read failed.
+   */
+  it('remote_enabled turns the serve side on and claims nothing about a code', () => {
     ingestRemoteEvent({ type: 'remote_enabled', ticketFingerprint: 'aabbccddeeff' });
     const { status } = getRemoteState();
     expect(status?.enabled).toBe(true);
     expect(status?.ticket_fingerprint).toBe('aabbccddeeff');
-    expect(status?.pairing_active).toBe(true);
+    expect(status?.pairing_active).toBe(false);
     expect(status?.paired).toBe(false);
   });
 
   it('remote_paired spends the code; remote_disabled clears the session', () => {
-    ingestRemoteEvent({ type: 'remote_enabled', ticketFingerprint: 'aabbccddeeff' });
+    // Seeded through a status rather than an `enable` event, which no longer
+    // claims a code is live.
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true, pairing_active: true });
     ingestRemoteEvent({ type: 'remote_paired', peer: '0123456789ab' });
     expect(getRemoteState().status).toMatchObject({
       pairing_active: false,

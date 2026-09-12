@@ -22,3 +22,5 @@ export const REMOTE_STATUS_PATH = '/api/remote/status';
 export const REMOTE_CONNECT_PATH = '/api/remote/connect';
 export const REMOTE_DISCONNECT_PATH = '/api/remote/disconnect';
 export const REMOTE_KILL_PATH = '/api/remote/kill';
+export const REMOTE_INVITE_PATH = '/api/remote/invite';
+export const REMOTE_DEVICES_PATH = '/api/remote/devices';

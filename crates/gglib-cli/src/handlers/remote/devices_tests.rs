@@ -97,10 +97,17 @@ fn a_row_is_not_called_unadmitted_merely_because_the_tunnel_is_down() {
     );
 }
 
-/// A clock that moved backwards says so rather than claiming the future.
+/// A clock that moved backwards says so rather than claiming the future —
+/// but a few seconds of skew is not that.
+///
+/// The GUI renders this same roster against a browser clock that is not in
+/// step with the daemon's, so the tolerance is shared rather than local to
+/// either. Without it a just-minted invite reads as "invited at an unknown
+/// time" on one surface and "invited just now" on the other.
 #[test]
 fn a_timestamp_ahead_of_the_clock_is_not_rendered_as_a_duration() {
     assert_eq!(ago(now() + 600_000), "at an unknown time");
+    assert_eq!(ago(now() + 5_000), "just now", "five seconds is skew");
 }
 
 /// An id that is not one is refused here rather than sent.

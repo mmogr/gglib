@@ -1,4 +1,4 @@
-import { FC, useEffect, useRef, useState } from 'react';
+import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { Globe } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useRemoteState } from '../services/remoteRegistry';
@@ -7,7 +7,7 @@ import { useToastContext } from '../contexts/ToastContext';
 import { Icon } from './ui/Icon';
 import { Button } from './ui/Button';
 import { cn } from '../utils/cn';
-import { ConnectSection, ServeSection } from './remote';
+import { ConnectSection, DevicesSection, ServeSection } from './remote';
 
 interface RemoteControlProps {
   buttonClassName?: string;
@@ -55,7 +55,12 @@ const RemoteControl: FC<RemoteControlProps> = ({
     active && statusDotActiveClassName,
   );
 
-  const notice = (message: string, kind: 'success' | 'error' | 'info') => showToast(message, kind);
+  // Memoised because the sections take it as a prop and put it in dependency
+  // arrays; a fresh closure every render makes every one of those a no-op.
+  const notice = useCallback(
+    (message: string, kind: 'success' | 'error' | 'info') => showToast(message, kind),
+    [showToast],
+  );
 
   return (
     <div className="relative inline-flex" ref={dropdownRef}>
@@ -87,14 +92,17 @@ const RemoteControl: FC<RemoteControlProps> = ({
             <>
               <ServeSection onNotice={notice} />
               <div className="my-base border-t border-border-light" />
+              <DevicesSection onNotice={notice} />
+              <div className="my-base border-t border-border-light" />
               <ConnectSection onNotice={notice} />
             </>
           )}
 
           <div className="mt-md pt-md border-t border-border-light">
             <small className="text-text-muted text-xs leading-normal">
-              One key, two doors: the tunnel enforces the same API key the proxy does. Nothing is
-              persisted — a restart forgets both sides.
+              A key per device: retiring one leaves every other connected, and no device's key
+              ever reaches the proxy behind the tunnel. Remote access stays on across a restart;
+              the connection to another machine does not.
             </small>
           </div>
         </div>

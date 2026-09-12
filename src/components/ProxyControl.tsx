@@ -182,7 +182,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
               <Button
                 variant="secondary"
                 className="w-full p-sm mb-md rounded-base text-sm font-medium"
-                onClick={() => setShowDashboard(true)}
+                onClick={() => { setIsOpen(false); setShowDashboard(true); }}
                 leftIcon={<Icon icon={LayoutDashboard} size={14} />}
               >
                 View Dashboard

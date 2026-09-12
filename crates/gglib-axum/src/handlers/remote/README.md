@@ -29,16 +29,24 @@ Two decisions live here rather than in `RemoteOps`:
   does not. The body says `{"forgotten": false}` so a surface that wants to
   tell the difference can, and one that only wants the device gone need not.
 
-`devices` holds its own shapes rather than putting them in `wire`, which is
-fifteen lines from the file-size budget. `invite` has none: `RemoteOps::invite`
-answers with the same `Enabled` an `enable --invite` does — the ticket belongs
-in it, and a pairing view needs one — so the route reuses the enable response
-and a client needs no second shape to decode.
+`devices` holds its own shapes rather than putting them in `wire`. `invite`
+has none: `RemoteOps::invite` answers with the same `Enabled` an
+`enable --invite` does — the ticket belongs in it, and a pairing view needs
+one — so the route reuses the enable response and a client needs no second
+shape to decode.
 
-`wire` holds the shapes. The status carries the ticket's fingerprint and never
-the ticket; the peers by fingerprint; the connect side's port and path; what
-settings remember of the last pairing, again by fingerprint; and the counters
-the tunnel's owner keeps. `ts-rs` exports them for the Remote panel.
+The shapes are split the way the calls are: `wire` is what the tunnel is
+*asked* — the enable, connect and kill bodies, and the enable and connect
+responses, of which only `enable`'s (reused by `invite`) carries a ticket —
+and `status` is what it *says*. `devices` keeps its own beside its handlers.
+
+That split is not only size. The status is the response anything on this
+machine can ask for twice, so what it leaves out is as much the contract as
+what it carries: the ticket's fingerprint and never the ticket, peers by
+fingerprint, the connect side's port and path, what settings remember of the
+last pairing (again by fingerprint), the counters the tunnel's owner keeps,
+and device rows with no field a key could live in. `ts-rs` exports them all
+for the Remote panel.
 
 <!-- module-docs:end -->
 
@@ -50,6 +58,8 @@ the tunnel's owner keeps. `ts-rs` exports them for the Remote panel.
 |--------|-----|------------|----------|
 | [`connect.rs`](connect.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-connect-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-connect-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-connect-coverage.json) |
 | [`devices.rs`](devices.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-devices-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-devices-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-devices-coverage.json) |
+| [`status.rs`](status.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-status-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-status-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-status-coverage.json) |
+| [`status_tests.rs`](status_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-status_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-status_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-status_tests-coverage.json) |
 | [`wire.rs`](wire.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-wire-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-wire-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-wire-coverage.json) |
 | [`wire_tests.rs`](wire_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-wire_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-wire_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-remote-wire_tests-coverage.json) |
 <!-- module-table:end -->

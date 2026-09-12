@@ -202,4 +202,73 @@ describe('useClickOutside', () => {
     expect(handler1).toHaveBeenCalledTimes(1); // Not called again
     expect(handler2).toHaveBeenCalledTimes(1);
   });
+  describe('a dialog is not "outside"', () => {
+    /**
+     * Every dropdown in this app opens its confirms through one shared
+     * dialog, which is portalled to the body — so by the DOM's reckoning it
+     * is outside every one of them. Without these three exemptions, answering
+     * a confirm opened from inside a panel closes the panel underneath it, and
+     * cancelling leaves the person nowhere near what they were doing.
+     */
+    function dialog(): { content: HTMLElement; overlay: HTMLElement } {
+      const overlay = document.createElement('div');
+      overlay.setAttribute('data-modal-overlay', '');
+      const content = document.createElement('div');
+      content.setAttribute('role', 'dialog');
+      const button = document.createElement('button');
+      content.appendChild(button);
+      document.body.append(overlay, content);
+      return { content: button, overlay };
+    }
+
+    it('ignores a click on the dialog itself', () => {
+      const handler = vi.fn();
+      const { content } = dialog();
+      renderHook(() => {
+        const ref = useRef<HTMLDivElement>(target);
+        useClickOutside(ref, handler);
+        return ref;
+      });
+
+      content.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('ignores a click on the dim backdrop behind it', () => {
+      // The overlay is a sibling of the dialog with no role of its own, so
+      // the role check alone does not cover it — and clicking the backdrop
+      // is one of the three ways a person dismisses a confirm.
+      const handler = vi.fn();
+      const { overlay } = dialog();
+      renderHook(() => {
+        const ref = useRef<HTMLDivElement>(target);
+        useClickOutside(ref, handler);
+        return ref;
+      });
+
+      overlay.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('ignores the Escape that a dialog has already consumed', () => {
+      // A dialog handles Escape on a capture listener and marks the event
+      // handled, but does not stop it propagating. Without this the one
+      // keypress closes both the confirm and the panel it was opened from.
+      const handler = vi.fn();
+      renderHook(() => {
+        const ref = useRef<HTMLDivElement>(target);
+        useClickOutside(ref, handler);
+        return ref;
+      });
+
+      const consumed = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+      document.addEventListener('keydown', (e) => e.preventDefault(), { capture: true, once: true });
+      document.dispatchEvent(consumed);
+      expect(handler).not.toHaveBeenCalled();
+
+      // An Escape nobody consumed still closes the panel.
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
 });

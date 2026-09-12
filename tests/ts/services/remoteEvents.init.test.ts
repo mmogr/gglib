@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { RemoteStatus } from '../../../src/services/transport/types/remote';
 
 const subscribeSseEvent = vi.fn();
 const getRemoteStatus = vi.fn();
@@ -32,7 +33,14 @@ async function loadFresh() {
   return import('../../../src/services/remoteEvents');
 }
 
-const STATUS = {
+/**
+ * Annotated, which it was not: this literal had gone stale twice over,
+ * missing `remote_enabled` and `identity_path` long after the Rust grew
+ * them, because nothing typechecked it against the shape it claims to be.
+ * A test fixture that has drifted from the real payload is testing the
+ * wrong thing quietly. `tsc` owns it now.
+ */
+const STATUS: RemoteStatus = {
   enabled: true,
   ticket_fingerprint: 'aabbccddeeff',
   pairing_active: true,
@@ -46,6 +54,9 @@ const STATUS = {
   connected: null,
   stored_ticket_fingerprint: null,
   has_remote_key: false,
+  remote_enabled: true,
+  identity_path: '/home/matt/.gglib/remote_identity',
+  devices: [],
 };
 
 describe('initRemoteEvents', () => {
@@ -105,5 +116,41 @@ describe('initRemoteEvents', () => {
     expect(applyRemoteStatus).not.toHaveBeenCalledWith({ ...STATUS, enabled: false });
 
     cleanupRemoteEvents();
+  });
+
+  it('a re-read overtaken by an event is retried, not reported as failed', async () => {
+    const { initRemoteEvents, refreshRemoteStatus, cleanupRemoteEvents } = await loadFresh();
+    initRemoteEvents();
+    await vi.waitFor(() => expect(getRemoteStatus).toHaveBeenCalledTimes(1));
+
+    let resolveStatus: (s: typeof STATUS) => void = () => {};
+    getRemoteStatus.mockImplementationOnce(
+      () => new Promise<typeof STATUS>((resolve) => (resolveStatus = resolve)),
+    );
+    const reread = refreshRemoteStatus();
+
+    const handler = subscribeSseEvent.mock.calls[0][1] as (evt: unknown) => void;
+    handler({ type: 'remote_back', port: 41234 });
+    resolveStatus(STATUS);
+
+    // The read worked; an event merely overtook it. Reporting that as a
+    // failure told a forget its list "could not be re-read" while the event's
+    // own read was already landing.
+    await expect(reread).resolves.toBe(true);
+    // Hydration, this read, the event's read, and the retry.
+    expect(getRemoteStatus).toHaveBeenCalledTimes(4);
+
+    cleanupRemoteEvents();
+  });
+
+  it('refreshRemoteStatus answers true once applied, and false rather than rejecting when the read fails', async () => {
+    // The contract a forget relies on to decide whether it may say it is done.
+    // The component tests mock it, so this is the one place it is held to it.
+    const { refreshRemoteStatus } = await loadFresh();
+    await expect(refreshRemoteStatus()).resolves.toBe(true);
+    expect(applyRemoteStatus).toHaveBeenCalledWith(STATUS);
+
+    getRemoteStatus.mockRejectedValueOnce(new Error('daemon gone'));
+    await expect(refreshRemoteStatus()).resolves.toBe(false);
   });
 });

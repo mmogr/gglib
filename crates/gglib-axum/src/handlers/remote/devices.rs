@@ -1,10 +1,8 @@
 //! The three device routes: invite one, list them, retire one.
 //!
-//! Their DTOs live here beside them rather than in `wire.rs`, which is
-//! fifteen lines from the 300-line budget `scripts/check_rust_complexity.sh`
-//! allows a file not already in its baseline. The split is along a subject
-//! either way: `wire.rs` is the tunnel — enable, status, connect — and this
-//! is who may use it.
+//! Their DTOs live here beside them rather than in `wire.rs`, along a
+//! subject: `wire.rs` is what the tunnel is asked — enable, connect, kill —
+//! `status.rs` is what it says, and this is who may use it.
 //!
 //! `invite` has no DTO of its own. `RemoteOps::invite` answers with the same
 //! `Enabled` an `enable --invite` does, so this route answers with
