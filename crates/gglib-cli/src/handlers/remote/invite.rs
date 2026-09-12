@@ -11,10 +11,11 @@ use crate::daemon_client::{self, RemoteEnableDto};
 
 /// Execute `gglib remote invite`.
 ///
-/// The tunnel has to be up already; the daemon refuses otherwise and names
-/// both commands that fix it. Nothing about the session changes — the flags
-/// it was enabled with, the ticket, and every device already using it are
-/// left exactly as they were.
+/// The tunnel has to be up already. The daemon refuses otherwise, and says
+/// what to do instead: `enable` when the switch is off, and wait when it is
+/// on and the tunnel is still coming up. Nothing about the session changes —
+/// the flags it was enabled with, the ticket, and every device already using
+/// it are left exactly as they were.
 ///
 /// Shares `enable --invite`'s screen rather than growing one of its own:
 /// what a person is shown is the same thing, and the only reason `enable`
@@ -50,6 +51,17 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
                  device already on it is unaffected."
             );
             eprintln!("  Run `gglib remote invite` again for a fresh code.");
+        }
+        Outcome::Ended { tunnel_up } => {
+            eprintln!();
+            for line in pairing_tui::withdrawn_notice(tunnel_up) {
+                eprintln!("{line}");
+            }
+            // The closing notice says remote access was already on and still
+            // is, which is the one thing it would get wrong with it down.
+            if !tunnel_up {
+                return Ok(());
+            }
         }
         Outcome::Interrupted => {
             eprintln!();

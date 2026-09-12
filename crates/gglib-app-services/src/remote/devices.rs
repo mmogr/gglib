@@ -25,6 +25,7 @@ use tracing::{info, warn};
 use super::RemoteOps;
 use super::enrolment::{forget, offer};
 use super::roster::read_roster;
+use super::slot::Busy;
 use super::types::{DeviceView, Enabled};
 use crate::error::GuiError;
 use gglib_core::Device;
@@ -41,10 +42,10 @@ impl RemoteOps {
     ///
     /// # Errors
     ///
-    /// `Conflict` when the tunnel is not up, when an invite is already open,
-    /// or when remote access went down while this was preparing; `Internal`
-    /// when a store cannot be written or the edge refuses the token or the
-    /// grant.
+    /// `Conflict` when the tunnel is not up or is still coming up, when an
+    /// invite is already open, or when remote access went down while this was
+    /// preparing; `Internal` when a store cannot be written or the edge
+    /// refuses the token or the grant.
     ///
     /// Answers with the whole [`Enabled`], not the
     /// [`OfferedPairing`](super::types::OfferedPairing) inside it, because
@@ -55,11 +56,7 @@ impl RemoteOps {
     /// the pairing string to recover it.
     pub async fn invite(&self) -> Result<Enabled, GuiError> {
         let Some(enabled) = self.invite_if_up().await? else {
-            return Err(GuiError::Conflict(
-                "remote access is not enabled — run `gglib remote enable` first, or \
-                 `gglib remote enable --invite` to do both"
-                    .to_owned(),
-            ));
+            return Err(self.nothing_to_invite_onto().await);
         };
         if enabled.pairing.is_none() {
             return Err(GuiError::Internal(
@@ -67,6 +64,25 @@ impl RemoteOps {
             ));
         }
         Ok(enabled)
+    }
+
+    /// Why [`Self::invite_if_up`] found nothing, read afresh rather than
+    /// returned by it: `enable --invite` shares that call, and has to go on
+    /// getting `Ok(None)` for every way the tunnel can be down, because that
+    /// is what lets it arm one.
+    ///
+    /// Settings first and the serve slot second, the order `status` reads
+    /// them in. A settings read that fails counts as the switch being off,
+    /// which leaves the refusal saying what it always said.
+    async fn nothing_to_invite_onto(&self) -> GuiError {
+        let switched_on = self
+            .core
+            .settings()
+            .get()
+            .await
+            .is_ok_and(|s| s.remote_enabled == Some(true));
+        let busy = self.live.lock().await.busy();
+        refusal_without_a_tunnel(busy.as_ref(), switched_on)
     }
 
     /// The same, against a tunnel that may or may not be up: `Ok(None)` means
@@ -116,6 +132,19 @@ impl RemoteOps {
     ///
     /// `Internal` when a store cannot be written.
     pub async fn forget(&self, device: &str) -> Result<bool, GuiError> {
+        // First, before the edge is told anything or either store is touched.
+        // A code still on screen for this device would otherwise stay
+        // redeemable across every wait below — the roster lock and two store
+        // writes — for a key the edge had already dropped: a device that
+        // pairs, sees a green checkmark, and is refused on its first real
+        // request, the least debuggable failure this has and the one
+        // `offer`'s ordering exists to prevent from the other end. Withdrawn
+        // last, as it was, it was also skipped whenever a store write failed,
+        // which left the code live for the rest of its two minutes.
+        if let Some(pending) = self.gateway.withdraw_pairing_for(device) {
+            info!(device = %pending, "withdrew the open invite for a device being forgotten");
+        }
+
         let handle = {
             let live = self.live.lock().await;
             live.full().map(|l| Arc::clone(&l.handle))
@@ -137,15 +166,6 @@ impl RemoteOps {
             && handle.remove_token(device)
         {
             warn!(device = %device, "a tunnel armed mid-forget had seeded the retired key; removed");
-        }
-
-        // A code still on screen for this device would otherwise redeem for a
-        // key the edge has just stopped holding: a device that pairs, sees a
-        // green checkmark, and is refused on its first real request — the
-        // least debuggable failure this has, and the one `offer`'s ordering
-        // exists to prevent from the other end.
-        if let Some(pending) = self.gateway.withdraw_pairing_for(device) {
-            info!(device = %pending, "withdrew the open invite for a device being forgotten");
         }
         Ok(gone)
     }
@@ -172,6 +192,46 @@ impl RemoteOps {
         };
         Ok(viewed(roster, admitting.as_deref()))
     }
+}
+
+/// The refusal for an invite that found no tunnel up, as the person who asked
+/// needs to hear it.
+///
+/// Three sentences, because the fix differs:
+/// - With the switch off, `enable` is the fix.
+/// - With a tunnel still arming — `resume` holds the slot for up to fifteen
+///   seconds after every daemon start — the fix is to wait. Both `enable`
+///   commands refuse while the slot is taken, so naming them would send
+///   someone to two refusals in a row; `disable` is the way out, as
+///   `busy_serving` says it.
+/// - With the switch on and nothing reserved, the daemon has not reached the
+///   arm yet — one this command started for itself answers before `resume`
+///   has taken the slot — or it tried and could not reach a relay. `enable`
+///   is the wrong advice either way: the switch is already on.
+///
+/// `Full` means an arm finished between the two reads: it was still coming up
+/// when `invite_if_up` looked, and an invite works now, so the same advice
+/// holds.
+fn refusal_without_a_tunnel(busy: Option<&Busy>, switched_on: bool) -> GuiError {
+    GuiError::Conflict(
+        match (busy, switched_on) {
+            (Some(Busy::Filling | Busy::Full), _) => {
+                "remote access is still coming up — `gglib remote status` shows when the \
+                 ticket is ready; run `gglib remote invite` then, or `gglib remote disable` \
+                 to give up on it"
+            }
+            (None, true) => {
+                "remote access is switched on, but nothing is bound — still arming, or it \
+                 could not reach a relay; `gglib remote status` shows the ticket once it is \
+                 up, and `gglib remote invite` works then"
+            }
+            (None, false) => {
+                "remote access is not enabled — run `gglib remote enable` first, or \
+                 `gglib remote enable --invite` to do both"
+            }
+        }
+        .to_owned(),
+    )
 }
 
 /// Roster rows as the surfaces see them, given what the edge is admitting.
@@ -201,3 +261,7 @@ pub(super) fn viewed(roster: Vec<Device>, admitting: Option<&[String]>) -> Vec<D
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "devices_tests.rs"]
+mod devices_tests;

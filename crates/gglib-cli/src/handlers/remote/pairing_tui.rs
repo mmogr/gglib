@@ -1,11 +1,11 @@
 //! The pairing screen.
 //!
 //! Draws the QR and the code in the alternate screen buffer, polls the daemon
-//! for a pairing, and leaves the moment one happens or the code expires. The
-//! alternate buffer is the point: `less` and `vim` draw there so that leaving
-//! restores the terminal exactly, and nothing they showed survives in the
-//! scrollback. A pairing string is a credential for two minutes; a terminal
-//! history is forever.
+//! for a pairing, and leaves the moment one happens, the code expires, or the
+//! invite is withdrawn. The alternate buffer is the point: `less` and `vim`
+//! draw there so that leaving restores the terminal exactly, and nothing they
+//! showed survives in the scrollback. A pairing string is a credential for two
+//! minutes; a terminal history is forever.
 
 use std::io::{Write as _, stdout};
 use std::time::{Duration, Instant};
@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use crossterm::{cursor, execute, terminal};
 
-use crate::daemon_client::{DaemonHandle, RemoteEnableDto};
+use crate::daemon_client::{DaemonHandle, RemoteEnableDto, RemoteStatusDto};
 
 /// How the screen ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,9 +22,25 @@ pub(super) enum Outcome {
     Paired { peer: Option<String> },
     /// The code expired with nobody pairing.
     Expired,
+    /// The daemon let go of the code before it expired, and nobody paired.
+    ///
+    /// Almost always a withdrawal on this machine — `forget` of the invited
+    /// row, or `disable` — but a status cannot say which, and a restart or a
+    /// proxy that exited reads the same. `tunnel_up` is whether the serve side
+    /// was still up at the read that said so.
+    Ended { tunnel_up: bool },
     /// The person pressed Ctrl-C; the tunnel is still up.
     Interrupted,
 }
+
+/// How near the end of the countdown a code the daemon has let go of is put
+/// down to expiry rather than to a withdrawal.
+///
+/// The daemon starts its clock when it arms the code, before it answers, and
+/// this screen starts its own when the answer arrives, so the daemon always
+/// lets go a moment first. A withdrawal inside this window is reported as the
+/// expiry it was about to be.
+const LAPSE_GRACE: Duration = Duration::from_secs(2);
 
 /// Render the pairing string as a QR code, or `None` if it will not fit.
 ///
@@ -40,7 +56,32 @@ pub(super) fn qr(pairing: &str) -> Option<String> {
     Some(code.render::<unicode::Dense1x2>().quiet_zone(true).build())
 }
 
-/// Show the pairing until a device pairs, the code expires, or Ctrl-C.
+/// What a screen that ended on a withdrawal prints, a line at a time.
+///
+/// One copy for `enable` and `invite`, which reach the same event under two
+/// names. The cause is hedged because the status cannot prove it: `forget` and
+/// `disable` are what withdraw a code, but a restart, a proxy that exited, or
+/// three wrong codes typed on this machine read the same.
+pub(super) fn withdrawn_notice(tunnel_up: bool) -> [&'static str; 2] {
+    if tunnel_up {
+        [
+            "  The invite was withdrawn on this machine (`gglib remote forget`, most \
+             likely); nobody paired.",
+            "  The tunnel is up and every device already on it is unaffected; \
+             `gglib remote invite` offers a fresh code.",
+        ]
+    } else {
+        [
+            "  The invite ended with the tunnel (`gglib remote disable`, most likely); \
+             nobody paired.",
+            "  `gglib remote status` says whether remote access is coming back; if it is \
+             off, `gglib remote enable --invite` turns it on with a fresh code.",
+        ]
+    }
+}
+
+/// Show the pairing until a device pairs, the code expires or is withdrawn,
+/// or Ctrl-C.
 pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Result<Outcome> {
     // Only reached when `enable` offered a code; the caller guards on it.
     let ttl = Duration::from_secs(enabled.expires_in_s.unwrap_or_default());
@@ -54,6 +95,7 @@ pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Res
     // every exit path, including a `?`.
     let _restore = Restore;
 
+    let mut watch = Watch::default();
     let outcome = loop {
         let left = ttl.saturating_sub(started.elapsed());
         draw(&mut out, enabled, rendered.as_deref(), left)?;
@@ -64,17 +106,54 @@ pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Res
             _ = tokio::signal::ctrl_c() => break Outcome::Interrupted,
             () = tokio::time::sleep(Duration::from_secs(1)) => {}
         }
+        // A read that fails says nothing either way, so it changes nothing.
+        // The time left is taken again, because the second's sleep has made
+        // the one above stale.
         if let Ok(status) = handle.remote_status().await
-            && status.paired
+            && let Some(outcome) = watch.read(status, ttl.saturating_sub(started.elapsed()))
         {
-            break Outcome::Paired {
-                peer: status
-                    .last_peer
-                    .or_else(|| status.peers.first().map(|p| p.fingerprint.clone())),
-            };
+            break outcome;
         }
     };
     Ok(outcome)
+}
+
+/// What the polls have said so far, and when that is enough to leave.
+#[derive(Debug, Default)]
+struct Watch {
+    /// The last read said no code was live and nobody had paired.
+    gone: bool,
+}
+
+impl Watch {
+    /// One status read, with `left` before the countdown ends; `Some` when the
+    /// screen should leave.
+    ///
+    /// It keys on the code being gone, not on its going from live to gone.
+    /// The popover keys on the change because it can hold a read from before
+    /// its own invite landed. This screen holds none, and the daemon arms a
+    /// code before it answers, so every read here comes after the code
+    /// existed. Keyed on the change, a withdrawal before the first read would
+    /// leave the dead code up for the whole countdown, which is the thing this
+    /// exists to stop.
+    ///
+    /// A gone code has to be read twice running, because a redemption clears
+    /// the code and records the pairing in two steps, and a read between them
+    /// sees neither. And one that goes inside [`LAPSE_GRACE`] is left for the
+    /// countdown to call expired.
+    fn read(&mut self, status: RemoteStatusDto, left: Duration) -> Option<Outcome> {
+        if status.paired {
+            return Some(Outcome::Paired {
+                peer: status
+                    .last_peer
+                    .or_else(|| status.peers.first().map(|p| p.fingerprint.clone())),
+            });
+        }
+        let gone_before = std::mem::replace(&mut self.gone, !status.pairing_active);
+        (self.gone && gone_before && left > LAPSE_GRACE).then_some(Outcome::Ended {
+            tunnel_up: status.enabled,
+        })
+    }
 }
 
 /// Leaves the alternate screen and shows the cursor again, on drop.
@@ -124,15 +203,5 @@ fn draw(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A ticket from modelpipe's format vectors plus a code, as `enable`
-    /// would print it, fits a QR and round-trips through uppercasing.
-    #[test]
-    fn the_pairing_string_fits_a_qr_when_upper_cased() {
-        let pairing = "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na-483920";
-        let rendered = qr(pairing).expect("fits");
-        assert!(rendered.lines().count() > 10, "a drawn code has rows");
-    }
-}
+#[path = "pairing_tui_tests.rs"]
+mod pairing_tui_tests;

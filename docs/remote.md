@@ -51,7 +51,8 @@ mints a key for one new device and a six-digit code that hands it over once,
 shown in the terminal's alternate screen — a QR code, the ticket, and the
 code — the way `less` shows a file: leaving the screen restores the terminal,
 and nothing is left in the scrollback. The screen goes away by itself the
-moment a device pairs or the code expires. `--no-qr`, or a stdout that is not
+moment a device pairs, the code expires, or the invite is withdrawn on this
+machine. `--no-qr`, or a stdout that is not
 a terminal, prints the pairing as plain text instead.
 
 A restart never invites. The daemon brings the tunnel back up with the flags

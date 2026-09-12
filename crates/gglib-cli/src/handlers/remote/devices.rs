@@ -90,7 +90,20 @@ pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
 fn describe(d: &RemoteDeviceDto) -> String {
     let name = d.label.as_deref().unwrap_or("\u{2014}");
     if d.redeemed_at.is_none() && d.last_seen.is_none() {
-        return format!("{name}  (invited {}, never joined)", ago(d.joined_at));
+        // An invite the edge has stopped honouring is still one nobody took,
+        // and worth saying twice: an unwind that failed part-way, or an arm
+        // that refused the id, leaves exactly this row, and "never joined"
+        // alone reads as a harmless unspent code. With the tunnel down there
+        // is nothing to add, because no row is admitted then.
+        let refused = if d.admitted == Some(false) {
+            "; not admitted"
+        } else {
+            ""
+        };
+        return format!(
+            "{name}  (invited {}, never joined{refused})",
+            ago(d.joined_at)
+        );
     }
     let seen = match d.last_seen {
         Some(at) => format!("last seen {}", ago(at)),

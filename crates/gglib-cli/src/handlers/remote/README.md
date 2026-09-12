@@ -18,7 +18,8 @@ remote/
                     nothing about the session the others are using
   devices.rs      — `list`, `forget`: who may use the tunnel
   pairing_tui.rs  — the pairing screen: QR + code in the alternate buffer,
-                    gone the moment a device pairs or the code expires
+                    gone the moment a device pairs, the code expires, or
+                    the invite is withdrawn
   connect.rs      — `join` (and `connect`, its old name): this machine as
                     the laptop, plus `disconnect`
 ```
@@ -59,8 +60,12 @@ They are drawn in the terminal's **alternate screen buffer**, the way `less`
 draws, so leaving it restores whatever was there and nothing is left in the
 scrollback for a later screenshot or `tmux` history to find. The screen polls
 `GET /api/remote/status` once a second and leaves as soon as the daemon
-reports a device paired, or when the code expires — an unattended terminal
-showing a credential indefinitely is the case this exists to avoid.
+reports a device paired or the code gone, or when the code expires — an
+unattended terminal showing a credential indefinitely is the case this exists
+to avoid. A code the daemon lets go of early has to be read gone twice
+running, because a redemption clears the code before it records the pairing,
+and one that goes in the last two seconds is counted as the expiry it was
+about to be.
 
 `--no-qr`, or a stdout that is not a terminal, prints the pairing string as
 plain text instead and returns. The string is a credential for two minutes;
@@ -96,6 +101,7 @@ would otherwise look exactly like the one it is warning about.
 | [`invite.rs`](invite.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-coverage.json) |
 | [`mod_tests.rs`](mod_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-coverage.json) |
 | [`pairing_tui.rs`](pairing_tui.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-coverage.json) |
+| [`pairing_tui_tests.rs`](pairing_tui_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui_tests-coverage.json) |
 <!-- module-table:end -->
 
 </details>

@@ -220,6 +220,26 @@ describe('RemoteControl', () => {
     expect(screen.getByText(/invited 1h ago, never joined/i)).toBeInTheDocument();
   });
 
+  it('an invite the edge no longer admits says both, as the CLI does', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      enabled: true,
+      devices: [
+        {
+          joined_at: Date.now() - 3_600_000,
+          id: 'dev-99887766',
+          redeemed_at: null,
+          last_seen: null,
+          // What a half-unwound invite leaves: a row the edge has dropped.
+          admitted: false,
+        },
+      ],
+    });
+    await open();
+
+    expect(screen.getByText(/invited 1h ago, never joined · not admitted/i)).toBeInTheDocument();
+  });
+
   it('a row says which state it is in, and never mistakes one for another', async () => {
     // Three states a redeemed row can be in; the CLI's own tests pin two of
     // them, tunnel down and no requests yet. `admitted: null` is the one that

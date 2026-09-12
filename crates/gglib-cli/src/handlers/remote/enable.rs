@@ -115,6 +115,23 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             );
             eprintln!("  Run `gglib remote invite` again for a fresh code.");
         }
+        Outcome::Ended { tunnel_up } => {
+            eprintln!();
+            for line in pairing_tui::withdrawn_notice(tunnel_up) {
+                eprintln!("{line}");
+            }
+            if !tunnel_up {
+                // The closing notice would say remote access is on and how to
+                // stop broadcasting, and neither is true now. What this
+                // `enable` did to the local proxy still is, and is said every
+                // time.
+                if arming == Arming::Enable {
+                    eprintln!();
+                    print_key_notice();
+                }
+                return Ok(());
+            }
+        }
         Outcome::Interrupted => {
             eprintln!();
             eprintln!(
@@ -161,7 +178,7 @@ fn print_up(enabled: &RemoteEnableDto) {
 /// when it did not, or that `/mcp` is closed when it is open.
 ///
 /// `Arming::Enable` says the switch was just thrown; `Arming::Invite` says it
-/// was already on and only a device was added. The difference is not
+/// was already on and only a code was offered. The difference is not
 /// decoration: "the local proxy *now* requires the API key" and "pass
 /// `--allow-mcp`" are both true of a switch being thrown and both false when
 /// it was already on — where no flag changed, and recommending `--allow-mcp`
@@ -175,22 +192,10 @@ pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!();
     match arming {
         Arming::Enable => {
-            eprintln!(
-                "  Remote access is on. The local proxy on 127.0.0.1 now requires the API key \
-                 too \u{2014} gglib's own clients read it from settings; a hand-configured client \
-                 needs it added once."
-            );
-            eprintln!(
-                "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock \
-                 you out of `gglib` or the app."
-            );
+            eprintln!("  Remote access is on.");
+            print_key_notice();
         }
-        Arming::Invite => {
-            eprintln!(
-                "  Remote access was already on and still is; this added a device and changed \
-                 nothing else about the session."
-            );
-        }
+        Arming::Invite => eprintln!("{INVITE_NOTICE}"),
     }
     match (allow_mcp, arming) {
         (true, _) => eprintln!("  /mcp is reachable through the tunnel."),
@@ -211,11 +216,60 @@ pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!("  Stop broadcasting:  gglib remote disable");
 }
 
+/// What switching remote access on did to this machine's local proxy.
+///
+/// It stays true whatever becomes of the tunnel — the bearer requirement is
+/// one `disable` does not take away — so it is said on its own after a
+/// pairing screen that ended with the tunnel down, where "remote access is
+/// on" would not be.
+fn print_key_notice() {
+    eprintln!(
+        "  The local proxy on 127.0.0.1 now requires the API key too \u{2014} gglib's own \
+         clients read it from settings; a hand-configured client needs it added once."
+    );
+    eprintln!(
+        "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock \
+         you out of `gglib` or the app."
+    );
+}
+
+/// What `invite`, and `enable --invite` against a tunnel already up, say
+/// about the session.
+///
+/// A constant so the wording is pinned by a test, as `DISABLE_NOTICE` is. It
+/// said "this added a device", and it is printed after the pairing screen
+/// whatever that screen saw, "expired and nobody paired" included. An invite
+/// offers a code; whether a device took it is the line above's to say.
+const INVITE_NOTICE: &str = "  Remote access was already on and still is; this offered a code for \
+     one more device and changed nothing else about the session.";
+
 /// Which command is printing the closing notice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Arming {
     /// `enable`: the switch was just thrown.
     Enable,
-    /// `invite`: it was already on, and a device was added to it.
+    /// `invite`: it was already on, and a code for one more device was
+    /// offered on it.
     Invite,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::INVITE_NOTICE;
+
+    /// An invite claims the code it offered, not a device that may never come:
+    /// the notice follows "expired and nobody paired" as readily as "paired",
+    /// so the old claim was false whenever nobody came.
+    #[test]
+    fn the_invite_notice_claims_a_code_and_not_a_device() {
+        assert!(!INVITE_NOTICE.contains("added a device"), "{INVITE_NOTICE}");
+        assert!(
+            INVITE_NOTICE.contains("offered a code for one more device"),
+            "{INVITE_NOTICE}"
+        );
+        assert!(
+            INVITE_NOTICE.contains("changed nothing else about the session"),
+            "{INVITE_NOTICE}"
+        );
+    }
 }
