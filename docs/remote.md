@@ -108,10 +108,16 @@ still works today.
 The key lives at `<data root>/data/remote_identity`, created `0600` and refused
 if anything else can read it. `gglib remote status` prints the path.
 
-**Revoking is deleting that file.** It is deliberate rather than accidental,
-which is the change: this used to happen at every reboot, re-pairing every
-device as a side effect nobody asked for. Deleting it re-pairs every device,
-once, when you mean it.
+**Deleting that file retires the address, not the keys.** It is deliberate
+rather than accidental, which is the change: this used to happen at every
+reboot, re-pairing every device as a side effect nobody asked for. It takes
+effect the next time the tunnel comes up — a restart, or `disable` then
+`enable` — and every device then needs the new ticket to find the machine.
+It revokes nothing: the device keys are put back on the new tunnel, so the
+old key still opens it for any client that presents one with the new
+ticket. `gglib remote join` asks for a fresh code instead, and pairing again
+mints a second key while the first stays admitted. To cut a device off, use
+`gglib remote forget <id>`.
 
 Two things worth knowing about the trade:
 
@@ -350,8 +356,9 @@ which the edge cannot restrict to one route — is refused before it reaches
 anything, with `403 device_not_paired`.
 
 Rotating the key on the desktop (`gglib config settings set
---proxy-api-key`) reaches the running tunnel within a few seconds and changes
-only that last hop. No device notices, and none has to re-pair.
+--proxy-api-key`) reaches the running tunnel within two settings-cache
+windows, about ten seconds, and changes only that last hop. No device has to
+re-pair, though a request made inside that window can be refused.
 
 **A device that is refused says so flatly.** `invalid or missing bearer
 token` is what the tunnel writes when a key is not admitted — naming nothing,
@@ -381,23 +388,27 @@ minted for this one device and travels once, inside the encrypted tunnel, in
 exchange for that code. Every refusal is the same flat refusal; a guesser
 learns nothing.
 
-> **Corrected 2026-09-07.** Any one path gets two of those three, not all
-> three. Over the tunnel a wrong code is a wrong bearer and is refused at the
-> edge before gglib sees it, so the three-attempt burn never counts a guess —
-> there, the two-minute window and the ticket are the whole defence. On the
-> desktop's own loopback the burn does count, but the ticket is not needed to
-> reach the route, so a local process can kill a pairing that is on screen
-> with three POSTs. [ADR 0012](adr/0012-the-remote-tunnel.md), decision 3, has
-> the arithmetic.
+> **Corrected 2026-09-07, and again 2026-09-12.** On 2026-09-07 no one path
+> had all three. Over the tunnel a wrong code is a wrong bearer and is refused
+> at the edge before gglib sees it, and gglib's own counter never saw those
+> guesses. Since the ticket started lasting, the edge counts them itself and
+> burns the code at the third, so over the tunnel the burn and the two-minute
+> window both hold, and the ticket, which no longer changes, is not what the
+> arithmetic rests on. On the desktop's own loopback the burn counts, but the
+> ticket is not needed to reach the route, so a local process can still kill
+> a pairing that is on screen with three POSTs.
+> [ADR 0012](adr/0012-the-remote-tunnel.md), decisions 3 and 4, has the
+> arithmetic.
 
 **One identity, kept.** `enable` reuses this machine's stored endpoint key, so
 the ticket is the same ticket every time and a device pairs once rather than
 every session. `gglib remote disable` stops answering — the ticket reaches
 nobody while the tunnel is down — but it does not revoke anything: `enable`
-brings the same address back. Retiring one device is the per-device
-revocation; deleting the endpoint key, which `gglib remote status` prints the
-path to, is the whole-machine one, and re-pairs everything at once. What a lasting name costs in return is under
-[How it stays private](#how-it-stays-private) below.
+brings the same address back. Retiring one device, with `gglib remote forget`,
+is the revocation. Deleting the endpoint key, which `gglib remote status`
+prints the path to, retires the address and revokes no key: a device that
+learns the new ticket and still holds its key is admitted. What a lasting
+name costs in return is under [You pair once](#you-pair-once) above.
 
 **Enabling puts the key on the local proxy too.** The tunnel and the proxy
 are one listener, so enabling remote access makes the desktop's own loopback
@@ -460,9 +471,9 @@ open, bind it to loopback and put whatever you trust — an SSH tunnel, a
 reverse proxy — in front of it.
 
 Back on loopback, two things do not come back with the reopening. A tunnel
-that is still running keeps demanding the token it was handed — key rotation
-follows a *changed* key, not
-a cleared one — so this opens the local door only; `gglib remote disable`
+that is still running keeps demanding each device's own key, which clearing
+`proxy_api_key` does not touch — so this opens the local door only;
+`gglib remote disable`
 closes the remote one. And `/mcp` *does* come back open, along with `/v1/*`,
 because it sits behind the same bearer guard. That is the ordinary posture of
 a loopback proxy that never enabled remote access, not a new hole, but it is
@@ -535,6 +546,8 @@ here is one the desktop can retire on its own.
 
 ## Not yet
 
-A phone client, pairing over the LAN without a ticket, and pinning the
-pairing request to a specific peer are noted in the ADR's
-[out of scope](adr/0012-the-remote-tunnel.md#out-of-scope) section.
+Pairing over the LAN without a ticket, and pinning the pairing request to a
+specific peer, are noted in the ADR's
+[out of scope](adr/0012-the-remote-tunnel.md#out-of-scope) section. A phone
+client is out of scope for gglib too, but it is no longer missing:
+[ggchat](https://github.com/mmogr/ggchat) is one, built as its own product.
