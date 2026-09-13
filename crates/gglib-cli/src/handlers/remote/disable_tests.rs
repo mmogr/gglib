@@ -54,9 +54,35 @@ fn the_disable_notice_does_not_promise_a_new_ticket() {
         notice.contains("the same one back"),
         "what replaced it says the ticket survives: {notice}"
     );
+}
+
+/// [#1036]: deleting the endpoint key retires the address and revokes no
+/// device. `arm` seeds every stored device key onto the listener that comes
+/// up at the new address, so the notice must not call the deletion revoking,
+/// and must name the command that does take a device's key away.
+///
+/// Whitespace is folded because the sentence runs across the banner's lines.
+///
+/// [#1036]: https://github.com/mmogr/gglib/issues/1036
+#[test]
+fn the_disable_notice_says_deleting_the_endpoint_key_revokes_no_device() {
+    let notice = DISABLE_NOTICE
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
     assert!(
-        notice.contains("deleting the endpoint key"),
-        "and names what revoking actually is: {notice}"
+        !notice.contains("revoking is deleting"),
+        "the claim that deleting the key revokes anything is gone: {notice}"
+    );
+    assert!(
+        notice.contains("Deleting the endpoint key retires it and revokes no device"),
+        "what replaced it says what the deletion does: {notice}"
+    );
+    assert!(
+        notice.contains("`gglib remote forget` does that"),
+        "and names the command that does take a key away: {notice}"
     );
 }
 

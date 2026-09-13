@@ -179,10 +179,12 @@ pub struct RemoteStatusSnapshot {
     /// Where this machine's endpoint key is kept.
     ///
     /// Always present now — the identity lasts (ADR 0012 decision 4,
-    /// reversed) — and shown because revoking a ticket is deleting this
-    /// file, which is a thing a person cannot do without being told where
-    /// it is. Deleting it is the *whole-machine* revocation: every paired
-    /// device loses the address at once. Retiring one is
+    /// reversed) — and shown because deleting this file is how this
+    /// machine's address is retired, which is a thing a person cannot do
+    /// without being told where it is. It revokes no device: the next arm
+    /// mints a new key here and seeds every stored device key onto the new
+    /// listener, so a device that finds the new address with its old key is
+    /// admitted. Retiring one is
     /// [`RemoteOps::forget`](super::RemoteOps::forget), and leaves the rest
     /// untouched.
     pub identity_path: Option<String>,

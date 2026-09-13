@@ -179,9 +179,11 @@ pub enum RemoteCommand {
     List,
     /// Stop admitting one device; the others are untouched
     ///
-    /// Retires that device's key at the tunnel edge and forgets its row.
-    /// This is the per-device revocation; deleting the endpoint identity
-    /// that `status` names is the one that revokes everything at once.
+    /// Retires that device's key at the tunnel edge and forgets its row:
+    /// this is how a device is cut off. Deleting the endpoint identity that
+    /// `status` names retires this machine's address and revokes no device,
+    /// because the tunnel comes up at a new address that still admits every
+    /// device key this machine holds.
     Forget {
         /// The device id, as `gglib remote list` shows it
         device: String,

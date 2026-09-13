@@ -188,7 +188,8 @@ pub(crate) struct RemoteStatusDto {
     /// Whether this machine comes back reachable after a restart.
     #[serde(default)]
     pub remote_enabled: bool,
-    /// Where the endpoint key is kept; deleting it revokes the ticket.
+    /// Where the endpoint key is kept; deleting it retires this machine's
+    /// address and revokes no device.
     #[serde(default)]
     pub identity_path: Option<String>,
 }

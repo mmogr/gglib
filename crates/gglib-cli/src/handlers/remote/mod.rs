@@ -138,10 +138,10 @@ fn print_status(status: &RemoteStatusDto) {
             status.ticket_fingerprint.as_deref().unwrap_or("?")
         );
         // The ticket lasts now, so where the key lives is operational
-        // knowledge rather than trivia: deleting that file is how a ticket
-        // is revoked, and it is the only way.
+        // knowledge rather than trivia: deleting that file is how this
+        // machine's address is retired. It revokes no device; `forget` does.
         if let Some(path) = &status.identity_path {
-            eprintln!("  Identity:  lasting \u{2014} same ticket after a restart");
+            eprintln!("  Identity:  the same ticket after a restart, while this file exists");
             eprintln!("             {path}");
         }
         if !status.remote_enabled {

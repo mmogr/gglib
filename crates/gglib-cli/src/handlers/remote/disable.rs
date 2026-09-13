@@ -108,9 +108,10 @@ const SWITCHED_OFF: &str =
 /// notice names the dependency and points at the command that shows the state,
 /// rather than asserting a rule that holds in one case only. `docs/remote.md`
 /// carries both cases in full, and ADR 0012 the reasoning.
-const DISABLE_NOTICE: [&str; 4] = [
+const DISABLE_NOTICE: [&str; 5] = [
     "  Remote access is off. Nothing answers the ticket while it is off, and",
-    "  `enable` brings the same one back \u{2014} revoking is deleting the endpoint key.",
+    "  `enable` brings the same one back. Deleting the endpoint key retires it",
+    "  and revokes no device's key \u{2014} `gglib remote forget` does that.",
     "  The API key stays in settings \u{2014} whether the proxy still demands it depends",
     "  on the bind its listener came up with. `gglib config settings show` prints it.",
 ];
