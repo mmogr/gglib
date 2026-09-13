@@ -42,6 +42,13 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   const enabled = status?.enabled ?? false;
   const paired = status?.paired ?? false;
   const pairingActive = status?.pairing_active ?? false;
+  // The switch on with nothing bound: the daemon is putting the tunnel back
+  // after a start, or tried and could not, or another enable is arming. These
+  // look the same from here,
+  // so Enable stays live. Pressed now it waits for the first, and after the
+  // second arms the tunnel with the settings below, where a dead button
+  // would be a dead end.
+  const comingBack = (status?.remote_enabled ?? false) && !enabled;
   // Whether any device has actually *arrived*, not merely whether the roster
   // has rows in it. An invite nobody took leaves a row behind, so counting
   // rows would call a machine "paired" on the strength of a code that
@@ -129,8 +136,20 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
           : null,
       );
       void refreshRemoteStatus();
+      // `already_up` here is a session the daemon's own resume brought back
+      // while this waited, since Enable is shown only when the last status
+      // read had nothing up. This
+      // click switched nothing on, so the key notice is not its to give, and
+      // a /mcp box that session did not honour says so, as the CLI does.
+      const ignoredMcp = answer.already_up && allowMcp && !answer.mcp_allowed;
       onNotice(
-        'Remote access is on. The local proxy now requires the API key too.',
+        answer.already_up
+          ? `Remote access was already coming back up, and is on now.${
+              ignoredMcp
+                ? ' The /mcp box did not take: that session keeps its own grant; disable and enable again to change it.'
+                : ''
+            }`
+          : 'Remote access is on. The local proxy now requires the API key too.',
         'info',
       );
     } catch (err) {
@@ -261,9 +280,11 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
             {busy === 'enable' ? 'Finding a relay…' : 'Enable remote access'}
           </Button>
           <Label size="xs" muted>
-            {anyJoined
-              ? 'Devices already paired come back on their own; use Invite to add another. '
-              : 'Shows a ticket and a six-digit code once, to pair your first device. '}
+            {comingBack
+              ? 'Switched on, but nothing is bound yet: the daemon may still be putting it back, or could not. Enabling now waits for it, or arms it again with the settings below. '
+              : anyJoined
+                ? 'Devices already paired come back on their own; use Invite to add another. '
+                : 'Shows a ticket and a six-digit code once, to pair your first device. '}
             Enabling puts the API key on the local proxy too, and disabling does not take that
             away.
           </Label>

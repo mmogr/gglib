@@ -88,9 +88,10 @@ export async function killRemote(): Promise<RemoteStatus> {
  *
  * Nothing else about the session changes: the flags it was enabled with, the
  * ticket, and every device already using it are left exactly as they were.
- * Requires the tunnel to be up — a `409` naming the commands that fix it
- * otherwise — and answers with the same shape `enable` does, because what a
- * person is shown is the same thing.
+ * Requires the tunnel to be up — the daemon waits for one it is putting back
+ * after a start — with a `409` naming the commands that fix it otherwise, and
+ * answers with the same shape `enable` does, because what a person is shown
+ * is the same thing.
  */
 export async function inviteRemote(): Promise<RemoteEnableResponse> {
   return post<RemoteEnableResponse>(REMOTE_INVITE_PATH, {});

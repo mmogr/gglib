@@ -12,6 +12,7 @@ mod key;
 mod pairing;
 mod pairing_string;
 mod redeem;
+mod resume_wait;
 mod roster;
 mod rotation;
 mod serve;
@@ -34,7 +35,7 @@ use std::time::Duration;
 
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::services::AppCore;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
@@ -50,6 +51,19 @@ const WAIT_ONLINE: Duration = Duration::from_secs(10);
 
 /// How long a teardown lets in-flight requests finish before cutting them.
 const DRAIN: Duration = Duration::from_secs(5);
+
+/// How long `enable` and `invite` wait for the daemon's own startup resume
+/// before answering as though it were not there.
+///
+/// Budgeted from what a resume does: start the proxy, which nothing here
+/// bounds, wait up to [`WAIT_ONLINE`] for a relay, and, on a machine with no
+/// key in settings yet, wait out the five-second window a freshly minted key
+/// needs. A first `enable` that failed or was killed before it minted one
+/// leaves exactly that machine. Twenty covers those fifteen with five to
+/// spare for the proxy, and twenty plus the fifteen a caller's own arm can
+/// take after it stays inside the 45 seconds the CLI gives
+/// `POST /api/remote/enable`.
+const WAIT_OUT_RESUME: Duration = Duration::from_secs(20);
 
 /// One live serve side and the tasks that keep it honest.
 ///
@@ -115,6 +129,14 @@ pub struct RemoteOps {
     /// device), which makes the collision likelier than it was. The fix
     /// belongs in `SettingsService`, not here.
     roster: Arc<Mutex<()>>,
+    /// True from the first line of the daemon's startup `resume` to its last:
+    /// a wider span than the reservation that resume takes, because
+    /// `turn_on` starts the proxy before it reserves anything. `enable` and
+    /// `invite` wait on it; `resume_wait.rs` has the rest.
+    resuming: watch::Sender<bool>,
+    /// Bumped by every `disable`, so a call waiting out a resume can tell
+    /// that the person changed their mind while it waited.
+    disables: watch::Sender<u64>,
 }
 
 impl RemoteOps {
@@ -135,6 +157,8 @@ impl RemoteOps {
             connect_generation: AtomicU64::new(0),
             enable_generation: AtomicU64::new(0),
             roster: Arc::new(Mutex::new(())),
+            resuming: watch::channel(false).0,
+            disables: watch::channel(0).0,
         }
     }
 
@@ -247,3 +271,11 @@ mod serve_watch_tests;
 #[cfg(test)]
 #[path = "serve_invite_tests.rs"]
 mod serve_invite_tests;
+
+#[cfg(test)]
+#[path = "enable_wait_tests.rs"]
+mod enable_wait_tests;
+
+#[cfg(test)]
+#[path = "serve_resume_tests.rs"]
+mod serve_resume_tests;

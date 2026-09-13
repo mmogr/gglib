@@ -49,7 +49,9 @@ pub struct Enabled {
     /// daemon did not make.
     pub mcp_allowed: bool,
     /// Whether this call found the tunnel already up and answered from that
-    /// session rather than arming one.
+    /// session rather than arming one. That includes an `enable` that waited
+    /// while the daemon's own resume brought the session back; without
+    /// `invite` it carries no pairing.
     ///
     /// The flags of the request are ignored on that path — the session's
     /// grants belong to the `enable` that armed it — so a caller cannot say

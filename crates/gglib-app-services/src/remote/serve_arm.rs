@@ -22,6 +22,7 @@ use super::key;
 use super::key::identity_path;
 use super::pairing::Offer;
 use super::rotation::rotation_poll;
+use super::serve_switch::CANCELLED_BY_DISABLE;
 use super::types::{EnableRequest, Enabled};
 use super::{DRAIN, Live, RemoteOps, WAIT_ONLINE};
 use super::{device_keys, enrolment, roster};
@@ -128,9 +129,7 @@ impl RemoteOps {
             if !handle.shutdown_timeout(DRAIN).await {
                 warn!("remote tunnel drain hit its deadline; remaining requests were cut");
             }
-            return Err(GuiError::Conflict(
-                "the enable was cancelled by `gglib remote disable`".to_owned(),
-            ));
+            return Err(GuiError::Conflict(CANCELLED_BY_DISABLE.to_owned()));
         }
         // Under the guard, which is what makes a `forget` racing an arm come
         // out right; `device_keys::seed` has the reasoning.

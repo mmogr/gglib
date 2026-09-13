@@ -2,12 +2,14 @@
 
 mod connect;
 mod devices;
+mod disable;
 mod enable;
 mod invite;
 mod pairing_tui;
 
 use connect::{ConnectArgs, connect, disconnect};
 use devices::{forget, list};
+use disable::disable;
 use enable::{EnableArgs, enable};
 use invite::invite;
 
@@ -87,53 +89,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
         RemoteCommand::Disconnect => disconnect(ctx).await,
     }
 }
-
-/// Execute `gglib remote disable`.
-pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
-    match daemon_client::probe(&client).await {
-        DaemonProbe::Running => {}
-        _ => {
-            eprintln!("  Daemon is not running \u{2014} nothing is being broadcast.");
-            return Ok(());
-        }
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
-    };
-    let status = handle.remote_disable().await?;
-    if status.enabled {
-        anyhow::bail!("the daemon reported remote access still enabled after disable");
-    }
-    for line in DISABLE_NOTICE {
-        eprintln!("{line}");
-    }
-    Ok(())
-}
-
-/// What `gglib remote disable` prints once the tunnel is down.
-///
-/// A constant so the wording is pinned by a test rather than by nobody. The
-/// sentence this replaced — "authentication turns on and never off by itself"
-/// — is true of a listener that bound with a key already in settings, and
-/// false of the ordinary case this command ends: `enable` mints the key into a
-/// proxy that is *already* bound on loopback, and a loopback bind resolves no
-/// key, so that listener has no bind-time floor and clearing `proxy_api_key`
-/// reopens it, `/mcp` included. `clearing_reopens_a_listener_that_bound_on_loopback`
-/// in `gglib-core`'s `access::bearer_tests` asserts exactly that.
-///
-/// Which of the two a running listener is, this side cannot see: `disable`
-/// talks to the daemon over HTTP and never learns the proxy's bind. So the
-/// notice names the dependency and points at the command that shows the state,
-/// rather than asserting a rule that holds in one case only. `docs/remote.md`
-/// carries both cases in full, and ADR 0012 the reasoning.
-const DISABLE_NOTICE: [&str; 4] = [
-    "  Remote access is off. Nothing answers the ticket while it is off, and",
-    "  `enable` brings the same one back \u{2014} revoking is deleting the endpoint key.",
-    "  The API key stays in settings \u{2014} whether the proxy still demands it depends",
-    "  on the bind its listener came up with. `gglib config settings show` prints it.",
-];
 
 /// Execute `gglib remote status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
@@ -273,7 +228,3 @@ fn ago(unix_ms: i64) -> String {
         s => format!("{}h ago", s / 3600),
     }
 }
-
-#[cfg(test)]
-#[path = "mod_tests.rs"]
-mod mod_tests;

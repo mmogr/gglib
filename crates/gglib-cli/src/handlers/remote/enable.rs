@@ -32,7 +32,20 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
 
-    if args.no_discovery {
+    eprintln!("  Enabling remote access\u{2026} (finding a relay can take a few seconds)");
+    let enabled = handle
+        .remote_enable(&RemoteEnableBody {
+            allow_mcp: args.allow_mcp,
+            relay: args.relay,
+            discovery: Some(!args.no_discovery),
+            invite: args.invite,
+        })
+        .await?;
+
+    // After the answer, and only when this call armed the session: one that
+    // was already up, or that the daemon's own resume brought back while this
+    // waited, keeps the paths it was minted with whatever was passed here.
+    if args.no_discovery && !enabled.already_up {
         // Worth two lines now rather than one. The ticket used to die at the
         // next restart, so "stops working" meant "until you enable again".
         // It lasts now, and a ticket minted without discovery keeps only the
@@ -46,15 +59,6 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
              way — paired devices need a new pairing."
         );
     }
-    eprintln!("  Enabling remote access\u{2026} (finding a relay can take a few seconds)");
-    let enabled = handle
-        .remote_enable(&RemoteEnableBody {
-            allow_mcp: args.allow_mcp,
-            relay: args.relay,
-            discovery: Some(!args.no_discovery),
-            invite: args.invite,
-        })
-        .await?;
 
     // The daemon says whether it armed a session or answered from one that
     // was already running; this is not inferred. Inference from `mcp_allowed`
@@ -75,7 +79,14 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
                  then `enable --allow-mcp`."
             );
         }
-        Arming::Invite
+        // A code means `--invite` found a session to offer one on. None means
+        // a plain `enable` that waited for the daemon's own resume, the only
+        // way the daemon answers `already_up` without one.
+        if enabled.code.is_some() {
+            Arming::Invite
+        } else {
+            Arming::Resumed
+        }
     } else {
         Arming::Enable
     };
@@ -188,6 +199,10 @@ fn print_up(enabled: &RemoteEnableDto) {
 /// tunnel that is already up is answered by that same session, and is the
 /// same event under another name — which is why the daemon reports
 /// `already_up` rather than leaving the caller to guess from what came back.
+///
+/// `Arming::Resumed` is a plain `enable` answered from the session the
+/// daemon's own resume brought back while it waited: the switch was already
+/// on, nothing was offered, and no flag took.
 pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
     eprintln!();
     match arming {
@@ -196,6 +211,7 @@ pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
             print_key_notice();
         }
         Arming::Invite => eprintln!("{INVITE_NOTICE}"),
+        Arming::Resumed => eprintln!("{RESUMED_NOTICE}"),
     }
     match (allow_mcp, arming) {
         (true, _) => eprintln!("  /mcp is reachable through the tunnel."),
@@ -206,7 +222,7 @@ pub(super) fn print_notice(allow_mcp: bool, arming: Arming) {
         }
         // `invite` has no such flag: the grant belongs to the session `enable`
         // armed, and changing it means `disable` and `enable` again.
-        (false, Arming::Invite) => {
+        (false, Arming::Invite | Arming::Resumed) => {
             eprintln!(
                 "  /mcp is not reachable through the tunnel; that is the session's setting, \
                  changed by `disable` and `enable --allow-mcp`."
@@ -243,6 +259,13 @@ fn print_key_notice() {
 const INVITE_NOTICE: &str = "  Remote access was already on and still is; this offered a code for \
      one more device and changed nothing else about the session.";
 
+/// What a plain `enable` says when it was answered from the session the
+/// daemon's own resume brought back. Nothing was switched on by it and no flag
+/// took, so neither the key notice nor the advice to pass `--allow-mcp` is its
+/// to give. A constant, pinned by a test, as `INVITE_NOTICE` is.
+const RESUMED_NOTICE: &str = "  Remote access was already coming back up when you asked, and is on now; \
+     this changed nothing about the session. `gglib remote disable`, then `enable`, changes its flags.";
+
 /// Which command is printing the closing notice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Arming {
@@ -251,25 +274,11 @@ pub(super) enum Arming {
     /// `invite`: it was already on, and a code for one more device was
     /// offered on it.
     Invite,
+    /// A plain `enable` the daemon answered from the session its own resume
+    /// brought back, after waiting for it.
+    Resumed,
 }
 
 #[cfg(test)]
-mod tests {
-    use super::INVITE_NOTICE;
-
-    /// An invite claims the code it offered, not a device that may never come:
-    /// the notice follows "expired and nobody paired" as readily as "paired",
-    /// so the old claim was false whenever nobody came.
-    #[test]
-    fn the_invite_notice_claims_a_code_and_not_a_device() {
-        assert!(!INVITE_NOTICE.contains("added a device"), "{INVITE_NOTICE}");
-        assert!(
-            INVITE_NOTICE.contains("offered a code for one more device"),
-            "{INVITE_NOTICE}"
-        );
-        assert!(
-            INVITE_NOTICE.contains("changed nothing else about the session"),
-            "{INVITE_NOTICE}"
-        );
-    }
-}
+#[path = "enable_tests.rs"]
+mod enable_tests;

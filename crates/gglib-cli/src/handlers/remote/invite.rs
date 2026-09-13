@@ -11,9 +11,11 @@ use crate::daemon_client::{self, RemoteEnableDto};
 
 /// Execute `gglib remote invite`.
 ///
-/// The tunnel has to be up already. The daemon refuses otherwise, and says
-/// what to do instead: `enable` when the switch is off, and wait when it is
-/// on and the tunnel is still coming up. Nothing about the session changes —
+/// The tunnel has to be up, or coming back up on a daemon that has just
+/// started, which the daemon waits for, for up to twenty seconds. It refuses
+/// otherwise, and says what to do instead: `enable` when the switch is off,
+/// `enable --invite` when it is on and nothing is arming, and wait while the
+/// tunnel is still coming up. Nothing about the session changes —
 /// the flags it was enabled with, the ticket, and every device already using
 /// it are left exactly as they were.
 ///
