@@ -11,7 +11,10 @@ over `/api/remote/*` on the daemon; the tunnel itself lives in
 
 ```text
 remote/
-  mod.rs          — disable, status, and the shared status printer
+  mod.rs          — status, and the shared status printer
+  disable.rs      — `gglib remote disable`: take the tunnel down, or with no
+                    daemon running, switch it off so the next start does
+                    not put it back
   enable.rs       — `gglib remote enable`: bring the tunnel up; `--invite`
                     also pairs a device, so a first run is one command
   invite.rs       — `gglib remote invite`: pair one more device, changing
@@ -33,8 +36,9 @@ nobody ever redeemed. **A row is called never-joined only when it has neither
 `redeemed_at` nor `last_seen`** — both are written by background tasks and
 either can be lost, so one alone would eventually libel a real device.
 
-`invite` needs the tunnel already up and leaves it untouched: the flags it was
-enabled with, the ticket, and every device already on it. `enable --invite`
+`invite` needs the tunnel up, and waits for one the daemon is putting back
+after a start. It leaves it untouched: the flags it was enabled with, the
+ticket, and every device already on it. `enable --invite`
 remains, because a first run should not be two commands.
 
 # The other side
@@ -76,8 +80,11 @@ convenience.
 
 Enabling remote access puts a bearer requirement on the *local* loopback proxy
 too — it is one listener — and disabling does not take that away. `enable`
-says so every time, because a hand-configured local client will start
-getting `401` and the person reading this is the one who has to add the key.
+says so every time it switches remote access on, because a hand-configured
+local client will start getting `401` and the person reading this is the one
+who has to add the key. An `enable` answered by a session that was already
+up, or that the daemon put back while it waited, switched nothing on and says
+that instead.
 
 The daemon's management API on `127.0.0.1:9887` is a different listener and is
 not touched. It settles its own token at bind — none for a loopback daemon —
@@ -97,9 +104,11 @@ would otherwise look exactly like the one it is warning about.
 | [`connect_tests.rs`](connect_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-connect_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-connect_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-connect_tests-coverage.json) |
 | [`devices.rs`](devices.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices-coverage.json) |
 | [`devices_tests.rs`](devices_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-devices_tests-coverage.json) |
+| [`disable.rs`](disable.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-disable-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-disable-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-disable-coverage.json) |
+| [`disable_tests.rs`](disable_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-disable_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-disable_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-disable_tests-coverage.json) |
 | [`enable.rs`](enable.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable-coverage.json) |
+| [`enable_tests.rs`](enable_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-enable_tests-coverage.json) |
 | [`invite.rs`](invite.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-invite-coverage.json) |
-| [`mod_tests.rs`](mod_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-mod_tests-coverage.json) |
 | [`pairing_tui.rs`](pairing_tui.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui-coverage.json) |
 | [`pairing_tui_tests.rs`](pairing_tui_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-remote-pairing_tui_tests-coverage.json) |
 <!-- module-table:end -->

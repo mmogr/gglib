@@ -59,6 +59,7 @@ qrcode = { version = "0.14", default-features = false }
 
 [dev-dependencies]
 async-trait = { workspace = true }
+gglib-db = { path = "../gglib-db", features = ["test-utils"] }
 tempfile = { workspace = true }
 tokio-test = { workspace = true }
 

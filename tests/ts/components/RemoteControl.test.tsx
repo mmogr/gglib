@@ -131,6 +131,25 @@ describe('RemoteControl', () => {
     expect(screen.queryByText(/expires in/i)).not.toBeInTheDocument();
   });
 
+  it('a switch that is on with nothing bound says so, and Enable is still there to press', async () => {
+    applyRemoteStatus({ ...IDLE_STATUS, remote_enabled: true, enabled: false });
+    await open();
+    expect(screen.getByText(/nothing is bound yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enable remote access' })).toBeEnabled();
+  });
+
+  it('an enable answered by a session that came back does not claim it changed the proxy', async () => {
+    applyRemoteStatus({ ...IDLE_STATUS, remote_enabled: true, enabled: false, devices: [paired()] });
+    enableRemote.mockResolvedValue({ ticket: TICKET, mcp_allowed: false, already_up: true });
+    const user = await open();
+    await user.click(screen.getByRole('checkbox', { name: /reach \/mcp/i }));
+    await user.click(screen.getByRole('button', { name: 'Enable remote access' }));
+    expect(enableRemote).toHaveBeenCalledWith({ allow_mcp: true, invite: false });
+    expect(await screen.findByText(/already coming back up/i)).toBeInTheDocument();
+    expect(screen.getByText(/the \/mcp box did not take/i)).toBeInTheDocument();
+    expect(screen.queryByText(/now requires the API key/i)).not.toBeInTheDocument();
+  });
+
   it('invite shows the same reveal against a tunnel that is already up', async () => {
     // The case that has no command to fall back on: enabled already, so
     // `enable` would 409, and the only other way to add a device was to

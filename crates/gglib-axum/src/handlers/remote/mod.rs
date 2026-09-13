@@ -21,6 +21,11 @@ use crate::{error::HttpError, state::AppState};
 /// answering it would mean either minting a second code for a live session
 /// or re-reading the first, and neither is what a person who typed `enable`
 /// twice expects.
+///
+/// A call that arrives while the daemon's own startup resume is putting the
+/// tunnel back is not that second call. It waits, for up to twenty seconds,
+/// and is answered by the session the resume brought up, or arms its own if
+/// the resume brought none (`RemoteOps::enable`).
 pub(crate) async fn enable(
     State(state): State<AppState>,
     Json(body): Json<Option<RemoteEnableBody>>,

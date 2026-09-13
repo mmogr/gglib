@@ -40,9 +40,11 @@ device?: string,
 mcp_allowed: boolean, 
 /**
  * Whether the tunnel was already up and this answered from that session
- * rather than arming one — true for every `invite`, and for an `enable`
- * with `invite` set that found one running. The request's other flags
- * were ignored on that path, and a surface cannot infer it: only "asked
- * for `/mcp`, told no" shows in the rest of the answer.
+ * rather than arming one — true for every `invite`, for an `enable` with
+ * `invite` set that found one running, and for an `enable` that waited
+ * while the daemon's own resume brought one back, which carries no code
+ * unless `invite` was set. The request's other flags were ignored on
+ * that path, and a surface cannot infer it: only "asked for `/mcp`, told
+ * no" shows in the rest of the answer.
  */
 already_up: boolean, };

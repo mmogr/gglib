@@ -204,6 +204,13 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     //     be answering long before that — a `gglib remote status` run while
     //     this is still working is exactly how someone checks on it.
     //
+    //     It cannot simply be awaited here either: the CLI gives a daemon it
+    //     has just started ten seconds (`LAUNCH_WAIT`) to answer `/health`,
+    //     and an arm can take fifteen. So `resume` says it is working for as
+    //     long as it is, and an `enable` or `invite` typed at this daemon
+    //     meanwhile waits for it instead of being refused by it (#1037;
+    //     `resume_wait.rs` in `gglib-app-services`).
+    //
     //     `resume` reads the switch itself and reports its own failures. It
     //     arms the serving side; the connect side is left alone, because a
     //     stored pairing is an address this machine can dial whenever it

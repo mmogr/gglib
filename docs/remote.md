@@ -60,9 +60,10 @@ you enabled it with, minus this one: a code nobody is watching for is a live
 grant nobody spends, on a ticket that no longer changes between sessions.
 
 `gglib remote invite` is the same offer without the switch, for every device
-after the first. It needs the tunnel already up and leaves it exactly as it
-was — the flags, the ticket, and every device already using it — so pairing
-a second machine costs nobody else their connection. It takes `--no-qr` and
+after the first. It needs the tunnel up, and waits for one the daemon is
+putting back after a start. It leaves it exactly as it was — the flags, the
+ticket, and every device already using it — so pairing a second machine
+costs nobody else their connection. It takes `--no-qr` and
 nothing else; to change the flags, `disable` and `enable` again.
 
 `gglib remote list` shows what this machine has issued a key to, and
@@ -105,6 +106,15 @@ the same flags you enabled it with, and the machine keeps the same endpoint
 key — so its ticket is the same ticket, and a device that paired yesterday
 still works today.
 
+Putting the tunnel back takes a daemon a few seconds after it starts, and a
+command that arrives meanwhile waits for it rather than being refused.
+`gglib remote enable --invite` or `gglib remote invite` typed then gets a code
+on the session that came back, and a plain `gglib remote enable` is answered
+by that session. Flags passed with a command that waited do not apply to it:
+the session keeps the ones it was enabled with, and `disable` then `enable`
+changes them. If the tunnel is still not back after twenty seconds, the
+command says so and asks you to wait.
+
 The key lives at `<data root>/data/remote_identity`, created `0600` and refused
 if anything else can read it. `gglib remote status` prints the path.
 
@@ -140,7 +150,9 @@ arrive, so it is printed only on the machine that is serving; the connecting
 side has nothing to count and is told to read the number over there rather than
 shown a zero of its own. `gglib remote disable` takes the tunnel down;
 nothing answers the ticket until the next `enable`, which brings the same one
-back.
+back. With no daemon running, `disable` switches remote access off in
+settings instead, so the next start does not put the tunnel back, and says
+so.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
@@ -415,7 +427,9 @@ are one listener, so enabling remote access makes the desktop's own loopback
 proxy require the API key from then on — and disabling does not take that
 away. gglib's own CLI and GUI read the key from settings and carry on; a
 hand-configured local client will start getting `401` and needs the key added
-once. `enable` says so every time it runs.
+once. `enable` says so every time it switches remote access on; one answered
+by a session that was already up, or that the daemon put back while it
+waited, switched nothing on and says that instead.
 
 **Turning it back off on a loopback proxy: unset, then rebind — in that
 order.** `enable` says authentication never turns off by itself, and it does
@@ -542,6 +556,8 @@ here is one the desktop can retire on its own.
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
+| `remote access is already being enabled` | Another `enable` is arming the tunnel, or a daemon that has just started is still putting its own back after the twenty seconds commands wait for it. `gglib remote status` shows when the ticket is up; run the command again then, or `gglib remote disable` to give up on it. |
+| `disable` says `Daemon is not running` | No daemon was running, so `disable` switched remote access off in settings instead, and the next start will not put the tunnel back. `gglib remote enable` turns it on again. |
 | A row in `gglib remote list` reads `invited …, never joined` | A code was offered for that device and nobody redeemed it. The key was minted but never transmitted, so nobody holds it; `gglib remote forget <id>` tidies the row away. Unspent invites are listed rather than swept on a timer, so that what the machine issued is always visible. |
 
 ## Not yet

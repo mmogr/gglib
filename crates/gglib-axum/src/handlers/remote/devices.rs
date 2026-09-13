@@ -78,7 +78,8 @@ pub(crate) struct RemoteForgotten {
 
 /// `POST /api/remote/invite` — mint a key for one new device, and a code.
 ///
-/// `409` when the tunnel is not up or an invite is already open. Answers
+/// `409` when the tunnel is not up, once a startup resume that is putting it
+/// back has been waited for, or when an invite is already open. Answers
 /// with the enable response because that is the shape `RemoteOps::invite`
 /// returns: the ticket belongs in it, and a pairing view needs one.
 pub(crate) async fn invite(

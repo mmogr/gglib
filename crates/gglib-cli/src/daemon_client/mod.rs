@@ -40,8 +40,14 @@ pub(crate) enum DaemonProbe {
 
 /// Identity-check the daemon port.
 pub(crate) async fn probe(client: &reqwest::Client) -> DaemonProbe {
+    probe_within(client, PROBE_TIMEOUT).await
+}
+
+/// [`probe`], with a timeout of the caller's choosing, for the one caller
+/// that acts on the daemon being absent rather than only reporting it.
+pub(crate) async fn probe_within(client: &reqwest::Client, timeout: Duration) -> DaemonProbe {
     let url = format!("{}{}", base_url(), paths::HEALTH_PATH);
-    let response = match client.get(&url).timeout(PROBE_TIMEOUT).send().await {
+    let response = match client.get(&url).timeout(timeout).send().await {
         Ok(r) => r,
         Err(_) => return DaemonProbe::NotRunning,
     };

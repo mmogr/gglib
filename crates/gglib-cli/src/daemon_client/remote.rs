@@ -44,14 +44,15 @@ impl DaemonHandle {
     /// service hands back the whole session, and the ticket in it is half of
     /// what the pairing screen draws.
     ///
-    /// Shorter timeout than `remote_enable`'s. Nothing here waits on a relay
-    /// — the tunnel is already up or this is refused — but two stores are
-    /// written and the edge is told, so it is not instant either.
+    /// The same timeout as `remote_enable`'s. An invite typed at a daemon
+    /// that is still putting its tunnel back after a start waits for it, for
+    /// up to twenty seconds, and only then are two stores written and the
+    /// edge told.
     pub(crate) async fn remote_invite(&self) -> Result<RemoteEnableDto> {
         let response = self
             .post(paths::REMOTE_INVITE_PATH)
             .json(&serde_json::json!({}))
-            .timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(45))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)

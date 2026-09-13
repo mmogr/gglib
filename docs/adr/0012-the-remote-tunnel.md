@@ -1,7 +1,7 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (fifth reading 2026-09-12 — the relay, a migration on one connection, and a key revoked; **amended 2026-09-12 — dated notes under decisions 1, 2, 3, 4 and 7, under Consequences, under kill criterion 2 and under Out of scope say what has changed since the text around them was written**; fourth reading 2026-09-09 — a phone on cellular, direct; **amended 2026-09-11 — decision 2: one credential becomes one per device, with the five consequences listed there, and decision 5's note that a leaked token is now one of several; then the verbs those keys needed: `invite`, `list`, `forget`, and `connect` renamed `join`, a redeemed marker on the roster row, and unspent invites listed rather than swept**; **amended 2026-09-10 — decision 4 reversed: the identity always lasts, `--keep-identity` removed, `remote_enabled` added**; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (**amended 2026-09-13 — the `409 … already being enabled` at a daemon start, recorded with the fifth reading, is fixed: see the dated note there (#1037)**; fifth reading 2026-09-12 — the relay, a migration on one connection, and a key revoked; **amended 2026-09-12 — dated notes under decisions 1, 2, 3, 4 and 7, under Consequences, under kill criterion 2 and under Out of scope say what has changed since the text around them was written**; fourth reading 2026-09-09 — a phone on cellular, direct; **amended 2026-09-11 — decision 2: one credential becomes one per device, with the five consequences listed there, and decision 5's note that a leaked token is now one of several; then the verbs those keys needed: `invite`, `list`, `forget`, and `connect` renamed `join`, a redeemed marker on the roster row, and unspent invites listed rather than swept**; **amended 2026-09-10 — decision 4 reversed: the identity always lasts, `--keep-identity` removed, `remote_enabled` added**; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -1209,7 +1209,13 @@ three times with `409 … already being enabled`, because the daemon the CLI
 had just started was itself resuming the saved `remote_enabled` switch and
 held the serve slot; a `disable` against the running daemon cleared it, and
 the daemon log's trace of the episode runs from 20:51:57 to that `disable`
-at 20:53:12. That is gglib's defect, not the tunnel's. And one more note for
+at 20:53:12. That is gglib's defect, not the tunnel's. **Fixed 2026-09-13
+(#1037):** the resume now says it is working from its first line to its last,
+and `enable` and `invite` wait for it, for up to twenty seconds, instead of
+being refused, then answer from the session it brought up, or arm their own
+if it brought none. A `disable` during the resume now stops it, and a
+`disable` with no daemon running switches remote access off in settings, so
+the next start does not resume. And one more note for
 modelpipe: a client closing its
 own status stream is logged as `WARN exchange failed … sending stopped by
 peer: error 0`, which is a warning about nothing.

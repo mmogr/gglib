@@ -15,6 +15,7 @@
 
 use gglib_core::RemoteServe;
 use gglib_core::SettingsUpdate;
+use tokio::sync::watch;
 use tracing::{info, warn};
 
 use crate::RemoteOps;
@@ -23,6 +24,7 @@ use gglib_core::events::AppEvent;
 use crate::error::GuiError;
 
 use super::pairing::Offer;
+use super::serve::Caller;
 use super::slot::Busy;
 use super::slot::Taken;
 use super::types::EnableRequest;
@@ -60,11 +62,21 @@ impl RemoteOps {
     /// machine you reach later rather than a machine that will not start,
     /// and the reason is logged where the other startup steps log theirs.
     ///
+    /// Says it is working from its first line to its last, and an `enable`
+    /// or `invite` that arrives meanwhile waits for it instead of being
+    /// refused by it. `resume_wait.rs` has why the span is all of this and
+    /// not only the reservation.
+    ///
     /// # Errors
     ///
     /// None: every failure is logged and swallowed. The `Result` is kept off
     /// the signature deliberately so no caller is tempted to `?` on it.
     pub async fn resume(&self) {
+        let _resuming = self.mark_resuming();
+        // Before the switch is read, so that a `disable` from here on is one
+        // `turn_on` sees: it cannot cancel a reservation that does not exist
+        // yet, and this resume must not arm after it.
+        let disables = self.disables.subscribe();
         let settings = match self.core.settings().get().await {
             Ok(settings) => settings,
             Err(e) => {
@@ -93,7 +105,7 @@ impl RemoteOps {
         // grant at every boot, for a code nobody would ever read, on a
         // ticket that no longer changes. Devices already paired hold a key
         // and need no code; a new one is added with `gglib remote invite`.
-        match self.resume_arm(request).await {
+        match self.resume_arm(request, disables).await {
             Ok(()) => info!("remote access resumed from settings"),
             Err(e) => warn!("could not resume remote access: {e}"),
         }
@@ -101,16 +113,23 @@ impl RemoteOps {
 
     /// Put the tunnel back after a restart, arming no pairing code.
     ///
-    /// Everything `enable` does except the code. It sits here rather than as
-    /// a flag on `enable` because the difference is about *who is asking* —
-    /// the subject of this file — and because a flag is something a future
-    /// caller can forget, while a separate entry point is not.
+    /// Everything `enable` does except the code and the write of the switch,
+    /// which it has just read. It sits here rather than as a flag on `enable`
+    /// because the difference is about *who is asking* — the subject of this
+    /// file — and because a flag is something a future caller can forget,
+    /// while a separate entry point is not.
     ///
     /// # Errors
     ///
     /// As [`RemoteOps::enable`](crate::remote::RemoteOps::enable).
-    pub(super) async fn resume_arm(&self, request: EnableRequest) -> Result<(), GuiError> {
-        self.turn_on(request, Offer::Silent).await.map(|_| ())
+    pub(super) async fn resume_arm(
+        &self,
+        request: EnableRequest,
+        disables: watch::Receiver<u64>,
+    ) -> Result<(), GuiError> {
+        self.turn_on(request, Offer::Silent, Caller::Resume(disables))
+            .await
+            .map(|_| ())
     }
 
     /// Take the tunnel down. Nothing answers the ticket from this moment,
@@ -128,6 +147,9 @@ impl RemoteOps {
     ///
     /// `Conflict` when nothing is enabled and nothing is arming.
     pub async fn disable(&self) -> Result<(), GuiError> {
+        // First, so an `enable` waiting out a resume hears it and gives up,
+        // rather than arming a tunnel this person has just turned off.
+        self.disables.send_modify(|n| *n = n.wrapping_add(1));
         // Off is off across restarts, so the switch is cleared before the
         // slot is read: `Conflict` below means nothing was bound *here*, and
         // a daemon that would otherwise have resumed at the next boot is
@@ -182,6 +204,10 @@ impl RemoteOps {
         }
     }
 }
+
+/// What an `enable` hears when a `disable` got there first: while it was
+/// arming, or while it was waiting for the daemon's own resume.
+pub(super) const CANCELLED_BY_DISABLE: &str = "the enable was cancelled by `gglib remote disable`";
 
 /// A serve side that is already taken, as the person who typed the command
 /// needs to hear it.

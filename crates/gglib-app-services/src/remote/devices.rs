@@ -24,6 +24,8 @@ use tracing::{info, warn};
 
 use super::RemoteOps;
 use super::enrolment::{forget, offer};
+use super::pairing::Offer;
+use super::resume_wait::Waited;
 use super::roster::read_roster;
 use super::slot::Busy;
 use super::types::{DeviceView, Enabled};
@@ -42,9 +44,9 @@ impl RemoteOps {
     ///
     /// # Errors
     ///
-    /// `Conflict` when the tunnel is not up or is still coming up, when an
-    /// invite is already open, or when remote access went down while this was
-    /// preparing; `Internal` when a store cannot be written or the edge
+    /// `Conflict` when the tunnel is not up, or is still coming up once the
+    /// wait for the daemon's own resume is over, when an invite is already
+    /// open, or when remote access went down while this was preparing; `Internal` when a store cannot be written or the edge
     /// refuses the token or the grant.
     ///
     /// Answers with the whole [`Enabled`], not the
@@ -55,7 +57,20 @@ impl RemoteOps {
     /// handing it back costs nothing and saves every surface from splitting
     /// the pairing string to recover it.
     pub async fn invite(&self) -> Result<Enabled, GuiError> {
-        let Some(enabled) = self.invite_if_up().await? else {
+        // A daemon this command started for itself is putting the tunnel
+        // back, and an invite typed a few seconds later should get the code
+        // `enable --invite` gets rather than a refusal. A `disable` while it
+        // waits ends it at once: the slot may still read as arming until
+        // that `disable` reaches it, and a code on a session about to go
+        // would leave a row nobody can redeem.
+        if self.wait_out_the_resume().await == Waited::Cancelled {
+            return Err(GuiError::Conflict(
+                "the invite was cancelled by `gglib remote disable`, which switched remote access \
+                 off while this waited for it"
+                    .to_owned(),
+            ));
+        }
+        let Some(enabled) = self.answer_if_up(Offer::Code).await? else {
             return Err(self.nothing_to_invite_onto().await);
         };
         if enabled.pairing.is_none() {
@@ -66,7 +81,7 @@ impl RemoteOps {
         Ok(enabled)
     }
 
-    /// Why [`Self::invite_if_up`] found nothing, read afresh rather than
+    /// Why [`Self::answer_if_up`] found nothing, read afresh rather than
     /// returned by it: `enable --invite` shares that call, and has to go on
     /// getting `Ok(None)` for every way the tunnel can be down, because that
     /// is what lets it arm one.
@@ -85,21 +100,23 @@ impl RemoteOps {
         refusal_without_a_tunnel(busy.as_ref(), switched_on)
     }
 
-    /// The same, against a tunnel that may or may not be up: `Ok(None)` means
-    /// there was nothing to invite onto.
+    /// The session as it stands, against a tunnel that may or may not be up:
+    /// `Ok(None)` means there was nothing to answer from.
     ///
     /// Shared with `enable --invite`, which is what makes that command work
     /// on a machine that is already serving instead of answering "already
     /// enabled". Without it a person who needs to pair a second device is
     /// told to `disable` first, which drops every device already using the
     /// tunnel — and every string in this codebase that points at
-    /// `enable --invite` would be pointing at a refusal.
+    /// `enable --invite` would be pointing at a refusal. `enable` also
+    /// answers from here after waiting out the daemon's own resume, and a
+    /// plain `enable` then asks for `Offer::Silent`: the session, no code.
     ///
     /// The flags in that request are *not* applied to a session already
     /// running; only the code is new. `disable` and `enable` again to change
     /// them, which is the one thing that has to be said out loud, because
     /// `--allow-mcp` alongside `--invite` would otherwise look like it took.
-    pub(super) async fn invite_if_up(&self) -> Result<Option<Enabled>, GuiError> {
+    pub(super) async fn answer_if_up(&self, wanted: Offer) -> Result<Option<Enabled>, GuiError> {
         let armed = {
             let live = self.live.lock().await;
             live.full().map(|l| (Arc::clone(&l.handle), l.epoch))
@@ -108,10 +125,13 @@ impl RemoteOps {
             return Ok(None);
         };
         let ticket = handle.ticket().to_string();
-        let pairing = offer(self, &handle, epoch, &ticket).await?;
+        let pairing = match wanted {
+            Offer::Code => Some(offer(self, &handle, epoch, &ticket).await?),
+            Offer::Silent => None,
+        };
         Ok(Some(Enabled {
             ticket,
-            pairing: Some(pairing),
+            pairing,
             // The live session's answer, not the caller's flag: this path
             // deliberately leaves the flags where `enable` set them.
             mcp_allowed: gglib_core::ports::RemoteGatewayPort::mcp_allowed(&*self.gateway),
@@ -199,18 +219,19 @@ impl RemoteOps {
 ///
 /// Three sentences, because the fix differs:
 /// - With the switch off, `enable` is the fix.
-/// - With a tunnel still arming — `resume` holds the slot for up to fifteen
-///   seconds after every daemon start — the fix is to wait. Both `enable`
-///   commands refuse while the slot is taken, so naming them would send
-///   someone to two refusals in a row; `disable` is the way out, as
+/// - With a tunnel still arming — another command's `enable`, or the
+///   daemon's own resume outlasting the wait `invite` gives it — the fix is
+///   to wait. A second `enable` refuses while one is arming, so naming it
+///   would send someone to a refusal; `disable` is the way out, as
 ///   `busy_serving` says it.
-/// - With the switch on and nothing reserved, the daemon has not reached the
-///   arm yet — one this command started for itself answers before `resume`
-///   has taken the slot — or it tried and could not reach a relay. `enable`
-///   is the wrong advice either way: the switch is already on.
+/// - With the switch on and nothing reserved, the resume that puts the
+///   tunnel back has given up, or had not begun when this looked, since
+///   `invite` has already waited out one that was working. `enable --invite`
+///   is the fix either way: it arms the tunnel again with a code, and waits
+///   for a resume that has only just begun.
 ///
 /// `Full` means an arm finished between the two reads: it was still coming up
-/// when `invite_if_up` looked, and an invite works now, so the same advice
+/// when `answer_if_up` looked, and an invite works now, so the same advice
 /// holds.
 fn refusal_without_a_tunnel(busy: Option<&Busy>, switched_on: bool) -> GuiError {
     GuiError::Conflict(
@@ -221,9 +242,9 @@ fn refusal_without_a_tunnel(busy: Option<&Busy>, switched_on: bool) -> GuiError 
                  to give up on it"
             }
             (None, true) => {
-                "remote access is switched on, but nothing is bound — still arming, or it \
-                 could not reach a relay; `gglib remote status` shows the ticket once it is \
-                 up, and `gglib remote invite` works then"
+                "remote access is switched on, but nothing is bound and nothing is arming — \
+                 `gglib remote enable --invite` arms it again, with the flags you give it, and \
+                 offers a code"
             }
             (None, false) => {
                 "remote access is not enabled — run `gglib remote enable` first, or \

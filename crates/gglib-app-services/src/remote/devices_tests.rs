@@ -21,9 +21,10 @@ fn refusal(outcome: Result<Enabled, GuiError>) -> String {
 }
 
 /// With the switch off, `enable` is the fix, and the refusal names it. With a
-/// tunnel still arming, both `enable` commands refuse while the slot is
-/// taken, so naming them would send someone to two refusals in a row: the
-/// refusal says to wait instead, and how to give up.
+/// tunnel still arming, which is another command's `enable` or a resume that
+/// outlasted the wait `invite` gives it, a second `enable` refuses while the
+/// slot is held, so naming it would send someone to a refusal: the refusal
+/// says to wait instead, and how to give up.
 ///
 /// The slot is put into the state arming leaves it in, rather than reached
 /// through `enable`, which would bind the proxy's port for real.
@@ -50,17 +51,17 @@ async fn an_invite_while_the_tunnel_is_arming_says_to_wait_for_it() {
     );
     assert!(
         !arming.contains("`gglib remote enable"),
-        "both enable commands refuse while the slot is taken: {arming}"
+        "a second enable refuses while another is arming: {arming}"
     );
 }
 
-/// A daemon that the invite itself just started has the switch on and the
-/// slot not yet taken: `resume` runs beside the server, and reaches the
-/// reservation only after reading settings and starting the proxy. Telling
-/// that person to `enable` would send them to a command that is about to
-/// refuse.
+/// The switch on and the slot empty, with no resume working: the resume that
+/// puts the tunnel back has given up, or had not begun when this looked.
+/// `enable --invite` is the fix either way. It arms the tunnel again with a
+/// code, and waits for a resume that has only just begun. It was the wrong
+/// advice while an `enable` meeting the resume was refused (#1037).
 #[tokio::test]
-async fn an_invite_to_a_daemon_switched_on_but_not_yet_arming_does_not_say_enable() {
+async fn an_invite_to_a_daemon_switched_on_with_nothing_arming_says_enable_invite_puts_it_back() {
     let (core, ops, _) = test_remote_ops().await;
     core.settings()
         .update(SettingsUpdate {
@@ -72,10 +73,9 @@ async fn an_invite_to_a_daemon_switched_on_but_not_yet_arming_does_not_say_enabl
 
     let message = refusal(ops.invite().await);
     assert!(message.contains("switched on"), "{message}");
-    assert!(message.contains("`gglib remote status`"), "{message}");
     assert!(
-        !message.contains("`gglib remote enable"),
-        "it is already enabled, and `enable` would refuse: {message}"
+        message.contains("`gglib remote enable --invite`"),
+        "the command that puts it back, with a code: {message}"
     );
 }
 
