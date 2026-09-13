@@ -15,6 +15,7 @@ mod redeem;
 mod roster;
 mod rotation;
 mod serve;
+mod serve_arm;
 mod serve_switch;
 mod slot;
 mod stored_pairing;
