@@ -13,7 +13,7 @@
 //! an unbounded repeat is bounded only by the client noticing.
 
 use super::*;
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn cfg() -> LoopGuardConfig {
     LoopGuardConfig::from_settings(&Settings::with_defaults()).expect("guard on by default")
