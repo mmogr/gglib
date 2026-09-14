@@ -412,6 +412,23 @@ learns nothing.
 > [ADR 0012](adr/0012-the-remote-tunnel.md), decisions 3 and 4, has the
 > arithmetic.
 
+**The daemon's own API trusts the machine, not the person.** A daemon bound
+on loopback, the default, asks nothing of a request to `127.0.0.1:9887`: the
+socket is the boundary, so anything that can open it can do whatever `gglib`
+itself can. Two of those things reach past this machine. `POST
+/api/remote/enable` switches the tunnel on, and `POST /api/remote/invite`
+answers with the pairing string, code included. A process that calls both and
+redeems the code from anywhere the ticket reaches holds a device key of its
+own, on a roster row it named itself, and the edge admits that key after the
+process has gone and across restarts, until `gglib remote forget` retires it.
+Code running as you gains little by this, since it can already read gglib's
+data directory. Another account on the same machine cannot read
+`<data root>/data`, where the keys and the database are, since it is private
+to its owner, but it can reach loopback, so on a shared machine these two
+routes are a way off it. `gglib remote list` shows every row, one a process
+named itself included. A daemon started with `--share-lan` already demands
+its own token on every `/api/*` route, these two among them.
+
 **One identity, kept.** `enable` reuses this machine's stored endpoint key, so
 the ticket is the same ticket every time and a device pairs once rather than
 every session. `gglib remote disable` stops answering — the ticket reaches

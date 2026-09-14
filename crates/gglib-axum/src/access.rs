@@ -48,6 +48,11 @@ impl DaemonAccess {
     /// `api_key = None` leaves `/api/*` unauthenticated — the right default
     /// for loopback, where the socket itself is the boundary. Callers that
     /// bind anything else are expected to resolve or mint a key first.
+    ///
+    /// That boundary is the machine, not the user. Any local process, another
+    /// account's included, can reach `/api/remote/enable` and
+    /// `/api/remote/invite`, and with them mint itself a device key that
+    /// outlives it. `docs/remote.md`, "How it stays private", says so.
     #[must_use]
     pub fn new(api_key: Option<String>, bind_host: &str, extra_hosts: Vec<String>) -> Self {
         Self {
