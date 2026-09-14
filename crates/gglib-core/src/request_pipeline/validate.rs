@@ -32,11 +32,11 @@
 //! types, `required`, `enum`, `additionalProperties: false`, and the same
 //! checks recursively through nested objects and array items.
 //!
-//! Everything else — `$ref`, `anyOf`/`oneOf`/`allOf`, `not`, `pattern`,
-//! `$defs` — yields [`Verdict::Unvalidatable`] and the response is forwarded
-//! untouched. Half-implementing those constructs would produce false
-//! violations, and a false violation costs a wasted generation and replaces a
-//! working call with a re-rolled one.
+//! `$ref`, `anyOf`/`oneOf`/`allOf`, `not` and `$defs` yield
+//! [`Verdict::Unvalidatable`] and the response is forwarded untouched, and
+//! `pattern` is not checked at all. Half-implementing those constructs would
+//! produce false violations, and a false violation costs a wasted generation
+//! and replaces a working call with a re-rolled one.
 //!
 //! # Recursion is not optional
 //!
@@ -58,8 +58,9 @@ use serde_json::Value;
 
 /// Schema keywords this validator does not implement.
 ///
-/// Presence of any of them anywhere in a tool's schema makes that call
-/// unvalidatable. Listed rather than inferred so adding support for one is a
+/// Any of them in a tool's schema, or in a subschema under it, makes that call
+/// unvalidatable. A parameter's name is not where a keyword goes: see
+/// [`unsupported_reason`]. Listed rather than inferred so adding support for one is a
 /// deliberate edit with a test, not an emergent behaviour change.
 const UNSUPPORTED_KEYWORDS: &[&str] = &[
     "$ref",
@@ -286,20 +287,50 @@ fn schema_for<'a>(tools: &'a [Value], name: &str) -> Option<&'a Value> {
         .and_then(|f| f.get("parameters"))
 }
 
-/// The first unsupported keyword anywhere in `schema`, if any.
+/// Where a schema holds subschemas, besides the values of `properties`.
+///
+/// The unsupported keywords that hold subschemas are not listed: finding one
+/// ends the search.
+const SUBSCHEMA_KEYWORDS: &[&str] = &[
+    "items",
+    "prefixItems",
+    "additionalItems",
+    "contains",
+    "additionalProperties",
+    "unevaluatedItems",
+    "unevaluatedProperties",
+];
+
+/// The first unsupported keyword in `schema` or in a subschema under it.
+///
+/// A keyword is looked for only where a schema puts keywords. The keys of
+/// `properties` are a tool's parameter names, so a parameter called `if` or
+/// `definitions` is a name, and only the subschema under it is searched. A
+/// value that is not a subschema, such as an `enum` member or a `default`, is
+/// not searched at all.
 fn unsupported_reason(schema: &Value) -> Option<&'static str> {
-    match schema {
-        Value::Object(map) => {
-            for key in UNSUPPORTED_KEYWORDS {
-                if map.contains_key(*key) {
-                    return Some(key);
-                }
-            }
-            map.values().find_map(unsupported_reason)
-        }
-        Value::Array(items) => items.iter().find_map(unsupported_reason),
-        _ => None,
+    let map = schema.as_object()?;
+    if let Some(keyword) = UNSUPPORTED_KEYWORDS
+        .iter()
+        .copied()
+        .find(|keyword| map.contains_key(*keyword))
+    {
+        return Some(keyword);
     }
+    let named = map
+        .get("properties")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(serde_json::Map::values);
+    let positional = SUBSCHEMA_KEYWORDS
+        .iter()
+        .filter_map(|keyword| map.get(*keyword));
+    named
+        .chain(positional)
+        .find_map(|subschema| match subschema {
+            Value::Array(tuple) => tuple.iter().find_map(unsupported_reason),
+            one => unsupported_reason(one),
+        })
 }
 
 /// Check `value` against `schema`, appending `(pointer, kind)` for each

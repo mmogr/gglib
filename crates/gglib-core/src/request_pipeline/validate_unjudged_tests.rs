@@ -77,6 +77,95 @@ fn a_real_violation_outranks_an_unvalidatable_sibling() {
     assert_eq!(kinds(&v), vec![ViolationKind::MissingRequired]);
 }
 
+// ── Where keywords are looked for ────────────────────────────────────────
+
+/// A tool that branches can name its parameters `if`, `then` and `else`. They
+/// are names under `properties`, not keywords, and the call is judged like any
+/// other.
+#[test]
+fn a_parameter_named_like_a_keyword_is_still_validated() {
+    let tools = json!([{
+        "type": "function",
+        "function": {
+            "name": "branch",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "if": {"type": "string"},
+                    "then": {"type": "integer"},
+                    "else": {"type": "integer"},
+                    "not": {"type": "boolean"},
+                    "definitions": {"type": "object"},
+                    "$defs": {"type": "array"}
+                },
+                "required": ["if", "then"]
+            }
+        }
+    }]);
+    let calls = |arguments: &str| json!([{"type": "function", "function": {"name": "branch", "arguments": arguments}}]);
+
+    assert_eq!(
+        validate_tool_calls(
+            Some(&tools),
+            Some(&calls(r#"{"if":"x > 1","then":2,"else":3}"#))
+        ),
+        Verdict::Valid
+    );
+    let v = validate_tool_calls(Some(&tools), Some(&calls(r#"{"if":"x > 1","then":"2"}"#)));
+    assert_eq!(
+        kinds(&v),
+        vec![ViolationKind::WrongType {
+            expected: "integer".to_owned(),
+            actual: "string".to_owned()
+        }]
+    );
+}
+
+/// A keyword inside a parameter's subschema, or under `items`,
+/// `additionalProperties` or `prefixItems`, is still found.
+#[test]
+fn a_keyword_in_a_subschema_is_still_found() {
+    for parameters in [
+        json!({"type": "object", "properties": {"if": {"anyOf": [{"type": "string"}]}}}),
+        json!({"type": "object", "properties": {
+            "paths": {"type": "array", "items": {"oneOf": [{"type": "string"}]}}
+        }}),
+        json!({"type": "object", "additionalProperties": {"$ref": "#/$defs/path"}}),
+        json!({"type": "object", "properties": {
+            "pair": {"type": "array", "prefixItems": [{"type": "string"}, {"not": {"type": "null"}}]}
+        }}),
+    ] {
+        let tools =
+            json!([{"type": "function", "function": {"name": "t", "parameters": parameters}}]);
+        let calls = json!([{"type": "function", "function": {"name": "t", "arguments": "{}"}}]);
+        assert!(
+            matches!(
+                validate_tool_calls(Some(&tools), Some(&calls)),
+                Verdict::Unvalidatable(_)
+            ),
+            "{parameters}"
+        );
+    }
+}
+
+/// A value that is not a schema, such as an `enum` member or a `default`, is
+/// not searched for keywords.
+#[test]
+fn a_value_that_is_not_a_schema_is_not_searched() {
+    let tools = json!([{"type": "function", "function": {"name": "t", "parameters": {
+        "type": "object",
+        "properties": {
+            "rule": {"type": "object", "enum": [{"if": "a"}], "default": {"$ref": "b"}}
+        }
+    }}}]);
+    let calls = json!([{"type": "function", "function": {"name": "t", "arguments": r#"{"rule":{"if":"a"}}"#}}]);
+
+    assert_eq!(
+        validate_tool_calls(Some(&tools), Some(&calls)),
+        Verdict::Valid
+    );
+}
+
 // ── Not applicable ───────────────────────────────────────────────────────
 
 #[test]
