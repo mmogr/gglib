@@ -131,8 +131,10 @@ pub struct RemoteOps {
     /// `turn_on` starts the proxy before it reserves anything. `enable` and
     /// `invite` wait on it; `resume_wait.rs` has the rest.
     resuming: watch::Sender<bool>,
-    /// Bumped by every `disable`, so a call waiting out a resume can tell
-    /// that the person changed their mind while it waited.
+    /// Bumped by every `disable`, before it writes the switch, so a call that
+    /// subscribed earlier can tell that the person changed their mind since:
+    /// an `enable` or `invite` waiting out a resume, or an `enable` or resume
+    /// on its way to arming.
     disables: watch::Sender<u64>,
     /// The file the device keys are kept in, or `None` for the one beside
     /// the endpoint identity, where a daemon keeps them. A test names its
@@ -291,3 +293,7 @@ mod enable_wait_tests;
 #[cfg(test)]
 #[path = "serve_resume_tests.rs"]
 mod serve_resume_tests;
+
+#[cfg(test)]
+#[path = "enable_race_tests.rs"]
+mod enable_race_tests;

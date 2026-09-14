@@ -21,13 +21,14 @@ use super::serve_switch::{CANCELLED_BY_DISABLE, busy_serving};
 use super::types::{EnableRequest, Enabled};
 use crate::error::GuiError;
 
-/// Who is turning the tunnel on, which decides two things `turn_on` does.
+/// Who is turning the tunnel on, which decides whether `turn_on` writes the
+/// switch.
 pub(super) enum Caller {
     /// A person's `enable`, which writes the switch and its flags first.
     Person,
-    /// The daemon's own resume, which writes nothing, and hears about a
-    /// `disable` since its first line through this subscription.
-    Resume(watch::Receiver<u64>),
+    /// The daemon's own resume, which writes nothing: it read the switch a
+    /// moment ago.
+    Resume,
 }
 
 impl RemoteOps {
@@ -52,11 +53,14 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Conflict` when already enabled, when another call is still arming,
-    /// when `disable` took the slot while this was arming, or when one landed
-    /// while this waited;
+    /// or when a `disable` landed after this call began and before the
+    /// tunnel it was arming was up;
     /// whatever starting the proxy returns; `Internal` when settings cannot
     /// be written or the tunnel cannot bind.
     pub async fn enable(&self, request: EnableRequest) -> Result<Enabled, GuiError> {
+        // First, before anything here can wait: a `disable` from this line on
+        // is one `turn_on` sees, wherever it lands.
+        let disables = self.disables.subscribe();
         let waited = self.wait_out_the_resume().await;
         if waited == Waited::Cancelled {
             return Err(GuiError::Conflict(CANCELLED_BY_DISABLE.to_owned()));
@@ -81,16 +85,23 @@ impl RemoteOps {
         {
             return Ok(enabled);
         }
-        self.turn_on(request, offer, Caller::Person).await
+        self.turn_on(request, offer, Caller::Person, disables).await
     }
 
     /// Bringing the tunnel up, with `offer` and `caller` the two things
     /// `enable` and `resume_arm` differ in — so the rest cannot drift apart.
+    ///
+    /// `disables` is subscribed at the caller's first line, so every
+    /// `disable` since then is one this sees. Before the reservation it found
+    /// nothing to cancel, and this turns itself away; after it, it cancels
+    /// the reservation, and `remember_enabled` makes sure a person's write of
+    /// the switch does not outlast it.
     pub(super) async fn turn_on(
         &self,
         request: EnableRequest,
         offer: Offer,
         caller: Caller,
+        disables: watch::Receiver<u64>,
     ) -> Result<Enabled, GuiError> {
         if let Some(busy) = self.live.lock().await.busy() {
             return Err(busy_serving(&busy));
@@ -112,13 +123,12 @@ impl RemoteOps {
             let cancel = live
                 .reserve(generation)
                 .map_err(|busy| busy_serving(&busy))?;
-            // A `disable` since the resume began found this slot empty, so it
-            // had nothing to cancel, and the resume has to notice it itself.
-            // Read under the same hold as the reservation: a `disable` that
-            // says so after this finds the reservation and cancels it.
-            if let Caller::Resume(disables) = &caller
-                && disables.has_changed().unwrap_or(false)
-            {
+            // A `disable` since the caller began found this slot empty, so it
+            // had nothing to cancel, and this call has to notice it itself or
+            // arm after it. Read under the same hold as the reservation: a
+            // `disable` that says so after this finds the reservation and
+            // cancels it.
+            if disables.has_changed().unwrap_or(false) {
                 live.release(generation);
                 return Err(GuiError::Conflict(CANCELLED_BY_DISABLE.to_owned()));
             }
@@ -133,14 +143,16 @@ impl RemoteOps {
         // bound tunnel nobody recorded, comes back down at the next restart
         // for no reason a person could see.
         //
-        // A write that fails gives the slot back, or it would read as an arm
-        // on its way until someone ran `disable`.
+        // A write that fails, or that `remember_enabled` takes back for a
+        // `disable`, gives the slot back, or it would read as an arm on its
+        // way until someone ran `disable`.
         //
         // A resume writes nothing. It read the switch and the flags a moment
         // ago, and writing them back could only undo a `disable` that landed
-        // in between.
+        // in between. A person's write can undo one too, which is why
+        // `remember_enabled` looks for a `disable` again once it has written.
         if matches!(caller, Caller::Person)
-            && let Err(e) = self.remember_enabled(&request).await
+            && let Err(e) = self.remember_enabled(&request, &disables).await
         {
             self.live.lock().await.release(generation);
             return Err(e);

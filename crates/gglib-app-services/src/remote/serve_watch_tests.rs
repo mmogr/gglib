@@ -76,8 +76,8 @@ pub(super) async fn ops_with_key() -> (
     (core, proxy, events, ops, ARMING.lock().await)
 }
 
-/// [`ARMING`] for the one test here that builds its ops the other way.
-async fn arming() -> tokio::sync::MutexGuard<'static, ()> {
+/// [`ARMING`] for a test that builds its ops some other way.
+pub(super) async fn arming() -> tokio::sync::MutexGuard<'static, ()> {
     ARMING.lock().await
 }
 

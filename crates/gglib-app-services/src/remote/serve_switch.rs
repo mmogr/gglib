@@ -30,8 +30,25 @@ use super::slot::Taken;
 use super::types::EnableRequest;
 
 impl RemoteOps {
-    /// Write the switch on and the flags this `enable` was given.
-    pub(super) async fn remember_enabled(&self, request: &EnableRequest) -> Result<(), GuiError> {
+    /// Write the switch on and the flags this `enable` was given, unless a
+    /// `disable` has landed since `disables` was subscribed: then the switch
+    /// is written off again and the `enable` is refused.
+    ///
+    /// A `disable` after the reservation cancels it, but its write of the
+    /// switch can land before this one, and this one would then leave remote
+    /// access switched on under an arm that never finished, for the next boot
+    /// to resume. `disable` says so before it writes, so one look after this
+    /// write is enough: a `disable` it misses writes after it, and one it sees
+    /// is answered here.
+    ///
+    /// No lock is held across either settings write. The serve slot's cannot
+    /// be, because `status` waits on it, and the order of the write and the
+    /// look is what makes the switch end off without one.
+    pub(super) async fn remember_enabled(
+        &self,
+        request: &EnableRequest,
+        disables: &watch::Receiver<u64>,
+    ) -> Result<(), GuiError> {
         self.core
             .settings()
             .update(SettingsUpdate {
@@ -47,7 +64,36 @@ impl RemoteOps {
             .map_err(|e| {
                 GuiError::Internal(format!("could not record that remote access is on: {e}"))
             })?;
+        if disables.has_changed().unwrap_or(false) {
+            // The `disable` wrote the switch off and the write above put it
+            // back on. A switch that cannot be written off again is still on
+            // for the next start to resume, which a plain cancellation would
+            // hide.
+            if let Err(e) = self.remember_disabled().await {
+                return Err(GuiError::Internal(format!(
+                    "a disable landed while remote access was being enabled, and it could not \
+                     be switched back off: {e} — run `gglib remote disable` again"
+                )));
+            }
+            return Err(GuiError::Conflict(CANCELLED_BY_DISABLE.to_owned()));
+        }
         Ok(())
+    }
+
+    /// Write the switch off.
+    ///
+    /// Both callers return a failure, because a switch that could not be
+    /// written off may still be on for the next start. `disable` takes the
+    /// tunnel down first all the same.
+    async fn remember_disabled(&self) -> Result<(), gglib_core::ports::CoreError> {
+        self.core
+            .settings()
+            .update(SettingsUpdate {
+                remote_enabled: Some(Some(false)),
+                ..SettingsUpdate::default()
+            })
+            .await
+            .map(|_| ())
     }
 
     /// Bring the tunnel back up the way it was left, at daemon start.
@@ -127,7 +173,7 @@ impl RemoteOps {
         request: EnableRequest,
         disables: watch::Receiver<u64>,
     ) -> Result<(), GuiError> {
-        self.turn_on(request, Offer::Silent, Caller::Resume(disables))
+        self.turn_on(request, Offer::Silent, Caller::Resume, disables)
             .await
             .map(|_| ())
     }
@@ -145,10 +191,13 @@ impl RemoteOps {
     ///
     /// # Errors
     ///
-    /// `Conflict` when nothing is enabled and nothing is arming.
+    /// `Conflict` when nothing is enabled and nothing is arming. `Internal`
+    /// when the switch could not be written off, with the tunnel down all the
+    /// same.
     pub async fn disable(&self) -> Result<(), GuiError> {
-        // First, so an `enable` waiting out a resume hears it and gives up,
-        // rather than arming a tunnel this person has just turned off.
+        // First, and before the switch is written: an `enable` waiting out a
+        // resume hears it and gives up, and one already arming finds it when
+        // it looks again after writing the switch itself (`remember_enabled`).
         self.disables.send_modify(|n| *n = n.wrapping_add(1));
         // Off is off across restarts, so the switch is cleared before the
         // slot is read: `Conflict` below means nothing was bound *here*, and
@@ -156,18 +205,17 @@ impl RemoteOps {
         // exactly the case where clearing it matters most. The stored
         // pairings are left alone — this takes the tunnel down, it does not
         // forget anybody.
-        if let Err(e) = self
-            .core
-            .settings()
-            .update(SettingsUpdate {
-                remote_enabled: Some(Some(false)),
-                ..SettingsUpdate::default()
-            })
-            .await
-        {
-            warn!("could not record that remote access is off: {e}");
+        let recorded = self.remember_disabled().await;
+        let taken_down = self.shut_down().await;
+        // Said after the tunnel is down, which it is either way: a switch
+        // that could not be written off may still be on for the next start.
+        if let Err(e) = recorded {
+            return Err(GuiError::Internal(format!(
+                "remote access could not be recorded as off, so it may come back on at \
+                 the next start: {e} — run `gglib remote disable` again"
+            )));
         }
-        self.shut_down().await
+        taken_down
     }
 
     /// Take the tunnel down without touching the switch.
