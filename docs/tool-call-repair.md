@@ -81,7 +81,9 @@ one is being retired while the other takes over. Adjacency makes that legible.
 Recursive JSON Schema checking over each call's `arguments`, against the
 `tools[]` entry with the matching `function.name`:
 
-- **type** — including the `bool`-is-not-`integer` distinction
+- **type** — including the `bool`-is-not-`integer` distinction, and a list of
+  types, as an optional field's `["string", "null"]`. A type name the
+  validator does not know passes, with a debug line naming it
 - **required** — presence of every declared key
 - **enum** — membership
 - **additionalProperties: false** — no invented keys
