@@ -26,12 +26,19 @@ impl SettingsService {
     }
 
     /// Update settings with partial changes.
+    ///
+    /// The merge and the validation run on the settings as they stand when
+    /// the update is written, not as they stood at some earlier read: the
+    /// repository reads, applies and stores in one step
+    /// ([`SettingsRepository::modify`]). A field this update does not set is
+    /// left as its last writer left it, whichever process that was.
     pub async fn update(&self, update: SettingsUpdate) -> Result<Settings, CoreError> {
-        let mut current = self.repo.load().await.map_err(CoreError::from)?;
-        current.merge(&update);
-        validate_settings(&current)?;
-        self.repo.save(&current).await.map_err(CoreError::from)?;
-        Ok(current)
+        self.repo
+            .modify(&|settings: &mut Settings| {
+                settings.merge(&update);
+                validate_settings(settings)
+            })
+            .await
     }
 
     /// Save complete settings (validates first).
@@ -98,5 +105,31 @@ mod tests {
         // Verify persisted
         let fetched = service.get().await.unwrap();
         assert_eq!(fetched.default_context_size, Some(8192));
+    }
+
+    /// An update that fails validation stores nothing, not even the part of
+    /// it that was valid.
+    #[tokio::test]
+    async fn an_update_that_fails_validation_stores_nothing() {
+        let repo = Arc::new(MockSettingsRepo::new());
+        let service = SettingsService::new(repo);
+
+        let refused = service
+            .update(SettingsUpdate {
+                proxy_port: Some(Some(9191)),
+                default_context_size: Some(Some(1)),
+                ..Default::default()
+            })
+            .await;
+
+        assert!(
+            matches!(refused, Err(CoreError::Settings(_))),
+            "{refused:?}"
+        );
+        assert_eq!(
+            service.get().await.unwrap().proxy_port,
+            Settings::with_defaults().proxy_port,
+            "the valid half of a refused update was not stored"
+        );
     }
 }
