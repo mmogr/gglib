@@ -150,12 +150,13 @@ The detector therefore applies **two thresholds**:
 | At least one call does **not** match | `max_repeated_batch_steps` |
 
 A batch is observation-only when [`is_observation_batch`] returns `true`:
-every call's lowercased name satisfies
-`name.ends_with(pattern) || name.contains(pattern)` for at least one
-pattern in the configured list.  Substring/suffix matching is used
-intentionally so that namespaced MCP tool names such as
-`playwright_mcp_browser_snapshot` are matched by the short pattern
-`"snapshot"` without requiring users to enumerate every vendor variant.
+every call's lowercased name contains at least one pattern in the configured
+list as a substring.  Substring matching is used intentionally so that
+namespaced MCP tool names such as `playwright_mcp_browser_snapshot` are
+matched by the short pattern `"snapshot"` without requiring users to
+enumerate every vendor variant.  The cost falls on a hand-written list: a
+pattern matches every name containing it, so `"read"` also holds
+`thread_create` to the read-only allowance.
 
 **Mixed batches** (≥ 1 non-observation call) always fall back to the
 stricter `max_repeated_batch_steps` — the conservative choice.

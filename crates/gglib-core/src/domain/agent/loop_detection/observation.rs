@@ -13,9 +13,19 @@ use crate::ToolCall;
 /// Return `true` if **every** call in `calls` is an observation-only tool.
 ///
 /// A tool call is classified as observation-only when its lowercased name
-/// satisfies `name.ends_with(pattern) || name.contains(pattern)` for at
-/// least one pattern in `patterns`.  Matching is case-insensitive (both
-/// sides are lowercased before comparison).
+/// contains at least one pattern in `patterns` as a substring.  Matching is
+/// case-insensitive (both sides are lowercased before comparison).
+///
+/// A substring captures more than it names, which matters for a hand-written
+/// list, since a user's `observation_tools` replaces the shipped one whole: a
+/// pattern `read` also matches `thread_create` and `spreadsheet_update`, and
+/// tools that change state get the read-only allowance. The shipped
+/// coding-agent patterns are long enough that everything they capture is
+/// read-only (see `AgentConfig::observation_tools`); the browser ones are
+/// not, and `snapshot` also matches `delete_snapshot`. Whole-segment
+/// matching, the rule `is_costly_batch` uses, would stop `list_dir` covering
+/// `list_directory` and `click` covering `get_clickable_elements`, and
+/// over-capturing here is the cheaper error.
 ///
 /// An empty `patterns` list means no tools are ever classified as
 /// observation-only, so the function always returns `false`.
@@ -36,7 +46,7 @@ pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
             // supplied, and one carrying a capital could never match a name
             // already lowered. That read as case-sensitive; it was a no-op.
             let pat = pat.to_lowercase();
-            name.ends_with(&pat) || name.contains(&pat)
+            name.contains(&pat)
         })
     })
 }

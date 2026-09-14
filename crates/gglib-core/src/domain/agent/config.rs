@@ -214,7 +214,7 @@ pub struct AgentConfig {
     // exploratory tool, preventing false-positive loop aborts during ReAct
     // observation and navigation cycles while still catching an agent that
     // repeats one of them back to back without pause.
-    /// Substring/suffix patterns used to classify tools as **exploratory**.
+    /// Substring patterns used to classify tools as **exploratory**.
     ///
     /// "Exploratory" tools are those that drive progress by repeatedly
     /// querying or traversing a stateful source — page snapshots, navigation,
@@ -222,13 +222,13 @@ pub struct AgentConfig {
     /// Their repeated invocation with identical arguments is a legitimate
     /// `ReAct` pattern, not a stuck loop.
     ///
-    /// A tool call whose **lowercased** name satisfies
-    /// `name.ends_with(pattern) || name.contains(pattern)` for any pattern in
-    /// this list is classified as exploratory.  When **every** call in a batch
+    /// A tool call whose **lowercased** name contains any pattern in this list
+    /// as a substring is classified as exploratory, so a short pattern like
+    /// `"read"` also covers `thread_create`.  When **every** call in a batch
     /// matches, [`Self::max_observation_steps`] is applied as the loop
     /// detection threshold instead of [`Self::max_repeated_batch_steps`].
     ///
-    /// **Matching semantics** — substring/suffix rather than exact string — are
+    /// **Matching semantics** — substring rather than exact string — are
     /// intentional: MCP servers routinely prepend namespace prefixes to tool
     /// names (e.g. `playwright_mcp_browser_snapshot`), so exact matching would
     /// require users to enumerate every vendor variant.  The pattern `"navigate"`

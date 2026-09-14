@@ -79,6 +79,26 @@ fn the_all_and_empty_rules_survive() {
     assert!(!is_observation_batch(&call("read_file"), &[]));
 }
 
+/// Matching is by substring, so a hand-written fragment classifies every name
+/// containing it (#1053). The docs say so; this pins that they describe the
+/// rule that runs.
+#[test]
+fn a_fragment_classifies_every_name_containing_it() {
+    let read = patterns(&["read"]);
+    for name in [
+        "read",
+        "mcp__fs__read_file",
+        "thread_create",
+        "spreadsheet_update",
+    ] {
+        assert!(
+            is_observation_batch(&call(name), &read),
+            "{name} contains `read`"
+        );
+    }
+    assert!(!is_observation_batch(&call("write_file"), &read));
+}
+
 // =============================================================================
 // Costly-observation classifier
 // =============================================================================
