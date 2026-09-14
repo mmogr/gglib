@@ -21,9 +21,9 @@
 //! error back to the model, and the model tries again — one of the ways a
 //! local agentic session dies, and nothing in gglib noticed it happening.
 //!
-//! This module is the detection half. The repair half — re-issuing with
-//! `tool_choice: "required"`, which is where upstream *does* install a
-//! grammar — lives in the proxy, because only it can make a second request.
+//! This module is the detection half. The repair half — re-issuing under a
+//! grammar, upstream's with `tool_choice: "required"` or gglib's own on a turn
+//! it constrained — lives in the proxy, because only it can make a second request.
 //! See [Tool-call repair](https://github.com/mmogr/gglib/blob/main/docs/tool-call-repair.md).
 //!
 //! # Deliberately not a JSON Schema engine

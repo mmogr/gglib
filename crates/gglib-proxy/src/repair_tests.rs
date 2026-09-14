@@ -53,7 +53,7 @@ fn a_schema_violation_on_the_auto_path_is_reissued() {
     let d = decide(
         &request(json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        true,
+        RepairTurn::ON,
     );
 
     let Decision::Reissue { body, violations } = d else {
@@ -81,7 +81,7 @@ fn the_repair_request_is_non_streaming() {
     let Decision::Reissue { body, .. } = decide(
         &request(json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        true,
+        RepairTurn::ON,
     ) else {
         panic!("expected a re-issue");
     };
@@ -94,7 +94,11 @@ fn the_repair_request_is_non_streaming() {
 #[test]
 fn a_conformant_call_is_forwarded() {
     assert_eq!(
-        decide(&request(json!("auto")), &response(r#"{"path":"a"}"#), true),
+        decide(
+            &request(json!("auto")),
+            &response(r#"{"path":"a"}"#),
+            RepairTurn::ON
+        ),
         Decision::Forward(Skipped::Conformant)
     );
 }
@@ -107,7 +111,7 @@ fn an_already_required_request_is_not_reissued() {
         decide(
             &request(json!("required")),
             &response(r#"{"path":"a","max_lines":"42"}"#),
-            true
+            RepairTurn::ON
         ),
         Decision::Forward(Skipped::AlreadyConstrained)
     );
@@ -120,7 +124,7 @@ fn an_absent_tool_choice_counts_as_auto() {
     let d = decide(
         &request(json!(null)),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        true,
+        RepairTurn::ON,
     );
     assert!(matches!(d, Decision::Reissue { .. }));
 }
@@ -131,7 +135,7 @@ fn disabling_repair_forwards_everything() {
         decide(
             &request(json!("auto")),
             &response(r#"{"path":"a","max_lines":"42"}"#),
-            false
+            RepairTurn::OFF
         ),
         Decision::Forward(Skipped::Disabled)
     );
@@ -140,7 +144,7 @@ fn disabling_repair_forwards_everything() {
 #[test]
 fn an_unreadable_body_is_forwarded() {
     assert_eq!(
-        decide(b"not json", &response(r#"{"path":"a"}"#), true),
+        decide(b"not json", &response(r#"{"path":"a"}"#), RepairTurn::ON),
         Decision::Forward(Skipped::Unreadable)
     );
 }
@@ -153,7 +157,7 @@ fn a_response_without_tool_calls_is_not_applicable() {
     .unwrap();
 
     assert_eq!(
-        decide(&request(json!("auto")), &plain, true),
+        decide(&request(json!("auto")), &plain, RepairTurn::ON),
         Decision::Forward(Skipped::NotApplicable)
     );
 }
@@ -221,7 +225,7 @@ fn the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it() {
     let Decision::Reissue { body, .. } = decide(
         &request(json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
-        true,
+        RepairTurn::ON,
     ) else {
         panic!("expected a re-issue");
     };

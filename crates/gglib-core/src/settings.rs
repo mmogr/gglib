@@ -202,8 +202,8 @@ pub struct Settings {
     /// the two paths cannot drift.
     pub proxy_loop_detection: Option<bool>,
 
-    /// Whether a tool call that fails schema validation is re-issued with
-    /// `tool_choice: "required"`.
+    /// Whether a tool call that fails schema validation is re-issued, with
+    /// `tool_choice: "required"` or as a second draw under gglib's grammar.
     ///
     /// `None` (the default) means **on**, the same inverse polarity as
     /// [`Self::proxy_loop_detection`] and for the same reason: it is

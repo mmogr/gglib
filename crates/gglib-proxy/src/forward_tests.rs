@@ -324,7 +324,7 @@ async fn a_bad_streamed_tool_call_is_repaired_before_the_client_sees_it() {
         Some(RepairContext {
             req_builder: client.post(&url),
             request_body: body,
-            enabled: true,
+            turn: RepairTurn::ON,
         }),
         false,
     )
@@ -470,7 +470,7 @@ async fn a_stream_that_dies_mid_turn_still_releases_its_held_tool_call() {
         Some(RepairContext {
             req_builder: client.post(&url),
             request_body: body,
-            enabled: true,
+            turn: RepairTurn::ON,
         }),
         false,
     )
@@ -540,7 +540,7 @@ async fn a_conformant_streamed_tool_call_is_not_reissued() {
         Some(RepairContext {
             req_builder: client.post(&url),
             request_body: body,
-            enabled: true,
+            turn: RepairTurn::ON,
         }),
         false,
     )

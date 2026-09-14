@@ -84,6 +84,7 @@ use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
+use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
@@ -292,7 +293,7 @@ pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 /// So this is the one bound that keeps an unresponsive upstream from turning a
 /// repair into an unbounded silence. Comfortably under
 /// [`FIRST_BYTE_DEADLINE_SECS`], because a re-issue is a *constrained* call —
-/// `tool_choice: "required"` and non-streaming — not a fresh full turn. On
+/// under a grammar, and non-streaming — not a fresh full turn. On
 /// expiry the turn falls open to the original frames, exactly as every other
 /// repair failure path already does.
 const REPAIR_REISSUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
@@ -556,8 +557,8 @@ pub(crate) struct ForwardRequest<'a> {
     /// Cache-hit telemetry sink, fed from both the streaming and
     /// non-streaming response paths.
     pub cache_metrics: Arc<CacheMetricsStore>,
-    /// Whether a tool call failing schema validation is re-issued with
-    /// `tool_choice: "required"`.
+    /// Whether a tool call failing schema validation is re-issued, with
+    /// `tool_choice: "required"` or under gglib's own grammar.
     ///
     /// From `Settings.tool_call_repair`, which is absent-means-on. Resolved
     /// where the settings snapshot already lives rather than read again here,
@@ -831,7 +832,10 @@ pub(crate) async fn forward_chat_completion(
             permit,
             config,
             session_id,
-            repair_enabled,
+            RepairTurn {
+                enabled: repair_enabled,
+                gglib_grammar: grammar_enforced,
+            },
         ));
     }
 
@@ -954,20 +958,6 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
 /// [`inject_streaming_body_overrides`]), and a `prompt_progress` chunk has no
 /// `choices` key, so re-emitting it unasked puts a non-`OpenAI` chunk in front
 /// of every schema-validating client.
-/// Everything a streaming turn needs to re-issue itself as a tool-call repair.
-///
-/// Carried into the stream because the decision cannot be made until the call
-/// is complete, and by then only this function knows what was emitted. The
-/// re-issue itself is non-streaming — see [`crate::repair`].
-pub(crate) struct RepairContext {
-    /// Cloneable builder for the same upstream endpoint and headers.
-    pub req_builder: reqwest::RequestBuilder,
-    /// The request body as forwarded upstream, which the repair derives from.
-    pub request_body: Bytes,
-    /// Whether repair is enabled at all.
-    pub enabled: bool,
-}
-
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
@@ -1134,6 +1124,7 @@ pub(crate) async fn stream_response_to_channel(
                     if !held_tool_frames.is_empty() {
                         let mut flush = resolve_held_tool_calls(
                             repair.as_ref(),
+                            dialect.as_ref(),
                             &tool_calls,
                             std::mem::take(&mut held_tool_frames),
                             &encoder,
@@ -1320,6 +1311,7 @@ async fn emit_held_frames(
 /// fail-open rule truncation and the loop guard follow.
 async fn resolve_held_tool_calls(
     repair: Option<&RepairContext>,
+    dialect: Option<&DialectSpec>,
     tool_calls: &crate::repair::ToolCallAccumulator,
     original_frames: Vec<Bytes>,
     encoder: &SseEncoder,
@@ -1339,7 +1331,7 @@ async fn resolve_held_tool_calls(
         return original_frames;
     };
 
-    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.enabled);
+    let decision = crate::repair::decide(&ctx.request_body, &assembled_bytes, ctx.turn);
     // A call the validator could not judge at all leaves repair with no
     // opinion to act on. Recorded before the early return, because a client
     // whose tools all use `anyOf` gets zero repair coverage and, without
@@ -1357,7 +1349,7 @@ async fn resolve_held_tool_calls(
 
     warn!(
         violations = ?violations,
-        "tool call does not match the advertised schema; re-issuing with tool_choice=required"
+        "tool call does not match the advertised schema; asking upstream again"
     );
     outcome.repair_attempted = true;
 
@@ -1384,6 +1376,9 @@ async fn resolve_held_tool_calls(
     let Some(repaired) = repaired else {
         return original_frames;
     };
+    // Under `tool_choice: "none"` llama-server parses no tool calls, so the
+    // answer can be dialect markup: read it as a non-streaming response is.
+    let (repaired, _) = normalize_non_streaming_body(repaired, dialect);
 
     // `choose` re-validates: a repair that is still wrong is discarded.
     let (chosen, did_repair) = crate::repair::choose(
@@ -1566,3 +1561,8 @@ mod forward_shaping_tests;
 #[cfg(test)]
 #[path = "forward_progress_tests.rs"]
 mod forward_progress_tests;
+
+/// A streamed turn gglib's own grammar constrained, repaired by a second draw.
+#[cfg(test)]
+#[path = "forward_repair_grammar_tests.rs"]
+mod forward_repair_grammar_tests;

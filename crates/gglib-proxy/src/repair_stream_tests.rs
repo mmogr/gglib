@@ -72,7 +72,7 @@ fn the_assembled_shape_validates_like_a_real_response() {
     let bytes = serde_json::to_vec(&wrapped).unwrap();
 
     assert!(matches!(
-        decide(&request(json!("auto")), &bytes, true),
+        decide(&request(json!("auto")), &bytes, RepairTurn::ON),
         Decision::Reissue { .. }
     ));
 }

@@ -87,9 +87,10 @@ pub struct SettingsSetArgs {
     /// auto-detected recipe or the floor). Anything you set stands.
     #[arg(long)]
     pub agentic_sampling: Option<bool>,
-    /// Re-issue a malformed tool call with `tool_choice: "required"`.
+    /// Re-issue a malformed tool call under a grammar: `tool_choice: "required"`, or gglib's own.
     /// Enabled by default: a call that fails schema validation is
-    /// attempted once more with llama.cpp's own grammar made non-lazy,
+    /// attempted once more, with llama.cpp's own grammar made non-lazy or,
+    /// on a turn gglib's grammar constrained, as a second draw under it,
     /// which repairs most packaging failures instead of forwarding a
     /// broken turn. Set false when measuring a model's raw behaviour.
     #[arg(long)]

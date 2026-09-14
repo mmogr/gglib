@@ -57,7 +57,7 @@ pub struct ContextSnapshot {
     /// streams via [`ContextMetricsStore::flag_dialect_residue`].
     pub dialect_residue: bool,
     /// `true` when this turn's tool call failed schema validation and a
-    /// re-issue with `tool_choice: "required"` produced a conformant one.
+    /// re-issue, under `required` or gglib's own grammar, produced a conformant one.
     /// Back-patched after the response streams via
     /// [`ContextMetricsStore::flag_tool_repair`].
     pub tool_repaired: bool,
@@ -101,7 +101,7 @@ pub struct ContextMetricsStore {
     /// buffer — eviction must not lose the count.
     dialect_residue_total: AtomicU64,
     /// Count of turns whose tool call failed schema validation and was
-    /// re-issued with `tool_choice: "required"`.
+    /// re-issued, with `tool_choice: "required"` or under gglib's own grammar.
     ///
     /// Counted whether or not the re-issue worked. An attempt is evidence
     /// that this model's `auto` path is unconstrained — the per-model

@@ -48,7 +48,7 @@ already has".
         │                    ┌─────┴─────┐
         │                    ▼           ▼
         │                 forward    re-issue same messages
-        │                            with tool_choice=required
+        │                            (required, or a second draw)
         │                                 │
         │                                 ▼
         │                          llama-server (grammar installed)
@@ -124,7 +124,10 @@ All four must hold. Anything else forwards unchanged.
 2. The **original request's `tool_choice` was `auto`** (or absent). If the
    client already asked for `required` and the result is still invalid,
    re-issuing with `required` changes nothing — the grammar was already
-   installed and the violation is something it does not cover.
+   installed and the violation is something it does not cover. The
+   exception is a turn gglib's own grammar constrained (below): that grammar
+   is weaker than upstream's, so its call is judged, and a violation is drawn
+   again under the same grammar.
 3. The response is not already a repair attempt. **One attempt, never a loop.**
 4. Repair is enabled (`Settings.tool_call_repair`, default on, with a
    `GGLIB_DISABLE_TOOL_REPAIR` env kill switch matching the convention of
@@ -144,8 +147,10 @@ saving.
 
 ## The repair request
 
-Identical to the original except `tool_choice: "required"`. Same messages, same
-sampling, same model, same session. Rationale for each choice:
+On an `auto` turn, identical to the original except `tool_choice: "required"`;
+on a turn gglib's own grammar constrained, the forwarded body again (below).
+Same messages, same sampling, same model, same session. Rationale for each
+choice:
 
 - **Same messages.** The prefix is unchanged, so the prompt cache serves the
   prefill and the second generation costs decode only.
@@ -164,10 +169,24 @@ dialect models, installs gglib's own grammar, and **rewrites `tool_choice` to
 converts it into a request that asks for no tool call at all, and repair
 silently does nothing.
 
-The repair request must therefore carry a marker that suppresses stage 6, so
-upstream's grammar is the one that fires. This is the whole point of the
-mechanism: gglib's grammar is weaker than upstream's, and on this path we want
-upstream's.
+The repair request therefore never goes back through the pipeline: it is the
+forwarded body with `tool_choice` set to `"required"`, sent as it is, so
+upstream's grammar is the one that fires.
+
+### A turn gglib's own grammar constrained
+
+When stage 6 installed gglib's grammar, the forwarded body already carries it,
+with `tool_choice: "none"`, and llama-server refuses a custom grammar beside
+`required`. So the re-issue cannot switch to upstream's grammar. It is the same
+body sent again, non-streaming: a second draw under the same constraint, not a
+stronger one, and it may choose a different call. A draw that repeats the same
+call gains nothing, and `choose` then keeps the original.
+
+llama-server parses no tool calls under `tool_choice: "none"`, so the second
+draw comes back as the model's dialect markup in `content`. It is read the way
+a non-streaming response is, by the same dialect parser, before it is judged.
+Any re-issue's answer is read that way; for a model with no dialect, that
+changes nothing.
 
 ## When repair fails
 
@@ -209,8 +228,9 @@ on a repaired turn.
 **One accepted wart.** A turn that emits text *then* a bad tool call will show
 the client attempt 1's text followed by attempt 2's call. The text was the
 model's preamble and the call is now correct, which beats the alternative; and
-under `tool_choice: "required"` the re-issue emits no text of its own. Measured
-turns on the `auto` path emitted empty content anyway.
+under `tool_choice: "required"` the re-issue emits no text of its own, and a
+second draw under gglib's grammar answers in markup that is read as the call,
+not as text. Measured turns on the `auto` path emitted empty content anyway.
 
 This is acceptable because a tool call is not consumable incrementally: no
 agentic client can act on half a call, and every one of them reassembles the
@@ -244,9 +264,10 @@ is how that gets measured in production rather than in a `--verbose` log.
   kind, plus the nested-type case the harness got wrong.
 - Repair trigger: unit tests over `(verdict, original tool_choice, is_retry)`
   asserting fires/does-not-fire.
-- Stage-6 suppression: a test that a repair request survives the pipeline with
-  `tool_choice: "required"` intact — the interaction above, pinned so a future
-  change to `constrain` cannot silently disable repair.
+- Stage-6 bypass: `the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`
+  asserts that stage 6 would rewrite a repair body's `tool_choice` to `"none"`,
+  which is why the re-issue never goes back through the pipeline; the
+  second-draw tests pin the turn stage 6 did constrain.
 - Streaming: integration test that tool-call deltas are withheld until
   `finish_reason` and that text deltas are not.
 - End-to-end: replay a recorded Llama 3.2 `auto` response with
