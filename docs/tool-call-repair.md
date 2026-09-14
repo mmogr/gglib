@@ -158,7 +158,18 @@ choice:
   produced the improvement, and the grammar is doing the work.
 - **`required` is semantically safe here.** Forcing a call normally overrides a
   model's judgement about whether to call at all — but on this path the model
-  *already emitted a call*. We know the intent; we are fixing the shape.
+  *already emitted a call*, so asking for one again takes nothing from it.
+
+**The re-issue is a fresh generation, not a correction.** Nothing carries the
+first call's function name or arguments into the second request: the model is
+asked the same question again under a stronger constraint (or, on a turn
+gglib's own grammar constrained, under the same one), and it may answer with a
+different tool, or the same tool with different arguments, not only the same
+call in a valid shape. What repair guarantees is that the call the client
+receives validates against the schema, not that it is the call the model first
+meant. The client never saw the held-back call, so it has nothing to undo; but
+text the model streamed before the call, which the client did see, may no
+longer match the call that follows it.
 
 ### One interaction that must not be missed
 
