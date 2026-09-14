@@ -54,18 +54,6 @@ mod wire;
 
 use wire::HistoryEnvelope;
 
-/// Reached by `loop_guard_tests.rs` through `use super::*`.
-///
-/// The scan no longer names these — the results join moved to [`wire`] — but
-/// the tests that pin its behaviour still build answers by hand. Imported here
-/// rather than in the test file because that file is frozen at its current size
-/// by the complexity ratchet.
-#[cfg(test)]
-use {
-    gglib_core::domain::agent::{batch_results_hash, hash_result_content},
-    serde_json::Value,
-};
-
 // =============================================================================
 // Configuration
 // =============================================================================
