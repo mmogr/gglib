@@ -252,6 +252,15 @@ pub(crate) async fn test_core() -> Arc<AppCore> {
 /// the state the lifecycle tests exercise.
 #[allow(dead_code)]
 pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
+    let pool = setup_test_database().await.expect("in-memory DB");
+    test_core_and_proxy_over(&CoreFactory::build_repos(pool))
+}
+
+/// [`test_core_and_proxy`] over repositories the caller built, so a test can
+/// put a repository of its own in place of one of them.
+pub(crate) fn test_core_and_proxy_over(
+    repos: &gglib_core::ports::Repos,
+) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
     use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
     use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
     use gglib_mcp::McpService;
@@ -259,8 +268,6 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
     use gglib_runtime::process::ProcessManager;
     use gglib_runtime::proxy::ProxySupervisor;
 
-    let pool = setup_test_database().await.expect("in-memory DB");
-    let repos = CoreFactory::build_repos(pool);
     let core = Arc::new(AppCore::new(repos.clone()));
 
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
