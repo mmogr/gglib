@@ -3,8 +3,10 @@
 //! `gglib remote enable` writes here every time, and the tunnel reuses what it
 //! finds: the endpoint key lasts, so a device pairs once instead of at every
 //! restart (ADR 0012, decision 4, reversed — see the amendment dated
-//! 2026-09-10). Deleting this file is what revokes a ticket, which is why
-//! `gglib remote status` prints its path.
+//! 2026-09-10). Deleting this file retires this machine's address and revokes
+//! no device: the tunnel mints a new key the next time it comes up, and still
+//! admits every device key kept beside this one. `gglib remote status` prints
+//! the path.
 
 use std::path::PathBuf;
 

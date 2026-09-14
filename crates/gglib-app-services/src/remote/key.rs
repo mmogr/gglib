@@ -183,15 +183,17 @@ impl Settled {
 /// issued. Minting a new one every session made the address change for a
 /// reason nobody outside this process could see, so every paired device
 /// paired again after a reboot — paying a real cost daily to buy a
-/// revocation nobody was reaching for.
+/// rotation nobody was reaching for.
 ///
 /// What made that trade defensible was the arithmetic in decision 3: six
 /// digits and two minutes are enough only while a guesser has to find the
 /// listener first. A lasting ticket removes that step, so the counting had
 /// to move to where the guesses arrive — modelpipe 0.5's
-/// `grant_once_bounded`, which burns a grant at the edge. Revoking is now
-/// deleting this file, and it is a thing a person does deliberately rather
-/// than a side effect of a restart.
+/// `grant_once_bounded`, which burns a grant at the edge. Retiring the
+/// address is now deleting this file, a thing a person does deliberately
+/// rather than a side effect of a restart. It revokes no device: `arm` seeds
+/// every stored device key onto the listener at the new address, so cutting
+/// a device off is [`RemoteOps::forget`](super::RemoteOps::forget).
 ///
 /// Separate from `arm` so the decision can be read without binding an
 /// endpoint or writing a key: `arm` is a network call and a file, and this

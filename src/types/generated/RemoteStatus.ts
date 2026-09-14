@@ -66,9 +66,10 @@ has_remote_key: boolean,
  */
 remote_enabled: boolean, 
 /**
- * Where the endpoint key is kept; deleting it revokes the ticket for
- * *every* device at once. Retiring one device is a `DELETE` of
- * `/api/remote/devices/{device}`.
+ * Where the endpoint key is kept. Deleting it retires this machine's
+ * address and revokes no device: the tunnel comes up at a new address
+ * that still admits every device key. Retiring a device is a `DELETE`
+ * of `/api/remote/devices/{device}`.
  */
 identity_path: string | null, 
 /**

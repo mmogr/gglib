@@ -89,9 +89,10 @@ pub(crate) struct RemoteStatus {
     pub has_remote_key: bool,
     /// Whether this machine comes back reachable after a restart.
     pub remote_enabled: bool,
-    /// Where the endpoint key is kept; deleting it revokes the ticket for
-    /// *every* device at once. Retiring one device is a `DELETE` of
-    /// `/api/remote/devices/{device}`.
+    /// Where the endpoint key is kept. Deleting it retires this machine's
+    /// address and revokes no device: the tunnel comes up at a new address
+    /// that still admits every device key. Retiring a device is a `DELETE`
+    /// of `/api/remote/devices/{device}`.
     pub identity_path: Option<String>,
     /// Every device this machine has issued a key to. Carried on the status
     /// rather than fetched separately: the roster is a settings field this

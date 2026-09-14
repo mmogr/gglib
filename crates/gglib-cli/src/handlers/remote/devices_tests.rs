@@ -1,4 +1,4 @@
-//! What a roster row reads as in the terminal.
+//! What a roster row, and `forget`'s help, read as in the terminal.
 
 use super::*;
 
@@ -177,4 +177,33 @@ fn the_ids_this_machine_mints_are_device_ids() {
     for ok in ["dev-0a1b2c3d", "dev-00000000", "a", "A.b_c-9"] {
         assert!(is_device_id(ok), "{ok:?}");
     }
+}
+
+/// [#1036]: `forget --help` is where someone looks for a way to cut devices
+/// off, and it pointed them at the endpoint identity, whose deletion retires
+/// the address and revokes no device's key.
+///
+/// Whitespace is folded because clap joins a doc comment's lines itself.
+///
+/// [#1036]: https://github.com/mmogr/gglib/issues/1036
+#[test]
+fn forget_help_says_deleting_the_identity_retires_the_address_not_a_device() {
+    use clap::CommandFactory as _;
+
+    let mut cli = crate::Cli::command();
+    let forget = cli
+        .find_subcommand_mut("remote")
+        .and_then(|remote| remote.find_subcommand_mut("forget"))
+        .expect("`gglib remote forget` exists");
+    let help = forget.render_long_help().to_string();
+    let help = help.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    assert!(
+        !help.contains("revokes everything"),
+        "the claim that deleting the identity revokes every device is gone: {help}"
+    );
+    assert!(
+        help.contains("retires this machine's address and revokes no device"),
+        "what replaced it says what the deletion does: {help}"
+    );
 }
