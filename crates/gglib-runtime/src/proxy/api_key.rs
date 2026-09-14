@@ -51,21 +51,26 @@ pub(super) async fn resolve_api_key(
 
     let key = gglib_core::access::generate_api_key();
 
-    // Only write back settings we successfully read. Saving a `Settings`
-    // reconstructed from defaults after a failed load would silently clear
-    // every other stored preference to buy one field.
-    match stored {
-        Some(mut settings) => {
+    // Nothing is written when the read above failed: the store is what is
+    // failing. And the write is `modify`, never a save of the record that
+    // read returned, which would put every field back as it was read and
+    // lose a roster row or any other write landed since.
+    if stored.is_none() {
+        warn!("generated an API key but settings were unreadable, so it was not saved");
+        return (Some(key), ApiKeySource::Generated);
+    }
+    match settings_repo
+        .modify(&|settings: &mut gglib_core::Settings| {
             settings.proxy_api_key = Some(key.clone());
-            match settings_repo.save(&settings).await {
-                Ok(()) => info!("generated an API key for the non-loopback bind and saved it"),
-                // Still guard this run. Refusing to start would be worse, and an
-                // unsaved key beats an open endpoint on a network — the banner
-                // prints it either way, so the operator can copy it.
-                Err(e) => warn!("generated an API key but could not save it: {e}"),
-            }
-        }
-        None => warn!("generated an API key but settings were unreadable, so it was not saved"),
+            Ok(())
+        })
+        .await
+    {
+        Ok(_) => info!("generated an API key for the non-loopback bind and saved it"),
+        // Still guard this run. Refusing to start would be worse, and an
+        // unsaved key beats an open endpoint on a network — the banner
+        // prints it either way, so the operator can copy it.
+        Err(e) => warn!("generated an API key but could not save it: {e}"),
     }
 
     (Some(key), ApiKeySource::Generated)
@@ -76,7 +81,7 @@ mod tests {
     use std::sync::Mutex;
 
     use gglib_core::Settings;
-    use gglib_core::ports::RepositoryError;
+    use gglib_core::ports::{CoreError, RepositoryError, SettingsChange};
 
     use super::*;
 
@@ -86,6 +91,7 @@ mod tests {
     struct Recording {
         stored: Mutex<Settings>,
         saves: Mutex<usize>,
+        modifies: Mutex<usize>,
     }
 
     impl Recording {
@@ -95,6 +101,7 @@ mod tests {
             Arc::new(Self {
                 stored: Mutex::new(settings),
                 saves: Mutex::new(0),
+                modifies: Mutex::new(0),
             })
         }
 
@@ -104,6 +111,10 @@ mod tests {
 
         fn saves(&self) -> usize {
             *self.saves.lock().unwrap()
+        }
+
+        fn modifies(&self) -> usize {
+            *self.modifies.lock().unwrap()
         }
     }
 
@@ -116,6 +127,14 @@ mod tests {
             *self.stored.lock().unwrap() = settings.clone();
             *self.saves.lock().unwrap() += 1;
             Ok(())
+        }
+        /// The read, the change and the write under one lock, as the SQLite
+        /// store's one transaction is.
+        async fn modify(&self, change: &SettingsChange<'_>) -> Result<Settings, CoreError> {
+            let mut stored = self.stored.lock().unwrap();
+            change(&mut stored)?;
+            *self.modifies.lock().unwrap() += 1;
+            Ok(stored.clone())
         }
     }
 
@@ -140,7 +159,11 @@ mod tests {
                 None,
                 "{host}: nothing may be written back into a setting just cleared"
             );
-            assert_eq!(store.saves(), 0, "{host}: a loopback bind saves nothing");
+            assert_eq!(
+                store.saves() + store.modifies(),
+                0,
+                "{host}: a loopback bind writes nothing"
+            );
         }
     }
 
@@ -162,7 +185,12 @@ mod tests {
                 Some(minted.as_str()),
                 "{host}: the minted key is persisted, so the clear did not stick"
             );
-            assert_eq!(store.saves(), 1, "{host}: written exactly once");
+            assert_eq!(store.modifies(), 1, "{host}: written exactly once");
+            assert_eq!(
+                store.saves(),
+                0,
+                "{host}: never a save of the whole record, which loses a write landed since its read"
+            );
         }
     }
 
@@ -176,7 +204,11 @@ mod tests {
 
         assert_eq!(key.as_deref(), Some("set-by-remote-enable"));
         assert_eq!(source, ApiKeySource::Settings);
-        assert_eq!(store.saves(), 0, "reading a stored key rewrites nothing");
+        assert_eq!(
+            store.saves() + store.modifies(),
+            0,
+            "reading a stored key rewrites nothing"
+        );
     }
 
     /// And a flag outranks the store, which is why `--api-key` cannot be

@@ -119,12 +119,12 @@ pub struct RemoteOps {
     /// change would vanish. Separate from `live` because the settings write
     /// is slow and `invite` must not hold the serve slot across it.
     ///
-    /// It covers the roster's own writers and nothing else. `disable`
-    /// clearing the switch, `connect` storing a pairing, the settings form
-    /// and `gglib config settings set` in another process go through
-    /// `SettingsService::update`, which reads, merges and writes in one
-    /// transaction and rewrites only the fields it set, so none of them can
-    /// drop a row this lock let through.
+    /// It covers the roster's own writers and nothing else, and needs to: any
+    /// other settings write — `disable`, `connect`, the settings form, a proxy
+    /// minting its key, `gglib config settings set` in another process — goes
+    /// through `SettingsRepository::modify`, one transaction that rewrites only
+    /// the fields it changed. Only `gglib config settings reset` writes the
+    /// whole record, roster included, and it means to.
     roster: Arc<Mutex<()>>,
     /// True from the first line of the daemon's startup `resume` to its last:
     /// a wider span than the reservation that resume takes, because
