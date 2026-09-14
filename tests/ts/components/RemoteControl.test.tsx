@@ -72,6 +72,7 @@ function paired(): RemoteDevice {
     redeemed_at: Date.now() - 86_400_000,
     last_seen: Date.now() - 60_000,
     admitted: true,
+    recorded: true,
   };
 }
 
@@ -206,6 +207,7 @@ describe('RemoteControl', () => {
           redeemed_at: null,
           last_seen: Date.now() - 120_000,
           admitted: true,
+          recorded: true,
         },
       ],
     });
@@ -231,6 +233,7 @@ describe('RemoteControl', () => {
           // Minted and seeded at the edge before the code was ever shown, so
           // admission is not what tells the two apart.
           admitted: true,
+          recorded: true,
         },
       ],
     });
@@ -251,6 +254,7 @@ describe('RemoteControl', () => {
           last_seen: null,
           // What a half-unwound invite leaves: a row the edge has dropped.
           admitted: false,
+          recorded: true,
         },
       ],
     });
@@ -274,6 +278,7 @@ describe('RemoteControl', () => {
           redeemed_at: Date.now() - 5_000,
           last_seen: Date.now() - 5_000,
           admitted: null,
+          recorded: true,
         },
         {
           id: 'dev-22222222',
@@ -282,6 +287,7 @@ describe('RemoteControl', () => {
           redeemed_at: Date.now() - 5_000,
           last_seen: Date.now() - 5_000,
           admitted: false,
+          recorded: true,
         },
         {
           id: 'dev-33333333',
@@ -290,6 +296,7 @@ describe('RemoteControl', () => {
           redeemed_at: Date.now() - 5_000,
           last_seen: null,
           admitted: true,
+          recorded: true,
         },
       ],
     });
@@ -302,6 +309,50 @@ describe('RemoteControl', () => {
     expect(screen.getAllByText(/not admitted/)).toHaveLength(1);
   });
 
+  it('a key the device list has no record of says so, and whether the edge admits it', async () => {
+    // #1034: a key the machine holds that no roster row lists. Its id is all
+    // that is known of it, so the row must not read as an invite or a device,
+    // and Forget has to be there to retire it.
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      enabled: true,
+      devices: [
+        {
+          id: 'dev-11112222',
+          joined_at: 0,
+          redeemed_at: null,
+          last_seen: null,
+          admitted: true,
+          recorded: false,
+        },
+      ],
+    });
+    await open();
+
+    expect(screen.getByText('key held, no record · admitted')).toBeInTheDocument();
+    expect(screen.queryByText(/never joined/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Forget dev-11112222' })).toBeInTheDocument();
+  });
+
+  it('a row from a daemon older than the record flag reads as a device, not a stray key', async () => {
+    // The desktop app adopts whatever daemon answers, with no version check,
+    // and an older one sends no `recorded`. Every row it sends is a roster
+    // row, and reading the missing field as false would offer to forget each.
+    const older = {
+      id: 'dev-33334444',
+      label: 'iPad',
+      joined_at: Date.now() - 5_000,
+      redeemed_at: Date.now() - 5_000,
+      last_seen: Date.now() - 5_000,
+      admitted: true,
+    } as RemoteDevice;
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true, devices: [older] });
+    await open();
+
+    expect(screen.queryByText(/no record/)).not.toBeInTheDocument();
+    expect(screen.getByText(/last seen/)).toBeInTheDocument();
+  });
+
   it('two devices that named themselves the same thing are still two devices', async () => {
     // A device names itself, so nothing stops two from choosing one name.
     // This is the screen for deciding which to revoke; if the rows, their
@@ -311,6 +362,7 @@ describe('RemoteControl', () => {
       redeemed_at: Date.now() - 5_000,
       last_seen: Date.now() - 5_000,
       admitted: true,
+      recorded: true,
     };
     applyRemoteStatus({
       ...IDLE_STATUS,
@@ -471,6 +523,7 @@ describe('RemoteControl', () => {
       redeemed_at: null,
       last_seen: null,
       admitted: true,
+      recorded: true,
     };
     applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
     inviteRemote.mockResolvedValue({

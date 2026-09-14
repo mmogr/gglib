@@ -38,4 +38,11 @@ last_seen: number | null,
  * is down — nothing admits then, and `false` would read as "this one
  * device was dropped".
  */
-admitted: boolean | null, };
+admitted: boolean | null, 
+/**
+ * Whether the roster lists this device. `false` is a key this machine
+ * holds with no row for it, which nothing should leave but a surface
+ * must show: `id` and `admitted` are all that is known of it, and a
+ * `DELETE` of it retires the key.
+ */
+recorded: boolean, };

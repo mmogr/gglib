@@ -11,9 +11,10 @@ use anyhow::{Context, Result, anyhow};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use gglib_core::{CorsConfig, DAEMON_PORT, paths::data_root};
+use gglib_core::{CorsConfig, DAEMON_PORT, SettingsUpdate, paths::data_root};
 
-use crate::bootstrap::{ServerConfig, bootstrap};
+use crate::bootstrap::bootstrap;
+use crate::config::ServerConfig;
 use crate::state::AppState;
 
 // Stays `pub` because `lib.rs` re-exports it — a re-export chain must be public
@@ -270,10 +271,14 @@ async fn resolve_daemon_api_key(bind_host: &str, state: &AppState) -> Option<Str
     }
 
     let key = gglib_core::access::generate_api_key();
-    let mut updated = stored;
-    updated.proxy_api_key = Some(key.clone());
-    match settings.save(&updated).await {
-        Ok(()) => announce_api_key(&key, "generated"),
+    // An update, not a save of the record read above, which would put every
+    // field back as it was read and lose any write landed since.
+    let update = SettingsUpdate {
+        proxy_api_key: Some(Some(key.clone())),
+        ..SettingsUpdate::default()
+    };
+    match settings.update(update).await {
+        Ok(_) => announce_api_key(&key, "generated"),
         Err(e) => {
             warn!("generated a daemon API key but could not save it: {e}");
             announce_api_key(&key, "generated, not saved");

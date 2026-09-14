@@ -182,9 +182,9 @@ pub struct RemoteStatusSnapshot {
     /// reversed) — and shown because deleting this file is how this
     /// machine's address is retired, which is a thing a person cannot do
     /// without being told where it is. It revokes no device: the next arm
-    /// mints a new key here and seeds every stored device key onto the new
-    /// listener, so a device that finds the new address with its old key is
-    /// admitted. Retiring one is
+    /// mints a new key here and seeds every device key the roster lists onto
+    /// the new listener, so a device that finds the new address with its old
+    /// key is admitted. Retiring one is
     /// [`RemoteOps::forget`](super::RemoteOps::forget), and leaves the rest
     /// untouched.
     pub identity_path: Option<String>,
@@ -225,4 +225,10 @@ pub struct DeviceView {
     /// tunnel is down, because then nothing admits and a `false` would read
     /// as this one device having been dropped.
     pub admitted: Option<bool>,
+    /// Whether the roster lists this device. `false` is a key this machine
+    /// holds with no row for it: the id and `admitted` are all that is known,
+    /// the timestamps are empty and `joined_at` is zero, and `forget` retires
+    /// it. Nothing should leave one; it is listed so that if something does,
+    /// no key is admitted that a person cannot see.
+    pub recorded: bool,
 }

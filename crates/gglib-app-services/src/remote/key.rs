@@ -192,8 +192,8 @@ impl Settled {
 /// `grant_once_bounded`, which burns a grant at the edge. Retiring the
 /// address is now deleting this file, a thing a person does deliberately
 /// rather than a side effect of a restart. It revokes no device: `arm` seeds
-/// every stored device key onto the listener at the new address, so cutting
-/// a device off is [`RemoteOps::forget`](super::RemoteOps::forget).
+/// every device key the roster lists onto the listener at the new address,
+/// so cutting a device off is [`RemoteOps::forget`](super::RemoteOps::forget).
 ///
 /// Separate from `arm` so the decision can be read without binding an
 /// endpoint or writing a key: `arm` is a network call and a file, and this

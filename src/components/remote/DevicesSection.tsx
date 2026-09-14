@@ -163,6 +163,16 @@ export const DevicesSection: FC<DevicesSectionProps> = ({ onNotice }) => {
  * arrived. `last_seen` is the second opinion that prevents it.
  */
 function describe(device: RemoteDevice): string {
+  // `=== false`, not a falsy test: a daemon older than this field sends none,
+  // and every row it sends is a roster row. The CLI reads it the same way.
+  if (device.recorded === false) {
+    // A key this machine holds that no roster row lists (#1034): the id above
+    // and whether the edge admits it are all that is known, and Forget
+    // retires the key. The CLI's `describe` says the same of it.
+    const admitted =
+      device.admitted === null ? '' : device.admitted ? ' · admitted' : ' · not admitted';
+    return `key held, no record${admitted}`;
+  }
   if (device.redeemed_at === null && device.last_seen === null) {
     // An invite the edge has stopped honouring is still one nobody took, and
     // worth saying twice: a half-unwound invite leaves exactly this row. The

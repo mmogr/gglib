@@ -23,6 +23,8 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use super::RemoteOps;
+use super::device_keys::held_ids;
+use super::device_view::viewed;
 use super::enrolment::{forget, offer};
 use super::pairing::Offer;
 use super::resume_wait::Waited;
@@ -30,7 +32,6 @@ use super::roster::read_roster;
 use super::slot::Busy;
 use super::types::{DeviceView, Enabled};
 use crate::error::GuiError;
-use gglib_core::Device;
 
 impl RemoteOps {
     /// Offer a code that hands one new device a key of its own.
@@ -202,15 +203,22 @@ impl RemoteOps {
     ///
     /// `Internal` when the roster cannot be read.
     pub async fn list(&self) -> Result<Vec<DeviceView>, GuiError> {
-        // Settings first and the serve slot second, the order `status` reads
-        // them in. Taken the other way round, a row read mid-`forget` could
-        // come back "admitted" for a key the edge had already dropped.
-        let roster = read_roster(&self.core).await?;
+        // Settings and the key file first and the serve slot second, the
+        // order `status` reads them in. Taken the other way round, a row read
+        // mid-`forget` could come back "admitted" for a key the edge had
+        // already dropped. The two stores are read under `roster`, which
+        // `invite` and `forget` write both of under, so a device part-way
+        // through either is not listed as a key with no row. An unreadable
+        // key file costs only the rows for keys with no record, as in `status`.
+        let (roster, held) = {
+            let _guard = self.roster.lock().await;
+            (read_roster(&self.core).await?, held_ids(self))
+        };
         let admitting = {
             let live = self.live.lock().await;
             live.full().map(|l| l.handle.token_names())
         };
-        Ok(viewed(roster, admitting.as_deref()))
+        Ok(viewed(roster, &held, admitting.as_deref()))
     }
 }
 
@@ -253,34 +261,6 @@ fn refusal_without_a_tunnel(busy: Option<&Busy>, switched_on: bool) -> GuiError 
         }
         .to_owned(),
     )
-}
-
-/// Roster rows as the surfaces see them, given what the edge is admitting.
-///
-/// Shared with [`RemoteOps::status`](super::RemoteOps::status), which
-/// answers the same rows off the settings record it has already read. Two
-/// spellings of "is this device admitted" would be two chances to answer it
-/// differently, on the one question a person is asking the list.
-///
-/// Both callers read settings before the serve slot, so `admitted` is what
-/// the edge held when the slot was read — the later of the two reads.
-/// Mid-`forget` a row can come back "not admitted" for one read before it is
-/// gone; a device the edge had already dropped by then is never called
-/// admitted.
-pub(super) fn viewed(roster: Vec<Device>, admitting: Option<&[String]>) -> Vec<DeviceView> {
-    roster
-        .into_iter()
-        .map(|d| DeviceView {
-            // `None` with the tunnel down: nothing admits then, and saying
-            // `false` would read as "this device was dropped".
-            admitted: admitting.map(|names| names.contains(&d.id)),
-            id: d.id,
-            label: d.label,
-            joined_at: d.joined_at,
-            redeemed_at: d.redeemed_at,
-            last_seen: d.last_seen,
-        })
-        .collect()
 }
 
 #[cfg(test)]

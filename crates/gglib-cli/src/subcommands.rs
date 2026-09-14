@@ -183,7 +183,7 @@ pub enum RemoteCommand {
     /// this is how a device is cut off. Deleting the endpoint identity that
     /// `status` names retires this machine's address and revokes no device,
     /// because the tunnel comes up at a new address that still admits every
-    /// device key this machine holds.
+    /// device key the roster lists.
     Forget {
         /// The device id, as `gglib remote list` shows it
         device: String,

@@ -7,6 +7,7 @@
 //! the lock is not. One function with one caller, so there is still one place
 //! that gives the slot back.
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -79,7 +80,15 @@ impl RemoteOps {
         // `proxy_api_key`, locking the local proxy on the way out. The seed
         // itself happens under the install guard below; this read is what
         // makes an unreadable file fail while failing is still free.
-        let devices = device_keys::read_keys()?;
+        let devices = device_keys::read_keys(self)?;
+        // The ids the roster lists, read here for the key file's reason and
+        // one more: a key is seeded only if a row lists it (`seed_into` says
+        // why), and a settings read does not belong under the install guard.
+        let recorded: HashSet<String> = roster::read_roster(&self.core)
+            .await?
+            .into_iter()
+            .map(|device| device.id)
+            .collect();
 
         // The first and only thing this leaves on the machine, and the last
         // point at which leaving nothing is still free: everything that can
@@ -133,7 +142,7 @@ impl RemoteOps {
         }
         // Under the guard, which is what makes a `forget` racing an arm come
         // out right; `device_keys::seed` has the reasoning.
-        device_keys::seed(self, &handle, devices).await;
+        device_keys::seed(self, &handle, devices, &recorded).await;
         // The roster's writer, under the same guard as the install. The
         // gateway takes notes on the request path, where it may not await,
         // and this is the other end of that channel — here rather than below

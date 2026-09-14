@@ -12,6 +12,7 @@ fn unredeemed() -> RemoteDeviceDto {
         redeemed_at: None,
         last_seen: None,
         admitted: Some(true),
+        recorded: Some(true),
     }
 }
 
@@ -21,6 +22,32 @@ fn now() -> i64 {
         .ok()
         .and_then(|d| i64::try_from(d.as_millis()).ok())
         .unwrap_or(0)
+}
+
+/// #1034: a key the daemon holds with no roster row reads as one, and says
+/// whether the edge admits it, because a key admitted with no record is the
+/// row a person has to act on. A row from a daemon older than this client
+/// carries no answer and is a roster row.
+#[test]
+fn a_key_with_no_record_says_so_and_whether_it_is_admitted() {
+    let held = RemoteDeviceDto {
+        recorded: Some(false),
+        joined_at: 0,
+        ..unredeemed()
+    };
+    let line = describe(&held);
+    assert!(line.contains("key held, no record"), "{line}");
+    assert!(line.contains("; admitted"), "{line}");
+    assert!(
+        !line.contains("never joined"),
+        "it was never an invite: {line}"
+    );
+
+    let older = RemoteDeviceDto {
+        recorded: None,
+        ..unredeemed()
+    };
+    assert!(describe(&older).contains("never joined"));
 }
 
 /// An invite nobody took says so, rather than rendering as a device.

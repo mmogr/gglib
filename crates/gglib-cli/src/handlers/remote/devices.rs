@@ -89,6 +89,17 @@ pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
 /// never arrived — `last_seen` is the second opinion that prevents it.
 fn describe(d: &RemoteDeviceDto) -> String {
     let name = d.label.as_deref().unwrap_or("\u{2014}");
+    // A key this machine holds that no roster row lists (#1034): its id,
+    // printed beside this, and whether the edge admits it are all that is
+    // known. Said first, because every description below reads a roster row.
+    if d.recorded == Some(false) {
+        let admitted = match d.admitted {
+            Some(true) => "; admitted",
+            Some(false) => "; not admitted",
+            None => "",
+        };
+        return format!("{name}  (key held, no record{admitted})");
+    }
     if d.redeemed_at.is_none() && d.last_seen.is_none() {
         // An invite the edge has stopped honouring is still one nobody took,
         // and worth saying twice: an unwind that failed part-way, or an arm

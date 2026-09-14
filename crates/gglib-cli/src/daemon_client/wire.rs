@@ -72,6 +72,10 @@ pub(crate) struct RemoteDeviceDto {
     /// Whether the edge admits it now, or `None` with the tunnel down.
     #[serde(default)]
     pub admitted: Option<bool>,
+    /// Whether the roster lists it; `Some(false)` is a key held with no row.
+    /// `None` from a daemon older than this client, which listed rows only.
+    #[serde(default)]
+    pub recorded: Option<bool>,
 }
 
 /// `DELETE /api/remote/devices/{device}` response.

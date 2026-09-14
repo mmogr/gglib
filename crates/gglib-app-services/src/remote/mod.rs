@@ -4,6 +4,7 @@ mod backend;
 mod connect;
 mod connect_watch;
 mod device_keys;
+mod device_view;
 mod devices;
 mod enrolment;
 mod first_contact;
@@ -29,6 +30,7 @@ pub use types::{
     RemoteStatusSnapshot,
 };
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
@@ -111,23 +113,18 @@ pub struct RemoteOps {
     /// Serialises read-modify-write over the device roster *and its key
     /// file*, which are written together and must not interleave.
     ///
-    /// `SettingsService::update` is load, merge, save with no lock of its
-    /// own, and `remote_devices` is written whole — so an `invite` pushing a
-    /// row and a `forget` retaining one would each read the roster the other
-    /// had not yet written, and one change would vanish. Separate from
-    /// `live` because the settings write is slow and `invite` must not hold
-    /// the serve slot across it.
+    /// `remote_devices` is written whole, from a copy each writer reads
+    /// first — so an `invite` pushing a row and a `forget` retaining one
+    /// would each read the roster the other had not yet written, and one
+    /// change would vanish. Separate from `live` because the settings write
+    /// is slow and `invite` must not hold the serve slot across it.
     ///
-    /// **It covers the roster's own writers and nothing else.** Every other
-    /// caller of `SettingsService::update` — `disable` clearing the switch,
-    /// `connect` storing a pairing, the settings form, `gglib config settings
-    /// set` — loads and saves the whole record without taking this, so one
-    /// landing across a roster write still drops a row. That is a property of
-    /// the settings service rather than of this lock, and it predates the
-    /// roster; what the roster adds is the first writer driven by traffic
-    /// rather than by a person (`last_seen`, at most once a minute per
-    /// device), which makes the collision likelier than it was. The fix
-    /// belongs in `SettingsService`, not here.
+    /// It covers the roster's own writers and nothing else, and needs to: any
+    /// other settings write — `disable`, `connect`, the settings form, a proxy
+    /// minting its key, `gglib config settings set` in another process — goes
+    /// through `SettingsRepository::modify`, one transaction that rewrites only
+    /// the fields it changed. Only `gglib config settings reset` writes the
+    /// whole record, roster included, and it means to.
     roster: Arc<Mutex<()>>,
     /// True from the first line of the daemon's startup `resume` to its last:
     /// a wider span than the reservation that resume takes, because
@@ -137,15 +134,22 @@ pub struct RemoteOps {
     /// Bumped by every `disable`, so a call waiting out a resume can tell
     /// that the person changed their mind while it waited.
     disables: watch::Sender<u64>,
+    /// The file the device keys are kept in, or `None` for the one beside
+    /// the endpoint identity, where a daemon keeps them. A test names its
+    /// own: in a debug build the default is the checkout's `data/`, which is
+    /// also the installed daemon's.
+    device_keys: Option<PathBuf>,
 }
 
 impl RemoteOps {
-    /// Build the ops over the gateway the proxy was handed.
+    /// Build the ops over the gateway the proxy was handed, keeping device
+    /// keys in `device_keys`, or beside the endpoint identity when `None`.
     pub fn new(
         proxy: Arc<ProxyOps>,
         core: Arc<AppCore>,
         gateway: Arc<RemoteGateway>,
         emitter: Arc<dyn AppEventEmitter>,
+        device_keys: Option<PathBuf>,
     ) -> Self {
         Self {
             proxy,
@@ -159,6 +163,7 @@ impl RemoteOps {
             roster: Arc::new(Mutex::new(())),
             resuming: watch::channel(false).0,
             disables: watch::channel(0).0,
+            device_keys,
         }
     }
 
@@ -190,12 +195,19 @@ impl RemoteOps {
         // this machine" is a confident wrong answer on the one surface a
         // person opens to decide what to revoke. `RemoteOps::list` returns
         // the error; this is the trade the two make differently, on purpose.
-        let settings = match self.core.settings().get().await {
-            Ok(settings) => Some(settings),
-            Err(e) => {
-                warn!("could not read settings for remote status; reporting none: {e}");
-                None
-            }
+        let (settings, held) = {
+            // Under `roster`, which `invite` and `forget` write both stores
+            // under, so a device part-way through either is not one read of
+            // a key with no row.
+            let _guard = self.roster.lock().await;
+            let settings = match self.core.settings().get().await {
+                Ok(settings) => Some(settings),
+                Err(e) => {
+                    warn!("could not read settings for remote status; reporting none: {e}");
+                    None
+                }
+            };
+            (settings, device_keys::held_ids(self))
         };
         let remote_enabled = settings
             .as_ref()
@@ -220,7 +232,7 @@ impl RemoteOps {
         // "not admitted" from a session that had already gone.
         let admitting = live.full().map(|l| l.handle.token_names());
         let mut snapshot = RemoteStatusSnapshot {
-            devices: devices::viewed(roster, admitting.as_deref()),
+            devices: device_view::viewed(roster, &held, admitting.as_deref()),
             enabled: live.full().is_some(),
             pairing_active: self.gateway.pairing.active(),
             paired: self.gateway.paired(),

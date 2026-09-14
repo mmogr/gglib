@@ -5,8 +5,8 @@
 //! restart (ADR 0012, decision 4, reversed — see the amendment dated
 //! 2026-09-10). Deleting this file retires this machine's address and revokes
 //! no device: the tunnel mints a new key the next time it comes up, and still
-//! admits every device key kept beside this one. `gglib remote status` prints
-//! the path.
+//! admits every device key kept beside this one that the roster lists.
+//! `gglib remote status` prints the path.
 
 use std::path::PathBuf;
 

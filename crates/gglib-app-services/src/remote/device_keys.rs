@@ -10,11 +10,30 @@
 //! mode and the atomic replace; this one owns where the errors go and what
 //! they say to a person.
 
+use std::collections::HashSet;
+use std::path::PathBuf;
+
 use gglib_core::access::{DeviceKeys, device_keys_path, load_device_keys, store_device_keys};
 use tracing::{info, warn};
 
 use super::RemoteOps;
 use crate::error::GuiError;
+
+/// The ids the key file holds, for a read that lists devices, or none and a
+/// warning when the file cannot be read.
+///
+/// `list` and `status` show the roster whatever the key file says, so an
+/// unreadable file costs the rows for keys with no record and nothing else.
+/// `seed` does not use this: it falls back to the read `arm` took earlier.
+pub(super) fn held_ids(ops: &RemoteOps) -> Vec<String> {
+    read_keys(ops).map_or_else(
+        |e| {
+            warn!("could not read the device keys; listing no key without a record: {e}");
+            Vec::new()
+        },
+        |keys| keys.into_keys().collect(),
+    )
+}
 
 /// Put the stored devices on a listener that is about to be installed.
 ///
@@ -33,15 +52,24 @@ use crate::error::GuiError;
 /// fails: that file was parseable a moment ago and both writers replace it
 /// atomically, so falling back is a slightly staler roster rather than a
 /// wrong one — and the alternative is unwinding a tunnel that is already up.
-pub(super) async fn seed(ops: &RemoteOps, handle: &modelpipe::ServeHandle, earlier: DeviceKeys) {
+///
+/// `recorded` is the ids the roster listed when `arm` read it, before the
+/// guard: a settings read does not belong under it. A key needs one of them
+/// to be seeded; [`seed_into`] says why.
+pub(super) async fn seed(
+    ops: &RemoteOps,
+    handle: &modelpipe::ServeHandle,
+    earlier: DeviceKeys,
+    recorded: &HashSet<String>,
+) {
     let keys = {
         let _guard = ops.roster.lock().await;
-        read_keys().unwrap_or_else(|e| {
+        read_keys(ops).unwrap_or_else(|e| {
             warn!("re-reading the device keys failed, seeding the earlier read: {e}");
             earlier
         })
     };
-    seed_into(handle, keys);
+    seed_into(handle, keys, recorded);
 }
 
 /// Put every device this machine knows back on a freshly armed listener.
@@ -56,19 +84,38 @@ pub(super) async fn seed(ops: &RemoteOps, handle: &modelpipe::ServeHandle, earli
 /// failing the arm: one hand-edited id should not lock every other device
 /// out. The roster and the listener can then disagree, which the device list
 /// shows as a row that is not admitted.
-pub(super) fn seed_into(handle: &modelpipe::ServeHandle, keys: DeviceKeys) {
-    let held = keys.len();
-    let mut seeded = 0usize;
+///
+/// **A key no roster row lists is not seeded** (#1034). Nothing should leave
+/// one, but a row lost to a concurrent settings write did, and so does a
+/// daemon that dies between the two writes `invite` makes. Seeding it would
+/// admit a device no list shows; skipped, it is listed as "key held, no
+/// record", not admitted, until `forget` retires it.
+pub(super) fn seed_into(
+    handle: &modelpipe::ServeHandle,
+    keys: DeviceKeys,
+    recorded: &HashSet<String>,
+) {
+    let (mut seeded, mut refused, mut unrecorded) = (0usize, 0usize, 0usize);
     for (id, key) in keys {
+        if !recorded.contains(&id) {
+            unrecorded += 1;
+            warn!(
+                device = %id,
+                "a device key no roster row lists was not put on the tunnel; `gglib remote forget` retires it"
+            );
+            continue;
+        }
         match handle.add_token(&id, key) {
             Ok(()) => seeded += 1,
-            Err(e) => warn!(device = %id, "a stored device key was refused by the tunnel: {e}"),
+            Err(e) => {
+                refused += 1;
+                warn!(device = %id, "a stored device key was refused by the tunnel: {e}");
+            }
         }
     }
     info!(
         devices = seeded,
-        refused = held - seeded,
-        "seeded the tunnel with stored device keys"
+        refused, unrecorded, "seeded the tunnel with stored device keys"
     );
 }
 
@@ -83,10 +130,8 @@ pub(super) fn seed_into(handle: &modelpipe::ServeHandle, keys: DeviceKeys) {
 /// # Errors
 ///
 /// `Internal` when the file exists and cannot be read or parsed.
-pub(super) fn read_keys() -> Result<DeviceKeys, GuiError> {
-    let path = device_keys_path()
-        .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))?;
-    load_device_keys(&path)
+pub(super) fn read_keys(ops: &RemoteOps) -> Result<DeviceKeys, GuiError> {
+    load_device_keys(&keys_path(ops)?)
         .map_err(|e| GuiError::Internal(format!("could not read the device keys: {e}")))
 }
 
@@ -96,11 +141,25 @@ pub(super) fn read_keys() -> Result<DeviceKeys, GuiError> {
 ///
 /// `Internal` when the directory cannot be resolved or the file cannot be
 /// written.
-pub(super) fn write_keys(keys: &DeviceKeys) -> Result<(), GuiError> {
-    let path = device_keys_path()
-        .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))?;
-    store_device_keys(&path, keys)
+pub(super) fn write_keys(ops: &RemoteOps, keys: &DeviceKeys) -> Result<(), GuiError> {
+    store_device_keys(&keys_path(ops)?, keys)
         .map_err(|e| GuiError::Internal(format!("could not write the device keys: {e}")))
+}
+
+/// The file `ops` keeps its device keys in: the one it was built with, or,
+/// when it was built with none, the one beside the endpoint identity.
+///
+/// # Errors
+///
+/// `Internal` when the data root cannot be resolved.
+fn keys_path(ops: &RemoteOps) -> Result<PathBuf, GuiError> {
+    ops.device_keys.clone().map_or_else(
+        || {
+            device_keys_path()
+                .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))
+        },
+        Ok,
+    )
 }
 
 #[cfg(test)]
