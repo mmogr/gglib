@@ -4,7 +4,7 @@
 //! size by the complexity ratchet. Helpers are duplicated for the same reason.
 
 use super::*;
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn cfg() -> LoopGuardConfig {
     LoopGuardConfig::from_settings(&Settings::with_defaults()).expect("guard on by default")
