@@ -244,6 +244,16 @@ impl LoopDetector {
         })
     }
 
+    /// Forget the current run, as a user turn does.
+    ///
+    /// Structural on the agent path — `run` is invoked once per user message
+    /// and builds a fresh `Guards` — so only the proxy, which walks one
+    /// detector across a whole replayed conversation, has to be told. Resets
+    /// the read-only allowance with the strike count, as a fresh `Guards` does.
+    pub fn break_run(&mut self) {
+        self.run = None;
+    }
+
     /// Record what the batch named by `record` got back.
     ///
     /// Called once the answers exist, which on the agent path is *after* the
@@ -257,16 +267,6 @@ impl LoopDetector {
     /// client that omits `id` on replayed calls switch the guard off. It is
     /// also what makes a detector that is never told anything behave exactly as
     /// it did before it could be.
-    /// Forget the current run, as a user turn does.
-    ///
-    /// Structural on the agent path — `run` is invoked once per user message
-    /// and builds a fresh `Guards` — so only the proxy, which walks one
-    /// detector across a whole replayed conversation, has to be told. Resets
-    /// the read-only allowance with the strike count, as a fresh `Guards` does.
-    pub fn break_run(&mut self) {
-        self.run = None;
-    }
-
     pub fn record_results(&mut self, record: BatchRecord, answers: Option<u64>) -> RepeatOutcome {
         // Destructured rather than read through: taking the record by value is
         // what stops one batch being recorded twice, and clippy's
