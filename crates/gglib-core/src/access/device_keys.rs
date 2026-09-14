@@ -17,7 +17,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::paths::{PathError, remote_identity_path};
+use crate::paths::{PathError, create_private_dir, remote_identity_path};
 
 /// Every device key this machine holds, by the id the tunnel edge knows it as.
 pub type DeviceKeys = BTreeMap<String, String>;
@@ -77,7 +77,7 @@ pub fn load(path: &Path) -> io::Result<DeviceKeys> {
 /// temporary file, setting its mode, or the rename.
 pub fn store(path: &Path, keys: &DeviceKeys) -> io::Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        create_private_dir(parent)?;
     }
     let json = serde_json::to_vec_pretty(keys).map_err(io::Error::other)?;
 

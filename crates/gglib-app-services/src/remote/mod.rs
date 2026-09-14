@@ -206,8 +206,8 @@ impl RemoteOps {
         let stored_ticket_fingerprint = stored.as_ref().and_then(stored_pairing::fingerprint);
         let has_remote_key = stored.is_some();
         let connected = self.connect_snapshot().await;
-        // Before the lock: this touches the filesystem — `create_dir_all` on
-        // the data directory — and `status` is the call everything else waits
+        // Before the lock: this touches the filesystem — creating or
+        // tightening the data directory — and `status` is the call everything else waits
         // behind. Nothing under the serve slot should be doing IO that has
         // nothing to do with the slot.
         let identity_path = key::identity_path()

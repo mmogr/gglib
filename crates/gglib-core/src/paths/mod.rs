@@ -7,6 +7,7 @@ mod llama;
 mod models;
 mod pids;
 mod platform;
+mod private;
 mod remote;
 mod resolver;
 mod slots;
@@ -43,6 +44,9 @@ pub use pids::pids_dir;
 
 // The remote tunnel's stored endpoint key
 pub use remote::remote_identity_path;
+
+// Directories and files this user alone can read
+pub use private::{create_private_dir, create_private_file, make_private};
 
 // Directory operations
 pub use ensure::{DirectoryCreationStrategy, ensure_directory};

@@ -1,6 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
 
+mod database_file;
 pub mod factory;
 pub mod repositories;
 pub mod setup;

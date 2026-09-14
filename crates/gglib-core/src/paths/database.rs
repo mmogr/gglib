@@ -2,22 +2,23 @@
 //!
 //! Provides the canonical path to the gglib `SQLite` database file.
 
-use std::fs;
 use std::path::PathBuf;
 
 use super::error::PathError;
 use super::platform::data_root;
+use super::private::create_private_dir;
 
 /// Get the path to the gglib database file.
 ///
 /// Returns the path to `gglib.db` in the user data directory.
 /// This is shared between dev and release builds.
 ///
-/// The `data/` subdirectory is created if it doesn't exist.
+/// The `data/` subdirectory is created if it doesn't exist, and is this
+/// user's alone either way: see [`create_private_dir`].
 pub fn database_path() -> Result<PathBuf, PathError> {
     let data_dir = data_root()?.join("data");
 
-    fs::create_dir_all(&data_dir).map_err(|e| PathError::CreateFailed {
+    create_private_dir(&data_dir).map_err(|e| PathError::CreateFailed {
         path: data_dir.clone(),
         reason: e.to_string(),
     })?;

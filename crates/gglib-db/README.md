@@ -64,6 +64,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`database_file.rs`](src/database_file.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-database_file-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-database_file-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-database_file-coverage.json) |
 | [`factory.rs`](src/factory.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-factory-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-factory-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-factory-coverage.json) |
 | [`setup.rs`](src/setup.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-setup-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-setup-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-setup-coverage.json) |
 | [`repositories/`](src/repositories/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-repositories-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-repositories-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-repositories-coverage.json) |
@@ -72,6 +73,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 </details>
 
 **Module Descriptions:**
+- **`database_file.rs`** — The database and its directory made private to this user before `SQLite` opens them
 - **`factory.rs`** — Database connection factory and pooling
 - **`setup.rs`** — Schema migrations and database initialization
 - **`repositories/`** — `SQLite` implementations of all repository ports
@@ -154,7 +156,9 @@ table_info` keeps the shape introspectable either way.
 
 ## Testing
 
-All tests are inline `#[cfg(test)]` blocks living alongside their respective implementations.
+All tests are inline `#[cfg(test)]` blocks living alongside their respective implementations,
+except `tests/file_modes.rs`, which checks the modes of a real database on disk through the
+public `setup_database()`, as a caller opens it.
 
 ### Test harness
 
