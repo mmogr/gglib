@@ -93,6 +93,9 @@ pub struct ServiceGraphParams {
     pub base_port: Option<u16>,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
+    /// The file the remote tunnel keeps device keys in; `None` for the one
+    /// beside the endpoint identity. See [`RemoteOps::new`].
+    pub device_keys_path: Option<PathBuf>,
 }
 
 /// The domain-ops graph both GUI adapters share.
@@ -150,6 +153,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         bench_repo,
         base_port,
         llama_server_path,
+        device_keys_path,
     } = params;
 
     // Resolved here, once, so both adapters honour `Settings.llama_base_port`.
@@ -211,6 +215,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         Arc::clone(&core),
         remote_gateway,
         Arc::clone(&emitter),
+        device_keys_path,
     ));
 
     let models = Arc::new(ModelOps::new(ModelDeps {

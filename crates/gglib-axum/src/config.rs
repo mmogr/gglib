@@ -39,6 +39,13 @@ pub struct ServerConfig {
     /// build [`database_path`](gglib_core::paths::database_path) resolves into the checkout itself. Either way
     /// the database layer creates the parent directory and makes it `0700`.
     pub db_path: Option<PathBuf>,
+    /// The file the remote tunnel keeps device keys in. `None` is the one
+    /// beside the endpoint identity, where a daemon keeps them.
+    ///
+    /// Named for [`db_path`](Self::db_path)'s reason: in a debug build the
+    /// default is the checkout's `data/`, which the installed daemon uses too,
+    /// and a test that invites or lists devices must not read or write that.
+    pub device_keys_path: Option<PathBuf>,
 }
 
 impl ServerConfig {
@@ -53,6 +60,7 @@ impl ServerConfig {
             static_dir: None,
             cors: CorsConfig::default(),
             db_path: None,
+            device_keys_path: None,
         })
     }
 }

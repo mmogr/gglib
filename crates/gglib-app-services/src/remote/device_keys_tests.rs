@@ -7,11 +7,10 @@
 //! reports whether the listener is actually holding each row — the two stores
 //! are allowed to disagree, and a person has to be able to see that they do.
 //!
-//! Keys are passed in rather than read: [`super::read_keys`] reads the
-//! machine's own key file, which in a debug build is a real file in the
-//! repository checkout, and the policy is separable from where the keys came
-//! from. That split is also why this half cannot fail — `arm` reads the file
-//! while failing is still free, and seeds after the point of no return.
+//! Keys are passed in rather than read, because the policy is separable from
+//! where the keys came from. That split is also why this half cannot fail —
+//! `arm` reads the file while failing is still free, and seeds after the
+//! point of no return.
 
 use gglib_core::access::DeviceKeys;
 
@@ -81,4 +80,30 @@ async fn an_empty_roster_seeds_nothing() {
     assert!(handle.token_names().is_empty());
 
     handle.shutdown().await;
+}
+
+/// A `RemoteOps` built with a key file reads and writes that file and no
+/// other. That is what keeps a test's devices out of the checkout's
+/// `data/remote_devices`, which in a debug build is the installed daemon's.
+#[tokio::test]
+async fn the_key_file_an_ops_was_built_with_is_the_one_it_reads_and_writes() {
+    let (_, ops, _) = crate::test_support_remote::test_remote_ops().await;
+    let named = ops
+        .device_keys
+        .clone()
+        .expect("the fixture names a key file");
+    let one = keys(&[("dev-0a1b2c3d", "sk-zzq-one")]);
+
+    super::write_keys(&ops, &one).expect("written");
+
+    assert_eq!(
+        gglib_core::access::load_device_keys(&named).expect("read back from the named file"),
+        one
+    );
+    assert_eq!(super::read_keys(&ops).expect("read through the ops"), one);
+    assert_ne!(
+        Some(named),
+        gglib_core::access::device_keys_path().ok(),
+        "and the named file is not the one beside the endpoint identity"
+    );
 }

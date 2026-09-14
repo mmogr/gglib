@@ -193,6 +193,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
         base_port: Some(config.base_port),
         llama_server_path: config.llama_server_path.clone(),
+        device_keys_path: config.device_keys_path.clone(),
     })
     .await?;
 

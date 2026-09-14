@@ -82,18 +82,24 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     dir
 });
 
-/// A database of its own for each context.
+/// A database and a device key file of its own for each context.
 ///
 /// Per test rather than per binary: tests in one binary run concurrently, so
 /// a shared file both deadlocks on SQLite's write lock and lets one test see
-/// another's rows.
-fn isolated_db_path() -> PathBuf {
+/// another's rows. The key file is the same argument for the devices a test
+/// invites or lists, and left unnamed it would be the checkout's own.
+fn isolated_paths() -> (PathBuf, PathBuf) {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    SCRATCH_DIR.join(format!("gglib-{}.db", NEXT.fetch_add(1, Ordering::Relaxed)))
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    (
+        SCRATCH_DIR.join(format!("gglib-{n}.db")),
+        SCRATCH_DIR.join(format!("remote_devices-{n}")),
+    )
 }
 
 /// Config for a context that binds nothing and launches nothing.
 fn test_config(cors: CorsConfig) -> ServerConfig {
+    let (db_path, device_keys_path) = isolated_paths();
     ServerConfig {
         host: "127.0.0.1".into(),
         port: 0,
@@ -102,7 +108,8 @@ fn test_config(cors: CorsConfig) -> ServerConfig {
         max_concurrent_agent_loops: 1,
         static_dir: None,
         cors,
-        db_path: Some(isolated_db_path()),
+        db_path: Some(db_path),
+        device_keys_path: Some(device_keys_path),
     }
 }
 

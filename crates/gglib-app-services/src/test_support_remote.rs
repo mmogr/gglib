@@ -15,7 +15,9 @@
 //! `ticket_vectors.py` has no `--update` flag, deliberately, so these
 //! strings cannot drift under us.
 
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
@@ -118,8 +120,41 @@ pub(crate) async fn test_remote_ops() -> (Arc<AppCore>, Arc<crate::RemoteOps>, A
     let emitter: Arc<dyn AppEventEmitter> = events.clone();
     let (core, proxy) = test_core_and_proxy().await;
     let gateway = Arc::new(crate::RemoteGateway::new(Arc::clone(&emitter)));
-    let ops = crate::RemoteOps::new(proxy, Arc::clone(&core), gateway, emitter);
+    let ops = crate::RemoteOps::new(
+        proxy,
+        Arc::clone(&core),
+        gateway,
+        emitter,
+        Some(scratch_device_keys()),
+    );
     (core, Arc::new(ops), events)
+}
+
+/// A device key file no other `RemoteOps` in this run reads or writes.
+///
+/// Given `None`, `RemoteOps` keeps keys beside the endpoint identity, which in
+/// a debug build is the checkout's `data/remote_devices`: one file for every
+/// test in the process, and the installed daemon's own when this is the
+/// checkout it was built from. Each call names a new file under a directory
+/// keyed by the process id and emptied once per process, because a recycled
+/// pid can find files a dead run left there.
+pub(crate) fn scratch_device_keys() -> PathBuf {
+    static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+        let dir = std::env::temp_dir().join(format!("gglib-app-services-{}", std::process::id()));
+        if let Err(e) = std::fs::remove_dir_all(&dir) {
+            assert_eq!(
+                e.kind(),
+                std::io::ErrorKind::NotFound,
+                "could not empty the scratch directory {dir:?}: {e}"
+            );
+        }
+        dir
+    });
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    DIR.join(format!(
+        "remote_devices-{}",
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ))
 }
 
 /// One of the vectors above as the `Ticket` the code under test takes.

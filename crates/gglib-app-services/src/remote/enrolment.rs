@@ -123,9 +123,9 @@ fn mint(handle: &modelpipe::ServeHandle) -> Result<(String, String), GuiError> {
 /// Write both stores: the key to its file, the row to settings.
 async fn remember(ops: &RemoteOps, id: &str, key: &str) -> Result<(), GuiError> {
     let _guard = ops.roster.lock().await;
-    let mut keys = read_keys()?;
+    let mut keys = read_keys(ops)?;
     keys.insert(id.to_owned(), key.to_owned());
-    write_keys(&keys)?;
+    write_keys(ops, &keys)?;
 
     let mut roster = read_roster(&ops.core).await?;
     roster.push(Device {
@@ -168,7 +168,7 @@ pub(super) async fn forget(
         handle.remove_token(id);
     }
     let _guard = ops.roster.lock().await;
-    let mut keys = read_keys()?;
+    let mut keys = read_keys(ops)?;
     let had_key = keys.remove(id).is_some();
     // Each store is written only if this changed it. Retiring a device this
     // machine never issued a key to is an answer, not an edit: replacing two
@@ -176,7 +176,7 @@ pub(super) async fn forget(
     // can go wrong. The key store is process-wide, so a no-op forget would
     // still take its turn at replacing it.
     if had_key {
-        write_keys(&keys)?;
+        write_keys(ops, &keys)?;
     }
 
     let mut roster = read_roster(&ops.core).await?;

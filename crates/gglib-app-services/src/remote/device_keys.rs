@@ -10,6 +10,8 @@
 //! mode and the atomic replace; this one owns where the errors go and what
 //! they say to a person.
 
+use std::path::PathBuf;
+
 use gglib_core::access::{DeviceKeys, device_keys_path, load_device_keys, store_device_keys};
 use tracing::{info, warn};
 
@@ -36,7 +38,7 @@ use crate::error::GuiError;
 pub(super) async fn seed(ops: &RemoteOps, handle: &modelpipe::ServeHandle, earlier: DeviceKeys) {
     let keys = {
         let _guard = ops.roster.lock().await;
-        read_keys().unwrap_or_else(|e| {
+        read_keys(ops).unwrap_or_else(|e| {
             warn!("re-reading the device keys failed, seeding the earlier read: {e}");
             earlier
         })
@@ -83,10 +85,8 @@ pub(super) fn seed_into(handle: &modelpipe::ServeHandle, keys: DeviceKeys) {
 /// # Errors
 ///
 /// `Internal` when the file exists and cannot be read or parsed.
-pub(super) fn read_keys() -> Result<DeviceKeys, GuiError> {
-    let path = device_keys_path()
-        .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))?;
-    load_device_keys(&path)
+pub(super) fn read_keys(ops: &RemoteOps) -> Result<DeviceKeys, GuiError> {
+    load_device_keys(&keys_path(ops)?)
         .map_err(|e| GuiError::Internal(format!("could not read the device keys: {e}")))
 }
 
@@ -96,11 +96,25 @@ pub(super) fn read_keys() -> Result<DeviceKeys, GuiError> {
 ///
 /// `Internal` when the directory cannot be resolved or the file cannot be
 /// written.
-pub(super) fn write_keys(keys: &DeviceKeys) -> Result<(), GuiError> {
-    let path = device_keys_path()
-        .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))?;
-    store_device_keys(&path, keys)
+pub(super) fn write_keys(ops: &RemoteOps, keys: &DeviceKeys) -> Result<(), GuiError> {
+    store_device_keys(&keys_path(ops)?, keys)
         .map_err(|e| GuiError::Internal(format!("could not write the device keys: {e}")))
+}
+
+/// The file `ops` keeps its device keys in: the one it was built with, or,
+/// when it was built with none, the one beside the endpoint identity.
+///
+/// # Errors
+///
+/// `Internal` when the data root cannot be resolved.
+fn keys_path(ops: &RemoteOps) -> Result<PathBuf, GuiError> {
+    ops.device_keys.clone().map_or_else(
+        || {
+            device_keys_path()
+                .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))
+        },
+        Ok,
+    )
 }
 
 #[cfg(test)]

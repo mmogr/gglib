@@ -79,7 +79,7 @@ impl RemoteOps {
         // `proxy_api_key`, locking the local proxy on the way out. The seed
         // itself happens under the install guard below; this read is what
         // makes an unreadable file fail while failing is still free.
-        let devices = device_keys::read_keys()?;
+        let devices = device_keys::read_keys(self)?;
 
         // The first and only thing this leaves on the machine, and the last
         // point at which leaving nothing is still free: everything that can

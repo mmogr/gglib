@@ -29,6 +29,7 @@ pub use types::{
     RemoteStatusSnapshot,
 };
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
@@ -137,15 +138,22 @@ pub struct RemoteOps {
     /// Bumped by every `disable`, so a call waiting out a resume can tell
     /// that the person changed their mind while it waited.
     disables: watch::Sender<u64>,
+    /// The file the device keys are kept in, or `None` for the one beside
+    /// the endpoint identity, where a daemon keeps them. A test names its
+    /// own: in a debug build the default is the checkout's `data/`, which is
+    /// also the installed daemon's.
+    device_keys: Option<PathBuf>,
 }
 
 impl RemoteOps {
-    /// Build the ops over the gateway the proxy was handed.
+    /// Build the ops over the gateway the proxy was handed, keeping device
+    /// keys in `device_keys`, or beside the endpoint identity when `None`.
     pub fn new(
         proxy: Arc<ProxyOps>,
         core: Arc<AppCore>,
         gateway: Arc<RemoteGateway>,
         emitter: Arc<dyn AppEventEmitter>,
+        device_keys: Option<PathBuf>,
     ) -> Self {
         Self {
             proxy,
@@ -159,6 +167,7 @@ impl RemoteOps {
             roster: Arc::new(Mutex::new(())),
             resuming: watch::channel(false).0,
             disables: watch::channel(0).0,
+            device_keys,
         }
     }
 
