@@ -32,11 +32,11 @@
 //! types, `required`, `enum`, `additionalProperties: false`, and the same
 //! checks recursively through nested objects and array items.
 //!
-//! Everything else — `$ref`, `anyOf`/`oneOf`/`allOf`, `not`, `pattern`,
-//! `$defs` — yields [`Verdict::Unvalidatable`] and the response is forwarded
-//! untouched. Half-implementing those constructs would produce false
-//! violations, and a false violation costs a wasted generation and replaces a
-//! working call with a re-rolled one.
+//! `$ref`, `anyOf`/`oneOf`/`allOf`, `not` and `$defs` yield
+//! [`Verdict::Unvalidatable`] and the response is forwarded untouched, and
+//! `pattern` is not checked at all. Half-implementing those constructs would
+//! produce false violations, and a false violation costs a wasted generation
+//! and replaces a working call with a re-rolled one.
 //!
 //! # Recursion is not optional
 //!
@@ -44,7 +44,7 @@
 //! nested *types*, so `options: {"follow_symlinks": "null"}` passed a
 //! validator that should have rejected it and the measured conformance rate
 //! came out flattering. Pinned by
-//! `tests::a_nested_wrong_type_is_caught` so
+//! `validate_tests::a_nested_wrong_type_is_caught` so
 //! the same gap cannot reappear where it would cost a real repair.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
@@ -58,8 +58,9 @@ use serde_json::Value;
 
 /// Schema keywords this validator does not implement.
 ///
-/// Presence of any of them anywhere in a tool's schema makes that call
-/// unvalidatable. Listed rather than inferred so adding support for one is a
+/// Any of them in a tool's schema, or in a subschema under it, makes that call
+/// unvalidatable. A parameter's name is not where a keyword goes: see
+/// [`unsupported_reason`]. Listed rather than inferred so adding support for one is a
 /// deliberate edit with a test, not an emergent behaviour change.
 const UNSUPPORTED_KEYWORDS: &[&str] = &[
     "$ref",
@@ -286,20 +287,50 @@ fn schema_for<'a>(tools: &'a [Value], name: &str) -> Option<&'a Value> {
         .and_then(|f| f.get("parameters"))
 }
 
-/// The first unsupported keyword anywhere in `schema`, if any.
+/// Where a schema holds subschemas, besides the values of `properties`.
+///
+/// The unsupported keywords that hold subschemas are not listed: finding one
+/// ends the search.
+const SUBSCHEMA_KEYWORDS: &[&str] = &[
+    "items",
+    "prefixItems",
+    "additionalItems",
+    "contains",
+    "additionalProperties",
+    "unevaluatedItems",
+    "unevaluatedProperties",
+];
+
+/// The first unsupported keyword in `schema` or in a subschema under it.
+///
+/// A keyword is looked for only where a schema puts keywords. The keys of
+/// `properties` are a tool's parameter names, so a parameter called `if` or
+/// `definitions` is a name, and only the subschema under it is searched. A
+/// value that is not a subschema, such as an `enum` member or a `default`, is
+/// not searched at all.
 fn unsupported_reason(schema: &Value) -> Option<&'static str> {
-    match schema {
-        Value::Object(map) => {
-            for key in UNSUPPORTED_KEYWORDS {
-                if map.contains_key(*key) {
-                    return Some(key);
-                }
-            }
-            map.values().find_map(unsupported_reason)
-        }
-        Value::Array(items) => items.iter().find_map(unsupported_reason),
-        _ => None,
+    let map = schema.as_object()?;
+    if let Some(keyword) = UNSUPPORTED_KEYWORDS
+        .iter()
+        .copied()
+        .find(|keyword| map.contains_key(*keyword))
+    {
+        return Some(keyword);
     }
+    let named = map
+        .get("properties")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(serde_json::Map::values);
+    let positional = SUBSCHEMA_KEYWORDS
+        .iter()
+        .filter_map(|keyword| map.get(*keyword));
+    named
+        .chain(positional)
+        .find_map(|subschema| match subschema {
+            Value::Array(tuple) => tuple.iter().find_map(unsupported_reason),
+            one => unsupported_reason(one),
+        })
 }
 
 /// Check `value` against `schema`, appending `(pointer, kind)` for each
@@ -420,371 +451,5 @@ const fn type_name(value: &Value) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    /// The schema from the conformance experiment, so the tests exercise the
-    /// exact shape the measurements were taken against.
-    fn tools() -> Value {
-        json!([{
-            "type": "function",
-            "function": {
-                "name": "read_file",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string"},
-                        "max_lines": {"type": "integer"},
-                        "mode": {"type": "string", "enum": ["text", "binary"]},
-                        "options": {
-                            "type": "object",
-                            "properties": {"follow_symlinks": {"type": "boolean"}},
-                            "required": ["follow_symlinks"]
-                        }
-                    },
-                    "required": ["path", "mode"],
-                    "additionalProperties": false
-                }
-            }
-        }])
-    }
-
-    fn call(args: &str) -> Value {
-        json!([{
-            "type": "function",
-            "function": {"name": "read_file", "arguments": args}
-        }])
-    }
-
-    fn verdict(args: &str) -> Verdict {
-        validate_tool_calls(Some(&tools()), Some(&call(args)))
-    }
-
-    fn kinds(v: &Verdict) -> Vec<ViolationKind> {
-        v.violations().iter().map(|x| x.kind.clone()).collect()
-    }
-
-    #[test]
-    fn a_conformant_call_is_valid() {
-        assert_eq!(
-            verdict(r#"{"path":"/etc/hosts","mode":"text"}"#),
-            Verdict::Valid
-        );
-    }
-
-    /// The exact violation measured on Llama 3.2: an integer field carrying a
-    /// string. 26 of 30 calls looked like this.
-    #[test]
-    fn the_llama_32_failure_is_caught() {
-        let v = verdict(r#"{"path":"42","mode":"text","max_lines":"42"}"#);
-
-        assert!(matches!(v, Verdict::Invalid(_)));
-        assert_eq!(
-            kinds(&v),
-            vec![ViolationKind::WrongType {
-                expected: "integer".to_owned(),
-                actual: "string".to_owned()
-            }]
-        );
-        assert_eq!(v.violations()[0].pointer, "/max_lines");
-    }
-
-    /// The gap the experiment harness had: nested presence was checked, nested
-    /// types were not, so this passed and the measured rate came out
-    /// flattering. See the module docs.
-    #[test]
-    fn a_nested_wrong_type_is_caught() {
-        let v =
-            verdict(r#"{"path":"/etc/hosts","mode":"text","options":{"follow_symlinks":"null"}}"#);
-
-        assert!(matches!(v, Verdict::Invalid(_)));
-        assert_eq!(v.violations()[0].pointer, "/options/follow_symlinks");
-        assert_eq!(
-            kinds(&v),
-            vec![ViolationKind::WrongType {
-                expected: "boolean".to_owned(),
-                actual: "string".to_owned()
-            }]
-        );
-    }
-
-    #[test]
-    fn a_missing_required_property_is_caught() {
-        let v = verdict(r#"{"path":"/etc/hosts"}"#);
-        assert_eq!(kinds(&v), vec![ViolationKind::MissingRequired]);
-        assert_eq!(v.violations()[0].pointer, "/mode");
-    }
-
-    #[test]
-    fn a_missing_nested_required_property_is_caught() {
-        let v = verdict(r#"{"path":"/etc/hosts","mode":"text","options":{}}"#);
-        assert_eq!(kinds(&v), vec![ViolationKind::MissingRequired]);
-        assert_eq!(v.violations()[0].pointer, "/options/follow_symlinks");
-    }
-
-    #[test]
-    fn a_value_outside_its_enum_is_caught() {
-        let v = verdict(r#"{"path":"/etc/hosts","mode":"fast"}"#);
-        assert_eq!(kinds(&v), vec![ViolationKind::NotInEnum]);
-    }
-
-    #[test]
-    fn an_undeclared_property_is_caught_under_additional_properties_false() {
-        let v = verdict(r#"{"path":"/etc/hosts","mode":"text","recursive":true}"#);
-        assert_eq!(kinds(&v), vec![ViolationKind::UnexpectedProperty]);
-        assert_eq!(v.violations()[0].pointer, "/recursive");
-    }
-
-    /// Absent `additionalProperties` permits extras, per JSON Schema. Flagging
-    /// them would repair calls that are correct.
-    #[test]
-    fn an_undeclared_property_is_allowed_when_additional_properties_is_absent() {
-        let tools = json!([{
-            "type": "function",
-            "function": {
-                "name": "read_file",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": ["path"]
-                }
-            }
-        }]);
-        let calls = json!([{
-            "type": "function",
-            "function": {"name": "read_file", "arguments": r#"{"path":"a","extra":1}"#}
-        }]);
-
-        assert_eq!(
-            validate_tool_calls(Some(&tools), Some(&calls)),
-            Verdict::Valid
-        );
-    }
-
-    #[test]
-    fn malformed_arguments_json_is_a_violation() {
-        let v = verdict(r#"{"path":"/etc/hosts","mode":"te"#);
-        assert_eq!(kinds(&v), vec![ViolationKind::MalformedArguments]);
-    }
-
-    #[test]
-    fn arguments_that_are_not_an_object_are_a_violation() {
-        let v = verdict(r#"["/etc/hosts"]"#);
-        assert_eq!(kinds(&v), vec![ViolationKind::ArgumentsNotObject]);
-    }
-
-    #[test]
-    fn a_call_to_an_unadvertised_tool_is_a_violation() {
-        let calls = json!([{
-            "type": "function",
-            "function": {"name": "delete_everything", "arguments": "{}"}
-        }]);
-        let v = validate_tool_calls(Some(&tools()), Some(&calls));
-        assert_eq!(kinds(&v), vec![ViolationKind::UnknownFunction]);
-    }
-
-    /// A bool must not satisfy `integer`. Trivial in Rust, load-bearing in the
-    /// Python harness where `bool` subclasses `int` — pinned so a future port
-    /// of this logic cannot reintroduce it.
-    #[test]
-    fn a_boolean_does_not_satisfy_integer() {
-        let v = verdict(r#"{"path":"a","mode":"text","max_lines":true}"#);
-        assert_eq!(
-            kinds(&v),
-            vec![ViolationKind::WrongType {
-                expected: "integer".to_owned(),
-                actual: "boolean".to_owned()
-            }]
-        );
-    }
-
-    /// JSON Schema counts a zero-fraction float as an integer.
-    #[test]
-    fn a_whole_float_satisfies_integer() {
-        assert_eq!(
-            verdict(r#"{"path":"a","mode":"text","max_lines":3.0}"#),
-            Verdict::Valid
-        );
-    }
-
-    #[test]
-    fn a_fractional_float_does_not_satisfy_integer() {
-        let v = verdict(r#"{"path":"a","mode":"text","max_lines":3.5}"#);
-        assert!(matches!(v, Verdict::Invalid(_)));
-    }
-
-    /// One wrong-typed value yields one finding, not a cascade of unrelated
-    /// ones about constraints that cannot apply to it.
-    #[test]
-    fn a_wrong_type_suppresses_downstream_checks_on_the_same_value() {
-        let v = verdict(r#"{"path":"a","mode":42}"#);
-        assert_eq!(
-            kinds(&v),
-            vec![ViolationKind::WrongType {
-                expected: "string".to_owned(),
-                actual: "number".to_owned()
-            }],
-            "should not also report NotInEnum for a value that is not a string"
-        );
-    }
-
-    #[test]
-    fn several_violations_across_one_call_are_all_reported() {
-        let v = verdict(r#"{"mode":"fast","recursive":true}"#);
-        assert_eq!(v.violations().len(), 3, "missing path, bad enum, extra key");
-    }
-
-    #[test]
-    fn violations_carry_the_index_of_the_call_that_produced_them() {
-        let calls = json!([
-            {"type": "function", "function": {"name": "read_file", "arguments": r#"{"path":"a","mode":"text"}"#}},
-            {"type": "function", "function": {"name": "read_file", "arguments": r#"{"path":"b"}"#}}
-        ]);
-        let v = validate_tool_calls(Some(&tools()), Some(&calls));
-
-        assert_eq!(v.violations().len(), 1);
-        assert_eq!(v.violations()[0].call_index, 1);
-    }
-
-    // ── Unvalidatable ────────────────────────────────────────────────────────
-
-    /// A schema this validator cannot read must not be reported as conformant,
-    /// and must not trigger a repair either.
-    #[test]
-    fn a_schema_using_any_of_is_unvalidatable() {
-        let tools = json!([{
-            "type": "function",
-            "function": {
-                "name": "read_file",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"path": {"anyOf": [{"type": "string"}, {"type": "integer"}]}}
-                }
-            }
-        }]);
-        let calls = json!([{
-            "type": "function",
-            "function": {"name": "read_file", "arguments": r#"{"path":"a"}"#}
-        }]);
-
-        let v = validate_tool_calls(Some(&tools), Some(&calls));
-        assert_eq!(v, Verdict::Unvalidatable("anyOf"));
-        assert!(
-            !matches!(v, Verdict::Invalid(_)),
-            "must not re-roll a call it cannot judge"
-        );
-    }
-
-    #[test]
-    fn a_schema_using_a_ref_is_unvalidatable() {
-        let tools = json!([{
-            "type": "function",
-            "function": {
-                "name": "read_file",
-                "parameters": {"type": "object", "properties": {"p": {"$ref": "#/$defs/x"}}}
-            }
-        }]);
-        let calls = json!([{
-            "type": "function",
-            "function": {"name": "read_file", "arguments": "{}"}
-        }]);
-
-        assert!(matches!(
-            validate_tool_calls(Some(&tools), Some(&calls)),
-            Verdict::Unvalidatable(_)
-        ));
-    }
-
-    /// A real violation elsewhere outranks an unvalidatable schema: the repair
-    /// re-issues the whole turn anyway, so a known-bad call is worth acting on
-    /// even when a sibling cannot be judged.
-    #[test]
-    fn a_real_violation_outranks_an_unvalidatable_sibling() {
-        let tools = json!([
-            {"type": "function", "function": {
-                "name": "weird", "parameters": {"oneOf": [{"type": "object"}]}}},
-            {"type": "function", "function": {
-                "name": "read_file",
-                "parameters": {"type": "object", "properties": {"path": {"type": "string"}},
-                               "required": ["path"]}}}
-        ]);
-        let calls = json!([
-            {"type": "function", "function": {"name": "weird", "arguments": "{}"}},
-            {"type": "function", "function": {"name": "read_file", "arguments": "{}"}}
-        ]);
-
-        let v = validate_tool_calls(Some(&tools), Some(&calls));
-        assert!(matches!(v, Verdict::Invalid(_)));
-        assert_eq!(kinds(&v), vec![ViolationKind::MissingRequired]);
-    }
-
-    // ── Not applicable ───────────────────────────────────────────────────────
-
-    #[test]
-    fn no_tools_is_not_applicable() {
-        assert_eq!(
-            validate_tool_calls(None, Some(&call("{}"))),
-            Verdict::NotApplicable
-        );
-    }
-
-    #[test]
-    fn no_tool_calls_is_not_applicable() {
-        assert_eq!(
-            validate_tool_calls(Some(&tools()), None),
-            Verdict::NotApplicable
-        );
-    }
-
-    #[test]
-    fn empty_arrays_are_not_applicable() {
-        let empty = json!([]);
-        assert_eq!(
-            validate_tool_calls(Some(&empty), Some(&empty)),
-            Verdict::NotApplicable
-        );
-    }
-
-    /// Absent arguments mean an empty object, which is conformant for a tool
-    /// with no required properties. Treating it as malformed would repair
-    /// every legitimate no-argument call.
-    #[test]
-    fn absent_arguments_are_an_empty_object() {
-        let tools = json!([{
-            "type": "function",
-            "function": {"name": "now", "parameters": {"type": "object", "properties": {}}}
-        }]);
-        let calls = json!([{"type": "function", "function": {"name": "now"}}]);
-
-        assert_eq!(
-            validate_tool_calls(Some(&tools), Some(&calls)),
-            Verdict::Valid
-        );
-    }
-
-    /// Some callers hand this function already-decoded arguments rather than
-    /// the wire's JSON string.
-    #[test]
-    fn an_object_valued_arguments_field_is_accepted() {
-        let calls = json!([{
-            "type": "function",
-            "function": {"name": "read_file", "arguments": {"path": "a", "mode": "text"}}
-        }]);
-
-        assert_eq!(
-            validate_tool_calls(Some(&tools()), Some(&calls)),
-            Verdict::Valid
-        );
-    }
-
-    #[test]
-    fn a_violation_renders_a_useful_message() {
-        let v = verdict(r#"{"path":"a","mode":"text","max_lines":"42"}"#);
-        let rendered = v.violations()[0].to_string();
-
-        assert!(rendered.contains("read_file"), "{rendered}");
-        assert!(rendered.contains("/max_lines"), "{rendered}");
-        assert!(rendered.contains("integer"), "{rendered}");
-    }
-}
+#[path = "validate_tests.rs"]
+mod validate_tests;
