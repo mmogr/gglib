@@ -6,11 +6,11 @@
 //! 2026-09-10). Deleting this file is what revokes a ticket, which is why
 //! `gglib remote status` prints its path.
 
-use std::fs;
 use std::path::PathBuf;
 
 use super::error::PathError;
 use super::platform::data_root;
+use super::private::create_private_dir;
 
 /// Path to the stored iroh endpoint key for the remote tunnel.
 ///
@@ -25,7 +25,7 @@ use super::platform::data_root;
 pub fn remote_identity_path() -> Result<PathBuf, PathError> {
     let data_dir = data_root()?.join("data");
 
-    fs::create_dir_all(&data_dir).map_err(|e| PathError::CreateFailed {
+    create_private_dir(&data_dir).map_err(|e| PathError::CreateFailed {
         path: data_dir.clone(),
         reason: e.to_string(),
     })?;

@@ -93,7 +93,7 @@ async fn add_column_if_missing(
 ///
 /// This function:
 /// 1. Establishes a connection to the `SQLite` database file
-/// 2. Creates the database file if it doesn't exist
+/// 2. Creates the database file if it doesn't exist; it and the directory holding it are made this user's alone
 /// 3. Creates all tables and indexes
 /// 4. Runs any necessary schema migrations
 ///
@@ -124,10 +124,8 @@ async fn add_column_if_missing(
 /// # }
 /// ```
 pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
-    // Ensure parent directory exists
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    // Private before SQLite opens it; `database_file::prepare` says why then.
+    crate::database_file::prepare(db_path)?;
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
