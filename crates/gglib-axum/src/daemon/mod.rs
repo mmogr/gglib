@@ -13,7 +13,8 @@ use tracing::{info, warn};
 
 use gglib_core::{CorsConfig, DAEMON_PORT, paths::data_root};
 
-use crate::bootstrap::{ServerConfig, bootstrap};
+use crate::bootstrap::bootstrap;
+use crate::config::ServerConfig;
 use crate::state::AppState;
 
 // Stays `pub` because `lib.rs` re-exports it — a re-export chain must be public

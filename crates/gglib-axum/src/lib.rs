@@ -35,6 +35,7 @@ use tracing_subscriber as _; // Used by main.rs binary
 pub(crate) mod access;
 pub(crate) mod bootstrap;
 pub(crate) mod chat_api;
+pub(crate) mod config;
 pub(crate) mod daemon;
 pub(crate) mod dto;
 pub(crate) mod error;
@@ -48,7 +49,8 @@ pub(crate) mod ui;
 
 // Re-export primary types
 pub use access::DaemonAccess;
-pub use bootstrap::{AxumContext, ServerConfig, bootstrap, start_server};
+pub use bootstrap::{AxumContext, bootstrap, start_server};
+pub use config::ServerConfig;
 pub use daemon::{DaemonLock, DaemonOptions, run_daemon};
 pub use error::HttpError;
 pub use gglib_core::CorsConfig;
