@@ -55,6 +55,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::debug;
 
 /// Schema keywords this validator does not implement.
 ///
@@ -109,7 +110,8 @@ pub enum ViolationKind {
     MissingRequired,
     /// A value's JSON type did not match the schema's `type`.
     WrongType {
-        /// The schema's declared type.
+        /// The schema's declared type, or its types joined by `or` when the
+        /// schema lists several.
         expected: String,
         /// The type actually observed.
         actual: String,
@@ -341,13 +343,13 @@ fn check_value(
     pointer: &str,
     out: &mut Vec<(String, ViolationKind)>,
 ) {
-    if let Some(expected) = schema.get("type").and_then(Value::as_str)
-        && !type_matches(value, expected)
+    if let Some(expected) = schema.get("type")
+        && !type_satisfied(value, expected)
     {
         out.push((
             pointer.to_owned(),
             ViolationKind::WrongType {
-                expected: expected.to_owned(),
+                expected: type_label(expected),
                 actual: type_name(value).to_owned(),
             },
         ));
@@ -414,7 +416,35 @@ fn check_object(
     }
 }
 
-/// Whether `value` satisfies a JSON Schema `type` keyword.
+/// Whether `value` satisfies a `type` keyword, written as one type or a list.
+///
+/// A list accepts a value of any type in it, as `["string", "null"]` does for
+/// an optional field. A list that names no type, or a `type` that is neither a
+/// name nor a list, is not a constraint this validator reads, and passes.
+fn type_satisfied(value: &Value, expected: &Value) -> bool {
+    match expected {
+        Value::String(name) => type_matches(value, name),
+        Value::Array(listed) => {
+            let mut types = listed.iter().filter_map(Value::as_str).peekable();
+            types.peek().is_none() || types.any(|name| type_matches(value, name))
+        }
+        _ => true,
+    }
+}
+
+/// The `type` keyword as a violation names it: `integer`, or `string or null`.
+fn type_label(expected: &Value) -> String {
+    match expected {
+        Value::Array(names) => names
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join(" or "),
+        other => other.as_str().unwrap_or_default().to_owned(),
+    }
+}
+
+/// Whether `value` satisfies one JSON Schema type name.
 ///
 /// `integer` accepts a float whose fractional part is zero, which JSON Schema
 /// requires and which matters because a model emitting `3.0` for a count is
@@ -433,8 +463,16 @@ fn type_matches(value: &Value, expected: &str) -> bool {
                 || value.as_f64().is_some_and(|f| f.fract() == 0.0)
         }
         // An unrecognised `type` is not a violation to invent — treat it as
-        // satisfied rather than fail a call over a keyword we do not model.
-        _ => true,
+        // satisfied rather than fail a call over a keyword we do not model,
+        // and say so, so a schema that turns validation off for a field can be
+        // found.
+        unknown => {
+            debug!(
+                r#type = unknown,
+                "tool schema names a type this validator does not know; not checked"
+            );
+            true
+        }
     }
 }
 

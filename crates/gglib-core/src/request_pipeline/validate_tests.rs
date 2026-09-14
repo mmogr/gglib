@@ -240,5 +240,59 @@ fn a_violation_renders_a_useful_message() {
     assert!(rendered.contains("integer"), "{rendered}");
 }
 
+/// A `type` written as a list accepts a value of any type in it, as an
+/// optional field's `["string", "null"]` does, and names the list when the
+/// value is none of them.
+#[test]
+fn a_type_list_accepts_any_of_its_types_and_names_them_when_it_does_not() {
+    let tools = json!([{"type": "function", "function": {"name": "t", "parameters": {
+        "type": "object",
+        "properties": {"note": {"type": ["string", "null"]}}
+    }}}]);
+    let calls = |arguments: &str| json!([{"type": "function", "function": {"name": "t", "arguments": arguments}}]);
+
+    for fine in [r#"{"note":"a"}"#, r#"{"note":null}"#, "{}"] {
+        assert_eq!(
+            validate_tool_calls(Some(&tools), Some(&calls(fine))),
+            Verdict::Valid,
+            "{fine}"
+        );
+    }
+    let v = validate_tool_calls(Some(&tools), Some(&calls(r#"{"note":42}"#)));
+    assert_eq!(
+        kinds(&v),
+        vec![ViolationKind::WrongType {
+            expected: "string or null".to_owned(),
+            actual: "number".to_owned()
+        }]
+    );
+    let none = json!([{"type": "function", "function": {"name": "t", "parameters": {
+        "type": "object", "properties": {"note": {"type": []}}
+    }}}]);
+    let v = validate_tool_calls(Some(&none), Some(&calls(r#"{"note":42}"#)));
+    assert_eq!(
+        v,
+        Verdict::Valid,
+        "a list naming no type constrains nothing"
+    );
+}
+
+/// A `type` this validator does not know passes rather than inventing a
+/// violation.
+#[test]
+fn an_unknown_type_passes() {
+    let tools = json!([{"type": "function", "function": {"name": "t", "parameters": {
+        "type": "object",
+        "properties": {"n": {"type": "decimal"}}
+    }}}]);
+    let calls =
+        json!([{"type": "function", "function": {"name": "t", "arguments": r#"{"n":"1.5"}"#}}]);
+
+    assert_eq!(
+        validate_tool_calls(Some(&tools), Some(&calls)),
+        Verdict::Valid
+    );
+}
+
 #[path = "validate_unjudged_tests.rs"]
 mod validate_unjudged_tests;
