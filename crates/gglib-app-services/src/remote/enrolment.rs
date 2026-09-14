@@ -57,10 +57,10 @@ pub(super) async fn offer(
     let (id, key) = mint(handle)?;
 
     if let Err(e) = remember(ops, &id, &key).await {
-        // Both stores, not just the token: `remember` writes the key file
-        // first and the roster second, so a roster failure leaves a key
-        // behind that `seed` would install at the next arm — an id admitted
-        // at the edge that no roster row accounts for and no `list` shows.
+        // Both stores, not just the token: `remember` takes its key back out
+        // of the file when the roster write fails, but not when that second
+        // file write fails as well, and a key left there is listed as one
+        // with no record until something retires it.
         forget_quietly(ops, handle, &id).await;
         return Err(e);
     }
@@ -121,12 +121,29 @@ fn mint(handle: &modelpipe::ServeHandle) -> Result<(String, String), GuiError> {
 }
 
 /// Write both stores: the key to its file, the row to settings.
+///
+/// A roster write that fails takes the key back out of the file before the
+/// guard is let go. Left to the caller's unwind, which has to wait for the
+/// guard again, a `list` or `status` already queued behind this would read
+/// the key with no row.
 async fn remember(ops: &RemoteOps, id: &str, key: &str) -> Result<(), GuiError> {
     let _guard = ops.roster.lock().await;
     let mut keys = read_keys(ops)?;
     keys.insert(id.to_owned(), key.to_owned());
     write_keys(ops, &keys)?;
 
+    let recorded = record(ops, id).await;
+    if recorded.is_err() {
+        keys.remove(id);
+        if let Err(e) = write_keys(ops, &keys) {
+            warn!(device = %id, "could not take back a key whose roster row was not written: {e}");
+        }
+    }
+    recorded
+}
+
+/// Add an unspent invite's row to the roster.
+async fn record(ops: &RemoteOps, id: &str) -> Result<(), GuiError> {
     let mut roster = read_roster(&ops.core).await?;
     roster.push(Device {
         id: id.to_owned(),
@@ -196,3 +213,7 @@ async fn forget_quietly(ops: &RemoteOps, handle: &modelpipe::ServeHandle, id: &s
         warn!(device = %id, "could not unwind a device that was never paired: {e}");
     }
 }
+
+#[cfg(test)]
+#[path = "enrolment_tests.rs"]
+mod enrolment_tests;

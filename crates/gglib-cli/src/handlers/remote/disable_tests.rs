@@ -57,9 +57,9 @@ fn the_disable_notice_does_not_promise_a_new_ticket() {
 }
 
 /// [#1036]: deleting the endpoint key retires the address and revokes no
-/// device. `arm` seeds every stored device key onto the listener that comes
-/// up at the new address, so the notice must not call the deletion revoking,
-/// and must name the command that does take a device's key away.
+/// device. `arm` seeds every device key the roster lists onto the listener
+/// that comes up at the new address, so the notice must not call the deletion
+/// revoking, and must name the command that does take a device's key away.
 ///
 /// Whitespace is folded because the sentence runs across the banner's lines.
 ///

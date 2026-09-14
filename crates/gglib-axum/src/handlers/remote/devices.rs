@@ -48,6 +48,11 @@ pub(crate) struct RemoteDevice {
     /// device was dropped".
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null"))]
     pub admitted: Option<bool>,
+    /// Whether the roster lists this device. `false` is a key this machine
+    /// holds with no row for it, which nothing should leave but a surface
+    /// must show: `id` and `admitted` are all that is known of it, and a
+    /// `DELETE` of it retires the key.
+    pub recorded: bool,
 }
 
 impl From<DeviceView> for RemoteDevice {
@@ -59,6 +64,7 @@ impl From<DeviceView> for RemoteDevice {
             redeemed_at: d.redeemed_at,
             last_seen: d.last_seen,
             admitted: d.admitted,
+            recorded: d.recorded,
         }
     }
 }

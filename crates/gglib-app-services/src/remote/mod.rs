@@ -4,6 +4,7 @@ mod backend;
 mod connect;
 mod connect_watch;
 mod device_keys;
+mod device_view;
 mod devices;
 mod enrolment;
 mod first_contact;
@@ -194,12 +195,19 @@ impl RemoteOps {
         // this machine" is a confident wrong answer on the one surface a
         // person opens to decide what to revoke. `RemoteOps::list` returns
         // the error; this is the trade the two make differently, on purpose.
-        let settings = match self.core.settings().get().await {
-            Ok(settings) => Some(settings),
-            Err(e) => {
-                warn!("could not read settings for remote status; reporting none: {e}");
-                None
-            }
+        let (settings, held) = {
+            // Under `roster`, which `invite` and `forget` write both stores
+            // under, so a device part-way through either is not one read of
+            // a key with no row.
+            let _guard = self.roster.lock().await;
+            let settings = match self.core.settings().get().await {
+                Ok(settings) => Some(settings),
+                Err(e) => {
+                    warn!("could not read settings for remote status; reporting none: {e}");
+                    None
+                }
+            };
+            (settings, device_keys::held_ids(self))
         };
         let remote_enabled = settings
             .as_ref()
@@ -224,7 +232,7 @@ impl RemoteOps {
         // "not admitted" from a session that had already gone.
         let admitting = live.full().map(|l| l.handle.token_names());
         let mut snapshot = RemoteStatusSnapshot {
-            devices: devices::viewed(roster, admitting.as_deref()),
+            devices: device_view::viewed(roster, &held, admitting.as_deref()),
             enabled: live.full().is_some(),
             pairing_active: self.gateway.pairing.active(),
             paired: self.gateway.paired(),

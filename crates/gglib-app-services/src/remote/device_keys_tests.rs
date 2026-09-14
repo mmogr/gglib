@@ -12,6 +12,8 @@
 //! `arm` reads the file while failing is still free, and seeds after the
 //! point of no return.
 
+use std::collections::HashSet;
+
 use gglib_core::access::DeviceKeys;
 
 use super::seed_into;
@@ -40,6 +42,11 @@ fn keys(rows: &[(&str, &str)]) -> DeviceKeys {
         .collect()
 }
 
+/// The ids a roster lists.
+fn recorded(ids: &[&str]) -> HashSet<String> {
+    ids.iter().map(|id| (*id).to_owned()).collect()
+}
+
 /// One row the edge refuses does not cost the others theirs.
 ///
 /// The refusable row here is an id outside modelpipe's name charset — what a
@@ -56,6 +63,7 @@ async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
             ("not a valid name", "sk-zzq-two"),
             ("dev-11112222", "sk-zzq-three"),
         ]),
+        &recorded(&["dev-0a1b2c3d", "not a valid name", "dev-11112222"]),
     );
 
     let mut held = handle.token_names();
@@ -76,9 +84,30 @@ async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
 async fn an_empty_roster_seeds_nothing() {
     let handle = listener().await;
 
-    seed_into(&handle, DeviceKeys::new());
+    seed_into(&handle, DeviceKeys::new(), &HashSet::new());
     assert!(handle.token_names().is_empty());
 
+    handle.shutdown().await;
+}
+
+/// A key no roster row lists stays off the tunnel, and the rest are seeded.
+///
+/// That key is a device no list would show. Admitting it is the state #1034
+/// found a settings write could leave behind.
+#[tokio::test]
+async fn a_key_no_roster_row_lists_is_not_seeded() {
+    let handle = listener().await;
+
+    seed_into(
+        &handle,
+        keys(&[
+            ("dev-0a1b2c3d", "sk-zzq-one"),
+            ("dev-11112222", "sk-zzq-two"),
+        ]),
+        &recorded(&["dev-0a1b2c3d"]),
+    );
+
+    assert_eq!(handle.token_names(), vec!["dev-0a1b2c3d".to_owned()]);
     handle.shutdown().await;
 }
 

@@ -39,6 +39,7 @@ fn the_status_carries_the_roster_and_none_of_its_keys() {
             redeemed_at: Some(1_757_000_060_000),
             last_seen: None,
             admitted: Some(true),
+            recorded: true,
         }],
         ..RemoteStatusSnapshot::default()
     });
@@ -47,6 +48,7 @@ fn the_status_carries_the_roster_and_none_of_its_keys() {
     let row = json["devices"][0].as_object().expect("one device row");
     assert_eq!(row["id"], "dev-0a1b2c3d");
     assert_eq!(row["admitted"], true);
+    assert_eq!(row["recorded"], true);
     // The exact field set, not a search for "key" and "token": a new
     // `api_key` or `secret` field would pass a substring test, and a new
     // field on a polled `GET` is a contract change whatever it is called.
@@ -60,6 +62,7 @@ fn the_status_carries_the_roster_and_none_of_its_keys() {
             "joined_at",
             "label",
             "last_seen",
+            "recorded",
             "redeemed_at"
         ],
         "{json}"

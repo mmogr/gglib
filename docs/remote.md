@@ -123,9 +123,9 @@ rather than accidental, which is the change: this used to happen at every
 reboot, re-pairing every device as a side effect nobody asked for. It takes
 effect the next time the tunnel comes up — a restart, or `disable` then
 `enable` — and every device then needs the new ticket to find the machine.
-It revokes nothing: the device keys are put back on the new tunnel, so the
-old key still opens it for any client that presents one with the new
-ticket. `gglib remote join` asks for a fresh code instead, and pairing again
+It revokes nothing: the device keys the roster lists are put back on the new
+tunnel, so the old key still opens it for any client that presents one with
+the new ticket. `gglib remote join` asks for a fresh code instead, and pairing again
 mints a second key while the first stays admitted. To cut a device off, use
 `gglib remote forget <id>`.
 
@@ -558,6 +558,7 @@ here is one the desktop can retire on its own.
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
 | `remote access is already being enabled` | Another `enable` is arming the tunnel, or a daemon that has just started is still putting its own back after the twenty seconds commands wait for it. `gglib remote status` shows when the ticket is up; run the command again then, or `gglib remote disable` to give up on it. |
 | `disable` says `Daemon is not running` | No daemon was running, so `disable` switched remote access off in settings instead, and the next start will not put the tunnel back. `gglib remote enable` turns it on again. |
+| A row in `gglib remote list` reads `key held, no record` | This machine holds a key under that id and the device list has no row for it, so the id is all that is known. Nothing should leave one. It is not put on the tunnel the next time the tunnel comes up, though a tunnel that is up now may still admit it until then. `gglib remote forget <id>` retires the key. |
 | A row in `gglib remote list` reads `invited …, never joined` | A code was offered for that device and nobody redeemed it. The key was minted but never transmitted, so nobody holds it; `gglib remote forget <id>` tidies the row away. Unspent invites are listed rather than swept on a timer, so that what the machine issued is always visible. |
 
 ## Not yet

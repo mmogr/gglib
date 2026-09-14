@@ -68,8 +68,8 @@ remote_enabled: boolean,
 /**
  * Where the endpoint key is kept. Deleting it retires this machine's
  * address and revokes no device: the tunnel comes up at a new address
- * that still admits every device key. Retiring a device is a `DELETE`
- * of `/api/remote/devices/{device}`.
+ * that still admits every device key the roster lists. Retiring a device
+ * is a `DELETE` of `/api/remote/devices/{device}`.
  */
 identity_path: string | null, 
 /**
