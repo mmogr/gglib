@@ -4,7 +4,8 @@
 //! ratchet; see `scripts/check_rust_complexity.sh`.
 
 use super::*;
-use serde_json::json;
+use gglib_core::domain::agent::{batch_results_hash, hash_result_content};
+use serde_json::{Value, json};
 
 fn cfg() -> LoopGuardConfig {
     LoopGuardConfig::from_settings(&Settings::with_defaults()).expect("guard on by default")
@@ -18,15 +19,7 @@ fn body(messages: &[Value]) -> Vec<u8> {
 }
 
 fn assistant_call(name: &str, args: &str) -> Value {
-    json!({
-        "role": "assistant",
-        "content": null,
-        "tool_calls": [{
-            "id": "c1",
-            "type": "function",
-            "function": { "name": name, "arguments": args }
-        }]
-    })
+    assistant_call_id("c1", name, args)
 }
 
 fn assistant_text(text: &str) -> Value {
