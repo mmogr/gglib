@@ -43,6 +43,12 @@ pub(crate) struct RemoteDevice {
     /// Advisory, and written at most once a minute per device.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub last_seen: Option<i64>,
+    /// The fingerprint of the endpoint that redeemed this device's invite, or
+    /// `null` if none was recorded. A record, not a check: a device that does
+    /// not keep its endpoint key presents a new fingerprint every time it
+    /// connects.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+    pub peer: Option<String>,
     /// Whether the edge is admitting it right now, or `null` when the tunnel
     /// is down — nothing admits then, and `false` would read as "this one
     /// device was dropped".
@@ -63,6 +69,7 @@ impl From<DeviceView> for RemoteDevice {
             joined_at: d.joined_at,
             redeemed_at: d.redeemed_at,
             last_seen: d.last_seen,
+            peer: d.peer,
             admitted: d.admitted,
             recorded: d.recorded,
         }

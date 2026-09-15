@@ -180,7 +180,12 @@ function describe(device: RemoteDevice): string {
     const invited = `invited ${ago(device.joined_at)}, never joined`;
     return device.admitted === false ? `${invited} · not admitted` : invited;
   }
-  const seen = device.last_seen === null ? 'no requests yet' : `last seen ${ago(device.last_seen)}`;
+  // Where the invite was redeemed from, when that was recorded (#1041). A
+  // truthy test, not `!== null`: a daemon older than the field sends none. The
+  // CLI's `describe` puts it in the same place.
+  const from = device.peer ? ` · paired from ${device.peer}` : '';
+  const seen =
+    (device.last_seen === null ? 'no requests yet' : `last seen ${ago(device.last_seen)}`) + from;
   if (device.admitted === null) return `${seen} · tunnel down`;
   return device.admitted ? seen : `${seen} · not admitted`;
 }

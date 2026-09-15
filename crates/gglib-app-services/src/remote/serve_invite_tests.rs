@@ -198,7 +198,7 @@ async fn redeeming_an_invite_stamps_the_row_it_was_minted_for() {
     let outcome = gglib_core::ports::RemoteGatewayPort::redeem_pairing_code(
         &*ops.gateway,
         &offered.code,
-        None,
+        Some("3ca82708b995"),
         Some("Matt's iPhone"),
     );
     // `roster_sync` owns the write and the note reaches it down a channel,
@@ -227,9 +227,9 @@ async fn redeeming_an_invite_stamps_the_row_it_was_minted_for() {
     );
     let joined = joined.expect("the roster never settled within two seconds");
     assert_eq!(
-        joined.label.as_deref(),
-        Some("Matt's iPhone"),
-        "the label rides the same write"
+        (joined.label.as_deref(), joined.peer.as_deref()),
+        (Some("Matt's iPhone"), Some("3ca82708b995")),
+        "the label and the endpoint it paired from ride the same write"
     );
     assert!(
         joined.last_seen.is_none(),

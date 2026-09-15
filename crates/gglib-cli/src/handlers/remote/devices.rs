@@ -116,10 +116,16 @@ fn describe(d: &RemoteDeviceDto) -> String {
             ago(d.joined_at)
         );
     }
-    let seen = match d.last_seen {
+    let mut seen = match d.last_seen {
         Some(at) => format!("last seen {}", ago(at)),
         None => "no requests yet".to_owned(),
     };
+    // Where the invite was redeemed from, when that was recorded (#1041),
+    // after either arm, which is where the GUI's `describe` puts it too.
+    if let Some(peer) = &d.peer {
+        seen.push_str("; paired from ");
+        seen.push_str(peer);
+    }
     match d.admitted {
         Some(true) => format!("{name}  ({seen})"),
         Some(false) => format!("{name}  ({seen}; not admitted)"),

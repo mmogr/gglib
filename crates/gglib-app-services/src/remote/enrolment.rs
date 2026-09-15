@@ -153,6 +153,7 @@ async fn record(ops: &RemoteOps, id: &str) -> Result<(), GuiError> {
         // redeemed, which is what tells an unspent invite from a device.
         redeemed_at: None,
         last_seen: None,
+        peer: None,
     });
     write_roster(&ops.core, roster).await
 }

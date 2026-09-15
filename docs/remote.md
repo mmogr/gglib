@@ -80,11 +80,18 @@ not. The list errs this way on purpose, because the other direction would
 call an unspent invite a device; but it means `forget` on a row you do not
 recognise is a revocation you should be willing to make, not merely tidying.
 
+A device that redeemed its code also says which endpoint it paired from:
+the fingerprint of the endpoint the code was redeemed from. It is a record,
+not a check, and nothing is refused on it. Neither gglib nor ggchat keeps a
+connecting endpoint's key yet, so a device presents a new fingerprint every
+time it connects, and this one says only which endpoint redeemed the code. A
+row whose redemption was not recorded shows none.
+
 ```console
 $ gglib remote list
   ID            DEVICE
-  dev-4e5f6a7b  Matt's MacBook  (last seen 4m ago)
-  dev-0a1b2c3d  Matt's iPhone  (no requests yet)
+  dev-4e5f6a7b  Matt's MacBook  (last seen 4m ago; paired from 3ca82708b995)
+  dev-0a1b2c3d  Matt's iPhone  (no requests yet; paired from 91d0e4f2a6c8)
   dev-9c2b77f1  —  (invited 3d ago, never joined)
 
   Retire one:  gglib remote forget <id>
@@ -178,8 +185,8 @@ The desktop keeps two records, in two places, on purpose:
   settings show` prints settings unmasked by design, so that a rotated key
   can be recovered, and that output is what people paste into bug reports.
 * **Everything readable about a device** — the id the edge knows it as, what
-  it called itself, when it joined, when it was last seen — is in settings,
-  where nothing about it is secret.
+  it called itself, when it joined, when it was last seen, and which endpoint
+  redeemed its invite — is in settings, where nothing about it is secret.
 
 **Retiring a device stops admission, not delivery.** The edge refuses that
 device's key from the next request onward; a response already streaming to it

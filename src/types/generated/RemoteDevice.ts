@@ -34,6 +34,13 @@ redeemed_at: number | null,
  */
 last_seen: number | null, 
 /**
+ * The fingerprint of the endpoint that redeemed this device's invite, or
+ * `null` if none was recorded. A record, not a check: a device that does
+ * not keep its endpoint key presents a new fingerprint every time it
+ * connects.
+ */
+peer: string | null, 
+/**
  * Whether the edge is admitting it right now, or `null` when the tunnel
  * is down — nothing admits then, and `false` would read as "this one
  * device was dropped".

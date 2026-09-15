@@ -50,8 +50,8 @@ pub(crate) struct ProxyStatusDto {
 /// One row of `GET /api/remote/devices`.
 ///
 /// A narrowing of `gglib_axum::handlers::remote::RemoteDevice`: every field
-/// the terminal renders, and `#[serde(default)]` on each optional one so a
-/// daemon older than this client still decodes.
+/// the terminal renders. A field a daemon older than this client does not
+/// send reads as `None`, or as zero for `joined_at`; only `id` is required.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RemoteDeviceDto {
     /// The name the edge holds the key under, and what `forget` takes.
@@ -69,6 +69,8 @@ pub(crate) struct RemoteDeviceDto {
     /// Unix milliseconds of the last request under its key.
     #[serde(default)]
     pub last_seen: Option<i64>,
+    /// The fingerprint of the endpoint that redeemed it, when recorded.
+    pub peer: Option<String>,
     /// Whether the edge admits it now, or `None` with the tunnel down.
     #[serde(default)]
     pub admitted: Option<bool>,

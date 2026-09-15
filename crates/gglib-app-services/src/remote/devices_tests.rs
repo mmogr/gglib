@@ -53,6 +53,7 @@ async fn an_unreadable_key_file_still_lists_the_roster() {
                 joined_at: 1,
                 redeemed_at: Some(2),
                 last_seen: None,
+                peer: None,
             }])),
             ..SettingsUpdate::default()
         })

@@ -21,6 +21,7 @@ fn device(id: &str) -> Device {
         joined_at: 1,
         redeemed_at: None,
         last_seen: None,
+        peer: None,
     }
 }
 

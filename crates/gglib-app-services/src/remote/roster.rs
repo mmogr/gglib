@@ -39,6 +39,9 @@ pub(crate) enum Note {
         device: String,
         /// What it calls itself, when it said.
         label: Option<String>,
+        /// The fingerprint of the endpoint that redeemed, when the request
+        /// carried one.
+        peer: Option<String>,
         /// Unix milliseconds, read on the request path.
         ///
         /// Taken where the redemption happened rather than where it is
@@ -90,10 +93,12 @@ async fn roster_sync(core: Arc<AppCore>, lock: Arc<Mutex<()>>, mut notes: Unboun
             Note::Joined {
                 device,
                 label,
+                peer,
                 at_ms,
             } => {
                 let write = apply(&core, &lock, &device, |d| {
                     d.label.clone_from(&label);
+                    d.peer.clone_from(&peer);
                     d.redeemed_at = Some(at_ms);
                 })
                 .await;
