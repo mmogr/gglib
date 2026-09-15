@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 pub mod apply;
 pub(crate) mod constrain;
+pub(crate) mod content;
 pub(crate) mod effort_gate;
 pub mod explain;
 pub(crate) mod messages;
@@ -16,6 +17,7 @@ pub mod validate;
 
 pub use apply::{PipelineReport, apply};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
+pub use content::{for_each_text_mut, text_len};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
 pub use messages::shape_messages;
