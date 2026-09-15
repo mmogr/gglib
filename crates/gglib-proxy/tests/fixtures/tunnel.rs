@@ -44,9 +44,6 @@ pub(crate) const PROXY_KEY: &str = "sk-zzq-the-backend-key";
 pub(crate) const DEVICE: &str = "dev-0a1b2c3d";
 pub(crate) const DEVICE_KEY: &str = "sk-zzq-the-laptops-key";
 
-/// The code the stub gateway will redeem, for the pairing-route tests.
-pub(crate) const CODE: &str = "483920";
-
 /// Spawn the real proxy on a loopback port, demanding [`PROXY_KEY`].
 pub(crate) async fn spawn_proxy() -> (String, CancellationToken, Arc<StubGateway>) {
     spawn_proxy_demanding(PROXY_KEY).await
@@ -62,7 +59,7 @@ pub(crate) async fn spawn_proxy_demanding(
 
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-    let gateway = Arc::new(StubGateway::new(CODE, DEVICE_KEY, false));
+    let gateway = Arc::new(StubGateway::new(false));
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
         Some(key.to_owned()),

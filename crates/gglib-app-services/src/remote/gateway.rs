@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gglib_core::ports::{AppEventEmitter, PairingOutcome, RemoteGatewayPort};
+use gglib_core::ports::{AppEventEmitter, RemoteGatewayPort};
 
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -124,18 +124,6 @@ impl RemoteGateway {
 }
 
 impl RemoteGatewayPort for RemoteGateway {
-    /// Nothing is redeemed here any more. The tunnel edge answers the pairing
-    /// request itself and `invite_watch` learns how each invite ended, so the
-    /// proxy's pairing route, which still asks, finds nothing to redeem.
-    fn redeem_pairing_code(
-        &self,
-        _code: &str,
-        _peer: Option<&str>,
-        _name: Option<&str>,
-    ) -> PairingOutcome {
-        PairingOutcome::Rejected
-    }
-
     fn mcp_allowed(&self) -> bool {
         self.mcp_allowed.load(Ordering::Relaxed)
     }

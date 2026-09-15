@@ -8,20 +8,19 @@
 //! request, so `bearer_guard` validates a header modelpipe wrote microseconds
 //! earlier and can no longer refuse anything that crossed the tunnel.
 //!
-//! That matters because of what else `backend_auth` applies to. modelpipe
-//! rewrites the header for *every* admitted request, the one a **pairing
-//! grant** admits included, and a grant is one request at any path the
-//! guesser likes — the edge cannot scope it. So without this gate, one
-//! correctly guessed six-digit code would buy a single fully authenticated
-//! request to any protected route, `POST /v1/proxy/shutdown` among them,
-//! which is irreversible without physical access to the machine.
+//! That mattered more when it was written. While gglib paired through a
+//! one-time grant, modelpipe rewrote the header on the request a grant
+//! admitted too, and a grant was one request at any path the guesser liked;
+//! this gate was what kept a guessed code from reaching
+//! `POST /v1/proxy/shutdown`. modelpipe 0.6 answers pairing at the edge and
+//! forwards nothing for it, so every request it admits under
+//! `TokenPolicy::Named` names a device. The gate stays as the one check left
+//! that could refuse a credential a later edge admits without a name.
 //!
-//! The discriminator is the device header, and it works only because the
-//! listener runs `TokenPolicy::Named`: the edge writes that header when a
-//! *named* token admitted and never for a grant, so under `Named` every
-//! legitimate tunnelled request carries one and the absence of it means a
-//! grant — or a local process forging the markers, which is the other thing
-//! this refuses.
+//! The discriminator is the device header, which the edge writes when a
+//! *named* token admitted, so under `Named` every legitimate tunnelled
+//! request carries one, and its absence means a client that reached the
+//! proxy directly forging the markers, which this refuses too.
 //!
 //! Restrictive only, exactly like [`mcp_tunnel_guard`](super::mcp_tunnel_guard):
 //! nothing is ever *granted* on the strength of a header a client could

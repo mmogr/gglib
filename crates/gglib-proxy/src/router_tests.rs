@@ -19,7 +19,6 @@
 /// carries. `/mcp` is here and is the one with a guard of its own.
 const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
-    "/v1/remote/pair",
     "/v1/models",
     "/v1/models/{name}/load",
     "/v1/chat/completions",
