@@ -1,10 +1,13 @@
 # Tool-call repair
 
-**Status:** implemented, **streaming only**. The hold-back and the re-issue
-live on the SSE path; the non-streaming branch has no repair at all.
-`RepairContext` is constructed in exactly one place (`sse_stream.rs`), so a
-non-streaming request carries none and a malformed tool call on that path
-reaches the client unaltered.
+**Status:** implemented on both paths. A streamed turn holds its tool-call
+deltas back until the call is complete, judges it and re-issues; a
+`stream: false` turn has nothing to hold back, since its body is buffered
+anyway, so it is judged once read and re-issued the same way. Both re-issues
+are non-streaming, and both answers are read through the model's dialect
+before they are judged. `RepairContext` carries the decision on the streaming
+path (`sse_stream.rs`); the buffered path hands the same `RepairTurn` to
+`forward_unary`.
 **Decided by:** [ADR 0002](adr/0002-defer-tool-call-constraint-to-llama-cpp.md), findings 4–5.
 
 ## What this solves
@@ -69,7 +72,7 @@ and lives in core, the I/O lives in the adapter that already owns forwarding.
 |---|---|---|
 | `ToolCallValidator` — `(tools, tool_calls) -> Verdict` | `gglib-core::request_pipeline::validate` | Pure function over `serde_json::Value`. No HTTP, no runtime. Testable exhaustively against schema fixtures. |
 | `RepairPolicy` — should this verdict be repaired, and how | `gglib-core::request_pipeline::validate` | Policy is domain. Keeps the "when" answerable without a server. |
-| Repair executor — re-issue, swap, record | `gglib-proxy::forward` | Only the proxy can issue a second upstream request. |
+| Repair executor — re-issue, swap, record | `gglib-proxy::forward` (streamed) and `gglib-proxy::forward_unary` (buffered), sharing `repair::read_second_draw` | Only the proxy can issue a second upstream request. |
 | Counters / dashboard fields | `gglib-proxy::metrics` | Same shape as `dialect_residue_total` and `grammar_enforced`. |
 
 Sitting the validator in `request_pipeline` beside `constrain` is deliberate:
@@ -253,6 +256,25 @@ The alternative — repair only on `stream: false` — is rejected. Every agenti
 client streams, so it would ship a feature that never runs, which is exactly
 the inert-Tier-A trap ADR 0002 flagged.
 
+### Non-streaming
+
+A `stream: false` turn needs none of the above. The body is buffered before
+anything is answered, so there is nothing to hold back and nothing to
+interleave: `forward_unary` reads the body, runs it through the dialect parser
+once, judges the first choice's call and, on a violation, sends the same
+re-issue the streaming path would — `tool_choice: "required"` on an `auto`
+turn, a second draw under the same grammar on a turn stage 6 constrained.
+From the send onward the two paths share `repair::read_second_draw`, which
+reads the answer through the dialect before `choose` judges it. The client is
+answered with whichever body validates, the original when the draw does not,
+and the dashboard's repair counters and the per-model ledger record the
+attempt as they do for a streamed turn.
+
+What this path cannot do is keep the wire warm. The streaming path pushes an
+SSE comment every fifteen seconds while a re-issue is in flight; a buffered
+response has no frame to push, so the client hears nothing until the second
+generation ends, bounded by the same sixty-second re-issue cap. See "Cost".
+
 ## Observability
 
 Every repair is a fact about a model/build pair, which makes this Tier C data
@@ -264,6 +286,11 @@ as much as Tier B behaviour:
   completes — the same pattern `dialect_residue` uses.
 - A `warn!` on repair failure naming the model, the violation kinds, and the
   llama.cpp build.
+- On a `stream: false` turn the dialect-residue flag describes the first
+  answer, which is what was normalised, even when a repair then answers the
+  client with a second draw; the streamed path's flag describes the frames
+  the client received. Telemetry only, and the overlap (residue, a violation
+  and a successful draw on one turn) is narrow.
 
 A model that repairs constantly is evidence its `auto` path is unconstrained,
 which is precisely the per-model grammar-presence data ADR 0002 lists as a
@@ -282,6 +309,11 @@ is how that gets measured in production rather than in a `--verbose` log.
   second-draw tests pin the turn stage 6 did constrain.
 - Streaming: integration test that tool-call deltas are withheld until
   `finish_reason` and that text deltas are not.
+- Non-streaming, end to end (`forward_unary_repair_tests.rs`): a bad call is
+  re-issued and the client gets the valid one; a turn gglib's grammar
+  constrained is answered in markup and read as a call; a valid call is not
+  re-issued; a re-issue upstream rejects falls open to the first answer and
+  counts as an attempt; repair off leaves the body as it came.
 - End-to-end: replay a recorded Llama 3.2 `auto` response with
   `max_lines: "42"`, assert repair fires and the forwarded call conforms.
 
@@ -294,6 +326,14 @@ that one costs a generation *plus* a tool round trip *plus* the context growth
 of an error message the model then has to reason about.
 
 On Qwen3.5 it costs nothing, because nothing fails validation.
+
+On a `stream: false` turn the worst case doubles the wait: the first
+generation, then up to sixty seconds of re-issue with no keepalive the client
+can hear. A client whose own deadline is shorter than that sum gives up on a
+repaired turn it would have accepted unrepaired, and nothing here can tell it
+a second generation is under way. Every agentic client streams, so this is
+the rare path; it is written down because a client that hits it sees a
+timeout, not a repair.
 
 ## What this is not
 

@@ -26,6 +26,7 @@ pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
 pub(crate) mod forward;
+pub(crate) mod forward_unary;
 pub(crate) mod load_endpoint;
 pub(crate) mod loop_guard;
 pub(crate) mod mcp;
@@ -45,6 +46,7 @@ pub(crate) mod slots_poller;
 pub(crate) mod sse_stream;
 pub mod template_caps_read;
 pub(crate) mod token_calibration;
+pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;
 

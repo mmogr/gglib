@@ -38,9 +38,10 @@ use axum::response::{IntoResponse, Response};
 use tracing::{debug, error, info};
 
 use crate::dashboard::CacheStatus;
-use crate::forward::{forward_non_streaming_response, should_forward_header};
+use crate::forward::should_forward_header;
 use crate::models::{EmbeddingsRoutingEnvelope, ErrorResponse};
 use crate::server::{AppState, handle_runtime_error};
+use crate::unary_body::forward_non_streaming_response;
 
 /// The tag that marks a model as launchable in embedding mode.
 ///
