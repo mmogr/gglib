@@ -96,7 +96,8 @@ rate was flattering. The production validator must recurse or it repeats that
 error where it matters.
 
 **Explicit non-goals.** No `$ref` resolution, no `anyOf`/`oneOf`/`allOf`/`not`,
-no recursion into `$defs`. A schema using any of them yields
+no recursion into `$defs`, and no `prefixItems`, since `items` is applied to
+every element. A schema using any of them yields
 `Verdict::Unvalidatable` and is forwarded untouched. Those keywords are looked
 for only where a schema puts keywords, so a parameter named `if` or
 `definitions` is validated like any other. `pattern` is not checked at all.

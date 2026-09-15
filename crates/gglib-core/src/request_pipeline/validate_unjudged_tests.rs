@@ -54,6 +54,38 @@ fn a_schema_using_a_ref_is_unvalidatable() {
     ));
 }
 
+/// A tuple-shaped array is not judged. Under JSON Schema 2020-12, `items`
+/// covers only the elements after the ones `prefixItems` describes, so
+/// `["a", 1]` conforms to this schema; a validator that applied `items` to
+/// every element would report a wrong type at `/pair/0`, the false violation
+/// the module doc forbids.
+#[test]
+fn a_schema_using_prefix_items_is_unvalidatable() {
+    let tools = json!([{
+        "type": "function",
+        "function": {
+            "name": "t",
+            "parameters": {
+                "type": "object",
+                "properties": {"pair": {
+                    "type": "array",
+                    "prefixItems": [{"type": "string"}],
+                    "items": {"type": "integer"}
+                }}
+            }
+        }
+    }]);
+    let calls = json!([{
+        "type": "function",
+        "function": {"name": "t", "arguments": r#"{"pair":["a",1]}"#}
+    }]);
+
+    assert_eq!(
+        validate_tool_calls(Some(&tools), Some(&calls)),
+        Verdict::Unvalidatable("prefixItems")
+    );
+}
+
 /// A real violation elsewhere outranks an unvalidatable schema: the repair
 /// re-issues the whole turn anyway, so a known-bad call is worth acting on
 /// even when a sibling cannot be judged.
@@ -121,8 +153,8 @@ fn a_parameter_named_like_a_keyword_is_still_validated() {
     );
 }
 
-/// A keyword inside a parameter's subschema, or under `items`,
-/// `additionalProperties` or `prefixItems`, is still found.
+/// A keyword inside a parameter's subschema, or under `items`, whether one
+/// schema or a draft-07 tuple of them, or `additionalProperties`, is still found.
 #[test]
 fn a_keyword_in_a_subschema_is_still_found() {
     for parameters in [
@@ -132,7 +164,7 @@ fn a_keyword_in_a_subschema_is_still_found() {
         }}),
         json!({"type": "object", "additionalProperties": {"$ref": "#/$defs/path"}}),
         json!({"type": "object", "properties": {
-            "pair": {"type": "array", "prefixItems": [{"type": "string"}, {"not": {"type": "null"}}]}
+            "pair": {"type": "array", "items": [{"type": "string"}, {"not": {"type": "null"}}]}
         }}),
     ] {
         let tools =

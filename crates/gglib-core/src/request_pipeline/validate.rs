@@ -32,7 +32,7 @@
 //! types, `required`, `enum`, `additionalProperties: false`, and the same
 //! checks recursively through nested objects and array items.
 //!
-//! `$ref`, `anyOf`/`oneOf`/`allOf`, `not` and `$defs` yield
+//! `$ref`, `anyOf`/`oneOf`/`allOf`, `not`, `$defs` and `prefixItems` yield
 //! [`Verdict::Unvalidatable`] and the response is forwarded untouched, and
 //! `pattern` is not checked at all. Half-implementing those constructs would
 //! produce false violations, and a false violation costs a wasted generation
@@ -63,6 +63,10 @@ use tracing::debug;
 /// unvalidatable. A parameter's name is not where a keyword goes: see
 /// [`unsupported_reason`]. Listed rather than inferred so adding support for one is a
 /// deliberate edit with a test, not an emergent behaviour change.
+///
+/// `prefixItems` is here because the array check applies `items` to every
+/// element, and under a tuple schema `items` covers only the elements after
+/// the prefix, so a conformant tuple would read as a violation.
 const UNSUPPORTED_KEYWORDS: &[&str] = &[
     "$ref",
     "$defs",
@@ -77,6 +81,7 @@ const UNSUPPORTED_KEYWORDS: &[&str] = &[
     "patternProperties",
     "dependentSchemas",
     "propertyNames",
+    "prefixItems",
 ];
 
 /// What a single tool call got wrong.
@@ -295,7 +300,6 @@ fn schema_for<'a>(tools: &'a [Value], name: &str) -> Option<&'a Value> {
 /// ends the search.
 const SUBSCHEMA_KEYWORDS: &[&str] = &[
     "items",
-    "prefixItems",
     "additionalItems",
     "contains",
     "additionalProperties",
