@@ -135,8 +135,8 @@ pub(crate) struct EmbeddingsRoutingEnvelope {
 /// `ChatMessage.content` is typed as `Option<String>` here. The OpenAI API
 /// also allows an array of content parts; callers constructing this type
 /// should use `content: None` plus `tool_calls` for tool-only messages.
-/// Inbound array-form content passes through the proxy untouched because the
-/// proxy never deserialises it into this struct.
+/// Inbound array-form content is never deserialised into this struct; the
+/// request pipeline reads both shapes from the raw body where it needs to.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatCompletionRequest {
     /// Model name to use.

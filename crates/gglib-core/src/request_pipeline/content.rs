@@ -34,6 +34,20 @@ pub fn text_len(content: &Value) -> usize {
     }
 }
 
+/// The number of pieces of text `content` carries: 1 for a string, one per
+/// text part for an array, 0 for anything else.
+#[must_use]
+pub fn text_parts(content: &Value) -> usize {
+    match content {
+        Value::String(_) => 1,
+        Value::Array(parts) => parts
+            .iter()
+            .filter(|part| part.get("text").is_some_and(Value::is_string))
+            .count(),
+        _ => 0,
+    }
+}
+
 /// Apply `f` to every piece of text in `content`, in either shape, and say
 /// how many pieces it visited.
 ///

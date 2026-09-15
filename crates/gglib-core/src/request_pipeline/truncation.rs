@@ -18,7 +18,7 @@
 //!
 //! 2. **Oldest-first trim to a low watermark** — only when the payload exceeds
 //!    the budget are messages elided: unprotected `role: "tool"` /
-//!    `role: "assistant"` messages whose `content` string exceeds
+//!    `role: "assistant"` messages whose text, in either content shape, exceeds
 //!    [`TOOL_CONTENT_THRESHOLD_CHARS`] are replaced with
 //!    [`TRUNCATION_PLACEHOLDER`] **from oldest to newest**, until the estimated
 //!    savings reach a quantized target aimed at [`LOW_WATERMARK_PCT`] of the
@@ -75,9 +75,9 @@ use serde_json::Value;
 // Constants
 // =============================================================================
 
-/// Maximum number of characters allowed in a single unprotected `role: "tool"`
-/// or `role: "assistant"` message `content` string before it is eligible for
-/// replacement with [`TRUNCATION_PLACEHOLDER`].
+/// Maximum number of characters of text allowed in a single unprotected
+/// `role: "tool"` or `role: "assistant"` message, in either content shape,
+/// before it is eligible for replacement with [`TRUNCATION_PLACEHOLDER`].
 pub(crate) const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
 
 /// Character-to-token conversion factor used to translate a model's **token**
@@ -210,7 +210,6 @@ pub fn truncate_history(
     // abort below fires only when the payload still exceeds the budget itself,
     // not the watermark.
     let total = messages.len();
-    let placeholder_len = TRUNCATION_PLACEHOLDER.len();
     let target_savings = target_savings_chars(payload_chars_before, limit_chars);
     let mut messages_truncated = 0usize;
     let mut saved = 0usize;
@@ -225,21 +224,12 @@ pub fn truncate_history(
             continue;
         }
 
-        // Only string-form content is replaced. Array-form content (multi-part
-        // messages) is left untouched, as is `tool_calls` at any role.
-        let Some(content_len) = msg
-            .get("content")
-            .and_then(Value::as_str)
-            .map(str::len)
-            .filter(|len| *len > TOOL_CONTENT_THRESHOLD_CHARS)
-        else {
+        // Either content shape is elided; `tool_calls` at any role is not.
+        let Some(reclaimed) = super::truncation_parts::elide(msg) else {
             continue;
         };
-
-        msg["content"] = Value::String(TRUNCATION_PLACEHOLDER.to_owned());
         messages_truncated += 1;
-        // Each replacement reclaims (content_len - placeholder_len) chars.
-        saved = saved.saturating_add(content_len.saturating_sub(placeholder_len));
+        saved = saved.saturating_add(reclaimed);
     }
 
     // ── Budget check ─────────────────────────────────────────────────────────
