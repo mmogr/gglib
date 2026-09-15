@@ -1,159 +1,122 @@
-//! The pairing code: one code, one redemption, two minutes.
+//! The invite a session has open: at most one, and how it ended.
 //!
-//! Pure state behind a `std` mutex, never held across an await. The tunnel
-//! edge admits one request bearing the code (modelpipe's
-//! `grant_once_bounded`); this is the other half — the proxy's pairing
-//! route asks here whether that request's code is the one this session
-//! minted, and takes the key it stands for.
+//! The code itself is modelpipe's. The tunnel edge mints it beside the
+//! device's key, answers `POST /modelpipe/pair` itself, counts wrong codes per
+//! endpoint and expires it, and none of that reaches this process. What is
+//! left here is gglib's own rule, which modelpipe does not have: one invite at
+//! a time per session, so a second `gglib remote invite` is refused while a
+//! code is on screen rather than minting another beside it.
+//!
+//! Pure state behind a `std` mutex, never held across an await.
 
 use std::num::NonZeroU8;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use gglib_core::access::constant_time_eq;
-use gglib_core::ports::PairingOutcome;
+use modelpipe::InviteOutcome;
 
 /// How long a code lives unused.
 pub(crate) const PAIRING_TTL: Duration = Duration::from_secs(120);
 
-/// How many wrong codes burn the pairing, at each door that counts them.
+/// How many wrong codes one endpoint may present before the edge locks it out
+/// of the invite.
 ///
-/// Three is enough to forgive a mistyped digit and too few to guess with.
-/// Two counters enforce it and neither sees the other's attempts. This one
-/// counts redemptions that reach the proxy, which a local process can spend
-/// without holding a ticket — so the ticket is not part of the arithmetic
-/// here, as ADR 0012's 2026-09-07 correction records. The tunnel edge counts
-/// the wrong bearers that never reach the proxy at all, taking the same
-/// bound as [`MAX_ATTEMPTS_AT_EDGE`].
-pub(crate) const MAX_ATTEMPTS: u8 = 3;
-
-/// [`MAX_ATTEMPTS`] in the shape modelpipe's edge takes it.
-///
-/// Converted once rather than written twice: two literals that could drift
-/// apart would be two different promises about the same code.
-pub(crate) const MAX_ATTEMPTS_AT_EDGE: NonZeroU8 = match NonZeroU8::new(MAX_ATTEMPTS) {
+/// Three forgives a mistyped digit and is too few to guess with. The edge is
+/// the only counter: a code is presented to it and nowhere else. A guesser
+/// that mints fresh endpoints to get more tries is what
+/// [`InviteOutcome::Burned`] reports.
+pub(crate) const MAX_ATTEMPTS_AT_EDGE: NonZeroU8 = match NonZeroU8::new(3) {
     Some(bound) => bound,
-    None => panic!("MAX_ATTEMPTS is not zero"),
+    None => panic!("three is not zero"),
 };
 
 /// Whether an arming offers a pairing code at all.
 ///
 /// A person running `gglib remote enable` is watching for one. A daemon
 /// putting the tunnel back at startup is not, and a code nobody is watching
-/// for is a live grant nobody spends — for the two minutes it takes to
-/// expire, on a route outside the proxy's bearer group, at every boot. The
-/// distinction is a type rather than a `bool` so that the silent path cannot
-/// be reached by forgetting an argument.
+/// for is a live code nobody spends, for the two minutes it takes to expire,
+/// at every boot. The distinction is a type rather than a `bool` so that the
+/// silent path cannot be reached by forgetting an argument.
 #[derive(Clone, Copy)]
 pub(crate) enum Offer {
-    /// Mint a code and grant it once at the edge.
+    /// Invite a device: mint its key and a code at the edge.
     Code,
     /// Arm the tunnel and nothing else.
     Silent,
 }
 
-struct Pending {
-    code: String,
-    key: String,
-    /// The name the edge holds `key` under, handed back with it so the
-    /// device learns what it is called here.
-    device: String,
-    expires: Instant,
-    attempts: u8,
+/// What the gateway needs of an invite: how it ended, and a way to end it.
+///
+/// A trait rather than `modelpipe::InviteHandle` itself so that the gateway's
+/// tests can hold an invite no listener minted, which is the reason
+/// `teardown::Drain` exists too. `invite_watch.rs` implements it for the
+/// handle.
+pub(crate) trait Invitation: Send + Sync {
+    /// How the invite ended, or `None` while its code is redeemable.
+    fn ended(&self) -> Option<InviteOutcome>;
+    /// End it now, as withdrawn. A no-op once it has ended.
+    fn withdraw(&self);
 }
 
-/// The code a session is currently prepared to redeem, if any.
+/// An invite a session has open, and the device it was minted for.
+pub(crate) struct Open {
+    /// The name the edge holds the device's key under.
+    pub(crate) device: String,
+    pub(crate) invitation: Box<dyn Invitation>,
+}
+
+/// The invite a session currently has open, if any.
 #[derive(Default)]
 pub(crate) struct Pairing {
-    pending: Mutex<Option<Pending>>,
+    open: Mutex<Option<Open>>,
 }
 
 impl Pairing {
-    /// Arm a pairing: `code` redeems for `device`'s `key` until `ttl` passes.
+    /// Hold `invitation` as the open invite.
     ///
-    /// Replaces any pairing already armed. There is one code at a time, and
-    /// the caller decides whether replacing one is allowed — see
-    /// [`RemoteGateway::offer_pairing`](super::gateway::RemoteGateway::offer_pairing),
-    /// which refuses rather than arming over a live one.
-    pub(crate) fn begin_for(&self, code: String, key: String, device: String, ttl: Duration) {
-        *self.lock() = Some(Pending {
-            code,
-            key,
-            device,
-            expires: Instant::now() + ttl,
-            attempts: 0,
-        });
-    }
-
-    /// Forget a pairing that was armed but never redeemed, and say which
-    /// device it was for so its key can be retired.
-    pub(crate) fn withdraw(&self) -> Option<String> {
-        self.lock().take().map(|pending| pending.device)
-    }
-
-    /// The same, but only when the pending code was armed for `device`.
-    ///
-    /// An invite for some *other* device is none of a `forget`'s business:
-    /// retiring the laptop must not cancel the code a person is currently
-    /// typing into their phone.
-    pub(crate) fn withdraw_if(&self, device: &str) -> Option<String> {
+    /// Replaces nothing on purpose: an invite already here may have ended as
+    /// `Redeemed` and not been recorded yet, so the gateway takes it out and
+    /// records it before calling this.
+    pub(crate) fn begin(&self, device: String, invitation: Box<dyn Invitation>) {
         let mut slot = self.lock();
-        if slot.as_ref().is_none_or(|pending| pending.device != device) {
-            return None;
-        }
-        slot.take().map(|pending| pending.device)
-    }
-
-    /// Present a code. Exactly one presentation can ever be `Granted`.
-    ///
-    /// Expiry is checked first, so a code that timed out is dead whatever is
-    /// presented. A wrong code counts against the attempts and the third
-    /// burns the pairing. A right code is spent by the act of matching.
-    pub(crate) fn redeem(&self, presented: &str) -> PairingOutcome {
-        let mut slot = self.lock();
-        let Some(pending) = slot.as_mut() else {
-            return PairingOutcome::Rejected;
-        };
-        if Instant::now() >= pending.expires {
-            *slot = None;
-            return PairingOutcome::Rejected;
-        }
-        if constant_time_eq(pending.code.as_bytes(), presented.as_bytes()) {
-            let key = pending.key.clone();
-            let device = pending.device.clone();
-            *slot = None;
-            return PairingOutcome::Granted { key, device };
-        }
-        pending.attempts += 1;
-        if pending.attempts >= MAX_ATTEMPTS {
-            *slot = None;
-        }
-        PairingOutcome::Rejected
+        debug_assert!(slot.is_none(), "an open invite was replaced unrecorded");
+        *slot = Some(Open { device, invitation });
     }
 
     /// Whether a code is currently redeemable.
+    ///
+    /// **It reads and never clears.** An invite that ended as `Redeemed` stays
+    /// here until whoever takes it out records the device. Clearing it here
+    /// would lose that record to whichever `status` read came first.
     pub(crate) fn active(&self) -> bool {
-        let mut slot = self.lock();
-        match slot.as_ref() {
-            Some(pending) if Instant::now() < pending.expires => true,
-            Some(_) => {
-                *slot = None;
-                false
-            }
-            None => false,
-        }
+        self.lock()
+            .as_ref()
+            .is_some_and(|open| open.invitation.ended().is_none())
     }
 
-    /// Forget any pairing. `disable` calls this so a code shown for a
-    /// session that ended cannot outlive it.
-    pub(crate) fn clear(&self) {
-        *self.lock() = None;
+    /// Take the open invite out, live or ended.
+    pub(crate) fn take(&self) -> Option<Open> {
+        self.lock().take()
+    }
+
+    /// Take the open invite out if it was minted for `device`.
+    ///
+    /// An invite for some *other* device is none of the caller's business:
+    /// retiring the laptop must not cancel the code a person is typing into
+    /// their phone.
+    pub(crate) fn take_if(&self, device: &str) -> Option<Open> {
+        let mut slot = self.lock();
+        if slot.as_ref().is_some_and(|open| open.device == device) {
+            slot.take()
+        } else {
+            None
+        }
     }
 
     // Nothing panics while holding the lock; recovering the guard is the
     // honest answer to an impossible poison.
-    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Pending>> {
-        self.pending
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<Open>> {
+        self.open
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -161,4 +124,4 @@ impl Pairing {
 
 #[cfg(test)]
 #[path = "pairing_tests.rs"]
-mod pairing_tests;
+pub(super) mod pairing_tests;

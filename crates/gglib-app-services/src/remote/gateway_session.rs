@@ -1,8 +1,8 @@
-//! Starting, replacing and ending a gateway session.
+//! Starting, replacing and ending a gateway session, and the invite it holds.
 //!
 //! A child of `gateway.rs` rather than a sibling, for two reasons. The state
-//! these four methods move is private to [`RemoteGateway`] and should stay
-//! that way — a sibling module would need every field opened to the whole of
+//! these methods move is private to [`RemoteGateway`] and should stay that
+//! way — a sibling module would need every field opened to the whole of
 //! `remote`. And they are one subject: every one of them is the same three
 //! lines of reasoning about an epoch.
 //!
@@ -17,32 +17,45 @@
 //! differ.
 //!
 //! What that buys is the absence of two specific failures, both of which
-//! reach a person: a pairing code left live for its full TTL on a session
-//! with no listener behind it — and `POST /v1/remote/pair` sits outside the
-//! proxy's bearer group, so anything local could spend it — and a fresh
+//! reach a person: an invite held open for a session with no listener behind
+//! it, which `status` would report as a code nobody can redeem, and a fresh
 //! session silently reset by the teardown of the one it replaced, which
-//! hands the operator a string that answers `Rejected`.
+//! withdraws the code the operator is holding.
+//!
+//! **Whoever takes an invite out of the slot records how it ended.** The
+//! redemption happens at the tunnel edge, so this process learns that a
+//! device paired only by reading the invite's outcome. `invite_watch` reads
+//! it as soon as it is set, but that is a task, and a reset or a new offer
+//! can take the invite out first. So every path that takes one out withdraws
+//! it, which is a no-op once it has ended, and then records whatever it ended
+//! as. A device that redeemed is recorded once, by whichever got there first.
 
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+
+use gglib_core::events::AppEvent;
+use gglib_core::ports::RemoteGatewayPort;
+use modelpipe::InviteOutcome;
+use tracing::{info, warn};
 
 use super::RemoteGateway;
+use crate::remote::pairing::{Invitation, Open};
+use crate::remote::roster::{Note, now_ms};
 
 /// What [`RemoteGateway::offer_pairing`] did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::remote) enum Offered {
-    /// Armed: the code redeems for the key it was given.
+    /// Held: the invite is this session's, and the caller may arm its code.
     Armed,
-    /// A later session owns the gateway; nothing was armed.
+    /// A later session owns the gateway; nothing was held.
     Superseded,
-    /// A pairing is already open on this session; nothing was armed.
+    /// An invite is already open on this session; nothing was held.
     AlreadyOpen,
 }
 
 impl RemoteGateway {
-    /// Arm a session — `code` redeems for `key` for `ttl`, and `/mcp` is
-    /// open to tunnelled requests or it is not — and say which session that
-    /// is. The number comes back for [`Self::reset_session_if`].
+    /// Arm a session — `/mcp` is open to tunnelled requests or it is not —
+    /// and say which session that is. The number comes back for
+    /// [`Self::reset_session_if`].
     ///
     /// The paired flag is cleared here as well as there, because a teardown
     /// is not guaranteed to run: the session this replaces may still be
@@ -51,37 +64,37 @@ impl RemoteGateway {
     /// now being armed, and `status` would otherwise report the last one's
     /// answer.
     ///
-    /// No pairing is armed here. `enable` starts a session; `invite` is what
-    /// offers a code, and it does so against a session that is already up —
-    /// so any pairing the previous session left is cleared rather than
-    /// inherited, and a restart that puts the tunnel back arms nothing at
-    /// all. A code nobody is watching for is a live grant nobody spends, on
-    /// a route that sits outside the proxy's bearer group.
+    /// No invite is opened here. `enable` starts a session; `invite` is what
+    /// offers a code, against a session that is already up — so an invite
+    /// the previous session left open is withdrawn rather than inherited, and
+    /// a restart that puts the tunnel back offers nothing at all.
     pub(in crate::remote) fn begin_session(&self, allow_mcp: bool) -> u64 {
         let mut session = self.session();
         *session += 1;
-        self.pairing.clear();
+        self.close_invite(self.pairing.take());
         self.mcp_allowed.store(allow_mcp, Ordering::Relaxed);
         self.paired.store(false, Ordering::Relaxed);
         *session
     }
 
-    /// Offer `code` in exchange for `device`'s `key`, on the session `epoch`
-    /// names.
+    /// Hold `invitation`, minted for `device`, as the open invite on the
+    /// session `epoch` names.
     ///
     /// Epoch-guarded, for [`Self::reset_session_if`]'s reason from the other
     /// side: `invite` reads the live slot, releases it, mints a key and
     /// writes it, then comes back. A `disable` in that window leaves `epoch`
-    /// naming a session that is gone, and a code armed on it would stay
-    /// redeemable for `PAIRING_TTL` with no listener behind it — reachable,
-    /// because `POST /v1/remote/pair` is outside the bearer group.
+    /// naming a session that is gone, and an invite held for it would read
+    /// as a live code on a tunnel that is down. Read and act under the one
+    /// lock, so an `enable` landing between the check and the hold cannot be
+    /// held over.
     ///
-    /// Read and act under the one lock, so an `enable` landing between the
-    /// check and the arm cannot be armed over.
+    /// One invite at a time is this machine's rule, not modelpipe's, which
+    /// would take several. An invite that has ended but not been recorded
+    /// yet is recorded now rather than dropped by the one replacing it.
     ///
     /// **The paired flag is cleared here, not only when a session begins or
     /// ends.** It answers "has the code now on offer been taken?", and a
-    /// session outlives any one code: `invite` arms a second one against a
+    /// session outlives any one code: `invite` offers a second one against a
     /// tunnel that is already up, which is the point of offering a code
     /// without taking every other device down. Left set from the first
     /// device, it would have the pairing screen report success — naming that
@@ -91,10 +104,8 @@ impl RemoteGateway {
     pub(in crate::remote) fn offer_pairing(
         &self,
         epoch: u64,
-        code: String,
-        key: String,
         device: String,
-        ttl: Duration,
+        invitation: Box<dyn Invitation>,
     ) -> Offered {
         let session = self.session();
         if *session != epoch {
@@ -103,49 +114,44 @@ impl RemoteGateway {
         if self.pairing.active() {
             return Offered::AlreadyOpen;
         }
-        self.pairing.begin_for(code, key, device, ttl);
+        self.close_invite(self.pairing.take());
+        self.pairing.begin(device, invitation);
         self.paired.store(false, Ordering::Relaxed);
         Offered::Armed
     }
 
-    /// Clear an open invite when it belongs to `device`, and say so.
+    /// Record how the invite minted for `device` ended, unless another path
+    /// took it out of the slot first. `invite_watch` calls this once the
+    /// invite has ended.
+    pub(in crate::remote) fn settle_invite(&self, device: &str) {
+        let _session = self.session();
+        self.close_invite(self.pairing.take_if(device));
+    }
+
+    /// Withdraw an open invite when it belongs to `device`, and say so.
     ///
-    /// No epoch here, and that is the difference from
-    /// [`withdraw_pairing`](Self::withdraw_pairing): the caller is `forget`,
-    /// which works with the tunnel down and holds no session of its own. What
-    /// it knows is a device id, and an invite for a device that is being
-    /// retired is one nobody should be able to spend — a code redeemed after
-    /// the edge stopped holding its key hands the joining machine a
-    /// credential that admits nowhere.
+    /// No epoch here: the caller is `forget`, which works with the tunnel
+    /// down and holds no session of its own. What it knows is a device id,
+    /// and an invite for a device that is being retired is one nobody should
+    /// be able to spend — a code redeemed after the edge stopped holding its
+    /// key hands the joining machine a credential that admits nowhere.
     pub(in crate::remote) fn withdraw_pairing_for(&self, device: &str) -> Option<String> {
         let _session = self.session();
-        self.pairing.withdraw_if(device)
+        self.close_invite(self.pairing.take_if(device))
     }
 
-    /// Clear the pairing session `epoch` owns and say which device it was
-    /// for, so the caller can retire a key nobody will now fetch.
-    pub(in crate::remote) fn withdraw_pairing(&self, epoch: u64) -> Option<String> {
-        let session = self.session();
-        if *session != epoch {
-            return None;
-        }
-        self.pairing.withdraw()
-    }
-
-    /// Reset everything session `epoch` owns — the pairing, the `/mcp`
-    /// grant, the paired flag, and the roster channel — unless a later
-    /// session has taken the gateway over since. The request counters are
-    /// history and stay.
+    /// Reset everything session `epoch` owns — the invite, the `/mcp` grant,
+    /// the paired flag, and the roster channel — unless a later session has
+    /// taken the gateway over since. The request counters are history and
+    /// stay.
     ///
     /// The guard is not defensive: a teardown takes its time. `take_down`
     /// drains for up to `DRAIN` before it gets here, and neither of its
     /// callers holds the `live` lock while it does — holding it would block
     /// `status` for the whole drain. So a `disable` and a fresh `enable` can
     /// overlap, and a teardown that cleared unconditionally would wipe the
-    /// session that replaced it: the operator would be handed a pairing
-    /// string that answers `Rejected` — "expired, used already, or burned by
-    /// wrong attempts", none of it true — and an `/mcp` grant revoked
-    /// without a word.
+    /// session that replaced it: the code the operator was just handed
+    /// withdrawn, and an `/mcp` grant revoked without a word.
     ///
     /// Read and act under the one lock, which is the reason the epoch is not
     /// a bare atomic: an `enable` landing between a load and the clears
@@ -158,16 +164,18 @@ impl RemoteGateway {
     /// that is gone. The reachable case is an `invite`: it reads the epoch
     /// under the serve slot, releases it, mints a key and writes two stores —
     /// and a `disable` landing in that window would leave `offer_pairing`
-    /// arming a live two-minute code against a tunnel that is down, on a
-    /// route that sits outside the proxy's bearer group. Ending a session has
-    /// to retire its name along with its state.
+    /// holding an invite for a tunnel that is down. Ending a session has to
+    /// retire its name along with its state.
     pub(in crate::remote) fn reset_session_if(&self, epoch: u64) {
         let mut session = self.session();
         if *session != epoch {
             return;
         }
         *session += 1;
-        self.pairing.clear();
+        // Before the roster channel goes, below: a device that redeemed its
+        // code before the listener closed, and that nothing has recorded yet,
+        // is recorded on this session's writer.
+        self.close_invite(self.pairing.take());
         self.mcp_allowed.store(false, Ordering::Relaxed);
         self.paired.store(false, Ordering::Relaxed);
         // Dropping the sender is what ends `roster_sync`: it reads until the
@@ -181,5 +189,46 @@ impl RemoteGateway {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
+    }
+
+    /// Withdraw `open`, a no-op if it has ended, record how it ended, and say
+    /// which device it was for.
+    ///
+    /// Withdrawn before it is read, and not the other way round: a device
+    /// that redeems between a read that said "live" and the withdrawal would
+    /// otherwise be taken out as withdrawn and never recorded. After the
+    /// withdrawal the outcome cannot change.
+    fn close_invite(&self, open: Option<Open>) -> Option<String> {
+        let Open { device, invitation } = open?;
+        invitation.withdraw();
+        match invitation.ended() {
+            Some(InviteOutcome::Redeemed { peer, label, .. }) => {
+                let peer = peer.fingerprint();
+                info!(device = %device, peer = %peer, "a device redeemed its invite");
+                // The pairing request crossed the tunnel like any other, and
+                // while the proxy answered it `status` counted it and named its
+                // endpoint. The edge answers it now, so it is counted here, and
+                // before `paired` flips: the pairing screen names the device
+                // from the last peer the moment it reads `paired`.
+                self.note_tunnelled_request(Some(&peer), None);
+                self.paired.store(true, Ordering::Relaxed);
+                self.note(Note::Joined {
+                    device: device.clone(),
+                    label,
+                    peer: Some(peer.clone()),
+                    at_ms: now_ms(),
+                });
+                self.emitter.emit(AppEvent::remote_paired(Some(peer)));
+            }
+            Some(InviteOutcome::Burned) => warn!(
+                device = %device,
+                "an invite was burned by wrong codes from more endpoints than the edge tracks: \
+                 something holding this machine's ticket is guessing"
+            ),
+            // Expired or withdrawn, and whatever modelpipe adds: the row stays,
+            // listed as never joined, which is the promise `docs/remote.md` makes.
+            _ => {}
+        }
+        Some(device)
     }
 }

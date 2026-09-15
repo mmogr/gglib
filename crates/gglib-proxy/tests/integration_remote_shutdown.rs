@@ -193,13 +193,14 @@ async fn a_proxy_with_no_daemon_says_so() {
 ///
 /// `ServeOptions::backend_auth` means the bearer on a tunnelled request is a
 /// header modelpipe wrote microseconds earlier, so `bearer_guard` can no
-/// longer refuse anything that crossed the tunnel — including the one request
-/// a pairing **grant** admits, which the edge cannot scope to a path. The
-/// device gate is what refuses that, and this is the route where being wrong
+/// longer refuse anything that crossed the tunnel — including a request whose
+/// markers were forged to look tunnelled by a client that reached the proxy
+/// directly. The device gate is
+/// what refuses that, and this is the route where being wrong
 /// costs the most: nothing brings the daemon back but physical access.
 ///
-/// Synthesised rather than piped, deliberately. The real grant is pinned over
-/// a live tunnel in `integration_remote_devices.rs`; this one is here because
+/// Synthesised rather than piped, deliberately: over a live tunnel the edge
+/// names a device on everything it forwards. This one is here because
 /// an unrelated change to the router's layer order would quietly reopen it,
 /// and this file is where somebody looks when they touch this route.
 #[tokio::test]

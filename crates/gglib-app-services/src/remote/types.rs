@@ -24,7 +24,7 @@ pub struct EnableRequest {
     /// are separate verbs — this is the flag that lets a first run be one
     /// command rather than two. A restart never sets it: the daemon putting
     /// the tunnel back has no audience, and a code nobody is watching for is
-    /// a live grant nobody spends.
+    /// a live code nobody spends.
     pub invite: bool,
 }
 

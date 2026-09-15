@@ -1,15 +1,19 @@
-//! Tests for [`super::RemoteGateway`] — the port as the proxy sees it.
+//! Tests for [`super::RemoteGateway`] — the port as the proxy sees it, and the
+//! session it holds. The invite a session holds is `gateway_invite_tests.rs`,
+//! which shares the fixture below.
 
 use std::sync::{Arc, Mutex};
 
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, PairingOutcome, RemoteGatewayPort};
+use gglib_core::ports::{AppEventEmitter, RemoteGatewayPort};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 use super::*;
-use crate::remote::pairing::PAIRING_TTL;
+use crate::remote::pairing::pairing_tests::FakeInvite;
+use crate::remote::roster::Note;
 
 #[derive(Default)]
-struct Recording(Mutex<Vec<AppEvent>>);
+pub(super) struct Recording(Mutex<Vec<AppEvent>>);
 
 impl AppEventEmitter for Recording {
     fn emit(&self, event: AppEvent) {
@@ -17,72 +21,47 @@ impl AppEventEmitter for Recording {
     }
 }
 
-fn gateway() -> (Arc<Recording>, RemoteGateway) {
+pub(super) fn gateway() -> (Arc<Recording>, RemoteGateway) {
     let recorder = Arc::new(Recording::default());
     let gateway = RemoteGateway::new(recorder.clone());
     (recorder, gateway)
 }
 
-/// Begin a session and offer a code on it, which is what an `enable` followed
-/// by an `invite` does. The two are separate calls in the real path because
-/// `enable` is a switch and `invite` pairs a device; these tests are about
-/// what happens once something is armed.
-pub(super) fn arm_with(gateway: &RemoteGateway, code: &str, key: &str, allow_mcp: bool) -> u64 {
+/// The roster channel a session installs, so a test can read what was noted.
+pub(super) fn notes(gateway: &RemoteGateway) -> UnboundedReceiver<Note> {
+    let (sender, inbox) = unbounded_channel();
+    gateway.take_notes(sender);
+    inbox
+}
+
+/// Every `remote_paired` announced, by the peer it named.
+pub(super) fn announced(events: &Recording) -> Vec<Option<String>> {
+    events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| match event {
+            AppEvent::RemotePaired { peer } => Some(peer.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Begin a session and open an invite for `device` on it, which is what an
+/// `enable` followed by an `invite` does. The two are separate calls in the
+/// real path because `enable` is a switch and `invite` pairs a device; these
+/// tests are about what happens once something is open.
+pub(super) fn arm_with(
+    gateway: &RemoteGateway,
+    device: &str,
+    allow_mcp: bool,
+) -> (u64, Arc<FakeInvite>) {
     let epoch = gateway.begin_session(allow_mcp);
-    let offered = gateway.offer_pairing(
-        epoch,
-        code.to_owned(),
-        key.to_owned(),
-        "dev-0a1b2c3d".to_owned(),
-        PAIRING_TTL,
-    );
+    let invite = FakeInvite::new();
+    let offered = gateway.offer_pairing(epoch, device.to_owned(), Box::new(Arc::clone(&invite)));
     assert_eq!(offered, Offered::Armed, "the fixture must arm");
-    epoch
-}
-
-#[test]
-fn a_granted_code_marks_the_session_paired_and_says_which_peer() {
-    let (events, gateway) = gateway();
-    gateway.pairing.begin_for(
-        "483920".to_owned(),
-        "the-key".to_owned(),
-        "dev-0a1b2c3d".to_owned(),
-        PAIRING_TTL,
-    );
-    assert!(!gateway.paired());
-
-    let outcome = gateway.redeem_pairing_code("483920", Some("3ca82708b995"), None);
-    assert_eq!(
-        outcome,
-        PairingOutcome::Granted {
-            key: "the-key".to_owned(),
-            device: "dev-0a1b2c3d".to_owned(),
-        }
-    );
-    assert!(gateway.paired());
-
-    let recorded = events.0.lock().unwrap();
-    assert!(
-        matches!(&recorded[..], [AppEvent::RemotePaired { peer: Some(p) }] if p == "3ca82708b995"),
-        "{recorded:?}"
-    );
-}
-
-#[test]
-fn a_rejected_code_emits_nothing_and_pairs_nobody() {
-    let (events, gateway) = gateway();
-    gateway.pairing.begin_for(
-        "483920".to_owned(),
-        "the-key".to_owned(),
-        "dev-0a1b2c3d".to_owned(),
-        PAIRING_TTL,
-    );
-    assert_eq!(
-        gateway.redeem_pairing_code("000000", None, None),
-        PairingOutcome::Rejected
-    );
-    assert!(!gateway.paired());
-    assert!(events.0.lock().unwrap().is_empty());
+    (epoch, invite)
 }
 
 #[test]
@@ -102,15 +81,19 @@ fn tunnelled_requests_are_counted_and_the_last_peer_remembered() {
 #[test]
 fn resetting_the_session_keeps_the_history() {
     let (_, gateway) = gateway();
-    let epoch = arm_with(&gateway, "483920", "the-key", true);
-    gateway.redeem_pairing_code("483920", None, None);
+    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d", true);
+    invite.redeem("dev-0a1b2c3d", None);
+    gateway.settle_invite("dev-0a1b2c3d");
     gateway.note_tunnelled_request(None, None);
+    // The pairing counts as the request it was, as it did while the proxy
+    // answered it, and so does the request after it.
+    assert_eq!(gateway.tunnelled_requests(), 2);
 
     gateway.reset_session_if(epoch);
     assert!(!gateway.mcp_allowed());
     assert!(!gateway.paired());
     assert!(!gateway.pairing.active());
-    assert_eq!(gateway.tunnelled_requests(), 1, "history survives");
+    assert_eq!(gateway.tunnelled_requests(), 2, "history survives");
 }
 
 /// The epoch is what a slow teardown presents to prove the session it is
@@ -120,20 +103,18 @@ fn resetting_the_session_keeps_the_history() {
 #[test]
 fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
     let (_, gateway) = gateway();
-    let first = arm_with(&gateway, "483920", "the-key", true);
-    let second = arm_with(&gateway, "111111", "the-next-key", true);
+    let (first, first_invite) = arm_with(&gateway, "dev-0a1b2c3d", true);
+    let (second, second_invite) = arm_with(&gateway, "dev-4e5f6a7b", true);
     assert_ne!(first, second, "each session gets its own epoch");
+    assert!(
+        first_invite.was_withdrawn(),
+        "a new session inherits no invite"
+    );
 
     gateway.reset_session_if(first);
     assert!(gateway.mcp_allowed(), "the second session's grant stands");
-    assert_eq!(
-        gateway.redeem_pairing_code("111111", None, None),
-        PairingOutcome::Granted {
-            key: "the-next-key".to_owned(),
-            device: "dev-0a1b2c3d".to_owned(),
-        },
-        "and so does its code"
-    );
+    assert!(gateway.pairing.active(), "and so does its code");
+    assert!(!second_invite.was_withdrawn());
 }
 
 /// Arming a session says nobody has paired with it yet. It has to, because
@@ -143,11 +124,12 @@ fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
 #[test]
 fn arming_a_session_starts_it_unpaired() {
     let (_, gateway) = gateway();
-    arm_with(&gateway, "483920", "the-key", false);
-    gateway.redeem_pairing_code("483920", None, None);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", false);
+    invite.redeem("dev-0a1b2c3d", None);
+    gateway.settle_invite("dev-0a1b2c3d");
     assert!(gateway.paired());
 
-    arm_with(&gateway, "111111", "the-next-key", false);
+    arm_with(&gateway, "dev-4e5f6a7b", false);
     assert!(!gateway.paired());
 }
 
@@ -162,16 +144,15 @@ fn arming_a_session_starts_it_unpaired() {
 #[test]
 fn offering_a_second_code_says_nobody_has_taken_it_yet() {
     let (_, gateway) = gateway();
-    let epoch = arm_with(&gateway, "483920", "the-key", false);
-    gateway.redeem_pairing_code("483920", Some("3ca82708b995"), None);
+    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d", false);
+    invite.redeem("dev-0a1b2c3d", None);
+    gateway.settle_invite("dev-0a1b2c3d");
     assert!(gateway.paired());
 
     let offered = gateway.offer_pairing(
         epoch,
-        "111111".to_owned(),
-        "the-next-key".to_owned(),
         "dev-4e5f6a7b".to_owned(),
-        PAIRING_TTL,
+        Box::new(FakeInvite::new()),
     );
     assert_eq!(offered, Offered::Armed, "the session is still the live one");
     assert!(
@@ -180,15 +161,13 @@ fn offering_a_second_code_says_nobody_has_taken_it_yet() {
     );
 }
 
-/// A session begun without a code arms none, and clears whatever the last
+/// A session begun without a code opens none, and withdraws whatever the last
 /// one left. This is what a restart does: the daemon puts the tunnel back
 /// because the switch says to, and nobody is watching for a pairing string.
-/// Inheriting the previous session's code would leave one redeemable that
-/// no person ever saw, for two minutes, at every boot.
 #[test]
-fn a_session_begun_without_a_code_arms_none_and_clears_the_last() {
+fn a_session_begun_without_a_code_holds_none_and_withdraws_the_last() {
     let (_, gateway) = gateway();
-    arm_with(&gateway, "483920", "the-key", false);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", false);
     assert!(gateway.pairing.active(), "the armed session has a code");
 
     gateway.begin_session(false);
@@ -198,39 +177,27 @@ fn a_session_begun_without_a_code_arms_none_and_clears_the_last() {
         "a session begun without a code has none redeemable"
     );
     assert!(
-        matches!(
-            gateway.redeem_pairing_code("483920", None, None),
-            PairingOutcome::Rejected
-        ),
-        "and the previous session's code is not inherited"
+        invite.was_withdrawn(),
+        "and the previous session's code is withdrawn, not inherited"
     );
 }
 
 #[test]
-fn debug_reports_state_and_never_the_code_or_key() {
+fn debug_reports_state_only() {
     let (_, gateway) = gateway();
-    gateway.pairing.begin_for(
-        "483920".to_owned(),
-        "sk-zzq-secret".to_owned(),
-        "dev-0a1b2c3d".to_owned(),
-        PAIRING_TTL,
-    );
+    arm_with(&gateway, "dev-0a1b2c3d", false);
     let rendered = format!("{gateway:?}");
-    assert!(!rendered.contains("483920"), "{rendered}");
-    assert!(!rendered.contains("sk-zzq-secret"), "{rendered}");
     assert!(rendered.contains("pairing_active: true"), "{rendered}");
 }
 
-/// A session that ended takes its name with it, so nothing armed against it
-/// afterwards.
+/// A session that ended takes its name with it, so nothing is held open
+/// against it afterwards.
 ///
-/// The other half of the epoch guard, and the half that was missing: the
-/// tests above cover a teardown *superseded by a newer session*, where the
-/// epochs differ because `begin_session` moved the counter. With no successor
-/// nothing moved it, so the dead epoch still matched and `offer_pairing`
-/// armed a live two-minute code against a tunnel that was down —
-/// `POST /v1/remote/pair` sits outside the proxy's bearer group, so anything
-/// local could spend it.
+/// The other half of the epoch guard: the tests above cover a teardown
+/// *superseded by a newer session*, where the epochs differ because
+/// `begin_session` moved the counter. With no successor nothing moved it, so
+/// a dead epoch that still matched would let `offer_pairing` hold an invite
+/// for a tunnel that is down, which `status` would report as a live code.
 ///
 /// The window is real rather than theoretical: `invite` reads the epoch under
 /// the serve slot, releases it, then mints a key and writes two stores before
@@ -246,10 +213,8 @@ fn a_code_cannot_be_offered_against_a_session_that_has_ended() {
     assert_eq!(
         gateway.offer_pairing(
             epoch,
-            "483920".to_owned(),
-            "sk-zzq-a-device-key".to_owned(),
             "dev-0a1b2c3d".to_owned(),
-            PAIRING_TTL,
+            Box::new(FakeInvite::new()),
         ),
         Offered::Superseded,
         "the epoch a dead session was armed under must stop matching"
@@ -257,10 +222,5 @@ fn a_code_cannot_be_offered_against_a_session_that_has_ended() {
     assert!(
         !gateway.pairing.active(),
         "and nothing is redeemable against a tunnel that is down"
-    );
-    assert_eq!(
-        gateway.withdraw_pairing(epoch),
-        None,
-        "nor can a dead epoch reach into whatever comes next"
     );
 }

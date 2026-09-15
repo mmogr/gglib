@@ -86,8 +86,8 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
 
   // A code this panel did not put on screen — offered from a terminal, or
   // shown before the popover was last closed — still holds Invite dead while
-  // it is live, and nothing says when it lapses: `pairing_active` clears only
-  // when something reads it, and no event is emitted. With no reveal of ours
+  // it is live, and nothing says when it lapses: no event is emitted, so only
+  // a read of the status finds `pairing_active` gone. With no reveal of ours
   // to expire, the status is read again every fifteen seconds until a read
   // says the code is gone; a code lives two minutes.
   useEffect(() => {
@@ -97,8 +97,8 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   }, [pairingActive, reveal]);
 
   // Asks the daemon again as well as dropping the reveal. `pairing_active`
-  // is time-based on the daemon and clears only when something reads it, and
-  // no event is emitted when a code lapses — so without this re-read the
+  // goes false on the daemon when a code lapses, but no event is emitted
+  // when it does — so without this re-read the
   // status keeps saying a code is live, and the Invite button below, which is
   // disabled while one is, stays dead until the panel is closed and reopened.
   // That is the one path someone takes after a code expires.
@@ -115,7 +115,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
       // every one, redeemed or not, and nothing sweeps the unredeemed. So
       // `invite: true` unconditionally meant each Disable→Enable on a paired
       // machine left one more "invited …, never joined" row behind, plus a
-      // live pairing grant nobody was watching — which this panel now
+      // live pairing code nobody was watching — which this panel now
       // displays, one per re-enable, forever.
       //
       // A first run is still one action, because on a first run no device has

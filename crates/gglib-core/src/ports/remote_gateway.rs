@@ -64,8 +64,8 @@ pub trait RemoteGatewayPort: Send + Sync + std::fmt::Debug {
     /// peer remembered, for the status surface; never the request itself.
     ///
     /// `device` is the named token the edge says admitted it, when it named
-    /// one. Absent means a grant admitted the request — or that a local
-    /// process forged the markers, which is why nothing is ever granted on
-    /// the strength of it.
+    /// one. Absent means a local process forged the markers, since the edge
+    /// names a device on everything it forwards, which is why nothing is
+    /// ever granted on the strength of it.
     fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>);
 }

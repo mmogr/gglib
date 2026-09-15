@@ -434,7 +434,7 @@ describe('RemoteControl', () => {
     // Every invite writes a device id, a key and a roster row, redeemed or
     // not, and nothing sweeps the unredeemed. `invite: true` on every enable
     // meant one more "never joined" row per Disable→Enable, forever, plus a
-    // live pairing grant nobody was watching.
+    // live pairing code nobody was watching.
     applyRemoteStatus({ ...IDLE_STATUS, devices: [paired()] });
     enableRemote.mockResolvedValue({ ticket: TICKET });
     const user = await open();
@@ -632,7 +632,7 @@ describe('RemoteControl', () => {
   it('a code this panel did not show still gives Invite back when it lapses', async () => {
     // Offered from a terminal, or shown before the popover was last closed:
     // there is no reveal here to expire, no event when the code lapses, and
-    // `pairing_active` clears only when something reads it. Without reads of
+    // only a read of the status finds `pairing_active` gone. Without reads of
     // its own the panel would hold Invite dead until it was reopened.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

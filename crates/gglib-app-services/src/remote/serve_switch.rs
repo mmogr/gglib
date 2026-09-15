@@ -148,7 +148,7 @@ impl RemoteOps {
         // No pairing code is minted here, and `resume_arm` rather than
         // `enable` is what makes that true: `enable` mints one
         // unconditionally, so resuming through it opened a live two-minute
-        // grant at every boot, for a code nobody would ever read, on a
+        // code at every boot, which nobody would ever read, on a
         // ticket that no longer changes. Devices already paired hold a key
         // and need no code; a new one is added with `gglib remote invite`.
         match self.resume_arm(request, disables).await {

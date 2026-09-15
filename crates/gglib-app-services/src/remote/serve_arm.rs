@@ -50,8 +50,8 @@ impl RemoteOps {
         let backend = Backend::at(*addr);
 
         let mut opts = modelpipe::ServeOptions::default();
-        // Named, not Supplied: nothing admits but the tokens seeded below and
-        // a live grant. `backend_auth` keeps the proxy's own credential off
+        // Named, not Supplied: nothing admits but the tokens seeded below, and
+        // an invite needs it. `backend_auth` keeps the proxy's own credential off
         // every device — the edge presents it upstream in the device's place,
         // so ADR 0012 decision 2's local lock is untouched.
         opts.auth = modelpipe::TokenPolicy::Named;
@@ -108,10 +108,9 @@ impl RemoteOps {
         //
         // The pairing code is *not* armed here: `offer` does that after the
         // guard, on the epoch this returns. What keeps that safe is
-        // `reset_session_if` retiring the epoch, so a code cannot be armed
-        // against a session that ended — a live `PAIRING_TTL` grant on a
-        // dead tunnel would be spendable by anything local, since
-        // `POST /v1/remote/pair` sits outside the proxy's bearer group.
+        // `reset_session_if` retiring the epoch, so no invite is held for a
+        // session that ended, where `status` would report a code nobody can
+        // redeem.
         //
         // Nothing in here is slow: an install, a `Mutex<Option<_>>`, an
         // atomic, one small file read, and a wait on `roster` that only a
@@ -179,7 +178,7 @@ impl RemoteOps {
 
         let ticket = ticket.to_string();
         let pairing = match offer {
-            Offer::Code => Some(enrolment::offer(self, &handle, epoch, &ticket).await?),
+            Offer::Code => Some(enrolment::offer(self, &handle, epoch).await?),
             Offer::Silent => None,
         };
         Ok(Enabled {

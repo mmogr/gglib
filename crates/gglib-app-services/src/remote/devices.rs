@@ -48,7 +48,7 @@ impl RemoteOps {
     /// `Conflict` when the tunnel is not up, or is still coming up once the
     /// wait for the daemon's own resume is over, when an invite is already
     /// open, or when remote access went down while this was preparing; `Internal` when a store cannot be written or the edge
-    /// refuses the token or the grant.
+    /// refuses the invite.
     ///
     /// Answers with the whole [`Enabled`], not the
     /// [`OfferedPairing`](super::types::OfferedPairing) inside it, because
@@ -127,7 +127,7 @@ impl RemoteOps {
         };
         let ticket = handle.ticket().to_string();
         let pairing = match wanted {
-            Offer::Code => Some(offer(self, &handle, epoch, &ticket).await?),
+            Offer::Code => Some(offer(self, &handle, epoch).await?),
             Offer::Silent => None,
         };
         Ok(Some(Enabled {

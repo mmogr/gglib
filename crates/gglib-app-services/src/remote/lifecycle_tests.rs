@@ -14,7 +14,7 @@ use std::time::Duration;
 use gglib_core::events::AppEvent;
 use gglib_core::{Device, SettingsUpdate};
 
-use super::pairing::PAIRING_TTL;
+use super::pairing::pairing_tests::FakeInvite;
 use super::serve_watch_tests::{offline, ops_with_key};
 use super::types::{EnableRequest, Enabled};
 use crate::error::GuiError;
@@ -143,12 +143,9 @@ async fn a_stored_ticket_that_no_longer_parses_costs_the_fingerprint_and_nothing
 #[tokio::test]
 async fn disabling_a_tunnel_that_is_not_up_is_a_conflict_that_clears_nothing() {
     let (_, ops, events) = test_remote_ops().await;
-    ops.gateway().pairing.begin_for(
-        "483920".to_owned(),
-        "sk-zzq-armed".to_owned(),
-        "dev-0a1b2c3d".to_owned(),
-        PAIRING_TTL,
-    );
+    ops.gateway()
+        .pairing
+        .begin("dev-0a1b2c3d".to_owned(), Box::new(FakeInvite::new()));
 
     let err = ops.disable().await.expect_err("nothing is enabled");
     assert!(matches!(err, GuiError::Conflict(_)), "{err:?}");

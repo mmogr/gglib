@@ -113,9 +113,8 @@ pub(crate) async fn tunnel_to(
 ) -> (modelpipe::ServeHandle, modelpipe::ConnectHandle, String) {
     let mut serve_opts = ServeOptions::default();
     // Named, not Supplied. Nothing admits but a key this machine issued to a
-    // named device, or a live one-time grant — and only the first of those
-    // makes the edge write `X-Modelpipe-Device`, which is what gglib's device
-    // gate reads.
+    // named device, which is what makes the edge write `X-Modelpipe-Device`,
+    // the header gglib's device gate reads.
     serve_opts.auth = TokenPolicy::Named;
     serve_opts.backend_auth = Some(PROXY_KEY.to_owned());
     serve_opts.discovery = false;

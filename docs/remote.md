@@ -57,7 +57,7 @@ a terminal, prints the pairing as plain text instead.
 
 A restart never invites. The daemon brings the tunnel back up with the flags
 you enabled it with, minus this one: a code nobody is watching for is a live
-grant nobody spends, on a ticket that no longer changes between sessions.
+code nobody spends, on a ticket that no longer changes between sessions.
 
 `gglib remote invite` is the same offer without the switch, for every device
 after the first. It needs the tunnel up, and waits for one the daemon is
@@ -222,13 +222,13 @@ it for one release — the old name prints a note saying so and does exactly
 what it did before. Nothing about a pairing you already have changes.
 
 `gglib remote join <ticket>-<code>` binds a loopback port that is now the
-desktop's proxy, waits up to thirty seconds for the desktop to answer, then
-redeems the code through the tunnel for its API key and stores the key and the
-ticket. It prints the port. The waiting is in that position on purpose: the
-port is bound before anything has reached the far machine, and a code redeemed
-down a pipe that reached nobody is spent for nothing. Later,
-`gglib remote join <ticket>` uses the stored key, and `gglib remote join`
-with no argument dials the stored ticket.
+desktop's proxy, waits up to twenty-five seconds for the desktop to answer,
+then presents the code to the desktop's tunnel edge for its API key and stores
+the key and the ticket. It prints the port. The waiting is in that position
+on purpose: the port is bound before anything has reached the far machine,
+and a code presented down a pipe that reached nobody is spent for nothing.
+Later, `gglib remote join <ticket>` uses the stored key, and
+`gglib remote join` with no argument dials the stored ticket.
 
 **The port stays put.** The first connection binds `8180`; every later one
 tries the port the pairing was last reachable on, so a client you pointed
@@ -254,7 +254,11 @@ desktop answers, they say so. Nothing needs typing at either end. Only
 | `--no-discovery` | Dial only the paths the ticket carries. |
 
 `gglib remote disconnect` closes the port; the desktop and the stored pairing
-are unaffected. Stopping the *desktop* from the laptop is not a `remote`
+are unaffected. Typed while a `join` with a code is still pairing, it answers
+at once, but the pairing runs on for up to fifty-five seconds, because
+stopping it part way could spend the code for nothing; if it finishes, `join`
+says this machine holds the key, and `gglib remote join` with no argument
+connects. Stopping the *desktop* from the laptop is not a `remote`
 command at all: it is `gglib daemon stop --remote`, the same command that
 stops the daemon here, pointed at the other machine. It stops that daemon
 through the tunnel — proxy, models, downloads — and then disconnects, and it
@@ -370,9 +374,11 @@ proxy.
 That second check can therefore no longer refuse a tunnelled request on its
 own: it is validating a header the tunnel wrote microseconds earlier. What
 stands in its place is a check that the edge named a device at all. Only a
-named key makes it do so, so a request admitted by a one-time pairing code —
-which the edge cannot restrict to one route — is refused before it reaches
-anything, with `403 device_not_paired`.
+named key makes it do so, and the edge admits no other kind, so the check
+refuses only a request whose markers were forged by a client that reached the
+proxy directly, with `403 device_not_paired`. A pairing code is not a key: the
+edge answers it on its own pairing route, and refuses it everywhere else with
+`401`, like any key it does not hold.
 
 Rotating the key on the desktop (`gglib config settings set
 --proxy-api-key`) reaches the running tunnel within two settings-cache
@@ -400,24 +406,24 @@ impossible. `scripts/check_settings_surfaces.sh` records the exemption with
 that reason. Pair again instead; it is one command on each side.
 
 **Pairing moves a one-time code, not the key.** The six-digit code is
-granted once at the tunnel edge, lives two minutes, dies on first use, and
-is burned by the third wrong attempt — and it is useless without the ticket,
-which is the only way to reach the route that accepts it. The key it buys is
-minted for this one device and travels once, inside the encrypted tunnel, in
-exchange for that code. Every refusal is the same flat refusal; a guesser
-learns nothing.
+answered by the tunnel edge itself and never reaches this machine's proxy.
+It lives two minutes and dies on first use, and each endpoint that presents
+it gets three tries before the edge locks that endpoint out of it. It is
+useless without the ticket, which is the only way to reach the edge that
+answers it. The key it buys is minted for this one device and travels once,
+inside the encrypted tunnel, in exchange for that code. A wrong code, a spent
+or expired one, and a locked-out endpoint all get the same refusal. Somebody
+who mints enough endpoints to keep guessing ends the invite instead, and this
+machine logs it as burned. [The ADR log](adr/log-0012.md) keeps the history
+of this paragraph's earlier corrections.
 
-> **Corrected 2026-09-07, and again 2026-09-12.** On 2026-09-07 no one path
-> had all three. Over the tunnel a wrong code is a wrong bearer and is refused
-> at the edge before gglib sees it, and gglib's own counter never saw those
-> guesses. Since the ticket started lasting, the edge counts them itself and
-> burns the code at the third, so over the tunnel the burn and the two-minute
-> window both hold, and the ticket, which no longer changes, is not what the
-> arithmetic rests on. On the desktop's own loopback the burn counts, but the
-> ticket is not needed to reach the route, so a local process can still kill
-> a pairing that is on screen with three POSTs.
-> [ADR 0012](adr/0012-the-remote-tunnel.md), decisions 3 and 4, has the
-> arithmetic.
+A laptop on gglib 0.18 or a phone on ggchat 0.2.4 cannot pair with a desktop
+running this version, because they send the code as a key, which the tunnel
+edge refuses before the proxy sees it; they report that as a refused pairing
+code. A device either of them has already paired keeps working. Nor can a
+laptop on this version pair with a desktop still on gglib 0.18: that desktop's
+edge spends the code on the attempt, and `join` says the answer was not a
+pairing answer. Update the desktop first.
 
 **The daemon's own API trusts the machine, not the person.** A daemon bound
 on loopback, the default, asks nothing of a request to `127.0.0.1:9887`: the
@@ -546,11 +552,11 @@ a `403` naming the flag; local clients are unaffected. The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
 remove or forge to its advantage — forging it only denies yourself `/mcp`.
 
-A tunnelled request the edge did not admit on a *device* key reaches nothing
-at all: `403 device_not_paired`, before any of the above is consulted. In
-practice that is the one request a live pairing code buys, which would
-otherwise arrive at any route it liked carrying the proxy's own credential.
-Local clients are unaffected — they carry no marker.
+A tunnelled request the edge did not admit on a *device* key reaches no
+protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The
+edge forwards nothing else today, so this is a second lock on the same door: a
+pairing code is answered by the edge itself and refused as a key anywhere
+else. Local clients are unaffected — they carry no marker.
 
 ## Why the port does not inject the key
 
@@ -568,14 +574,14 @@ here is one the desktop can retire on its own.
 
 | You see | It means |
 |---------|----------|
-| `the remote machine did not answer within 30 seconds` | The desktop is off, offline, or has had its endpoint key deleted since. `join` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port stays bound and reconnects when it wakes. |
+| `the remote machine did not answer within 30 seconds`, or 25 when pairing | The desktop is off, offline, or has had its endpoint key deleted since. `join` binds the local port before it has reached anything, so this is the wait for first contact timing out rather than the dial failing. The ticket itself does not go stale on a restart any more; if the desktop is simply asleep, the port is released; run `gglib remote join` again once it is awake. |
 | `the tunnel closed before the remote machine answered` | The local end went away while the dial was still looking. Nothing was sent through it, so the pairing code is unspent — try `gglib remote join` again with the same string. |
 | `Connected: … — away 3m` in `gglib remote status` | The desktop has not answered for that long. The port here is still bound and still dialling; nothing to do but wait for the desktop, or wake it. |
 | `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |
-| `the far machine refused the pairing code` | The code expired, was used already, or was burned by wrong attempts. Run `gglib remote invite` on the desktop again. |
+| `the far machine refused the pairing code` | The code was mistyped, has expired (two minutes), or was used already. A mistyped code costs only that attempt: check it and run `gglib remote join` again while the code is still on screen. Once it has gone, run `gglib remote invite` on the desktop for a new one. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
 | `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
-| `403 device_not_paired` | The request reached the desktop's proxy without the tunnel naming a device — a pairing code used as an API key, or a forged marker on the desktop itself. Pair properly: `gglib remote invite` there, and redeem the code here. |
+| `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |

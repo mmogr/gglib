@@ -78,8 +78,8 @@ async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
 }
 
 /// A machine that has never invited anything seeds nothing and says nothing
-/// is wrong. Under `Named` that is a listener admitting only a live grant,
-/// which is the intended state after the clean break.
+/// is wrong. Under `Named` that is a listener admitting nothing until a
+/// device pairs, which is the intended state after the clean break.
 #[tokio::test]
 async fn an_empty_roster_seeds_nothing() {
     let handle = listener().await;

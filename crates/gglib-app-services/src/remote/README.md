@@ -32,7 +32,9 @@ remote/
   backend.rs        — which local address the tunnel fronts, and taking the
                       tunnel down when it stops being the proxy's
   connect_dial.rs   — the span of connect with the slot reserved and the
-                      lock released: the dial, the pairing, the install
+                      lock released: the record and the install
+  connect_open.rs   — reaching the far machine for a join: pair or wait,
+                      and what each refusal says
   connect_watch.rs  — following one connection until it is over, and the
                       dwell that decides when an idle peer is gone
   slot.rs           — the one-at-a-time slot each side occupies: reserve,
@@ -41,15 +43,17 @@ remote/
                       paired with: reading it, writing it, what a dial that
                       has come up owes it, and what a write that fails after
                       the code is spent has to say
-  pairing_string.rs — `<ticket>[-<code>]`, taken apart
-  redeem.rs         — the two requests made *through* the tunnel: redeem a
-                      code for the key, and stop the far daemon
-  gateway.rs        — RemoteGateway: the port the proxy asks (redeem a code,
-                      is /mcp open, a tunnelled request arrived)
-  pairing.rs        — the one-time code: begin, redeem once, burn on the third miss
+  far_daemon.rs     — the one request made *through* the tunnel: stop the
+                      far daemon
+  gateway.rs        — RemoteGateway: the port the proxy asks (is /mcp open,
+                      a tunnelled request arrived), and the invite a session
+                      holds
+  pairing.rs        — the open invite: one at a time, read without taking it
+  invite_watch.rs   — waiting for an invite to end, and handing it to the
+                      gateway to record
   key.rs            — which key the tunnel enforces, and when a minted one is
                       written down
-  teardown.rs       — ending a session: cancel, drain, and only then forget
+  teardown.rs       — ending a session: cancel, drain, and only then reset
   rotation.rs       — following a key rotation into the running listener
   types.rs          — what the ops are asked for and what they report
 ```
@@ -63,11 +67,13 @@ them is the proxy's. A device presents its own; the edge names it in
 the proxy and the proxy's key never reaches a device.
 
 The two doors do different work, and the second is not a repeat of the first.
-The edge refuses a key it does not hold. But a pairing grant admits exactly
-one request bearing *no* device, at whatever path the holder of a guessed code
-likes — the edge cannot scope it — so the request that names no device is
-refused at the second door instead, by `gglib-proxy`'s `device_gate`, with
-`403 device_not_paired`. That gate sits *inside* `bearer_guard`, and has to:
+The edge refuses a key it does not hold, and answers a pairing code itself
+without forwarding anything, so every request it forwards names a device. The
+second door is for a request that does not: markers forged by a client that
+reached the proxy directly, or a credential a later modelpipe admits without
+naming one. It is
+`gglib-proxy`'s `device_gate`, answering `403 device_not_paired`, and it sits
+*inside* `bearer_guard`, and has to:
 `backend_auth` means the bearer is a header modelpipe itself wrote, so for
 tunnelled traffic the device name is the only thing left that can refuse.
 
@@ -108,41 +114,41 @@ because nothing in settings may override it.
 
 `enable --invite` — and `invite`, against a session already up — returns the
 ticket and a six-digit code exactly once. A plain `enable` is a switch and
-returns no code at all. The code is
-granted at the tunnel edge (`grant_once`) so one request bearing it gets
-through without the token; the proxy's pairing route asks `RemoteGateway`
-whether it is the code this session minted, and takes the key it stands for.
-Two minutes, one redemption, three wrong attempts. Every refusal is the same
-refusal.
+returns no code at all. The code is modelpipe's: `ServeHandle::invite` mints
+the device's key and name and holds the key at the edge, `enrolment::offer`
+writes both stores and only then arms the code, and the edge answers
+`POST /modelpipe/pair` itself — two minutes, one redemption, three wrong codes
+per endpoint, every refusal the same refusal. Nothing reaches the proxy.
+`invite_watch` waits for the invite to end and hands it to the gateway, which
+records a device that redeemed: its label, when, and the endpoint it came
+from. One invite at a time is this machine's rule, not modelpipe's.
 
 # Ending a session
 
 `disable` and the proxy watcher end a session the same way, through
 `teardown.rs`: cancel what was following the tunnel, drain it, and only then
-forget the pairing. The order is the point. A laptop's `POST /remote/pair`
-can cross the tunnel edge — spending the one-time grant that is the only
-reason it got in — a millisecond before someone types `gglib remote disable`
-here, and clearing the pairing first hands that request the same flat `401` a
-wrong code gets, which the laptop renders as "expired, used already, or
-burned by wrong attempts". None of it true, the code spent either way, and
-the operator sent to re-run `enable` on a machine that was working.
+reset the session. What was admitted before `disable` finishes under the
+session it was admitted to, except a pairing: modelpipe withdraws a live
+invite as the listener closes, where the drain starts, so a pairing request
+whose code the edge has not redeemed by then is refused. A device that
+redeemed before it is recorded whichever runs first, because whoever takes
+an invite out of the gateway records how it ended: the watcher, a new offer,
+or the reset, which does so before it lets the roster's writer go.
 
 Draining first costs nothing on the tunnel in exchange: `shutdown_timeout`
-closes admission before it waits, so the requests it protects are exactly the
-ones that were already inside.
+closes admission before it waits, and modelpipe withdraws a live invite as
+the listener closes, so the drain gives no code a chance to be redeemed.
 
 It costs something on the *gateway*, which is what the session epoch pays
 for. Neither caller holds the `live` lock across the teardown — that would
 block `status` for the whole five seconds — so a fresh `enable` can find the
-slot empty and arm a new pairing while the previous session is still
-draining. A teardown that then cleared whatever it found would burn the code
-the operator is holding, with the same false "expired, used already, or
-burned by wrong attempts" this ordering exists to prevent, and revoke an
-`/mcp` grant that was just asked for. So `begin_session` numbers each
-session, `Live` carries the number, and `reset_session_if` clears nothing
-once a later session has taken the gateway over. Arming is what establishes
-the clean slate the superseded teardown will now never provide, so it clears
-the paired flag too.
+slot empty and open a new invite while the previous session is still
+draining. A teardown that then cleared whatever it found would withdraw the
+code the operator is holding and revoke an `/mcp` grant that was just asked
+for. So `begin_session` numbers each session, `Live` carries the number, and
+`reset_session_if` clears nothing once a later session has taken the gateway
+over. Arming is what establishes the clean slate the superseded teardown will
+now never provide, so it clears the paired flag too.
 
 # The address the tunnel fronts
 
@@ -205,10 +211,10 @@ a third-party client supplies it as its API key, the ordinary arrangement. A
 listener that injected the key would make every process on this machine an
 authenticated client of the other one.
 
-With a `<ticket>-<code>` pairing string the code is redeemed through the
-tunnel — as the bearer, so the edge's one-time grant admits the request, and
-in the body, so the far proxy can check it — and the ticket and the key that
-comes back are stored as one `RemotePairing`. That binding is the point: a
+With a `<ticket>-<code>` pairing string the dial is `modelpipe::pair`, which
+reaches the far machine, presents the code to its edge and keeps the pipe it
+paired over, and the ticket and the key that comes back are stored as one
+`RemotePairing`. That binding is the point: a
 key is issued *by* the machine whose code was redeemed, so a bare ticket is
 dialled only when the stored pairing names **that** machine, by fingerprint.
 Admitting it on "some key is stored" is what let a dial to a second machine
@@ -224,10 +230,11 @@ daemon again.
 # What the gateway is for
 
 `RemoteGateway` is always installed, tunnel up or not, because `ProxyOps`
-attaches it to every proxy it starts. With nothing armed it rejects every
-code. It also holds the `/mcp` grant for tunnelled requests — off unless
-`enable` was asked for it — and counts tunnelled requests for the status
-surface. Its `Debug` reports state and never a code or a key.
+attaches it to every proxy it starts. It holds the invite a session has
+open, and the paired flag that says whether the code on offer was taken. It
+also holds the `/mcp` grant for tunnelled requests — off unless `enable` was
+asked for it — and counts tunnelled requests for the status surface. Its
+`Debug` reports state and nothing an invite carries.
 
 # One at a time, without holding the lock
 
@@ -247,14 +254,14 @@ of finishing for nobody — and the install says so rather than binding a port
 behind a command that already reported success.
 
 The one thing that may *not* be done after the lock is given back is arming
-the gateway. `enable` installs the tunnel and arms its pairing code under one
+the gateway. `enable` installs the tunnel and begins its session under one
 hold: dropping the guard wakes whatever `disable` is queued behind it, and on
 a multi-thread runtime that `disable` runs alongside the lines that follow —
 resetting the session and taking the tunnel down while the arming is still on
-its way. A code armed after that reset stays live for `PAIRING_TTL` on a
-session that is gone, and `POST /v1/remote/pair` is outside the proxy's
-bearer group. So a reservation is never a session: a `disable` finds either a
-reservation with nothing armed, or a tunnel with its code. Both writes are
+its way. An invite held after that reset would read as a live code on a
+session that is gone, which is why `offer_pairing` checks the epoch. So a
+reservation is never a session: a `disable` finds either a reservation with
+nothing armed, or a tunnel with its session. Both writes are
 in-memory, which is what lets them share the guard at all — the rule is that
 nothing *slow* is held across it.
 
@@ -311,17 +318,16 @@ no test can drive.
 | [`enable_wait_tests.rs`](enable_wait_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enable_wait_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enable_wait_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enable_wait_tests-coverage.json) |
 | [`enrolment.rs`](enrolment.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enrolment-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enrolment-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enrolment-coverage.json) |
 | [`enrolment_tests.rs`](enrolment_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enrolment_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enrolment_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-enrolment_tests-coverage.json) |
-| [`first_contact.rs`](first_contact.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-first_contact-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-first_contact-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-first_contact-coverage.json) |
-| [`first_contact_tests.rs`](first_contact_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-first_contact_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-first_contact_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-first_contact_tests-coverage.json) |
+| [`far_daemon.rs`](far_daemon.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-far_daemon-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-far_daemon-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-far_daemon-coverage.json) |
 | [`gateway.rs`](gateway.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway-coverage.json) |
+| [`gateway_invite_tests.rs`](gateway_invite_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_invite_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_invite_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_invite_tests-coverage.json) |
 | [`gateway_tests.rs`](gateway_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-gateway_tests-coverage.json) |
+| [`invite_watch.rs`](invite_watch.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-invite_watch-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-invite_watch-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-invite_watch-coverage.json) |
+| [`invite_watch_tests.rs`](invite_watch_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-invite_watch_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-invite_watch_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-invite_watch_tests-coverage.json) |
 | [`key.rs`](key.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key-coverage.json) |
 | [`key_tests.rs`](key_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-key_tests-coverage.json) |
 | [`lifecycle_tests.rs`](lifecycle_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-lifecycle_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-lifecycle_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-lifecycle_tests-coverage.json) |
 | [`pairing.rs`](pairing.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing-coverage.json) |
-| [`pairing_string.rs`](pairing_string.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_string-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_string-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_string-coverage.json) |
-| [`pairing_tests.rs`](pairing_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-pairing_tests-coverage.json) |
-| [`redeem.rs`](redeem.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-redeem-coverage.json) |
 | [`resume_wait.rs`](resume_wait.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-resume_wait-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-resume_wait-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-resume_wait-coverage.json) |
 | [`roster.rs`](roster.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-roster-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-roster-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-roster-coverage.json) |
 | [`rotation.rs`](rotation.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-rotation-coverage.json) |
