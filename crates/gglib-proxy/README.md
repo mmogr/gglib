@@ -137,6 +137,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`forward_shaping_tests.rs`](src/forward_shaping_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_shaping_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_shaping_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_shaping_tests-coverage.json) |
 | [`forward_tests.rs`](src/forward_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_tests-coverage.json) |
 | [`forward_unary.rs`](src/forward_unary.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary-coverage.json) |
+| [`forward_unary_repair_tests.rs`](src/forward_unary_repair_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-coverage.json) |
 | [`load_endpoint.rs`](src/load_endpoint.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-coverage.json) |
 | [`loop_guard.rs`](src/loop_guard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-coverage.json) |
 | [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
@@ -174,7 +175,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
 - **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
-- **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised and answered
+- **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming body read whole and run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
@@ -957,8 +958,8 @@ uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 | `was_clamped` | `bool` | `true` when HTTP 400 was returned to the client |
 | `recorded_at_secs` | `u64` | Unix timestamp of the observation |
 | `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
-| `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched after the response streams |
-| `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched after the response streams |
+| `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
+| `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
 
 The underlying ring buffer retains at most 50 entries; `recent_requests`
 surfaces the newest 20 of those. `total_requests` grows monotonically

@@ -44,19 +44,24 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
     Some((prompt_tokens, cached_tokens))
 }
 
-/// Forward a non-streaming JSON response from llama-server, running the same
-/// dialect normalization the streaming path applies.
+/// Read a non-streaming answer whole and run it through the dialect parser
+/// once: the content type to answer under, and the normalised body.
 ///
 /// `residue_sink` — the metrics store and this request's snapshot sequence
 /// number — receives the dialect drift-alarm flag when post-normalization
 /// content still carries dialect markup. `None` for paths that record no
 /// snapshot (embeddings).
-pub(crate) async fn forward_non_streaming_response(
+///
+/// # Errors
+///
+/// The transport error, when the body could not be read; answer with
+/// [`unreadable_upstream`].
+pub(crate) async fn read_non_streaming_body(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
     dialect: Option<&DialectSpec>,
     residue_sink: Option<(&ContextMetricsStore, u64)>,
-) -> Response {
+) -> reqwest::Result<(HeaderValue, Bytes)> {
     // Collect upstream headers we want to preserve
     let content_type = response
         .headers()
@@ -65,37 +70,57 @@ pub(crate) async fn forward_non_streaming_response(
         .unwrap_or_else(|| HeaderValue::from_static("application/json"));
 
     // Read the full body
-    match response.bytes().await {
-        Ok(body_bytes) => {
-            // Body is already fully buffered, so this is a parse of bytes we
-            // hold rather than extra I/O. Failure is silent by design: an
-            // unparseable body still forwards verbatim, since telemetry must
-            // never change what the client receives.
-            if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
-                cache_metrics.record(prompt_tokens, cached_tokens);
-            }
-            let (body_bytes, residue) = normalize_non_streaming_body(body_bytes, dialect);
-            if let (Some(marker), Some((metrics, seq))) = (residue, residue_sink) {
-                warn!(
-                    marker = %marker,
-                    "dialect residue reached client-visible output (non-streaming)"
-                );
-                metrics.flag_dialect_residue(seq);
-            }
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("content-type", content_type)
-                .body(Body::from(body_bytes))
-                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-        }
-        Err(e) => {
-            error!("Failed to read upstream response: {e}");
-            (
-                StatusCode::BAD_GATEWAY,
-                axum::Json(ErrorResponse::upstream_error(&e.to_string())),
-            )
-                .into_response()
-        }
+    let body_bytes = response.bytes().await?;
+    // Body is already fully buffered, so this is a parse of bytes we
+    // hold rather than extra I/O. Failure is silent by design: an
+    // unparseable body still forwards verbatim, since telemetry must
+    // never change what the client receives.
+    if let Some((prompt_tokens, cached_tokens)) = usage_from_response_body(&body_bytes) {
+        cache_metrics.record(prompt_tokens, cached_tokens);
+    }
+    let (body_bytes, residue) = normalize_non_streaming_body(body_bytes, dialect);
+    if let (Some(marker), Some((metrics, seq))) = (residue, residue_sink) {
+        warn!(
+            marker = %marker,
+            "dialect residue reached client-visible output (non-streaming)"
+        );
+        metrics.flag_dialect_residue(seq);
+    }
+    Ok((content_type, body_bytes))
+}
+
+/// A 200 carrying `body` under `content_type`.
+pub(crate) fn answer_with(content_type: HeaderValue, body: Bytes) -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", content_type)
+        .body(Body::from(body))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+/// The 502 for an upstream body that could not be read.
+pub(crate) fn unreadable_upstream(e: &reqwest::Error) -> Response {
+    error!("Failed to read upstream response: {e}");
+    (
+        StatusCode::BAD_GATEWAY,
+        axum::Json(ErrorResponse::upstream_error(&e.to_string())),
+    )
+        .into_response()
+}
+
+/// Forward a non-streaming JSON response from llama-server, running the same
+/// dialect normalization the streaming path applies.
+///
+/// `residue_sink` is passed through to [`read_non_streaming_body`].
+pub(crate) async fn forward_non_streaming_response(
+    response: reqwest::Response,
+    cache_metrics: &CacheMetricsStore,
+    dialect: Option<&DialectSpec>,
+    residue_sink: Option<(&ContextMetricsStore, u64)>,
+) -> Response {
+    match read_non_streaming_body(response, cache_metrics, dialect, residue_sink).await {
+        Ok((content_type, body)) => answer_with(content_type, body),
+        Err(e) => unreadable_upstream(&e),
     }
 }
 

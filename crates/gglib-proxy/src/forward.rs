@@ -86,7 +86,6 @@ use crate::models::ErrorResponse;
 use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
-use crate::unary_body::normalize_non_streaming_body;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
 use gglib_core::cache_metrics::CacheMetricsStore;
 
@@ -296,7 +295,7 @@ pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 /// under a grammar, and non-streaming — not a fresh full turn. On
 /// expiry the turn falls open to the original frames, exactly as every other
 /// repair failure path already does.
-const REPAIR_REISSUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+pub(crate) const REPAIR_REISSUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How often to push an SSE comment while a re-issue is in flight.
 ///
@@ -847,6 +846,10 @@ pub(crate) async fn forward_chat_completion(
         &cache_metrics,
         metrics.as_ref(),
         snapshot_seq,
+        RepairTurn {
+            enabled: repair_enabled,
+            gglib_grammar: grammar_enforced,
+        },
     )
     .await
 }
@@ -1314,29 +1317,13 @@ async fn resolve_held_tool_calls(
     let Some(builder) = ctx.req_builder.try_clone() else {
         return original_frames;
     };
-    let sent = send_reissue_keeping_the_wire_warm(builder.body(body), tx).await;
-    let repaired = match sent {
-        Some(Ok(resp)) if resp.status().is_success() => resp.bytes().await.ok(),
-        Some(Ok(resp)) => {
-            warn!(
-                status = resp.status().as_u16(),
-                "repair re-issue rejected upstream"
-            );
-            None
-        }
-        Some(Err(e)) => {
-            warn!(error = %e, "repair re-issue failed");
-            None
-        }
-        // The client went away while we were re-issuing on its behalf.
-        None => return original_frames,
-    };
-    let Some(repaired) = repaired else {
+    // The client went away while we were re-issuing on its behalf.
+    let Some(sent) = send_reissue_keeping_the_wire_warm(builder.body(body), tx).await else {
         return original_frames;
     };
-    // Under `tool_choice: "none"` llama-server parses no tool calls, so the
-    // answer can be dialect markup: read it as a non-streaming response is.
-    let (repaired, _) = normalize_non_streaming_body(repaired, dialect);
+    let Some(repaired) = crate::repair::read_second_draw(sent, dialect).await else {
+        return original_frames;
+    };
 
     // `choose` re-validates: a repair that is still wrong is discarded.
     let (chosen, did_repair) = crate::repair::choose(
