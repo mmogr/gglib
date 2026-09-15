@@ -102,6 +102,114 @@ fn the_staging_file_is_unreadable_to_anybody_else_before_any_chmod() {
     );
 }
 
+/// A file already under the temporary name — a pid used again draws the same
+/// name again — may be open in somebody else's hands, opened
+/// while its mode let them. Truncating it and writing would put every key
+/// into their descriptor, where no chmod afterwards reaches. The writer gets
+/// a new file instead, and the leftover never sees a byte of it.
+///
+/// Unix only, where removing a name somebody holds open is guaranteed to
+/// free it at once.
+#[cfg(unix)]
+#[test]
+fn a_leftover_temporary_file_is_not_written_through() {
+    use std::io::Read;
+
+    let path = temp();
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    std::fs::write(&path, b"left over").expect("plant the leftover");
+    let mut held = std::fs::File::open(&path).expect("somebody holds it open");
+
+    create_private(&path)
+        .expect("a new file in the leftover's place")
+        .write_all(b"sk-secret")
+        .expect("write the keys");
+
+    let mut seen = String::new();
+    held.read_to_string(&mut seen).expect("read what they hold");
+    assert_eq!(seen, "left over", "the keys must not reach the leftover");
+    assert_eq!(
+        std::fs::read(&path).expect("read the new file"),
+        b"sk-secret",
+        "they go to a file of the writer's own under the same name"
+    );
+}
+
+/// Nor does a leftover's mode carry over. Opening a file that is already
+/// there keeps the mode it has, so one left readable by anybody is readable
+/// from the moment the writer opens it until `restrict` runs, and whoever
+/// opens it inside that instant holds a descriptor every key is then written
+/// into. The writer's file is private from the moment it has it.
+///
+/// Unlike `the_staging_file_is_unreadable_to_anybody_else_before_any_chmod`,
+/// this bites under any umask: the leftover's mode is set outright rather
+/// than left to it.
+#[cfg(unix)]
+#[test]
+fn the_temporary_file_is_never_readable_by_others_even_for_an_instant() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = temp();
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    std::fs::write(&path, b"").expect("plant the leftover");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+        .expect("readable by anybody");
+
+    let file = create_private(&path).expect("the temporary file");
+
+    let mode = file.metadata().expect("metadata").permissions().mode();
+    assert_eq!(
+        mode & 0o077,
+        0,
+        "group and other must have nothing before any chmod: {mode:o}"
+    );
+}
+
+/// A symlink under the temporary name is not followed, dangling or not. The
+/// create that was here before followed one and truncated the link's target,
+/// and what was written went into it; now the link itself is removed, its
+/// target is left as it was, and the keys go to a file of the writer's own.
+#[cfg(unix)]
+#[test]
+fn a_link_under_the_temporary_name_is_not_followed() {
+    use std::os::unix::fs::symlink;
+
+    let path = temp();
+    let dir = path.parent().expect("parent").to_path_buf();
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    let target = dir.join("somebody-elses-file");
+    std::fs::write(&target, b"theirs").expect("the link's target");
+    symlink(&target, &path).expect("plant a link");
+    let nowhere = dir.join("nothing-here-yet");
+    let second = dir.join("remote_devices.second");
+    symlink(&nowhere, &second).expect("plant a dangling link");
+
+    for name in [&path, &second] {
+        create_private(name)
+            .expect("a new file in the link's place")
+            .write_all(b"sk-secret")
+            .expect("write the keys");
+    }
+
+    assert_eq!(
+        std::fs::read(&target).expect("read the target"),
+        b"theirs",
+        "the link's target is untouched"
+    );
+    assert!(!nowhere.exists(), "a dangling link's target is not created");
+    assert!(
+        !std::fs::symlink_metadata(&path)
+            .expect("metadata")
+            .file_type()
+            .is_symlink(),
+        "the name is the writer's own file now"
+    );
+    assert_eq!(
+        std::fs::read(&path).expect("read the new file"),
+        b"sk-secret"
+    );
+}
+
 /// A crash mid-write must leave the previous roster rather than a truncated
 /// one, so the write goes to a sibling and renames.
 #[test]
