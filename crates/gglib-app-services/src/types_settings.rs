@@ -44,8 +44,8 @@ pub struct AppSettings {
     pub trust_client_sampling: Option<bool>,
     // Proxy loop guard; `None` means enabled (see `gglib_core::Settings`)
     pub proxy_loop_detection: Option<bool>,
-    /// Whether a tool call failing schema validation is re-issued with
-    /// `tool_choice: "required"`. Absent means on.
+    /// Whether a tool call failing schema validation is re-issued, with
+    /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
     pub tool_call_repair: Option<bool>,
     /// Whether structured-output turns get their temperature capped when no
     /// human chose one. Absent means on (see `gglib_core::Settings`). Was

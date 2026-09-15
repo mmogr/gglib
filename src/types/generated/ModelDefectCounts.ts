@@ -14,8 +14,8 @@ requests: number,
  */
 loop_guard_trips: number, 
 /**
- * Turns whose tool call failed schema validation and was re-issued
- * with `tool_choice: "required"`.
+ * Turns whose tool call failed schema validation and was re-issued,
+ * with `tool_choice: "required"` or as a second draw under gglib's grammar.
  */
 repairs_attempted: number, 
 /**

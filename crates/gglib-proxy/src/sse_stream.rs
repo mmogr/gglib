@@ -12,9 +12,8 @@ use tracing::{debug, error, warn};
 
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
 use crate::connections::ConnectionGuard;
-use crate::forward::{
-    FIRST_BYTE_DEADLINE_SECS, RepairContext, stream_response_to_channel, visible_content_frame,
-};
+use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visible_content_frame};
+use crate::repair::{RepairContext, RepairTurn};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -66,7 +65,7 @@ pub(crate) fn spawn_and_return(
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
     session_id: Option<String>,
-    repair_enabled: bool,
+    repair_turn: RepairTurn,
 ) -> Response {
     // `connection` is moved into this task so it lives exactly as long
     // as the streaming task does — dropped (unregistering from the
@@ -206,7 +205,7 @@ pub(crate) fn spawn_and_return(
                 let repair = cloned.map(|builder| RepairContext {
                     req_builder: builder,
                     request_body: body.clone(),
-                    enabled: repair_enabled,
+                    turn: repair_turn,
                 });
                 let outcome = stream_response_to_channel(
                     resp,

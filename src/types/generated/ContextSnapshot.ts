@@ -41,7 +41,7 @@ grammar_enforced: boolean,
 dialect_residue: boolean, 
 /**
  * `true` when this turn's tool call failed schema validation and a
- * re-issue with `tool_choice: "required"` produced a conformant one.
+ * re-issue, under `required` or gglib's own grammar, produced a conformant one.
  * Back-patched after the response streams via
  * [`ContextMetricsStore::flag_tool_repair`].
  */

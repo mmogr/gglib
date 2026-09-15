@@ -60,9 +60,10 @@ Everything between the OpenAI request and llama-server is the product:
 - **Tool-call repair**: `tool_choice: "auto"` can leave llama.cpp
   unconstrained, producing malformed arguments that crash the client's
   executor. GGLib validates every emitted tool call against the client's
-  schema and silently re-issues failures with `tool_choice: "required"`,
-  which activates llama.cpp's own grammar. The client only sees the
-  corrected call. [Details →](docs/tool-call-repair.md)
+  schema and silently re-issues failures: with `tool_choice: "required"`,
+  which activates llama.cpp's own grammar, or, on a turn gglib's own grammar
+  constrained, as a second draw under it. The client only sees a call that
+  validates. [Details →](docs/tool-call-repair.md)
 - **Loop defense**: agentic clients replay the full conversation each turn,
   so the proxy scans the incoming history for tool-call batches repeated back
   to back *and answered the same way*, observation-tool spam, and repeated

@@ -19,8 +19,8 @@ defaultModelId: number | null, inferenceDefaults: InferenceConfig | null,
  */
 inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, proxyApiKey: string | null, trustClientSampling: boolean | null, proxyLoopDetection: boolean | null, 
 /**
- * Whether a tool call failing schema validation is re-issued with
- * `tool_choice: "required"`. Absent means on.
+ * Whether a tool call failing schema validation is re-issued, with
+ * `tool_choice: "required"` or under gglib's grammar. Absent means on.
  */
 toolCallRepair: boolean | null, 
 /**
