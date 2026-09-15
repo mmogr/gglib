@@ -214,7 +214,7 @@ fn sub_threshold_content_is_not_trimmed_even_over_budget() {
 // ── Content forms ────────────────────────────────────────────────────────────
 
 #[test]
-fn array_form_content_is_skipped() {
+fn a_short_array_form_message_beside_a_long_string_is_left_alone() {
     let mut b = body(&with_tail(vec![
         json!({"role": "tool", "tool_call_id": "c1", "content": big(250_000)}),
         json!({"role": "tool", "tool_call_id": "c2", "content": [{"type": "text", "text": "hi"}]}),
@@ -222,7 +222,7 @@ fn array_form_content_is_skipped() {
 
     let report = truncate_history(&mut b, ROOMY).unwrap();
 
-    assert_eq!(report.messages_truncated, 1, "only the string-form message");
+    assert_eq!(report.messages_truncated, 1, "only the oversized message");
     assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
     assert!(b["messages"][1]["content"].is_array());
 }

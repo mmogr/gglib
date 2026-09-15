@@ -78,7 +78,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 - **Ports-only dependency**: Depends only on `gglib-core` (no sqlx, no gglib-runtime)
 - **Bind externally**: `serve()` takes a pre-bound `TcpListener` from supervisor
-- **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and OpenAI content variants (array-form `content`, bare-string `stop`, future extensions) pass through unchanged. Schema validation is llama-server's responsibility.
+- **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and OpenAI content variants (array-form `content`, bare-string `stop`, future extensions) pass through as they came, except where a request-pipeline stage rewrites message text in either shape. Schema validation is llama-server's responsibility.
 - **Domain → API mapping**: OpenAI types live here, domain types in gglib-core
 
 ## Module Architecture
@@ -604,15 +604,16 @@ model's nominal `context_length` instead.
 1. **Budget gate** — while the whole payload fits within budget it is
    forwarded **unchanged**; no history is elided while there is room.
 2. **Oldest-first trim** — only when over budget, unprotected `role: "tool"` /
-   `role: "assistant"` messages whose `content` string exceeds 2,000
-   characters are replaced **from oldest to newest**, stopping as soon as the
-   payload drops back under budget, with:
+   `role: "assistant"` messages whose text exceeds 2,000 characters, in
+   either content shape, are replaced **from oldest to newest**, stopping once the
+   savings reach the quantized watermark target, with:
 
    > `[Raw tool output truncated by proxy to maintain context window. Rely on your previous observations.]`
 
 3. `role: "system"` messages and the last 8 messages are never modified.
-4. Array-form content (multi-part messages) and `tool_calls` fields are
-   never touched.
+4. Array-form content (multi-part messages) is elided part by part: each text
+   part becomes the placeholder and the parts that are not text stay in
+   place. `tool_calls` fields are never touched.
 5. If the payload still exceeds the budget after every eligible message is
    trimmed, the request is **rejected** with HTTP 400:
    ```json

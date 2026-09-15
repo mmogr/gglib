@@ -27,6 +27,7 @@ use std::sync::LazyLock;
 
 use bytes::Bytes;
 use gglib_core::domain::ChatMessage;
+use gglib_core::request_pipeline::for_each_text_mut;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
@@ -174,27 +175,14 @@ fn canonicalize_system_prompt_with(body: Bytes, disabled: bool) -> Bytes {
         return body;
     };
 
-    let changed = match content {
-        serde_json::Value::String(text) => stabilise_dynamic_lines(text)
-            .map(|stabilised| {
-                *text = stabilised;
-            })
-            .is_some(),
-        // Array-of-parts: rewrite the text inside each part, keep the shape.
-        serde_json::Value::Array(parts) => {
-            let mut any = false;
-            for part in parts.iter_mut() {
-                if let Some(serde_json::Value::String(text)) = part.get_mut("text")
-                    && let Some(stabilised) = stabilise_dynamic_lines(text)
-                {
-                    *text = stabilised;
-                    any = true;
-                }
-            }
-            any
+    // Either content shape: rewrite the text in place, keep the shape.
+    let mut changed = false;
+    for_each_text_mut(content, &mut |text| {
+        if let Some(stabilised) = stabilise_dynamic_lines(text) {
+            *text = stabilised;
+            changed = true;
         }
-        _ => false,
-    };
+    });
 
     if !changed {
         return body;
