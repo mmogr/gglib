@@ -75,11 +75,15 @@ async fn test_monitor_emits_initial_status() {
     // Should get an initial status on first tick.
     //
     // The budget is deliberately far larger than the 10 ms poll interval:
-    // this asserts *liveness* (the stream emits at all), not latency. Under
-    // `cargo test --workspace` every crate's test binary runs concurrently,
-    // and this test's `current_thread` runtime can wait a long time to be
-    // scheduled — a tight budget here fails on contention rather than on
-    // anything the monitor did wrong.
+    // this asserts *liveness* (the stream emits at all), not latency. The
+    // first tick builds the shared health client and makes a request, and a
+    // busy machine stretches both, so a tight budget here would fail on load
+    // rather than on anything the monitor did wrong.
+    //
+    // It used to stretch much further than load alone explains. Building that
+    // client read the system proxy configuration, which cost about half a
+    // second warm and three seconds cold, and this test missed its budget in
+    // two gates (#1084). `crate::health::loopback_client` is where that went.
     let first_status = tokio::time::timeout(Duration::from_secs(10), stream.next()).await;
 
     cancel_token.cancel();

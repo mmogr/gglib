@@ -79,9 +79,7 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
     // and hung — and the hung case, the one worth bounding, was the loosest.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
     let mut attempt = 0;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()?;
+    let client = crate::health::loopback_client()?;
 
     loop {
         attempt += 1;
@@ -165,17 +163,13 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 pub async fn check_http_health(port: u16) -> bool {
     /// Shared client, built once. See `crate::health::HEALTH_CLIENT` for why
     /// this isn't constructed per call — this path is hotter still, running on
-    /// the already-running fast path of every proxied request.
+    /// the already-running fast path of every proxied request — and
+    /// `crate::health::loopback_client` for why it never consults a proxy.
     static CLIENT: std::sync::OnceLock<Option<reqwest::Client>> = std::sync::OnceLock::new();
 
     let health_url = format!("http://127.0.0.1:{port}/health");
     let Some(client) = CLIENT
-        .get_or_init(|| {
-            reqwest::Client::builder()
-                .timeout(Duration::from_secs(2))
-                .build()
-                .ok()
-        })
+        .get_or_init(|| crate::health::loopback_client().ok())
         .as_ref()
     else {
         // Client construction failed — indistinguishable from an unhealthy
