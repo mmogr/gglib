@@ -4,17 +4,6 @@
 
 use super::*;
 
-/// Six decimal digits, every time, including when the draw lands below
-/// 100000 and needs its zeros.
-#[test]
-fn a_pairing_code_is_six_decimal_digits() {
-    for _ in 0..256 {
-        let code = generate_pairing_code();
-        assert_eq!(code.len(), 6, "{code}");
-        assert!(code.bytes().all(|b| b.is_ascii_digit()), "{code}");
-    }
-}
-
 /// The proxy's superset of the two former private copies: it also covers the
 /// empty-vs-nonempty case, which the axum copy did not.
 #[test]

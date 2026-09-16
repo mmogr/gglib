@@ -2,18 +2,20 @@
 //!
 //! One `Arc<RemoteGateway>` is built with the service graph and handed to
 //! `ProxyOps`, which puts it on every proxy it starts. It is therefore
-//! always present, whether or not the tunnel is up: with nothing armed it
-//! rejects every pairing code, and with the tunnel down `mcp_allowed` is
-//! whatever it was last set to, which the proxy never consults because no
-//! request is marked as tunnelled.
+//! always present, whether or not the tunnel is up: with the tunnel down it
+//! holds no invite, and `mcp_allowed` is whatever it was last set to, which
+//! the proxy never consults because no request is marked as tunnelled.
+//!
+//! It also holds the invite a session has open. The code is answered at the
+//! tunnel edge, not here; `gateway_session.rs` has how the gateway learns a
+//! device paired.
 
 use std::fmt;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, PairingOutcome, RemoteGatewayPort};
+use gglib_core::ports::{AppEventEmitter, RemoteGatewayPort};
 
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -122,31 +124,6 @@ impl RemoteGateway {
 }
 
 impl RemoteGatewayPort for RemoteGateway {
-    fn redeem_pairing_code(
-        &self,
-        code: &str,
-        peer: Option<&str>,
-        name: Option<&str>,
-    ) -> PairingOutcome {
-        let outcome = self.pairing.redeem(code);
-        if let PairingOutcome::Granted { device, .. } = &outcome {
-            self.paired.store(true, Ordering::Relaxed);
-            // The roster row is written by `roster_sync`, not here: this runs
-            // on the request path and the port is synchronous by contract, so
-            // a settings write is not available. What the device called
-            // itself is a label, and a label learned microseconds before a
-            // crash is not worth an `await` on every tunnelled request.
-            self.note(Note::Joined {
-                device: device.clone(),
-                label: name.map(str::to_owned),
-                at_ms: super::roster::now_ms(),
-            });
-            self.emitter
-                .emit(AppEvent::remote_paired(peer.map(str::to_owned)));
-        }
-        outcome
-    }
-
     fn mcp_allowed(&self) -> bool {
         self.mcp_allowed.load(Ordering::Relaxed)
     }
@@ -181,8 +158,8 @@ impl RemoteGatewayPort for RemoteGateway {
 }
 
 impl fmt::Debug for RemoteGateway {
-    /// State, never secrets: the pending code and the key it stands for are
-    /// both credentials, and `ProxyConfig` derives `Debug` over this.
+    /// State only: `ProxyConfig` derives `Debug` over this, and nothing an
+    /// invite carries belongs in a log line.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RemoteGateway")
             .field("pairing_active", &self.pairing.active())
@@ -196,3 +173,7 @@ impl fmt::Debug for RemoteGateway {
 #[cfg(test)]
 #[path = "gateway_tests.rs"]
 mod gateway_tests;
+
+#[cfg(test)]
+#[path = "gateway_invite_tests.rs"]
+mod gateway_invite_tests;

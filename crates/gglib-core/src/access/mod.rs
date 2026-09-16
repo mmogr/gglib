@@ -69,42 +69,6 @@ pub fn generate_api_key() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
-/// Mint an identifier for a paired device.
-///
-/// Thirty-two random bits as eight lowercase hex behind a `dev-` prefix —
-/// inside modelpipe's rule for a token name, and a different shape from the
-/// twelve-hex peer fingerprint it will sit beside on a status line, so the
-/// two cannot be read as one.
-///
-/// **Independent of the device's key, deliberately.** This travels to the
-/// backend as `X-Modelpipe-Device` on every request that device makes, and
-/// lands in the tunnel's exchange log, the proxy's log, and device-list
-/// output that people paste into bug reports. An identifier derived from a
-/// live credential is needless coupling at best.
-#[must_use]
-pub fn generate_device_id() -> String {
-    let draw = u32::try_from(uuid::Uuid::new_v4().as_u128() & 0xffff_ffff).unwrap_or(0);
-    format!("dev-{draw:08x}")
-}
-
-/// Mint a six-digit pairing code for `gglib remote invite`.
-///
-/// Zero-padded decimal, so it is something a person reads off one screen
-/// and types into another. Its entropy is deliberately small — about twenty
-/// bits — and it is not a credential on its own: it lives two minutes, is
-/// spent on first use, is burned after three wrong attempts, and reaching
-/// the route that accepts it requires the ticket. ADR 0012 has the
-/// argument. Drawn from the same CSPRNG as [`generate_api_key`]; the modulo
-/// bias over a 128-bit draw is not measurable.
-#[must_use]
-pub fn generate_pairing_code() -> String {
-    let draw = uuid::Uuid::new_v4().as_u128();
-    // `as` would be a lint here; the remainder is by construction below
-    // one million and fits comfortably.
-    let six = u32::try_from(draw % 1_000_000).unwrap_or(0);
-    format!("{six:06}")
-}
-
 /// Who may reach the proxy, and how they prove it.
 ///
 /// Two independent gates that happen to travel together, because both are
@@ -133,8 +97,8 @@ pub struct ProxyAccessConfig {
     pub allowed_hosts: Vec<String>,
     /// The remote tunnel's owner, when this proxy may be reached through one
     /// (ADR 0012). Travels with the access policy because it *is* one: it
-    /// redeems the pairing code that hands out the key, and it decides
-    /// whether a request that arrived through the tunnel may reach `/mcp`.
+    /// decides whether a request that arrived through the tunnel may reach
+    /// `/mcp`.
     /// `None` for an embedded server or a test, where nothing is listening
     /// for the answers.
     pub remote: Option<Arc<dyn RemoteGatewayPort>>,

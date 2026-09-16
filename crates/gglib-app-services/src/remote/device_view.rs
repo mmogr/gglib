@@ -44,6 +44,7 @@ pub(super) fn viewed(
             joined_at: 0,
             redeemed_at: None,
             last_seen: None,
+            peer: None,
             recorded: false,
         })
         .collect();
@@ -56,6 +57,7 @@ pub(super) fn viewed(
             joined_at: d.joined_at,
             redeemed_at: d.redeemed_at,
             last_seen: d.last_seen,
+            peer: d.peer,
             recorded: true,
         })
         .chain(unrecorded)

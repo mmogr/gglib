@@ -188,8 +188,8 @@ impl Settled {
 /// What made that trade defensible was the arithmetic in decision 3: six
 /// digits and two minutes are enough only while a guesser has to find the
 /// listener first. A lasting ticket removes that step, so the counting had
-/// to move to where the guesses arrive — modelpipe 0.5's
-/// `grant_once_bounded`, which burns a grant at the edge. Retiring the
+/// to move to where the guesses arrive: the tunnel edge, which answers the
+/// code itself and counts wrong codes per endpoint. Retiring the
 /// address is now deleting this file, a thing a person does deliberately
 /// rather than a side effect of a restart. It revokes no device: `arm` seeds
 /// every device key the roster lists onto the listener at the new address,

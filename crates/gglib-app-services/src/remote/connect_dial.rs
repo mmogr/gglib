@@ -6,23 +6,27 @@
 //! the reservation and the install, a `disconnect` may take the slot away,
 //! and everything here has to be written as though it will.
 
-use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
 
 use gglib_core::events::AppEvent;
 use gglib_core::{DEFAULT_REMOTE_PORT, RemotePairing};
-use modelpipe::{ConnectError, ConnectHandle, Ticket};
+use modelpipe::PairingString;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
+use super::super::RemoteOps;
 use super::super::connect_watch::watch;
-use super::super::first_contact::{once_reached, wait};
 use super::super::stored_pairing::settle;
 use super::super::types::{ConnectRequest, Connected};
-use super::super::{RemoteOps, redeem};
-use super::{DRAIN, LiveConnect, cancelled, connect_error};
+use super::{DRAIN, LiveConnect, cancelled};
 use crate::error::GuiError;
+
+#[path = "connect_open.rs"]
+mod open;
+
+pub(super) use open::parse_pairing;
+use open::{Opened, open};
 
 impl RemoteOps {
     /// Everything from the dial to the install, with the slot already
@@ -35,78 +39,50 @@ impl RemoteOps {
     /// added later without one.
     pub(super) async fn dial(
         &self,
-        ticket: &Ticket,
-        code: Option<String>,
+        pairing: &PairingString,
         held: Option<RemotePairing>,
         request: &ConnectRequest,
         generation: u64,
         cancel: &CancellationToken,
     ) -> Result<Connected, GuiError> {
+        let ticket = pairing.ticket();
         let wanted = wanted_port(request.port, held.as_ref());
-        let (handle, moved_from) = match bind(ticket, request, Some(wanted), cancel).await? {
-            Ok(handle) => (handle, None),
-            Err(ConnectError::Bind(_)) if request.port.is_none() => {
-                let handle = bind(ticket, request, None, cancel)
-                    .await?
-                    .map_err(|e| connect_error(e, None))?;
-                (handle, Some(wanted))
+        let (opened, moved_from) = match open(pairing, request, Some(wanted), cancel).await {
+            Ok(opened) => (opened, None),
+            Err(refused) if refused.is_bind() && request.port.is_none() => {
+                let opened = open(pairing, request, None, cancel)
+                    .await
+                    .map_err(|refused| refused.into_error(None))?;
+                (opened, Some(wanted))
             }
-            Err(e) => return Err(connect_error(e, request.port)),
+            Err(refused) => return Err(refused.into_error(request.port)),
         };
+        let Opened { handle, key } = opened;
         let handle = Arc::new(handle);
         let base_url = handle.base_url();
         let port = handle.local_addr().port();
 
-        // Reach the far machine *before* redeeming anything through it.
-        // `modelpipe::connect` hands back a bound port and dials behind it,
-        // so up to here nothing has been in touch with the other end: a
-        // redeem sent now would spend the one-time code on the `502` the
-        // edge answers while there is no peer, and a pipe that had reached
-        // nobody would install and read as Connected for the ninety seconds
-        // `connect_watch` allows an idle one. `once_reached` keeps the two
-        // in that order by handing the redeem a `Reached` only the waiting
-        // can mint, rather than by being written above it —
-        // `first_contact.rs` carries that argument in full.
-        //
-        // Cancellable, unlike what follows it. Waiting up to thirty seconds
-        // is exactly when somebody types `gglib remote disconnect`, and
-        // giving up costs nothing while nothing has been spent.
-        //
-        // The redeem, from there, is deliberately *not* cancellable: one
-        // abandoned half way still burns the code, and the recovery for
-        // that costs a walk to the other machine — so a `disconnect` racing
-        // it waits the twenty seconds the request is bounded by and takes
-        // the connection down afterwards, with the key safely stored.
-        //
         // What the record owes this dial is `settle`'s, in
         // `stored_pairing.rs`, and it is there rather than here so that it
         // can be driven: nothing below `modelpipe::connect` is reachable in
-        // a test, and every arm of that decision is below it. The one thing
-        // that stays here is the port, which no arm may leave bound behind
-        // a `dial` that reported a failure.
-        let paired = match once_reached(
-            wait(handle.status(), || handle.status_changed(), cancel),
-            |reached| {
-                let over = base_url.as_str();
-                settle(
-                    &self.core,
-                    ticket,
-                    held.as_ref(),
-                    code,
-                    port,
-                    async move |code| redeem::redeem(&reached, over, &code).await,
-                )
-            },
-        )
-        .await
-        {
+        // a test, and every arm of that decision is below it. `pair` spent
+        // the code before this runs, so the key it bought stands where
+        // `settle` takes a code, and the redemption hands it straight back:
+        // `open` returns a key exactly when the string carried a code, and a
+        // dial with no code is never asked for one. The one thing that stays
+        // here is the port, which no arm may leave bound behind a `dial` that
+        // reported a failure.
+        let settled = settle(&self.core, ticket, held.as_ref(), key, port, async |key| {
+            Ok(key)
+        })
+        .await;
+        let paired = match settled {
             Ok(paired) => paired,
             Err(e) => {
-                // `DRAIN`, like every other teardown here. A dial that reached
-                // nobody has nothing of its own in flight, but the port it
-                // bound has been answering `502` to anything local for as long
-                // as the gate waited, and a third-party client mid-request on
-                // it is owed the same five seconds every other path gives one.
+                // `DRAIN`, like every other teardown here. The pipe reached
+                // the far machine, but a third-party client may already be
+                // mid-request on the port it bound, and is owed the same
+                // five seconds every other path gives one.
                 handle.shutdown_timeout(DRAIN).await;
                 return Err(e);
             }
@@ -127,7 +103,7 @@ impl RemoteOps {
             // port this built is nobody's, so it goes down here rather than
             // staying bound behind a command that reported success.
             handle.shutdown_timeout(DRAIN).await;
-            return Err(cancelled());
+            return Err(overtaken(paired));
         }
         tokio::spawn(watch(
             Arc::clone(&self.live_connect),
@@ -168,26 +144,21 @@ fn wanted_port(requested: Option<u16>, held: Option<&RemotePairing>) -> u16 {
         .unwrap_or(DEFAULT_REMOTE_PORT)
 }
 
-/// Bind the loopback side and start dialling — on `port`, or on any free
-/// one — unless `disconnect` gave up on this dial first.
+/// What a `join` says when `disconnect` took its slot before the install.
 ///
-/// The outer `Err` is the cancellation; the inner is modelpipe's, left for
-/// the caller to read, because a bind that failed on a port nobody pinned
-/// is not a failure yet.
-async fn bind(
-    ticket: &Ticket,
-    request: &ConnectRequest,
-    port: Option<u16>,
-    cancel: &CancellationToken,
-) -> Result<Result<ConnectHandle, ConnectError>, GuiError> {
-    let mut opts = modelpipe::ConnectOptions::default();
-    opts.bind = port.map(|port| SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
-    opts.relay = request.relay.clone();
-    opts.port_mapping = false;
-    opts.discovery = request.discovery;
-    tokio::select! {
-        () = cancel.cancelled() => Err(cancelled()),
-        dialled = modelpipe::connect(ticket, opts) => Ok(dialled),
+/// A dial with a code runs to completion once `pair` has it, so the pairing
+/// can finish after the slot is gone, with the key already stored. Saying
+/// only "cancelled" then would send somebody to the other machine for a code
+/// this one no longer needs.
+fn overtaken(paired: bool) -> GuiError {
+    if paired {
+        GuiError::Conflict(
+            "`gglib remote disconnect` ended this join after its pairing had finished: this \
+             machine holds the key now, so `gglib remote join` with no argument connects"
+                .to_owned(),
+        )
+    } else {
+        cancelled()
     }
 }
 
@@ -231,6 +202,23 @@ mod tests {
             wanted_port(Some(9100), Some(&held(Some(8181)))),
             9100,
             "`--port` is a pin and outranks the record"
+        );
+    }
+
+    /// A `join` overtaken after it paired says the key is kept, and one
+    /// overtaken before it paired says it was cancelled, as it always has.
+    #[test]
+    fn a_join_overtaken_after_it_paired_says_the_key_is_kept() {
+        let GuiError::Conflict(paired) = overtaken(true) else {
+            panic!("an overtaken join is a conflict either way");
+        };
+        assert!(paired.contains("holds the key now"), "{paired}");
+        let GuiError::Conflict(unpaired) = overtaken(false) else {
+            panic!("an overtaken join is a conflict either way");
+        };
+        assert!(
+            unpaired.contains("cancelled by `gglib remote disconnect`"),
+            "{unpaired}"
         );
     }
 }

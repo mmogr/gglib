@@ -37,8 +37,8 @@ impl RemoteOps {
     /// Starts the proxy if it is not running; settles the key the tunnel
     /// enforces (minting and persisting one when nothing enforces anything
     /// yet — which puts a bearer requirement on the local proxy too, see
-    /// ADR 0012); binds the stored identity; grants the pairing code at the
-    /// edge, bounded so wrong bearers burn it; and watches for a rotation.
+    /// ADR 0012); binds the stored identity; invites a device at the edge
+    /// when asked to, which answers the code itself; and watches for a rotation.
     /// The slot is reserved rather than held, so everything slow happens with
     /// the lock released and `status` answers throughout.
     ///

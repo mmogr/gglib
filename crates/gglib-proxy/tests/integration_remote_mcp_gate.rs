@@ -74,7 +74,7 @@ async fn spawn_proxy(access: ProxyAccessConfig) -> (String, CancellationToken) {
 
 /// A proxy with a token and a tunnel owner whose `/mcp` grant is `allow`.
 async fn tunnelled_proxy(allow_mcp: bool) -> (String, CancellationToken, Arc<StubGateway>) {
-    let gateway = Arc::new(StubGateway::new("000000", "unused", allow_mcp));
+    let gateway = Arc::new(StubGateway::new(allow_mcp));
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
         Some(TOKEN.to_owned()),

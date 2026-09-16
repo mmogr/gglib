@@ -157,7 +157,7 @@ pub enum RemoteCommand {
         ///
         /// `enable` turns this machine on and `invite` pairs a device; this
         /// does both. A restart never does: a code nobody is watching for is
-        /// a live grant nobody spends.
+        /// a live code nobody spends.
         #[arg(long)]
         invite: bool,
     },

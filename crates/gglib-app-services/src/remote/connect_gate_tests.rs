@@ -1,9 +1,9 @@
 //! The gate between binding the port and using it, at its call site.
 //!
-//! `first_contact_tests.rs` drives the policy — what waiting for the far
-//! machine decides, and that nothing is paid when it fails. This file
-//! asserts the other half, which no test over a pure function can: that
-//! `dial` actually goes through it, and goes through it *first*.
+//! modelpipe owns the policy now: `ConnectHandle::wait_reachable` waits for
+//! the far machine, and `pair` presents a code only once it has. This file
+//! asserts what is still `dial`'s, which no test inside modelpipe can: that
+//! it goes through them, and what `disconnect` may end while it does.
 //!
 //! Its own file rather than more of `connect_race_tests.rs`, which is at
 //! 229 of the 300 lines `scripts/check_rust_complexity.sh` allows and would
@@ -25,32 +25,47 @@ use crate::test_support_remote::{KEY_A, TICKET_UNREACHABLE, paired_with, test_re
 /// stricter and still far more than an answer needs).
 const PROMPTLY: Duration = Duration::from_secs(5);
 
-/// A dial that is still waiting for the far machine has spent nothing yet,
-/// and `disconnect` is what ends it.
+/// How long a dial that `disconnect` ended may take to finish ending.
 ///
-/// From modelpipe 0.3.0 `connect` returns as soon as the local port is
-/// bound and dials behind the handle, so without a gate the very next thing
-/// `dial` does — redeem the one-time code — goes out down a pipe that has
-/// reached nobody, and is spent on the `502` the edge answers while there
-/// is no peer. Minting another is a walk to the other machine.
+/// Not [`PROMPTLY`]: `disconnect` answers at once, but the dial it ended
+/// first drains the listener it bound, for up to `DRAIN`, five seconds, so a
+/// five-second wait here measured the machine's load as much as the dial
+/// (#1078). Four drains is room for a loaded machine, and still under the
+/// thirty seconds a dial that ignored `disconnect` would spend waiting for
+/// the far machine, which is the failure this wait exists to catch.
+const ENDED: Duration = Duration::from_secs(4 * DRAIN.as_secs());
+
+/// How long to watch a dial with a code after `disconnect` before judging
+/// that it is still pairing.
+///
+/// A dial that `disconnect` wrongly abandoned is over once it has torn its
+/// endpoint down, and under load that took longer than the half second this
+/// used to wait, so the mutation it exists to catch sometimes survived. A
+/// dial that honours its code waits twenty-five seconds for the far machine,
+/// so five cannot mistake one for the other.
+const ABANDONED: Duration = Duration::from_secs(5);
+
+/// A dial with a code is not abandoned part way through pairing, and
+/// `disconnect` still answers at once.
+///
+/// `modelpipe::pair` binds the port, waits for the far machine and presents
+/// the code in one call, and nothing on this side can see which of those it
+/// is in. Abandoning it could spend the code on a pairing nobody collects,
+/// and the recovery for that is a walk to the other machine. So `disconnect`
+/// takes the slot and returns, and the dial runs on until `pair` answers; it
+/// then finds the slot gone and takes its port down. Before modelpipe owned
+/// pairing a coded dial was cancellable while it waited, because gglib
+/// redeemed the code itself afterwards.
 ///
 /// It needs no network, for the reason `a_dial_that_fails_gives_the_connect_side_back`
-/// needs none: the local bind is the first thing `modelpipe::connect` does,
-/// and the iroh endpoint binds its own socket without anything answering.
-/// That test makes the bind *fail* to reach `dial`; this one lets it
-/// succeed, which is the only way to reach what `dial` does afterwards.
+/// needs none: the local bind is the first thing `pair` does, and the iroh
+/// endpoint binds its own socket without anything answering.
 ///
-/// The wait is for the port to accept, not a sleep. A sleep would be a race
-/// on a loaded machine — and a race that hides the regression rather than
-/// reporting it, because the arm it would land in is the one that passes.
-///
-/// **Two mutations die here.** Delete the gate and the redeem goes out at
-/// once, fails against the peerless edge, and the dial is over before
-/// `disconnect` is called — so `disconnect` answers "not connected" and the
-/// dial's error is a refusal rather than a cancellation. Move the gate to
-/// *after* the redeem and the same thing happens for the same reason.
+/// **The mutation it kills** is the coded arm wrapped in the same `select!`
+/// on the cancel token as the codeless one: the dial then ends the moment
+/// `disconnect` takes the slot.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_dial_still_waiting_for_the_far_machine_has_not_spent_the_code_yet() {
+async fn a_dial_with_a_code_is_not_abandoned_part_way_through_pairing() {
     let (_, ops, events) = test_remote_ops().await;
     // Named by binding it and letting it go, so the dial below can be
     // watched for the moment it takes the same port.
@@ -65,8 +80,6 @@ async fn a_dial_still_waiting_for_the_far_machine_has_not_spent_the_code_yet() {
     let dial = tokio::spawn(async move {
         dialling
             .connect(ConnectRequest {
-                // With a code: a first pairing is the case that has
-                // something to spend, and the case this gate exists for.
                 pairing: Some(format!("{TICKET_UNREACHABLE}-483920")),
                 port: Some(port),
                 discovery: false,
@@ -78,23 +91,25 @@ async fn a_dial_still_waiting_for_the_far_machine_has_not_spent_the_code_yet() {
 
     tokio::time::timeout(PROMPTLY, ops.disconnect())
         .await
-        .expect("disconnect queued behind the dial it exists to end")
-        .expect("a dial that has reached nobody yet is one to give up on");
+        .expect("disconnect queued behind the dial it was asked to end")
+        .expect("a dial in flight is one to give up on");
+    // Watched rather than glanced at: an abandoned dial still has to tear its
+    // endpoint down before it is over.
+    let _ = tokio::time::timeout(ABANDONED, async {
+        while !dial.is_finished() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    let still_pairing = !dial.is_finished();
+    // The far machine does not exist, so `pair` would wait out its whole
+    // budget; the test has what it came for.
+    dial.abort();
 
-    let err = tokio::time::timeout(PROMPTLY, dial)
-        .await
-        .expect("the dial ran on past the disconnect that ended it")
-        .expect("the dial task panicked")
-        .expect_err("nobody was reached, so nothing connected");
-    let GuiError::Conflict(message) = err else {
-        panic!(
-            "the dial was still waiting for the far machine, so giving up on it is a conflict \
-             — a redeem that had already gone out looks exactly like this: {err:?}"
-        );
-    };
     assert!(
-        message.contains("cancelled by `gglib remote disconnect`"),
-        "{message}"
+        still_pairing,
+        "the dial ended the moment disconnect took the slot, so a pairing that might have \
+         presented the code was abandoned"
     );
     assert!(
         events.events().is_empty(),
@@ -103,8 +118,8 @@ async fn a_dial_still_waiting_for_the_far_machine_has_not_spent_the_code_yet() {
     );
 }
 
-/// The same claim for a dial with **no code to spend**, which is the ordinary
-/// reconnect and the one the test above cannot make.
+/// A dial with **no code to spend**, the ordinary reconnect, has nothing to
+/// lose, so `disconnect` ends it while it waits.
 ///
 /// It matters because the gate has two jobs and only one of them is about the
 /// code. A codeless dial that reached nobody would still install, and
@@ -150,7 +165,7 @@ async fn a_codeless_dial_waits_for_the_far_machine_too() {
         .expect("disconnect queued behind the dial it exists to end")
         .expect("a dial that has reached nobody yet is one to give up on");
 
-    let err = tokio::time::timeout(PROMPTLY, dial)
+    let err = tokio::time::timeout(ENDED, dial)
         .await
         .expect("the dial ran on past the disconnect that ended it")
         .expect("the dial task panicked")
@@ -186,7 +201,7 @@ async fn a_codeless_dial_waits_for_the_far_machine_too() {
 /// How long to watch a dial that should be parked in the gate.
 ///
 /// **This is the assertion that discriminates, and it is a dwell rather than a
-/// race.** The gate holds a dial for thirty seconds; a dial that skipped it is
+/// race.** The gate holds a dial for 25 or 30 seconds; a dial that skipped it is
 /// over in microseconds — it binds, settles, installs and returns. Half a
 /// second sits three orders of magnitude above the one and two below the
 /// other, so it separates them without depending on which task the scheduler

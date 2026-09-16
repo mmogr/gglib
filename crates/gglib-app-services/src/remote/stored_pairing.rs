@@ -48,13 +48,17 @@ pub(super) fn names_the_same_machine(stored: &RemotePairing, ticket: &Ticket) ->
 /// paired.
 ///
 /// The redemption arrives as a closure rather than as a base URL, for the
-/// reason the connect watcher takes its statuses as one: `redeem` needs a
+/// reason the connect watcher takes its statuses as one: a pairing needs a
 /// live tunnel, so a decision reachable only *through* `modelpipe::connect`
 /// — an iroh endpoint and a peer that answers — is a comment with an `await`
 /// in it rather than something a test can drive. Both arms are decisions
 /// worth driving. Which of the two writes takes a redeemed key is the whole
 /// reason [`store_redeemed`] is not [`remember`]; and on the codeless arm,
 /// that a dial to the machine already recorded writes nothing at all.
+///
+/// `code` is whatever `redeem` spends, and a secret either way: `dial` passes
+/// the key `modelpipe::pair` already bought and redeems it by handing it
+/// straight back, so nothing here may log or format it.
 ///
 /// # Errors
 ///
@@ -157,11 +161,11 @@ pub(super) async fn store_redeemed(
 /// A failure to store a pairing whose code has already been spent.
 ///
 /// Worth its own sentence because the ordinary reading of "could not store"
-/// is "try again", and trying again cannot work: `redeem` burned the code at
-/// both ends of the far machine — the tunnel edge's one-time grant is
-/// consumed and the pairing slot cleared — so the next `connect` meets a
-/// refusal it reports as an expired or mistyped code. The only way forward
-/// is a fresh `enable` there, and saying so is the difference between
+/// is "try again", and trying again cannot work: `modelpipe::pair` spent the
+/// code at the far machine's tunnel edge, which answers each code once, so
+/// the next `connect` meets a
+/// refusal it reports as a refused pairing code. The only way forward
+/// is a fresh `gglib remote invite` there, and saying so is the difference between
 /// walking to the other machine once and doing it after an hour of retries.
 ///
 /// It does not get the key back. Nothing at this layer can: the key exists

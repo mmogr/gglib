@@ -35,7 +35,7 @@ pub(crate) struct RemoteEnableBody {
     ///
     /// `enable` is a switch and `invite` is what pairs a device, so a first
     /// run is two commands unless this is set. Omitted is off, which is what
-    /// a restart wants: a code nobody is watching for is a live grant nobody
+    /// a restart wants: a code nobody is watching for is a live code nobody
     /// spends.
     #[serde(default)]
     pub invite: bool,

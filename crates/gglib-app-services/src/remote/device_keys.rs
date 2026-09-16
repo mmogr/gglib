@@ -75,7 +75,7 @@ pub(super) async fn seed(
 /// Put every device this machine knows back on a freshly armed listener.
 ///
 /// Under `TokenPolicy::Named` the listener starts closed: until this runs,
-/// nothing admits but a live grant. That is why [`read_keys`] is called
+/// nothing admits at all. That is why [`read_keys`] is called
 /// *before* the arm reaches its point of no return and this is called after —
 /// an unreadable key file must fail the enable while failing it is still
 /// free, and this half cannot fail at all.

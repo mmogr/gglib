@@ -11,113 +11,103 @@
 //! Every write here takes `RemoteOps::roster` first and touches the key file
 //! before the roster, so a concurrent invite and forget cannot interleave.
 
+use std::sync::Arc;
+
 use gglib_core::Device;
-use gglib_core::access::{generate_api_key, generate_device_id};
 use tracing::{info, warn};
 
 use super::RemoteOps;
 use super::device_keys::{read_keys, write_keys};
 use super::gateway::Offered;
+use super::invite_watch;
 use super::pairing::{MAX_ATTEMPTS_AT_EDGE, PAIRING_TTL};
 use super::roster::{now_ms, read_roster, write_roster};
 use super::types::OfferedPairing;
 use crate::error::GuiError;
 
-/// Mint a key for a device that has not paired yet, and a code that hands it
-/// over once.
+/// Invite a device that has not paired yet: a key of its own, held at the
+/// tunnel edge, and a code that hands it over once.
 ///
 /// The order is not free choice:
 ///
-/// 1. `add_token` **first**, because it is the call that can fail. A code
-///    redeemable before its token exists means a device pairs successfully
-///    and is then refused on its first real request — a 401 immediately
-///    after a green checkmark, the least debuggable failure this has.
+/// 1. `invite` **first**, because it is the call that can fail. modelpipe
+///    mints the key and the device's name and holds the key at the edge, and
+///    the code it mints is not redeemable yet.
 /// 2. Both stores written next, before the code can be spent, so a daemon
 ///    that dies mid-redemption cannot leave a device holding a key this side
-///    has forgotten.
-/// 3. The gateway armed, which refuses if a pairing is already open or if
-///    the session moved under us.
-/// 4. The edge grant last, bounded: the ticket lasts now, so anyone holding
-///    it can wait for a window and spend it guessing — as wrong *bearers*,
-///    which the local counter never sees and the edge does.
+///    has forgotten. That is modelpipe's own rule for an invite: store the
+///    key, then arm.
+/// 3. The gateway holds the invite, which it refuses if one is already open
+///    or the session moved under us.
+/// 4. The code armed last. The edge answers it, counts wrong codes per
+///    endpoint and expires it; `invite_watch` records the device when it
+///    pairs.
 ///
-/// Every failure after step 1 unwinds what came before it.
+/// Every failure after step 1 unwinds what came before it: `forget`'s
+/// `remove_token` withdraws the invite as it drops the key.
 ///
 /// # Errors
 ///
-/// `Conflict` when a pairing is already open or the session ended while this
-/// was preparing; `Internal` when a store cannot be written or the edge
-/// refuses the token or the grant.
+/// `Conflict` when an invite is already open or the session ended while this
+/// was preparing; `Internal` when the edge refuses the invite or a store
+/// cannot be written.
 pub(super) async fn offer(
     ops: &RemoteOps,
     handle: &modelpipe::ServeHandle,
     epoch: u64,
-    ticket: &str,
 ) -> Result<OfferedPairing, GuiError> {
-    let (id, key) = mint(handle)?;
+    let mut options = modelpipe::InviteOptions::default();
+    options.ttl = PAIRING_TTL;
+    options.wrong_codes = MAX_ATTEMPTS_AT_EDGE;
+    let invited = handle
+        .invite(options)
+        .map_err(|e| GuiError::Internal(format!("the tunnel refused to invite a device: {e}")))?;
+    let device = invited.device().to_owned();
 
-    if let Err(e) = remember(ops, &id, &key).await {
+    if let Err(e) = remember(ops, &device, invited.api_key()).await {
         // Both stores, not just the token: `remember` takes its key back out
         // of the file when the roster write fails, but not when that second
         // file write fails as well, and a key left there is listed as one
         // with no record until something retires it.
-        forget_quietly(ops, handle, &id).await;
+        forget_quietly(ops, handle, &device).await;
         return Err(e);
     }
 
-    let code = gglib_core::access::generate_pairing_code();
     match ops
         .gateway
-        .offer_pairing(epoch, code.clone(), key, id.clone(), PAIRING_TTL)
+        .offer_pairing(epoch, device.clone(), Box::new(invited.handle()))
     {
         Offered::Armed => {}
         Offered::Superseded => {
-            forget_quietly(ops, handle, &id).await;
+            forget_quietly(ops, handle, &device).await;
             return Err(GuiError::Conflict(
                 "remote access was taken down while the invite was being prepared".to_owned(),
             ));
         }
         Offered::AlreadyOpen => {
-            forget_quietly(ops, handle, &id).await;
+            forget_quietly(ops, handle, &device).await;
             return Err(GuiError::Conflict(
                 "an invite is already open — wait for it to be used or to expire".to_owned(),
             ));
         }
     }
 
-    if let Err(e) = handle.grant_once_bounded(code.clone(), PAIRING_TTL, MAX_ATTEMPTS_AT_EDGE) {
-        ops.gateway.withdraw_pairing(epoch);
-        forget_quietly(ops, handle, &id).await;
-        return Err(GuiError::Internal(format!(
-            "could not arm the pairing code: {e}"
-        )));
-    }
+    // Outside the session lock, and safe there: a teardown landing now takes
+    // the invite out of the gateway and withdraws it, and arming an invite
+    // that has ended does nothing.
+    invited.arm();
+    invite_watch::watch(Arc::clone(&ops.gateway), device.clone(), invited.handle());
 
-    info!(device = %id, "offered a pairing code for a new device");
+    info!(device = %device, "offered a pairing code for a new device");
     Ok(OfferedPairing {
-        pairing: format!("{ticket}-{code}"),
-        code,
+        // From the invite rather than the caller's copy of the ticket: the
+        // address set behind a ticket fills in over time, and this is the one
+        // the code was minted against.
+        pairing: invited.pairing().to_string(),
+        code: invited.code().as_str().to_owned(),
         expires_in_s: PAIRING_TTL.as_secs(),
-        device: id,
+        device,
     })
-}
-
-/// Mint an id nothing already holds, and a key, and hold them at the edge.
-fn mint(handle: &modelpipe::ServeHandle) -> Result<(String, String), GuiError> {
-    let key = generate_api_key();
-    // The listener is the authority on what admits, so a refusal here is a
-    // redraw rather than a failure: an id it will not hold is one no device
-    // could have used anyway.
-    for _ in 0..5 {
-        let id = generate_device_id();
-        match handle.add_token(&id, key.clone()) {
-            Ok(()) => return Ok((id, key)),
-            Err(e) => warn!("a minted device id was refused, drawing another: {e}"),
-        }
-    }
-    Err(GuiError::Internal(
-        "could not mint a device id the tunnel would hold".to_owned(),
-    ))
 }
 
 /// Write both stores: the key to its file, the row to settings.
@@ -153,6 +143,7 @@ async fn record(ops: &RemoteOps, id: &str) -> Result<(), GuiError> {
         // redeemed, which is what tells an unspent invite from a device.
         redeemed_at: None,
         last_seen: None,
+        peer: None,
     });
     write_roster(&ops.core, roster).await
 }

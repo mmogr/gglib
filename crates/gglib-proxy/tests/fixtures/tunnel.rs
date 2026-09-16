@@ -44,9 +44,6 @@ pub(crate) const PROXY_KEY: &str = "sk-zzq-the-backend-key";
 pub(crate) const DEVICE: &str = "dev-0a1b2c3d";
 pub(crate) const DEVICE_KEY: &str = "sk-zzq-the-laptops-key";
 
-/// The code the stub gateway will redeem, for the pairing-route tests.
-pub(crate) const CODE: &str = "483920";
-
 /// Spawn the real proxy on a loopback port, demanding [`PROXY_KEY`].
 pub(crate) async fn spawn_proxy() -> (String, CancellationToken, Arc<StubGateway>) {
     spawn_proxy_demanding(PROXY_KEY).await
@@ -62,7 +59,7 @@ pub(crate) async fn spawn_proxy_demanding(
 
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-    let gateway = Arc::new(StubGateway::new(CODE, DEVICE_KEY, false));
+    let gateway = Arc::new(StubGateway::new(false));
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
         Some(key.to_owned()),
@@ -113,9 +110,8 @@ pub(crate) async fn tunnel_to(
 ) -> (modelpipe::ServeHandle, modelpipe::ConnectHandle, String) {
     let mut serve_opts = ServeOptions::default();
     // Named, not Supplied. Nothing admits but a key this machine issued to a
-    // named device, or a live one-time grant — and only the first of those
-    // makes the edge write `X-Modelpipe-Device`, which is what gglib's device
-    // gate reads.
+    // named device, which is what makes the edge write `X-Modelpipe-Device`,
+    // the header gglib's device gate reads.
     serve_opts.auth = TokenPolicy::Named;
     serve_opts.backend_auth = Some(PROXY_KEY.to_owned());
     serve_opts.discovery = false;

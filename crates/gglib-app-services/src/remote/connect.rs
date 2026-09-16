@@ -11,15 +11,14 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
-use modelpipe::{ConnectError, ConnectHandle};
+use modelpipe::{ConnectError, ConnectHandle, PairingString};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use super::pairing_string::{self, Parsed};
 use super::slot::{Busy, Taken};
 use super::stored_pairing::names_the_same_machine;
 use super::types::{ConnectRequest, ConnectSnapshot, Connected};
-use super::{RemoteOps, redeem};
+use super::{RemoteOps, far_daemon};
 use crate::error::GuiError;
 
 #[path = "connect_dial.rs"]
@@ -53,8 +52,8 @@ impl LiveConnect {
 impl RemoteOps {
     /// Reach another machine: bind a loopback port here that is its proxy.
     ///
-    /// With a `<ticket>-<code>` pairing, redeems the code through the tunnel
-    /// for the far machine's API key and stores the two as one
+    /// With a `<ticket>-<code>` pairing, pairs through the tunnel, which hands
+    /// this device a key of its own, and stores the two as one
     /// [`RemotePairing`](gglib_core::RemotePairing), so later sessions need
     /// only the ticket — or nothing, since the ticket is part of the record.
     ///
@@ -84,8 +83,8 @@ impl RemoteOps {
             return Err(busy_dialling(&busy));
         }
         let settings = self.settings().await?;
-        let Parsed { ticket, code } = match request.pairing.as_deref() {
-            Some(pairing) => pairing_string::parse(pairing).map_err(GuiError::ValidationFailed)?,
+        let pairing: PairingString = match request.pairing.as_deref() {
+            Some(pairing) => connect_dial::parse_pairing(pairing)?,
             None => {
                 let stored = settings.remote_pairing.as_ref().ok_or_else(|| {
                     GuiError::ValidationFailed(
@@ -94,7 +93,7 @@ impl RemoteOps {
                             .to_owned(),
                     )
                 })?;
-                pairing_string::parse(&stored.ticket).map_err(GuiError::ValidationFailed)?
+                connect_dial::parse_pairing(&stored.ticket)?
             }
         };
         // The key this machine holds *for the machine about to be dialled*,
@@ -104,8 +103,8 @@ impl RemoteOps {
         let held = settings
             .remote_pairing
             .as_ref()
-            .filter(|stored| names_the_same_machine(stored, &ticket));
-        if code.is_none() && held.is_none() {
+            .filter(|stored| names_the_same_machine(stored, pairing.ticket()));
+        if pairing.code().is_none() && held.is_none() {
             return Err(GuiError::ValidationFailed(
                 "this machine holds no key for that remote — pair once with the full \
                  `<ticket>-<code>` string from `gglib remote invite`"
@@ -127,7 +126,7 @@ impl RemoteOps {
             .map_err(|busy| busy_dialling(&busy))?;
 
         let dialled = self
-            .dial(&ticket, code, held.cloned(), &request, generation, &cancel)
+            .dial(&pairing, held.cloned(), &request, generation, &cancel)
             .await;
         if dialled.is_err() {
             self.live_connect.lock().await.release(generation);
@@ -201,7 +200,7 @@ impl RemoteOps {
                     "this machine holds no key for the remote, so it cannot stop it".to_owned(),
                 )
             })?;
-        redeem::kill(&base_url, &key, &fingerprint).await?;
+        far_daemon::kill(&base_url, &key, &fingerprint).await?;
         // The far side is going away; take this side down before its
         // watcher reports the closed pipe as a surprise.
         self.disconnect().await
@@ -262,7 +261,7 @@ fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
         // id is not a curve point. A peer that is merely *absent* is no
         // longer reported here at all — `connect` now returns as soon as
         // the local port is bound, and waiting for the machine is
-        // `first_contact`'s, which is where that sentence went. iroh defers
+        // `connect_open`'s, which is where that sentence went. iroh defers
         // the curve check further still, so nothing produces this today;
         // the arm stays because that is iroh's choice to revisit, not this
         // repo's, and `ConnectError` is `#[non_exhaustive]`.
@@ -270,7 +269,7 @@ fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
         // Deliberately NOT in `docs/remote.md`'s troubleshooting table. A
         // sentence nobody can be shown is noise there, and the cause a reader
         // would reach for — a ticket copied wrong — produces
-        // `pairing_string::parse`'s error instead, one guard earlier.
+        // the pairing string's parse error instead, one guard earlier.
         ConnectError::PeerUnreachable => GuiError::ValidationFailed(
             "that pairing string names an address nobody could be at — copy it again from \
              `gglib remote invite` on the far machine"

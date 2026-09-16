@@ -16,11 +16,10 @@
 //!               handler
 //! ```
 //!
-//! `/health` and `/v1/remote/pair` sit outside the bearer group on purpose:
-//! the first is polled before anyone has credentials, and the second is
-//! how credentials are obtained — it cannot demand the key it hands out. Both
-//! are still behind the Host guard, and the pairing route is behind the
-//! tunnel edge's own one-time grant besides.
+//! `/health` sits outside the bearer group on purpose: it is polled before
+//! anyone has credentials. It is still behind the Host guard. Pairing has no
+//! route here: the tunnel edge answers a pairing request itself and never
+//! forwards it.
 
 use std::sync::Arc;
 
@@ -95,9 +94,6 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
 
     Router::new()
         .route("/health", get(health_check))
-        // Outside the bearer group: this is how the key is obtained. Inside
-        // the Host guard, and behind the tunnel edge's one-time grant.
-        .route("/v1/remote/pair", post(crate::remote::handle_remote_pair))
         .merge(protected)
         // Reads the tunnel markers the serve side sets, and records the
         // request as tunnelled for the gate above and the status surface.

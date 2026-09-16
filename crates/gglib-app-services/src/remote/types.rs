@@ -24,7 +24,7 @@ pub struct EnableRequest {
     /// are separate verbs — this is the flag that lets a first run be one
     /// command rather than two. A restart never sets it: the daemon putting
     /// the tunnel back has no audience, and a code nobody is watching for is
-    /// a live grant nobody spends.
+    /// a live code nobody spends.
     pub invite: bool,
 }
 
@@ -221,6 +221,9 @@ pub struct DeviceView {
     /// the marker headers, though not to name a device this machine never
     /// issued a key to.
     pub last_seen: Option<i64>,
+    /// The fingerprint of the endpoint that redeemed its invite, when one was
+    /// recorded. Advisory, like `redeemed_at`, and nothing is refused on it.
+    pub peer: Option<String>,
     /// Whether the live listener holds this device's key — `None` when the
     /// tunnel is down, because then nothing admits and a `false` would read
     /// as this one device having been dropped.

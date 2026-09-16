@@ -72,6 +72,7 @@ function paired(): RemoteDevice {
     redeemed_at: Date.now() - 86_400_000,
     last_seen: Date.now() - 60_000,
     admitted: true,
+    peer: null,
     recorded: true,
   };
 }
@@ -207,6 +208,7 @@ describe('RemoteControl', () => {
           redeemed_at: null,
           last_seen: Date.now() - 120_000,
           admitted: true,
+          peer: null,
           recorded: true,
         },
       ],
@@ -233,6 +235,7 @@ describe('RemoteControl', () => {
           // Minted and seeded at the edge before the code was ever shown, so
           // admission is not what tells the two apart.
           admitted: true,
+          peer: null,
           recorded: true,
         },
       ],
@@ -254,6 +257,7 @@ describe('RemoteControl', () => {
           last_seen: null,
           // What a half-unwound invite leaves: a row the edge has dropped.
           admitted: false,
+          peer: null,
           recorded: true,
         },
       ],
@@ -278,6 +282,7 @@ describe('RemoteControl', () => {
           redeemed_at: Date.now() - 5_000,
           last_seen: Date.now() - 5_000,
           admitted: null,
+          peer: null,
           recorded: true,
         },
         {
@@ -287,6 +292,7 @@ describe('RemoteControl', () => {
           redeemed_at: Date.now() - 5_000,
           last_seen: Date.now() - 5_000,
           admitted: false,
+          peer: null,
           recorded: true,
         },
         {
@@ -296,6 +302,7 @@ describe('RemoteControl', () => {
           redeemed_at: Date.now() - 5_000,
           last_seen: null,
           admitted: true,
+          peer: null,
           recorded: true,
         },
       ],
@@ -307,6 +314,19 @@ describe('RemoteControl', () => {
     expect(screen.getByText(/no requests yet/)).toBeInTheDocument();
     // The tunnel-down row must not also read as a retirement.
     expect(screen.getAllByText(/not admitted/)).toHaveLength(1);
+  });
+
+  it('a redeemed device says which endpoint it paired from, as the CLI does', async () => {
+    // #1041: the fingerprint of the endpoint that redeemed the invite, kept on
+    // the row. A record rather than a check, so it is shown and nothing more.
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      enabled: true,
+      devices: [{ ...paired(), peer: '3ca82708b995' }],
+    });
+    await open();
+
+    expect(screen.getByText('last seen 1m ago · paired from 3ca82708b995')).toBeInTheDocument();
   });
 
   it('a key the device list has no record of says so, and whether the edge admits it', async () => {
@@ -323,6 +343,7 @@ describe('RemoteControl', () => {
           redeemed_at: null,
           last_seen: null,
           admitted: true,
+          peer: null,
           recorded: false,
         },
       ],
@@ -362,6 +383,7 @@ describe('RemoteControl', () => {
       redeemed_at: Date.now() - 5_000,
       last_seen: Date.now() - 5_000,
       admitted: true,
+      peer: null,
       recorded: true,
     };
     applyRemoteStatus({
@@ -412,7 +434,7 @@ describe('RemoteControl', () => {
     // Every invite writes a device id, a key and a roster row, redeemed or
     // not, and nothing sweeps the unredeemed. `invite: true` on every enable
     // meant one more "never joined" row per Disable→Enable, forever, plus a
-    // live pairing grant nobody was watching.
+    // live pairing code nobody was watching.
     applyRemoteStatus({ ...IDLE_STATUS, devices: [paired()] });
     enableRemote.mockResolvedValue({ ticket: TICKET });
     const user = await open();
@@ -523,6 +545,7 @@ describe('RemoteControl', () => {
       redeemed_at: null,
       last_seen: null,
       admitted: true,
+      peer: null,
       recorded: true,
     };
     applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
@@ -609,7 +632,7 @@ describe('RemoteControl', () => {
   it('a code this panel did not show still gives Invite back when it lapses', async () => {
     // Offered from a terminal, or shown before the popover was last closed:
     // there is no reveal here to expire, no event when the code lapses, and
-    // `pairing_active` clears only when something reads it. Without reads of
+    // only a read of the status finds `pairing_active` gone. Without reads of
     // its own the panel would hold Invite dead until it was reopened.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

@@ -13,6 +13,7 @@ fn unredeemed() -> RemoteDeviceDto {
         last_seen: None,
         admitted: Some(true),
         recorded: Some(true),
+        peer: None,
     }
 }
 
@@ -140,6 +141,29 @@ fn a_redeemed_device_with_no_requests_yet_is_not_never_joined() {
     );
 }
 
+/// #1041: a redeemed device says which endpoint it paired from, when that was
+/// recorded, and a row with no record of one says nothing about it.
+#[test]
+fn a_redeemed_device_says_which_endpoint_it_paired_from() {
+    let joined = RemoteDeviceDto {
+        redeemed_at: Some(now() - 5_000),
+        peer: Some("3ca82708b995".to_owned()),
+        ..unredeemed()
+    };
+    let line = describe(&joined);
+    assert!(
+        line.contains("(no requests yet; paired from 3ca82708b995)"),
+        "{line}"
+    );
+
+    let unrecorded = RemoteDeviceDto {
+        peer: None,
+        ..joined
+    };
+    let line = describe(&unrecorded);
+    assert!(!line.contains("paired from"), "{line}");
+}
+
 /// With the tunnel down nothing is admitted, so no single row is the one
 /// that was dropped.
 #[test]
@@ -232,5 +256,22 @@ fn forget_help_says_deleting_the_identity_retires_the_address_not_a_device() {
     assert!(
         help.contains("retires this machine's address and revokes no device"),
         "what replaced it says what the deletion does: {help}"
+    );
+}
+
+/// The suffix follows "last seen" as it follows "no requests yet": a device
+/// that has made requests still says which endpoint it paired from.
+#[test]
+fn a_device_that_has_been_seen_still_says_which_endpoint_it_paired_from() {
+    let seen = RemoteDeviceDto {
+        redeemed_at: Some(now() - 600_000),
+        last_seen: Some(now() - 300_000),
+        peer: Some("3ca82708b995".to_owned()),
+        ..unredeemed()
+    };
+    let line = describe(&seen);
+    assert!(
+        line.contains("(last seen ") && line.contains(" ago; paired from 3ca82708b995)"),
+        "{line}"
     );
 }

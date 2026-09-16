@@ -12,6 +12,7 @@ fn row(id: &str) -> Device {
         joined_at: 1_757_000_000_000,
         redeemed_at: Some(1_757_000_060_000),
         last_seen: None,
+        peer: Some("3ca82708b995".to_owned()),
     }
 }
 
@@ -33,6 +34,7 @@ fn a_key_no_row_lists_is_listed_as_held_with_no_record() {
     };
     assert!(listed.recorded);
     assert_eq!(listed.label.as_deref(), Some("a label"));
+    assert_eq!(listed.peer.as_deref(), Some("3ca82708b995"));
     assert_eq!(unrecorded.id, "dev-11112222");
     assert!(!unrecorded.recorded, "a key with no row says so");
     assert_eq!(
@@ -44,9 +46,10 @@ fn a_key_no_row_lists_is_listed_as_held_with_no_record() {
         (
             &unrecorded.label,
             unrecorded.redeemed_at,
-            unrecorded.last_seen
+            unrecorded.last_seen,
+            &unrecorded.peer
         ),
-        (&None, None, None),
+        (&None, None, None, &None),
         "nothing else is known of it"
     );
 }

@@ -1,10 +1,11 @@
 //! Did this request come through the tunnel?
 //!
-//! The serve side sets two headers on every request it forwards, after
-//! removing any copy the client sent: `Via: 1.1 modelpipe` and
-//! `X-Modelpipe-Peer: <fingerprint>`. This middleware reads them into a
-//! request extension so the `/mcp` gate and the pairing route can act on
-//! them, and tells the tunnel's owner a request arrived.
+//! The serve side sets three headers on every request it forwards, after
+//! removing any copy the client sent: `Via: 1.1 modelpipe`,
+//! `X-Modelpipe-Peer: <fingerprint>` and `X-Modelpipe-Device: <name>`. This
+//! middleware reads them into a request extension so the device gate and the
+//! `/mcp` gate can act on them, and tells the tunnel's owner a request
+//! arrived.
 //!
 //! **Restrictive only.** A local client can write these headers too. What it
 //! gains is a refusal on `/mcp` and a tick on a counter — nothing is granted
@@ -31,8 +32,8 @@ const PEER_HEADER: &str = "x-modelpipe-peer";
 
 /// The header naming the device token that admitted the request.
 ///
-/// The edge writes it only when a *named* token admitted — never for a
-/// one-time grant, and never for the primary. Its absence is therefore what
+/// The edge writes it only when a *named* token admitted, and never for the
+/// primary. Its absence is therefore what
 /// [`device_gate`](super::device_gate()) reads, and its presence is only ever
 /// used to say which paired device is talking.
 const DEVICE_HEADER: &str = "x-modelpipe-device";
@@ -43,8 +44,8 @@ pub(crate) struct Tunnelled {
     /// The peer's fingerprint, when the edge sent a well-formed one: twelve
     /// hex characters, the same rule the tunnel's own log uses.
     ///
-    /// Per-process on the connecting side, so it names a run rather than a
-    /// device: a laptop that restarts arrives under a new one.
+    /// Per connection on the connecting side, so it names a dial rather than
+    /// a device: a laptop that dials again arrives under a new one.
     pub(crate) peer: Option<Arc<str>>,
 
     /// The name the edge holds the admitting token under, when a named token

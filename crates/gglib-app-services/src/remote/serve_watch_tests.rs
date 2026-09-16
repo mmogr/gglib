@@ -98,7 +98,7 @@ pub(super) const fn offline() -> EnableRequest {
 /// The proxy goes away while the tunnel is binding. `enable` takes seconds —
 /// `wait_online` alone is most of them — and nothing is watching the proxy
 /// across that span, because the watcher is not spawned until the install.
-/// So the check before the code is granted is the only thing standing
+/// So the check before the code is offered is the only thing standing
 /// between this and a pairing string for a tunnel fronting a released port.
 #[tokio::test]
 async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {

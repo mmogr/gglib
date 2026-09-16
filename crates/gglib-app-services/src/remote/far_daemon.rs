@@ -1,77 +1,21 @@
-//! The two requests the connect side makes *through* the tunnel.
+//! The one request the connect side makes *through* the tunnel.
 //!
-//! Both go to the far proxy over the local listener, which is the point: the
-//! pairing route and the shutdown route are the far machine's, and this side
-//! reaches them the way any client would. Neither is retried — one is a
-//! one-time code and the other is a one-way door.
+//! It goes to the far proxy over the local listener, which is the point: the
+//! shutdown route is the far machine's, and this side reaches it the way any
+//! client would. It is not retried, because it is a one-way door. Pairing,
+//! the other request that used to be made from here, is modelpipe's now: the
+//! far edge answers it, and `connect_open` calls `modelpipe::pair`.
 
 use std::time::Duration;
 
-use serde::Deserialize;
 use tracing::info;
 
-use super::first_contact::Reached;
 use crate::error::GuiError;
 
-/// How long either request may take end to end. Generous because a first
+/// How long the request may take end to end. Generous because a first
 /// request may still be finishing the hole punch; bounded because a tunnel
 /// that never answers is a failure to report, not to wait out.
 const TIMEOUT: Duration = Duration::from_secs(20);
-
-#[derive(Deserialize)]
-struct Paired {
-    api_key: String,
-}
-
-/// Trade the one-time code for the far machine's API key.
-///
-/// The code travels twice on purpose: as the bearer, so the tunnel edge's
-/// one-time grant admits the request without the real token, and in the
-/// body, so the far proxy's pairing route can check it against the code that
-/// session minted. Every refusal there is the same flat `401`.
-///
-/// # Errors
-///
-/// `ValidationFailed` for the refusal — the code is wrong, expired, spent,
-/// or the far side was not enabled with one — and `Unavailable` when the
-/// tunnel did not carry the request at all.
-pub(super) async fn redeem(
-    _reached: &Reached,
-    base_url: &str,
-    code: &str,
-) -> Result<String, GuiError> {
-    let client = client()?;
-    let response = client
-        .post(format!("{base_url}/remote/pair"))
-        .bearer_auth(code)
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await
-        .map_err(|e| {
-            GuiError::Unavailable(format!("the pairing request did not get through: {e}"))
-        })?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(GuiError::ValidationFailed(
-            "the far machine refused the pairing code — it may have expired (two minutes), been \
-             used already, or been burned by wrong attempts; run `gglib remote invite` there \
-             again"
-                .to_owned(),
-        ));
-    }
-    let status = response.status();
-    if !status.is_success() {
-        return Err(GuiError::Unavailable(format!(
-            "the pairing request was answered with {status}"
-        )));
-    }
-    let paired: Paired = response.json().await.map_err(|e| {
-        GuiError::Internal(format!(
-            "the pairing response was not what was expected: {e}"
-        ))
-    })?;
-    info!("redeemed the pairing code; this machine now holds the remote's API key");
-    Ok(paired.api_key)
-}
 
 /// Stop the far daemon: `POST /v1/proxy/shutdown` with the confirmation word
 /// the route requires (ADR 0012, decision 7). A one-way door.

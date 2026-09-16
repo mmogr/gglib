@@ -193,6 +193,17 @@ pub struct Device {
     /// row is still in use.
     #[serde(default)]
     pub last_seen: Option<i64>,
+
+    /// The fingerprint of the endpoint that redeemed this device's invite, or
+    /// `None` if none was recorded.
+    ///
+    /// A record, not a check: nothing is refused on it. A device that does
+    /// not keep its endpoint key presents a new fingerprint every time it
+    /// connects, so this says which endpoint redeemed the invite, not where
+    /// the key is used from. Written by the roster's writer with `redeemed_at`, and
+    /// advisory in the same way.
+    #[serde(default)]
+    pub peer: Option<String>,
 }
 
 /// `serde(default)` for a field whose absence means yes.

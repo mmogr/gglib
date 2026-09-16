@@ -38,6 +38,7 @@ fn the_status_carries_the_roster_and_none_of_its_keys() {
             joined_at: 1_757_000_000_000,
             redeemed_at: Some(1_757_000_060_000),
             last_seen: None,
+            peer: Some("3ca82708b995".to_owned()),
             admitted: Some(true),
             recorded: true,
         }],
@@ -49,6 +50,7 @@ fn the_status_carries_the_roster_and_none_of_its_keys() {
     assert_eq!(row["id"], "dev-0a1b2c3d");
     assert_eq!(row["admitted"], true);
     assert_eq!(row["recorded"], true);
+    assert_eq!(row["peer"], "3ca82708b995");
     // The exact field set, not a search for "key" and "token": a new
     // `api_key` or `secret` field would pass a substring test, and a new
     // field on a polled `GET` is a contract change whatever it is called.
@@ -62,6 +64,7 @@ fn the_status_carries_the_roster_and_none_of_its_keys() {
             "joined_at",
             "label",
             "last_seen",
+            "peer",
             "recorded",
             "redeemed_at"
         ],

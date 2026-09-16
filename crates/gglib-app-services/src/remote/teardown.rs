@@ -35,30 +35,25 @@ impl Drain for modelpipe::ServeHandle {
 /// End a session: stop the tasks the tunnel owns, drain it, and only then
 /// forget what the session was holding.
 ///
-/// **The drain comes before the pairing is cleared, and that ordering is the
-/// point.** A laptop's `POST /remote/pair` can cross the tunnel edge — and
-/// spend the one-time grant that is the only reason it got in — a
-/// millisecond before someone types `gglib remote disable` here. Clearing
-/// the pairing first means that request arrives at a gateway with nothing
-/// armed and is answered with the same flat `401` a wrong code gets, which
-/// the laptop renders as "it may have expired, been used already, or been
-/// burned by wrong attempts". None of those is true, the code is spent
-/// either way, and the operator is sent to re-run `enable` on a machine that
-/// was working. Draining first lets that request buy the key it was minted
-/// for.
+/// **The drain comes before the session is reset.** What was admitted before
+/// `disable` finishes under the session it was admitted to, `/mcp` grant
+/// included. A pairing is the exception: modelpipe withdraws a live invite as
+/// the listener closes, which is where the drain starts, so a pairing request
+/// whose code the edge has not redeemed by then is refused. A device that
+/// redeemed before it is recorded whichever runs first, because whoever takes
+/// an invite out of the gateway records how it ended.
 ///
 /// It opens no window on the tunnel in exchange: `shutdown_timeout` closes
-/// admission before it waits, so what the drain protects is exactly the
-/// requests that were already inside — no code can be redeemed against this
-/// tunnel after this call begins.
+/// admission before it waits, and modelpipe withdraws the invite as the
+/// listener closes, so the drain gives no code a chance to be redeemed.
 ///
 /// It does open one on the *gateway*, which is why the reset names a
 /// session. Both callers release the `live` lock before calling this (the
 /// alternative is a `status` that blocks for the whole drain), so a fresh
 /// `enable` can arm a new session while this one is still draining. Clearing
-/// whatever is armed would then wipe that new session — the same false
-/// "expired, used already, or burned" the ordering above exists to prevent,
-/// only aimed at a tunnel that is up. So the epoch this tunnel was armed
+/// whatever is armed would then wipe that new session, withdrawing the code
+/// the operator was just handed on a tunnel that is up. So the epoch this
+/// tunnel was armed
 /// under is handed back, and a superseded teardown clears nothing.
 pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) {
     // First, because it is what stops anything following a tunnel that is
@@ -75,30 +70,27 @@ pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) 
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
-    use gglib_core::ports::{NoopEmitter, PairingOutcome, RemoteGatewayPort as _};
+    use gglib_core::ports::{NoopEmitter, RemoteGatewayPort as _};
+    use tokio::sync::mpsc::unbounded_channel;
     use tokio_util::sync::CancellationToken;
 
     use super::*;
-    use crate::remote::pairing::PAIRING_TTL;
+    use crate::remote::pairing::pairing_tests::FakeInvite;
+    use crate::remote::roster::Note;
 
-    const CODE: &str = "483920";
-    const KEY: &str = "the-desktop-key";
+    const DEVICE: &str = "dev-0a1b2c3d";
 
-    /// A gateway with one session armed, and the epoch that session was
-    /// armed under — which is what the `Live` a teardown is given carries.
-    fn gateway() -> (Arc<RemoteGateway>, u64) {
+    /// A gateway with one session armed and an invite open on it; the epoch
+    /// that session was armed under, which is what the `Live` a teardown is
+    /// given carries; and the invite.
+    fn gateway() -> (Arc<RemoteGateway>, u64, Arc<FakeInvite>) {
         let gateway = Arc::new(RemoteGateway::new(Arc::new(NoopEmitter)));
         let epoch = gateway.begin_session(true);
-        gateway.offer_pairing(
-            epoch,
-            CODE.to_owned(),
-            KEY.to_owned(),
-            "dev-0a1b2c3d".to_owned(),
-            PAIRING_TTL,
-        );
-        (gateway, epoch)
+        let invite = FakeInvite::new();
+        gateway.offer_pairing(epoch, DEVICE.to_owned(), Box::new(Arc::clone(&invite)));
+        (gateway, epoch, invite)
     }
 
     fn live<H>(handle: &Arc<H>, epoch: u64) -> (Live<H>, CancellationToken) {
@@ -123,65 +115,54 @@ mod tests {
         }
     }
 
-    /// A handle that redeems the pairing code while it drains — the laptop's
-    /// request that crossed the edge just before the shutdown, arriving at
-    /// the gateway from inside the drain, which is where it arrives in
-    /// production too.
-    struct RedeemingDrain {
-        gateway: Arc<RemoteGateway>,
-        outcome: Mutex<Option<PairingOutcome>>,
-    }
+    /// A handle across whose drain the open invite turns out redeemed: a
+    /// device that redeemed just before `disable`, whose outcome nothing has
+    /// recorded by the time the drain returns. The redemption is staged inside
+    /// the drain because that is the last moment it can be found unrecorded.
+    struct RedeemingDrain(Arc<FakeInvite>);
 
     impl Drain for RedeemingDrain {
         fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
-            let outcome = self
-                .gateway
-                .redeem_pairing_code(CODE, Some("3ca82708b995"), None);
-            *self.outcome.lock().unwrap() = Some(outcome);
+            self.0.redeem(DEVICE, None);
             std::future::ready(true)
         }
     }
 
-    /// The one-time grant is spent by crossing the edge, so this request has
-    /// already paid for the key. Answering it with the refusal a wrong code
-    /// gets tells the operator three things that are all false and sends
-    /// them back to a machine that was working.
+    /// The device paid for its key with the code and holds it. Leaving it off
+    /// the roster would list it as an invite nobody took, and `forget` on
+    /// that row would be a revocation the operator did not know they were
+    /// making.
     #[tokio::test]
-    async fn a_redeem_still_in_flight_when_the_tunnel_goes_down_gets_the_key_it_paid_for() {
-        let (gateway, epoch) = gateway();
-        let handle = Arc::new(RedeemingDrain {
-            gateway: Arc::clone(&gateway),
-            outcome: Mutex::new(None),
-        });
+    async fn a_device_that_redeemed_just_before_the_teardown_is_still_recorded() {
+        let (gateway, epoch, invite) = gateway();
+        let (sender, mut inbox) = unbounded_channel();
+        gateway.take_notes(sender);
+        let handle = Arc::new(RedeemingDrain(invite));
         let (live, _cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
-        assert_eq!(
-            *handle.outcome.lock().unwrap(),
-            Some(PairingOutcome::Granted {
-                key: KEY.to_owned(),
-                device: "dev-0a1b2c3d".to_owned(),
-            }),
-            "the pairing has to still be armed while the drain runs"
+        assert!(
+            matches!(inbox.recv().await, Some(Note::Joined { device, .. }) if device == DEVICE),
+            "a redemption nothing recorded before the teardown has to reach the roster's writer"
         );
     }
 
     /// And no longer than that. The code was shown for one session; once the
-    /// drain is over nothing is left inside to redeem it, and a code that
-    /// outlived its tunnel would be a credential with no listener behind it.
+    /// drain is over nothing is left inside to redeem it, and an invite that
+    /// outlived its tunnel would read as a live code with no listener behind
+    /// it.
     #[tokio::test]
-    async fn the_pairing_does_not_outlive_the_session_it_was_armed_for() {
-        let (gateway, epoch) = gateway();
+    async fn the_invite_does_not_outlive_the_session_it_was_opened_for() {
+        let (gateway, epoch, invite) = gateway();
         let handle = Arc::new(Drained);
         let (live, _cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
         assert!(!gateway.pairing.active());
-        assert_eq!(
-            gateway.redeem_pairing_code(CODE, None, None),
-            PairingOutcome::Rejected,
+        assert!(
+            invite.was_withdrawn(),
             "the session is over, and so is its code"
         );
         assert!(!gateway.mcp_allowed(), "and so is its /mcp grant");
@@ -191,7 +172,7 @@ mod tests {
     /// may still be following a tunnel that has gone.
     #[tokio::test]
     async fn taking_a_tunnel_down_stops_what_was_following_it() {
-        let (gateway, epoch) = gateway();
+        let (gateway, epoch, _invite) = gateway();
         let handle = Arc::new(Drained);
         let (live, cancel) = live(&handle, epoch);
 
@@ -212,7 +193,7 @@ mod tests {
             }
         }
 
-        let (gateway, epoch) = gateway();
+        let (gateway, epoch, _invite) = gateway();
         let handle = Arc::new(NeverDrains);
         let (live, _cancel) = live(&handle, epoch);
 
@@ -221,10 +202,6 @@ mod tests {
         assert!(!gateway.pairing.active());
     }
 
-    /// What the `enable` that lands inside the drain arms.
-    const NEXT_CODE: &str = "111111";
-    const NEXT_KEY: &str = "the-next-desktop-key";
-
     /// A handle that arms a fresh session while it drains — the `enable`
     /// that arrives in the five seconds this teardown spends draining.
     /// Neither caller of `take_down` holds the `live` lock across it, so
@@ -232,6 +209,7 @@ mod tests {
     /// pairing string.
     struct ArmingDrain {
         gateway: Arc<RemoteGateway>,
+        next: Arc<FakeInvite>,
     }
 
     impl Drain for ArmingDrain {
@@ -239,39 +217,34 @@ mod tests {
             let epoch = self.gateway.begin_session(true);
             self.gateway.offer_pairing(
                 epoch,
-                NEXT_CODE.to_owned(),
-                NEXT_KEY.to_owned(),
                 "dev-4e5f6a7b".to_owned(),
-                PAIRING_TTL,
+                Box::new(Arc::clone(&self.next)),
             );
             std::future::ready(true)
         }
     }
 
     /// The session that replaced this one is not this one's to end. A
-    /// teardown that cleared whatever it found would burn a code the
-    /// operator is holding — answered with the same "expired, used already,
-    /// or burned by wrong attempts" that the drain-before-clear ordering
-    /// exists to eliminate — and revoke an `/mcp` grant that was just asked
+    /// teardown that cleared whatever it found would withdraw a code the
+    /// operator is holding and revoke an `/mcp` grant that was just asked
     /// for.
     #[tokio::test]
     async fn a_session_armed_while_the_teardown_drained_survives_it() {
-        let (gateway, epoch) = gateway();
+        let (gateway, epoch, _invite) = gateway();
+        let next = FakeInvite::new();
         let handle = Arc::new(ArmingDrain {
             gateway: Arc::clone(&gateway),
+            next: Arc::clone(&next),
         });
         let (live, _cancel) = live(&handle, epoch);
 
         take_down(live, &gateway).await;
 
-        assert_eq!(
-            gateway.redeem_pairing_code(NEXT_CODE, None, None),
-            PairingOutcome::Granted {
-                key: NEXT_KEY.to_owned(),
-                device: "dev-4e5f6a7b".to_owned(),
-            },
-            "the newer session's code has to still redeem"
+        assert!(
+            gateway.pairing.active(),
+            "the newer session's code has to still be redeemable"
         );
+        assert!(!next.was_withdrawn());
         assert!(
             gateway.mcp_allowed(),
             "and its /mcp grant has to still be granted"

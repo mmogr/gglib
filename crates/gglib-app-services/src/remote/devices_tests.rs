@@ -6,10 +6,9 @@
 
 use futures_util::FutureExt as _;
 use gglib_core::SettingsUpdate;
-use gglib_core::ports::{PairingOutcome, RemoteGatewayPort};
 
 use super::super::device_keys::write_keys;
-use super::super::pairing::PAIRING_TTL;
+use super::super::pairing::pairing_tests::FakeInvite;
 use super::*;
 use crate::test_support_remote::test_remote_ops;
 
@@ -53,6 +52,7 @@ async fn an_unreadable_key_file_still_lists_the_roster() {
                 joined_at: 1,
                 redeemed_at: Some(2),
                 last_seen: None,
+                peer: None,
             }])),
             ..SettingsUpdate::default()
         })
@@ -162,24 +162,23 @@ async fn an_invite_to_a_daemon_switched_on_with_nothing_arming_says_enable_invit
 #[tokio::test]
 async fn forgetting_a_device_withdraws_its_open_invite_before_waiting_on_the_stores() {
     let (_, ops, _) = test_remote_ops().await;
-    ops.gateway().pairing.begin_for(
-        "483920".to_owned(),
-        "sk-zzq-armed".to_owned(),
+    let invite = FakeInvite::new();
+    ops.gateway().pairing.begin(
         "dev-never-minted".to_owned(),
-        PAIRING_TTL,
+        Box::new(std::sync::Arc::clone(&invite)),
     );
 
     let held = ops.roster.lock().await;
     let mut forgetting = std::pin::pin!(ops.forget("dev-never-minted"));
     let parked = forgetting.as_mut().now_or_never().is_none();
-    let outcome = RemoteGatewayPort::redeem_pairing_code(&*ops.gateway(), "483920", None, None);
+    let withdrawn = invite.was_withdrawn();
     drop(held);
     let forgotten = forgetting.await;
 
     assert!(parked, "forget waits on the roster lock this test holds");
     assert!(
-        matches!(outcome, PairingOutcome::Rejected),
-        "a code for a device being forgotten redeemed while forget waited: {outcome:?}"
+        withdrawn,
+        "the code for a device being forgotten was still redeemable while forget waited"
     );
     assert!(forgotten.is_ok(), "{forgotten:?}");
 }
