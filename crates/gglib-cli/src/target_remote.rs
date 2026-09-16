@@ -152,7 +152,7 @@ impl super::Target {
         if self == Self::Local {
             bail!("internal: the local target has no far machine");
         }
-        let client = reqwest::Client::new();
+        let client = gglib_proxy::loopback::client();
         if !matches!(daemon_client::probe(&client).await, DaemonProbe::Running) {
             bail!(
                 "--remote needs the daemon running and connected to the other machine: \

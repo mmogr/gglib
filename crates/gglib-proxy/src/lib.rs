@@ -8,8 +8,8 @@
 mod access;
 mod admin;
 pub(crate) mod audit_records;
-// Crate-internal. The six that stay `pub` below are the ones other crates
-// name by path: dashboard, models, props, repair, slot_eviction, slots.
+// Crate-internal. The seven that stay `pub` below are the ones other crates
+// name by path: dashboard, loopback, models, props, repair, slot_eviction, slots.
 // `server` goes internal too — the root re-exports `serve`, which is all
 // anyone wanted from it.
 // Without `test-support` the re-export below is absent, which is the point of
@@ -29,6 +29,7 @@ pub(crate) mod forward;
 pub(crate) mod forward_unary;
 pub(crate) mod load_endpoint;
 pub(crate) mod loop_guard;
+pub mod loopback;
 pub(crate) mod mcp;
 pub(crate) mod metrics;
 pub mod models;

@@ -22,7 +22,7 @@ use crate::daemon_client::{self, DaemonProbe};
 ///
 /// [#1037]: https://github.com/mmogr/gglib/issues/1037
 pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
     // Asked twice before anything is written: the ordinary probe gives the
     // daemon half a second, which one busy arming a tunnel can miss, and
     // writing the switch off behind a daemon that is running would say "not

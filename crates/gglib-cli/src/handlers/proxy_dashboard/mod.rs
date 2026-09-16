@@ -119,7 +119,7 @@ impl Drop for TerminalGuard {
 pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> Result<()> {
     let url = format!("http://{host}:{port}/v1/proxy/status/stream");
 
-    let mut request = reqwest::Client::new().get(&url);
+    let mut request = gglib_proxy::loopback::client_for(&host).get(&url);
     if let Some(key) = api_key {
         request = request.bearer_auth(key);
     }

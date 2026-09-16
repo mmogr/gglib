@@ -146,7 +146,7 @@ pub(in crate::handlers) async fn attach_dashboard(
 
 /// Execute `gglib proxy stop`.
 pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
     match daemon_client::probe(&client).await {
         daemon_client::DaemonProbe::Running => {}
         _ => {

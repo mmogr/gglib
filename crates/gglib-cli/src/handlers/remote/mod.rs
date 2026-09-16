@@ -92,7 +92,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
 
 /// Execute `gglib remote status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
     style::print_info_banner("Remote", "\u{1f517}");
     match daemon_client::probe(&client).await {
         DaemonProbe::Running => {}

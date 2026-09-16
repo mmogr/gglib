@@ -21,7 +21,6 @@ use gglib_db::SqliteBenchmarkRepository;
 use gglib_db::cleanup_zombie_benchmark_runs;
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
-use reqwest::Client;
 
 use crate::config::ServerConfig;
 use crate::sse::SseBroadcaster;
@@ -58,7 +57,7 @@ pub struct AxumContext {
     /// Storing a single `reqwest::Client` here keeps one connection pool for
     /// the entire process lifetime.  Handlers clone the client cheaply (it is
     /// internally `Arc`-backed).
-    pub http_client: Client,
+    pub http_client: reqwest::Client,
     /// Concurrency limiter for `POST /api/agent/chat` sessions.
     ///
     /// Each active agent SSE stream holds one permit.  When all permits are
@@ -220,7 +219,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         mcp,
         hf_client,
         sse,
-        http_client: Client::new(),
+        http_client: gglib_proxy::loopback::client(),
         agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
             config.max_concurrent_agent_loops,
         )),

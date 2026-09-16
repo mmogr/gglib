@@ -106,7 +106,7 @@ impl Daemon {
     #[must_use]
     pub(crate) fn disconnected() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: gglib_proxy::loopback::client(),
             ownership: Ownership::Unresolved,
         }
     }
@@ -118,7 +118,7 @@ impl Daemon {
     /// Fails when the port is held by a foreign program, or when neither an
     /// external launch nor the in-process fallback becomes healthy in time.
     pub(crate) async fn connect_or_launch() -> Result<Self, String> {
-        let client = reqwest::Client::new();
+        let client = gglib_proxy::loopback::client();
 
         match probe(&client).await {
             Probe::Running => {

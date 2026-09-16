@@ -137,7 +137,7 @@ pub(crate) struct DaemonHandle {
 /// - the launched daemon does not become healthy within the wait window
 ///   (the log file path is named in the error).
 pub(crate) async fn ensure_daemon(api_key: Option<String>) -> Result<DaemonHandle> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
 
     match probe(&client).await {
         DaemonProbe::Running => return Ok(DaemonHandle { client, api_key }),

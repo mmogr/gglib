@@ -30,32 +30,16 @@ static HEALTH_CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
 
 /// A client for asking a server on this machine's loopback address how it is.
 ///
-/// `no_proxy()` is what makes this a loopback client rather than a general
-/// one, and it earns its place twice over.
-///
-/// It is **correct**, on every platform. `http://127.0.0.1:<port>/health` is
-/// this process asking the server it started whether it is up. hyper-util's
-/// matcher skips only the hosts named in `NO_PROXY`, so with `HTTP_PROXY`,
-/// `ALL_PROXY` or a system proxy set, that question went to the proxy instead,
-/// which answers for a machine that is not this one. `health_proxy_tests` runs
-/// the two single-shot checks with a proxy in the environment and watches where
-/// they land; `wait_for_http_health` is covered by sharing this constructor.
-///
-/// It is also **fast on macOS and Windows**, which is where the second half of
-/// the story is. Without it, `build()` pushes `ProxyMatcher::system()`, and
-/// hyper-util reads the operating system's own proxy settings when its
-/// `client-proxy-system` feature is on — which it is in any build that also
-/// links hf-hub's reqwest 0.12, meaning the workspace test run and every binary
-/// gglib ships. On macOS that opens an `SCDynamicStore`, measured here at
-/// 470–490 ms in a warm process and 3.19 s in a cold one, against 4–5 µs with
-/// `no_proxy()`. On Linux the matcher reads environment variables only, which
-/// is cheap, so CI never saw this. The cost landed on the first check of each
-/// client, synchronously, on whatever runtime was driving it, which is what
-/// made a health-monitor test miss a ten-second budget here (#1084).
+/// [`gglib_proxy::loopback::client_builder`] with a two-second timeout: that
+/// builder is what makes this a loopback client rather than a general one, and
+/// its docs carry the story of where a health check went with a proxy in the
+/// environment (#1085) and what the system-proxy lookup cost a first check on
+/// macOS (#1084). `health_proxy_tests` runs the two single-shot checks with a
+/// proxy in the environment and watches where they land;
+/// `wait_for_http_health` is covered by sharing this constructor.
 pub(crate) fn loopback_client() -> reqwest::Result<Client> {
-    Client::builder()
+    gglib_proxy::loopback::client_builder()
         .timeout(Duration::from_secs(2))
-        .no_proxy()
         .build()
 }
 
