@@ -29,12 +29,27 @@ pub fn database_path() -> Result<PathBuf, PathError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
+    use tempfile::tempdir;
 
     #[test]
     fn test_database_path_ends_with_gglib_db() {
+        // `database_path()` creates `<data root>/data`, so it runs under the
+        // lock every test that points GGLIB_DATA_DIR at a temporary root holds,
+        // and in a root of its own (#1082). Without the lock it once resolved
+        // into a neighbour's root as that root was being removed.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempdir().unwrap();
+        let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+
         let result = database_path();
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.to_string_lossy().ends_with("gglib.db"));
+        assert!(
+            path.starts_with(temp.path()),
+            "the database path is outside the test's own root: {}",
+            path.display()
+        );
     }
 }
