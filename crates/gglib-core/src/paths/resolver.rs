@@ -95,7 +95,8 @@ impl std::fmt::Display for ResolvedPaths {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paths::test_utils::ENV_LOCK;
+    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
+    use tempfile::tempdir;
 
     #[test]
     fn resolve_returns_consistent_paths() {
@@ -111,11 +112,25 @@ mod tests {
 
     #[test]
     fn display_format_is_parseable() {
+        // Under the same lock as every test that sets GGLIB_DATA_DIR: without
+        // it this test resolved whatever root a neighbour had pointed the
+        // variable at, and once found that root being removed under it
+        // (#1082). Its own temporary data root keeps it off the real data
+        // directory as well, since resolve() creates what it names. (The
+        // resource root is still the checkout's in a debug build.)
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempdir().unwrap();
+        let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
+
         let paths = ResolvedPaths::resolve().expect("resolve");
         let output = paths.to_string();
 
+        // The data root printed is this test's own, not whoever runs the tests'.
+        assert!(
+            output.contains(&format!("data_root = {}", temp.path().display())),
+            "resolved outside the test's own root:\n{output}"
+        );
         // Should contain key = value pairs
-        assert!(output.contains("data_root = "));
         assert!(output.contains("resource_root = "));
         assert!(output.contains("database_path = "));
         assert!(output.contains("llama_server_path = "));
