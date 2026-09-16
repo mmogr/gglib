@@ -141,7 +141,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         model_registrar,
         llama_server_path: config.llama_server_path,
         base_port: config.base_port,
-        http_client: reqwest::Client::new(),
+        http_client: gglib_proxy::loopback::client(),
         bench_repo,
         settings_repo: repos.settings,
         download_emitter,

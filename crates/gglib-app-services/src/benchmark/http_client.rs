@@ -39,7 +39,7 @@ impl BenchmarkDeps {
     /// Returns an error if `reqwest` cannot build the client (extremely rare —
     /// only fails on TLS initialisation errors).
     pub fn build_http_client() -> Result<reqwest::Client> {
-        reqwest::Client::builder()
+        gglib_proxy::loopback::client_builder()
             .timeout(Duration::from_secs(600))
             .build()
             .map_err(|e| anyhow::anyhow!("failed to build benchmark HTTP client: {e}"))
@@ -84,7 +84,7 @@ impl BenchmarkDeps {
     /// seconds. There is deliberately no total-request deadline to inject —
     /// the absence of one is the property under test.
     fn agentic_http_client(stream_idle_timeout: Duration) -> Result<reqwest::Client> {
-        reqwest::Client::builder()
+        gglib_proxy::loopback::client_builder()
             .read_timeout(stream_idle_timeout)
             .connect_timeout(Duration::from_secs(AGENTIC_CONNECT_TIMEOUT_SECS))
             .pool_idle_timeout(Duration::from_secs(AGENTIC_POOL_IDLE_TIMEOUT_SECS))

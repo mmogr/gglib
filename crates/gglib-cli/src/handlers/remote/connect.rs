@@ -105,7 +105,7 @@ pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
 
 /// Execute `gglib remote disconnect`.
 pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
     match daemon_client::probe(&client).await {
         DaemonProbe::Running => {}
         _ => {

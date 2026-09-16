@@ -1262,7 +1262,7 @@ async fn fetch_hardware_snapshot(ctx: &CliContext) -> serde_json::Value {
         daemon_client::base_url(),
         daemon_client::paths::SETUP_STATUS_PATH
     );
-    let request = reqwest::Client::new().get(&url);
+    let request = gglib_proxy::loopback::client().get(&url);
     let request = match daemon_client::auth::daemon_api_key(ctx).await {
         Some(key) => request.bearer_auth(key),
         None => request,

@@ -108,7 +108,7 @@ async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Resu
         url.push_str(&format!("&tags={}", args.tags.join(",")));
     }
 
-    let client = reqwest::Client::builder()
+    let client = gglib_proxy::loopback::client_builder()
         .timeout(Duration::from_secs(5))
         .build()?;
 
@@ -160,7 +160,7 @@ struct HealthResponse {
 async fn detect_daemon(ctx: &CliContext) -> Option<u16> {
     let settings = ctx.app.settings().get().await.ok()?;
     let port = settings.effective_proxy_port();
-    let client = reqwest::Client::builder()
+    let client = gglib_proxy::loopback::client_builder()
         .timeout(Duration::from_millis(500))
         .build()
         .ok()?;

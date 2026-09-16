@@ -111,7 +111,7 @@ async fn observe_template_caps(
     model_id: u32,
     base_url: String,
 ) {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
     let reading = gglib_proxy::props::fetch_props(&client, &base_url).await;
     match reading.caps {
         TemplateCapsState::Read { caps } => {

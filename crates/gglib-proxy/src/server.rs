@@ -14,7 +14,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use reqwest::Client;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
@@ -50,7 +49,7 @@ use gglib_sse::SseOptions;
 #[derive(Clone)]
 pub(crate) struct AppState {
     /// HTTP client for forwarding requests to llama-server.
-    pub(crate) client: Client,
+    pub(crate) client: reqwest::Client,
     /// Port for managing model runtime.
     pub(crate) runtime_port: Arc<dyn ModelRuntimePort>,
     /// Port for listing and resolving models.
@@ -243,11 +242,12 @@ pub async fn serve(
     //   than enough to detect a dead/not-yet-started port while imposing no
     //   limit on how long an actual inference may take.
     //
+    // Built by `loopback`, so it never goes through a proxy to reach 127.0.0.1.
     // Dead-server protection during streaming is handled separately: if
     // llama-server crashes mid-stream the reqwest byte-stream returns an
     // error, which forward_chat_completion surfaces as ForwardError::UpstreamDead
     // and the handler clears stale state for the next request.
-    let client = Client::builder()
+    let client = crate::loopback::client_builder()
         .pool_max_idle_per_host(10)
         .connect_timeout(std::time::Duration::from_secs(10))
         .build()?;

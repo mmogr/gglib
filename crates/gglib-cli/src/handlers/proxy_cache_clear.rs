@@ -15,7 +15,7 @@ pub(crate) async fn execute(
 ) -> Result<()> {
     let url = format!("http://{}:{}/v1/proxy/cache/clear", host, port);
 
-    let mut builder = reqwest::Client::new().post(&url);
+    let mut builder = gglib_proxy::loopback::client_for(host).post(&url);
 
     if let Some(sid) = session_id {
         builder = builder.header("X-Gglib-Session-Id", sid);

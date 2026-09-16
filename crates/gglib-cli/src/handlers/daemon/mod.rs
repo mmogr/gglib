@@ -53,7 +53,7 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
 
 /// Execute `gglib daemon status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
 
     style::print_info_banner("Daemon", "\u{2139}\u{fe0f}");
     match daemon_client::probe(&client).await {
@@ -109,7 +109,7 @@ pub(crate) async fn stop(ctx: &CliContext, target: Target, yes: bool) -> Result<
 
 /// Request shutdown from the daemon on this machine and wait for it to land.
 async fn stop_here(ctx: &CliContext) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
 
     match daemon_client::probe(&client).await {
         DaemonProbe::NotRunning => {
@@ -171,7 +171,7 @@ fn print_share_lan_warning() {
 /// does this for the desktop app, and the request it sends asks the far
 /// proxy to type the same word.
 async fn stop_far(ctx: &CliContext, yes: bool) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
     match daemon_client::probe(&client).await {
         DaemonProbe::Running => {}
         _ => anyhow::bail!("the daemon is not running, so nothing is connected to a remote"),

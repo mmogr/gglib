@@ -24,6 +24,8 @@ gglib-runtime = { workspace = true, features = ["cli"] }
 gglib-tauri.workspace = true
 gglib-axum.workspace = true
 gglib-app-services.workspace = true
+# For `loopback`, the one builder of an HTTP client for the daemon on this machine (#1085).
+gglib-proxy = { path = "../crates/gglib-proxy" }
 reqwest.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 # Note: axum and tower-http are used via gglib-axum re-exports, no direct dependency needed

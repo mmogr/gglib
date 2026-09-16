@@ -68,7 +68,7 @@ pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Re
 }
 
 fn client() -> Result<reqwest::Client, GuiError> {
-    reqwest::Client::builder()
+    gglib_proxy::loopback::client_builder()
         .timeout(TIMEOUT)
         .build()
         .map_err(|e| GuiError::Internal(format!("could not build an HTTP client: {e}")))

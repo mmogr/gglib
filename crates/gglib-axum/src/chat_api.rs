@@ -13,7 +13,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use futures_util::StreamExt;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::error::HttpError;
@@ -677,7 +676,8 @@ pub(crate) async fn proxy_chat(
     );
 
     // Forward the request
-    let client = Client::new();
+    // Built by `loopback`: llama-server is on this machine, never behind a proxy.
+    let client = gglib_proxy::loopback::client();
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")

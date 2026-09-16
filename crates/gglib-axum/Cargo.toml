@@ -18,6 +18,8 @@ gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: ToolSupportDetector
 gglib-mcp = { path = "../gglib-mcp" }
+# For `loopback`, the one builder of an HTTP client for a server on this machine (#1085).
+gglib-proxy = { path = "../gglib-proxy" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
 gglib-sse = { path = "../gglib-sse" }
 

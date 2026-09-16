@@ -36,7 +36,7 @@ impl LlmCompletionAdapter {
     /// per-request connection-pool overhead.
     #[must_use]
     pub fn new(base_url: impl Into<String>, model: Option<String>) -> Self {
-        Self::with_client(base_url, Client::new(), model)
+        Self::with_client(base_url, gglib_proxy::loopback::client(), model)
     }
 
     /// Create an adapter that reuses an existing [`reqwest::Client`].

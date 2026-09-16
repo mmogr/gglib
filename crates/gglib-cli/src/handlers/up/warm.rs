@@ -35,7 +35,7 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
 /// the cold start it was trying to avoid.
 pub(super) async fn run(port: u16, model: String, api_key: Option<String>) {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
-    let client = reqwest::Client::new();
+    let client = gglib_proxy::loopback::client();
 
     if !wait_for_bind(&client, addr).await {
         // The proxy prints its own bind failure; adding a second one here
