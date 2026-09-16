@@ -19,14 +19,22 @@
 //!   simply have nothing to strip and pass through untouched.
 //! * Defensive — only assistant messages are touched; user, system, tool,
 //!   and developer messages are never modified.
-//! * Conservative on shape — the `reasoning_content` key is removed
-//!   outright. String `content` has every `<think>...</think>` block
-//!   excised. Non-string `content` (multi-part array form) is left alone.
+//! * The same in either shape — the `reasoning_content` key is removed
+//!   outright, and every `<think>...</think>` block is excised from the
+//!   text of `content`, whether that is a string or the array of parts
+//!   VS Code's gateway sends; parts that are not text are left as they
+//!   are, and so is `content` of any other shape. A text that lost a
+//!   block is also trimmed of surrounding whitespace, as string content
+//!   always was; a text that had none is untouched, whitespace included.
+//!   The walk over both shapes is
+//!   [`request_pipeline::for_each_text_mut`](crate::request_pipeline::for_each_text_mut).
 //! * Forward-safe on unclosed tags — an unclosed `<think>` from the most
 //!   recent turn is preserved verbatim; the upstream is responsible for
 //!   closing it.
 
 use serde_json::Value;
+
+use crate::request_pipeline::for_each_text_mut;
 
 /// Strip reasoning artifacts from prior assistant messages in `messages`.
 ///
@@ -50,14 +58,16 @@ pub fn strip_thinking_debt(messages: &mut [Value]) -> usize {
         }
 
         let removed_reasoning = obj.remove("reasoning_content").is_some();
-        let stripped_inline = if let Some(Value::String(s)) = obj.get_mut("content") {
-            strip_think_blocks(s).is_some_and(|new_s| {
-                *s = new_s;
-                true
-            })
-        } else {
-            false
-        };
+        let stripped_inline = obj.get_mut("content").is_some_and(|content| {
+            let mut stripped = false;
+            for_each_text_mut(content, &mut |text| {
+                if let Some(new_text) = strip_think_blocks(text) {
+                    *text = new_text;
+                    stripped = true;
+                }
+            });
+            stripped
+        });
 
         if removed_reasoning || stripped_inline {
             touched += 1;
@@ -188,20 +198,47 @@ mod tests {
     }
 
     #[test]
-    fn strip_preserves_non_string_content() {
-        // Array-form content (OpenAI multi-part) is left alone; only
-        // reasoning_content gets removed.
+    fn strip_removes_think_blocks_from_array_form_content() {
+        // The array of parts VS Code's gateway sends is stripped like a
+        // string: every text part loses its blocks, a part that is not text
+        // is untouched, and the shape is kept (#1077).
+        // The last part keeps its whitespace: only a text that lost a block
+        // is trimmed, as string content always was.
         let mut m = msgs(json!([
             {
                 "role": "assistant",
-                "content": [{"type": "text", "text": "<think>x</think>hi"}],
+                "content": [
+                    {"type": "text", "text": "<think>x</think>hi"},
+                    {"type": "image_url", "image_url": {"url": "data:,"}},
+                    {"type": "text", "text": " <think>y</think> there "},
+                    {"type": "text", "text": " plain "}
+                ],
                 "reasoning_content": "r"
             }
         ]));
         let touched = strip_thinking_debt(&mut m);
         assert_eq!(touched, 1);
         assert!(m[0].get("reasoning_content").is_none());
-        assert_eq!(m[0]["content"][0]["text"], "<think>x</think>hi");
+        assert_eq!(
+            m[0]["content"],
+            json!([
+                {"type": "text", "text": "hi"},
+                {"type": "image_url", "image_url": {"url": "data:,"}},
+                {"type": "text", "text": "there"},
+                {"type": "text", "text": " plain "}
+            ])
+        );
+    }
+
+    #[test]
+    fn strip_counts_an_array_form_message_only_when_a_block_went() {
+        // A clean array is not "touched", so a caller can skip re-serialising.
+        let original = json!([
+            {"role": "assistant", "content": [{"type": "text", "text": "plain"}]}
+        ]);
+        let mut m = msgs(original.clone());
+        assert_eq!(strip_thinking_debt(&mut m), 0);
+        assert_eq!(Value::Array(m), original);
     }
 
     #[test]
