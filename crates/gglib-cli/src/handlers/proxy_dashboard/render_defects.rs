@@ -25,8 +25,10 @@ use super::wire::ModelDefectCounts;
 /// model would bury the one that is not.
 ///
 /// Loop-guard trips print as their sum and then, indented beneath it, by the
-/// detector that raised them, since whether *stagnation* rejections have become
-/// rare is a question ADR 0011 asks and the sum alone cannot answer.
+/// detector that raised them, since whether *stagnation* trips have become
+/// rare is a question ADR 0011 asks and the sum alone cannot answer. Since
+/// #1052 a trip is an intervention rather than a rejection: the default
+/// forwards the request with a note.
 ///
 /// Three counters here are not failures. `identical_result_repeats` describes a
 /// conversation that went in a circle, and `repeats_not_evaluated` says how

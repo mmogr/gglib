@@ -30,8 +30,9 @@ code.
 
 4096 is also precisely the regime where an agentic client's replayed history
 overflows, truncation fires, the model loses the thread, and the loop guard
-rejects the session ([ADR 0006](0006-recover-dont-predict.md)'s postscript
-records the counters that make that visible).
+acts on the session — a 400 when this was written, a forwarded note since
+#1052 ([ADR 0006](0006-recover-dont-predict.md)'s postscript records the
+counters that make that visible).
 
 ## Decision
 

@@ -63,13 +63,19 @@ impl ModelDefectLedger {
         self.with(model, |c| c.requests += 1);
     }
 
-    /// Count one loop-guard rejection for `model`, under the detector that
+    /// Count one loop-guard intervention for `model`, under the detector that
     /// raised it.
     ///
+    /// Since #1052 an intervention is a note *or* a refusal — the default
+    /// forwards the request with a note rather than rejecting it.
+    ///
     /// Bumps the detector's own count and `loop_guard_trips`, which stays the
-    /// sum of the two. Also counts the request itself: the guard fires
-    /// *instead of* a forward, and a trip outside its own denominator would
-    /// overstate every rate computed from these numbers.
+    /// sum of the two. Also counts the request itself, and is the **only**
+    /// call that does so for a tripped request: the refusing mode forwards
+    /// nothing, and the noting mode reaches the forward's own snapshot with
+    /// the trip on it, so `record_request` is not called for it either. A
+    /// trip outside its own denominator would overstate every rate computed
+    /// from these numbers.
     pub fn record_loop_guard_trip(&self, model: &str, which: LoopGuardTrip) {
         self.with(model, |c| {
             c.requests += 1;
@@ -143,7 +149,7 @@ impl ModelDefectLedger {
         self.with(model, |c| c.identical_result_repeats += 1);
     }
 
-    /// Count one turn the guard would have refused for repeating and did not,
+    /// Count one turn the guard would have acted on for repeating and did not,
     /// because the answer had moved. A repeat still inside the allowance is not.
     pub fn record_repeat_rescued(&self, model: &str) {
         self.with(model, |c| c.repeats_rescued += 1);

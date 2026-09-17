@@ -172,16 +172,21 @@ before ADR 0006 had to widen it.
 > criterion below deletes the ceiling if `repeats_rescued` stays at zero; that
 > is unaffected, since it reads the rescue, not the verdict's consequence.
 >
-> The delivery is not a `system` message: rendered over the 69 chat templates
-> llama.cpp bundles, a trailing `system` message raises on Qwen3.5 and the
-> Mistral family, is hoisted to token 0 by the DeepSeek family, and is dropped
-> silently by gpt-oss and four others. The note goes inside the last message's
-> content behind a `[gglib loop guard]` marker instead. That evidence is
-> minijinja over llama.cpp's copies of those templates, not llama-server's own
-> engine, and nothing was run against a model; the four templates that decided
-> it are vendored and rendered as a test, with Phi-3.5-mini pinned as the one
-> known drop (a template with no `tool` branch drops the whole last message on
-> an agentic tail, and the note with it).
+> The delivery is not a `system` message: rendered over the chat templates
+> llama.cpp bundles — 65 of its 69 compile in minijinja, against two tails
+> each — a trailing `system` message lands where it was put in only 63 of the
+> 101 pairs that render at all. It raises in 7 (Qwen3.5, `Ministral-3` and
+> `Mistral-Nemo`, and `Apertus-8B`, which is not Mistral-family), is hoisted to
+> token 0 in 19 (the DeepSeek family, plus `tencent-Hy3`, `Solar-Open-100B` and
+> one rwkv-world tail) and is dropped silently in 10 (gpt-oss and four more).
+> The note goes inside the last message's content behind a `[gglib loop guard]`
+> marker instead, which lands in 99 of the same 101. That evidence is minijinja
+> over llama.cpp's copies of those templates, not llama-server's own engine,
+> and nothing was run against a model; **the full table is not re-derivable
+> from the tree** — the harness was a throwaway — but the four templates that
+> decided it are vendored and rendered as a test, with Phi-3.5-mini pinned as
+> the one known drop (a template with no `tool` branch drops the whole last
+> message on an agentic tail, and the note with it).
 
 ## Kill criteria
 

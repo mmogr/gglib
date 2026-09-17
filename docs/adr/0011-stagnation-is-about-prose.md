@@ -200,6 +200,27 @@ property of judging a whole transcript rather than the turn in front of you.
   > and is the one below: these counters reset with the process. #1052's second
   > half is the event log that outlives it.
   >
+  > **The restatement above quotes words that have since changed.** It cites
+  > `ModelDefectCounts` documenting the counter as "requests the loop/stagnation
+  > guard rejected before dispatch"; that doc now reads "requests the
+  > loop/stagnation guard **acted on**", corrected in the same change as this
+  > note. The quotation is left as it was — it was accurate when the
+  > restatement was written, and it is the evidence for the argument that
+  > paragraph makes — but a reader following it to the source will find the new
+  > wording, not the old.
+  >
+  > **One limit on what an intervention is worth, because it bears on what this
+  > number counts.** The note is delivered inside the last message's content, so
+  > a chat template with no branch for the `tool` role drops the whole last
+  > message on an agentic tail and the note with it. Such a request is still
+  > counted here as an intervention, and the model saw nothing. Of llama.cpp's
+  > bundled templates two behave that way (Phi-3.5-mini, rwkv-world), and a
+  > model behind either never sees a tool *result* either, so it cannot run a
+  > tool loop meaningfully in the first place; on a chat tail, where stagnation
+  > trips, both render the note in place. The event log in #1052's second half
+  > records the action taken, not whether the model read it, and no counter
+  > here can close that gap.
+  >
   > One consequence worth stating because it is a cost, not a benefit: under
   > `note` a genuinely runaway client burns a full generation per stuck turn
   > instead of being stopped at threshold + 1. That is the trade the issue

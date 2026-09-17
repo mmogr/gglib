@@ -44,7 +44,13 @@ pub struct ModelDefectCounts {
     /// this model — every rate's denominator.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
-    /// Requests the loop/stagnation guard rejected before dispatch.
+    /// Requests the loop/stagnation guard acted on.
+    ///
+    /// Since #1052 that is *not* the same as rejected: the guard's default
+    /// forwards a tripped request with a note, and only
+    /// `--loop-guard-mode refuse` rejects it before dispatch. Both count
+    /// here, so this number is a count of **interventions**, which is what
+    /// ADR 0011's restated kill criterion reads.
     ///
     /// The sum of the two counts below, kept because it is the row people
     /// already read and the one an older dashboard knows. Adding all three
@@ -160,7 +166,7 @@ pub struct ModelDefectCounts {
     /// partly unanswered.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repeats_not_evaluated: u64,
-    /// Turns the loop guard would have refused for repeating, and did not,
+    /// Turns the loop guard would have acted on for repeating, and did not,
     /// because the answer had moved. A repeat inside the allowance is not one.
     ///
     /// Unlike the two above, this is not a fact about the conversation — it is

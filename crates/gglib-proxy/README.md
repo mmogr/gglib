@@ -692,12 +692,16 @@ all, which is what `--proxy-loop-detection false` meant and, for one release,
 still means. Either spelling clears the other when written.
 
 The note is delivered inside the last message rather than as a trailing
-`system` message because a `system` message at the tail raises on Qwen3.5 and
-the Mistral family, is hoisted to the head of the prompt by the DeepSeek
-family, and is silently dropped by gpt-oss and four others — measured over
-llama.cpp's 69 bundled templates, with the four that decided it kept as a test.
-The one limit: a template with no branch for the `tool` role drops the whole
-last message on an agentic tail, and the note with it.
+`system` message because a `system` message at the tail raises on Qwen3.5,
+two Mistral-family templates and Apertus, is hoisted to the head of the prompt
+by the DeepSeek family and three others, and is silently dropped by gpt-oss and
+four more — 63 of 101 renderable template × tail pairs land it where it was
+put, against 99 for the in-content delivery. Measured with minijinja over
+llama.cpp's bundled templates (65 of the 69 compile there), not against a
+model, and the four templates that decided it are kept as a test; the full
+table is not re-derivable from this tree. The one limit: a template with no
+branch for the `tool` role drops the whole last message on an agentic tail,
+and the note with it.
 
 The escape hatch remains for a
 client that legitimately repeats identical batches with nothing in between.
@@ -714,7 +718,9 @@ the JSON), and a tool call whose `arguments` string is malformed is hashed as
 the raw string rather than rejected — the guard is protection, not validation.
 Tripped requests are visible on the dashboard as `loop_guard_trip` in
 `recent_requests`, which names the detector that raised the trip (`"loop"` or
-`"stagnation"`) and is `null` for a request the guard let through.
+`"stagnation"`) and is `null` for a request that did not trip at all. A
+request the guard *noted* was let through and still names its detector —
+that is the point of the field since #1052.
 
 ## Proxy Dashboard
 
@@ -837,9 +843,11 @@ Five shapes worth knowing before reading them:
 - **`reasoning_only` is counted *inside* `empty_responses`**, not beside it.
   The turn was empty from the client's point of view either way; the
   distinction is *why*. Adding them double-counts.
-- **Only a loop-guard trip bumps `requests`.** The guard fires *instead of* a
-  forward, so it has to count its own denominator; every other *defect*
-  counter describes a turn that was already counted when it was forwarded. One
+- **Only a loop-guard trip bumps `requests`.** A trip is the one signal that
+  has to count its own denominator: under `refuse` nothing is forwarded, and
+  under `note` the forward's snapshot carries the trip rather than a plain
+  request. Every other *defect* counter describes a turn that was already
+  counted when it was forwarded. One
   trip bumps two counters besides: `loop_guard_trips`, and whichever of
   `loop_guard_loops` and `loop_guard_stagnations` names the detector that
   raised it. The first is the sum of the other two, so adding all three

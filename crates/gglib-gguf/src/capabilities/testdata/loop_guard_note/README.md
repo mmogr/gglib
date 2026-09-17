@@ -9,6 +9,12 @@ Real chat templates, vendored **byte for byte** from llama.cpp `e5a8d439`
 (`models/templates/`) — unlike the hand-reduced fixtures in the parent
 directory, which model a family's tool-call markup rather than reproduce it.
 
+The measurement that chose the delivery rendered 65 of that directory's 69
+templates (4 do not compile in minijinja) against two conversation tails each.
+Its harness was a throwaway and **the full table is not re-derivable from this
+tree**; these five are the part of it that is, and they are the five that
+decided the answer.
+
 They are here because the loop guard's note (#1052) is delivered by appending
 its text to the last message's content rather than as a trailing `system`
 message, and these five are why. `loop_guard_note_templates_tests.rs` renders
