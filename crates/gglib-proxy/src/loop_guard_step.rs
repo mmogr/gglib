@@ -45,10 +45,14 @@ pub(crate) enum GuardStep {
 /// Run the guard over one request's replayed history.
 ///
 /// Turn-level loop/stagnation guard (parity with the built-in agent's guards):
-/// reject a conversation whose replayed history already shows a stuck loop
-/// *before* paying admission — a runaway agentic client otherwise burns a
-/// model swap plus a full generation per repeated turn. See [`crate::loop_guard`]
-/// for the design (stateless history scan, fail-open).
+/// act on a conversation whose replayed history already shows a stuck loop.
+/// Under [`LoopGuardMode::Refuse`] that is a refusal *before* paying
+/// admission, which is what stops a runaway agentic client burning a model
+/// swap plus a full generation per repeated turn; under the default,
+/// [`LoopGuardMode::Note`], the request is forwarded with a note and pays
+/// those costs, because a refusal is terminal for a client with no recovery
+/// path. See [`crate::loop_guard`] for the design (stateless history scan,
+/// fail-open).
 ///
 /// Fail-open by construction: a settings snapshot that switches the guard off,
 /// or an agent config with no loop threshold, returns [`GuardStep::Forward`]
@@ -82,26 +86,40 @@ pub(crate) fn run(
         metrics.record_repeat_rescued(model_name);
     }
 
-    match outcome.verdict {
-        LoopGuardVerdict::Pass => GuardStep::Forward,
-        tripped if guard_cfg.mode() == LoopGuardMode::Note => {
+    // Nothing tripped: the common case, and the only one with no mode to
+    // consult. `trip()` is `None` for exactly `Pass`, so this is also what
+    // lets everything below treat the verdict as tripped.
+    let Some(trip) = outcome.verdict.trip() else {
+        return GuardStep::Forward;
+    };
+    let tripped = outcome.verdict;
+
+    // Matched variant by variant rather than `Note` versus everything else: a
+    // fourth mode would otherwise be silently treated as a refusal, and this
+    // is the one place a mode becomes a behaviour.
+    match guard_cfg.mode() {
+        // `from_settings` returns `None` for `Off`, so there is no config to
+        // reach this arm with — but saying so here is what makes the match
+        // exhaustive, so a new variant fails to compile instead of refusing.
+        LoopGuardMode::Off => {
+            debug_assert!(false, "a guard configured Off does not scan");
+            GuardStep::Forward
+        }
+        LoopGuardMode::Note => {
             // Deliberately not a refusal and not a snapshot of its own: the
             // request goes on to be forwarded, and the forward records it.
             // `trip` rides along so that one snapshot names the detector.
-            let Some(trip) = tripped.trip() else {
-                unreachable!("Pass is handled above")
-            };
             warn!(
                 model = %model_name,
                 verdict = ?tripped,
                 "loop guard forwarding request with a note"
             );
             let Some(note) = LoopGuardNote::for_verdict(&tripped) else {
-                unreachable!("Pass is handled above")
+                unreachable!("a tripped verdict has a note")
             };
             GuardStep::Note { note, trip }
         }
-        tripped => {
+        LoopGuardMode::Refuse => {
             warn!(
                 model = %model_name,
                 verdict = ?tripped,
@@ -117,7 +135,7 @@ pub(crate) fn run(
                 messages_truncated: 0,
                 was_clamped: false,
                 grammar_enforced: false,
-                loop_guard_trip: tripped.trip(),
+                loop_guard_trip: Some(trip),
                 recorded_at_secs: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()

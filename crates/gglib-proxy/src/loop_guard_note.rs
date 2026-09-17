@@ -13,13 +13,17 @@
 //! environment `gglib_gguf`'s template probe uses, against the two tails a
 //! tripped request actually has, a trailing `system` message lands where it
 //! was put in 63 of the 101 pairs that render at all. In the rest it
-//! **raises** (Qwen3.5-4B: "System message must be at the beginning."; three
-//! Mistral-family templates), is **hoisted to token 0** (the DeepSeek family,
-//! which concatenates every system message into a prompt prefix — breaking
-//! the cached prefix on every tripped turn, the exact failure
-//! `canonicalization` exists to prevent), or is **silently dropped**
-//! (gpt-oss, `SmolLM3`, `MiniMax-M1`, Nemotron-Nano-v2, Bielik). A raise is an
-//! HTTP 500 from llama-server where the guard used to return a clean 400.
+//! **raises** in 7 (Qwen3.5-4B: "System message must be at the beginning.";
+//! `Ministral-3` and `Mistral-Nemo` on the Mistral side; `Apertus-8B`, which
+//! is neither), is **hoisted to token 0** in 19 (the DeepSeek family, which
+//! concatenates every system message into a prompt prefix — breaking the
+//! cached prefix on every tripped turn, the exact failure `canonicalization`
+//! exists to prevent — plus `tencent-Hy3`, `Solar-Open-100B` and rwkv-world's
+//! chat tail), or is **silently dropped** in 10 (gpt-oss, `SmolLM3`,
+//! `MiniMax-M1`, Nemotron-Nano-v2, Bielik). The remaining 2 are the
+//! no-`tool`-branch pair below, where the whole history is lost and the note
+//! survives. A raise is an HTTP 500 from llama-server where the guard used to
+//! return a clean 400.
 //! gglib's two capability flags identify none of these: llama.cpp probes
 //! `supports_system_role` with the message at index 0, so Qwen3.5 and DeepSeek
 //! both report that they support it.
@@ -35,10 +39,14 @@
 //! trips, both templates render the note in place.
 //!
 //! The evidence is minijinja over llama.cpp's bundled templates, not
-//! llama-server's own engine, and nothing here was run against a model.
-//! `loop_guard_note_templates_tests.rs` in `gglib-gguf` keeps the four
-//! templates that broke the alternatives honest, with Phi-3.5-mini pinned as
-//! the known drop.
+//! llama-server's own engine, and nothing here was run against a model. Of
+//! the 69 templates, 4 do not compile in minijinja at all, so 65 were
+//! rendered against 2 tails each — 130 pairs, of which 101 render on the
+//! baseline. `loop_guard_note_templates_tests.rs` in `gglib-gguf` keeps the
+//! four templates that broke the alternatives honest, with Phi-3.5-mini
+//! pinned as the known drop; **the full table is not re-derivable from this
+//! tree** — the harness that produced it was a throwaway, and the five
+//! vendored templates are what survives of it.
 //!
 //! # Where it goes in the pipeline
 //!
@@ -84,6 +92,25 @@ use crate::loop_guard::LoopGuardVerdict;
 /// their words.
 pub(crate) const MARKER: &str = "[gglib loop guard]";
 
+/// How much of a batch signature the note will echo.
+///
+/// The signature carries the client's own tool names verbatim (see
+/// [`LoopGuardNote::for_verdict`]), so it is the one part of the note a client
+/// controls. Long enough that a real batch of several tools is named in full —
+/// a signature is `name:16 hex` per call — and short enough that a pathological
+/// name cannot dominate the prompt.
+const SIGNATURE_LIMIT: usize = 240;
+
+/// `signature`, truncated on a character boundary if it is longer than
+/// [`SIGNATURE_LIMIT`].
+fn bound(signature: &str) -> std::borrow::Cow<'_, str> {
+    if signature.chars().count() <= SIGNATURE_LIMIT {
+        return std::borrow::Cow::Borrowed(signature);
+    }
+    let kept: String = signature.chars().take(SIGNATURE_LIMIT).collect();
+    std::borrow::Cow::Owned(format!("{kept}…"))
+}
+
 /// A note the guard decided to send instead of a refusal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LoopGuardNote {
@@ -94,17 +121,30 @@ impl LoopGuardNote {
     /// The note for a verdict, or `None` for [`LoopGuardVerdict::Pass`].
     ///
     /// Fixed text: the only things interpolated are the signature, the count
-    /// and the threshold, all of which the verdict already carries. No prompt
-    /// text and nothing a person wrote reaches the model through here.
+    /// and the threshold, all of which the verdict already carries. No message
+    /// content and nothing a person typed reaches the model through here.
+    ///
+    /// The signature is **not** free of client input, and that matters more
+    /// here than it did for the 400 body this replaces. It is
+    /// `name:hash|name:hash…`: the arguments are hashed, but each tool *name*
+    /// is verbatim off the wire, unbounded and unescaped. Under `refuse` it
+    /// went into an error body the client reads back; under `note` it goes
+    /// into the prompt. The client already owns the prompt, so this is not an
+    /// escalation — but an unbounded echo inside gglib's own marked sentence
+    /// is worth bounding, so the interpolated signature is truncated to
+    /// [`SIGNATURE_LIMIT`] characters with an ellipsis.
     pub(crate) fn for_verdict(verdict: &LoopGuardVerdict) -> Option<Self> {
         let text = match verdict {
             LoopGuardVerdict::Pass => return None,
-            LoopGuardVerdict::LoopDetected { signature } => format!(
-                "{MARKER} This conversation has repeated the tool-call batch `{signature}` \
-                 with nothing in between, and received the same result each time. Repeating \
-                 it will not produce a different answer. Change approach, or tell the user \
-                 what is blocking you."
-            ),
+            LoopGuardVerdict::LoopDetected { signature } => {
+                let signature = bound(signature);
+                format!(
+                    "{MARKER} This conversation has repeated the tool-call batch `{signature}` \
+                     with nothing in between, and received the same result each time. Repeating \
+                     it will not produce a different answer. Change approach, or tell the user \
+                     what is blocking you."
+                )
+            }
             LoopGuardVerdict::StagnationDetected { count, max_steps } => format!(
                 "{MARKER} This conversation has produced the same response {count} times, \
                  against a limit of {max_steps}. Repeating it will not produce a different \
