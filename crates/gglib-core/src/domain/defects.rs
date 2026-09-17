@@ -40,137 +40,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-/// Cumulative defect counts for one model.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct ModelDefectCounts {
-    /// Requests the proxy forwarded (or would have, but for a guard) for
-    /// this model — every rate's denominator.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub requests: u64,
-    /// Requests the loop/stagnation guard rejected before dispatch.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub loop_guard_trips: u64,
-    /// Turns whose tool call failed schema validation and was re-issued,
-    /// with `tool_choice: "required"` or as a second draw under gglib's grammar.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub repairs_attempted: u64,
-    /// Of those, the re-issues that produced a conformant call.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub repairs_succeeded: u64,
-    /// Streaming turns that died on an *upstream* mid-stream failure — an
-    /// error event the model server emitted mid-generation, or the byte
-    /// stream itself breaking.
-    ///
-    /// The catastrophic sibling of the repair signal. Both of the counters
-    /// above require a model coherent enough to produce structured output:
-    /// one counts verbatim repetition, the other a tool call that was
-    /// attempted and malformed. A model whose sampling has collapsed
-    /// produces neither — it emits output so far outside the expected shape
-    /// that the model server kills the stream, and the person's turn simply
-    /// fails, invisibly to every other counter here.
-    ///
-    /// Client disconnects are deliberately not in here: hanging up is a
-    /// person's action, not a model defect.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub stream_errors: u64,
-    /// Turns the model server cut off at the token ceiling
-    /// (`finish_reason == "length"`).
-    ///
-    /// Not a model defect in the same sense as the others — a long answer is
-    /// allowed to be long — but a *rising* rate is how a runaway generation
-    /// looks before anything else notices, and it is the cheapest evidence
-    /// that a context budget is mis-sized.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub truncated_generations: u64,
-    /// Turns that produced nothing a client can render.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub empty_responses: u64,
-    /// Of those, the ones that produced reasoning and nothing else.
-    ///
-    /// Counted inside [`Self::empty_responses`] rather than beside it: the
-    /// turn was empty from the client's point of view either way, and the
-    /// distinction is *why*. A model stranding its whole answer in
-    /// `reasoning_content` is a prompt/template problem; one producing
-    /// nothing at all is not.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub reasoning_only: u64,
-    /// Turns where dialect markup survived normalization into client-visible
-    /// output — the drift alarm, per model rather than fleet-wide.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub dialect_residue: u64,
-    /// Turns whose tool call could not be validated at all, so repair never
-    /// had an opinion to act on.
-    ///
-    /// The blind spot this makes visible: a client whose tools all use
-    /// `anyOf` gets zero repair coverage *and*, until now, zero evidence of
-    /// that fact. A high rate here means the repair rate below it is
-    /// measuring a much smaller slice of traffic than it appears to.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub unvalidatable_schemas: u64,
-    /// Turns whose normalization discarded a malformed dialect tool call and
-    /// surfaced the raw body as visible text instead.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub normalization_errors: u64,
-    /// Turns whose newest tool-call batch repeated the batch before it and
-    /// got an equal result back.
-    ///
-    /// The comparison is against the *preceding* occurrence of that signature,
-    /// not any earlier one: a call that returned A, then B, then A again is
-    /// not counted, because the model did get a different answer last time.
-    ///
-    /// The odd one out, deliberately. Every counter above measures a gglib
-    /// organ firing or a defect in the shape of the model's own output. This
-    /// one measures a condition in the *conversation*: the model asked for
-    /// the same thing twice and the environment answered the same way twice,
-    /// which is the only evidence available that a repeat was genuinely
-    /// stuck rather than progress that happens to look alike.
-    ///
-    /// One increment per turn, like every counter above it — not a tally over
-    /// the replayed history. A client resends the whole conversation each
-    /// turn, so counting history-wide would re-count the same event on every
-    /// later request and grow with the square of session length.
-    ///
-    /// "Equal" means equal after hashing the result's `content` as it
-    /// arrived, per turn. Bounded to the calls the batch actually made, and
-    /// only when every one of them was answered.
-    ///
-    /// Counted whether or not the guard trips — a repeat under the threshold
-    /// is exactly the case a verdict cannot see. Nothing acts on it: it
-    /// exists to answer whether a corrective arm on the input plane would
-    /// ever have a trigger, before one is built.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub identical_result_repeats: u64,
-    /// Turns whose newest tool-call batch repeated the batch before it but
-    /// whose results could **not** be compared.
-    ///
-    /// The denominator for the counter above, and the reason a zero there can
-    /// be read at all. A repeat gglib could not evaluate is not a repeat that
-    /// did not happen: without this, an instrument that never managed to join
-    /// a single result would look exactly like a fleet with nothing wrong.
-    ///
-    /// Bumps when a client omits `id` on replayed tool calls, when results are
-    /// not contiguous after the assistant turn, or when a parallel batch went
-    /// partly unanswered.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub repeats_not_evaluated: u64,
-    /// Turns the loop guard would have refused for repeating, and did not,
-    /// because the answer had moved. A repeat inside the allowance is not one.
-    ///
-    /// Unlike the two above, this is not a fact about the conversation — it is
-    /// a fact about gglib's own reflex, which is what the ledger was chartered
-    /// for before ADR 0006 had to widen it. It reads the detector's run-scoped
-    /// outcome, not the session-wide map those two are computed from, so it is
-    /// a third instrument rather than a third view of one.
-    ///
-    /// It exists because ADR 0010 promoted the results join from an
-    /// observation to a policy input, and a kill criterion nobody can read is
-    /// not a kill criterion. If this dwarfs `identical_result_repeats` in real
-    /// use, the join is being defeated by output that carries a clock rather
-    /// than measuring progress, and the rescue wants narrowing or removing.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub repeats_rescued: u64,
-}
+pub use super::defect_counts::{LoopGuardTrip, ModelDefectCounts};
 
 /// Process-lifetime per-model defect counters.
 ///
@@ -193,15 +63,21 @@ impl ModelDefectLedger {
         self.with(model, |c| c.requests += 1);
     }
 
-    /// Count one loop-guard rejection for `model`.
+    /// Count one loop-guard rejection for `model`, under the detector that
+    /// raised it.
     ///
-    /// Also counts the request itself: the guard fires *instead of* a
-    /// forward, and a trip outside its own denominator would overstate
-    /// every rate computed from these numbers.
-    pub fn record_loop_guard_trip(&self, model: &str) {
+    /// Bumps the detector's own count and `loop_guard_trips`, which stays the
+    /// sum of the two. Also counts the request itself: the guard fires
+    /// *instead of* a forward, and a trip outside its own denominator would
+    /// overstate every rate computed from these numbers.
+    pub fn record_loop_guard_trip(&self, model: &str, which: LoopGuardTrip) {
         self.with(model, |c| {
             c.requests += 1;
             c.loop_guard_trips += 1;
+            match which {
+                LoopGuardTrip::Loop => c.loop_guard_loops += 1,
+                LoopGuardTrip::Stagnation => c.loop_guard_stagnations += 1,
+            }
         });
     }
 
@@ -305,7 +181,7 @@ mod tests {
         let ledger = ModelDefectLedger::new();
         ledger.record_request("a");
         ledger.record_request("a");
-        ledger.record_loop_guard_trip("a");
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Loop);
         ledger.record_repair("b", true);
         ledger.record_repair("b", false);
 
@@ -314,6 +190,23 @@ mod tests {
         assert_eq!(snap["a"].loop_guard_trips, 1);
         assert_eq!(snap["b"].repairs_attempted, 2);
         assert_eq!(snap["b"].repairs_succeeded, 1);
+    }
+
+    /// A trip is counted under the detector that raised it and in the sum, and
+    /// counts its own request once. ADR 0011's first criterion asks about
+    /// stagnation alone, which one tally over both detectors could not answer.
+    #[test]
+    fn a_trip_is_counted_under_its_detector_and_in_the_sum() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Loop);
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Stagnation);
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Stagnation);
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.loop_guard_loops, 1, "one loop trip");
+        assert_eq!(snap.loop_guard_stagnations, 2, "two stagnation trips");
+        assert_eq!(snap.loop_guard_trips, 3, "the sum of the two");
+        assert_eq!(snap.requests, 3, "each trip counts its own request, once");
     }
 
     /// A stream error marks an already-forwarded request as having died; it

@@ -44,6 +44,8 @@ const BAR_WIDTH: usize = 20;
 const DEFAULT_TERM_WIDTH: u16 = 80;
 
 mod render;
+/// The per-model signals, whose rules are about what not to print.
+mod render_defects;
 /// The one section that is not a readback — see the module docs there.
 mod render_reasoning;
 mod wire;

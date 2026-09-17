@@ -122,13 +122,13 @@ property of judging a whole transcript rather than the turn in front of you.
   should be widened or the detector retired. It should get *rarer*, not zero.~~
 
   > **Restated 2026-08-28 — `loop_guard_trips` cannot show that.** It is one
-  > tally over both detectors and both paths. `ModelDefectCounts` documents it as
+  > tally over both detectors ~~and both paths~~. `ModelDefectCounts` documents it as
   > "requests the loop/stagnation guard rejected before dispatch", and the proxy
   > records `LoopDetected` and `StagnationDetected` through the same
   > `loop_guard_tripped` flag before they diverge into two error bodies;
   > `record_loop_guard_trip` takes no discriminator. A stagnation rejection is
-  > not separable from a loop one in that number, and the proxy path is not
-  > separable from the agent path.
+  > not separable from a loop one in that number~~, and the proxy path is not
+  > separable from the agent path~~.
   >
   > Read as written, the criterion is answerable only where the combined tally is
   > zero — which is the reading taken below, and which says nothing about whether
@@ -146,6 +146,34 @@ property of judging a whole transcript rather than the turn in front of you.
   > [#947](https://github.com/mmogr/gglib/issues/947) rather than assumed, and
   > the original criterion above is struck rather than deleted so that what was
   > wanted stays legible.
+
+  > **Amended 2026-09-17 — the tally now says which detector, and it never
+  > covered two paths.** [#947](https://github.com/mmogr/gglib/issues/947) has
+  > landed its first half. `record_loop_guard_trip` takes the detector that
+  > raised the trip, `ModelDefectCounts` carries `loop_guard_loops` and
+  > `loop_guard_stagnations` beside `loop_guard_trips`, which stays as their sum,
+  > the snapshot's `loop_guard_tripped` flag is now `loop_guard_trip` and names
+  > the detector, and `gglib proxy dashboard` prints the parts under the sum. The
+  > sentences above that say there is no discriminator, that the two are not
+  > separable, and that the counter does not exist were true when written and
+  > are not now.
+  >
+  > "Both paths" is struck above, here and in the first reading, because it was
+  > wrong when written. The agent loop runs the same two detectors
+  > (`gglib-agent`'s `agent_loop.rs`), but a trip there becomes an error event and
+  > reaches no counter, so this tally has only ever seen the proxy's pre-dispatch
+  > scan, which is also all the struck criterion asked about. #947's second
+  > half, separating the paths, is therefore not a split of this number but an
+  > instrument that does not exist yet:
+  > [#1091](https://github.com/mmogr/gglib/issues/1091).
+  >
+  > **What this does not change is the criterion.** The struck one can now be
+  > *asked* — within one proxy run. These counters still reset with the process,
+  > which is what the first reading below calls "cannot be re-read", and a
+  > criterion about stagnation becoming rare needs a denominator no single run
+  > will supply. So the weaker restatement stands, and the original is not
+  > reinstated here; that waits for a reading that survives a restart
+  > ([#1052](https://github.com/mmogr/gglib/issues/1052)).
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.
@@ -165,7 +193,7 @@ restatement above. Two of them turn out not to be readings at all, which is
 worth saying plainly rather than leaving as three lines that look alike.
 
 - **The guard is no longer paying for itself** — **0 loop-guard trips across 10
-  requests, 2026-08-28**, covering both detectors and both paths, read against
+  requests, 2026-08-28**, covering both detectors ~~and both paths~~, read against
   the restated criterion rather than the struck one. Ten requests is nowhere
   near a denominator at which a rejection would have been expected, so this is a
   zero with nothing yet behind it. **OPEN.**
@@ -182,6 +210,11 @@ worth saying plainly rather than leaving as three lines that look alike.
 **Both live criteria remain OPEN**, and one of them has been narrowed by the
 restatement: until [#947](https://github.com/mmogr/gglib/issues/947) lands,
 nothing can retire `StagnationDetector` on its own evidence.
+
+> **Amended 2026-09-17.** #947's detector split has landed (the note under the
+> first criterion says what it did and did not change). What still stands
+> between this detector and its own evidence is a count that outlives the
+> process (#1052) and the path that is not counted at all (#1091).
 
 ## Notes
 

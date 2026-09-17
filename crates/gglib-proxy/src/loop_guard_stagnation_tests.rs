@@ -153,3 +153,20 @@ fn oscillating_prose_still_trips_inside_the_window() {
         LoopGuardVerdict::StagnationDetected { .. }
     ));
 }
+
+/// A verdict names its own detector, so the ledger cannot file a stagnation
+/// rejection under the loop detector or the other way about. Here rather than
+/// in `loop_guard_tests.rs` for the reason at the top of this file.
+#[test]
+fn a_verdict_says_which_detector_raised_it() {
+    let looped = LoopGuardVerdict::LoopDetected {
+        signature: "write_file:1f".into(),
+    };
+    let stagnant = LoopGuardVerdict::StagnationDetected {
+        count: 6,
+        max_steps: 5,
+    };
+    assert_eq!(LoopGuardVerdict::Pass.trip(), None);
+    assert_eq!(looped.trip(), Some(LoopGuardTrip::Loop));
+    assert_eq!(stagnant.trip(), Some(LoopGuardTrip::Stagnation));
+}

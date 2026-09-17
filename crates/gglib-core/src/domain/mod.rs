@@ -7,6 +7,7 @@ pub mod capabilities;
 pub mod capability_tags;
 pub mod chat;
 mod context_fit;
+pub mod defect_counts;
 pub mod defects;
 pub mod dialect;
 pub(crate) mod generation_config;
