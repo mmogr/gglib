@@ -397,7 +397,9 @@ impl Settings {
     ///
     /// The new setting wins outright when present. The boolean is consulted
     /// only when it is absent, which [`Self::merge`] makes true of anything
-    /// this build has written: `Some(false)` is [`LoopGuardMode::Off`], and
+    /// this build has *written to a value* — an explicit clear of one spelling
+    /// leaves the other standing, so both can be absent and the default
+    /// answers: `Some(false)` is [`LoopGuardMode::Off`], and
     /// `Some(true)` or absent is the default, [`LoopGuardMode::Note`]. An
     /// explicit old "on" therefore becomes a note rather than a refusal,
     /// which is the behaviour change #1052 exists to make.
@@ -469,12 +471,12 @@ impl Settings {
         if let Some(v) = other.tool_call_repair {
             self.tool_call_repair = v;
         }
-        // The loop guard's two spellings clear each other, in this order, so
-        // they can never disagree on disk and an update carrying both has one
-        // answer: the new setting's. Precedence
-        // ([`Self::effective_loop_guard_mode`]) is then only ever consulted
-        // for a settings file an older build wrote — which is what keeps
-        // `--proxy-loop-detection false` working for the release it is
+        // The loop guard's two spellings clear each other when one is
+        // *written to a value*, in this order, so they cannot disagree on
+        // disk and an update carrying both has one answer: the new setting's.
+        // An explicit null clears only itself — see below — so the pair can
+        // also end up both absent, which the default covers. That is what
+        // keeps `--proxy-loop-detection false` working for the release it is
         // promised.
         if let Some(ref v) = other.proxy_loop_detection {
             self.proxy_loop_detection = *v;

@@ -1,10 +1,13 @@
 //! End-to-end tests for the pre-dispatch loop/stagnation guard.
 //!
-//! Each test drives the real proxy over HTTP with a request whose replayed
-//! `messages[]` history is the signal under test, and asserts the wire
-//! contract an external agentic client (Cline, Roo Code) would see: a clean
-//! 400 with `loop_detected` / `stagnation_detected` before any model work,
-//! or an untouched 200 round-trip for benign traffic.
+//! These are the **`refuse` mode's** cases: each drives the real proxy over
+//! HTTP with a request whose replayed `messages[]` history is the signal under
+//! test, and asserts a clean 400 with `loop_detected` / `stagnation_detected`
+//! before any model work, or an untouched 200 round-trip for benign traffic.
+//! Since #1052 that 400 is no longer what an external agentic client sees by
+//! default — the default forwards with a note, which is
+//! `integration_loop_guard_note.rs` — so every case here that expects a
+//! refusal asks for one.
 //!
 //! The "before any model work" half of the contract is load-bearing —
 //! `CountingRuntime` proves the guard fired before admission, i.e. before a

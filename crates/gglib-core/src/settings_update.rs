@@ -40,8 +40,9 @@ pub struct SettingsUpdate {
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
     /// See [`Settings::loop_guard_mode`](super::Settings::loop_guard_mode).
-    /// Writing it clears [`Self::proxy_loop_detection`], and the other way
-    /// round.
+    /// Writing it **to a value** clears [`Self::proxy_loop_detection`], and
+    /// the other way round; `Some(None)` — the explicit clear — clears only
+    /// itself, because "forget this field" is not "forget both".
     pub loop_guard_mode: Option<Option<LoopGuardMode>>,
     /// **Deprecated**; see
     /// [`Settings::proxy_loop_detection`](super::Settings::proxy_loop_detection).

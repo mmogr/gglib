@@ -68,7 +68,7 @@ Everything between the OpenAI request and llama-server is the product:
   so the proxy scans the incoming history for tool-call batches repeated back
   to back *and answered the same way*, observation-tool spam, and repeated
   *response text* anywhere in the session. A batch whose answer keeps changing
-  is an agent polling for output, not a loop, and is not counted. What happens
+  is an agent polling for output, not a loop, and does not trip it. What happens
   to a stuck session is one setting: by default the request is **forwarded with
   a note** telling the model what it has repeated, so a client with no recovery
   path from a refusal gets something it can act on; `--loop-guard-mode refuse`

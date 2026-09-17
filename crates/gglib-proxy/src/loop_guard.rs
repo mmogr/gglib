@@ -23,9 +23,12 @@
 //! is forwarded with a note and therefore pays those costs — the trade #1052
 //! makes, for a client that cannot recover from a refusal.  This catches
 //! a loop one turn after the agent path's per-iteration check would (the
-//! history at turn N shows responses 1..N-1), which caps a runaway session at
-//! threshold+1 turns — accepted for a guard whose job is "fail fast and
-//! loud", not mid-stream intervention.
+//! history at turn N shows responses 1..N-1). Under `refuse` that caps a
+//! runaway session at threshold+1 turns; under the default it does not cap it
+//! at all — the model is told and left to decide, and a client that ignores
+//! the note spends a generation per stuck turn. The cap was the old bargain
+//! and is now one of three, which is why the mode is a setting rather than a
+//! constant.
 //!
 //! Parse policy is **fail-open**: this guard is protection, not validation.
 //! An unparseable body yields [`LoopGuardVerdict::Pass`] (routing already

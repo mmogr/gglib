@@ -55,7 +55,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Aborts looping conversations** before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
+6. **Acts on looping conversations** — by default it forwards them with a note telling the model what it has repeated; set to refuse, it aborts them before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
 7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
@@ -567,7 +567,7 @@ curl -X POST http://localhost:8080/mcp \
 | 503 | Model is loading (retry after) |
 | 502 | Failed to connect to llama-server |
 | 404 | Model not found |
-| 400 | Context window budget exceeded after truncation |
+| 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit, in any mode) |
 | 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 500 | Internal error |
 
@@ -711,7 +711,16 @@ batch that went unanswered, or was answered only in part, cannot be compared
 and is counted as a repeat: an answer nobody can read is not evidence of
 progress. See [ADR 0010](../../docs/adr/0010-the-loop-guard-reads-what-came-back.md).) Detection lags the agent
 path's per-iteration check by one turn (the history at turn N shows responses
-1..N-1), capping a runaway session at threshold+1 turns.
+1..N-1). Under `refuse` that caps a runaway session at threshold+1 turns;
+under the default, `note`, nothing is capped — the model is told, and a client
+that ignores the note spends a generation per stuck turn.
+
+One shape gets neither: a conversation that trips the guard **and** cannot be
+trimmed into the context budget is refused as `context_length_exceeded` before
+the note is ever rendered, so it sees a terminal 400 and no note at all. That
+is by construction the shape most likely to trip the guard — long and
+repetitive — and it is the one case where the new default buys nothing. The
+trip is still counted.
 
 **Fail-open:** an unparseable body passes (request routing already validated
 the JSON), and a tool call whose `arguments` string is malformed is hashed as

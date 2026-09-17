@@ -113,8 +113,9 @@ pub struct SettingsSetArgs {
     /// Deprecated: use `--loop-guard-mode off|note|refuse`.
     ///
     /// `false` still means `off`; `true` now means `note`, not a refusal.
-    /// Writing either spelling clears the other, so whichever was set last is
-    /// the one that answers.
+    /// Writing either spelling to a value clears the other, so whichever was
+    /// set last is the one that answers. (`gglib config settings unset` clears
+    /// one without touching the other.)
     #[arg(long)]
     pub proxy_loop_detection: Option<bool>,
     /// Cap the temperature on agentic turns. Enabled by default: a

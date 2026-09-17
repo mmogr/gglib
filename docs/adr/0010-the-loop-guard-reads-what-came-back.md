@@ -179,6 +179,8 @@ before ADR 0006 had to widen it.
 > `Mistral-Nemo`, and `Apertus-8B`, which is not Mistral-family), is hoisted to
 > token 0 in 19 (the DeepSeek family, plus `tencent-Hy3`, `Solar-Open-100B` and
 > one rwkv-world tail) and is dropped silently in 10 (gpt-oss and four more).
+> Those four outcomes sum to 99; the remaining 2 are a fifth, where the
+> template renders the note but loses the history around it.
 > The note goes inside the last message's content behind a `[gglib loop guard]`
 > marker instead, which lands in 99 of the same 101. That evidence is minijinja
 > over llama.cpp's copies of those templates, not llama-server's own engine,
