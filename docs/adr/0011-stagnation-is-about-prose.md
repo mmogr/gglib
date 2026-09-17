@@ -174,6 +174,38 @@ property of judging a whole transcript rather than the turn in front of you.
   > will supply. So the weaker restatement stands, and the original is not
   > reinstated here; that waits for a reading that survives a restart
   > ([#1052](https://github.com/mmogr/gglib/issues/1052)).
+
+  > **Amended 2026-09-18 — the number has changed its subject, and the reading
+  > still does not survive a restart.** [#1052](https://github.com/mmogr/gglib/issues/1052)'s
+  > first half has landed. The guard's answer is now a setting,
+  > `loop_guard_mode`, with three values, and its default is `note`: a tripped
+  > request is **forwarded**, with a fixed note appended to the last message
+  > saying what repeated. `refuse` is the old HTTP 400, and `off` is the old
+  > off.
+  >
+  > So `loop_guard_trips` no longer counts *rejections*. It counts requests the
+  > guard **acted on** — noted or refused — and the same is true of
+  > `loop_guard_loops` and `loop_guard_stagnations`. Every criterion on this
+  > page that reads those numbers now reads a count of interventions.
+  >
+  > That matters more than it sounds. Read against the old subject, the struck
+  > criterion — "stagnation rejections have effectively vanished" — would be
+  > satisfied the moment the default stopped rejecting, by a change in what the
+  > proxy does rather than by anything about the models. The restatement above
+  > is not reinstated and is not weakened further: it asks whether the counter
+  > reaches zero across a large enough denominator, and under `note` that is
+  > still the right question, now about interventions.
+  >
+  > The reason the original criterion is *still* not reinstated is unchanged
+  > and is the one below: these counters reset with the process. #1052's second
+  > half is the event log that outlives it.
+  >
+  > One consequence worth stating because it is a cost, not a benefit: under
+  > `note` a genuinely runaway client burns a full generation per stuck turn
+  > instead of being stopped at threshold + 1. That is the trade the issue
+  > asks for — a refusal is terminal for a client with no recovery path, and
+  > ADR 0011's own context records one ending a Copilot session on turn six —
+  > and the event log is what makes the cost auditable.
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.
