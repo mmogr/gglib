@@ -25,58 +25,10 @@ use fixtures::common::{
     CountingRuntime, StaticSettingsRepo, TaggedCatalog, spawn_mock_upstream, spawn_proxy,
     spawn_proxy_with_runtime, spawn_proxy_with_settings,
 };
+use fixtures::loop_guard::{
+    assistant_call, chat_body, looping_history, repeated_read_history, stagnating_history,
+};
 use fixtures::sse::BASIC_TEXT;
-
-// ─── Request-body builders ─────────────────────────────────────────────────
-
-fn assistant_call(name: &str, args: &str) -> Value {
-    json!({
-        "role": "assistant",
-        "content": null,
-        "tool_calls": [{
-            "id": "c1",
-            "type": "function",
-            "function": { "name": name, "arguments": args }
-        }]
-    })
-}
-
-fn chat_body(model: &str, history: Vec<Value>) -> Value {
-    let mut messages = vec![json!({ "role": "system", "content": "be helpful" })];
-    messages.extend(history);
-    messages.push(json!({ "role": "user", "content": "continue" }));
-    json!({ "model": model, "stream": false, "messages": messages })
-}
-
-/// History with `n` identical tool-call batches (each followed by a tool
-/// result, as a real client would replay it).
-///
-/// Uses a *mutating* tool deliberately. `read_file` and friends are
-/// observation tools, whose repeats are held to the far higher
-/// `max_observation_steps` ceiling — see
-/// `repeated_file_reads_are_not_a_loop` for why that matters.
-fn looping_history(n: usize) -> Vec<Value> {
-    (0..n)
-        .flat_map(|_| {
-            vec![
-                assistant_call("write_file", r#"{"path":"src/main.rs"}"#),
-                json!({ "role": "tool", "tool_call_id": "c1", "content": "1 file changed" }),
-            ]
-        })
-        .collect()
-}
-
-/// The same shape, but with the read-only tool a coding agent repeats.
-fn repeated_read_history(n: usize) -> Vec<Value> {
-    (0..n)
-        .flat_map(|_| {
-            vec![
-                assistant_call("read_file", r#"{"path":"src/main.rs"}"#),
-                json!({ "role": "tool", "tool_call_id": "c1", "content": "fn main() {}" }),
-            ]
-        })
-        .collect()
-}
 
 /// Reading the same file repeatedly is the ordinary shape of an agentic
 /// coding turn — read, edit, re-read to verify — and must reach the model.
@@ -282,9 +234,7 @@ async fn stagnating_history_is_rejected() {
     let (runtime, admit_calls) = CountingRuntime::new(1, "test-model");
     let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
 
-    let history: Vec<Value> = (0..6)
-        .map(|_| json!({ "role": "assistant", "content": "I cannot proceed further." }))
-        .collect();
+    let history = stagnating_history(6);
     let resp = Client::new()
         .post(format!("{proxy_url}/v1/chat/completions"))
         .json(&chat_body("test-model", history))

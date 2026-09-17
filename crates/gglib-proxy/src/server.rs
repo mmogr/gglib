@@ -573,78 +573,12 @@ pub(crate) async fn chat_completions(
         }
     };
 
-    // Turn-level loop/stagnation guard (parity with the built-in agent's
-    // guards): reject a conversation whose replayed history already shows a
-    // stuck loop *before* paying admission — a runaway agentic client
-    // otherwise burns a model swap plus a full generation per repeated turn.
-    // See `loop_guard` for the design (stateless history scan, fail-open).
-    if let Some(guard_cfg) = crate::loop_guard::LoopGuardConfig::from_settings(&settings) {
-        use crate::loop_guard::LoopGuardVerdict;
-        let outcome = crate::loop_guard::scan_history(&body, &guard_cfg);
-
-        // Diagnosis, not a decision: recorded for every scanned request,
-        // whether or not the verdict below trips. A repeat under the
-        // threshold is exactly the case the verdict cannot see, and it is
-        // the one that says whether the repeat was stuck or productive.
-        if outcome.identical_result_repeat {
-            state
-                .dashboard
-                .metrics
-                .record_identical_result_repeat(&model_name);
-        } else if outcome.repeat_not_evaluated {
-            state
-                .dashboard
-                .metrics
-                .record_repeat_not_evaluated(&model_name);
-        }
-        // Its own `if`, not another arm of the chain above: this bit comes
-        // from the detector's run-scoped outcome and those two from a
-        // session-wide map, so a turn can genuinely be both — a batch that
-        // repeated earlier with the same answer, and repeated just now with a
-        // different one.
-        if outcome.repeat_rescued {
-            state.dashboard.metrics.record_repeat_rescued(&model_name);
-        }
-
-        match outcome.verdict {
-            LoopGuardVerdict::Pass => {}
-            tripped => {
-                warn!(
-                    model = %model_name,
-                    verdict = ?tripped,
-                    "loop guard aborting request before dispatch"
-                );
-                state
-                    .dashboard
-                    .metrics
-                    .record(crate::metrics::ContextSnapshot {
-                        dialect_residue: false,
-                        tool_repaired: false,
-                        seq: 0,
-                        model_name: model_name.clone(),
-                        payload_chars_before: body.len(),
-                        payload_chars_after: body.len(),
-                        messages_truncated: 0,
-                        was_clamped: false,
-                        grammar_enforced: false,
-                        loop_guard_trip: tripped.trip(),
-                        recorded_at_secs: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs(),
-                    });
-                let err = match tripped {
-                    LoopGuardVerdict::LoopDetected { signature } => {
-                        ErrorResponse::loop_detected(&signature)
-                    }
-                    LoopGuardVerdict::StagnationDetected { count, max_steps } => {
-                        ErrorResponse::stagnation_detected(count, max_steps)
-                    }
-                    LoopGuardVerdict::Pass => unreachable!("Pass is handled above"),
-                };
-                return (StatusCode::BAD_REQUEST, Json(err)).into_response();
-            }
-        }
+    // The turn-level loop/stagnation guard, before any catalog/admission/
+    // model-swap cost is paid. See `loop_guard_step` for what it records and
+    // `loop_guard` for what a replayed history means.
+    match crate::loop_guard_step::run(&settings, &body, &model_name, &state.dashboard.metrics) {
+        crate::loop_guard_step::GuardStep::Forward => {}
+        crate::loop_guard_step::GuardStep::Refuse(response) => return response,
     }
 
     // Watchdog: if the upstream tripped the consecutive-failure threshold on
