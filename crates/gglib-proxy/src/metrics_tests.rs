@@ -16,7 +16,7 @@ fn make_snapshot(model: &str) -> ContextSnapshot {
         grammar_enforced: false,
         dialect_residue: false,
         tool_repaired: false,
-        loop_guard_tripped: false,
+        loop_guard_trip: None,
         recorded_at_secs: 0,
         seq: 0,
     }
@@ -54,6 +54,44 @@ fn defect_counts_are_empty_without_a_ledger() {
     let store = ContextMetricsStore::new();
     store.record(make_snapshot("qwen-27b"));
     assert!(store.defect_counts().is_empty());
+}
+
+/// The snapshot is where the guard's two verdicts used to become one bit. A
+/// stagnation trip has to reach the ledger as one, or ADR 0011's criterion is
+/// asked of a number that cannot answer it.
+#[test]
+fn a_trip_reaches_the_ledger_under_the_detector_that_raised_it() {
+    let ledger = std::sync::Arc::new(gglib_core::domain::defects::ModelDefectLedger::new());
+    let store = ContextMetricsStore::new().with_ledger(std::sync::Arc::clone(&ledger));
+
+    let mut stagnant = make_snapshot("qwen-27b");
+    stagnant.loop_guard_trip = Some(LoopGuardTrip::Stagnation);
+    store.record(stagnant);
+    store.record(make_snapshot("qwen-27b"));
+
+    let qwen = store.defect_counts()["qwen-27b"];
+    assert_eq!(qwen.loop_guard_stagnations, 1, "the stagnation trip");
+    assert_eq!(qwen.loop_guard_loops, 0, "nothing looped");
+    assert_eq!(qwen.loop_guard_trips, 1, "the sum");
+    assert_eq!(qwen.requests, 2, "the trip and the forwarded request");
+}
+
+/// `recent_requests` is a public route, so the detector's spelling there is a
+/// contract: snake case like every other enum on it, and `null` for a request
+/// the guard let through.
+#[test]
+fn a_snapshot_names_the_detector_in_snake_case_or_null() {
+    let mut snapshot = make_snapshot("a");
+    let json = serde_json::to_value(&snapshot).unwrap();
+    assert!(json["loop_guard_trip"].is_null(), "{json}");
+
+    snapshot.loop_guard_trip = Some(LoopGuardTrip::Stagnation);
+    let json = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(json["loop_guard_trip"], "stagnation", "{json}");
+
+    snapshot.loop_guard_trip = Some(LoopGuardTrip::Loop);
+    let json = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(json["loop_guard_trip"], "loop", "{json}");
 }
 
 #[test]

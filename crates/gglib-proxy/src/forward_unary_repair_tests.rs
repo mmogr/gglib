@@ -120,7 +120,7 @@ fn snapshot() -> ContextSnapshot {
         grammar_enforced: false,
         dialect_residue: false,
         tool_repaired: false,
-        loop_guard_tripped: false,
+        loop_guard_trip: None,
         seq: 0,
         recorded_at_secs: 0,
     }

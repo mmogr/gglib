@@ -5,10 +5,36 @@
 //! of cumulative counts, serialised to the dashboard as it stands. Nearly all of
 //! this file is field documentation, because what a counter does *not* count is
 //! what a person reading a number needs to know, and it has to be said where the
-//! field is declared or it is said nowhere.
+//! field is declared or it is said nowhere. Beside it, [`LoopGuardTrip`]: the
+//! one fact a writer hands over with a count, which detector raised a trip.
 //!
 //! The ledger that bumps these lives in [`super::defects`], which re-exports
-//! the struct, so `gglib_core::domain::defects::ModelDefectCounts` still names it.
+//! both, so `gglib_core::domain::defects::ModelDefectCounts` still names it.
+
+/// Which of the loop guard's two detectors raised a trip.
+///
+/// The guard is two detectors behind one verdict, and until this existed their
+/// trips went into one number, so nobody could ask whether *stagnation*
+/// rejections had become rare, which is the question that decides whether
+/// `StagnationDetector` survives (ADR 0011's first kill criterion, #947).
+///
+/// It says which detector, and nothing about which path. Only the proxy's
+/// pre-dispatch scan records a trip at all: the agent loop runs the same two
+/// detectors and its trips reach no counter (#1091).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub enum LoopGuardTrip {
+    /// The same tool-call batch repeated back to back and kept getting the
+    /// same answer.
+    ///
+    /// Also a batch that is not read-only carried past the read-only allowance
+    /// by changing answers. The guard's verdict does not tell those two apart,
+    /// because the remedy is the same, so neither does this.
+    Loop,
+    /// The same assistant text repeated beyond the threshold.
+    Stagnation,
+}
 
 /// Cumulative defect counts for one model.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
@@ -19,8 +45,18 @@ pub struct ModelDefectCounts {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
     /// Requests the loop/stagnation guard rejected before dispatch.
+    ///
+    /// The sum of the two counts below, kept because it is the row people
+    /// already read and the one an older dashboard knows. Adding all three
+    /// double-counts.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub loop_guard_trips: u64,
+    /// Of those, the ones [`LoopGuardTrip::Loop`] raised.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub loop_guard_loops: u64,
+    /// Of those, the ones [`LoopGuardTrip::Stagnation`] raised.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub loop_guard_stagnations: u64,
     /// Turns whose tool call failed schema validation and was re-issued,
     /// with `tool_choice: "required"` or as a second draw under gglib's grammar.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]

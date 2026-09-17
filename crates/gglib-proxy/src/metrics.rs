@@ -19,6 +19,8 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use gglib_core::domain::defects::LoopGuardTrip;
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -61,9 +63,9 @@ pub struct ContextSnapshot {
     /// Back-patched after the response streams via
     /// [`ContextMetricsStore::flag_tool_repair`].
     pub tool_repaired: bool,
-    /// `true` when the pre-dispatch loop guard rejected this request with an
-    /// HTTP 400 instead of forwarding it (see `loop_guard`).
-    pub loop_guard_tripped: bool,
+    /// The detector that made the pre-dispatch loop guard reject this request
+    /// with an HTTP 400 instead of forwarding it (see `loop_guard`), or `None`.
+    pub loop_guard_trip: Option<LoopGuardTrip>,
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub recorded_at_secs: u64,
@@ -167,8 +169,8 @@ impl ContextMetricsStore {
         snapshot.seq = seq;
 
         if let Some(ledger) = &self.ledger {
-            if snapshot.loop_guard_tripped {
-                ledger.record_loop_guard_trip(&snapshot.model_name);
+            if let Some(which) = snapshot.loop_guard_trip {
+                ledger.record_loop_guard_trip(&snapshot.model_name, which);
             } else {
                 ledger.record_request(&snapshot.model_name);
             }

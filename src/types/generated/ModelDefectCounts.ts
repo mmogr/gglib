@@ -11,8 +11,20 @@ export type ModelDefectCounts = {
 requests: number, 
 /**
  * Requests the loop/stagnation guard rejected before dispatch.
+ *
+ * The sum of the two counts below, kept because it is the row people
+ * already read and the one an older dashboard knows. Adding all three
+ * double-counts.
  */
 loop_guard_trips: number, 
+/**
+ * Of those, the ones [`LoopGuardTrip::Loop`] raised.
+ */
+loop_guard_loops: number, 
+/**
+ * Of those, the ones [`LoopGuardTrip::Stagnation`] raised.
+ */
+loop_guard_stagnations: number, 
 /**
  * Turns whose tool call failed schema validation and was re-issued,
  * with `tool_choice: "required"` or as a second draw under gglib's grammar.

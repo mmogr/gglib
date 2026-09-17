@@ -40,7 +40,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-pub use super::defect_counts::ModelDefectCounts;
+pub use super::defect_counts::{LoopGuardTrip, ModelDefectCounts};
 
 /// Process-lifetime per-model defect counters.
 ///
@@ -63,15 +63,21 @@ impl ModelDefectLedger {
         self.with(model, |c| c.requests += 1);
     }
 
-    /// Count one loop-guard rejection for `model`.
+    /// Count one loop-guard rejection for `model`, under the detector that
+    /// raised it.
     ///
-    /// Also counts the request itself: the guard fires *instead of* a
-    /// forward, and a trip outside its own denominator would overstate
-    /// every rate computed from these numbers.
-    pub fn record_loop_guard_trip(&self, model: &str) {
+    /// Bumps the detector's own count and `loop_guard_trips`, which stays the
+    /// sum of the two. Also counts the request itself: the guard fires
+    /// *instead of* a forward, and a trip outside its own denominator would
+    /// overstate every rate computed from these numbers.
+    pub fn record_loop_guard_trip(&self, model: &str, which: LoopGuardTrip) {
         self.with(model, |c| {
             c.requests += 1;
             c.loop_guard_trips += 1;
+            match which {
+                LoopGuardTrip::Loop => c.loop_guard_loops += 1,
+                LoopGuardTrip::Stagnation => c.loop_guard_stagnations += 1,
+            }
         });
     }
 
@@ -175,7 +181,7 @@ mod tests {
         let ledger = ModelDefectLedger::new();
         ledger.record_request("a");
         ledger.record_request("a");
-        ledger.record_loop_guard_trip("a");
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Loop);
         ledger.record_repair("b", true);
         ledger.record_repair("b", false);
 
@@ -184,6 +190,23 @@ mod tests {
         assert_eq!(snap["a"].loop_guard_trips, 1);
         assert_eq!(snap["b"].repairs_attempted, 2);
         assert_eq!(snap["b"].repairs_succeeded, 1);
+    }
+
+    /// A trip is counted under the detector that raised it and in the sum, and
+    /// counts its own request once. ADR 0011's first criterion asks about
+    /// stagnation alone, which one tally over both detectors could not answer.
+    #[test]
+    fn a_trip_is_counted_under_its_detector_and_in_the_sum() {
+        let ledger = ModelDefectLedger::new();
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Loop);
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Stagnation);
+        ledger.record_loop_guard_trip("a", LoopGuardTrip::Stagnation);
+
+        let snap = ledger.snapshot()["a"];
+        assert_eq!(snap.loop_guard_loops, 1, "one loop trip");
+        assert_eq!(snap.loop_guard_stagnations, 2, "two stagnation trips");
+        assert_eq!(snap.loop_guard_trips, 3, "the sum of the two");
+        assert_eq!(snap.requests, 3, "each trip counts its own request, once");
     }
 
     /// A stream error marks an already-forwarded request as having died; it

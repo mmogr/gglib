@@ -627,7 +627,7 @@ pub(crate) async fn chat_completions(
                         messages_truncated: 0,
                         was_clamped: false,
                         grammar_enforced: false,
-                        loop_guard_tripped: true,
+                        loop_guard_trip: tripped.trip(),
                         recorded_at_secs: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()

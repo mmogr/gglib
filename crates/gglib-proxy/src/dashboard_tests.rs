@@ -63,7 +63,7 @@ fn build_reflects_active_connection_and_metrics() {
         messages_truncated: 0,
         was_clamped: false,
         grammar_enforced: false,
-        loop_guard_tripped: false,
+        loop_guard_trip: None,
         recorded_at_secs: 0,
     });
 

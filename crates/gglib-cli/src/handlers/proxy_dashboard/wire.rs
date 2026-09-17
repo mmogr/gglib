@@ -70,6 +70,10 @@ pub(super) struct ModelDefectCounts {
     #[serde(default)]
     pub(super) loop_guard_trips: u64,
     #[serde(default)]
+    pub(super) loop_guard_loops: u64,
+    #[serde(default)]
+    pub(super) loop_guard_stagnations: u64,
+    #[serde(default)]
     pub(super) repairs_attempted: u64,
     #[serde(default)]
     pub(super) repairs_succeeded: u64,

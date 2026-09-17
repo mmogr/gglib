@@ -24,6 +24,10 @@ use super::wire::ModelDefectCounts;
 /// Only models with something to report get a line, and listing every clean
 /// model would bury the one that is not.
 ///
+/// Loop-guard trips print as their sum and then, indented beneath it, by the
+/// detector that raised them, since whether *stagnation* rejections have become
+/// rare is a question ADR 0011 asks and the sum alone cannot answer.
+///
 /// Three counters here are not failures. `identical_result_repeats` describes a
 /// conversation that went in a circle, and `repeats_not_evaluated` says how
 /// often that question could not be answered — facts about the client's
@@ -73,8 +77,26 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
             ));
         }
 
+        // The sum first, because it is the row an older proxy can still fill,
+        // then which detector raised them, indented as parts of it. A proxy
+        // that predates the split sends neither part and prints the sum alone.
+        if counts.loop_guard_trips > 0 {
+            out.push_str(&format!(
+                "    {:<24} {}\n",
+                "loop-guard trips",
+                thousands(counts.loop_guard_trips)
+            ));
+            for (label, value) in [
+                ("loop detector", counts.loop_guard_loops),
+                ("stagnation detector", counts.loop_guard_stagnations),
+            ] {
+                if value > 0 {
+                    out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
+                }
+            }
+        }
+
         for (label, value) in [
-            ("loop-guard trips", counts.loop_guard_trips),
             ("stream errors", counts.stream_errors),
             ("truncated at ceiling", counts.truncated_generations),
             ("dialect residue", counts.dialect_residue),

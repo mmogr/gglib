@@ -693,8 +693,9 @@ path's per-iteration check by one turn (the history at turn N shows responses
 **Fail-open:** an unparseable body passes (request routing already validated
 the JSON), and a tool call whose `arguments` string is malformed is hashed as
 the raw string rather than rejected — the guard is protection, not validation.
-Tripped requests are visible on the dashboard as `loop_guard_tripped` in
-`recent_requests`.
+Tripped requests are visible on the dashboard as `loop_guard_trip` in
+`recent_requests`, which names the detector that raised the trip (`"loop"` or
+`"stagnation"`) and is `null` for a request the guard let through.
 
 ## Proxy Dashboard
 
@@ -805,7 +806,8 @@ explicitly documented as a not-yet-consumed "future" contract).
 
 The fleet totals above answer *"is something wrong"*; this answers *"with which
 model"*, which is the only form the answer is actionable in. Each value carries
-`requests` (the denominator) plus `loop_guard_trips`, `repairs_attempted`,
+`requests` (the denominator) plus `loop_guard_trips`, `loop_guard_loops`,
+`loop_guard_stagnations`, `repairs_attempted`,
 `repairs_succeeded`, `stream_errors`, `truncated_generations`,
 `empty_responses`, `reasoning_only`, `dialect_residue`,
 `unvalidatable_schemas`, `normalization_errors`,
@@ -816,9 +818,15 @@ Five shapes worth knowing before reading them:
 - **`reasoning_only` is counted *inside* `empty_responses`**, not beside it.
   The turn was empty from the client's point of view either way; the
   distinction is *why*. Adding them double-counts.
-- **Only `loop_guard_trips` bumps `requests`.** The guard fires *instead of* a
+- **Only a loop-guard trip bumps `requests`.** The guard fires *instead of* a
   forward, so it has to count its own denominator; every other *defect*
-  counter describes a turn that was already counted when it was forwarded.
+  counter describes a turn that was already counted when it was forwarded. One
+  trip bumps two counters besides: `loop_guard_trips`, and whichever of
+  `loop_guard_loops` and `loop_guard_stagnations` names the detector that
+  raised it. The first is the sum of the other two, so adding all three
+  double-counts. They say which detector, not which path: only this proxy's
+  scan records a trip, and the agent loop's own detectors reach no counter
+  ([#1091](https://github.com/mmogr/gglib/issues/1091)).
 - **`identical_result_repeats` is not a defect, and does not bump
   `requests`.** It counts turns whose newest tool-call batch repeated the one
   before it and got an equal result back — a fact about the
@@ -965,6 +973,7 @@ uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 | `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
 | `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
+| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard reject this request before dispatch, or `null` when it did not |
 
 The underlying ring buffer retains at most 50 entries; `recent_requests`
 surfaces the newest 20 of those. `total_requests` grows monotonically

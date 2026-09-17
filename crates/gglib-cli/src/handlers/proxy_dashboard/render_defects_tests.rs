@@ -159,3 +159,116 @@ fn a_counter_that_never_fired_is_not_printed() {
     assert!(!rendered.contains("loop-guard trips"), "{rendered}");
     assert!(!rendered.contains("truncated at ceiling"), "{rendered}");
 }
+
+/// The question ADR 0011's first criterion asks: of the guard's trips, which
+/// were stagnation? A model that only stagnated says so, and does not print a
+/// loop-detector row at zero beside it.
+#[test]
+fn a_trip_is_shown_under_the_detector_that_raised_it() {
+    let stagnant = BTreeMap::from([(
+        "qwen".to_string(),
+        counts(|c| {
+            c.loop_guard_trips = 3;
+            c.loop_guard_stagnations = 3;
+        }),
+    )]);
+    let rendered = render_defects_section(&stagnant);
+    assert!(
+        rendered.contains("loop-guard trips         3"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("stagnation detector"), "{rendered}");
+    assert!(!rendered.contains("loop detector"), "{rendered}");
+
+    let both = BTreeMap::from([(
+        "qwen".to_string(),
+        counts(|c| {
+            c.loop_guard_trips = 3;
+            c.loop_guard_loops = 1;
+            c.loop_guard_stagnations = 2;
+        }),
+    )]);
+    let rendered = render_defects_section(&both);
+    assert!(
+        rendered.contains("      loop detector            1"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("      stagnation detector      2"),
+        "{rendered}"
+    );
+}
+
+/// A proxy that predates the split sends the sum and neither part. The sum
+/// still prints, alone, rather than beside two zeroes it never measured.
+#[test]
+fn an_older_proxys_trips_print_as_the_sum_alone() {
+    let per_model = BTreeMap::from([("qwen".to_string(), counts(|c| c.loop_guard_trips = 2))]);
+    let rendered = render_defects_section(&per_model);
+    assert!(rendered.contains("loop-guard trips"), "{rendered}");
+    assert!(!rendered.contains("detector"), "{rendered}");
+}
+
+/// The same older proxy, through serde this time rather than the helper above:
+/// the frame it sends has no key for either part. Each new field defaults, so
+/// the frame still deserialises and the parts read zero; without the default,
+/// one missing key would fail the whole dashboard.
+#[test]
+fn an_older_proxys_frame_still_deserialises_without_the_parts() {
+    let old: ModelDefectCounts = serde_json::from_str(r#"{"requests":9,"loop_guard_trips":5}"#)
+        .expect("a frame that predates the split still reads");
+    assert_eq!(old.loop_guard_trips, 5);
+    assert_eq!(
+        (old.loop_guard_loops, old.loop_guard_stagnations),
+        (0, 0),
+        "the parts an older proxy never sent read as zero"
+    );
+}
+
+/// The mirror in `wire` is kept in step with the proxy's struct by hand, and
+/// every field of it defaults, so a misspelt one would read zero for ever and
+/// fail nothing. This reads the proxy's own serialisation through it, every
+/// field carrying a value no other field has.
+#[test]
+fn the_proxys_own_counts_are_read_through_the_mirror() {
+    let sent = gglib_core::domain::defects::ModelDefectCounts {
+        requests: 1,
+        loop_guard_trips: 2,
+        loop_guard_loops: 3,
+        loop_guard_stagnations: 4,
+        repairs_attempted: 5,
+        repairs_succeeded: 6,
+        stream_errors: 7,
+        truncated_generations: 8,
+        empty_responses: 9,
+        reasoning_only: 10,
+        dialect_residue: 11,
+        unvalidatable_schemas: 12,
+        normalization_errors: 13,
+        identical_result_repeats: 14,
+        repeats_not_evaluated: 15,
+        repeats_rescued: 16,
+    };
+    let json = serde_json::to_string(&sent).expect("the proxy's struct serialises");
+    let got: ModelDefectCounts = serde_json::from_str(&json).expect("the mirror reads it");
+
+    let read = [
+        got.requests,
+        got.loop_guard_trips,
+        got.loop_guard_loops,
+        got.loop_guard_stagnations,
+        got.repairs_attempted,
+        got.repairs_succeeded,
+        got.stream_errors,
+        got.truncated_generations,
+        got.empty_responses,
+        got.reasoning_only,
+        got.dialect_residue,
+        got.unvalidatable_schemas,
+        got.normalization_errors,
+        got.identical_result_repeats,
+        got.repeats_not_evaluated,
+        got.repeats_rescued,
+    ];
+    assert_eq!(read, std::array::from_fn(|i| i as u64 + 1), "{json}");
+}

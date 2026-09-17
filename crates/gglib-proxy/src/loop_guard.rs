@@ -41,6 +41,7 @@
 use std::collections::HashMap;
 
 use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
+use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::ports::AgentError;
 use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
 
@@ -123,6 +124,21 @@ pub(crate) enum LoopGuardVerdict {
         /// The configured threshold.
         max_steps: usize,
     },
+}
+
+impl LoopGuardVerdict {
+    /// Which detector raised this verdict, for the per-model ledger — `None`
+    /// when nothing tripped.
+    ///
+    /// The one place a verdict becomes a tally, so the two cannot disagree
+    /// about which detector a rejection belongs to.
+    pub(crate) const fn trip(&self) -> Option<LoopGuardTrip> {
+        match self {
+            Self::Pass => None,
+            Self::LoopDetected { .. } => Some(LoopGuardTrip::Loop),
+            Self::StagnationDetected { .. } => Some(LoopGuardTrip::Stagnation),
+        }
+    }
 }
 
 // =============================================================================
