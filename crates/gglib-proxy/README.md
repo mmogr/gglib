@@ -140,6 +140,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`forward_unary_repair_tests.rs`](src/forward_unary_repair_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-coverage.json) |
 | [`load_endpoint.rs`](src/load_endpoint.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-coverage.json) |
 | [`loop_guard.rs`](src/loop_guard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-coverage.json) |
+| [`loop_guard_note.rs`](src/loop_guard_note.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_note-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_note-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_note-coverage.json) |
 | [`loop_guard_step.rs`](src/loop_guard_step.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_step-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_step-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_step-coverage.json) |
 | [`loopback.rs`](src/loopback.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback-coverage.json) |
 | [`loopback_scanner.rs`](src/loopback_scanner.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_scanner-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_scanner-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_scanner-coverage.json) |
@@ -567,7 +568,7 @@ curl -X POST http://localhost:8080/mcp \
 | 502 | Failed to connect to llama-server |
 | 404 | Model not found |
 | 400 | Context window budget exceeded after truncation |
-| 400 | Loop or stagnation detected in the replayed history (`loop_detected` / `stagnation_detected`) |
+| 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 500 | Internal error |
 
 ## History Truncation
@@ -678,10 +679,27 @@ through `gglib-agent` was not. It does **not** rescue a transcript that already
 tripped: the scan returns on the first trip it finds and never reaches a later
 user turn. See [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
 
-A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
-cost — `type` and `code` are `loop_detected` or `stagnation_detected`
-(mirroring `context_length_exceeded`'s shape), and the message names the
-off-switch: `gglib config settings set --proxy-loop-detection false`, for a
+What a tripped guard does is one setting, `--loop-guard-mode`, with three
+values. The default, `note`, **forwards** the request with a fixed note
+appended to the last message's content behind a `[gglib loop guard]` marker,
+saying what repeated and how often: the request therefore pays the catalog,
+admission and model-swap cost it used to be refused ahead of, and a client with
+no recovery path from a 400 gets something it can act on. `refuse` is the old
+behaviour — HTTP 400 before any of that cost, `type` and `code` being
+`loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
+shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
+all, which is what `--proxy-loop-detection false` meant and, for one release,
+still means. Either spelling clears the other when written.
+
+The note is delivered inside the last message rather than as a trailing
+`system` message because a `system` message at the tail raises on Qwen3.5 and
+the Mistral family, is hoisted to the head of the prompt by the DeepSeek
+family, and is silently dropped by gpt-oss and four others — measured over
+llama.cpp's 69 bundled templates, with the four that decided it kept as a test.
+The one limit: a template with no branch for the `tool` role drops the whole
+last message on an agentic tail, and the note with it.
+
+The escape hatch remains for a
 client that legitimately repeats identical batches with nothing in between.
 (Replaying identical batches across a history no longer trips it — the count
 is back to back, and a repeat whose answer changed is not counted at all. A
@@ -974,7 +992,7 @@ uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 | `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
 | `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
-| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard reject this request before dispatch, or `null` when it did not |
+| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, or refuse it before dispatch — or `null` when it did not |
 
 The underlying ring buffer retains at most 50 entries; `recent_requests`
 surfaces the newest 20 of those. `total_requests` grows monotonically

@@ -81,7 +81,7 @@ fn error_response_loop_detected_carries_signature_and_escape_hatch() {
     assert_eq!(err.error.code.as_deref(), Some("loop_detected"));
     assert_eq!(err.error.r#type, "loop_detected");
     assert!(err.error.message.contains("read_file:00000000deadbeef"));
-    assert!(err.error.message.contains("--proxy-loop-detection false"));
+    assert!(err.error.message.contains("--loop-guard-mode note"));
 }
 
 /// Same shape for the stagnation variant; the message carries the observed
@@ -93,7 +93,7 @@ fn error_response_stagnation_detected_carries_count_and_limit() {
     assert_eq!(err.error.r#type, "stagnation_detected");
     assert!(err.error.message.contains('6'));
     assert!(err.error.message.contains("limit 5"));
-    assert!(err.error.message.contains("--proxy-loop-detection false"));
+    assert!(err.error.message.contains("--loop-guard-mode note"));
 }
 
 // =========================================================================

@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
+#[path = "settings_loop_guard.rs"]
+mod settings_loop_guard;
+pub use settings_loop_guard::LoopGuardMode;
+
 #[path = "settings_update.rs"]
 mod settings_update;
 pub use settings_update::{SettingsError, SettingsUpdate};
@@ -179,31 +183,47 @@ pub struct Settings {
     pub trust_client_sampling: Option<bool>,
 
     // ── Proxy loop guard ────────────────────────────────────────────
-    /// Whether the proxy's turn-level loop/stagnation guard runs on
-    /// `/v1/chat/completions`.
+    /// What the proxy's turn-level loop/stagnation guard does on
+    /// `/v1/chat/completions` when a replayed history trips it.
     ///
-    /// `None`/`Some(true)` → active (the default): a conversation whose
-    /// replayed history already repeats the same tool-call batch back to back
-    /// and gets the same answer back each time, or repeats the same assistant
-    /// response anywhere in the session, beyond the
-    /// shared agent-path thresholds is rejected
-    /// with a clean HTTP 400 (`loop_detected` / `stagnation_detected`)
-    /// **before** admission — no model swap, no generation, no ten minutes of
-    /// scrolling garbage. `Some(false)` disables the guard entirely: the
-    /// escape hatch for a client that legitimately repeats identical
-    /// tool-call batches with nothing in between, or repeats a response.
-    /// Replaying identical batches across a history no longer trips it — the
+    /// A conversation that repeats the same tool-call batch back to back and
+    /// gets the same answer back each time, or repeats the same assistant
+    /// response anywhere in the session, beyond the shared agent-path
+    /// thresholds, is answered per [`LoopGuardMode`]: `note` (absent, and the
+    /// default) forwards it with a note saying what repeated, `refuse` rejects
+    /// it with a clean HTTP 400 before admission, and `off` does not scan.
+    /// Replaying identical batches across a history does not trip it — the
     /// batch count is back to back — and a repeat whose answer changed is not
     /// counted at all.
     ///
-    /// Note the inverse polarity to [`Self::trust_client_sampling`]: absent
-    /// means **on**, because the guard is protection the endpoint should not
-    /// silently lose, while trusting client sampling is authority a client
-    /// must be explicitly granted.
+    /// Note the polarity: absent means the guard is **on**, because it is
+    /// protection the endpoint should not silently lose, unlike
+    /// [`Self::trust_client_sampling`], which is authority a client must be
+    /// explicitly granted.
     ///
     /// The stagnation threshold itself comes from
     /// [`Self::max_stagnation_steps`], shared with the built-in agent loop so
     /// the two paths cannot drift.
+    ///
+    /// Read through [`Self::effective_loop_guard_mode`], never directly: the
+    /// deprecated [`Self::proxy_loop_detection`] still answers for a settings
+    /// file written by an older build.
+    pub loop_guard_mode: Option<LoopGuardMode>,
+
+    /// **Deprecated**, for one release: the boolean [`Self::loop_guard_mode`]
+    /// replaces.
+    ///
+    /// `Some(false)` still means [`LoopGuardMode::Off`]. `Some(true)` means
+    /// the guard is on, which is now [`LoopGuardMode::Note`] rather than a
+    /// refusal — a deliberate behaviour change for anyone who asked for the
+    /// guard by name, and the point of #1052.
+    ///
+    /// The two never disagree on disk: [`Self::merge`] clears each when the
+    /// other is written, so precedence is only ever consulted for a settings
+    /// file an older build wrote. `gglib config settings set
+    /// --proxy-loop-detection false` therefore keeps working for the release
+    /// it is promised, for anyone who scripted it while the guard's own 400
+    /// bodies still named it.
     pub proxy_loop_detection: Option<bool>,
 
     /// Whether a tool call that fails schema validation is re-issued, with
@@ -339,6 +359,7 @@ impl Settings {
             share_lan: None,
             proxy_api_key: None,
             trust_client_sampling: None,
+            loop_guard_mode: None,
             proxy_loop_detection: None,
             tool_call_repair: None,
             proxy_autostart: None,
@@ -366,6 +387,27 @@ impl Settings {
         match self.llama_base_port {
             Some(port) => port,
             None => DEFAULT_LLAMA_BASE_PORT,
+        }
+    }
+
+    /// What the loop guard does, reconciling [`Self::loop_guard_mode`] with
+    /// the deprecated [`Self::proxy_loop_detection`].
+    ///
+    /// The new setting wins outright when present. The boolean is consulted
+    /// only when it is absent, which [`Self::merge`] makes true of anything
+    /// this build has written: `Some(false)` is [`LoopGuardMode::Off`], and
+    /// `Some(true)` or absent is the default, [`LoopGuardMode::Note`]. An
+    /// explicit old "on" therefore becomes a note rather than a refusal,
+    /// which is the behaviour change #1052 exists to make.
+    ///
+    /// The one place this precedence is decided, so the proxy, the CLI and
+    /// anything that reports the setting cannot disagree about it.
+    #[must_use]
+    pub const fn effective_loop_guard_mode(&self) -> LoopGuardMode {
+        match (self.loop_guard_mode, self.proxy_loop_detection) {
+            (Some(mode), _) => mode,
+            (None, Some(false)) => LoopGuardMode::Off,
+            (None, _) => LoopGuardMode::Note,
         }
     }
 
@@ -425,8 +467,20 @@ impl Settings {
         if let Some(v) = other.tool_call_repair {
             self.tool_call_repair = v;
         }
+        // The loop guard's two spellings clear each other, in this order, so
+        // they can never disagree on disk and an update carrying both has one
+        // answer: the new setting's. Precedence
+        // ([`Self::effective_loop_guard_mode`]) is then only ever consulted
+        // for a settings file an older build wrote — which is what keeps
+        // `--proxy-loop-detection false` working for the release it is
+        // promised.
         if let Some(ref v) = other.proxy_loop_detection {
             self.proxy_loop_detection = *v;
+            self.loop_guard_mode = None;
+        }
+        if let Some(ref v) = other.loop_guard_mode {
+            self.loop_guard_mode = *v;
+            self.proxy_loop_detection = None;
         }
         if let Some(ref v) = other.agentic_sampling {
             self.agentic_sampling = *v;
@@ -517,6 +571,10 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "settings_loop_guard_tests.rs"]
+mod settings_loop_guard_tests;
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]

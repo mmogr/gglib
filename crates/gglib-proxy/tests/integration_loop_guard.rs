@@ -17,8 +17,8 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::Settings;
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::{LoopGuardMode, Settings};
 
 mod fixtures;
 use fixtures::common::{
@@ -26,7 +26,8 @@ use fixtures::common::{
     spawn_proxy_with_runtime, spawn_proxy_with_settings,
 };
 use fixtures::loop_guard::{
-    assistant_call, chat_body, looping_history, repeated_read_history, stagnating_history,
+    assistant_call, chat_body, looping_history, repeated_read_history, spawn_proxy_in_mode,
+    stagnating_history,
 };
 use fixtures::sse::BASIC_TEXT;
 
@@ -195,11 +196,13 @@ async fn a_trailing_user_turn_does_not_re_report_the_repeat() {
 // ─── Guard trips ───────────────────────────────────────────────────────────
 
 /// Three identical tool-call batches → 400 `loop_detected`, with zero
-/// admissions: the guard must fire before the runtime is asked to swap.
+/// admissions: under `refuse` the guard must fire before the runtime is asked
+/// to swap. (`note`, the default, is `integration_loop_guard_note.rs`.)
 #[tokio::test]
 async fn looping_history_is_rejected_before_admission() {
     let (runtime, admit_calls) = CountingRuntime::new(1, "test-model");
-    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+    let (proxy_url, cancel) =
+        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Refuse).await;
 
     let resp = Client::new()
         .post(format!("{proxy_url}/v1/chat/completions"))
@@ -216,8 +219,8 @@ async fn looping_history_is_rejected_before_admission() {
         body["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("proxy-loop-detection"),
-        "error message must name the escape hatch"
+            .contains("--loop-guard-mode note"),
+        "error message must name the setting that stops it refusing"
     );
     assert_eq!(
         admit_calls.load(Ordering::SeqCst),
@@ -228,11 +231,13 @@ async fn looping_history_is_rejected_before_admission() {
     cancel.cancel();
 }
 
-/// Six identical assistant responses → 400 `stagnation_detected`.
+/// Six identical assistant responses → 400 `stagnation_detected`, under
+/// `refuse`.
 #[tokio::test]
 async fn stagnating_history_is_rejected() {
     let (runtime, admit_calls) = CountingRuntime::new(1, "test-model");
-    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+    let (proxy_url, cancel) =
+        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Refuse).await;
 
     let history = stagnating_history(6);
     let resp = Client::new()

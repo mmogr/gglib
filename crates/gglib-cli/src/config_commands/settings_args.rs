@@ -5,7 +5,36 @@
 //! each. Keeping it here means adding a setting touches a file about settings
 //! rather than the file that enumerates every config subcommand.
 
-use clap::Args;
+use clap::{Args, ValueEnum};
+
+use gglib_core::LoopGuardMode;
+
+/// The CLI's mirror of [`LoopGuardMode`].
+///
+/// A mirror rather than a `ValueEnum` on the domain type: `gglib-core` may not
+/// depend on clap (`scripts/check_boundaries.sh`), and `value_enum` is what
+/// gives the flag its completions and its "possible values" error message.
+/// The `From` below is the only place the two are mapped, so a variant added
+/// to one and not the other fails to compile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LoopGuardModeArg {
+    /// Do not scan the replayed history at all.
+    Off,
+    /// Forward a tripped request with a note saying what repeated.
+    Note,
+    /// Refuse a tripped request with HTTP 400, before any model work.
+    Refuse,
+}
+
+impl From<LoopGuardModeArg> for LoopGuardMode {
+    fn from(arg: LoopGuardModeArg) -> Self {
+        match arg {
+            LoopGuardModeArg::Off => Self::Off,
+            LoopGuardModeArg::Note => Self::Note,
+            LoopGuardModeArg::Refuse => Self::Refuse,
+        }
+    }
+}
 
 /// Every field `gglib config settings set` can write.
 ///
@@ -75,10 +104,17 @@ pub struct SettingsSetArgs {
     /// replayed history repeats the same tool-call batch back to back and
     /// gets the same answer back each time, or repeats the same assistant
     /// prose too often in a short span, beyond the agent-path thresholds is
-    /// rejected with a clean 400 before any model work. A repeat whose answer
-    /// changed is an agent polling for output, and is not counted. Set false
-    /// only for a client that legitimately repeats identical batches with
-    /// nothing in between.
+    /// answered by this setting: `note` (the default) forwards it with a note
+    /// saying what repeated, `refuse` rejects it with a clean 400 before any
+    /// model work, and `off` does not scan at all. A repeat whose answer
+    /// changed is an agent polling for output, and is not counted.
+    #[arg(long, value_enum)]
+    pub loop_guard_mode: Option<LoopGuardModeArg>,
+    /// Deprecated: use `--loop-guard-mode off|note|refuse`.
+    ///
+    /// `false` still means `off`; `true` now means `note`, not a refusal.
+    /// Writing either spelling clears the other, so whichever was set last is
+    /// the one that answers.
     #[arg(long)]
     pub proxy_loop_detection: Option<bool>,
     /// Cap the temperature on agentic turns. Enabled by default: a

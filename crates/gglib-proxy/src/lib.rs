@@ -29,6 +29,7 @@ pub(crate) mod forward;
 pub(crate) mod forward_unary;
 pub(crate) mod load_endpoint;
 pub(crate) mod loop_guard;
+pub(crate) mod loop_guard_note;
 pub(crate) mod loop_guard_step;
 pub mod loopback;
 pub(crate) mod mcp;

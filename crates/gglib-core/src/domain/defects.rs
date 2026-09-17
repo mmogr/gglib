@@ -94,9 +94,10 @@ impl ModelDefectLedger {
     /// Count one upstream mid-stream failure for `model`.
     ///
     /// Deliberately does *not* bump `requests`, unlike
-    /// [`Self::record_loop_guard_trip`]. The guard fires *instead of* a
-    /// forward, so it has to count its own denominator; a stream error
-    /// happens after the request was forwarded and already counted. Bumping
+    /// [`Self::record_loop_guard_trip`], which counts a request the guard
+    /// acted on — refused instead of forwarding, or forwarded with a note —
+    /// and so has to count its own denominator either way. A stream error
+    /// happens after the request was forwarded and already counted; bumping
     /// here would count the same request twice and deflate every rate.
     pub fn record_stream_error(&self, model: &str) {
         self.with(model, |c| c.stream_errors += 1);

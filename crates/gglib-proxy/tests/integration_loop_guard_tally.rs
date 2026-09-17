@@ -19,14 +19,19 @@ use reqwest::Client;
 use serde_json::{Value, json};
 
 mod fixtures;
-use fixtures::common::{CountingRuntime, spawn_proxy_with_runtime};
-use fixtures::loop_guard::{chat_body, looping_history, stagnating_history};
+use fixtures::common::CountingRuntime;
+use fixtures::loop_guard::{chat_body, looping_history, spawn_proxy_in_mode, stagnating_history};
+use gglib_core::LoopGuardMode;
 
 /// Send `history` to a fresh proxy, expect the guard's 400 with `code`, and
 /// return what the dashboard route then says about the model.
 async fn counts_after_a_trip(history: Vec<Value>, code: &str) -> Value {
     let (runtime, _admit_calls) = CountingRuntime::new(1, "test-model");
-    let (proxy_url, cancel) = spawn_proxy_with_runtime(runtime, "test-model", vec![]).await;
+    // `refuse`, so the tally is read off the same 400 these tests were
+    // written against; `note` counts the same trip on the forward's snapshot
+    // instead, which `integration_loop_guard_note.rs` covers.
+    let (proxy_url, cancel) =
+        spawn_proxy_in_mode(runtime, "test-model", LoopGuardMode::Refuse).await;
 
     let resp = Client::new()
         .post(format!("{proxy_url}/v1/chat/completions"))

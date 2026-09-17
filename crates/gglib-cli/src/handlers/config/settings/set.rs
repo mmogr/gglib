@@ -58,6 +58,9 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
     if args.trust_client_sampling.is_some() {
         changed.insert("trust-client-sampling");
     }
+    if args.loop_guard_mode.is_some() {
+        changed.insert("loop-guard-mode");
+    }
     if args.proxy_loop_detection.is_some() {
         changed.insert("proxy-loop-detection");
     }
@@ -100,6 +103,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         share_lan: args.share_lan.map(Some),
         proxy_api_key: args.proxy_api_key.map(Some),
         trust_client_sampling: args.trust_client_sampling.map(Some),
+        loop_guard_mode: args.loop_guard_mode.map(|m| Some(m.into())),
         proxy_loop_detection: args.proxy_loop_detection.map(Some),
         tool_call_repair: args.tool_call_repair.map(Some),
         agentic_sampling: args.agentic_sampling.map(Some),
@@ -154,6 +158,9 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
     }
     if let Some(Some(v)) = update.trust_client_sampling {
         prospective.trust_client_sampling = Some(v);
+    }
+    if let Some(Some(v)) = update.loop_guard_mode {
+        prospective.loop_guard_mode = Some(v);
     }
     if let Some(Some(v)) = update.proxy_loop_detection {
         prospective.proxy_loop_detection = Some(v);

@@ -17,8 +17,11 @@
 //! construction — there is one detector implementation, not two — and no
 //! per-session store, TTL, or eviction is needed.
 //!
-//! Detection is deliberately **pre-admission**: a tripped guard returns a
-//! clean HTTP 400 before any catalog/admission/model-swap cost.  This catches
+//! Detection is deliberately **pre-admission**, which is what lets
+//! `--loop-guard-mode refuse` return a clean HTTP 400 before any
+//! catalog/admission/model-swap cost. Under the default, `note`, the request
+//! is forwarded with a note and therefore pays those costs — the trade #1052
+//! makes, for a client that cannot recover from a refusal.  This catches
 //! a loop one turn after the agent path's per-iteration check would (the
 //! history at turn N shows responses 1..N-1), which caps a runaway session at
 //! threshold+1 turns — accepted for a guard whose job is "fail fast and
@@ -43,7 +46,7 @@ use std::collections::HashMap;
 use gglib_core::domain::agent::{AgentConfig, LoopDetector, StagnationDetector, batch_signature};
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::ports::AgentError;
-use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, Settings, ToolCall};
+use gglib_core::{DEFAULT_MAX_STAGNATION_STEPS, LoopGuardMode, Settings, ToolCall};
 
 /// The permissive view of the incoming history.
 ///
@@ -72,16 +75,25 @@ pub(crate) struct LoopGuardConfig {
     max_stagnation_steps: usize,
     observation_tools: Vec<String>,
     max_observation_steps: Option<usize>,
+    /// What to do with a history that trips — carried here so the step can
+    /// branch without re-reading settings, and so it cannot be [`Off`]:
+    /// `from_settings` returns `None` for that.
+    ///
+    /// [`Off`]: LoopGuardMode::Off
+    mode: LoopGuardMode,
 }
 
 impl LoopGuardConfig {
     /// Resolve the guard configuration from a settings snapshot.
     ///
-    /// Returns `None` when the guard is disabled — either explicitly
-    /// (`proxy_loop_detection = Some(false)`) or because the shared agent
+    /// Returns `None` when nothing will be scanned — either because the mode
+    /// is [`LoopGuardMode::Off`] (which includes the deprecated
+    /// `proxy_loop_detection = Some(false)`, through
+    /// [`Settings::effective_loop_guard_mode`]) or because the shared agent
     /// defaults disable loop detection entirely.
     pub(crate) fn from_settings(settings: &Settings) -> Option<Self> {
-        if settings.proxy_loop_detection == Some(false) {
+        let mode = settings.effective_loop_guard_mode();
+        if !mode.scans() {
             return None;
         }
         let defaults = AgentConfig::default();
@@ -92,7 +104,13 @@ impl LoopGuardConfig {
                 .map_or(DEFAULT_MAX_STAGNATION_STEPS, |v| v as usize),
             observation_tools: defaults.observation_tools,
             max_observation_steps: defaults.max_observation_steps,
+            mode,
         })
+    }
+
+    /// What to do with a history that trips. Never [`LoopGuardMode::Off`].
+    pub(crate) const fn mode(&self) -> LoopGuardMode {
+        self.mode
     }
 }
 

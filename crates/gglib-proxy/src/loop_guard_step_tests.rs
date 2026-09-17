@@ -9,14 +9,25 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use gglib_core::Settings;
 use gglib_core::domain::defects::{LoopGuardTrip, ModelDefectLedger};
+use gglib_core::{LoopGuardMode, Settings};
 use serde_json::{Value, json};
 
 use super::{GuardStep, run};
 use crate::metrics::ContextMetricsStore;
 
 const MODEL: &str = "test-model";
+
+/// Settings whose loop guard runs in `mode`.
+///
+/// Every test that wants a refusal asks for one: the default is `note`, and
+/// the whole point of #1052 is that the guard no longer refuses by default.
+fn in_mode(mode: LoopGuardMode) -> Settings {
+    Settings {
+        loop_guard_mode: Some(mode),
+        ..Settings::with_defaults()
+    }
+}
 
 /// A store with a ledger behind it, so a test can read the per-model counts
 /// the dashboard reads.
@@ -150,7 +161,7 @@ fn a_repeated_batch_is_refused_and_counted_as_a_loop() {
     let (metrics, ledger) = store();
 
     let step = run(
-        &Settings::with_defaults(),
+        &in_mode(LoopGuardMode::Refuse),
         &body(looping(3)),
         MODEL,
         &metrics,
@@ -176,7 +187,7 @@ fn a_repeated_reply_is_refused_and_counted_as_stagnation() {
     let (metrics, ledger) = store();
 
     let step = run(
-        &Settings::with_defaults(),
+        &in_mode(LoopGuardMode::Refuse),
         &body(stagnating(6)),
         MODEL,
         &metrics,
@@ -201,7 +212,7 @@ async fn the_refusal_names_the_repeated_signature() {
     let (metrics, _ledger) = store();
 
     let GuardStep::Refuse(resp) = run(
-        &Settings::with_defaults(),
+        &in_mode(LoopGuardMode::Refuse),
         &body(looping(3)),
         MODEL,
         &metrics,
@@ -245,4 +256,31 @@ fn a_repeat_the_verdict_cannot_see_is_still_read() {
         c.repeats_not_evaluated, 0,
         "the results were joinable, so nothing went unevaluated"
     );
+}
+
+#[test]
+fn the_default_notes_rather_than_refusing_and_records_nothing_itself() {
+    for (history, expected) in [
+        (looping(3), LoopGuardTrip::Loop),
+        (stagnating(6), LoopGuardTrip::Stagnation),
+    ] {
+        let (metrics, ledger) = store();
+
+        let GuardStep::Note { note, trip } =
+            run(&Settings::with_defaults(), &body(history), MODEL, &metrics)
+        else {
+            panic!("the default mode is `note`");
+        };
+
+        assert_eq!(trip, expected, "the note carries its own detector");
+        assert!(
+            note.text().contains("[gglib loop guard]"),
+            "{}",
+            note.text()
+        );
+        // No snapshot of its own: the request goes on to be forwarded, and
+        // the forward records it. Recording here too would count it twice.
+        assert_eq!(metrics.total_requests(), 0);
+        assert_eq!(counts(&ledger).loop_guard_trips, 0);
+    }
 }

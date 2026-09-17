@@ -15,9 +15,11 @@ use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use tracing::warn;
 
-use gglib_core::Settings;
+use gglib_core::domain::defects::LoopGuardTrip;
+use gglib_core::{LoopGuardMode, Settings};
 
 use crate::loop_guard::{LoopGuardConfig, LoopGuardVerdict, scan_history};
+use crate::loop_guard_note::LoopGuardNote;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 
@@ -25,6 +27,16 @@ use crate::models::ErrorResponse;
 pub(crate) enum GuardStep {
     /// Forward it unchanged: nothing tripped, or the guard is switched off.
     Forward,
+    /// Forward it with this note appended, and count the trip on the forward's
+    /// own snapshot rather than one of the step's.
+    ///
+    /// The trip rides with the note because a noted request *is* forwarded:
+    /// recording a snapshot here and letting the forward record another would
+    /// count one request twice.
+    Note {
+        note: LoopGuardNote,
+        trip: LoopGuardTrip,
+    },
     /// Refuse it with this response, before any catalog/admission/model-swap
     /// cost. The snapshot for the refused request has already been recorded.
     Refuse(Response),
@@ -72,6 +84,23 @@ pub(crate) fn run(
 
     match outcome.verdict {
         LoopGuardVerdict::Pass => GuardStep::Forward,
+        tripped if guard_cfg.mode() == LoopGuardMode::Note => {
+            // Deliberately not a refusal and not a snapshot of its own: the
+            // request goes on to be forwarded, and the forward records it.
+            // `trip` rides along so that one snapshot names the detector.
+            let Some(trip) = tripped.trip() else {
+                unreachable!("Pass is handled above")
+            };
+            warn!(
+                model = %model_name,
+                verdict = ?tripped,
+                "loop guard forwarding request with a note"
+            );
+            let Some(note) = LoopGuardNote::for_verdict(&tripped) else {
+                unreachable!("Pass is handled above")
+            };
+            GuardStep::Note { note, trip }
+        }
         tripped => {
             warn!(
                 model = %model_name,

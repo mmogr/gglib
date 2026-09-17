@@ -812,7 +812,8 @@ broken-sampling positive control):
 - The failure the cap was *risking* did happen, under the cap: loop/stagnation
   triggers were more frequent at `0.6` (29/126) than at `1.0` (22/117) —
   cooling a thinking model manufactures the repetition its vendors warn about,
-  which the proxy's own loop guard then rejects as a 400.
+  which the proxy's own loop guard then acts on: a 400 when this was written,
+  a forwarded note since #1052.
 
 So the reasoning-class cap is gone: a reasoning model's resolved temperature
 stands on agentic turns. The non-reasoning `0.3` cap is untouched — no

@@ -6,6 +6,7 @@
 //! path changed. `scripts/check_settings_surfaces.sh` reads this file by
 //! name for the `double_option` guard.
 
+use gglib_core::LoopGuardMode;
 use serde::{Deserialize, Serialize};
 
 /// Application settings for the settings UI.
@@ -42,7 +43,10 @@ pub struct AppSettings {
     pub proxy_api_key: Option<String>,
     // Sampling authority (see `gglib_core::Settings`)
     pub trust_client_sampling: Option<bool>,
-    // Proxy loop guard; `None` means enabled (see `gglib_core::Settings`)
+    // Proxy loop guard; `None` means the default, `note` (see
+    // `gglib_core::Settings::loop_guard_mode`)
+    pub loop_guard_mode: Option<LoopGuardMode>,
+    // Deprecated, for one release; superseded by `loop_guard_mode`
     pub proxy_loop_detection: Option<bool>,
     /// Whether a tool call failing schema validation is re-issued, with
     /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
@@ -78,6 +82,7 @@ impl From<gglib_core::Settings> for AppSettings {
             share_lan: settings.share_lan,
             proxy_api_key: settings.proxy_api_key,
             trust_client_sampling: settings.trust_client_sampling,
+            loop_guard_mode: settings.loop_guard_mode,
             proxy_loop_detection: settings.proxy_loop_detection,
             tool_call_repair: settings.tool_call_repair,
             agentic_sampling: settings.agentic_sampling,
@@ -168,7 +173,19 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub trust_client_sampling: Option<Option<bool>>,
-    // Proxy loop guard; explicit `null` re-enables (see `gglib_core::Settings`)
+    // Proxy loop guard; explicit `null` restores the default, `note`
+    // (see `gglib_core::Settings::loop_guard_mode`)
+    // `as`, not `type`: a raw type override gives ts-rs no dependency to
+    // import, and the generated file then names a type it never imported. The
+    // doubled `Option` is the point — `Some(None)` is how a client clears the
+    // setting, and the generated type has to be able to say so.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<Option<LoopGuardMode>>", optional)
+    )]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub loop_guard_mode: Option<Option<LoopGuardMode>>,
+    // Deprecated, for one release; writing it clears `loop_guard_mode`
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub proxy_loop_detection: Option<Option<bool>>,
@@ -216,6 +233,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             share_lan: request.share_lan,
             proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
+            loop_guard_mode: request.loop_guard_mode,
             proxy_loop_detection: request.proxy_loop_detection,
             tool_call_repair: request.tool_call_repair,
             agentic_sampling: request.agentic_sampling,

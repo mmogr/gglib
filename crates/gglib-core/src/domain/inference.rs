@@ -1582,7 +1582,7 @@ impl InferenceConfig {
     /// - The failure the cap was risking did: loop/stagnation triggers were
     ///   *more* frequent under the cap (29/126 vs 22/117) — cooling a
     ///   thinking model manufactures the repetition its own vendors warn
-    ///   about, which the proxy's loop guard then rejects.
+    ///   about, which the proxy's loop guard then acts on.
     ///
     /// So a reasoning model's resolved temperature stands on agentic turns,
     /// which in the shipped default means its auto-detected recipe's `1.0`.

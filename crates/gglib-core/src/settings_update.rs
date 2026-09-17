@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
-use super::{Device, RemotePairing, RemoteServe};
+use super::{Device, LoopGuardMode, RemotePairing, RemoteServe};
 
 /// Partial settings update.
 ///
@@ -39,6 +39,12 @@ pub struct SettingsUpdate {
     pub share_lan: Option<Option<bool>>,
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
+    /// See [`Settings::loop_guard_mode`](super::Settings::loop_guard_mode).
+    /// Writing it clears [`Self::proxy_loop_detection`], and the other way
+    /// round.
+    pub loop_guard_mode: Option<Option<LoopGuardMode>>,
+    /// **Deprecated**; see
+    /// [`Settings::proxy_loop_detection`](super::Settings::proxy_loop_detection).
     pub proxy_loop_detection: Option<Option<bool>>,
     pub tool_call_repair: Option<Option<bool>>,
     /// See [`Settings::agentic_sampling`](super::Settings::agentic_sampling).

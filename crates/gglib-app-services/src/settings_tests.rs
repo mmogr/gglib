@@ -139,6 +139,7 @@ fn profiles_use_camel_case_on_the_wire() {
         share_lan: None,
         proxy_api_key: None,
         trust_client_sampling: None,
+        loop_guard_mode: None,
         proxy_loop_detection: None,
         tool_call_repair: None,
         agentic_sampling: Some(false),

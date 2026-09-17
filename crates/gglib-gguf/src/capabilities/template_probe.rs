@@ -84,7 +84,7 @@ pub(super) fn derive(metadata: &HashMap<String, String>) -> Option<DialectSpec> 
 }
 
 /// Build the lenient probe environment for `template`.
-fn build_env(template: &str) -> Result<Environment<'_>, minijinja::Error> {
+pub(super) fn build_env(template: &str) -> Result<Environment<'_>, minijinja::Error> {
     let mut env = Environment::new();
     // Missing variables render as empty rather than erroring — probe
     // contexts cannot anticipate every variable a template consults.

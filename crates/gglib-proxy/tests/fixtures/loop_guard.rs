@@ -6,7 +6,37 @@
 //! caller belongs, and it leaves `integration_loop_guard.rs` — frozen at its
 //! size by the complexity ratchet — the room its own new cases need.
 
+use std::sync::Arc;
+
 use serde_json::{Value, json};
+use tokio_util::sync::CancellationToken;
+
+use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::{LoopGuardMode, Settings};
+
+use super::common::{StaticSettingsRepo, TaggedCatalog, spawn_proxy_with_settings};
+
+/// Spawn a proxy whose loop guard runs in `mode`.
+///
+/// The guard's default is `note`, so a test that wants a refusal has to ask
+/// for one. Here rather than in `common.rs`, which is at its size baseline,
+/// and beside the histories these tests send.
+pub(crate) async fn spawn_proxy_in_mode(
+    runtime: Arc<dyn ModelRuntimePort>,
+    model_name: &str,
+    mode: LoopGuardMode,
+) -> (String, CancellationToken) {
+    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
+        name: model_name.into(),
+        tags: vec![],
+        dialect: None,
+    });
+    let settings = Settings {
+        loop_guard_mode: Some(mode),
+        ..Settings::with_defaults()
+    };
+    spawn_proxy_with_settings(runtime, catalog, Arc::new(StaticSettingsRepo(settings))).await
+}
 
 /// One assistant turn carrying a single tool call.
 pub(crate) fn assistant_call(name: &str, args: &str) -> Value {

@@ -18,7 +18,7 @@ pub mod validate;
 
 pub use apply::{PipelineReport, apply};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
-pub use content::{for_each_text_mut, text_len, text_parts};
+pub use content::{append_text, for_each_text_mut, text_len, text_parts};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
 pub use messages::shape_messages;

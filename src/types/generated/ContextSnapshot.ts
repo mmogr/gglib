@@ -48,8 +48,9 @@ dialect_residue: boolean,
  */
 tool_repaired: boolean, 
 /**
- * The detector that made the pre-dispatch loop guard reject this request
- * with an HTTP 400 instead of forwarding it (see `loop_guard`), or `None`.
+ * The detector that made the pre-dispatch loop guard act on this request
+ * — forward it with a note, or refuse it with an HTTP 400 (see
+ * `loop_guard`) — or `None`.
  */
 loop_guard_trip: LoopGuardTrip | null, 
 /**
