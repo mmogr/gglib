@@ -172,13 +172,9 @@ fn a_body_that_cannot_carry_a_note_is_returned_unchanged() {
     assert_eq!(note.append_to(empty.clone()), empty);
 }
 
-#[test]
-fn the_note_is_not_scanned_by_the_guard_that_produced_it() {
-    // A tripped history: scan it, note it, then scan the *forwarded* body and
-    // assert the verdict is unchanged. The note adds no tool-call batch and
-    // no assistant turn, so it can neither trip the guard nor — which is the
-    // sharper risk — reset the detectors by looking like a turn boundary.
-    let history: Vec<Value> = (0..3)
+/// The history a tripped request has, with `n` identical `write_file` batches.
+fn looping(n: usize) -> Vec<Value> {
+    (0..n)
         .flat_map(|_| {
             vec![
                 json!({ "role": "assistant", "content": null, "tool_calls": [
@@ -189,20 +185,91 @@ fn the_note_is_not_scanned_by_the_guard_that_produced_it() {
                 json!({ "role": "tool", "tool_call_id": "c1", "content": "1 file changed" }),
             ]
         })
-        .collect();
-    let before = body(json!(history));
+        .collect()
+}
 
+fn scan(body: &Bytes) -> LoopGuardVerdict {
     let cfg =
         crate::loop_guard::LoopGuardConfig::from_settings(&gglib_core::Settings::with_defaults())
             .expect("the guard is on by default");
-    let first = crate::loop_guard::scan_history(&before, &cfg);
-    let note = LoopGuardNote::for_verdict(&first.verdict).expect("this history trips");
+    crate::loop_guard::scan_history(body, &cfg).verdict
+}
 
-    let after = note.append_to(before);
-    let second = crate::loop_guard::scan_history(&after, &cfg);
+#[test]
+fn the_note_neither_creates_a_trip_nor_masks_one() {
+    // Deliberately *not* "append the note to a body that already trips and
+    // check the verdict did not change": `scan_history` returns on the first
+    // trip it finds, so such a test never reaches the note and holds whatever
+    // the note is. Both halves below scan a body whose verdict the note could
+    // actually move.
+    let note = loop_note();
 
+    // One repeat under the threshold: passes, and must still pass with the
+    // note in it. A note that added a tool-call batch would trip here.
+    let under = body(json!(looping(2)));
     assert_eq!(
-        second.verdict, first.verdict,
-        "the note must not change what the guard sees"
+        scan(&under),
+        LoopGuardVerdict::Pass,
+        "the fixture must pass"
+    );
+    assert_eq!(
+        scan(&note.append_to(under)),
+        LoopGuardVerdict::Pass,
+        "the note must not create a trip"
+    );
+
+    // One more repeat: trips, and must still trip with the note in it. A note
+    // delivered as a trailing turn of a role that is not tool/assistant would
+    // reset both detectors and hide this.
+    let over = body(json!(looping(3)));
+    let verdict = scan(&over);
+    assert!(
+        matches!(verdict, LoopGuardVerdict::LoopDetected { .. }),
+        "the fixture must trip: {verdict:?}"
+    );
+    assert_eq!(
+        scan(&note.append_to(over)),
+        verdict,
+        "the note must not mask a trip"
+    );
+}
+
+#[test]
+fn the_note_survives_a_truncation_that_trims_the_history_around_it() {
+    // A long conversation whose earlier tool results are big enough that the
+    // budget forces a trim, with the note appended to the last message. The
+    // note is always in the last message, and truncation protects the tail by
+    // index, so it must come through untouched while earlier turns do not.
+    let filler = "y".repeat(4_000);
+    let mut history = vec![json!({ "role": "system", "content": "be helpful" })];
+    for _ in 0..12 {
+        history.push(json!({ "role": "assistant", "content": "working on it" }));
+        history.push(json!({ "role": "tool", "tool_call_id": "c1", "content": filler }));
+    }
+    history.push(json!({ "role": "user", "content": "continue" }));
+
+    let note = loop_note();
+    let noted = note.append_to(body(json!(history)));
+    let mut value: Value = serde_json::from_slice(&noted).expect("json");
+
+    let before = serde_json::to_string(&value).expect("serialise").len();
+    // Half the payload: enough to force a trim of the unprotected head, and
+    // still room for the protected tail, which truncation may not touch and
+    // which is where the note lives.
+    let report = gglib_core::request_pipeline::truncate_history(&mut value, before / 2)
+        .expect("a conversation this shape can be trimmed to fit");
+    assert!(
+        report.messages_truncated > 0,
+        "the fixture must actually trim something: {report:?}"
+    );
+
+    let last = value["messages"]
+        .as_array()
+        .and_then(|m| m.last())
+        .and_then(|m| m["content"].as_str())
+        .expect("string content");
+    assert!(
+        last.ends_with(note.text()),
+        "the note must survive the trim, last: {last}"
     );
 }

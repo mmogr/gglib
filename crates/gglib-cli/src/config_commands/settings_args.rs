@@ -152,9 +152,57 @@ pub struct SettingsSetArgs {
 
 #[cfg(test)]
 mod tests {
-    use super::SettingsSetArgs;
-    use clap::{Args, Command};
+    use super::{LoopGuardModeArg, SettingsSetArgs};
+    use clap::{Args, Command, FromArgMatches};
+    use gglib_core::LoopGuardMode;
     use gglib_core::settings::CONTEXT_SIZE_RANGE;
+
+    /// Every variant maps to its own, and the mapping is the only place the
+    /// two enums meet.
+    ///
+    /// The `From` impl's own doc says a variant added to one and not the other
+    /// fails to compile. True — but a *mis*-mapping compiles perfectly, and
+    /// `--loop-guard-mode note` quietly refusing is exactly the bug this
+    /// setting exists to remove. Asserted per variant rather than by a
+    /// round-trip helper, so the failure names the value that moved.
+    #[test]
+    fn every_cli_mode_maps_to_its_own_domain_mode() {
+        assert_eq!(
+            LoopGuardMode::from(LoopGuardModeArg::Off),
+            LoopGuardMode::Off
+        );
+        assert_eq!(
+            LoopGuardMode::from(LoopGuardModeArg::Note),
+            LoopGuardMode::Note
+        );
+        assert_eq!(
+            LoopGuardMode::from(LoopGuardModeArg::Refuse),
+            LoopGuardMode::Refuse
+        );
+    }
+
+    /// The flag parses the three spellings a person types, and nothing else.
+    #[test]
+    fn the_flag_accepts_exactly_off_note_and_refuse() {
+        for (typed, expected) in [
+            ("off", LoopGuardModeArg::Off),
+            ("note", LoopGuardModeArg::Note),
+            ("refuse", LoopGuardModeArg::Refuse),
+        ] {
+            let m = SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(["t", "--loop-guard-mode", typed])
+                .unwrap_or_else(|e| panic!("--loop-guard-mode {typed} must parse: {e}"));
+            let args = SettingsSetArgs::from_arg_matches(&m).expect("args");
+            assert_eq!(args.loop_guard_mode, Some(expected), "for {typed}");
+        }
+
+        assert!(
+            SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(["t", "--loop-guard-mode", "warn"])
+                .is_err(),
+            "an unknown mode must be refused, not silently defaulted"
+        );
+    }
 
     /// The range in this flag's help must be the range the backend enforces.
     ///
