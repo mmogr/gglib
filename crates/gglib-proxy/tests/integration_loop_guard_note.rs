@@ -11,16 +11,10 @@
 //! the complexity ratchet, and because these are about a different answer:
 //! that file's cases now ask for `refuse` explicitly.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use axum::Router;
-use axum::body::{Body, Bytes};
-use axum::extract::State;
-use axum::response::Response;
-use axum::routing::post;
 use reqwest::Client;
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::LoopGuardMode;
@@ -28,47 +22,9 @@ use gglib_core::ports::ModelRuntimePort;
 
 mod fixtures;
 use fixtures::common::FixedUpstream;
-use fixtures::loop_guard::{chat_body, looping_history, spawn_proxy_in_mode, stagnating_history};
-
-/// An upstream that answers every completion with one SSE frame and keeps the
-/// request body it was handed.
-///
-/// Its own rather than `spawn_mock_upstream`'s: what these tests are about is
-/// the bytes that arrive, and nothing shared captures them without also
-/// dragging in the KV-cache harness.
-async fn spawn_recording_upstream(cancel: CancellationToken) -> (u16, Arc<Mutex<Option<Bytes>>>) {
-    let seen: Arc<Mutex<Option<Bytes>>> = Arc::new(Mutex::new(None));
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let port = listener.local_addr().unwrap().port();
-
-    let app = Router::new()
-        .route(
-            "/v1/chat/completions",
-            post(
-                |State(seen): State<Arc<Mutex<Option<Bytes>>>>, body: Bytes| async move {
-                    *seen.lock().unwrap() = Some(body);
-                    Response::builder()
-                        .header("content-type", "text/event-stream")
-                        .header("cache-control", "no-cache")
-                        .body(Body::from(
-                            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"index\":0}]}\n\n\
-                         data: [DONE]\n\n",
-                        ))
-                        .unwrap()
-                },
-            ),
-        )
-        .with_state(Arc::clone(&seen));
-
-    tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(async move { cancel.cancelled().await })
-            .await
-            .ok();
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (port, seen)
-}
+use fixtures::loop_guard::{
+    chat_body, looping_history, spawn_proxy_in_mode, spawn_recording_upstream, stagnating_history,
+};
 
 /// Send `history` to a proxy in `mode` and return what the upstream received,
 /// the proxy's status code, and what the dashboard then says about the model.

@@ -41,7 +41,12 @@ fn a_passing_verdict_has_no_note() {
 #[test]
 fn the_note_names_the_repeated_batch_and_marks_itself() {
     let text = loop_note().text().to_owned();
-    assert!(text.starts_with(MARKER), "{text}");
+    // The literal, not the constant: `starts_with(MARKER)` is true of every
+    // string when `MARKER` is empty, so it cannot notice the marker going
+    // missing — which is the one thing that tells a model whose words these
+    // are.
+    assert!(text.starts_with("[gglib loop guard]"), "{text}");
+    assert_eq!(MARKER, "[gglib loop guard]");
     assert!(text.contains("write_file:1f2e3d4c"), "{text}");
 }
 
@@ -53,7 +58,7 @@ fn the_stagnation_note_names_the_count_and_the_limit() {
     })
     .expect("a tripped verdict has a note");
     let text = note.text();
-    assert!(text.starts_with(MARKER), "{text}");
+    assert!(text.starts_with("[gglib loop guard]"), "{text}");
     assert!(text.contains('6') && text.contains("limit of 5"), "{text}");
 }
 
