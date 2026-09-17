@@ -8,8 +8,9 @@
 //! template accepts.
 //!
 //! The obvious alternative — a trailing `system` message — was the first
-//! choice and does not survive contact with real templates. Rendering all 69
-//! chat templates llama.cpp bundles (at `e5a8d43`) through the same minijinja
+//! choice and does not survive contact with real templates. Rendering the
+//! chat templates llama.cpp bundles (at `e5a8d439`; 65 of the 69 compile in
+//! minijinja) through the same minijinja
 //! environment `gglib_gguf`'s template probe uses, against the two tails a
 //! tripped request actually has, a trailing `system` message lands where it
 //! was put in 63 of the 101 pairs that render at all. In the rest it
@@ -53,6 +54,12 @@
 //! Applied in `server.rs` after the scan and before `body_for_retry` is
 //! cloned, which puts it on the primary forward, the `UpstreamDead` retry, the
 //! unary path and the repair re-issue, all of which derive from that body.
+//!
+//! One path carries the trip and never delivers the note: a request that also
+//! exceeds the context budget is refused as `context_length_exceeded` inside
+//! the forward, before shaping renders anything. That is by construction the
+//! shape most likely to trip the guard, and it is where the new default buys
+//! nothing.
 //!
 //! **After the scan** is load-bearing twice over: the note cannot trip the
 //! guard that wrote it, and `loop_guard`'s detectors reset on any role that is
@@ -197,3 +204,7 @@ impl LoopGuardNote {
 #[cfg(test)]
 #[path = "loop_guard_note_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "loop_guard_note_bound_tests.rs"]
+mod bound_tests;

@@ -70,12 +70,16 @@ impl ModelDefectLedger {
     /// forwards the request with a note rather than rejecting it.
     ///
     /// Bumps the detector's own count and `loop_guard_trips`, which stays the
-    /// sum of the two. Also counts the request itself, and is the **only**
-    /// call that does so for a tripped request: the refusing mode forwards
-    /// nothing, and the noting mode reaches the forward's own snapshot with
-    /// the trip on it, so `record_request` is not called for it either. A
-    /// trip outside its own denominator would overstate every rate computed
-    /// from these numbers.
+    /// sum of the two. Also counts the request itself: a trip outside its own
+    /// denominator would overstate every rate computed from these numbers.
+    ///
+    /// Scoped to the **snapshot**, not the client request. Exactly one of this
+    /// and [`Self::record_request`] runs per snapshot recorded, because the
+    /// caller branches on whether the snapshot names a detector. A client
+    /// request that is noted and then retried after an upstream death records
+    /// two snapshots — the second deliberately carries no trip — so it bumps
+    /// `requests` twice and `loop_guard_trips` once. That double count of
+    /// `requests` predates this and is the retry path's, not the guard's.
     pub fn record_loop_guard_trip(&self, model: &str, which: LoopGuardTrip) {
         self.with(model, |c| {
             c.requests += 1;
