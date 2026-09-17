@@ -59,9 +59,8 @@ const renderAdvanced = (
       setInferenceDefaultsInput={noop}
       trustClientSampling={false}
       setTrustClientSampling={noop}
-      proxyLoopDetection
-      setProxyLoopDetection={noop}
       agentGuards={{
+        loopGuardMode: 'note',
         agenticSampling: true,
         toolCallRepair: true,
         maxStagnationSteps: overrides.stagnation ?? '',

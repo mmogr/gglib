@@ -2,10 +2,12 @@ import { FC } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
+import { Select } from '../../ui/Select';
 import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import type { SparseInferenceConfig } from '../../../types';
 import type { AgentGuardSettingsValues } from '../useAgentGuardSettings';
+import type { LoopGuardMode } from '../../../types/generated/LoopGuardMode';
 import { Label } from '../../primitives';
 import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
 import { NumberSettingField } from './NumberSettingField';
@@ -24,8 +26,6 @@ interface AdvancedSettingsProps {
   setInferenceDefaultsInput: (value: SparseInferenceConfig | undefined) => void;
   trustClientSampling: boolean;
   setTrustClientSampling: (value: boolean) => void;
-  proxyLoopDetection: boolean;
-  setProxyLoopDetection: (value: boolean) => void;
   agentGuards: AgentGuardSettingsValues;
   setAgentGuardSetting: <K extends keyof AgentGuardSettingsValues>(
     key: K,
@@ -49,8 +49,6 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
   setInferenceDefaultsInput,
   trustClientSampling,
   setTrustClientSampling,
-  proxyLoopDetection,
-  setProxyLoopDetection,
   agentGuards,
   setAgentGuardSetting,
   saving,
@@ -132,21 +130,32 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           sampling controls to its user (e.g. OpenWebUI).
         </ToggleField>
 
-        <ToggleField
-          id="proxy-loop-detection-input"
-          label="Loop detection on the proxy endpoint"
-          checked={proxyLoopDetection}
-          onChange={setProxyLoopDetection}
-          disabled={saving}
+        <SettingField
+          id="loop-guard-mode-input"
+          label="Loop guard on the proxy endpoint"
+          description={
+            <>
+              What happens when a conversation&apos;s history repeats the same tool-call
+              batch back to back and gets the same answer back each time, or repeats the
+              same assistant response anywhere in the session, beyond the agent-path
+              thresholds. A repeat whose answer changed is an agent polling for output, and
+              is not counted.
+            </>
+          }
         >
-          On by default: a conversation whose history repeats the same tool-call batch back
-          to back and gets the same answer back each time, or repeats the same assistant
-          response anywhere in the session, beyond the agent-path thresholds is rejected
-          with a clean 400 before any model work, instead of burning a model swap and a
-          full generation per stuck turn. A repeat whose answer changed is an agent polling
-          for output, and is not counted. Turn this off only for a client that legitimately
-          repeats identical batches with nothing in between.
-        </ToggleField>
+          <Select
+            id="loop-guard-mode-input"
+            value={agentGuards.loopGuardMode}
+            onChange={(event) =>
+              setAgentGuardSetting('loopGuardMode', event.target.value as LoopGuardMode)
+            }
+            disabled={saving}
+          >
+            <option value="note">Note — forward it, and tell the model (default)</option>
+            <option value="refuse">Refuse — reject it with a 400, before any model work</option>
+            <option value="off">Off — do not scan at all</option>
+          </Select>
+        </SettingField>
 
         <ToggleField
           id="agentic-sampling-input"
