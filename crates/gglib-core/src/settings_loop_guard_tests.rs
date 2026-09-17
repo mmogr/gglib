@@ -145,3 +145,38 @@ fn the_wire_spelling_is_lowercase() {
         );
     }
 }
+
+#[test]
+fn clearing_one_spelling_leaves_the_other_alone() {
+    // `Some(None)` is the "clear this field" update every
+    // `UpdateSettingsRequest` field must support, and it reaches `merge` from
+    // the API. Clearing one spelling must not discard what the other says —
+    // otherwise `{"proxyLoopDetection": null}` silently wipes a stored mode.
+    let mut s = settings(Some(LoopGuardMode::Refuse), Some(true));
+    s.merge(&SettingsUpdate {
+        proxy_loop_detection: Some(None),
+        ..SettingsUpdate::default()
+    });
+    assert_eq!(s.proxy_loop_detection, None, "the bool was cleared");
+    assert_eq!(
+        s.loop_guard_mode,
+        Some(LoopGuardMode::Refuse),
+        "clearing the bool must not discard the mode"
+    );
+    assert_eq!(s.effective_loop_guard_mode(), LoopGuardMode::Refuse);
+
+    // And the other way round: clearing the mode leaves the deprecated
+    // off-switch standing, so it still answers.
+    let mut s = settings(Some(LoopGuardMode::Refuse), Some(false));
+    s.merge(&SettingsUpdate {
+        loop_guard_mode: Some(None),
+        ..SettingsUpdate::default()
+    });
+    assert_eq!(s.loop_guard_mode, None);
+    assert_eq!(s.proxy_loop_detection, Some(false));
+    assert_eq!(
+        s.effective_loop_guard_mode(),
+        LoopGuardMode::Off,
+        "the deprecated off-switch still answers once the mode is cleared"
+    );
+}

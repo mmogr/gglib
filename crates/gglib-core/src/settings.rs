@@ -219,8 +219,10 @@ pub struct Settings {
     /// guard by name, and the point of #1052.
     ///
     /// The two never disagree on disk: [`Self::merge`] clears each when the
-    /// other is written, so precedence is only ever consulted for a settings
-    /// file an older build wrote. `gglib config settings set
+    /// other is **written to a value** — clearing one leaves the other alone,
+    /// since an explicit null means "forget this field", not "forget both" —
+    /// so precedence is only ever consulted for a settings file an older build
+    /// wrote. `gglib config settings set
     /// --proxy-loop-detection false` therefore keeps working for the release
     /// it is promised, for anyone who scripted it while the guard's own 400
     /// bodies still named it.
@@ -476,11 +478,19 @@ impl Settings {
         // promised.
         if let Some(ref v) = other.proxy_loop_detection {
             self.proxy_loop_detection = *v;
-            self.loop_guard_mode = None;
+            // Only a *write* clears the other spelling. `Some(None)` is the
+            // "clear this field" update every `UpdateSettingsRequest` field
+            // must support, and clearing one spelling must not silently
+            // discard what the other says.
+            if v.is_some() {
+                self.loop_guard_mode = None;
+            }
         }
         if let Some(ref v) = other.loop_guard_mode {
             self.loop_guard_mode = *v;
-            self.proxy_loop_detection = None;
+            if v.is_some() {
+                self.proxy_loop_detection = None;
+            }
         }
         if let Some(ref v) = other.agentic_sampling {
             self.agentic_sampling = *v;
