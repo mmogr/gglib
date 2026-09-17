@@ -75,6 +75,20 @@ describe('the loop-guard mode field', () => {
     expect(setAgentGuardSetting).toHaveBeenCalledWith('loopGuardMode', 'off');
   });
 
+  it('is announced with its own description', () => {
+    // The toggle it replaced carried its prose as the control's own children,
+    // so a select that does not point at the description is a regression for
+    // this field rather than a gap it inherited.
+    renderAdvanced(guards());
+
+    const select = screen.getByLabelText(/loop guard on the proxy endpoint/i);
+    const describedBy = select.getAttribute('aria-describedby');
+    expect(describedBy).toBe('loop-guard-mode-input-description');
+    expect(document.getElementById(describedBy as string)).toHaveTextContent(
+      /repeats the same tool-call batch/i,
+    );
+  });
+
   it('no longer renders the boolean it replaced', () => {
     renderAdvanced(guards());
 

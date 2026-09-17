@@ -155,6 +155,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.defaultDownloadPath !== undefined ||
           updates.bindHost !== undefined ||
           updates.shareLan !== undefined ||
+          updates.loopGuardMode !== undefined ||
           updates.agenticSampling !== undefined ||
           updates.maxStagnationSteps !== undefined ||
           updates.proxyAutostart !== undefined ||

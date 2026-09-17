@@ -11,7 +11,7 @@ import type { LoopGuardMode } from '../../../types/generated/LoopGuardMode';
 import { Label } from '../../primitives';
 import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
 import { NumberSettingField } from './NumberSettingField';
-import { SettingField } from './SettingField';
+import { SettingField, settingDescriptionId } from './SettingField';
 import { ToggleField } from './ToggleField';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/transport';
 
@@ -145,6 +145,7 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
         >
           <Select
             id="loop-guard-mode-input"
+            aria-describedby={settingDescriptionId('loop-guard-mode-input')}
             value={agentGuards.loopGuardMode}
             onChange={(event) =>
               setAgentGuardSetting('loopGuardMode', event.target.value as LoopGuardMode)
