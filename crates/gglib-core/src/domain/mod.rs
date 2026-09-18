@@ -17,6 +17,7 @@ pub mod inference_profile;
 pub(crate) mod kv_estimate;
 pub(crate) mod kv_memory;
 pub(crate) mod launch_narration;
+pub mod loop_guard_log;
 pub mod mcp;
 mod model;
 pub(crate) mod model_naming;

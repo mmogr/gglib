@@ -15,7 +15,7 @@ test-utils = []
 gglib-core = { path = "../gglib-core" }
 
 # Universal dependencies
-tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync", "macros"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -640,6 +640,47 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // The loop guard's log (#1052): a row per decision the guard took, and a
+    // row per UTC day, model, gglib version and mode counting the requests it
+    // scanned. `gglib_db::LoopGuardTripWriter` writes both;
+    // `SqliteLoopGuardTripLog` reads them back, a row for every day either
+    // table knows.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS loop_guard_trips (
+            id             INTEGER PRIMARY KEY,
+            recorded_at    INTEGER NOT NULL,
+            model_name     TEXT    NOT NULL,
+            gglib_version  TEXT    NOT NULL,
+            mode           TEXT    NOT NULL,
+            detector       TEXT    NOT NULL,
+            signature_hash TEXT,
+            session_hash   TEXT,
+            repeat_count   INTEGER,
+            threshold      INTEGER
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_loop_guard_trips_recorded_at ON loop_guard_trips(recorded_at)",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS loop_guard_scans (
+            day           INTEGER NOT NULL,
+            model_name    TEXT    NOT NULL,
+            gglib_version TEXT    NOT NULL,
+            mode          TEXT    NOT NULL,
+            scanned       INTEGER NOT NULL,
+            PRIMARY KEY (day, model_name, gglib_version, mode)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

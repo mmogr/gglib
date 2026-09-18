@@ -8,6 +8,7 @@ pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
 pub mod huggingface;
 pub(crate) mod llm_completion;
+pub(crate) mod loop_guard_trips;
 pub(crate) mod mcp_dto;
 pub(crate) mod mcp_error;
 pub(crate) mod mcp_repository;
@@ -33,6 +34,7 @@ use thiserror::Error;
 pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
 pub use llm_completion::LlmCompletionPort;
+pub use loop_guard_trips::{LoopGuardTripLog, LoopGuardTripSink};
 // Re-export tool-executor filter decorators
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
