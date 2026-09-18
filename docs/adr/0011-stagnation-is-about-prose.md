@@ -244,6 +244,92 @@ property of judging a whole transcript rather than the turn in front of you.
   > asks for — a refusal is terminal for a client with no recovery path, and
   > ADR 0011's own context records one ending a Copilot session on turn six —
   > and the event log is what makes the cost auditable.
+
+  > **Amended 2026-09-18, second note — the reading survives a restart, and
+  > the original criterion is reinstated for the proxy's guard, in
+  > intervention terms.** [#1052](https://github.com/mmogr/gglib/issues/1052)'s
+  > second half has landed. Every decision the guard takes, and a daily count
+  > of the requests it scans, is written to a log in gglib's database that
+  > outlives the daemon, read with `gglib proxy trips`, the daemon's
+  > `GET /api/proxy/loop-guard-trips`, or the panel under the setting. That is
+  > the reading the 2026-09-17 note and the first 2026-09-18 note were waiting
+  > for, so the struck criterion comes back — restated, because the first
+  > 2026-09-18 note shows that "rejections have vanished" is now satisfied by
+  > the default alone:
+  >
+  > **If the log shows stagnation interventions have effectively vanished on
+  > the proxy path — `stagnations` near zero across a `scanned` count large
+  > enough that one would have been expected, read within one mode — the
+  > proxy's stagnation guard is no longer paying for itself**, and the
+  > detector should be taken out of the proxy's guard. It should get rarer,
+  > not zero. Widening its window instead is not the proxy's alone to do: the
+  > window is `max_stagnation_steps` times `WINDOW_FACTOR`, shared with the
+  > agent path so the two cannot drift, so it waits for #1091 as retiring
+  > the detector does. The restatement above stands beside it, for both
+  > detectors together, and is read the same way: the log's `trips` over
+  > `scanned`, not the `loop_guard_trips` it names.
+  >
+  > **Which reading, precisely**, because the names collide: `trips`,
+  > `loops` and `stagnations` over `scanned` in the log. Not the dashboard's
+  > `loop_guard_trips`, which still counts one process's snapshots and resets
+  > with it. The two are different quantities. The log counts *decisions*, so
+  > under `note` it can count more than the dashboard (below). And `scanned`
+  > is not the ledger's `requests`: it excludes `off`, includes requests for
+  > models that do not exist (the guard scans before admission), and counts
+  > a retried request once, where `requests` counts each attempt.
+  >
+  > **What it can retire, and what it cannot.** The log reads the proxy's
+  > pre-dispatch scan only, which is all the struck criterion asked about. The
+  > agent loop runs the same `StagnationDetector` and records nothing
+  > ([#1091](https://github.com/mmogr/gglib/issues/1091)), so this reading
+  > can take the detector out of the proxy's guard; retiring the detector
+  > itself, which would retire it on the agent path too, still waits for that
+  > path's reading.
+  >
+  > **How to read it, and what it cannot see.**
+  >
+  > - *Within one mode.* Under `note` a stuck conversation is logged again on
+  >   every later turn; under `refuse` a client with no recovery path stops at
+  >   the first. Under `note`, `sessions` is the better count of conversations
+  >   that got stuck, but it is per row: a session that trips on two days
+  >   counts on both, so it does not add across days.
+  > - *Decisions, not deliveries.* A noted request can deliver nothing by six
+  >   routes: a template with no `tool` branch (the first 2026-09-18 note), the
+  >   context budget (the same), an embedding model, an unknown model, a failed
+  >   admission, and a failed retry. Each is still a row. The dashboard counts
+  >   the first two and the last as well; the embedding model, the unknown
+  >   model and the failed admission it does not, so under `note` the log can
+  >   count more than the dashboard for the same run.
+  > - *And sometimes fewer.* A decision the writer cannot queue is dropped
+  >   while its scan is still counted, a flush the database refuses loses its
+  >   batch, and a forced exit loses what the writer had not flushed — at most
+  >   five seconds of scans and the queued decisions. The count of what was
+  >   lost reaches only the daemon's log, as a warning. A zero read from the
+  >   log rules a trip out only as far as those warnings are absent.
+  > - *One gglib release and one mode per reading.* Every row carries both.
+  >   The llama.cpp build and the model file are not recorded; a reading that
+  >   spans an upgrade of either has to be split by date.
+  > - *Ninety days, today included.* Above 50,000 trip rows, whole days are
+  >   dropped from both tables, oldest first and never today — so a day that
+  >   alone passes the cap removes every day before it. Scan rows are bounded
+  >   by the ninety days alone.
+  >
+  > **What is stored.** No conversation text. The batch signature and the
+  > session id are kept as the first 16 hex digits of their SHA-256: stable
+  > correlation keys that anyone holding the data directory can match against
+  > a guess, not a privacy boundary. The model name is the client's, bounded
+  > to 256 characters.
+  >
+  > **The notes above, answered.** The event log "records the action taken,
+  > not whether the model read it": true, with the four further routes listed
+  > here. "The event log is what makes the cost auditable": the noted turns
+  > are auditable — per day, model, version and mode, with their distinct
+  > sessions — and what they cost is not; the generations and tokens a noted
+  > turn spends are in no reading.
+  >
+  > **Scope of the evidence: none yet.** The first reading below is still the
+  > only one — ten requests in one process. The criterion is now readable; it
+  > has not been read.
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.
@@ -285,6 +371,11 @@ nothing can retire `StagnationDetector` on its own evidence.
 > first criterion says what it did and did not change). What still stands
 > between this detector and its own evidence is a count that outlives the
 > process (#1052) and the path that is not counted at all (#1091).
+
+> **Amended 2026-09-18.** The count that outlives the process is delivered
+> (the second 2026-09-18 note under the first criterion). The path not
+> counted at all (#1091) still stands between `StagnationDetector` itself and
+> its own evidence; the proxy's guard alone no longer does.
 
 ## Notes
 

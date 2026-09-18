@@ -1,10 +1,10 @@
 //! Tests for [`super::run`] — the guard's step, with no server around it.
 //!
-//! These characterise what the step does today, before the setting in a later
-//! commit gives it a third answer. Each one pins something a caller depends
-//! on: that the switch-off path scans nothing, that a trip is refused with the
-//! 400 an external agentic client already handles, and that the readings the
-//! dashboard shows are recorded whether or not the verdict trips.
+//! These characterise what the step answers under each mode of the setting.
+//! Each one pins something a caller depends on: that the switch-off path scans
+//! nothing, that a trip is refused with the 400 an external agentic client
+//! already handles, and that the readings the dashboard shows are recorded
+//! whether or not the verdict trips.
 
 use bytes::Bytes;
 use gglib_core::domain::defects::LoopGuardTrip;

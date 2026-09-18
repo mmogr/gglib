@@ -76,6 +76,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 **Module Descriptions:**
 - **`database_file.rs`** — The database and its directory made private to this user before `SQLite` opens them
 - **`factory.rs`** — Database connection factory and pooling
+- **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
@@ -107,7 +108,7 @@ async fn example() {
 ## Design Decisions
 
 1. **Port Pattern** — Repositories implement traits from `gglib-core`, not local traits
-2. **No Domain Logic** — Pure data access; business logic stays in `gglib-core::services`
+2. **No Domain Logic** — Pure data access; business logic stays in `gglib-core::services` — except the loop guard log's writer, which owns its batching and pruning; the retention length comes from `gglib-core`
 3. **Pooled Connections** — All adapters share a connection pool for efficiency
 
 ## Schema Migrations
@@ -139,13 +140,16 @@ named, with every other one propagated.
 `scripts/check_swallowed_db_errors.sh` fails the build if the discarded form
 comes back.
 
-**Nothing here deletes user data.** `create_schema()` drops a table only when
+**Schema setup deletes no user data.** `create_schema()` drops a table only when
 that table is the tombstone of a removed feature and provably never held a row
 (`download_queue`, the orchestrator pair). A schema this build cannot correctly
 write to is refused instead: if `chat_messages` predates the `'tool'` role, setup
 fails and names the database file, leaving every conversation where it is. That
 branch used to DROP both chat tables — silently, at boot, on a substring match
-against a stored CREATE statement.
+against a stored CREATE statement. Beyond reclaiming the removed `auto_tune`
+setting's row at setup, the one place this crate deletes rows on its own is the
+loop guard's log, which its writer prunes by age (90 days, today included) and
+by a row cap, whole days at a time.
 
 There is deliberately no `PRAGMA user_version` ladder over the column set.
 `CANONICAL_PATH_SCHEMA_VERSION` is already load-bearing for the canonical-path
@@ -193,4 +197,5 @@ mod tests {
 | `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
 | `SqliteMcpRepository` | insert/get/list/update/delete servers, SSE server, duplicate name conflict |
 | `SqliteSettingsRepository` | load empty, save and load, clear individual fields |
+| `SqliteLoopGuardTripLog` | summary over both tables — a scanned day with no trips, and a trip whose scan was lost — detectors, modes and models apart, the window, a second flush adding to a day, pruning by age and by cap, no text in any column |
 

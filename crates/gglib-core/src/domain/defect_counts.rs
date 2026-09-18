@@ -15,8 +15,10 @@
 ///
 /// The guard is two detectors behind one verdict, and until this existed their
 /// trips went into one number, so nobody could ask whether *stagnation* trips
-/// had become rare, which is the question that decides whether
-/// `StagnationDetector` survives (ADR 0011's first kill criterion, #947).
+/// had become rare, which is the question that decides whether the proxy
+/// keeps `StagnationDetector` in its guard (ADR 0011's first kill criterion,
+/// #947; retiring the detector itself also needs the agent path's reading,
+/// #1091).
 /// Since #1052 a trip is an intervention rather than a rejection: the default
 /// forwards the request with a note.
 ///
@@ -51,8 +53,13 @@ pub struct ModelDefectCounts {
     /// Since #1052 that is *not* the same as rejected: the guard's default
     /// forwards a tripped request with a note, and only
     /// `--loop-guard-mode refuse` rejects it before dispatch. Both count
-    /// here, so this number is a count of **interventions**, which is what
-    /// ADR 0011's restated kill criterion reads.
+    /// here, so this number is a count of **interventions** — per process,
+    /// reset when the daemon restarts. ADR 0011's kill criterion reads the
+    /// loop guard's log instead (`gglib proxy trips`), which outlives the
+    /// process and counts *decisions* rather than snapshots: a noted request
+    /// the embedding check or admission then refuses is a decision there and
+    /// no snapshot here, so the log can count more than this for the same
+    /// traffic.
     ///
     /// The sum of the two counts below, kept because it is the row people
     /// already read and the one an older dashboard knows. Adding all three
