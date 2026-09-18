@@ -55,7 +55,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Aborts looping conversations** before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
+6. **Acts on looping conversations** — by default it forwards them with a note telling the model what it has repeated; set to refuse, it aborts them before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
 7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
@@ -140,6 +140,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`forward_unary_repair_tests.rs`](src/forward_unary_repair_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward_unary_repair_tests-coverage.json) |
 | [`load_endpoint.rs`](src/load_endpoint.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-load_endpoint-coverage.json) |
 | [`loop_guard.rs`](src/loop_guard.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard-coverage.json) |
+| [`loop_guard_note.rs`](src/loop_guard_note.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_note-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_note-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_note-coverage.json) |
+| [`loop_guard_step.rs`](src/loop_guard_step.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_step-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_step-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loop_guard_step-coverage.json) |
 | [`loopback.rs`](src/loopback.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback-coverage.json) |
 | [`loopback_scanner.rs`](src/loopback_scanner.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_scanner-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_scanner-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_scanner-coverage.json) |
 | [`loopback_tests.rs`](src/loopback_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loopback_tests-coverage.json) |
@@ -565,8 +567,8 @@ curl -X POST http://localhost:8080/mcp \
 | 503 | Model is loading (retry after) |
 | 502 | Failed to connect to llama-server |
 | 404 | Model not found |
-| 400 | Context window budget exceeded after truncation |
-| 400 | Loop or stagnation detected in the replayed history (`loop_detected` / `stagnation_detected`) |
+| 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit, in any mode) |
+| 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 500 | Internal error |
 
 ## History Truncation
@@ -677,25 +679,65 @@ through `gglib-agent` was not. It does **not** rescue a transcript that already
 tripped: the scan returns on the first trip it finds and never reaches a later
 user turn. See [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
 
-A tripped guard rejects with HTTP 400 before any catalog/admission/model-swap
-cost — `type` and `code` are `loop_detected` or `stagnation_detected`
-(mirroring `context_length_exceeded`'s shape), and the message names the
-off-switch: `gglib config settings set --proxy-loop-detection false`, for a
-client that legitimately repeats identical batches with nothing in between.
+What a tripped guard does is one setting, `--loop-guard-mode`, with three
+values. The default, `note`, **forwards** the request with a fixed note
+appended to the last message's content behind a `[gglib loop guard]` marker,
+saying what repeated and how often: the request therefore pays the catalog,
+admission and model-swap cost it used to be refused ahead of, and a client with
+no recovery path from a 400 gets something it can act on. `refuse` is the old
+behaviour — HTTP 400 before any of that cost, `type` and `code` being
+`loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
+shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
+all, which is what `--proxy-loop-detection false` meant and, for one release,
+still means. Either spelling clears the other when written.
+
+The note is delivered inside the last message rather than as a trailing
+`system` message because a `system` message at the tail raises on Qwen3.5,
+two Mistral-family templates and Apertus, is hoisted to the head of the prompt
+by the DeepSeek family and three others, and is silently dropped by gpt-oss and
+four more — 63 of 101 renderable template × tail pairs land it where it was
+put, against 99 for the in-content delivery. Measured with minijinja over
+llama.cpp's bundled templates (65 of the 69 compile there), not against a
+model, and the four templates that decided it are kept as a test; the full
+table is not re-derivable from this tree. The one limit: a template with no
+branch for the `tool` role drops the whole last message on an agentic tail,
+and the note with it.
+
+The escape hatch — `--loop-guard-mode off` — remains for a client that
+legitimately repeats identical batches with nothing in between.
 (Replaying identical batches across a history no longer trips it — the count
 is back to back, and a repeat whose answer changed is not counted at all. A
 batch that went unanswered, or was answered only in part, cannot be compared
 and is counted as a repeat: an answer nobody can read is not evidence of
 progress. See [ADR 0010](../../docs/adr/0010-the-loop-guard-reads-what-came-back.md).) Detection lags the agent
 path's per-iteration check by one turn (the history at turn N shows responses
-1..N-1), capping a runaway session at threshold+1 turns.
+1..N-1). Under `refuse` that caps a runaway session at threshold+1 turns;
+under the default, `note`, nothing is capped — the model is told, and a client
+that ignores the note spends a generation per stuck turn.
+
+One shape gets neither. A conversation that trips the guard **and** cannot be
+trimmed into the context budget is noted — the note is built and appended
+first — and then refused as `context_length_exceeded` inside the forward, so
+nothing is sent and the client sees a terminal 400 with no note at all. That
+is by construction the shape most likely to trip the guard, long and
+repetitive, and it is the one case where the new default buys nothing. The
+trip is still counted.
+
+Because the note is appended *before* the budget is measured, its own
+characters count against that budget: a loop note adds 245–486 characters and
+a stagnation note about 206. A tripped conversation sitting inside that band of
+the ceiling is forwarded under `off` and refused under the default. Narrow, and
+the same shape was already one turn from the ceiling — but it is a 400 the old
+default would not have returned.
 
 **Fail-open:** an unparseable body passes (request routing already validated
 the JSON), and a tool call whose `arguments` string is malformed is hashed as
 the raw string rather than rejected — the guard is protection, not validation.
 Tripped requests are visible on the dashboard as `loop_guard_trip` in
 `recent_requests`, which names the detector that raised the trip (`"loop"` or
-`"stagnation"`) and is `null` for a request the guard let through.
+`"stagnation"`) and is `null` for a request that did not trip at all. A
+request the guard *noted* was let through and still names its detector —
+that is the point of the field since #1052.
 
 ## Proxy Dashboard
 
@@ -818,9 +860,11 @@ Five shapes worth knowing before reading them:
 - **`reasoning_only` is counted *inside* `empty_responses`**, not beside it.
   The turn was empty from the client's point of view either way; the
   distinction is *why*. Adding them double-counts.
-- **Only a loop-guard trip bumps `requests`.** The guard fires *instead of* a
-  forward, so it has to count its own denominator; every other *defect*
-  counter describes a turn that was already counted when it was forwarded. One
+- **Only a loop-guard trip bumps `requests`.** A trip is the one signal that
+  has to count its own denominator: under `refuse` nothing is forwarded, and
+  under `note` the forward's snapshot carries the trip rather than a plain
+  request. Every other *defect* counter describes a turn that was already
+  counted when it was forwarded. One
   trip bumps two counters besides: `loop_guard_trips`, and whichever of
   `loop_guard_loops` and `loop_guard_stagnations` names the detector that
   raised it. The first is the sum of the other two, so adding all three
@@ -973,7 +1017,7 @@ uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 | `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
 | `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
-| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard reject this request before dispatch, or `null` when it did not |
+| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, or refuse it before dispatch — or `null` when it did not |
 
 The underlying ring buffer retains at most 50 entries; `recent_requests`
 surfaces the newest 20 of those. `total_requests` grows monotonically

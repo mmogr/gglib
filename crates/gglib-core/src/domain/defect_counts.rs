@@ -14,9 +14,11 @@
 /// Which of the loop guard's two detectors raised a trip.
 ///
 /// The guard is two detectors behind one verdict, and until this existed their
-/// trips went into one number, so nobody could ask whether *stagnation*
-/// rejections had become rare, which is the question that decides whether
+/// trips went into one number, so nobody could ask whether *stagnation* trips
+/// had become rare, which is the question that decides whether
 /// `StagnationDetector` survives (ADR 0011's first kill criterion, #947).
+/// Since #1052 a trip is an intervention rather than a rejection: the default
+/// forwards the request with a note.
 ///
 /// It says which detector, and nothing about which path. Only the proxy's
 /// pre-dispatch scan records a trip at all: the agent loop runs the same two
@@ -44,7 +46,13 @@ pub struct ModelDefectCounts {
     /// this model — every rate's denominator.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
-    /// Requests the loop/stagnation guard rejected before dispatch.
+    /// Requests the loop/stagnation guard acted on.
+    ///
+    /// Since #1052 that is *not* the same as rejected: the guard's default
+    /// forwards a tripped request with a note, and only
+    /// `--loop-guard-mode refuse` rejects it before dispatch. Both count
+    /// here, so this number is a count of **interventions**, which is what
+    /// ADR 0011's restated kill criterion reads.
     ///
     /// The sum of the two counts below, kept because it is the row people
     /// already read and the one an older dashboard knows. Adding all three
@@ -160,7 +168,7 @@ pub struct ModelDefectCounts {
     /// partly unanswered.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub repeats_not_evaluated: u64,
-    /// Turns the loop guard would have refused for repeating, and did not,
+    /// Turns the loop guard would have acted on for repeating, and did not,
     /// because the answer had moved. A repeat inside the allowance is not one.
     ///
     /// Unlike the two above, this is not a fact about the conversation — it is

@@ -9,8 +9,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, UpdateSettingsRequest } from '../../types';
+import type { LoopGuardMode } from '../../types/generated/LoopGuardMode';
 
 export interface AgentGuardSettingsValues {
+  /** What the proxy's loop guard does with a tripped history. */
+  loopGuardMode: LoopGuardMode;
   /** Inverse polarity on the wire: unset means enabled. */
   agenticSampling: boolean;
   /** Inverse polarity on the wire: unset means enabled. */
@@ -20,6 +23,7 @@ export interface AgentGuardSettingsValues {
 }
 
 const DEFAULTS: AgentGuardSettingsValues = {
+  loopGuardMode: 'note',
   agenticSampling: true,
   toolCallRepair: true,
   maxStagnationSteps: '',
@@ -33,7 +37,10 @@ export interface UseAgentGuardSettingsResult {
     key: K,
     value: AgentGuardSettingsValues[K],
   ) => void;
-  updates: Pick<UpdateSettingsRequest, 'agenticSampling' | 'toolCallRepair' | 'maxStagnationSteps'>;
+  updates: Pick<
+    UpdateSettingsRequest,
+    'loopGuardMode' | 'agenticSampling' | 'toolCallRepair' | 'maxStagnationSteps'
+  >;
 }
 
 /** Track the agent-guard fields, seeded from persisted settings. */
@@ -43,7 +50,9 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
   useEffect(() => {
     if (settings) {
       setValues({
-        // Unset means enabled, like proxyLoopDetection.
+        // Unset means the default, which is to note rather than refuse.
+        loopGuardMode: settings.loopGuardMode ?? 'note',
+        // Unset means enabled, the same absent-means-protective rule.
         agenticSampling: settings.agenticSampling !== false,
         toolCallRepair: settings.toolCallRepair !== false,
         maxStagnationSteps: settings.maxStagnationSteps?.toString() ?? '',
@@ -67,6 +76,7 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
     setValue,
     reset,
     updates: {
+      loopGuardMode: values.loopGuardMode,
       agenticSampling: values.agenticSampling,
       toolCallRepair: values.toolCallRepair,
       maxStagnationSteps: Number.isFinite(parsed) ? parsed : null,

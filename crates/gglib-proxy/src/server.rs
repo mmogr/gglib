@@ -573,78 +573,20 @@ pub(crate) async fn chat_completions(
         }
     };
 
-    // Turn-level loop/stagnation guard (parity with the built-in agent's
-    // guards): reject a conversation whose replayed history already shows a
-    // stuck loop *before* paying admission — a runaway agentic client
-    // otherwise burns a model swap plus a full generation per repeated turn.
-    // See `loop_guard` for the design (stateless history scan, fail-open).
-    if let Some(guard_cfg) = crate::loop_guard::LoopGuardConfig::from_settings(&settings) {
-        use crate::loop_guard::LoopGuardVerdict;
-        let outcome = crate::loop_guard::scan_history(&body, &guard_cfg);
-
-        // Diagnosis, not a decision: recorded for every scanned request,
-        // whether or not the verdict below trips. A repeat under the
-        // threshold is exactly the case the verdict cannot see, and it is
-        // the one that says whether the repeat was stuck or productive.
-        if outcome.identical_result_repeat {
-            state
-                .dashboard
-                .metrics
-                .record_identical_result_repeat(&model_name);
-        } else if outcome.repeat_not_evaluated {
-            state
-                .dashboard
-                .metrics
-                .record_repeat_not_evaluated(&model_name);
+    // The turn-level loop/stagnation guard. Under `refuse` it answers here,
+    // before any catalog/admission/model-swap cost is paid; under `note` the
+    // request goes on and carries the note and the trip with it. See
+    // `loop_guard_step` for what it records and `loop_guard` for what a
+    // replayed history means.
+    let mut guard_note = None;
+    let mut loop_guard_trip = None;
+    match crate::loop_guard_step::run(&settings, &body, &model_name, &state.dashboard.metrics) {
+        crate::loop_guard_step::GuardStep::Forward => {}
+        crate::loop_guard_step::GuardStep::Note { note, trip } => {
+            guard_note = Some(note);
+            loop_guard_trip = Some(trip);
         }
-        // Its own `if`, not another arm of the chain above: this bit comes
-        // from the detector's run-scoped outcome and those two from a
-        // session-wide map, so a turn can genuinely be both — a batch that
-        // repeated earlier with the same answer, and repeated just now with a
-        // different one.
-        if outcome.repeat_rescued {
-            state.dashboard.metrics.record_repeat_rescued(&model_name);
-        }
-
-        match outcome.verdict {
-            LoopGuardVerdict::Pass => {}
-            tripped => {
-                warn!(
-                    model = %model_name,
-                    verdict = ?tripped,
-                    "loop guard aborting request before dispatch"
-                );
-                state
-                    .dashboard
-                    .metrics
-                    .record(crate::metrics::ContextSnapshot {
-                        dialect_residue: false,
-                        tool_repaired: false,
-                        seq: 0,
-                        model_name: model_name.clone(),
-                        payload_chars_before: body.len(),
-                        payload_chars_after: body.len(),
-                        messages_truncated: 0,
-                        was_clamped: false,
-                        grammar_enforced: false,
-                        loop_guard_trip: tripped.trip(),
-                        recorded_at_secs: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs(),
-                    });
-                let err = match tripped {
-                    LoopGuardVerdict::LoopDetected { signature } => {
-                        ErrorResponse::loop_detected(&signature)
-                    }
-                    LoopGuardVerdict::StagnationDetected { count, max_steps } => {
-                        ErrorResponse::stagnation_detected(count, max_steps)
-                    }
-                    LoopGuardVerdict::Pass => unreachable!("Pass is handled above"),
-                };
-                return (StatusCode::BAD_REQUEST, Json(err)).into_response();
-            }
-        }
+        crate::loop_guard_step::GuardStep::Refuse(response) => return response,
     }
 
     // Watchdog: if the upstream tripped the consecutive-failure threshold on
@@ -815,6 +757,15 @@ pub(crate) async fn chat_completions(
         agentic_adjustments: settings.agentic_sampling != Some(false),
     };
 
+    // The note goes on here, before the retry's clone, so every path that
+    // derives from this body carries it: the primary forward, the
+    // `UpstreamDead` retry, the unary path and the repair re-issue. After the
+    // scan above, so it can never trip the guard that wrote it.
+    let body = match guard_note {
+        Some(note) => note.append_to(body),
+        None => body,
+    };
+
     // Clone body before forwarding — Bytes is reference-counted so this is
     // O(1).  Needed to retry with the original payload if the upstream dies.
     let body_for_retry = body.clone();
@@ -853,6 +804,7 @@ pub(crate) async fn chat_completions(
         calibration_session_id: sanitized_session_id.as_deref(),
         cache_metrics: state.dashboard.cache_metrics.clone(),
         sampling_audit: state.dashboard.sampling_audit.clone(),
+        loop_guard_trip,
     };
 
     // Forward the request, optionally wrapped in cache lifecycle. `Some(cfg)`
@@ -994,6 +946,13 @@ pub(crate) async fn chat_completions(
                 calibration_session_id: sanitized_session_id.as_deref(),
                 cache_metrics: state.dashboard.cache_metrics.clone(),
                 sampling_audit: state.dashboard.sampling_audit.clone(),
+                // Not the trip. The first attempt already recorded it, and
+                // this is a second attempt at the same client request: the
+                // ledger counts one intervention per request the guard acted
+                // on, not one per attempt. (`requests` is counted per attempt
+                // on this path, as it already was.) The retry does carry the
+                // note, which is in `body_for_retry`.
+                loop_guard_trip: None,
             };
 
             match retry_req.send(retry_permit, retry_cfg, retry_session).await {

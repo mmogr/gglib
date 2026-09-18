@@ -88,6 +88,7 @@ use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::domain::defects::LoopGuardTrip;
 
 /// Signals that the upstream llama-server was unreachable (connection refused
 /// or timed out).  Returned by [`forward_chat_completion`] so the caller can
@@ -567,6 +568,17 @@ pub(crate) struct ForwardRequest<'a> {
     /// [`crate::sampling_audit`] — this half records the intent; the `/slots`
     /// poller supplies the observation to compare it against.
     pub sampling_audit: Arc<SamplingAuditStore>,
+    /// Which detector the loop guard tripped on, when it decided to note this
+    /// request rather than refuse it.
+    ///
+    /// It rides here rather than being recorded by the guard because a noted
+    /// request is forwarded: this function records the one snapshot for it,
+    /// and both of its record sites carry the trip, so a request that is then
+    /// clamped by the context budget still counts the intervention. A
+    /// refused request never reaches here — the guard records its own — and
+    /// an `UpstreamDead` retry deliberately passes `None`, so one client
+    /// request counts one trip however many attempts it takes.
+    pub loop_guard_trip: Option<LoopGuardTrip>,
 }
 
 impl ForwardRequest<'_> {
@@ -622,6 +634,7 @@ pub(crate) async fn forward_chat_completion(
         cache_metrics,
         repair_enabled,
         sampling_audit,
+        loop_guard_trip,
     } = req;
 
     debug!("Forwarding to {upstream_url}, streaming={is_streaming}");
@@ -669,7 +682,10 @@ pub(crate) async fn forward_chat_completion(
                 grammar_enforced: false,
                 dialect_residue: false,
                 tool_repaired: false,
-                loop_guard_trip: None,
+                // A conversation long and repetitive enough to trip the guard
+                // is exactly the shape that reaches the context ceiling, so a
+                // noted-then-clamped request must still count its trip.
+                loop_guard_trip,
                 seq: 0,
                 recorded_at_secs: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -728,7 +744,7 @@ pub(crate) async fn forward_chat_completion(
         grammar_enforced,
         dialect_residue: false,
         tool_repaired: false,
-        loop_guard_trip: None,
+        loop_guard_trip,
         seq: 0,
         recorded_at_secs: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

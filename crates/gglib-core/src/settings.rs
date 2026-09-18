@@ -7,6 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
+#[path = "settings_loop_guard.rs"]
+mod settings_loop_guard;
+pub use settings_loop_guard::LoopGuardMode;
+
+#[path = "settings_update.rs"]
+mod settings_update;
+pub use settings_update::{SettingsError, SettingsUpdate};
+
 #[path = "settings_validate.rs"]
 mod settings_validate;
 pub use settings_validate::{validate_inference_config, validate_inference_profiles};
@@ -175,31 +183,49 @@ pub struct Settings {
     pub trust_client_sampling: Option<bool>,
 
     // ── Proxy loop guard ────────────────────────────────────────────
-    /// Whether the proxy's turn-level loop/stagnation guard runs on
-    /// `/v1/chat/completions`.
+    /// What the proxy's turn-level loop/stagnation guard does on
+    /// `/v1/chat/completions` when a replayed history trips it.
     ///
-    /// `None`/`Some(true)` → active (the default): a conversation whose
-    /// replayed history already repeats the same tool-call batch back to back
-    /// and gets the same answer back each time, or repeats the same assistant
-    /// response anywhere in the session, beyond the
-    /// shared agent-path thresholds is rejected
-    /// with a clean HTTP 400 (`loop_detected` / `stagnation_detected`)
-    /// **before** admission — no model swap, no generation, no ten minutes of
-    /// scrolling garbage. `Some(false)` disables the guard entirely: the
-    /// escape hatch for a client that legitimately repeats identical
-    /// tool-call batches with nothing in between, or repeats a response.
-    /// Replaying identical batches across a history no longer trips it — the
+    /// A conversation that repeats the same tool-call batch back to back and
+    /// gets the same answer back each time, or repeats the same assistant
+    /// response anywhere in the session, beyond the shared agent-path
+    /// thresholds, is answered per [`LoopGuardMode`]: `note` (absent, and the
+    /// default) forwards it with a note saying what repeated, `refuse` rejects
+    /// it with a clean HTTP 400 before admission, and `off` does not scan.
+    /// Replaying identical batches across a history does not trip it — the
     /// batch count is back to back — and a repeat whose answer changed is not
     /// counted at all.
     ///
-    /// Note the inverse polarity to [`Self::trust_client_sampling`]: absent
-    /// means **on**, because the guard is protection the endpoint should not
-    /// silently lose, while trusting client sampling is authority a client
-    /// must be explicitly granted.
+    /// Note the polarity: absent means the guard is **on**, because it is
+    /// protection the endpoint should not silently lose, unlike
+    /// [`Self::trust_client_sampling`], which is authority a client must be
+    /// explicitly granted.
     ///
     /// The stagnation threshold itself comes from
     /// [`Self::max_stagnation_steps`], shared with the built-in agent loop so
     /// the two paths cannot drift.
+    ///
+    /// Read through [`Self::effective_loop_guard_mode`], never directly: the
+    /// deprecated [`Self::proxy_loop_detection`] still answers for a settings
+    /// file written by an older build.
+    pub loop_guard_mode: Option<LoopGuardMode>,
+
+    /// **Deprecated**, for one release: the boolean [`Self::loop_guard_mode`]
+    /// replaces.
+    ///
+    /// `Some(false)` still means [`LoopGuardMode::Off`]. `Some(true)` means
+    /// the guard is on, which is now [`LoopGuardMode::Note`] rather than a
+    /// refusal — a deliberate behaviour change for anyone who asked for the
+    /// guard by name, and the point of #1052.
+    ///
+    /// The two never disagree on disk: [`Self::merge`] clears each when the
+    /// other is **written to a value** — clearing one leaves the other alone,
+    /// since an explicit null means "forget this field", not "forget both" —
+    /// so precedence is only ever consulted for a settings file an older build
+    /// wrote. `gglib config settings set
+    /// --proxy-loop-detection false` therefore keeps working for the release
+    /// it is promised, for anyone who scripted it while the guard's own 400
+    /// bodies still named it.
     pub proxy_loop_detection: Option<bool>,
 
     /// Whether a tool call that fails schema validation is re-issued, with
@@ -335,6 +361,7 @@ impl Settings {
             share_lan: None,
             proxy_api_key: None,
             trust_client_sampling: None,
+            loop_guard_mode: None,
             proxy_loop_detection: None,
             tool_call_repair: None,
             proxy_autostart: None,
@@ -362,6 +389,29 @@ impl Settings {
         match self.llama_base_port {
             Some(port) => port,
             None => DEFAULT_LLAMA_BASE_PORT,
+        }
+    }
+
+    /// What the loop guard does, reconciling [`Self::loop_guard_mode`] with
+    /// the deprecated [`Self::proxy_loop_detection`].
+    ///
+    /// The new setting wins outright when present. The boolean is consulted
+    /// only when it is absent, which [`Self::merge`] makes true of anything
+    /// this build has *written to a value* — an explicit clear of one spelling
+    /// leaves the other standing, so both can be absent and the default
+    /// answers: `Some(false)` is [`LoopGuardMode::Off`], and
+    /// `Some(true)` or absent is the default, [`LoopGuardMode::Note`]. An
+    /// explicit old "on" therefore becomes a note rather than a refusal,
+    /// which is the behaviour change #1052 exists to make.
+    ///
+    /// The one place this precedence is decided, so the proxy, the CLI and
+    /// anything that reports the setting cannot disagree about it.
+    #[must_use]
+    pub const fn effective_loop_guard_mode(&self) -> LoopGuardMode {
+        match (self.loop_guard_mode, self.proxy_loop_detection) {
+            (Some(mode), _) => mode,
+            (None, Some(false)) => LoopGuardMode::Off,
+            (None, _) => LoopGuardMode::Note,
         }
     }
 
@@ -421,8 +471,28 @@ impl Settings {
         if let Some(v) = other.tool_call_repair {
             self.tool_call_repair = v;
         }
+        // The loop guard's two spellings clear each other when one is
+        // *written to a value*, in this order, so they cannot disagree on
+        // disk and an update carrying both has one answer: the new setting's.
+        // An explicit null clears only itself — see below — so the pair can
+        // also end up both absent, which the default covers. That is what
+        // keeps `--proxy-loop-detection false` working for the release it is
+        // promised.
         if let Some(ref v) = other.proxy_loop_detection {
             self.proxy_loop_detection = *v;
+            // Only a *write* clears the other spelling. `Some(None)` is the
+            // "clear this field" update every `UpdateSettingsRequest` field
+            // must support, and clearing one spelling must not silently
+            // discard what the other says.
+            if v.is_some() {
+                self.loop_guard_mode = None;
+            }
+        }
+        if let Some(ref v) = other.loop_guard_mode {
+            self.loop_guard_mode = *v;
+            if v.is_some() {
+                self.proxy_loop_detection = None;
+            }
         }
         if let Some(ref v) = other.agentic_sampling {
             self.agentic_sampling = *v;
@@ -438,87 +508,6 @@ impl Settings {
         }
         self.merge_remote(other);
     }
-}
-
-/// Partial settings update.
-///
-/// Each field is `Option<Option<T>>`:
-/// - `None` = don't change this field
-/// - `Some(None)` = set field to None/null
-/// - `Some(Some(value))` = set field to value
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SettingsUpdate {
-    pub default_download_path: Option<Option<String>>,
-    pub default_context_size: Option<Option<u64>>,
-    pub proxy_port: Option<Option<u16>>,
-    pub llama_base_port: Option<Option<u16>>,
-    pub max_download_queue_size: Option<Option<u32>>,
-    pub show_memory_fit_indicators: Option<Option<bool>>,
-    pub max_tool_iterations: Option<Option<u32>>,
-    pub max_stagnation_steps: Option<Option<u32>>,
-    pub default_model_id: Option<Option<i64>>,
-    pub inference_defaults: Option<Option<InferenceConfig>>,
-    pub inference_profiles: Option<Option<Vec<InferenceProfile>>>,
-    pub setup_completed: Option<Option<bool>>,
-    pub title_generation_prompt: Option<Option<String>>,
-    pub bind_host: Option<Option<String>>,
-    pub share_lan: Option<Option<bool>>,
-    pub proxy_api_key: Option<Option<String>>,
-    pub trust_client_sampling: Option<Option<bool>>,
-    pub proxy_loop_detection: Option<Option<bool>>,
-    pub tool_call_repair: Option<Option<bool>>,
-    /// See [`Settings::agentic_sampling`].
-    pub agentic_sampling: Option<Option<bool>>,
-    pub proxy_autostart: Option<Option<bool>>,
-    pub close_to_tray: Option<Option<bool>>,
-    pub start_at_login: Option<Option<bool>>,
-    /// See [`Settings::remote_pairing`]. Written whole or not at all: the
-    /// two halves have no separate update, which is what keeps them bound.
-    pub remote_pairing: Option<Option<RemotePairing>>,
-    /// See [`Settings::remote_enabled`].
-    pub remote_enabled: Option<Option<bool>>,
-    /// See [`Settings::remote_serve`]. Written whole, like the pairing.
-    pub remote_serve: Option<Option<RemoteServe>>,
-    /// See [`Settings::remote_devices`]. Written whole.
-    pub remote_devices: Option<Option<Vec<Device>>>,
-}
-
-/// Settings validation error.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum SettingsError {
-    #[error("Context size must be between 512 and 1,000,000, got {0}")]
-    InvalidContextSize(u64),
-
-    #[error("Port should be >= 1024 (privileged ports require root), got {0}")]
-    InvalidPort(u16),
-
-    #[error("Max download queue size must be between 1 and 50, got {0}")]
-    InvalidQueueSize(u32),
-
-    #[error("Download path cannot be empty")]
-    EmptyDownloadPath,
-
-    #[error("Invalid inference parameter: {0}")]
-    InvalidInferenceConfig(String),
-
-    #[error("Invalid inference profile: {0}")]
-    InvalidInferenceProfile(String),
-
-    #[error("Bind host must be an IP address (e.g. 127.0.0.1 or 0.0.0.0), got '{0}'")]
-    InvalidBindHost(String),
-
-    #[error("Proxy API key cannot be blank — clear it instead to disable authentication")]
-    BlankProxyApiKey,
-
-    #[error("Remote API key cannot be blank — clear the pairing instead to forget it")]
-    BlankRemoteApiKey,
-
-    #[error("Remote ticket cannot be blank — clear the pairing instead to forget it")]
-    BlankRemoteTicket,
-
-    /// An id the tunnel edge would refuse to hold a token under.
-    #[error("Device id {0:?} must be 1-64 of ASCII letters, digits, '.', '_' or '-'")]
-    InvalidDeviceId(String),
 }
 
 /// Validate settings values.
@@ -594,6 +583,10 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "settings_loop_guard_tests.rs"]
+mod settings_loop_guard_tests;
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]

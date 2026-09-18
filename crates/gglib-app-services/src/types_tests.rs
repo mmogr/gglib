@@ -96,6 +96,60 @@ mod update_settings_request_tests {
 
     /// The clear must still be a clear after the hand-off to the domain
     /// update — the layer that decides what actually reaches storage.
+    /// The read hop for the loop-guard mode: what is stored is what the
+    /// settings modal is shown.
+    ///
+    /// Deleting this one line makes the GUI select open on the default
+    /// whatever is stored, and nothing else in the workspace notices.
+    #[test]
+    fn the_stored_loop_guard_mode_reaches_the_settings_ui() {
+        use gglib_core::{LoopGuardMode, Settings};
+
+        for mode in [
+            None,
+            Some(LoopGuardMode::Off),
+            Some(LoopGuardMode::Note),
+            Some(LoopGuardMode::Refuse),
+        ] {
+            let settings = Settings {
+                loop_guard_mode: mode,
+                ..Settings::with_defaults()
+            };
+            let dto = super::super::AppSettings::from(settings);
+            assert_eq!(dto.loop_guard_mode, mode, "for {mode:?}");
+        }
+    }
+
+    /// The write hop: what the GUI select sends is what the domain applies.
+    ///
+    /// This is the line the whole Tier 1 claim rests on — the select's only
+    /// effect reaches `gglib-core` through this conversion, and deleting it
+    /// makes the control do nothing with every suite green.
+    #[test]
+    fn a_written_loop_guard_mode_reaches_the_domain_update() {
+        use gglib_core::LoopGuardMode;
+
+        let request: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"loopGuardMode":"refuse"}"#).expect("set");
+        let update = gglib_core::SettingsUpdate::from(request);
+        assert_eq!(update.loop_guard_mode, Some(Some(LoopGuardMode::Refuse)));
+
+        // And the three states the double option exists for stay distinct.
+        let omitted: UpdateSettingsRequest = serde_json::from_str("{}").expect("omitted");
+        assert_eq!(
+            gglib_core::SettingsUpdate::from(omitted).loop_guard_mode,
+            None,
+            "an omitted field must not change the setting"
+        );
+        let cleared: UpdateSettingsRequest =
+            serde_json::from_str(r#"{"loopGuardMode":null}"#).expect("cleared");
+        assert_eq!(
+            gglib_core::SettingsUpdate::from(cleared).loop_guard_mode,
+            Some(None),
+            "an explicit null must clear the setting"
+        );
+    }
+
     #[test]
     fn a_cleared_tool_call_repair_reaches_the_domain_update() {
         let request: UpdateSettingsRequest =

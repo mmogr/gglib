@@ -154,6 +154,42 @@ taken from the detector's own outcome. That one is a fact about gglib's reflex
 rather than about the conversation — which is what the ledger was chartered for
 before ADR 0006 had to widen it.
 
+> **Amended 2026-09-18 — the verdict this ADR taught to read results is no
+> longer terminal by default.** [#1052](https://github.com/mmogr/gglib/issues/1052)
+> gave the guard a setting, `loop_guard_mode`, whose default (`note`) forwards
+> a tripped request with a note appended to the last message rather than
+> refusing it. Everything on this page about *what the guard decides* stands
+> unchanged — the results join, the rescue, the observation ceiling and their
+> counters all run exactly as described, before the mode is consulted. What
+> changes is only what happens to a request after the verdict.
+>
+> Two readings on this page are worth re-reading with that in mind.
+> `repeats_rescued` counts a turn the guard declined to act on because the
+> answer moved; under `note` the turn it is compared against is noted rather
+> than refused, so the pair still measures the same thing — whether the rescue
+> has customers — but the cost of being wrong about it is smaller, because a
+> mistaken trip now adds a sentence instead of ending a session. And the third
+> criterion below deletes the ceiling if `repeats_rescued` stays at zero; that
+> is unaffected, since it reads the rescue, not the verdict's consequence.
+>
+> The delivery is not a `system` message: rendered over the chat templates
+> llama.cpp bundles — 65 of its 69 compile in minijinja, against two tails
+> each — a trailing `system` message lands where it was put in only 63 of the
+> 101 pairs that render at all. It raises in 7 (Qwen3.5, `Ministral-3` and
+> `Mistral-Nemo`, and `Apertus-8B`, which is not Mistral-family), is hoisted to
+> token 0 in 19 (the DeepSeek family, plus `tencent-Hy3`, `Solar-Open-100B` and
+> one rwkv-world tail) and is dropped silently in 10 (gpt-oss and four more).
+> Those four outcomes sum to 99; the remaining 2 are a fifth, where the
+> template renders the note but loses the history around it.
+> The note goes inside the last message's content behind a `[gglib loop guard]`
+> marker instead, which lands in 99 of the same 101. That evidence is minijinja
+> over llama.cpp's copies of those templates, not llama-server's own engine,
+> and nothing was run against a model; **the full table is not re-derivable
+> from the tree** — the harness was a throwaway — but the four templates that
+> decided it are vendored and rendered as a test, with Phi-3.5-mini pinned as
+> the one known drop (a template with no `tool` branch drops the whole last
+> message on an agentic tail, and the note with it).
+
 ## Kill criteria
 
 - If `repeats_rescued` dwarfs `identical_result_repeats` in real use, the join is

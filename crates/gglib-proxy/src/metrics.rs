@@ -63,8 +63,9 @@ pub struct ContextSnapshot {
     /// Back-patched after the response streams via
     /// [`ContextMetricsStore::flag_tool_repair`].
     pub tool_repaired: bool,
-    /// The detector that made the pre-dispatch loop guard reject this request
-    /// with an HTTP 400 instead of forwarding it (see `loop_guard`), or `None`.
+    /// The detector that made the pre-dispatch loop guard act on this request
+    /// — forward it with a note, or refuse it with an HTTP 400 (see
+    /// `loop_guard`) — or `None`.
     pub loop_guard_trip: Option<LoopGuardTrip>,
     /// Unix timestamp (seconds since epoch) at which this snapshot was recorded.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]

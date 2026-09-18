@@ -48,6 +48,38 @@ pub fn text_parts(content: &Value) -> usize {
     }
 }
 
+/// Append `text` to `content` as a trailing piece of text, in either shape,
+/// and say whether it could be.
+///
+/// A string gains `text` after a blank line. An array gains one more
+/// `{"type": "text", "text": …}` part at the end, beside whatever parts it
+/// already has — the walks above can only rewrite text that is already there,
+/// so adding a piece is its own operation rather than a use of them. Any
+/// other shape — `null`, absent, a number — is **left untouched** and reports
+/// `false`, which is the caller's signal that this message cannot carry the
+/// text and something else must.
+///
+/// The blank line matters: the appended text has to read as a separate
+/// paragraph to a model that is about to be handed the whole thing as one
+/// string, and the shapes must agree about that, because a template is free
+/// to join an array's text parts with nothing between them.
+pub fn append_text(content: &mut Value, text: &str) -> bool {
+    match content {
+        Value::String(existing) => {
+            if !existing.is_empty() {
+                existing.push_str("\n\n");
+            }
+            existing.push_str(text);
+            true
+        }
+        Value::Array(parts) => {
+            parts.push(serde_json::json!({ "type": "text", "text": text }));
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Apply `f` to every piece of text in `content`, in either shape, and say
 /// how many pieces it visited.
 ///

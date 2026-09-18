@@ -5,7 +5,36 @@
 //! each. Keeping it here means adding a setting touches a file about settings
 //! rather than the file that enumerates every config subcommand.
 
-use clap::Args;
+use clap::{Args, ValueEnum};
+
+use gglib_core::LoopGuardMode;
+
+/// The CLI's mirror of [`LoopGuardMode`].
+///
+/// A mirror rather than a `ValueEnum` on the domain type: `gglib-core` may not
+/// depend on clap (`scripts/check_boundaries.sh`), and `value_enum` is what
+/// gives the flag its completions and its "possible values" error message.
+/// The `From` below is the only place the two are mapped, so a variant added
+/// to one and not the other fails to compile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LoopGuardModeArg {
+    /// Do not scan the replayed history at all.
+    Off,
+    /// Forward a tripped request with a note saying what repeated.
+    Note,
+    /// Refuse a tripped request with HTTP 400, before any model work.
+    Refuse,
+}
+
+impl From<LoopGuardModeArg> for LoopGuardMode {
+    fn from(arg: LoopGuardModeArg) -> Self {
+        match arg {
+            LoopGuardModeArg::Off => Self::Off,
+            LoopGuardModeArg::Note => Self::Note,
+            LoopGuardModeArg::Refuse => Self::Refuse,
+        }
+    }
+}
 
 /// Every field `gglib config settings set` can write.
 ///
@@ -75,10 +104,18 @@ pub struct SettingsSetArgs {
     /// replayed history repeats the same tool-call batch back to back and
     /// gets the same answer back each time, or repeats the same assistant
     /// prose too often in a short span, beyond the agent-path thresholds is
-    /// rejected with a clean 400 before any model work. A repeat whose answer
-    /// changed is an agent polling for output, and is not counted. Set false
-    /// only for a client that legitimately repeats identical batches with
-    /// nothing in between.
+    /// answered by this setting: `note` (the default) forwards it with a note
+    /// saying what repeated, `refuse` rejects it with a clean 400 before any
+    /// model work, and `off` does not scan at all. A repeat whose answer
+    /// changed is an agent polling for output, and is not counted.
+    #[arg(long, value_enum)]
+    pub loop_guard_mode: Option<LoopGuardModeArg>,
+    /// Deprecated: use `--loop-guard-mode off|note|refuse`.
+    ///
+    /// `false` still means `off`; `true` now means `note`, not a refusal.
+    /// Writing either spelling to a value clears the other, so whichever was
+    /// set last is the one that answers. (`gglib config settings unset` clears
+    /// one without touching the other.)
     #[arg(long)]
     pub proxy_loop_detection: Option<bool>,
     /// Cap the temperature on agentic turns. Enabled by default: a
@@ -116,9 +153,57 @@ pub struct SettingsSetArgs {
 
 #[cfg(test)]
 mod tests {
-    use super::SettingsSetArgs;
-    use clap::{Args, Command};
+    use super::{LoopGuardModeArg, SettingsSetArgs};
+    use clap::{Args, Command, FromArgMatches};
+    use gglib_core::LoopGuardMode;
     use gglib_core::settings::CONTEXT_SIZE_RANGE;
+
+    /// Every variant maps to its own, and the mapping is the only place the
+    /// two enums meet.
+    ///
+    /// The `From` impl's own doc says a variant added to one and not the other
+    /// fails to compile. True — but a *mis*-mapping compiles perfectly, and
+    /// `--loop-guard-mode note` quietly refusing is exactly the bug this
+    /// setting exists to remove. Asserted per variant rather than by a
+    /// round-trip helper, so the failure names the value that moved.
+    #[test]
+    fn every_cli_mode_maps_to_its_own_domain_mode() {
+        assert_eq!(
+            LoopGuardMode::from(LoopGuardModeArg::Off),
+            LoopGuardMode::Off
+        );
+        assert_eq!(
+            LoopGuardMode::from(LoopGuardModeArg::Note),
+            LoopGuardMode::Note
+        );
+        assert_eq!(
+            LoopGuardMode::from(LoopGuardModeArg::Refuse),
+            LoopGuardMode::Refuse
+        );
+    }
+
+    /// The flag parses the three spellings a person types, and nothing else.
+    #[test]
+    fn the_flag_accepts_exactly_off_note_and_refuse() {
+        for (typed, expected) in [
+            ("off", LoopGuardModeArg::Off),
+            ("note", LoopGuardModeArg::Note),
+            ("refuse", LoopGuardModeArg::Refuse),
+        ] {
+            let m = SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(["t", "--loop-guard-mode", typed])
+                .unwrap_or_else(|e| panic!("--loop-guard-mode {typed} must parse: {e}"));
+            let args = SettingsSetArgs::from_arg_matches(&m).expect("args");
+            assert_eq!(args.loop_guard_mode, Some(expected), "for {typed}");
+        }
+
+        assert!(
+            SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(["t", "--loop-guard-mode", "warn"])
+                .is_err(),
+            "an unknown mode must be refused, not silently defaulted"
+        );
+    }
 
     /// The range in this flag's help must be the range the backend enforces.
     ///

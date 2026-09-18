@@ -568,7 +568,8 @@ Both vendors specify the range this breaks, and specify it for this reason:
 | DeepSeek-R1 | the same | 0.5 – 0.7 |
 
 Below that range these models degenerate into endless repetition — which the
-proxy's own pre-dispatch loop guard (#723) then rejects as a 400. A near-greedy
+proxy's own pre-dispatch loop guard (#723) then acts on: a 400 when it was
+written, a forwarded note since #1052. A near-greedy
 overlay therefore does not merely sample poorly. It **manufactures the exact
 failure another organ exists to catch**, and it does so on the models most
 likely to be used for agentic coding, since `reasoning` tagging is automatic at

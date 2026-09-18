@@ -174,6 +174,76 @@ property of judging a whole transcript rather than the turn in front of you.
   > will supply. So the weaker restatement stands, and the original is not
   > reinstated here; that waits for a reading that survives a restart
   > ([#1052](https://github.com/mmogr/gglib/issues/1052)).
+
+  > **Amended 2026-09-18 — the number has changed its subject, and the reading
+  > still does not survive a restart.** [#1052](https://github.com/mmogr/gglib/issues/1052)'s
+  > first half has landed. The guard's answer is now a setting,
+  > `loop_guard_mode`, with three values, and its default is `note`: a tripped
+  > request is **forwarded**, with a fixed note appended to the last message
+  > saying what repeated. `refuse` is the old HTTP 400, and `off` is the old
+  > off.
+  >
+  > So `loop_guard_trips` no longer counts *rejections*. It counts requests the
+  > guard **acted on** — noted or refused — and the same is true of
+  > `loop_guard_loops` and `loop_guard_stagnations`. Every criterion on this
+  > page that reads those numbers now reads a count of interventions.
+  >
+  > That matters more than it sounds. Read against the old subject, the struck
+  > criterion — "stagnation rejections have effectively vanished" — would be
+  > satisfied the moment the default stopped rejecting, by a change in what the
+  > proxy does rather than by anything about the models. The restatement above
+  > is not reinstated and is not weakened further: it asks whether the counter
+  > reaches zero across a large enough denominator, and under `note` that is
+  > still the right question, now about interventions.
+  >
+  > The reason the original criterion is *still* not reinstated is unchanged
+  > and is the one below: these counters reset with the process. #1052's second
+  > half is the event log that outlives it.
+  >
+  > **The restatement above quotes words that have since changed.** It cites
+  > `ModelDefectCounts` documenting the counter as "requests the loop/stagnation
+  > guard rejected before dispatch"; that doc now reads "requests the
+  > loop/stagnation guard **acted on**", corrected in the same change as this
+  > note. The quotation is left as it was — it was accurate when the
+  > restatement was written, and it is the evidence for the argument that
+  > paragraph makes — but a reader following it to the source will find the new
+  > wording, not the old. (The correction ships in the same pull request as
+  > this note, a commit later.)
+  >
+  > **One limit on what an intervention is worth, because it bears on what this
+  > number counts.** The note is delivered inside the last message's content, so
+  > a chat template with no branch for the `tool` role drops the whole last
+  > message on an agentic tail and the note with it. Such a request is still
+  > counted here as an intervention, and the model saw nothing. Two of the 65
+  > llama.cpp templates that render at all behave that way (Phi-3.5-mini,
+  > rwkv-world) — but what a deployment actually renders is the template inside
+  > its own GGUF, which is usually not one of those 69, so the share of real
+  > traffic affected is **unmeasured**, not two in sixty-five. A
+  > model behind either never sees a tool *result* either, so it cannot run a
+  > tool loop meaningfully in the first place; on a chat tail, where stagnation
+  > trips, both render the note in place. The event log in #1052's second half
+  > records the action taken, not whether the model read it, and no counter
+  > here can close that gap.
+  >
+  > The same bound by a second route: a tripped conversation that also exceeds
+  > the context budget is noted, and then refused as `context_length_exceeded`
+  > inside the forward — the note is built and appended, and nothing is sent.
+  > It too is counted as an intervention that delivered nothing, and that is by
+  > construction the shape most likely to trip the guard. Stating the template
+  > case and not this one would leave the bound half-drawn.
+  >
+  > A corollary, since the note is appended before the budget is measured: the
+  > note's own characters count against it. A conversation within a few hundred
+  > characters of the ceiling can be forwarded under `off` and refused under
+  > the default. That is a cost of the new default, not of the counter, and it
+  > is recorded here because this note is where the trade is written down.
+  >
+  > One consequence worth stating because it is a cost, not a benefit: under
+  > `note` a genuinely runaway client burns a full generation per stuck turn
+  > instead of being stopped at threshold + 1. That is the trade the issue
+  > asks for — a refusal is terminal for a client with no recovery path, and
+  > ADR 0011's own context records one ending a Copilot session on turn six —
+  > and the event log is what makes the cost auditable.
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.
