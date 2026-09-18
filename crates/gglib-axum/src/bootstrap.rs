@@ -15,10 +15,12 @@ use gglib_app_services::{
     ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelCatalogPort, ModelRuntimePort};
+use gglib_core::ports::{
+    AppEventEmitter, HfClientPort, LoopGuardTripLog, ModelCatalogPort, ModelRuntimePort,
+};
 use gglib_core::services::AppCore;
-use gglib_db::SqliteBenchmarkRepository;
 use gglib_db::cleanup_zombie_benchmark_runs;
+use gglib_db::{LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 
@@ -70,6 +72,13 @@ pub struct AxumContext {
     /// Stored directly in `AxumContext` (alongside `benchmark`) so history
     /// handlers can query past runs without going through `BenchmarkOps`.
     pub bench_repo: Arc<SqliteBenchmarkRepository>,
+    /// The loop guard's batched writer (#1052): the sink every proxy this
+    /// context starts records into. Owned here rather than by a proxy run, so
+    /// it outlives a proxy restart; the daemon's teardown writes what it holds.
+    pub loop_guard_trip_writer: Arc<LoopGuardTripWriter>,
+    /// The loop guard's log read back: what the daemon's route answers with,
+    /// from the same database the writer writes to.
+    pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
     /// Benchmark operations: run_compare and run_perf with SSE streaming.
     pub benchmark: Arc<BenchmarkOps>,
     /// Shared `ModelRuntimePort` wrapping the one `ProcessManager`.
@@ -164,6 +173,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // Assembly lives in gglib-app-services so this adapter and the Tauri one
     // cannot drift; only genuinely Axum-shaped wiring stays here.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
+    let loop_guard_trip_writer = LoopGuardTripWriter::spawn(pool.clone());
+    let loop_guard_trips: Arc<dyn LoopGuardTripLog> =
+        Arc::new(SqliteLoopGuardTripLog::new(pool.clone()));
 
     let AppServices {
         models,
@@ -190,6 +202,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         emitter: sse.clone(),
         server_events: Arc::new(crate::sse::AxumServerEvents::new((*sse).clone())),
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
+        loop_guard_trips: Arc::clone(&loop_guard_trip_writer)
+            as Arc<dyn gglib_core::ports::LoopGuardTripSink>,
         base_port: Some(config.base_port),
         llama_server_path: config.llama_server_path.clone(),
         device_keys_path: config.device_keys_path.clone(),
@@ -224,6 +238,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
             config.max_concurrent_agent_loops,
         )),
         bench_repo,
+        loop_guard_trip_writer,
+        loop_guard_trips,
         benchmark,
         runtime,
         catalog,

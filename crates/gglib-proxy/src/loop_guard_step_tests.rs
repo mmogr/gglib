@@ -12,7 +12,8 @@ use gglib_core::{LoopGuardMode, Settings};
 use serde_json::{Value, json};
 
 use super::fixtures::{
-    MODEL, agentic_body, body, counts, in_mode, looping, repeated_read, stagnating, store,
+    MODEL, agentic_body, body, counts, in_mode, looping, observing, repeated_read, stagnating,
+    store,
 };
 use super::{GuardStep, run};
 
@@ -22,7 +23,7 @@ fn a_guard_switched_off_scans_nothing_and_forwards() {
     settings.proxy_loop_detection = Some(false);
     let (metrics, ledger) = store();
 
-    let step = run(&settings, &body(looping(3)), MODEL, &metrics);
+    let step = run(&settings, &body(looping(3)), MODEL, &observing(&metrics));
 
     assert!(matches!(step, GuardStep::Forward));
     // Nothing was scanned, so nothing was recorded: not the refusal snapshot,
@@ -46,7 +47,7 @@ fn a_benign_history_is_forwarded() {
         &Settings::with_defaults(),
         &body(vec![json!({ "role": "assistant", "content": "done" })]),
         MODEL,
-        &metrics,
+        &observing(&metrics),
     );
 
     assert!(matches!(step, GuardStep::Forward));
@@ -61,7 +62,7 @@ fn an_unparseable_body_is_forwarded() {
         &Settings::with_defaults(),
         &Bytes::from_static(b"not json at all"),
         MODEL,
-        &metrics,
+        &observing(&metrics),
     );
 
     // Fail-open: this guard is protection, not validation.
@@ -77,7 +78,7 @@ fn a_repeated_batch_is_refused_and_counted_as_a_loop() {
         &in_mode(LoopGuardMode::Refuse),
         &body(looping(3)),
         MODEL,
-        &metrics,
+        &observing(&metrics),
     );
 
     let GuardStep::Refuse(resp) = step else {
@@ -103,7 +104,7 @@ fn a_repeated_reply_is_refused_and_counted_as_stagnation() {
         &in_mode(LoopGuardMode::Refuse),
         &body(stagnating(6)),
         MODEL,
-        &metrics,
+        &observing(&metrics),
     );
 
     let GuardStep::Refuse(resp) = step else {
@@ -128,7 +129,7 @@ async fn the_refusal_names_the_repeated_signature() {
         &in_mode(LoopGuardMode::Refuse),
         &body(looping(3)),
         MODEL,
-        &metrics,
+        &observing(&metrics),
     ) else {
         panic!("a repeated batch must not be forwarded");
     };
@@ -155,7 +156,7 @@ fn a_repeat_the_verdict_cannot_see_is_still_read() {
         &Settings::with_defaults(),
         &agentic_body(repeated_read(2)),
         MODEL,
-        &metrics,
+        &observing(&metrics),
     );
 
     assert!(matches!(step, GuardStep::Forward));
@@ -179,9 +180,12 @@ fn the_default_notes_rather_than_refusing_and_records_nothing_itself() {
     ] {
         let (metrics, ledger) = store();
 
-        let GuardStep::Note { note, trip } =
-            run(&Settings::with_defaults(), &body(history), MODEL, &metrics)
-        else {
+        let GuardStep::Note { note, trip } = run(
+            &Settings::with_defaults(),
+            &body(history),
+            MODEL,
+            &observing(&metrics),
+        ) else {
             panic!("the default mode is `note`");
         };
 

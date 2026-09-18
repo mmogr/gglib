@@ -2,8 +2,9 @@
 //!
 //! The ordering matters: the proxy is drained first so no request is
 //! mid-flight when its upstream dies, then every llama-server child is
-//! stopped through the graceful SIGTERM → grace → SIGKILL path, then a
-//! final pidfile audit catches anything that slipped through. The whole
+//! stopped through the graceful SIGTERM → grace → SIGKILL path, then the
+//! loop guard's log writes what it still holds, then a final pidfile audit
+//! catches anything that slipped through. The whole
 //! sequence runs under a force-exit watchdog so a wedged child (D-state on
 //! a blocked CUDA ioctl) cannot keep the daemon alive forever.
 
@@ -16,6 +17,10 @@ use tracing::{info, warn};
 
 /// How long the whole teardown may take before the watchdog force-exits.
 const SHUTDOWN_WATCHDOG: Duration = Duration::from_secs(10);
+
+/// How long the loop guard's log may take over its last write, out of the
+/// watchdog's ten seconds.
+const TRIP_LOG_DRAIN: Duration = Duration::from_secs(2);
 
 /// Resolve when *either* trigger fires, then cancel the token so both converge.
 ///
@@ -112,6 +117,25 @@ pub(super) async fn perform_shutdown(state: &AppState) {
         std::process::exit(1);
     });
 
+    teardown(state).await;
+
+    // 5. Final audit: anything still recorded in the pidfile directory is an
+    //    orphan by definition now.
+    if let Err(e) = gglib_runtime::pidfile::cleanup_orphaned_servers().await {
+        warn!("final orphan audit failed: {e}");
+    }
+
+    completed.store(true, Ordering::Release);
+    info!("daemon shutdown complete");
+}
+
+/// Everything the teardown does to this daemon's own state, in order: steps 0
+/// to 4.
+///
+/// Apart from [`perform_shutdown`] so a test can run it: the watchdog and the
+/// final pidfile audit act on the whole machine — the audit kills every
+/// llama-server its pidfiles verify — and have no place in a test.
+pub(super) async fn teardown(state: &AppState) {
     // 0. Take the remote tunnel down first, so nothing new arrives from
     //    outside while the rest is dismantled. "Not enabled" is the usual
     //    answer.
@@ -144,14 +168,18 @@ pub(super) async fn perform_shutdown(state: &AppState) {
     // 3. Cancel queued/active downloads so partial files are accounted for.
     state.downloads.cancel_all().await;
 
-    // 4. Final audit: anything still recorded in the pidfile directory is an
-    //    orphan by definition now.
-    if let Err(e) = gglib_runtime::pidfile::cleanup_orphaned_servers().await {
-        warn!("final orphan audit failed: {e}");
+    // 4. Write what the loop guard's log still holds. After the proxy that
+    //    records into it has stopped, so nothing it records is lost to the
+    //    order, and after the children, so a slow disk cannot eat the time
+    //    their graceful stop is given; bounded for the same reason. The cost
+    //    of that placement: a child wedged badly enough that the watchdog
+    //    fires first loses this write, as any forced exit does.
+    if tokio::time::timeout(TRIP_LOG_DRAIN, state.loop_guard_trip_writer.shutdown())
+        .await
+        .is_err()
+    {
+        warn!("the loop guard's log did not finish its last write in time");
     }
-
-    completed.store(true, Ordering::Release);
-    info!("daemon shutdown complete");
 }
 
 #[cfg(test)]

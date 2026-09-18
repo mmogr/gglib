@@ -95,7 +95,8 @@ impl Default for DaemonOptions {
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
 ///    machine told once to be reachable is reachable again after a reboot.
 /// 6. On SIGINT/SIGTERM/shutdown-route: drain the proxy, stop every child,
-///    audit pidfiles — under a force-exit watchdog.
+///    write what the loop guard's log still holds, audit pidfiles — under a
+///    force-exit watchdog.
 ///
 /// # Errors
 ///

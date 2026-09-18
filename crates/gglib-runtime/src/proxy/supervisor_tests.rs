@@ -43,7 +43,8 @@ impl McpServerRepository for EmptyMcpRepo {
     }
 }
 
-/// Mock runtime port for testing.
+/// Mock runtime port for testing. It admits nothing, so a request a proxy
+/// lets through is refused at admission and is never forwarded anywhere.
 #[derive(Debug)]
 struct MockRuntimePort;
 
@@ -51,14 +52,12 @@ struct MockRuntimePort;
 impl ModelRuntimePort for MockRuntimePort {
     async fn admit(
         &self,
-        _model_name: &str,
+        model_name: &str,
         _num_ctx: Option<u64>,
         _default_ctx: Option<u64>,
         _overrides: gglib_core::ports::LaunchOverrides,
     ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
-        Ok(gglib_core::ports::Admission::detached(
-            RunningTarget::local(8080, 1, "test-model".to_string(), 4096, false),
-        ))
+        Err(ModelRuntimeError::ModelNotFound(model_name.to_string()))
     }
 
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -217,4 +216,76 @@ async fn test_restart_after_stop() {
 
     // Cleanup
     supervisor.stop().await.unwrap();
+}
+
+/// A sink that counts the decisions it is handed.
+#[derive(Default)]
+struct CountingSink(std::sync::atomic::AtomicUsize);
+
+impl gglib_core::ports::LoopGuardTripSink for CountingSink {
+    fn record_trip(&self, _event: gglib_core::domain::loop_guard_log::LoopGuardTripEvent) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn record_scan(&self, _model_name: &str, _mode: gglib_core::LoopGuardMode, _at_secs: u64) {}
+}
+
+/// Post a history that trips the loop guard — three identical batches of a
+/// mutating tool, each answered the same way — to the proxy at `addr`. The
+/// model does not exist, so admission refuses it after the guard has run.
+async fn post_a_loop(addr: std::net::SocketAddr) {
+    let call = serde_json::json!({ "role": "assistant", "content": null, "tool_calls": [{
+        "id": "c1", "type": "function",
+        "function": { "name": "write_file", "arguments": "{\"path\":\"a\"}" }
+    }] });
+    let answer = serde_json::json!({ "role": "tool", "tool_call_id": "c1", "content": "done" });
+    let mut messages = vec![serde_json::json!({ "role": "user", "content": "go" })];
+    for _ in 0..3 {
+        messages.push(call.clone());
+        messages.push(answer.clone());
+    }
+    messages.push(serde_json::json!({ "role": "user", "content": "continue" }));
+    gglib_proxy::loopback::client_builder()
+        .build()
+        .unwrap()
+        .post(format!("http://{addr}/v1/chat/completions"))
+        .json(&serde_json::json!({ "model": "no-such-model", "messages": messages }))
+        .send()
+        .await
+        .expect("the proxy answers");
+}
+
+/// The sink a supervisor is built with reaches every proxy it starts, and a
+/// stop and a start keep counting into it.
+#[tokio::test]
+async fn the_trip_sink_reaches_every_proxy_run() {
+    let sink = Arc::new(CountingSink::default());
+    let supervisor = ProxySupervisor::with_trip_sink(
+        Arc::clone(&sink) as Arc<dyn gglib_core::ports::LoopGuardTripSink>
+    );
+    let config = ProxyConfig {
+        host: "127.0.0.1".to_string(),
+        port: 0,
+        ..ProxyConfig::default()
+    };
+    for expected in 1..=2 {
+        let (runtime, catalog) = make_ports();
+        let bind = supervisor
+            .start(
+                config.clone(),
+                runtime,
+                catalog,
+                make_mcp(),
+                make_settings_repo(),
+            )
+            .await
+            .unwrap();
+        post_a_loop(bind.addr).await;
+        supervisor.stop().await.unwrap();
+        assert_eq!(
+            sink.0.load(std::sync::atomic::Ordering::SeqCst),
+            expected,
+            "run {expected} records into the same sink"
+        );
+    }
 }

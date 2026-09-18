@@ -209,10 +209,11 @@ pub struct ProxySupervisor {
     /// the embedded axum server (GUI chat, via [`Self::agent_metrics`]) reach —
     /// so a single population survives proxy restarts within one process.
     agent_metrics: Arc<CacheMetricsStore>,
-    /// Per-model defect counters, owned here for the same reason
+    /// What every proxy run reports to — the per-model defect counters and,
+    /// in the daemon, the loop guard's log — owned here for the same reason
     /// `agent_metrics` is: they must outlive any single proxy run, so a
-    /// diagnosis spanning several restarts is still one population.
-    defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
+    /// diagnosis spanning several proxy restarts is still one population.
+    observers: gglib_proxy::ProxyObservers,
 }
 
 impl Default for ProxySupervisor {
@@ -225,12 +226,26 @@ impl ProxySupervisor {
     /// Create a new ProxySupervisor.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_observers(gglib_proxy::ProxyObservers::default())
+    }
+
+    /// A supervisor whose proxies record the loop guard's decisions, and the
+    /// requests it scanned, into `trips` — the daemon's log, which keeps them.
+    #[must_use]
+    pub fn with_trip_sink(trips: Arc<dyn gglib_core::ports::LoopGuardTripSink>) -> Self {
+        Self::with_observers(gglib_proxy::ProxyObservers {
+            loop_guard_trips: Some(trips),
+            ..gglib_proxy::ProxyObservers::default()
+        })
+    }
+
+    fn with_observers(observers: gglib_proxy::ProxyObservers) -> Self {
         let (exit_tx, _) = watch::channel(ProxyStatus::Stopped);
         Self {
             handle: Mutex::new(None),
             exit_tx,
             agent_metrics: Arc::new(CacheMetricsStore::new()),
-            defects: Arc::new(gglib_core::domain::defects::ModelDefectLedger::new()),
+            observers,
         }
     }
 
@@ -359,7 +374,7 @@ impl ProxySupervisor {
         let started_override = inference_override.clone();
         let started_default_profile = default_profile.clone();
         let agent_metrics = Arc::clone(&self.agent_metrics);
-        let defects = Arc::clone(&self.defects);
+        let observers = self.observers.clone();
         let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
@@ -387,7 +402,7 @@ impl ProxySupervisor {
                 slot_dir,
                 disk_budget,
                 agent_metrics,
-                defects,
+                observers,
                 &access,
             )
             .await;

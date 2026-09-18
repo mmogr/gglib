@@ -12,6 +12,7 @@ use gglib_core::domain::defects::ModelDefectLedger;
 use gglib_core::{LoopGuardMode, Settings};
 use serde_json::{Value, json};
 
+use super::GuardObservers;
 use crate::metrics::ContextMetricsStore;
 
 pub(super) const MODEL: &str = "test-model";
@@ -35,6 +36,15 @@ pub(super) fn store() -> (ContextMetricsStore, Arc<ModelDefectLedger>) {
         ContextMetricsStore::new().with_ledger(Arc::clone(&ledger)),
         ledger,
     )
+}
+
+/// Observers with no log behind them: the dashboard's store alone.
+pub(super) const fn observing(metrics: &ContextMetricsStore) -> GuardObservers<'_> {
+    GuardObservers {
+        metrics,
+        trips: None,
+        session_id: None,
+    }
 }
 
 pub(super) fn body(history: Vec<Value>) -> Bytes {

@@ -38,8 +38,8 @@ use std::sync::Arc;
 use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, Repos, SystemProbePort,
-    ToolSupportDetectorPort,
+    LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort,
+    Repos, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
@@ -85,6 +85,10 @@ pub struct ServiceGraphParams {
     pub server_events: Arc<dyn ServerEvents>,
     /// Benchmark run persistence.
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,
+    /// Where every proxy the graph's supervisor starts records the loop
+    /// guard's decisions and scans (#1052). The adapter owns it, so it
+    /// outlives a proxy restart, and drains it in its own teardown.
+    pub loop_guard_trips: Arc<dyn LoopGuardTripSink>,
     /// Adapter-supplied base port for llama-server allocation.
     ///
     /// `Some` is an explicit override (a CLI `--base-port`); `None` defers to
@@ -151,6 +155,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         server_events,
         tool_detector,
         bench_repo,
+        loop_guard_trips,
         base_port,
         llama_server_path,
         device_keys_path,
@@ -191,7 +196,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         CacheRamSetting::ExplicitMb(0),
     ));
 
-    let proxy_supervisor = Arc::new(ProxySupervisor::new());
+    let proxy_supervisor = Arc::new(ProxySupervisor::with_trip_sink(loop_guard_trips));
     let system_probe: Arc<dyn SystemProbePort> = Arc::new(gglib_runtime::DefaultSystemProbe::new());
 
     // ProxyOps is built before ServerOps because ServerOps routes its whole
