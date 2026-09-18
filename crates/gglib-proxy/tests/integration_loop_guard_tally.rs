@@ -3,8 +3,9 @@
 //!
 //! The guard is two detectors behind one verdict, and `loop_guard_trips` used
 //! to be one number over both, so nobody could ask whether *stagnation* trips
-//! had become rare — the question ADR 0011's first kill criterion decides
-//! `StagnationDetector`'s future on (#947). The verdict becomes a tally in
+//! had become rare — the question on which ADR 0011's first kill criterion
+//! decides whether the proxy keeps `StagnationDetector` in its guard (#947).
+//! The verdict becomes a tally in
 //! three hops (`server.rs` reads the verdict, `metrics.rs` hands it to the
 //! ledger, the ledger bumps a field), and a unit test per hop proves each hop.
 //! These prove the chain: a real request that trips one detector, read back

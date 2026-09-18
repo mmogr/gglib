@@ -5,12 +5,22 @@
 
 import { get, post } from './client';
 import type { ProxyConfig, ProxyStatus, StartPinnedRequest } from '../types/proxy';
+import type { LoopGuardTripDay } from '../../../types/generated/LoopGuardTripDay';
 
 /**
  * Get current proxy server status.
  */
 export async function getProxyStatus(): Promise<ProxyStatus> {
   return get<ProxyStatus>('/api/proxy/status');
+}
+
+/**
+ * The loop guard's log over the last `sinceDays` days, a day per row, newest
+ * first. The daemon clamps the window to the 90 days the log keeps. Read from
+ * the database, so it survives a restart.
+ */
+export async function getLoopGuardTrips(sinceDays: number): Promise<LoopGuardTripDay[]> {
+  return get<LoopGuardTripDay[]>(`/api/proxy/loop-guard-trips?since_days=${sinceDays}`);
 }
 
 /**

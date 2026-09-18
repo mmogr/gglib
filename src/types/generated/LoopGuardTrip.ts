@@ -5,8 +5,10 @@
  *
  * The guard is two detectors behind one verdict, and until this existed their
  * trips went into one number, so nobody could ask whether *stagnation* trips
- * had become rare, which is the question that decides whether
- * `StagnationDetector` survives (ADR 0011's first kill criterion, #947).
+ * had become rare, which is the question that decides whether the proxy
+ * keeps `StagnationDetector` in its guard (ADR 0011's first kill criterion,
+ * #947; retiring the detector itself also needs the agent path's reading,
+ * #1091).
  * Since #1052 a trip is an intervention rather than a rejection: the default
  * forwards the request with a note.
  *

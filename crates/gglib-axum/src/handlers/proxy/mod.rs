@@ -4,9 +4,15 @@ mod wire;
 
 pub(crate) use wire::{ProxyStatus, StartPinnedBody, StartProxyConfig};
 
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Query, State},
+};
 
 use crate::{error::HttpError, state::AppState};
+use gglib_core::domain::loop_guard_log::{
+    LOOP_GUARD_LOG_DEFAULT_DAYS, LoopGuardTripDay, first_day_of_window,
+};
 use gglib_core::ports::AppEventEmitter;
 use wire::{to_api_status, to_runtime_config};
 
@@ -62,6 +68,41 @@ pub(crate) async fn start_pinned(
 /// Get current proxy status.
 pub(crate) async fn status(State(state): State<AppState>) -> Json<ProxyStatus> {
     Json(fetch_status(&state).await)
+}
+
+/// Query for [`trips`].
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct TripsQuery {
+    /// How many days back, ending today; clamped to the days the log keeps.
+    #[serde(default = "default_trip_days")]
+    since_days: u32,
+}
+
+const fn default_trip_days() -> u32 {
+    LOOP_GUARD_LOG_DEFAULT_DAYS
+}
+
+/// `GET /api/proxy/loop-guard-trips` — the loop guard's log, one row per UTC
+/// day, model, gglib version and mode, newest day first (#1052).
+///
+/// A day the guard scanned and never tripped is a row with no trips: that
+/// row is the reading ADR 0011's criterion asks for.
+///
+/// Not reachable through the remote tunnel: the tunnel's backend is the
+/// proxy's bind address, and the proxy serves no `/api` routes.
+pub(crate) async fn trips(
+    State(state): State<AppState>,
+    Query(query): Query<TripsQuery>,
+) -> Result<Json<Vec<LoopGuardTripDay>>, HttpError> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let days = state
+        .loop_guard_trips
+        .summary(first_day_of_window(now, query.since_days))
+        .await?;
+    Ok(Json(days))
 }
 
 /// Start the proxy (idempotent).

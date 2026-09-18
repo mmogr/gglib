@@ -79,8 +79,8 @@
 //! and the model's answer comes back untouched — so it is never replayed, and
 //! the guard therefore re-trips and re-notes on the next turn with the count
 //! one higher. That steady state is the design: a model that ignores the note
-//! forever is exactly what the event log in the second half of #1052 exists to
-//! make visible.
+//! forever is what the loop guard's log (`gglib proxy trips`) makes visible
+//! across restarts — its trips climb while its distinct sessions do not.
 //!
 //! # What it costs
 //!

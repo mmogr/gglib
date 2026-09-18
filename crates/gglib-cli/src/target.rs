@@ -98,6 +98,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
                      stops that machine, proxy and all, and asks first.",
                 ),
             ),
+            Some(ProxyCommand::Trips { .. }) => ("proxy trips", Reach::Local),
             None => ("proxy", Reach::Local),
         },
         Commands::Up { .. } => ("up", Reach::Local),

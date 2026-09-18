@@ -25,6 +25,13 @@ pub const PROXY_STOP_PATH: &str = "/api/proxy/stop";
 /// Current proxy status.
 pub const PROXY_STATUS_PATH: &str = "/api/proxy/status";
 
+/// The loop guard's log, a day per row (#1052).
+///
+/// Not in [`CLI_ROUTE_CONTRACT`]: `gglib proxy trips` reads the log from this
+/// machine's database directly, daemon or not. This route exists for the
+/// GUI's settings panel.
+pub const PROXY_LOOP_GUARD_TRIPS_PATH: &str = "/api/proxy/loop-guard-trips";
+
 /// Start (or reuse) a llama-server for a model.
 pub const SERVERS_START_PATH: &str = "/api/servers/start";
 

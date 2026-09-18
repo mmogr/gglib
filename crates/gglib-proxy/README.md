@@ -148,6 +148,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 | [`metrics.rs`](src/metrics.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-metrics-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
 | [`models_endpoint.rs`](src/models_endpoint.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_endpoint-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_endpoint-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models_endpoint-coverage.json) |
+| [`observers.rs`](src/observers.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-observers-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-observers-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-observers-coverage.json) |
 | [`profiles.rs`](src/profiles.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-profiles-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-profiles-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-profiles-coverage.json) |
 | [`props.rs`](src/props.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-props-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-props-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-props-coverage.json) |
 | [`props_baseline_tests.rs`](src/props_baseline_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-props_baseline_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-props_baseline_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-props_baseline_tests-coverage.json) |
@@ -739,6 +740,26 @@ Tripped requests are visible on the dashboard as `loop_guard_trip` in
 request the guard *noted* was let through and still names its detector —
 that is the point of the field since #1052.
 
+Every decision is also written to the loop guard's log in gglib's database,
+which outlives the daemon: a row per request the guard noted or refused, and,
+per UTC day, model, gglib version and mode, a count of the requests it scanned
+(nothing is scanned under `off`). Read it with `gglib proxy trips`,
+`GET /api/proxy/loop-guard-trips`, or the panel under the setting. A row is the
+guard's decision, not a delivery — a noted request can still reach the model
+without its note (a template with no `tool` branch), or not at all (the
+context budget, an embedding model, an unknown model, a failed admission, a
+failed retry). The dashboard counts those too, except the embedding model, the
+unknown model and the failed admission, so under `note` the log can count more
+than the dashboard's `loop_guard_trips`. It can also count fewer: a decision the
+writer could not queue is lost while its scan is kept, which reads as fewer
+trips over the same scans, and only a warning in the daemon's log says so. No
+conversation text is kept: the batch signature and the session id are stored
+as the first 16 hex digits of their SHA-256, stable correlation keys that
+anyone holding the data directory can match against a guess, not a privacy
+boundary; the model name is the client's, bounded to 256 characters. Rows are
+kept 90 days. Only this proxy's scan writes it; the agent loop's detectors
+record nothing (#1091).
+
 ## Proxy Dashboard
 
 ```text
@@ -897,7 +918,11 @@ Five shapes worth knowing before reading them:
   that carries a clock rather than measuring progress.
 
 Process-lifetime and reset on restart, deliberately — see
-[ADR 0006](../../docs/adr/0006-recover-dont-predict.md). Nothing acts on them
+[ADR 0006](../../docs/adr/0006-recover-dont-predict.md). The loop guard's
+decisions alone are also kept across restarts, in a log of their own (see
+[Loop & Stagnation Defence](#loop--stagnation-defence)): `loop_guard_trips`
+here counts one run's snapshots, the log counts decisions across runs, and
+under `note` the two can differ. Nothing acts on them
 automatically; they are diagnosis. `gglib proxy dashboard` renders them, listing
 only models with something to report. A model with no faults can still earn a
 line on the two observational counters alone, printed under an `observed`

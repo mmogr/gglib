@@ -127,6 +127,9 @@ pub(crate) struct AppState {
     /// when the same model+session is already hot.
     last_loaded_session:
         Arc<tokio::sync::RwLock<Option<crate::cache_lifecycle::LastLoadedSession>>>,
+    /// Where the loop guard records each decision and each scanned request,
+    /// to outlive the process. `None` records nothing.
+    pub(crate) loop_guard_trips: Option<Arc<dyn gglib_core::ports::LoopGuardTripSink>>,
 }
 
 impl AppState {
@@ -212,11 +215,10 @@ pub async fn serve(
     // single proxy run. Exposed on the dashboard as `agent_usage`, alongside
     // the proxied figure.
     agent_metrics: Arc<CacheMetricsStore>,
-    // Per-model defect counters, supervisor-owned for the same reason as
-    // `agent_metrics`: they outlive any single proxy run. Fed by the
-    // context-metrics store, which sees every signal with the model name
-    // attached.
-    defects: Arc<gglib_core::domain::defects::ModelDefectLedger>,
+    // What this run reports to that outlives it — the per-model defect
+    // counters and the loop guard's log — supervisor-owned for the same
+    // reason as `agent_metrics`. See `ProxyObservers`.
+    observers: crate::ProxyObservers,
     // Who may reach this endpoint: the CORS policy, the optional bearer token,
     // and the Host allowlist. Carries the `CorsConfig` it replaced rather than
     // sitting beside it — `serve` was already at fifteen parameters, and access
@@ -302,7 +304,7 @@ pub async fn serve(
     let dashboard = Arc::new(DashboardState::new(
         connections,
         slots_cache,
-        Arc::new(ContextMetricsStore::new().with_ledger(defects)),
+        Arc::new(ContextMetricsStore::new().with_ledger(observers.defects)),
         Arc::clone(&upstream_health),
         Arc::new(CacheStatusCache::new()),
         Arc::new(CacheMetricsStore::new()),
@@ -341,6 +343,7 @@ pub async fn serve(
         per_session_cleared,
         server_start_time,
         last_loaded_session,
+        loop_guard_trips: observers.loop_guard_trips,
     };
 
     let app = crate::router::build(state, access);
@@ -580,7 +583,12 @@ pub(crate) async fn chat_completions(
     // replayed history means.
     let mut guard_note = None;
     let mut loop_guard_trip = None;
-    match crate::loop_guard_step::run(&settings, &body, &model_name, &state.dashboard.metrics) {
+    let guard_observers = crate::loop_guard_step::GuardObservers {
+        metrics: &state.dashboard.metrics,
+        trips: state.loop_guard_trips.as_deref(),
+        session_id: sanitized_session_id.as_deref(),
+    };
+    match crate::loop_guard_step::run(&settings, &body, &model_name, &guard_observers) {
         crate::loop_guard_step::GuardStep::Forward => {}
         crate::loop_guard_step::GuardStep::Note { note, trip } => {
             guard_note = Some(note);

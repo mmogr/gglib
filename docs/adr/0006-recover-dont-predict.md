@@ -2,7 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-12 (amended 2026-08-26 and 2026-08-27 — see the two notes
-  following the 2026-08-26 postscript)
+  following the 2026-08-26 postscript — and 2026-09-18, in a note under
+  Consequences)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0002](0002-defer-tool-call-constraint-to-llama-cpp.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md),
@@ -87,6 +88,24 @@ invented to answer the staleness objection ADR 0005 itself raised. With no
 automatic reader left, nobody needed yesterday's numbers, and the apparatus
 would have sat dormant. Gathering evidence from real traffic is now a
 deliberate sitting rather than something that accrues across restarts.
+
+> **Amended 2026-09-18 — one reading now accrues across restarts.**
+> [#1052](https://github.com/mmogr/gglib/issues/1052) writes the loop guard's
+> decisions, and a daily count of the requests it scanned, to two tables in
+> gglib's database (`loop_guard_trips`, `loop_guard_scans`), because
+> [ADR 0011](0011-stagnation-is-about-prose.md)'s kill criterion needs a
+> denominator no single run supplies. The per-model counters above are
+> unchanged: per-process, reset on restart.
+>
+> The log is not the removed `defect_windows`. Nothing decays. Nothing
+> automatic reads it — a person does, through `gglib proxy trips`,
+> `GET /api/proxy/loop-guard-trips` or the panel under the loop guard's
+> setting. And instead of discarding evidence from another build, it stamps
+> each row with the gglib version and the guard's mode so a reader can keep
+> them apart. It records neither the llama.cpp build nor the model file, so it
+> answers the staleness objection only as far as a person splits the reading
+> by date. "Nobody needed yesterday's numbers" was true of the scheduler's
+> readers and is not true of this one.
 
 **A day's autonomy is gone, deliberately.** gglib will no longer improve a
 model's defaults while nobody is looking. In exchange it no longer spends hours

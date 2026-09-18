@@ -13,6 +13,7 @@ import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../../constants/se
 import { NumberSettingField } from './NumberSettingField';
 import { SettingField, settingDescriptionId } from './SettingField';
 import { ToggleField } from './ToggleField';
+import { LoopGuardTripsPanel } from '../LoopGuardTripsPanel';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../../../services/transport';
 
 interface AdvancedSettingsProps {
@@ -157,6 +158,8 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
             <option value="off">Off — do not scan at all</option>
           </Select>
         </SettingField>
+
+        <LoopGuardTripsPanel />
 
         <ToggleField
           id="agentic-sampling-input"

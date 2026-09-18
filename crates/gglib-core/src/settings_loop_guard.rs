@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// session on its sixth turn: an external agentic client has no recovery path
 /// from a refusal, and because it replays the whole conversation every turn,
 /// the refusal repeats for the rest of the session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum LoopGuardMode {

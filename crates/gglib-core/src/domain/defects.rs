@@ -36,6 +36,16 @@
 //! the whole apparatus went rather than sit dormant. These counters are
 //! diagnostic, per-process, and reset on restart — which is the correct
 //! lifetime for a claim about what is happening now.
+//!
+//! One reading has since needed yesterday's numbers: ADR 0011's kill
+//! criterion asks whether the guard's trips reach zero across more traffic
+//! than one run sees. So the loop guard's decisions — not these counters — are
+//! also written to a log that outlives the process,
+//! [`super::loop_guard_log`]. It answers the objection above in part: every
+//! row is dated, so a person chooses the window; nothing automatic reads it;
+//! and every row carries the gglib version and the guard's mode. It records
+//! neither the llama.cpp build nor the model file, which `defect_windows`
+//! scoped by, so a reading that spans either has to be split by date.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

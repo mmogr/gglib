@@ -36,6 +36,7 @@ pub(crate) mod mcp;
 pub(crate) mod metrics;
 pub mod models;
 pub(crate) mod models_endpoint;
+pub(crate) mod observers;
 pub(crate) mod profiles;
 pub mod props;
 pub(crate) mod remote;
@@ -53,6 +54,7 @@ pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;
 
+pub use observers::ProxyObservers;
 pub use server::serve;
 // Named by this crate's own `tests/`, which link it as an external crate and so
 // cannot see `#[cfg(test)]`. Re-exported rather than reopening

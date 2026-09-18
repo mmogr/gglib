@@ -571,13 +571,13 @@ pub(crate) struct ForwardRequest<'a> {
     /// Which detector the loop guard tripped on, when it decided to note this
     /// request rather than refuse it.
     ///
-    /// It rides here rather than being recorded by the guard because a noted
-    /// request is forwarded: this function records the one snapshot for it,
-    /// and both of its record sites carry the trip, so a request that is then
-    /// clamped by the context budget still counts the intervention. A
-    /// refused request never reaches here — the guard records its own — and
-    /// an `UpstreamDead` retry deliberately passes `None`, so one client
-    /// request counts one trip however many attempts it takes.
+    /// It rides here rather than in a snapshot of the guard's own because
+    /// this function records the one snapshot for a noted request that reaches
+    /// it, and both of its record sites carry the trip, so a request that is
+    /// then clamped by the context budget still counts the intervention. A
+    /// refused request never reaches here — the guard records its own
+    /// snapshot — and an `UpstreamDead` retry deliberately passes `None`, so
+    /// one client request counts one trip however many attempts it takes.
     pub loop_guard_trip: Option<LoopGuardTrip>,
 }
 

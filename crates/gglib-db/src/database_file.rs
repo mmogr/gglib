@@ -2,7 +2,9 @@
 //! `SQLite` opens it.
 //!
 //! The database holds chat history, the proxy's API key and the environment
-//! variables given to MCP servers, which is where their API keys go.
+//! variables given to MCP servers, which is where their API keys go — and the
+//! loop guard's log, whose hashed signatures and session ids anyone who can
+//! read the file can match against a guess.
 
 use std::io;
 use std::path::Path;

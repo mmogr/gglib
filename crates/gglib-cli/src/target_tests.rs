@@ -45,6 +45,12 @@ fn the_use_side_reaches_the_machine_and_everything_else_is_about_this_one() {
         assert_eq!(reach, Reach::Local, "{name}");
         assert_eq!(name, argv[1], "the name is the word typed");
     }
+    // The loop guard's log is this machine's database; --remote must refuse
+    // it rather than print this machine's log as if it were the far one's.
+    assert_eq!(
+        reach(&parsed(&["gglib", "proxy", "trips"])),
+        ("proxy trips", Reach::Local)
+    );
 }
 
 /// `proxy stop` is about this machine for a reason the general sentence

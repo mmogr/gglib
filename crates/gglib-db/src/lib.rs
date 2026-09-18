@@ -3,6 +3,7 @@
 
 mod database_file;
 pub mod factory;
+mod loop_guard_trip_writer;
 pub mod repositories;
 pub mod setup;
 
@@ -12,8 +13,11 @@ pub use factory::CoreFactory;
 // Re-export repository implementations
 pub use repositories::{
     ModelFilesRepository, SqliteBenchmarkRepository, SqliteChatHistoryRepository,
-    SqliteMcpRepository, SqliteModelRepository, SqliteSettingsRepository,
+    SqliteLoopGuardTripLog, SqliteMcpRepository, SqliteModelRepository, SqliteSettingsRepository,
 };
+
+// The loop guard's batched writer: the sink the proxy records into.
+pub use loop_guard_trip_writer::{LoopGuardTripWriter, TripWriterLimits};
 
 // Re-export setup functions for convenient access
 pub use setup::cleanup_zombie_benchmark_runs;
