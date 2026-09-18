@@ -12,11 +12,11 @@ use std::sync::Arc;
 use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, ModelRegistrarPort,
-    ModelRepository, SettingsRepository,
+    AppEventEmitter, DownloadManagerPort, GgufParserPort, LoopGuardTripLog, ModelCatalogPort,
+    ModelRegistrarPort, ModelRepository, SettingsRepository,
 };
 use gglib_core::services::AppCore;
-use gglib_db::SqliteBenchmarkRepository;
+use gglib_db::{SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
 use gglib_download::CliDownloadEventEmitter;
 use gglib_mcp::McpService;
 use gglib_runtime::CatalogPortImpl;
@@ -83,6 +83,9 @@ pub struct CliContext {
     pub http_client: reqwest::Client,
     /// Benchmark run repository for compare and perf results.
     pub bench_repo: Arc<SqliteBenchmarkRepository>,
+    /// The loop guard's log, read straight from this machine's database, so
+    /// `gglib proxy trips` answers whether or not a daemon is running.
+    pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
     /// Settings repository for user preferences and inference defaults.
     pub settings_repo: Arc<dyn SettingsRepository>,
     /// Terminal progress emitter used by the interactive download monitor.
@@ -127,7 +130,8 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
-    let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool));
+    let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
+    let loop_guard_trips = Arc::new(SqliteLoopGuardTripLog::new(pool));
 
     let mcp = Arc::new(McpService::new(repos.mcp_servers.clone()));
 
@@ -143,6 +147,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         base_port: config.base_port,
         http_client: gglib_proxy::loopback::client(),
         bench_repo,
+        loop_guard_trips,
         settings_repo: repos.settings,
         download_emitter,
     })
