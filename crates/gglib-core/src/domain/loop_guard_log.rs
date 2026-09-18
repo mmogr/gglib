@@ -73,6 +73,9 @@ use crate::settings::LoopGuardMode;
 /// How many days the log keeps, and so the widest window a reader can ask for.
 pub const LOOP_GUARD_LOG_RETENTION_DAYS: u32 = 90;
 
+/// The window a reader gets when it names none.
+pub const LOOP_GUARD_LOG_DEFAULT_DAYS: u32 = 30;
+
 /// The longest model name a row keeps. The client chooses the name, and the
 /// proxy sets no request-size limit of its own.
 pub const MODEL_NAME_LIMIT: usize = 256;
