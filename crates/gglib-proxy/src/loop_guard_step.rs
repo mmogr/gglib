@@ -156,5 +156,9 @@ pub(crate) fn run(
 }
 
 #[cfg(test)]
+#[path = "loop_guard_step_fixtures.rs"]
+mod fixtures;
+
+#[cfg(test)]
 #[path = "loop_guard_step_tests.rs"]
 mod tests;
