@@ -96,7 +96,8 @@ mod update_settings_request_tests {
 
     /// The clear must still be a clear after the hand-off to the domain
     /// update — the layer that decides what actually reaches storage.
-    /// The read hop: what is stored is what the settings modal is shown.
+    /// The read hop for the loop-guard mode: what is stored is what the
+    /// settings modal is shown.
     ///
     /// Deleting this one line makes the GUI select open on the default
     /// whatever is stored, and nothing else in the workspace notices.

@@ -226,11 +226,17 @@ property of judging a whole transcript rather than the turn in front of you.
   > here can close that gap.
   >
   > The same bound by a second route: a tripped conversation that also exceeds
-  > the context budget is refused as `context_length_exceeded` before the note
-  > is rendered, so it too is counted as an intervention that delivered
-  > nothing — and that is by construction the shape most likely to trip the
-  > guard. Stating the template case and not this one would leave the bound
-  > half-drawn.
+  > the context budget is noted, and then refused as `context_length_exceeded`
+  > inside the forward — the note is built and appended, and nothing is sent.
+  > It too is counted as an intervention that delivered nothing, and that is by
+  > construction the shape most likely to trip the guard. Stating the template
+  > case and not this one would leave the bound half-drawn.
+  >
+  > A corollary, since the note is appended before the budget is measured: the
+  > note's own characters count against it. A conversation within a few hundred
+  > characters of the ceiling can be forwarded under `off` and refused under
+  > the default. That is a cost of the new default, not of the counter, and it
+  > is recorded here because this note is where the trade is written down.
   >
   > One consequence worth stating because it is a cost, not a benefit: under
   > `note` a genuinely runaway client burns a full generation per stuck turn

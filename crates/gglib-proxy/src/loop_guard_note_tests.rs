@@ -218,9 +218,13 @@ fn the_note_neither_creates_a_trip_nor_masks_one() {
         "the note must not create a trip"
     );
 
-    // One more repeat: trips, and must still trip with the note in it. A note
-    // delivered as a trailing turn of a role that is not tool/assistant would
-    // reset both detectors and hide this.
+    // One more repeat: trips, and must still trip with the note in it.
+    //
+    // This half is weaker than it looks and is kept for the arithmetic rather
+    // than the hazard: `scan_history` returns at the first trip it finds, so a
+    // note appended after that point is never reached, and a delivery that
+    // *did* reset the detectors would not fail here. The first half above is
+    // the one that can fail.
     let over = body(json!(looping(3)));
     let verdict = scan(&over);
     assert!(
@@ -237,9 +241,14 @@ fn the_note_neither_creates_a_trip_nor_masks_one() {
 #[test]
 fn the_note_survives_a_truncation_that_trims_the_history_around_it() {
     // A long conversation whose earlier tool results are big enough that the
-    // budget forces a trim, with the note appended to the last message. The
-    // note is always in the last message, and truncation protects the tail by
-    // index, so it must come through untouched while earlier turns do not.
+    // budget forces a trim, with the note appended to the last message.
+    //
+    // What this pins is the outcome, not the mechanism: the trim runs oldest
+    // to newest and stops at the low watermark long before it reaches the
+    // tail, so forcing `is_tail_protected` false leaves this green. The
+    // protected-tail guarantee is real — the note is always at index
+    // `total - 1` — but it is not what this test exercises, and a mutation of
+    // that constant would survive.
     let filler = "y".repeat(4_000);
     let mut history = vec![json!({ "role": "system", "content": "be helpful" })];
     for _ in 0..12 {

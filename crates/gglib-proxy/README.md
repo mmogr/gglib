@@ -703,8 +703,8 @@ table is not re-derivable from this tree. The one limit: a template with no
 branch for the `tool` role drops the whole last message on an agentic tail,
 and the note with it.
 
-The escape hatch remains for a
-client that legitimately repeats identical batches with nothing in between.
+The escape hatch — `--loop-guard-mode off` — remains for a client that
+legitimately repeats identical batches with nothing in between.
 (Replaying identical batches across a history no longer trips it — the count
 is back to back, and a repeat whose answer changed is not counted at all. A
 batch that went unanswered, or was answered only in part, cannot be compared
@@ -715,12 +715,20 @@ path's per-iteration check by one turn (the history at turn N shows responses
 under the default, `note`, nothing is capped — the model is told, and a client
 that ignores the note spends a generation per stuck turn.
 
-One shape gets neither: a conversation that trips the guard **and** cannot be
-trimmed into the context budget is refused as `context_length_exceeded` before
-the note is ever rendered, so it sees a terminal 400 and no note at all. That
-is by construction the shape most likely to trip the guard — long and
-repetitive — and it is the one case where the new default buys nothing. The
+One shape gets neither. A conversation that trips the guard **and** cannot be
+trimmed into the context budget is noted — the note is built and appended
+first — and then refused as `context_length_exceeded` inside the forward, so
+nothing is sent and the client sees a terminal 400 with no note at all. That
+is by construction the shape most likely to trip the guard, long and
+repetitive, and it is the one case where the new default buys nothing. The
 trip is still counted.
+
+Because the note is appended *before* the budget is measured, its own
+characters count against that budget: a loop note adds 245–486 characters and
+a stagnation note about 206. A tripped conversation sitting inside that band of
+the ceiling is forwarded under `off` and refused under the default. Narrow, and
+the same shape was already one turn from the ceiling — but it is a 400 the old
+default would not have returned.
 
 **Fail-open:** an unparseable body passes (request routing already validated
 the JSON), and a tool call whose `arguments` string is malformed is hashed as

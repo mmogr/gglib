@@ -121,8 +121,14 @@ fn a_guard_switched_off_scans_nothing_and_forwards() {
     // Nothing was scanned, so nothing was recorded: not the refusal snapshot,
     // and not the repeat readings a scan would have produced.
     assert_eq!(metrics.total_requests(), 0);
-    assert_eq!(counts(&ledger).loop_guard_trips, 0);
-    assert_eq!(counts(&ledger).identical_result_repeats, 0);
+    let c = counts(&ledger);
+    assert_eq!(c.loop_guard_trips, 0);
+    // All three diagnostic readings, not one: `off` means the scan does not
+    // run, so none of them can be taken. Asserting a single reading would
+    // pass for a guard that scanned and merely declined to act.
+    assert_eq!(c.identical_result_repeats, 0);
+    assert_eq!(c.repeats_not_evaluated, 0);
+    assert_eq!(c.repeats_rescued, 0);
 }
 
 #[test]

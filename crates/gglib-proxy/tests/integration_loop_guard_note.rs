@@ -175,11 +175,20 @@ async fn an_off_guard_forwards_the_same_history_untouched() {
 
     let counts = &dashboard["per_model_defects"]["test-model"];
     assert_eq!(counts["loop_guard_trips"].as_u64(), Some(0), "{dashboard}");
-    assert_eq!(
-        counts["identical_result_repeats"].as_u64(),
-        Some(0),
-        "`off` scans nothing, so not even the diagnosis is taken: {dashboard}"
-    );
+    // All three diagnostic readings: `off` means the scan does not run, so
+    // none of them can be taken. One would pass for a guard that scanned and
+    // merely declined to act.
+    for reading in [
+        "identical_result_repeats",
+        "repeats_not_evaluated",
+        "repeats_rescued",
+    ] {
+        assert_eq!(
+            counts[reading].as_u64(),
+            Some(0),
+            "`off` scans nothing, so {reading} cannot be taken: {dashboard}"
+        );
+    }
 }
 
 /// A benign history is forwarded with nothing added, under the new default —

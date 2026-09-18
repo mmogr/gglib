@@ -56,15 +56,24 @@
 //! unary path and the repair re-issue, all of which derive from that body.
 //!
 //! One path carries the trip and never delivers the note: a request that also
-//! exceeds the context budget is refused as `context_length_exceeded` inside
-//! the forward, before shaping renders anything. That is by construction the
-//! shape most likely to trip the guard, and it is where the new default buys
-//! nothing.
+//! exceeds the context budget is noted here and then refused as
+//! `context_length_exceeded` inside the forward. The note is built and
+//! appended first — this runs before `shape_request_body` — so what fails is
+//! the sending, not the rendering. That is by construction the shape most
+//! likely to trip the guard, and it is where the new default buys nothing.
 //!
-//! **After the scan** is load-bearing twice over: the note cannot trip the
-//! guard that wrote it, and `loop_guard`'s detectors reset on any role that is
-//! not `tool`/`assistant`, so a note seen *before* the scan would quietly
-//! disable the guard rather than merely confuse it.
+//! It also means the note's own characters are inside the payload the budget
+//! is measured against: 245–486 for a loop, about 206 for stagnation. A
+//! conversation that close to the ceiling is forwarded under `off` and
+//! refused under the default.
+//!
+//! **After the scan** is load-bearing: the note cannot trip the guard that
+//! wrote it. The sharper-sounding hazard — that `loop_guard`'s detectors reset
+//! on any role that is not `tool`/`assistant`, so a note seen *before* the
+//! scan would disable the guard rather than merely confuse it — is foreclosed
+//! by the data flow rather than by the ordering, since the note is produced
+//! *by* the scan's own step and cannot exist before it. It is not a second
+//! reason, and a test cannot be written for it.
 //!
 //! The client never sees the note — it is added to the upstream request only,
 //! and the model's answer comes back untouched — so it is never replayed, and

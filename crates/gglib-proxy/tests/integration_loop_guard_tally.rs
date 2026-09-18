@@ -1,8 +1,8 @@
 //! End to end: a loop-guard trip reaches the dashboard under the detector that
 //! raised it.
 //!
-//! The guard is two detectors behind one 400, and `loop_guard_trips` used to be
-//! one number over both, so nobody could ask whether *stagnation* rejections
+//! The guard is two detectors behind one verdict, and `loop_guard_trips` used
+//! to be one number over both, so nobody could ask whether *stagnation* trips
 //! had become rare — the question ADR 0011's first kill criterion decides
 //! `StagnationDetector`'s future on (#947). The verdict becomes a tally in
 //! three hops (`server.rs` reads the verdict, `metrics.rs` hands it to the

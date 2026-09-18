@@ -4,9 +4,11 @@
  * Which of the loop guard's two detectors raised a trip.
  *
  * The guard is two detectors behind one verdict, and until this existed their
- * trips went into one number, so nobody could ask whether *stagnation*
- * rejections had become rare, which is the question that decides whether
+ * trips went into one number, so nobody could ask whether *stagnation* trips
+ * had become rare, which is the question that decides whether
  * `StagnationDetector` survives (ADR 0011's first kill criterion, #947).
+ * Since #1052 a trip is an intervention rather than a rejection: the default
+ * forwards the request with a note.
  *
  * It says which detector, and nothing about which path. Only the proxy's
  * pre-dispatch scan records a trip at all: the agent loop runs the same two
