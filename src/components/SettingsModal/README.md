@@ -17,10 +17,12 @@ Application settings modal: models directory path, base port configuration, per-
 | `InferenceProfileEditor.tsx` | Form for one profile. A blank parameter field is omitted from the payload rather than sent as `0`, so it falls through to the model's own default |
 | `SystemSettings.tsx` | System tab — the GUI face of `gglib config llama` |
 | `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel in the System tab |
+| `LoopGuardTripsPanel.tsx` | `gglib proxy trips` under the loop guard's setting: per day and model, what the guard scanned and what it acted on |
 | `LabelledValue.tsx` | A label and its value, for the read-only rows those two panels are mostly made of |
 | `BuildInfo.tsx` | The daemon's own build — version and commit — read from `/api/version` |
 | `useSystemSettings.ts` | State for the System tab: what llama.cpp is installed, whether upstream has moved, and the update/uninstall actions |
 | `useDiagnostics.ts` | State for the diagnostics half of the System tab |
+| `useLoopGuardTrips.ts` | State for the loop guard's log panel: one read when the Advanced section opens, and a reload |
 | `useNetworkSettings.ts` | State for the network-binding settings (bind host, LAN sharing) |
 | `useAgentGuardSettings.ts` | State for the agent-guard settings (agentic sampling cap, stagnation limit) |
 | `fields/` | The reusable field primitives these panels are built from |

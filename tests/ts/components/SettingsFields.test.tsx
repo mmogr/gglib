@@ -7,6 +7,13 @@ import { PortSettings } from '../../../src/components/SettingsModal/fields/PortS
 import { ModelDefaults } from '../../../src/components/SettingsModal/fields/ModelDefaults';
 import { AdvancedSettings } from '../../../src/components/SettingsModal/fields/AdvancedSettings';
 
+// The Advanced section now renders the loop guard's log, which reads it on
+// mount; this file is about the fields, so the read answers with nothing.
+vi.mock('../../../src/services/transport/api/proxy', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport/api/proxy')>()),
+  getLoopGuardTrips: vi.fn().mockResolvedValue([]),
+}));
+
 const noop = () => {};
 
 type Setter = (value: string) => void;
