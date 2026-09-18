@@ -20,9 +20,11 @@ on every request it forwards, after removing any copy the client sent, and
 `X-Modelpipe-Device: <name>` naming the device token that admitted it. [`remote_marker`] reads all three into a [`Tunnelled`]
 extension and tells the owner a request arrived.
 
-The peer fingerprint is minted per process on the connecting side, so it
-names a run rather than a device: a laptop that restarts arrives under a new
-one. The device name is the durable identity, because this side issued it.
+The peer fingerprint comes from the connecting side's endpoint key, so what
+it names is that side's choice: gglib's `join` keeps no key, so a laptop
+arrives under a new one every time it connects, while ggchat keeps one per
+machine it pairs with from 0.3.1. The device name is the durable identity,
+because this side issued it.
 
 **They are restrictive only.** A local client can write these headers too,
 and what it gains is a refusal — on `/mcp`, or now from [`device_gate()`] — and
