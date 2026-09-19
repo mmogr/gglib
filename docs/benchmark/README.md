@@ -77,3 +77,66 @@ context size: nothing in the default suite comes near a context limit.
 
 This is the task that generated ~32,900 completion tokens per run through the
 pipeline on 2026-08-29, against ~510 without it, and passed both ways.
+
+## Through the proxy: `--proxy`
+
+Neither the raw nor the gglib arm reaches `gglib-proxy`. Both post to
+llama-server, and the gglib arm applies the request pipeline in-process. So
+neither measures what only the proxy does, above all validating each tool call
+against the schema the client sent and re-issuing a broken one.
+
+`--proxy` adds an arm that does, and a baseline for it. The proxy arm sends
+every turn through a real proxy, started in-process in front of the model the
+eval already holds, just before the arm, and stopped just after it. Its
+baseline, raw (auto), goes straight to llama-server and is the raw arm with
+one difference, `tool_choice`. The proxy judges every call whose schema it
+can judge on an `"auto"` turn, but on a `"required"` turn only when gglib's
+own grammar constrained it, which it does for a dialect model. So both open
+with `"auto"`, where raw and gglib open with `"required"`, and the two are
+compared with each other and not with raw and gglib.
+
+The report's "through gglib-proxy" block gives the pair's scores and delta.
+The delta is everything the proxy does, its request pipeline included, so it
+does not say which part moved a score. The block also gives what the proxy
+counted: requests, and repairs attempted and succeeded. Read the counts first.
+A repaired call reaches the agent as the repaired call, so the scores alone
+cannot say whether repair ran. When the proxy attempts no repair (with repair
+on, no call it could judge broke its schema), the pair shows nothing about
+repair, and the report says so.
+
+The block also counts the proxy's loop-guard interventions. The eval's own
+agent runs the same loop detectors and ends a stuck run itself, so whether
+that count can be non-zero in an eval is not shown.
+
+A proxy arm in which no run reached the model ends the eval, as any other such
+arm does: a column of scores with nothing measured under it is not reported.
+
+## `schema_stress_suite.json`
+
+Six single-call tasks built to be violated. Five are traps for a model; the
+sixth is a trap for the validator:
+
+| task | the trap |
+| --- | --- |
+| `schema_integer_not_string` | `max_lines` is an integer, and the prompt spells it out in words |
+| `schema_enum_case` | `level` is one of four lower-case values, and the prompt says `WARNING` |
+| `schema_nested_required` | a required object with required fields of its own, and an enum at each level |
+| `schema_parameter_named_if` | a parameter named `if`, which a validator that mistakes names for keywords refuses to judge (#1046) |
+| `schema_array_of_objects` | an array of objects, each with a required integer |
+| `schema_deep_nesting` | an enum three objects deep |
+
+Every schema uses only keywords the proxy's validator checks: `type`, `enum`,
+`required`, `properties`, `items` and `additionalProperties: false`. That is
+deliberate. A schema holding a keyword the validator refuses (`$ref`, `anyOf`
+and the like) is forwarded unjudged, and the task would then look like a
+model that never needed repair. A keyword it ignores (`pattern`, `minimum`) is
+never checked, so a trap built on one would catch nothing.
+`crates/gglib-core/tests/schema_stress_suite.rs` holds the suite to being
+judgeable: each expected call is valid, and the same call missing one
+required argument is invalid, not unjudgeable. It does not notice an ignored
+keyword; keep them out by reading the schema.
+
+```
+gglib benchmark agentic -m <model> \
+  --task-suite docs/benchmark/schema_stress_suite.json --proxy
+```
