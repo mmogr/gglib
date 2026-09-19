@@ -75,8 +75,10 @@ pub enum ProxyCommand {
     ///
     /// Read from this machine's database, so it answers with or without a
     /// daemon running, and after a restart. One row per UTC day, model, gglib
-    /// version and mode: requests scanned, and of those the ones the guard
-    /// noted or refused, by detector, with the sessions they came from.
+    /// version and mode: requests scanned, and the ones the guard noted or
+    /// refused, by detector, with the sessions they came from. The noted or
+    /// refused ones are ordinarily among the requests scanned, but one whose
+    /// scan was lost is not, so a row can show more trips than scans.
     Trips {
         /// How many days back, ending today (the log keeps 90)
         #[arg(long, default_value_t = gglib_core::domain::loop_guard_log::LOOP_GUARD_LOG_DEFAULT_DAYS)]

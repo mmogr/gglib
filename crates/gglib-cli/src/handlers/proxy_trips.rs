@@ -8,10 +8,12 @@
 //! reads the same tables for the GUI's settings panel.
 //!
 //! One row per UTC day, model, gglib version and mode: the requests the guard
-//! scanned, and of those the ones it acted on — noted under `note`, refused
-//! under `refuse` — by detector, with how many sessions they came from. A day
-//! scanned without a trip is printed with zero trips: that is the reading
-//! ADR 0011's criterion asks for.
+//! scanned, and the ones it acted on — noted under `note`, refused under
+//! `refuse` — by detector, with how many sessions they came from. The ones
+//! acted on are ordinarily among the requests scanned, but one whose scan was
+//! lost is not, so a row can show more trips than scans. A day scanned without
+//! a trip is printed with zero trips: that is the reading ADR 0011's criterion
+//! asks for.
 
 use std::io::Write;
 
