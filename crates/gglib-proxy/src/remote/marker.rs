@@ -44,8 +44,9 @@ pub(crate) struct Tunnelled {
     /// The peer's fingerprint, when the edge sent a well-formed one: twelve
     /// hex characters, the same rule the tunnel's own log uses.
     ///
-    /// Per connection on the connecting side, so it names a dial rather than
-    /// a device: a laptop that dials again arrives under a new one.
+    /// Taken from the connecting side's endpoint key: gglib's `join` keeps
+    /// none, so a laptop that dials again arrives under a new one, while
+    /// ggchat keeps one per machine it pairs with from 0.3.1.
     pub(crate) peer: Option<Arc<str>>,
 
     /// The name the edge holds the admitting token under, when a named token

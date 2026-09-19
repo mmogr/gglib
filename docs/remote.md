@@ -82,10 +82,13 @@ recognise is a revocation you should be willing to make, not merely tidying.
 
 A device that redeemed its code also says which endpoint it paired from:
 the fingerprint of the endpoint the code was redeemed from. It is a record,
-not a check, and nothing is refused on it. Neither gglib nor ggchat keeps a
-connecting endpoint's key yet, so a device presents a new fingerprint every
-time it connects, and this one says only which endpoint redeemed the code. A
-row whose redemption was not recorded shows none.
+not a check, and nothing is refused on it. gglib's own `join` keeps no
+connecting endpoint key, so a laptop presents a new fingerprint every time it
+connects, and its row says only which endpoint redeemed the code. ggchat keeps
+one key per machine it pairs with from 0.3.1, so a phone that paired on 0.3.1
+or later presents the fingerprint it paired from each time it connects here,
+for as long as it keeps that key. A row whose redemption was not recorded
+shows none.
 
 ```console
 $ gglib remote list
