@@ -27,27 +27,31 @@ use super::{AgenticEvalReport, EffectVerdict};
 /// per-run quality scalar. Pass/fail flips remain visible per task in
 /// [`AgenticTaskComparison::pass_counts`]; folding them in here would double
 /// count, since the match score is most of what decides `passed`.
+///
+/// The same record serves every pairing the eval makes, each with a baseline
+/// and a treatment: raw and gglib here, raw-auto and the proxy arm in
+/// [`super::ProxyArms`], and an incumbent and a winner in the tune apply gate.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct PairedEffect {
-    /// Matched `(task, seed)` pairs in which both arms produced a real
+    /// Matched `(task, seed)` pairs in which both sides produced a real
     /// observation.
     pub pairs: usize,
-    /// Pairs both arms ran but at least one side never reached the model —
+    /// Pairs both sides ran but at least one side never reached the model —
     /// dropped from every number here, and reported so the drop is visible.
     pub unmeasured_pairs: usize,
-    /// Pairs the gglib arm scored strictly higher.
+    /// Pairs the treatment (gglib, or the proxy arm) scored strictly higher.
     pub wins: usize,
-    /// Pairs the raw arm scored strictly higher.
+    /// Pairs the baseline (raw, or raw-auto) scored strictly higher.
     pub losses: usize,
     /// Pairs with identical scores. On a suite where most tasks pass cleanly
-    /// under both arms this is the largest bucket, and that is information:
-    /// the arms mostly agree.
+    /// on both sides this is the largest bucket, and that is information: the
+    /// two mostly agree.
     pub ties: usize,
-    /// Mean of `gglib − raw` over the measured pairs.
+    /// Mean of `treatment − baseline` over the measured pairs.
     pub mean_delta: f64,
-    /// One-sided Wilcoxon signed-rank *p* for "gglib scores higher", by
-    /// normal approximation with tie correction.
+    /// One-sided Wilcoxon signed-rank *p* for "the treatment scores higher",
+    /// by normal approximation with tie correction.
     ///
     /// `None` below [`WILCOXON_MIN_PAIRS`] non-tied pairs — the approximation
     /// is not trustworthy there, and rendering a statistic the design cannot
@@ -69,15 +73,31 @@ impl PairedEffect {
     /// analysis of nothing is not a zero effect.
     #[must_use]
     pub fn from_tasks(tasks: &[AgenticTaskComparison]) -> Option<Self> {
+        Self::from_seed_pairs(
+            tasks
+                .iter()
+                .flat_map(|task| task.raw.iter().zip(task.gglib.iter())),
+        )
+    }
+
+    /// The paired comparison over matched `(baseline, treatment)` runs of the
+    /// same task and seed: the treatment's score minus the baseline's, so
+    /// `wins` counts pairs the *treatment* took.
+    ///
+    /// [`Self::from_tasks`] is this over the raw and gglib arms; the proxy
+    /// arm's report pairs its raw-auto baseline with the proxy the same way.
+    /// `None` when no pair has both sides measured.
+    #[must_use]
+    pub fn from_seed_pairs<'a>(
+        pairs: impl IntoIterator<Item = (&'a TuneTaskResult, &'a TuneTaskResult)>,
+    ) -> Option<Self> {
         let mut deltas = Vec::new();
         let mut unmeasured_pairs = 0_usize;
-        for task in tasks {
-            for (raw, gglib) in task.raw.iter().zip(task.gglib.iter()) {
-                if raw.is_measured() && gglib.is_measured() {
-                    deltas.push(gglib.tool_match_score - raw.tool_match_score);
-                } else {
-                    unmeasured_pairs += 1;
-                }
+        for (baseline, treatment) in pairs {
+            if baseline.is_measured() && treatment.is_measured() {
+                deltas.push(treatment.tool_match_score - baseline.tool_match_score);
+            } else {
+                unmeasured_pairs += 1;
             }
         }
         Self::from_deltas(&deltas, unmeasured_pairs)

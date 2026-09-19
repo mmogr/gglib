@@ -63,6 +63,7 @@ fn report() -> AgenticEvalReport {
         raw_replicates: vec![arm(0.780, None)],
         replicate_seed_sets: vec![replicate_seeds(&DEFAULT_SEEDS)],
         paired: None,
+        proxy: None,
     }
 }
 

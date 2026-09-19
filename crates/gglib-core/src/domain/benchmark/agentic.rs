@@ -34,6 +34,13 @@
 //! control that moves 0.5 says the eval can detect a large change; it says
 //! nothing about whether it can resolve a 0.08 one, which is what the A/A arm
 //! is for.
+//!
+//! Neither of the two real arms passes through `gglib-proxy`, so neither
+//! measures what only the proxy does, tool-call repair above all. One opt-in
+//! arm does, with a baseline ([`AgenticEvalConfig::include_proxy`]): **`proxy`**
+//! ([`EvalArm::Proxy`]) sends every turn through a real proxy, and
+//! **`raw_auto`** ([`EvalArm::RawAuto`]) is its baseline. They are compared
+//! with each other, never with the arms above; [`ProxyArms`] says why.
 
 use serde::{Deserialize, Serialize};
 
@@ -44,13 +51,16 @@ use super::tune::task::{TaskCategory, TaskSuite};
 #[path = "agentic_paired.rs"]
 mod agentic_paired;
 pub use agentic_paired::{PairedEffect, WILCOXON_MIN_PAIRS};
+#[path = "agentic_proxy.rs"]
+mod agentic_proxy;
+pub use agentic_proxy::{ProxyArmSettings, ProxyArms, ProxyTaskRuns};
 
 /// Configuration for one A/B agentic eval run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgenticEvalConfig {
     /// Database ID of the model to evaluate.
     pub model_id: i64,
-    /// Task suite both arms run — the same schema the tune sweep uses.
+    /// Task suite every arm runs — the same schema the tune sweep uses.
     pub task_suite: TaskSuite,
     /// Weights for each arm's composite score.
     ///
@@ -127,6 +137,14 @@ pub struct AgenticEvalConfig {
     /// reads.
     #[serde(default = "default_control_seeds")]
     pub control_seeds: usize,
+    /// Whether to run the proxy arm and its raw-auto baseline. See
+    /// [`EvalArm::Proxy`] and [`ProxyArms`].
+    ///
+    /// Off by default, so an eval that does not ask for them costs what it
+    /// always did: the two arms add two passes over the suite on the primary
+    /// seeds.
+    #[serde(default)]
+    pub include_proxy: bool,
 }
 
 /// The seeds an eval uses when its config names none.
@@ -293,6 +311,23 @@ pub enum EvalArm {
     /// applies to its instruments: a comparison in which nothing could have
     /// varied, reporting that nothing varied, is not evidence.
     Control,
+    /// **The proxy arm's baseline.** The raw arm, except that a task demanding
+    /// a tool call opens with `tool_choice: "auto"` rather than `"required"`.
+    ///
+    /// It exists only to be compared with [`Self::Proxy`], which opens with
+    /// `"auto"`, under which the proxy judges every call whose schema it can
+    /// judge. Against it, the proxy arm
+    /// differs only in going through the proxy; against [`Self::Raw`] it would
+    /// also differ in `tool_choice`.
+    RawAuto,
+    /// **Every turn through a real `gglib-proxy`**, started in-process in front
+    /// of the loaded model, opening with `tool_choice: "auto"`.
+    ///
+    /// The only arm that reaches what the proxy alone does, above all
+    /// validating each tool call against its schema and re-issuing a broken
+    /// one. The client side sends what [`Self::RawAuto`] sends; the proxy
+    /// applies the request pipeline itself.
+    Proxy,
 }
 
 impl std::fmt::Display for EvalArm {
@@ -300,6 +335,8 @@ impl std::fmt::Display for EvalArm {
         match self {
             Self::Raw => write!(f, "raw"),
             Self::Gglib => write!(f, "gglib"),
+            Self::RawAuto => write!(f, "raw (auto)"),
+            Self::Proxy => write!(f, "proxy"),
             Self::RawReplicate => write!(f, "raw (A/A)"),
             Self::Control => write!(f, "control"),
         }
@@ -593,7 +630,7 @@ pub struct AgenticEvalReport {
     pub quantization: Option<String>,
     /// Parameter count in billions.
     pub param_count_b: f64,
-    /// Context size both arms ran at, in tokens.
+    /// Context size every arm ran at, in tokens.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub ctx_size: u64,
     /// Aggregate scores under the raw arm.
@@ -650,6 +687,11 @@ pub struct AgenticEvalReport {
     /// from the drill-down for reports written before the field existed.
     #[serde(default)]
     pub paired: Option<PairedEffect>,
+    /// The proxy arm and its raw-auto baseline, when
+    /// [`AgenticEvalConfig::include_proxy`] ran them. `None` on every report
+    /// written before they existed.
+    #[serde(default)]
+    pub proxy: Option<ProxyArms>,
 }
 
 /// The smallest composite gap the control arm must open for the apparatus to

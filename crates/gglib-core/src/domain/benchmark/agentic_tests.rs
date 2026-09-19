@@ -27,7 +27,7 @@ fn a_config_with_no_weights_omits_the_key_rather_than_nulling_it() {
     );
 }
 
-fn scores(tool_accuracy: f64, loop_avoidance: Option<f64>, composite: f64) -> ArmScores {
+pub(super) fn scores(tool_accuracy: f64, loop_avoidance: Option<f64>, composite: f64) -> ArmScores {
     ArmScores {
         tool_accuracy,
         loop_avoidance,
@@ -89,7 +89,7 @@ fn uniform_arm(value: f64) -> ArmScores {
     arm
 }
 
-fn report_with(control: Option<ArmScores>, gglib_composite: f64) -> AgenticEvalReport {
+pub(super) fn report_with(control: Option<ArmScores>, gglib_composite: f64) -> AgenticEvalReport {
     AgenticEvalReport {
         model_name: "m".to_owned(),
         quantization: None,
@@ -110,6 +110,7 @@ fn report_with(control: Option<ArmScores>, gglib_composite: f64) -> AgenticEvalR
         raw_replicates: vec![],
         replicate_seed_sets: vec![],
         paired: None,
+        proxy: None,
     }
 }
 

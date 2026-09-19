@@ -415,6 +415,7 @@ async fn cmd_agentic(
         replicate_raw,
         replicate_pairs,
         control_seeds,
+        include_proxy: false,
     };
 
     let mut arms = vec!["raw (pipeline bypassed)", "gglib (full pipeline)"];

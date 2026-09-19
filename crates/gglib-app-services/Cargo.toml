@@ -13,7 +13,8 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core domain and ports, plus gglib-runtime and gglib-proxy for what they own
-# (the process runner, and the one loopback HTTP client builder); no UI adapters.
+# (the process runner, the one loopback HTTP client builder, and the proxy
+# itself); no UI adapters.
 gglib-core = { path = "../gglib-core" }
 gglib-download = { path = "../gglib-download" }
 gglib-mcp = { path = "../gglib-mcp" }
@@ -21,7 +22,8 @@ gglib-hf = { path = "../gglib-hf" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
 # For `loopback`, the one builder of an HTTP client for a server on this machine
 # (the far daemon's shutdown route over the pipe's local port, the benchmark's
-# llama-server); see #1085.
+# llama-server; see #1085), and for `serve`, which the agentic eval's proxy arm
+# starts in-process in front of the model it holds (#1047).
 gglib-proxy = { path = "../gglib-proxy" }
 # Pure-domain agentic loop (no HTTP/infra deps of its own — see its own
 # Cargo.toml). Used only by the tune service to drive AgentLoop::build()
