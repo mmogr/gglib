@@ -206,6 +206,17 @@ pub enum BenchmarkCommand {
         #[arg(long, default_value_t = 1, value_name = "N")]
         control_seeds: usize,
 
+        /// Also run an arm through a real gglib-proxy, started in front of the
+        /// model, which validates each tool call against its schema and
+        /// re-issues a broken one, and a raw baseline beside it that goes
+        /// straight to llama-server. Both open with `tool_choice: "auto"`,
+        /// under which the proxy judges every call whose schema it can judge,
+        /// so they are compared with each other and not with the raw and gglib
+        /// arms. Adds two passes
+        /// over the suite
+        #[arg(long)]
+        proxy: bool,
+
         /// Print the full report as JSON to stdout (the leaderboard
         /// interchange format: per-arm scores, deltas, per-task drill-down,
         /// model/quant identity, hardware snapshot)

@@ -12,8 +12,9 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
-    AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CompareConfig, DeltaWithheld, ModelCompareResult, ModelPerfResult, PerfConfig,
+    AgenticEvalConfig, AgenticEvalReport, ArmDelta, ArmScores, BenchmarkEvent,
+    BenchmarkModelResult, CompareConfig, DeltaWithheld, ModelCompareResult, ModelPerfResult,
+    PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
@@ -94,6 +95,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
             no_replicate,
             replicate_pairs,
             control_seeds,
+            proxy,
             json,
             output,
         } => {
@@ -107,6 +109,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
                 !no_replicate,
                 replicate_pairs,
                 control_seeds,
+                proxy,
                 json,
                 output,
             )
@@ -395,6 +398,7 @@ async fn cmd_agentic(
     replicate_raw: bool,
     replicate_pairs: usize,
     control_seeds: usize,
+    include_proxy: bool,
     json: bool,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
@@ -415,10 +419,14 @@ async fn cmd_agentic(
         replicate_raw,
         replicate_pairs,
         control_seeds,
-        include_proxy: false,
+        include_proxy,
     };
 
     let mut arms = vec!["raw (pipeline bypassed)", "gglib (full pipeline)"];
+    if include_proxy {
+        arms.push("raw opening with auto (the proxy's baseline)");
+        arms.push("proxy (every turn through gglib-proxy)");
+    }
     if replicate_raw {
         arms.push("raw again (A/A, disjoint seeds)");
     }
@@ -538,46 +546,7 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     }
     eprintln!();
     eprintln!("  axis              raw    gglib   delta");
-    eprintln!("  ─────────────── ────── ────── ───────");
-    for (name, raw, gglib, delta) in [
-        (
-            "tool accuracy  ",
-            Some(report.raw.tool_accuracy),
-            Some(report.gglib.tool_accuracy),
-            report.delta.tool_accuracy,
-        ),
-        (
-            "loop avoidance ",
-            report.raw.loop_avoidance,
-            report.gglib.loop_avoidance,
-            report.delta.loop_avoidance,
-        ),
-        (
-            "task completion",
-            Some(report.raw.task_completion),
-            Some(report.gglib.task_completion),
-            report.delta.task_completion,
-        ),
-        (
-            "composite      ",
-            Some(report.raw.composite),
-            Some(report.gglib.composite),
-            report.delta.composite,
-        ),
-    ] {
-        let colour = match delta {
-            Some(d) if d > 0.0 => style::SUCCESS,
-            Some(d) if d < 0.0 => style::DANGER,
-            _ => "",
-        };
-        eprintln!(
-            "  {name} {raw} {gglib} {colour}{delta}{RESET}",
-            raw = fmt_axis(raw, 6),
-            gglib = fmt_axis(gglib, 6),
-            delta = fmt_delta(delta),
-            RESET = style::RESET
-        );
-    }
+    render_axis_rows(&report.raw, &report.gglib, &report.delta);
     // An arm that never reached a second tool batch cannot have looped, so its
     // loop-avoidance score is unmeasured rather than perfect. Say so, and say
     // over how many tasks — the denominator is the whole story.
@@ -599,10 +568,136 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     render_noise_block(report);
     render_paired_block(report);
     render_control_block(report);
+    render_proxy_block(report);
     render_stability_block(report);
     render_efficiency_block(report);
     render_generation_block(report);
     eprintln!();
+}
+
+/// The four axis rows under a header the caller prints: `first`, `second`,
+/// and the delta between them, coloured by its sign.
+fn render_axis_rows(first: &ArmScores, second: &ArmScores, delta: &ArmDelta) {
+    eprintln!("  ─────────────── ────── ────── ───────");
+    for (name, a, b, d) in [
+        (
+            "tool accuracy  ",
+            Some(first.tool_accuracy),
+            Some(second.tool_accuracy),
+            delta.tool_accuracy,
+        ),
+        (
+            "loop avoidance ",
+            first.loop_avoidance,
+            second.loop_avoidance,
+            delta.loop_avoidance,
+        ),
+        (
+            "task completion",
+            Some(first.task_completion),
+            Some(second.task_completion),
+            delta.task_completion,
+        ),
+        (
+            "composite      ",
+            Some(first.composite),
+            Some(second.composite),
+            delta.composite,
+        ),
+    ] {
+        let colour = match d {
+            Some(d) if d > 0.0 => style::SUCCESS,
+            Some(d) if d < 0.0 => style::DANGER,
+            _ => "",
+        };
+        eprintln!(
+            "  {name} {a} {b} {colour}{d}{RESET}",
+            a = fmt_axis(a, 6),
+            b = fmt_axis(b, 6),
+            d = fmt_delta(d),
+            RESET = style::RESET
+        );
+    }
+}
+
+/// The proxy pair: what going through the proxy changed on this model, and
+/// whether its repair did anything at all.
+///
+/// Both arms open with `tool_choice: "auto"`, under which the proxy judges
+/// every call, so they get a table of their own rather than two more columns
+/// beside raw and gglib, which open with `"required"`. The delta is everything
+/// the proxy does, its request pipeline included. The repair counts come last
+/// and matter most: a repaired call reaches the agent as the repaired call, so
+/// the scores alone cannot say whether repair ran.
+fn render_proxy_block(report: &AgenticEvalReport) {
+    let Some(pair) = &report.proxy else {
+        return;
+    };
+    let (muted, warn, reset) = (style::MUTED, style::WARNING, style::RESET);
+    eprintln!();
+    eprintln!(
+        "  {bold}through gglib-proxy{reset}  {muted}both arms open with tool_choice \"auto\", \
+         under which the proxy judges every call whose schema it can judge; compare them \
+         with each other, not with the \
+         table above{reset}",
+        bold = style::BOLD,
+    );
+    eprintln!("  axis              auto   proxy   delta");
+    render_axis_rows(&pair.raw_auto, &pair.proxy, &pair.delta);
+    // `delta_of` names its counts for raw and gglib; here they are raw (auto)
+    // and the proxy arm.
+    if let Some(DeltaWithheld::ContaminatedByUnmeasuredRuns { raw, gglib }) = pair.delta.withheld {
+        eprintln!(
+            "  {warn}delta withheld: {raw} raw (auto) and {gglib} proxy runs never reached the \
+             model, so a difference here would be partly a difference in failures{reset}"
+        );
+    }
+    eprintln!(
+        "  {muted}the delta is everything the proxy does, its request pipeline included; the \
+         counts below say whether repair was part of it{reset}"
+    );
+    if let Some(p) = &pair.paired {
+        eprintln!(
+            "  {muted}paired: the proxy scored higher on {w}, raw (auto) on {l}, {t} tied, of \
+             {n} {pairs}{pv}{reset}",
+            w = p.wins,
+            l = p.losses,
+            t = p.ties,
+            n = p.pairs,
+            pairs = plural(p.pairs, "pair"),
+            pv = p
+                .p_value
+                .map_or(String::new(), |v| format!("; one-sided p {v:.3}")),
+        );
+    }
+    let d = &pair.defects;
+    eprintln!(
+        "  the proxy handled {req} {requests}: {att} {repairs} attempted, {ok} succeeded; \
+         {trips} loop-guard {interventions}",
+        req = d.requests,
+        requests = plural_u64(d.requests, "request"),
+        att = d.repairs_attempted,
+        repairs = plural_u64(d.repairs_attempted, "repair"),
+        ok = d.repairs_succeeded,
+        trips = d.loop_guard_trips,
+        interventions = plural_u64(d.loop_guard_trips, "intervention"),
+    );
+    if !pair.settings.tool_call_repair {
+        eprintln!(
+            "  {warn}repair was off (GGLIB_DISABLE_TOOL_REPAIR is set), so this pair measured \
+             the proxy without it{reset}"
+        );
+    } else if d.repairs_attempted == 0 {
+        eprintln!(
+            "  {muted}the proxy attempted no repair: no call it could judge broke its schema, so \
+             this pair says nothing about what repair changes{reset}"
+        );
+    }
+}
+
+/// [`plural`] for a count held as `u64`, as the defect counters are.
+fn plural_u64(count: u64, word: &str) -> String {
+    plural(usize::try_from(count).unwrap_or(usize::MAX), word)
 }
 
 /// What each arm generated, as opposed to how much.
@@ -719,6 +814,8 @@ fn render_unmeasured_block(report: &AgenticEvalReport) {
         ("gglib", Some(&report.gglib)),
         ("A/A", report.raw_replicate.as_ref()),
         ("control", report.control.as_ref()),
+        ("raw (auto)", report.proxy.as_ref().map(|p| &p.raw_auto)),
+        ("proxy", report.proxy.as_ref().map(|p| &p.proxy)),
     ];
     let present: Vec<(&str, &ArmScores)> = arms
         .into_iter()
