@@ -8,6 +8,8 @@ import type { EvalArm } from '../../../types/benchmark';
 export const ARM_LABELS: Record<EvalArm, string> = {
   raw: 'raw (pipeline bypassed)',
   gglib: 'gglib (full pipeline)',
+  raw_auto: "raw opening with auto (the proxy's baseline)",
+  proxy: 'proxy (every turn through gglib-proxy)',
   raw_replicate: 'raw again (A/A, disjoint seeds)',
   control: 'control (sampling deliberately broken)',
 };

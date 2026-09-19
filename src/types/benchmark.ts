@@ -20,6 +20,7 @@ import type { InferenceConfig } from './index';
 import type { AgenticEvalReport, EvalArm, PairedEffect } from './agenticEval';
 
 export type * from './agenticEval';
+export type * from './agenticProxy';
 
 // ─── Enumerations ────────────────────────────────────────────────────────────
 

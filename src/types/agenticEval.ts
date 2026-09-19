@@ -15,6 +15,7 @@ import type {
   TaskSuite,
   TuneTaskResult,
 } from './benchmark';
+import type { ProxyArms } from './agenticProxy';
 
 // ─── Agentic A/B Eval (raw vs gglib) ─────────────────────────────────────────
 
@@ -25,8 +26,14 @@ import type {
  * re-runs `raw` on a disjoint seed set (an A/A test, whose gap is the eval's
  * own drift), and `control` runs the pipeline with sampling deliberately broken
  * and must score far below `gglib`.
+ *
+ * `raw_auto` and `proxy` run only when asked for (`include_proxy`), and are
+ * compared with each other: every turn of `proxy` goes through a real
+ * gglib-proxy, and `raw_auto` is its baseline. Both open with
+ * `tool_choice: "auto"`, under which the proxy judges every call whose schema
+ * it can judge.
  */
-export type EvalArm = 'raw' | 'gglib' | 'raw_replicate' | 'control';
+export type EvalArm = 'raw' | 'gglib' | 'raw_auto' | 'proxy' | 'raw_replicate' | 'control';
 
 /**
  * Request body for `POST /api/benchmark/agentic`. Mirrors
@@ -61,6 +68,8 @@ export interface AgenticEvalConfig {
   replicate_pairs?: number;
   /** Server default 1; clamped into 1..=seeds.len() server-side. */
   control_seeds?: number;
+  /** Server default false — also run the proxy arm and its raw-auto baseline. */
+  include_proxy?: boolean;
 }
 
 /** One arm's aggregate scores. Mirrors `gglib_core::domain::benchmark::agentic::ArmScores`. */
@@ -230,6 +239,8 @@ export interface AgenticEvalReport {
    * absent on reports written before the field existed.
    */
   paired?: PairedEffect | null;
+  /** The proxy arm and its raw-auto baseline; absent unless `include_proxy` ran them. */
+  proxy?: ProxyArms | null;
 }
 
 /**
