@@ -7,7 +7,7 @@
 //! difference. See [`gglib_core::domain::benchmark::agentic`] for the
 //! report shape and the definition of each arm.
 //!
-//! One admission lease covers both arms, for the same reason the tune sweep
+//! One admission lease covers every arm, for the same reason the tune sweep
 //! holds one across candidates: an arm measured across a model swap would
 //! be measuring the swap. Tasks whose expected outcome demands a tool call
 //! send `tool_choice: "required"` on their **opening turn** in both arms —
@@ -17,6 +17,14 @@
 //! model held at `"required"` for the whole run can never answer, so it
 //! re-emits its last batch until the loop guard stops it, and the eval ends
 //! up measuring its own harness.
+//!
+//! Neither of those arms reaches `gglib-proxy`. When the config asks for it,
+//! two more run: the proxy arm, every turn through a real proxy started
+//! in-process in front of the held model ([`super::proxy_arm`]), and its
+//! raw-auto baseline, which goes straight to llama-server. Both open with
+//! `"auto"`, under which the proxy judges every call whose schema it can
+//! judge; a `"required"` turn it judges only when gglib's own grammar
+//! constrained it.
 
 use std::sync::Arc;
 
@@ -25,10 +33,10 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::agentic::{
     AgenticEvalConfig, AgenticEvalReport, AgenticTaskComparison, ArmScores,
     CONTROL_MIN_COMPOSITE_GAP, ControlVerdict, EFFECT_NOISE_RATIO, EffectVerdict, EvalArm,
-    PairedEffect, control_sampling, replicate_seed_set, replicate_seeds,
+    PairedEffect, ProxyArms, control_sampling, replicate_seed_set, replicate_seeds,
 };
 use gglib_core::domain::benchmark::tune::config::ScoreWeights;
-use gglib_core::domain::benchmark::tune::result::{GeneratedOutput, TuneTaskResult};
+use gglib_core::domain::benchmark::tune::result::TuneTaskResult;
 use gglib_core::domain::benchmark::tune::task::{ExpectedOutcome, TuneTask};
 use gglib_core::domain::benchmark::{BenchmarkEvent, BenchmarkRunType};
 use gglib_core::ports::{LlmCompletionPort, UsageSink};
@@ -39,7 +47,12 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::BenchmarkDeps;
-use super::tune::{axis_scores, run_task_with_llm, throughput_tps};
+use super::proxy_arm::{ProxyArm, arm_base_url, opens_with_required, proxy_task_runs};
+use super::tune::run_task_with_llm;
+
+#[path = "agentic_rollup.rs"]
+mod agentic_rollup;
+use agentic_rollup::{arm_scores, flatten};
 
 /// Entry point called by [`super::BenchmarkOps::run_agentic`].
 pub(crate) async fn run_agentic_eval(
@@ -83,7 +96,7 @@ pub(crate) async fn run_agentic_eval(
     let settings = deps.settings_repo.load().await.ok();
     let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
 
-    // One lease across both arms — an arm measured across a model swap would
+    // One lease across every arm — an arm measured across a model swap would
     // be measuring the swap.
     let admission = match deps
         .runtime
@@ -124,12 +137,31 @@ pub(crate) async fn run_agentic_eval(
 
     let plans = plan_arms(&config);
 
+    // The proxy arm's proxy runs for that arm alone: started just before it,
+    // in front of the model this eval already holds, and finished just after.
+    // Dropping it stops it, so every early return below stops it too.
+    let mut proxy_arm: Option<ProxyArm> = None;
+    let mut proxy_outcome = None;
+
     // Per arm, results are grouped by task and ordered by seed within each
     // group, so the per-task drill-down can report N-of-M without re-keying.
     let mut arm_results: Vec<(EvalArm, Vec<Vec<TuneTaskResult>>)> = Vec::with_capacity(plans.len());
     for plan in &plans {
         let arm = plan.arm;
         let seeds = &plan.seeds;
+        if arm == EvalArm::Proxy {
+            match ProxyArm::start(admission.target.clone(), Arc::clone(&deps.catalog)).await {
+                Ok(proxy) => proxy_arm = Some(proxy),
+                Err(e) => {
+                    let msg = format!("failed to start the proxy arm's proxy: {e:#}");
+                    deps.bench_repo.fail_run(run_id, &msg).await.ok();
+                    deps.runtime.stop_current().await.ok();
+                    let _ = tx.send(BenchmarkEvent::RunFailed { error: msg }).await;
+                    return Ok(());
+                }
+            }
+        }
+        let arm_url = arm_base_url(arm, &base_url, proxy_arm.as_ref());
         let _ = tx
             .send(BenchmarkEvent::AgenticArmStarted {
                 arm,
@@ -159,7 +191,7 @@ pub(crate) async fn run_agentic_eval(
                     |usage| {
                         build_arm_llm(
                             &http_client,
-                            &base_url,
+                            arm_url,
                             &model.name,
                             arm,
                             &model_context,
@@ -214,9 +246,15 @@ pub(crate) async fn run_agentic_eval(
         }
 
         arm_results.push((arm, per_task));
+
+        // Its own arm is done, so what the proxy's ledger holds is that arm's
+        // traffic and nothing else's.
+        if let Some(proxy) = proxy_arm.take() {
+            proxy_outcome = Some(proxy.finish().await);
+        }
     }
 
-    // Taken by arm rather than popped in reverse push order: two of the four
+    // Taken by arm rather than popped in reverse push order: four of the six
     // arms are conditional, and an ordering the reader has to reconstruct from
     // the push sequence is one refactor away from silently attributing the
     // control's scores to the pipeline.
@@ -230,6 +268,8 @@ pub(crate) async fn run_agentic_eval(
     }
     let replicate_results = replicate_runs.first().cloned();
     let control_results = take_arm(&mut arm_results, EvalArm::Control);
+    let raw_auto_results = take_arm(&mut arm_results, EvalArm::RawAuto);
+    let proxy_results = take_arm(&mut arm_results, EvalArm::Proxy);
 
     // Resolved once for the whole run, not per arm: an absent `weights` means
     // the client left the choice to us, and every arm must be scored on the
@@ -258,6 +298,25 @@ pub(crate) async fn run_agentic_eval(
         .collect();
     let control = score_arm(&control_results, EvalArm::Control);
     let delta = AgenticEvalReport::delta_of(&raw, &gglib, &weights);
+    let proxy = match (
+        score_arm(&raw_auto_results, EvalArm::RawAuto),
+        score_arm(&proxy_results, EvalArm::Proxy),
+        proxy_outcome,
+    ) {
+        (Some(raw_auto), Some(proxy), Some((defects, settings))) => Some(ProxyArms::assemble(
+            raw_auto,
+            proxy,
+            &weights,
+            defects,
+            settings,
+            proxy_task_runs(
+                &tasks,
+                raw_auto_results.unwrap_or_default(),
+                proxy_results.unwrap_or_default(),
+            ),
+        )),
+        _ => None,
+    };
 
     let tasks_cmp: Vec<AgenticTaskComparison> = raw_results
         .unwrap_or_default()
@@ -297,6 +356,7 @@ pub(crate) async fn run_agentic_eval(
         raw_replicate,
         raw_replicates,
         paired: None,
+        proxy,
     };
     let report = AgenticEvalReport {
         paired: PairedEffect::from_tasks(&report.tasks),
@@ -398,9 +458,14 @@ struct ArmPlan {
 ///   and the gap it has to clear is an order of magnitude above the threshold
 ///   that reads it.
 ///
+/// The proxy arm and its raw-auto baseline, when asked for, share the primary
+/// seed set for the same reason the real arms do: they are compared with each
+/// other.
+///
 /// Order matters for a run that gets interrupted: the real arms finish first,
-/// then the cheap A/A arm, and the control — which on measured runs costs more
-/// wall time than everything above it combined — goes last.
+/// then the proxy pair, then the cheap A/A arm, and the control — which on
+/// measured runs costs more wall time than everything above it combined — goes
+/// last.
 fn plan_arms(config: &AgenticEvalConfig) -> Vec<ArmPlan> {
     // An empty seed list still runs once with no seed named, which stays the
     // fastest smoke test.
@@ -420,6 +485,15 @@ fn plan_arms(config: &AgenticEvalConfig) -> Vec<ArmPlan> {
             seeds: primary.clone(),
         },
     ];
+
+    if config.include_proxy {
+        for arm in [EvalArm::RawAuto, EvalArm::Proxy] {
+            plans.push(ArmPlan {
+                arm,
+                seeds: primary.clone(),
+            });
+        }
+    }
 
     if config.replicate_raw {
         // One plan per requested pair, each on its own derived seed set —
@@ -493,6 +567,15 @@ fn empty_scores(weights: &ScoreWeights) -> ArmScores {
 /// task's expected outcome demands a call — identical requests, different
 /// machinery — and both fall back to `"auto"` afterwards so the model can
 /// finish.
+///
+/// The proxy pair differs from that in the one way repair needs:
+///
+/// - **`RawAuto`** is the raw arm with no opening demand, so every turn goes
+///   out as `"auto"`.
+/// - **`Proxy`** sends exactly what `RawAuto` sends, to the proxy rather than
+///   to llama-server (see [`arm_base_url`]). The client side stays bare: the
+///   proxy runs the request pipeline itself, and a second pass here would run
+///   it twice.
 #[allow(clippy::too_many_arguments)]
 fn build_arm_llm(
     http_client: &reqwest::Client,
@@ -504,7 +587,8 @@ fn build_arm_llm(
     seed: Option<u32>,
     usage: Arc<dyn UsageSink>,
 ) -> Arc<dyn LlmCompletionPort> {
-    let tool_choice = demands_tool_call(task).then(|| "required".to_owned());
+    let tool_choice =
+        (opens_with_required(arm) && demands_tool_call(task)).then(|| "required".to_owned());
 
     // The seed is the only sampling value the raw arm carries, and carrying it
     // does not compromise the arm: `build_chat_body` writes the caller's
@@ -528,7 +612,11 @@ fn build_arm_llm(
                 ..InferenceConfig::default()
             }
         }
-        EvalArm::Raw | EvalArm::RawReplicate | EvalArm::Gglib => InferenceConfig {
+        EvalArm::Raw
+        | EvalArm::RawReplicate
+        | EvalArm::Gglib
+        | EvalArm::RawAuto
+        | EvalArm::Proxy => InferenceConfig {
             seed,
             ..InferenceConfig::default()
         },
@@ -548,6 +636,9 @@ fn build_arm_llm(
         // difference here — however small — would turn the noise floor it
         // measures into a second A/B comparison wearing the wrong name.
         EvalArm::Raw | EvalArm::RawReplicate => adapter.with_raw_passthrough(true),
+        // Bare on the client side, both of them: one so it shows llama-server
+        // alone, the other because the proxy applies the pipeline itself.
+        EvalArm::RawAuto | EvalArm::Proxy => adapter.with_raw_passthrough(true),
         // The control runs the same pipeline as the gglib arm, so the gap
         // between them is attributable to sampling rather than to shaping. It
         // is not a one-variable ablation — see `control_sampling` — because its
@@ -622,8 +713,17 @@ fn warn_partial_arms(report: &AgenticEvalReport) {
         .as_ref()
         .map(|s| (EvalArm::RawReplicate, s));
     let control = report.control.as_ref().map(|s| (EvalArm::Control, s));
+    let proxy_pair = report
+        .proxy
+        .iter()
+        .flat_map(|p| [(EvalArm::RawAuto, &p.raw_auto), (EvalArm::Proxy, &p.proxy)]);
 
-    for (arm, scores) in arms.into_iter().chain(replicate).chain(control) {
+    for (arm, scores) in arms
+        .into_iter()
+        .chain(replicate)
+        .chain(control)
+        .chain(proxy_pair)
+    {
         if scores.is_partly_unmeasured() {
             warn!(
                 "agentic eval: {n} of the '{arm}' arm's {runs} runs never reached the model, and \
@@ -636,128 +736,10 @@ fn warn_partial_arms(report: &AgenticEvalReport) {
     }
 }
 
-/// Flatten per-task, per-seed results into one list.
-///
-/// Every mean below is taken over the flat list rather than over per-task
-/// means. With a balanced design — and this one is balanced by construction,
-/// every task running every seed — the two are arithmetically identical, and
-/// the flat form keeps one code path shared with the single-seed sweep.
-fn flatten(per_task: &[Vec<TuneTaskResult>]) -> Vec<TuneTaskResult> {
-    per_task.iter().flatten().cloned().collect()
-}
-
-/// Aggregate one arm's task results into [`ArmScores`].
-fn arm_scores(
-    results: &[TuneTaskResult],
-    weights: &ScoreWeights,
-    seeds: usize,
-    tasks: usize,
-) -> ArmScores {
-    let axes = axis_scores(results);
-    let composite = super::tune::compute_composite_score(results, weights);
-    ArmScores {
-        seeds,
-        runs: tasks * seeds,
-        unmeasured_runs: results.iter().filter(|r| !r.is_measured()).count(),
-        transport_retries: results.iter().map(|r| r.transport_retries).sum(),
-        tool_accuracy: axes.as_ref().map_or(0.0, |a| a.tool_accuracy),
-        loop_avoidance: axes.as_ref().and_then(|a| a.loop_avoidance),
-        loop_eligible: axes.as_ref().map_or(0, |a| a.loop_eligible),
-        task_completion: axes.as_ref().map_or(0.0, |a| a.task_completion),
-        composite,
-        tg_tps: throughput_tps(results),
-        total_completion_tokens: total_completion_tokens(results),
-        total_wall_ms: results.iter().map(|r| r.latency_ms).sum(),
-        measured_wall_ms: results
-            .iter()
-            .filter(|r| r.is_measured())
-            .map(|r| r.latency_ms)
-            .sum(),
-        mean_time_to_first_tool_call_ms: mean_time_to_first_tool_call_ms(results),
-        median_time_to_first_tool_call_ms: median_time_to_first_tool_call_ms(results),
-        generated: aggregate_generated(results),
-    }
-}
-
-/// Roll the per-run generation shapes up to the arm.
-///
-/// Measured runs only — an unmeasured run generated nothing, and its zeros
-/// would understate the arm exactly where it was least healthy.
-///
-/// `max_tool_calls_in_batch` takes the arm-wide maximum rather than a sum or a
-/// mean. One runaway batch among sixty-three ordinary runs is the whole signal,
-/// and both other aggregations would bury it.
-fn aggregate_generated(results: &[TuneTaskResult]) -> GeneratedOutput {
-    results
-        .iter()
-        .filter(|r| r.is_measured())
-        .fold(GeneratedOutput::default(), |mut acc, r| {
-            acc.reasoning_chars += r.generated.reasoning_chars;
-            acc.answer_chars += r.generated.answer_chars;
-            acc.llm_calls += r.generated.llm_calls;
-            acc.system_warnings += r.generated.system_warnings;
-            acc.max_tool_calls_in_batch = acc
-                .max_tool_calls_in_batch
-                .max(r.generated.max_tool_calls_in_batch);
-            acc
-        })
-}
-
-/// Suite-wide completion tokens. `None` only when no task reported usage,
-/// which stays distinct from a measured zero.
-fn total_completion_tokens(results: &[TuneTaskResult]) -> Option<u64> {
-    let mut total: Option<u64> = None;
-    for tokens in results.iter().filter_map(|r| r.completion_tokens) {
-        total = Some(total.unwrap_or(0) + tokens);
-    }
-    total
-}
-
-/// Mean time to first tool call across the tasks that made one.
-///
-/// Averaged over callers only: an `Irrelevance` task correctly never calls a
-/// tool, and folding its absence in as a zero would flatter whichever arm
-/// abstained most.
-fn mean_time_to_first_tool_call_ms(results: &[TuneTaskResult]) -> Option<f64> {
-    let samples: Vec<u64> = results
-        .iter()
-        .filter_map(|r| r.time_to_first_tool_call_ms)
-        .collect();
-    if samples.is_empty() {
-        return None;
-    }
-    #[allow(clippy::cast_precision_loss)]
-    Some(samples.iter().sum::<u64>() as f64 / samples.len() as f64)
-}
-
-/// Median time to first tool call across the tasks that made one.
-///
-/// Same population as [`mean_time_to_first_tool_call_ms`], and reported beside
-/// it rather than instead of it. The mean stopped describing this arm the
-/// moment a few runs generated for a quarter of an hour before acting; the
-/// median describes the typical run, and the gap between the two is what says a
-/// handful of runs behaved nothing like the rest.
-///
-/// Even-length samples take the mean of the two middle values, so a 2-run arm
-/// reports the midpoint rather than arbitrarily picking a side.
-fn median_time_to_first_tool_call_ms(results: &[TuneTaskResult]) -> Option<f64> {
-    let mut samples: Vec<u64> = results
-        .iter()
-        .filter_map(|r| r.time_to_first_tool_call_ms)
-        .collect();
-    if samples.is_empty() {
-        return None;
-    }
-    samples.sort_unstable();
-    let mid = samples.len() / 2;
-    #[allow(clippy::cast_precision_loss)]
-    Some(if samples.len() % 2 == 1 {
-        samples[mid] as f64
-    } else {
-        (samples[mid - 1] as f64 + samples[mid] as f64) / 2.0
-    })
-}
-
 #[cfg(test)]
 #[path = "agentic_tests.rs"]
 mod agentic_tests;
+
+#[cfg(test)]
+#[path = "agentic_proxy_tests.rs"]
+mod agentic_proxy_tests;

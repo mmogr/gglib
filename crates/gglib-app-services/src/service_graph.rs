@@ -263,7 +263,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         bench_repo,
         http_client: BenchmarkDeps::build_http_client()?,
         settings_repo: repos.settings.clone(),
-        // The same ledger the proxy writes: one Arc, two ends of the loop.
+        catalog: Arc::clone(&catalog),
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {

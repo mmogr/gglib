@@ -113,3 +113,22 @@ fn a_malformed_seed_is_still_rejected() {
 fn a_whitespace_only_seed_is_treated_as_empty() {
     assert_eq!(seeds_with(&["--seeds", "  "]), Vec::<u32>::new());
 }
+
+/// Whether a full command line asks for the proxy pair.
+fn proxy_with(extra: &[&str]) -> bool {
+    let owned = argv(extra);
+    match Cli::try_parse_from(&owned).map(|cli| cli.command) {
+        Ok(Some(Commands::Benchmark {
+            command: BenchmarkCommand::Agentic { proxy, .. },
+        })) => proxy,
+        _ => panic!("{owned:?} did not parse as an agentic run"),
+    }
+}
+
+/// The proxy pair adds two passes over the suite, so it runs only when
+/// asked for, and `--proxy` asks.
+#[test]
+fn the_proxy_flag_is_off_unless_given() {
+    assert!(!proxy_with(&[]));
+    assert!(proxy_with(&["--proxy"]));
+}

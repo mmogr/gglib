@@ -41,7 +41,12 @@ pub enum LoopGuardTrip {
 }
 
 /// Cumulative defect counts for one model.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+///
+/// Read back as well as written: the agentic eval's stored reports carry one.
+/// A counter missing from a stored report reads as zero, so adding one leaves
+/// every earlier report readable.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelDefectCounts {
     /// Requests the proxy forwarded (or would have, but for a guard) for

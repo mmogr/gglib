@@ -37,6 +37,7 @@ export const AgenticConfigForm: FC<AgenticConfigFormProps> = ({
   const [includeControl, setIncludeControl] = useState(true);
   const [replicateRaw, setReplicateRaw] = useState(true);
   const [controlSeeds, setControlSeeds] = useState('1');
+  const [includeProxy, setIncludeProxy] = useState(false);
   const [suite, setSuite] = useState<TaskSuite | null>({ source: 'default' });
 
   // Only whole decimal tokens count, capped at u32::MAX — anything else
@@ -59,6 +60,7 @@ export const AgenticConfigForm: FC<AgenticConfigFormProps> = ({
       include_control: includeControl,
       replicate_raw: replicateRaw,
       control_seeds: Math.max(1, parseInt(controlSeeds, 10) || 1),
+      include_proxy: includeProxy,
     });
   };
 
@@ -150,6 +152,21 @@ export const AgenticConfigForm: FC<AgenticConfigFormProps> = ({
           disabled={isRunning}
           onChange={(e) => setReplicateRaw(e.target.checked)}
           label="A/A replicate (raw again, disjoint seeds)"
+        />
+      </div>
+
+      <div className="flex flex-col gap-sm">
+        <label className="text-xs font-semibold text-text">Through gglib-proxy</label>
+        <p className="text-xs text-text-muted m-0">
+          Two more arms: every turn through a real proxy, which validates each tool call and
+          re-issues a broken one, and a raw baseline beside it. Both open with tool_choice
+          &quot;auto&quot;, so they are compared with each other. Adds two passes over the suite.
+        </p>
+        <Checkbox
+          checked={includeProxy}
+          disabled={isRunning}
+          onChange={(e) => setIncludeProxy(e.target.checked)}
+          label="Proxy arm and its baseline"
         />
       </div>
 

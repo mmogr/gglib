@@ -12,15 +12,19 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::tune::config::{ScoreWeights, SweepSpec, TuneConfig};
 use gglib_core::domain::benchmark::tune::task::{TaskSuite, TuneTask};
 use gglib_core::domain::benchmark::{
-    AgenticEvalConfig, AgenticEvalReport, ArmScores, BenchmarkEvent, BenchmarkModelResult,
-    CONTROL_MIN_COMPOSITE_GAP, CompareConfig, ControlVerdict, DeltaWithheld, EFFECT_NOISE_RATIO,
-    ModelCompareResult, ModelPerfResult, PerfConfig,
+    AgenticEvalConfig, AgenticEvalReport, ArmDelta, ArmScores, BenchmarkEvent,
+    BenchmarkModelResult, CompareConfig, DeltaWithheld, ModelCompareResult, ModelPerfResult,
+    PerfConfig,
 };
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::presentation::style;
+
+#[path = "benchmark_verdicts.rs"]
+mod benchmark_verdicts;
+use benchmark_verdicts::{render_control_block, render_noise_block, render_paired_block};
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
@@ -91,6 +95,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
             no_replicate,
             replicate_pairs,
             control_seeds,
+            proxy,
             json,
             output,
         } => {
@@ -104,6 +109,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
                 !no_replicate,
                 replicate_pairs,
                 control_seeds,
+                proxy,
                 json,
                 output,
             )
@@ -392,6 +398,7 @@ async fn cmd_agentic(
     replicate_raw: bool,
     replicate_pairs: usize,
     control_seeds: usize,
+    include_proxy: bool,
     json: bool,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
@@ -412,9 +419,14 @@ async fn cmd_agentic(
         replicate_raw,
         replicate_pairs,
         control_seeds,
+        include_proxy,
     };
 
     let mut arms = vec!["raw (pipeline bypassed)", "gglib (full pipeline)"];
+    if include_proxy {
+        arms.push("raw opening with auto (the proxy's baseline)");
+        arms.push("proxy (every turn through gglib-proxy)");
+    }
     if replicate_raw {
         arms.push("raw again (A/A, disjoint seeds)");
     }
@@ -534,46 +546,7 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     }
     eprintln!();
     eprintln!("  axis              raw    gglib   delta");
-    eprintln!("  ─────────────── ────── ────── ───────");
-    for (name, raw, gglib, delta) in [
-        (
-            "tool accuracy  ",
-            Some(report.raw.tool_accuracy),
-            Some(report.gglib.tool_accuracy),
-            report.delta.tool_accuracy,
-        ),
-        (
-            "loop avoidance ",
-            report.raw.loop_avoidance,
-            report.gglib.loop_avoidance,
-            report.delta.loop_avoidance,
-        ),
-        (
-            "task completion",
-            Some(report.raw.task_completion),
-            Some(report.gglib.task_completion),
-            report.delta.task_completion,
-        ),
-        (
-            "composite      ",
-            Some(report.raw.composite),
-            Some(report.gglib.composite),
-            report.delta.composite,
-        ),
-    ] {
-        let colour = match delta {
-            Some(d) if d > 0.0 => style::SUCCESS,
-            Some(d) if d < 0.0 => style::DANGER,
-            _ => "",
-        };
-        eprintln!(
-            "  {name} {raw} {gglib} {colour}{delta}{RESET}",
-            raw = fmt_axis(raw, 6),
-            gglib = fmt_axis(gglib, 6),
-            delta = fmt_delta(delta),
-            RESET = style::RESET
-        );
-    }
+    render_axis_rows(&report.raw, &report.gglib, &report.delta);
     // An arm that never reached a second tool batch cannot have looped, so its
     // loop-avoidance score is unmeasured rather than perfect. Say so, and say
     // over how many tasks — the denominator is the whole story.
@@ -595,10 +568,136 @@ fn render_agentic_report(report: &AgenticEvalReport) {
     render_noise_block(report);
     render_paired_block(report);
     render_control_block(report);
+    render_proxy_block(report);
     render_stability_block(report);
     render_efficiency_block(report);
     render_generation_block(report);
     eprintln!();
+}
+
+/// The four axis rows under a header the caller prints: `first`, `second`,
+/// and the delta between them, coloured by its sign.
+fn render_axis_rows(first: &ArmScores, second: &ArmScores, delta: &ArmDelta) {
+    eprintln!("  ─────────────── ────── ────── ───────");
+    for (name, a, b, d) in [
+        (
+            "tool accuracy  ",
+            Some(first.tool_accuracy),
+            Some(second.tool_accuracy),
+            delta.tool_accuracy,
+        ),
+        (
+            "loop avoidance ",
+            first.loop_avoidance,
+            second.loop_avoidance,
+            delta.loop_avoidance,
+        ),
+        (
+            "task completion",
+            Some(first.task_completion),
+            Some(second.task_completion),
+            delta.task_completion,
+        ),
+        (
+            "composite      ",
+            Some(first.composite),
+            Some(second.composite),
+            delta.composite,
+        ),
+    ] {
+        let colour = match d {
+            Some(d) if d > 0.0 => style::SUCCESS,
+            Some(d) if d < 0.0 => style::DANGER,
+            _ => "",
+        };
+        eprintln!(
+            "  {name} {a} {b} {colour}{d}{RESET}",
+            a = fmt_axis(a, 6),
+            b = fmt_axis(b, 6),
+            d = fmt_delta(d),
+            RESET = style::RESET
+        );
+    }
+}
+
+/// The proxy pair: what going through the proxy changed on this model, and
+/// whether its repair did anything at all.
+///
+/// Both arms open with `tool_choice: "auto"`, under which the proxy judges
+/// every call, so they get a table of their own rather than two more columns
+/// beside raw and gglib, which open with `"required"`. The delta is everything
+/// the proxy does, its request pipeline included. The repair counts come last
+/// and matter most: a repaired call reaches the agent as the repaired call, so
+/// the scores alone cannot say whether repair ran.
+fn render_proxy_block(report: &AgenticEvalReport) {
+    let Some(pair) = &report.proxy else {
+        return;
+    };
+    let (muted, warn, reset) = (style::MUTED, style::WARNING, style::RESET);
+    eprintln!();
+    eprintln!(
+        "  {bold}through gglib-proxy{reset}  {muted}both arms open with tool_choice \"auto\", \
+         under which the proxy judges every call whose schema it can judge; compare them \
+         with each other, not with the \
+         table above{reset}",
+        bold = style::BOLD,
+    );
+    eprintln!("  axis              auto   proxy   delta");
+    render_axis_rows(&pair.raw_auto, &pair.proxy, &pair.delta);
+    // `delta_of` names its counts for raw and gglib; here they are raw (auto)
+    // and the proxy arm.
+    if let Some(DeltaWithheld::ContaminatedByUnmeasuredRuns { raw, gglib }) = pair.delta.withheld {
+        eprintln!(
+            "  {warn}delta withheld: {raw} raw (auto) and {gglib} proxy runs never reached the \
+             model, so a difference here would be partly a difference in failures{reset}"
+        );
+    }
+    eprintln!(
+        "  {muted}the delta is everything the proxy does, its request pipeline included; the \
+         counts below say whether repair was part of it{reset}"
+    );
+    if let Some(p) = &pair.paired {
+        eprintln!(
+            "  {muted}paired: the proxy scored higher on {w}, raw (auto) on {l}, {t} tied, of \
+             {n} {pairs}{pv}{reset}",
+            w = p.wins,
+            l = p.losses,
+            t = p.ties,
+            n = p.pairs,
+            pairs = plural(p.pairs, "pair"),
+            pv = p
+                .p_value
+                .map_or(String::new(), |v| format!("; one-sided p {v:.3}")),
+        );
+    }
+    let d = &pair.defects;
+    eprintln!(
+        "  the proxy handled {req} {requests}: {att} {repairs} attempted, {ok} succeeded; \
+         {trips} loop-guard {interventions}",
+        req = d.requests,
+        requests = plural_u64(d.requests, "request"),
+        att = d.repairs_attempted,
+        repairs = plural_u64(d.repairs_attempted, "repair"),
+        ok = d.repairs_succeeded,
+        trips = d.loop_guard_trips,
+        interventions = plural_u64(d.loop_guard_trips, "intervention"),
+    );
+    if !pair.settings.tool_call_repair {
+        eprintln!(
+            "  {warn}repair was off (GGLIB_DISABLE_TOOL_REPAIR is set), so this pair measured \
+             the proxy without it{reset}"
+        );
+    } else if d.repairs_attempted == 0 {
+        eprintln!(
+            "  {muted}the proxy attempted no repair: no call it could judge broke its schema, so \
+             this pair says nothing about what repair changes{reset}"
+        );
+    }
+}
+
+/// [`plural`] for a count held as `u64`, as the defect counters are.
+fn plural_u64(count: u64, word: &str) -> String {
+    plural(usize::try_from(count).unwrap_or(usize::MAX), word)
 }
 
 /// What each arm generated, as opposed to how much.
@@ -715,6 +814,8 @@ fn render_unmeasured_block(report: &AgenticEvalReport) {
         ("gglib", Some(&report.gglib)),
         ("A/A", report.raw_replicate.as_ref()),
         ("control", report.control.as_ref()),
+        ("raw (auto)", report.proxy.as_ref().map(|p| &p.raw_auto)),
+        ("proxy", report.proxy.as_ref().map(|p| &p.proxy)),
     ];
     let present: Vec<(&str, &ArmScores)> = arms
         .into_iter()
@@ -782,242 +883,6 @@ fn render_unmeasured_block(report: &AgenticEvalReport) {
         DANGER = style::DANGER,
         RESET = style::RESET,
     );
-}
-
-/// What the A/A arm says about the size of the delta just rendered.
-///
-/// Placed immediately under the axis table, because it is the sentence that
-/// decides how the composite row should be read — not a footnote to it. A delta
-/// of 0.082 above a drift of 0.031 is a finding; the same 0.082 above a drift
-/// of 0.070 is a coin landing the same way twice, and the table alone cannot
-/// tell them apart.
-fn render_noise_block(report: &AgenticEvalReport) {
-    let Some(verdict) = report.effect_verdict() else {
-        eprintln!();
-        eprintln!(
-            "  {MUTED}no A/A arm ran, so nothing here shows how much of the delta above is \
-             drift — read it as a direction, not a magnitude{RESET}",
-            MUTED = style::MUTED,
-            RESET = style::RESET,
-        );
-        return;
-    };
-    let replicate = report
-        .raw_replicate
-        .as_ref()
-        .map_or(f64::NAN, |r| r.composite);
-    let ratio = verdict
-        .ratio()
-        .map_or_else(|| "—".to_owned(), |r| format!("{r:.1}×"));
-
-    // An unseeded run has no seed list to name, and "re-run on 0 disjoint
-    // seeds" would describe an arm that did in fact run.
-    let how = if report.raw_replicates.len() > 1 {
-        format!(
-            "re-run {n} times on disjoint seed sets",
-            n = report.raw_replicates.len(),
-        )
-    } else if report.replicate_seeds.is_empty() {
-        "re-run unseeded".to_owned()
-    } else {
-        format!(
-            "re-run on {n} disjoint {seeds}",
-            n = report.replicate_seeds.len(),
-            seeds = plural(report.replicate_seeds.len(), "seed"),
-        )
-    };
-
-    eprintln!();
-    eprintln!(
-        "  {MUTED}A/A: the raw arm {how} scored {replicate:.3} against its own {raw:.3}{RESET}",
-        raw = report.raw.composite,
-        MUTED = style::MUTED,
-        RESET = style::RESET,
-    );
-    let over = match verdict.pairs() {
-        0 | 1 => String::new(),
-        pairs => format!(" (mean over {pairs} pairwise gaps)"),
-    };
-    if verdict.exceeds_noise() {
-        eprintln!(
-            "  {SUCCESS}effect exceeds drift{RESET}: the {effect:+.3} composite delta is {ratio} \
-             the {noise:.3} this eval moves with nothing changed{over}.",
-            effect = verdict.effect(),
-            noise = verdict.noise(),
-            SUCCESS = style::SUCCESS,
-            RESET = style::RESET,
-        );
-    } else {
-        eprintln!(
-            "  {WARN}effect is within drift{RESET}: the {effect:+.3} composite delta is {ratio} \
-             the {noise:.3} this eval moves with nothing changed{over}, under the {min:.0}× \
-             needed to call it more than noise.",
-            effect = verdict.effect(),
-            noise = verdict.noise(),
-            min = EFFECT_NOISE_RATIO,
-            WARN = style::WARNING,
-            RESET = style::RESET,
-        );
-        eprintln!(
-            "  {WARN}That is unresolved, not absent — the fix is more seeds, not a different \
-             conclusion.{RESET}",
-            WARN = style::WARNING,
-            RESET = style::RESET,
-        );
-    }
-    // Printed on success as well as failure. A ratio computed from a
-    // handful of gaps is the kind of number that gets quoted as though it
-    // were a p-value, and the caveat has to travel with it — sized to the
-    // run: the single-pair wording on a three-gap estimate misstates the
-    // degrees of freedom in the caveat about degrees of freedom (caught on
-    // the first live multi-pair run).
-    let df = match verdict.pairs() {
-        0 | 1 => "one A/A pair estimates that drift from a single degree of freedom".to_owned(),
-        pairs => format!("{pairs} pairwise gaps back that drift estimate"),
-    };
-    eprintln!(
-        "  {MUTED}{df} — this is a sanity ratio, not a significance test{RESET}",
-        MUTED = style::MUTED,
-        RESET = style::RESET,
-    );
-}
-
-/// The paired view: the same cells the delta above averages, compared as
-/// matched pairs — which is what removes the eval's identical-arm spread
-/// from the comparison.
-fn render_paired_block(report: &AgenticEvalReport) {
-    let Some(paired) = report.paired_effect() else {
-        return;
-    };
-    eprintln!();
-    let p = paired.p_value.map_or_else(
-        || {
-            format!(
-                "too few non-tied pairs for a p — read {wins}W against {losses}L directly",
-                wins = paired.wins,
-                losses = paired.losses,
-            )
-        },
-        |p| format!("Wilcoxon one-sided p = {p:.4}"),
-    );
-    eprintln!(
-        "  paired: {wins}W–{losses}L–{ties}T over {pairs} (task, seed) {pair_word}, \
-         mean Δ {mean:+.3} on tool-match; {p}",
-        wins = paired.wins,
-        losses = paired.losses,
-        ties = paired.ties,
-        pairs = paired.pairs,
-        pair_word = plural(paired.pairs, "pair"),
-        mean = paired.mean_delta,
-    );
-    if paired.unmeasured_pairs > 0 {
-        eprintln!(
-            "  {WARN}{n} {pairs} dropped: at least one side never reached the model.{RESET}",
-            n = paired.unmeasured_pairs,
-            pairs = plural(paired.unmeasured_pairs, "pair"),
-            WARN = style::WARNING,
-            RESET = style::RESET,
-        );
-    }
-}
-
-/// The positive control's verdict.
-///
-/// Rendered **before** the efficiency numbers and never as a footnote: a
-/// control that failed to move invalidates every delta above it, and a reader
-/// scanning for the headline number has to meet that fact first.
-fn render_control_block(report: &AgenticEvalReport) {
-    let Some(verdict) = report.control_verdict() else {
-        // Not run. Distinct from "ran and failed", and said so rather than
-        // left silent — the same rule the sampling readback applies to blind.
-        eprintln!();
-        eprintln!(
-            "  {MUTED}no control arm ran, so nothing here shows whether this eval could have \
-             detected a difference at all{RESET}",
-            MUTED = style::MUTED,
-            RESET = style::RESET,
-        );
-        return;
-    };
-    let control = report.control.as_ref().map_or(f64::NAN, |c| c.composite);
-    let gglib = report.gglib.composite;
-
-    eprintln!();
-    match verdict {
-        ControlVerdict::Moved { gap } => eprintln!(
-            "  {SUCCESS}control moved{RESET}: the deliberately broken sampling cost {gap:.3} \
-             composite ({control:.3} vs {gglib:.3}), so this run can detect a sampling change.",
-            SUCCESS = style::SUCCESS,
-            RESET = style::RESET,
-        ),
-        ControlVerdict::TooSmall { gap } => {
-            eprintln!(
-                "  {DANGER}control did not move{RESET}: the deliberately broken sampling changed \
-                 the composite by only {gap:.3} ({control:.3} vs {gglib:.3}), below the \
-                 {min:.2} this apparatus needs to demonstrate sensitivity.",
-                min = CONTROL_MIN_COMPOSITE_GAP,
-                DANGER = style::DANGER,
-                RESET = style::RESET,
-            );
-            eprintln!(
-                "  {DANGER}Treat every delta above as uninterpretable: this run cannot tell \"no \
-                 effect\" from \"no sensitivity\".{RESET}",
-                DANGER = style::DANGER,
-                RESET = style::RESET,
-            );
-        }
-        // Never worded as "barely moved". It moved a great deal, the wrong
-        // way, which contradicts the control's premise rather than failing a
-        // threshold — and the fix is to the control, not to the suite size.
-        ControlVerdict::WrongDirection { gap } => {
-            eprintln!(
-                "  {DANGER}control moved the WRONG WAY{RESET}: the deliberately broken sampling \
-                 scored {gap:.3} ABOVE the gglib arm ({control:.3} vs {gglib:.3}).",
-                DANGER = style::DANGER,
-                RESET = style::RESET,
-            );
-            eprintln!(
-                "  {DANGER}Its sampling was chosen to be bad, so this contradicts the control's \
-                 premise. Fix the control before reading any delta above.{RESET}",
-                DANGER = style::DANGER,
-                RESET = style::RESET,
-            );
-        }
-    }
-
-    // The control's composite is a coarser number than the two it is printed
-    // beside, and nothing else on the line says so.
-    let control_seeds = report.control.as_ref().map_or(0, |c| c.seeds);
-    if control_seeds < report.gglib.seeds {
-        eprintln!(
-            "  {MUTED}measured on {control_seeds} of the run's {run_seeds} seeds — enough for a \
-             gap this size, and it is the slowest arm in the eval{RESET}",
-            run_seeds = report.gglib.seeds,
-            MUTED = style::MUTED,
-            RESET = style::RESET,
-        );
-    }
-
-    // What the control does *not* establish, said where it will be read. A
-    // control that clears 0.5 licenses no claim about resolving 0.08 — that is
-    // the A/A arm's job, and conflating them is the easiest misreading of this
-    // whole report.
-    if verdict.demonstrated_sensitivity()
-        && let Some(effect) = report.effect_verdict()
-    {
-        eprintln!(
-            "  {MUTED}that demonstrates sensitivity at {gap:.3}, not at the {effect:.3} measured \
-             above — see the A/A line for that{RESET}",
-            gap = match verdict {
-                ControlVerdict::Moved { gap }
-                | ControlVerdict::TooSmall { gap }
-                | ControlVerdict::WrongDirection { gap } => gap,
-            },
-            effect = effect.effect().abs(),
-            MUTED = style::MUTED,
-            RESET = style::RESET,
-        );
-    }
 }
 
 /// Tasks that disagreed with themselves across seeds.

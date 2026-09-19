@@ -15,39 +15,43 @@
  * per-run quality scalar. Pass/fail flips remain visible per task in
  * [`AgenticTaskComparison::pass_counts`]; folding them in here would double
  * count, since the match score is most of what decides `passed`.
+ *
+ * The same record serves every pairing the eval makes, each with a baseline
+ * and a treatment: raw and gglib here, raw-auto and the proxy arm in
+ * [`super::ProxyArms`], and an incumbent and a winner in the tune apply gate.
  */
 export type PairedEffect = { 
 /**
- * Matched `(task, seed)` pairs in which both arms produced a real
+ * Matched `(task, seed)` pairs in which both sides produced a real
  * observation.
  */
 pairs: number, 
 /**
- * Pairs both arms ran but at least one side never reached the model —
+ * Pairs both sides ran but at least one side never reached the model —
  * dropped from every number here, and reported so the drop is visible.
  */
 unmeasured_pairs: number, 
 /**
- * Pairs the gglib arm scored strictly higher.
+ * Pairs the treatment (gglib, or the proxy arm) scored strictly higher.
  */
 wins: number, 
 /**
- * Pairs the raw arm scored strictly higher.
+ * Pairs the baseline (raw, or raw-auto) scored strictly higher.
  */
 losses: number, 
 /**
  * Pairs with identical scores. On a suite where most tasks pass cleanly
- * under both arms this is the largest bucket, and that is information:
- * the arms mostly agree.
+ * on both sides this is the largest bucket, and that is information: the
+ * two mostly agree.
  */
 ties: number, 
 /**
- * Mean of `gglib − raw` over the measured pairs.
+ * Mean of `treatment − baseline` over the measured pairs.
  */
 mean_delta: number, 
 /**
- * One-sided Wilcoxon signed-rank *p* for "gglib scores higher", by
- * normal approximation with tie correction.
+ * One-sided Wilcoxon signed-rank *p* for "the treatment scores higher",
+ * by normal approximation with tie correction.
  *
  * `None` below [`WILCOXON_MIN_PAIRS`] non-tied pairs — the approximation
  * is not trustworthy there, and rendering a statistic the design cannot

@@ -9,7 +9,8 @@ use gglib_core::domain::benchmark::AgenticEvalConfig;
 use gglib_core::domain::benchmark::tune::config::TuneConfig;
 use gglib_core::domain::benchmark::{BenchmarkEvent, CompareConfig, PerfConfig};
 use gglib_core::ports::{
-    BenchmarkRepositoryPort, ModelRepository, ModelRuntimePort, SettingsRepository,
+    BenchmarkRepositoryPort, ModelCatalogPort, ModelRepository, ModelRuntimePort,
+    SettingsRepository,
 };
 
 mod agentic;
@@ -17,7 +18,10 @@ mod compare;
 pub mod guard;
 mod http_client;
 pub mod mapper;
+#[cfg(test)]
+mod mock_upstream;
 mod perf;
+mod proxy_arm;
 pub mod tune;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -51,6 +55,10 @@ pub struct BenchmarkDeps {
     /// `inference_defaults` at the start of each compare run — mirrors the
     /// same per-request settings read the proxy performs.
     pub settings_repo: Arc<dyn SettingsRepository>,
+    /// The catalog the agentic eval's proxy arm resolves models through, as
+    /// the daemon's own proxy does — the same instance the composition root
+    /// hands the process manager.
+    pub catalog: Arc<dyn ModelCatalogPort>,
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -121,7 +129,7 @@ impl BenchmarkOps {
     /// against one loaded model — pipeline bypassed vs the full pipeline —
     /// finishing with a [`BenchmarkEvent::AgenticEvalComplete`] report.
     ///
-    /// Like `run_tune`, the model is loaded **once** for both arms.
+    /// Like `run_tune`, the model is loaded **once** for every arm.
     pub async fn run_agentic(
         &self,
         config: AgenticEvalConfig,

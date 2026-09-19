@@ -4,6 +4,7 @@ import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { cn } from '../../../utils/cn';
 import { formatMs, formatTps } from '../format';
+import { AgenticProxyPair } from './AgenticProxyPair';
 import { AgenticReportVerdicts } from './AgenticReportVerdicts';
 import { AgenticTaskDrilldown } from './AgenticTaskDrilldown';
 import { getTransport } from '../../../services/transport';
@@ -179,6 +180,8 @@ export const AgenticReport: FC<{ report: AgenticEvalReport }> = ({ report }) => 
       {loopDenominatorNote && <p className="m-0 text-xs text-text-muted">{loopDenominatorNote}</p>}
 
       <AgenticReportVerdicts report={report} />
+
+      <AgenticProxyPair report={report} />
 
       <section className="flex flex-col gap-xs">
         <h3 className="m-0 text-sm font-semibold text-text">Efficiency</h3>

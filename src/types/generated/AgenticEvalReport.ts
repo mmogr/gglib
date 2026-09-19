@@ -3,6 +3,7 @@ import type { AgenticTaskComparison } from "./AgenticTaskComparison";
 import type { ArmDelta } from "./ArmDelta";
 import type { ArmScores } from "./ArmScores";
 import type { PairedEffect } from "./PairedEffect";
+import type { ProxyArms } from "./ProxyArms";
 
 /**
  * The complete A/B report — the leaderboard interchange format.
@@ -21,7 +22,7 @@ quantization: string | null,
  */
 param_count_b: number, 
 /**
- * Context size both arms ran at, in tokens.
+ * Context size every arm ran at, in tokens.
  */
 ctx_size: number, 
 /**
@@ -92,4 +93,10 @@ replicate_seed_sets: Array<Array<number>>,
  * nobody should maintain twice. [`Self::paired_effect`] re-derives it
  * from the drill-down for reports written before the field existed.
  */
-paired: PairedEffect | null, };
+paired: PairedEffect | null, 
+/**
+ * The proxy arm and its raw-auto baseline, when
+ * [`AgenticEvalConfig::include_proxy`] ran them. `None` on every report
+ * written before they existed.
+ */
+proxy: ProxyArms | null, };
