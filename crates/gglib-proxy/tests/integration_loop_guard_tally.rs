@@ -5,11 +5,10 @@
 //! to be one number over both, so nobody could ask whether *stagnation* trips
 //! had become rare — the question on which ADR 0011's first kill criterion
 //! decides whether the proxy keeps `StagnationDetector` in its guard (#947).
-//! The verdict becomes a tally in
-//! three hops (`server.rs` reads the verdict, `metrics.rs` hands it to the
-//! ledger, the ledger bumps a field), and a unit test per hop proves each hop.
-//! These prove the chain: a real request that trips one detector, read back
-//! off the route a dashboard reads.
+//! The verdict becomes a tally in three hops (`server.rs` reads the verdict,
+//! `metrics.rs` hands it to the ledger, the ledger bumps a field), and a unit
+//! test per hop proves each hop. These prove the chain: a real request that
+//! trips one detector, read back off the route a dashboard reads.
 //!
 //! Their own file because `integration_loop_guard.rs` is frozen at its size by
 //! the complexity ratchet. The request builders are shared with it through

@@ -37,9 +37,9 @@ async fn the_api_path_tolerates_a_second_cancel() {
 /// the pidfile audit have no place in a test.
 ///
 /// The request names a model that does not exist, so nothing is sent
-/// upstream: the step records before admission, lets the
-/// request go on under the default mode, and admission's 404 for an unknown
-/// model is what the client gets.
+/// upstream: the step records before admission, lets the request go on under
+/// the default mode, and admission's 404 for an unknown model is what the
+/// client gets.
 #[tokio::test]
 async fn teardown_writes_what_the_loop_guard_recorded() {
     use gglib_core::domain::loop_guard_log::epoch_day;
