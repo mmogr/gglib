@@ -162,10 +162,11 @@ table_info` keeps the shape introspectable either way.
 ## Testing
 
 All tests are inline `#[cfg(test)]` blocks or `_tests.rs` siblings living alongside their
-respective implementations, except two under `tests/` that need a real database on disk:
+respective implementations, except three under `tests/` that need a real database on disk:
 `tests/file_modes.rs`, which checks its modes through the public `setup_database()` as a caller
-opens it, and `tests/settings_writes.rs`, which runs two settings writers against one file
-through pools of their own, as the daemon and the CLI are.
+opens it; `tests/settings_writes.rs`, which runs two settings writers against one file
+through pools of their own, as the daemon and the CLI are; and `tests/loop_guard_writer_race.rs`,
+which races scans against the loop guard writer's stop in a database file of its own per round.
 
 ### Test harness
 
