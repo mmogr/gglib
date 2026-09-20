@@ -335,6 +335,55 @@ a second generation is under way. Every agentic client streams, so this is
 the rare path; it is written down because a client that hits it sees a
 timeout, not a repair.
 
+## Measured through a real proxy (2026-09-20)
+
+Everything above was measured against llama-server, or in the proxy's own
+tests. The agentic benchmark's proxy arm (#1047) sends every turn through a
+real proxy, so repair can be read end to end. The first run, on a
+schema-stress suite of six tasks and three seeds, against `b619935e`:
+
+| model | repairs attempted / succeeded | tool accuracy, no proxy → through it |
+|---|---:|---|
+| Llama 3.2 3B Q8_0 | 11 / 11 | 0.639 → 1.000 |
+| Qwen3.8-27B Q8_0 | 0 / 0 | 1.000 → 1.000 |
+
+On Llama 3.2 the proxy scored higher on tool-match score in 8 of 15 matched
+`(task, seed)` pairs and lower in none. The arm-level delta is withheld,
+because three of that pair's runs never reached the model. The 8 are the proxy
+arm's, not repair's: they are everything the proxy does to a request and its
+answer.
+[ADR 0004](adr/0004-observe-the-sampling-boundary.md)'s 2026-09-20 addendum
+has the reading, the axis that moved the other way, and what none of it
+licenses.
+
+## What shrinks this mechanism
+
+This module is Tier B in [ADR 0001](adr/0001-runtime-capability-tiers.md)'s
+terms — policy, which that ADR asks no deletion criterion of, unlike Tier A.
+Judging a call against the schema the client sent, and re-issuing rather than
+handing the client something its executor will reject, is gglib's and stays.
+What can shrink is how often either half has anything to fire on, and the two
+halves retire separately:
+
+- The `auto` path exists because llama.cpp installs no grammar for
+  `tool_choice: "auto"` on some model/build pairs. No criterion deletes it
+  outright; it stops firing model by model as chat templates constrain more of
+  them.
+- The second draw under gglib's own grammar exists because stage 6 constrains
+  a dialect model more weakly than upstream's own grammar would. It goes when
+  stage 6 goes, on the deletion criterion `request_pipeline::constrain`
+  already carries.
+
+None of that is visible in a score, because a repaired call reaches the client
+as the repaired call. `repairs_attempted` in the report is what anyone will
+notice it by — but a zero is a reason to look rather than a reading, because
+several unlike facts produce one: a model that broke no schema, a model whose
+`auto` turns upstream already constrains, a client that asked for `required`
+on a turn gglib's own grammar did not constrain, a turn with no tools in it or
+none called. `Skipped` names them apart in the decision; the counter does not.
+Qwen3.8-27B's zero above is one of the first two — nothing it emitted failed
+validation — and the run does not say which.
+
 ## What this is not
 
 - Not semantic repair. A call with `path: "src/mian.rs"` is schema-valid and
