@@ -74,6 +74,14 @@ pub(super) struct ModelDefectCounts {
     #[serde(default)]
     pub(super) loop_guard_stagnations: u64,
     #[serde(default)]
+    pub(super) agent_guard_scanned: u64,
+    #[serde(default)]
+    pub(super) agent_guard_trips: u64,
+    #[serde(default)]
+    pub(super) agent_guard_loops: u64,
+    #[serde(default)]
+    pub(super) agent_guard_stagnations: u64,
+    #[serde(default)]
     pub(super) repairs_attempted: u64,
     #[serde(default)]
     pub(super) repairs_succeeded: u64,
@@ -116,6 +124,11 @@ impl ModelDefectCounts {
     /// sparse enough not to bury anything.
     pub(super) const fn is_clean(&self) -> bool {
         self.loop_guard_trips == 0
+            // The agent path's trips, but not its `agent_guard_scanned`:
+            // that is a denominator, like `requests`, and a model whose only
+            // agent signal is turns the guard looked at and passed has
+            // nothing to report.
+            && self.agent_guard_trips == 0
             && self.repairs_attempted == 0
             && self.stream_errors == 0
             && self.truncated_generations == 0

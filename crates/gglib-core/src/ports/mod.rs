@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod agent;
+pub(crate) mod agent_guard_sink;
 pub(crate) mod benchmark;
 pub mod chat_history;
 pub(crate) mod download;
@@ -32,6 +33,7 @@ use thiserror::Error;
 
 // Re-export agent port types for convenience
 pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
+pub use agent_guard_sink::{AgentGuardReporter, AgentGuardSink};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
 pub use llm_completion::LlmCompletionPort;
 pub use loop_guard_trips::{LoopGuardTripLog, LoopGuardTripSink};

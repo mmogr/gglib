@@ -30,6 +30,14 @@ use super::wire::ModelDefectCounts;
 /// #1052 a trip is an intervention rather than a rejection: the default
 /// forwards the request with a note.
 ///
+/// The agent path's trips print in a row of their own, and carry their
+/// denominator with them (#1091). Two reasons they are not folded in with the
+/// proxy's. They are read against a different population — turns the agent
+/// loop's guard ran on, where one client conversation is many turns — and the
+/// header's `requests` is not that population. And they are a different
+/// event: a proxy trip under the default forwards the request and the
+/// conversation continues, while an agent trip ended the run.
+///
 /// Three counters here are not failures. `identical_result_repeats` describes a
 /// conversation that went in a circle, and `repeats_not_evaluated` says how
 /// often that question could not be answered — facts about the client's
@@ -52,20 +60,45 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
     }
     if faulty.is_empty() {
         let served: u64 = per_model.values().map(|c| c.requests).sum();
+        // The agent path's turns are named separately when there were any,
+        // because they are not requests and adding them to that total would
+        // claim a denominator that does not exist. A clean run's whole value
+        // is its denominator, so leaving them out would understate it.
+        let decisions: u64 = per_model.values().map(|c| c.agent_guard_scanned).sum();
+        let over = if decisions > 0 {
+            format!(
+                "{} request(s) and {} agent turn(s)",
+                thousands(served),
+                thousands(decisions)
+            )
+        } else {
+            format!("{} request(s)", thousands(served))
+        };
         out.push_str(&format!(
-            "  none across {} request(s), {} model(s)\n",
-            thousands(served),
+            "  none across {over}, {} model(s)\n",
             per_model.len()
         ));
         return out;
     }
 
     for (model, counts) in faulty {
-        out.push_str(&format!(
-            "  {:<28} {} request(s)\n",
-            truncate(model, 28),
-            thousands(counts.requests)
-        ));
+        // The header carries the proxy's denominator. A model reached only
+        // through GUI chat has forwarded nothing, and "0 request(s)" there
+        // reads as "nothing happened" when what happened was on the other
+        // path — so it names the absence instead. The agent path's own
+        // denominator rides with its trips below.
+        if counts.requests == 0 && counts.agent_guard_scanned > 0 {
+            out.push_str(&format!(
+                "  {:<28} no proxy requests\n",
+                truncate(model, 28)
+            ));
+        } else {
+            out.push_str(&format!(
+                "  {:<28} {} request(s)\n",
+                truncate(model, 28),
+                thousands(counts.requests)
+            ));
+        }
 
         // Repairs read as a ratio: the attempt rate says how often this model
         // packages a tool call badly, and the success rate says whether the
@@ -91,6 +124,33 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
             for (label, value) in [
                 ("loop detector", counts.loop_guard_loops),
                 ("stagnation detector", counts.loop_guard_stagnations),
+            ] {
+                if value > 0 {
+                    out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
+                }
+            }
+        }
+
+        // The agent path's trips, printed with their denominator on the same
+        // row rather than in the header. The proxy's trips are read against
+        // `requests` above; these are read against the turns the agent loop's
+        // guard ran on, which is a different population — one client
+        // conversation is many turns — and a trip count whose denominator is
+        // somewhere else is the unreadable instrument #1091 was filed about.
+        //
+        // A trip here is also not the same event as one above: the proxy's
+        // default forwards the request with a note and the conversation goes
+        // on, while this one ended the run.
+        if counts.agent_guard_trips > 0 {
+            out.push_str(&format!(
+                "    {:<24} {} of {} decision(s)\n",
+                "agent-path guard trips",
+                thousands(counts.agent_guard_trips),
+                thousands(counts.agent_guard_scanned)
+            ));
+            for (label, value) in [
+                ("loop detector", counts.agent_guard_loops),
+                ("stagnation detector", counts.agent_guard_stagnations),
             ] {
                 if value > 0 {
                     out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
@@ -160,3 +220,7 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
 #[cfg(test)]
 #[path = "render_defects_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "render_defects_agent_tests.rs"]
+mod agent_tests;
