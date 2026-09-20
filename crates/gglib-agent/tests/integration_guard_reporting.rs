@@ -1,7 +1,8 @@
 //! What the agent loop reports about its own guard (#1091).
 //!
-//! Before this, the loop ran `LoopDetector` and `StagnationDetector` and told
-//! nobody what they decided, so `loop_guard_trips` described the proxy alone.
+//! Before this, the loop ran `LoopDetector` and `StagnationDetector` and let
+//! a decision out only as the error that ended the run, so `loop_guard_trips`
+//! described the proxy alone.
 //! These tests are about the decisions reaching a sink, and about the two ways
 //! that count could be wrong: a turn the guard ran on and did not report, and
 //! a turn it reported without having run.

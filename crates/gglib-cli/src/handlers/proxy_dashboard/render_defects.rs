@@ -36,7 +36,7 @@ use super::wire::ModelDefectCounts;
 /// loop's guard ran on, where one client conversation is many turns — and the
 /// header's `requests` is not that population. And they are a different
 /// event: a proxy trip under the default forwards the request and the
-/// conversation continues, while an agent trip ended the run.
+/// conversation continues, while an agent trip ends the run.
 ///
 /// Three counters here are not failures. `identical_result_repeats` describes a
 /// conversation that went in a circle, and `repeats_not_evaluated` says how

@@ -2,8 +2,15 @@
 //!
 //! The agent loop runs the same two detectors the proxy does — `LoopDetector`
 //! and `StagnationDetector`, both from [`crate::domain::agent`] — and until
-//! #1091 its decisions reached no counter at all, so every number anyone had
-//! about the loop guard described one of its two callers.
+//! #1091 its decisions reached neither the per-model ledger nor the guard's
+//! persisted log, so every number either of those gave about the loop guard
+//! described one of its two callers. A trip was not invisible — it ends the
+//! run, and the error event says so to whoever is watching. Two benchmark
+//! harnesses *record* it: the tuning and agentic evals share
+//! `run_task_with_llm`, which turns that error into a per-task
+//! `loop_detected` flag, and each rolls those up into a `loop_avoidance`
+//! axis above it. Both score a run under test. What nothing had was a count
+//! of what the guard does in service.
 //!
 //! This is the seam that fixes that. `gglib-agent` must not depend on the
 //! proxy, so the hand-over is a port here, the shape
@@ -30,9 +37,11 @@
 //!
 //! A trip count with no denominator is the unreadable instrument this port
 //! exists to replace. The proxy's trips sit over `requests`, which it records
-//! for every request; the agent loop records nothing, so agent trips alone
-//! would be a numerator over nothing. So the sink is told about **every** turn
-//! the guard ran on, and `None` — both detectors quiet — is the ordinary case.
+//! for every request it forwarded or would have but for a guard; the agent
+//! loop had no such count of its own, so agent trips alone would be a
+//! numerator over nothing. So the sink is told about
+//! **every** turn the guard ran on, and `None` — both detectors quiet — is
+//! the ordinary case.
 
 use std::sync::Arc;
 

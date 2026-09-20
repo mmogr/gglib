@@ -54,7 +54,17 @@ pub enum LoopGuardTrip {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelDefectCounts {
     /// Requests the proxy forwarded (or would have, but for a guard) for
-    /// this model — every rate's denominator.
+    /// this model.
+    ///
+    /// The proxy path's own count, and the denominator for the rates taken
+    /// over it — but not for every rate here, and it is worth knowing which.
+    /// A counter whose doc begins "Of those" is a share of the counter it
+    /// refers to, not of this one: [`Self::repairs_succeeded`] is read
+    /// against [`Self::repairs_attempted`], and each detector count against
+    /// its own trip total. The agent path has a denominator of its own,
+    /// [`Self::agent_guard_scanned`], and its counters are read against that
+    /// rather than against this one — that field says how, and why it is not
+    /// folded in here.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
     /// Requests the loop/stagnation guard acted on.
@@ -95,12 +105,22 @@ pub struct ModelDefectCounts {
     /// client conversation is many of them. The two are different populations,
     /// and one denominator over both would describe neither.
     ///
-    /// Where this differs from the proxy's own denominator, and it has to be
-    /// said because the whole point of these four is that the paths are
-    /// comparable: the proxy's two detectors travel together under one
-    /// setting, so stagnation alone never makes it scan, while on the agent
-    /// path the two thresholds are separate `AgentConfig` fields and a run
-    /// with only one of them set is still a scanned run.
+    /// Two things stop this ratio and the proxy's being read the same way,
+    /// and both have to be said, because the whole point of these four is
+    /// that the paths are comparable.
+    ///
+    /// The proxy's two detectors travel together under one setting, so
+    /// stagnation alone never makes it scan, while on the agent path the two
+    /// thresholds are separate `AgentConfig` fields and a run with only one
+    /// of them set is still a scanned run.
+    ///
+    /// And the numerators do not count the same way, so equal ratios do not
+    /// mean equally stuck conversations. An agent trip ends its run, so a run
+    /// contributes at most one; under `note` the proxy re-notes a stuck
+    /// conversation on every later turn, so one conversation can contribute
+    /// many. ADR 0011 makes the same point about reading its log within one
+    /// mode. Read either ratio as trips per decision, which is what it is,
+    /// and not as a rate of conversations that got stuck.
     ///
     /// Per process, like every counter here, so it resets when the daemon
     /// restarts. ADR 0011's kill criterion reads the loop guard's *log*

@@ -757,8 +757,10 @@ conversation text is kept: the batch signature and the session id are stored
 as the first 16 hex digits of their SHA-256, stable correlation keys that
 anyone holding the data directory can match against a guess, not a privacy
 boundary; the model name is the client's, bounded to 256 characters. Rows are
-kept 90 days. Only this proxy's scan writes it; the agent loop's detectors
-record nothing (#1091).
+kept 90 days. Only this proxy's scan writes it: the agent loop runs the same
+detectors and counts its decisions into the dashboard's `agent_guard_*`
+fields, never into this log, so a reading taken here is the proxy path's
+alone ([#1091](https://github.com/mmogr/gglib/issues/1091)).
 
 ## Proxy Dashboard
 
@@ -869,8 +871,11 @@ explicitly documented as a not-yet-consumed "future" contract).
 
 The fleet totals above answer *"is something wrong"*; this answers *"with which
 model"*, which is the only form the answer is actionable in. Each value carries
-`requests` (the denominator) plus `loop_guard_trips`, `loop_guard_loops`,
-`loop_guard_stagnations`, `repairs_attempted`,
+`requests` (the proxy path's denominator) plus `loop_guard_trips`,
+`loop_guard_loops`, `loop_guard_stagnations`, the agent path's four —
+`agent_guard_scanned`, which is that path's own denominator, with
+`agent_guard_trips`, `agent_guard_loops` and `agent_guard_stagnations` —
+`repairs_attempted`,
 `repairs_succeeded`, `stream_errors`, `truncated_generations`,
 `empty_responses`, `reasoning_only`, `dialect_residue`,
 `unvalidatable_schemas`, `normalization_errors`,
@@ -889,9 +894,14 @@ Five shapes worth knowing before reading them:
   trip bumps two counters besides: `loop_guard_trips`, and whichever of
   `loop_guard_loops` and `loop_guard_stagnations` names the detector that
   raised it. The first is the sum of the other two, so adding all three
-  double-counts. They say which detector, not which path: only this proxy's
-  scan records a trip, and the agent loop's own detectors reach no counter
-  ([#1091](https://github.com/mmogr/gglib/issues/1091)).
+  double-counts. They say which detector, not which path — the path is which
+  field the count lands in. These four are this proxy's pre-dispatch scan.
+  Since [#1091](https://github.com/mmogr/gglib/issues/1091) the agent loop's
+  own detectors are counted too, in `agent_guard_trips` and its three
+  companions, and they are deliberately not folded in here: a proxy trip
+  under `note` is an intervention the conversation survives, and an agent
+  trip ends the run. `agent_guard_scanned` is their denominator, and
+  `requests` is not — an agent turn is not a proxy request.
 - **`identical_result_repeats` is not a defect, and does not bump
   `requests`.** It counts turns whose newest tool-call batch repeated the one
   before it and got an equal result back — a fact about the
