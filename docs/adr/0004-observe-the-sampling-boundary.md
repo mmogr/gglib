@@ -1040,3 +1040,140 @@ So the test for a report is not "does it disclose its limits" but **"is the
 misleading figure still reachable?"** Where it is, the disclosure is decoration.
 The fix is not a louder caveat; it is `Option`, and a type that cannot render a
 comparison nobody took.
+
+## Addendum — the first reading through the proxy (2026-09-20)
+
+Every reading above was taken against llama-server directly. The `gglib` arm
+applied the request pipeline in-process, so nothing measured here had ever
+passed through `gglib-proxy`, and the two behaviours the README leads with —
+tool-call repair and the loop guard — had no reading at all (#1047). The
+harness gained an arm that does (#1104), and this is what it returned the
+first time it ran.
+
+### What was run
+
+`gglib benchmark agentic --proxy`, on a daemon built from `b619935e`:
+
+```
+gglib benchmark agentic -m <model> \
+  --task-suite docs/benchmark/schema_stress_suite.json \
+  --seeds 12345,67890,11111 --proxy --no-control --no-replicate
+```
+
+Six single-call tasks built to be violated (`docs/benchmark/README.md` walks
+them), three seeds, four arms, 72 runs per model. The arms differ in two
+things, and the pairs must be read apart:
+
+- `raw` and `gglib` open a task that demands a call with `tool_choice:
+  "required"`, which is the pair the A/B addenda above compare;
+- `proxy` sends every turn through a real proxy and opens with `"auto"`;
+  `raw (auto)` is its baseline, straight to llama-server, opening the same way.
+
+The proxy pair opens with `"auto"` because that is the turn the proxy judges
+on any model; under `"required"` it judges only what gglib's own grammar
+constrained.
+
+### Llama 3.2 3B Instruct Q8_0, 131072 ctx
+
+| axis | raw (auto) | proxy |
+|------|----:|----:|
+| tool accuracy | 0.639 | 1.000 |
+| task completion | 0.500 | 1.000 |
+| loop avoidance (eligible) | 0.750 | 0.500 |
+| composite | 0.645 | 0.833 |
+
+The arm-level delta is **withheld**: two raw-auto runs and one proxy run never
+reached the model, so every mean above is diluted, and the report refuses a
+difference that would be partly a difference in failures. What the run does
+license is the paired comparison, which drops those pairs and compares
+tool-match score: over 15 matched `(task, seed)` pairs the proxy scored higher
+on **8**, the baseline on **0**, with 7 ties, one-sided Wilcoxon *p* = 0.006.
+
+One axis moved the other way, and the composite above carries it. Loop
+avoidance is the eval agent's own reading, not the proxy's: the fraction of
+loop-eligible *runs* in which the agent's loop and stagnation detectors both
+stayed quiet. On eight eligible runs each it is 6 of 8 in the baseline against
+4 of 8 through the proxy. Nothing in this run says why.
+
+The proxy counted **50 requests, 11 repairs attempted and 11 succeeded**, and
+no loop-guard intervention of its own. That is the part the scores cannot say:
+a repaired call reaches the agent as the repaired call, so without the counts a
+reader cannot tell repair from sampling.
+
+Two runs of the identical command returned identical scores, counts and *p*,
+and lost the same runs. Only the timings moved.
+
+### The runs that never reached the model
+
+Six of the 72 died the same way, and both runs of the command lost the same
+six: llama-server ended the stream with an error of its own, "The model
+produced output that does not match the expected peg-native format". They fall
+in a pattern. The two arms that send llama-server an unshaped request, `raw`
+and `raw (auto)`, each lost `schema_integer_not_string` and
+`schema_nested_required`; the two whose request the pipeline shaped, `gglib`
+and `proxy`, each lost `schema_enum_case`. So each pair lost three runs, and
+this run's raw-versus-gglib delta is withheld for the same reason as the proxy
+pair's.
+
+It is not the harness: the error came back from upstream, mid-stream, in
+llama-server's own words — its `peg-native` parser refusing what the model
+emitted, the parser ADR 0002's finding 4 also saw fail, though nothing here
+shows the trigger that finding names. The pattern corroborates it. Each loss is
+one of that arm's three seeds for the task, every other run of those tasks
+reached the model, and the losses do not follow the arm that repairs: `gglib`
+repairs nothing and lost the same task the proxy arm lost.
+
+### Qwen3.8-27B Q8_0, 131072 ctx
+
+| axis | raw (auto) | proxy | delta |
+|------|----:|----:|----:|
+| tool accuracy | 1.000 | 1.000 | 0.000 |
+| task completion | 1.000 | 1.000 | 0.000 |
+| loop avoidance (eligible) | 1.000 | 1.000 | 0.000 |
+| composite | 1.000 | 1.000 | 0.000 |
+
+Nothing was lost in transport, so this delta is taken rather than withheld.
+All 18 pairs tied, and the proxy counted **38 requests, 0 repairs attempted**,
+no unvalidatable schema and no loop-guard intervention of its own.
+
+That is the honest shape of the negative case. This model broke no schema the
+proxy could judge, so repair had nothing to do, and the reading says nothing
+about what repair changes — not that it changes nothing. It does say the proxy
+cost this model nothing in score.
+
+### What it cost
+
+Measured wall time over the runs that reached the model, and generated tokens:
+
+| model | raw (auto) | proxy |
+|---|---:|---:|
+| Llama 3.2 3B | 24.7 s, 1,595 tokens, 59.8 t/s | 30.9 s, 1,615 tokens, 48.6 t/s |
+| Qwen3.8-27B | 368.8 s, 4,490 tokens, 12.2 t/s | 325.5 s, 3,950 tokens, 12.1 t/s |
+
+The 3B's two totals are not over the same number of runs — 17 reached the
+model in the proxy arm and 16 in the baseline — and the proxy counted 11
+re-issued calls across that arm's 18, each a second request. That is not a
+measurement of what a re-issue costs: the repeat run made the same 11 and put
+the gap at about ten seconds rather than six. On the 27B, where both arms ran
+all 18, the proxy arm finished 43 s sooner in total, about 2.4 s a run, while
+single runs ranged from 12 s to 44 s in the baseline and from under 10 s to
+over 45 s through the proxy; it made no re-issue at all. Neither figure is a
+throughput measurement; they are what these runs took.
+
+### What this reading does not establish
+
+- **It is not a raw-versus-gglib reading.** This pair opens a task that demands
+  a call with `"auto"`; the `raw` and `gglib` arms in the same run open it with
+  `"required"`. The two comparisons are not the same experiment and must not be
+  put in one table.
+- **The delta is not repair's effect.** It is everything the proxy does, its
+  request pipeline included. The repair counts say whether repair was part of
+  it; nothing here apportions the rest.
+- **No control and no A/A arm ran.** This run cannot say whether the apparatus
+  could have detected a difference of this size, nor how much of it is drift.
+  The paired *p* is a within-run statistic and is not that.
+- **One suite, one machine, one build.** The suite exists to be violated; a
+  model that breaks no schema gives repair nothing to do, and the report says
+  so rather than reading as evidence either way.
+- **Nothing here reads on the loop guard.** Its count was zero, and the eval's
+  own agent runs the same detectors and ends a stuck run itself.
