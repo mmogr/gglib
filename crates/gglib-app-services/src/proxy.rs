@@ -43,7 +43,7 @@ pub struct ProxyDeps {
 /// via the composition root, so every llama-server runs inside the same
 /// admission-controlled resident set.
 pub struct ProxyOps {
-    supervisor: Arc<ProxySupervisor>,
+    pub(crate) supervisor: Arc<ProxySupervisor>,
     model_repo: Arc<dyn ModelRepository>,
     mcp: Arc<McpService>,
     core: Arc<AppCore>,
