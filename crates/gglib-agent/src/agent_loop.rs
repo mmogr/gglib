@@ -38,8 +38,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{
-    AgentError, AgentLoopPort, AgentRunOutput, EmptyToolExecutor, FilteredToolExecutor,
-    LlmCompletionPort, ToolExecutorPort,
+    AgentError, AgentGuardReporter, AgentLoopPort, AgentRunOutput, EmptyToolExecutor,
+    FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort,
 };
 use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
@@ -136,6 +136,10 @@ async fn report_tool_call_truncation(response: &CollectedResponse, tx: &mpsc::Se
 pub struct AgentLoop {
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
+    /// Where each guard decision is counted (#1091), and the model name to
+    /// count it under. `None` reports nowhere, which is what every caller
+    /// that has no ledger to reach passes.
+    guard: Option<AgentGuardReporter>,
 }
 
 impl AgentLoop {
@@ -152,8 +156,13 @@ impl AgentLoop {
     pub(crate) fn new(
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
+        guard: Option<AgentGuardReporter>,
     ) -> Self {
-        Self { llm, tool_executor }
+        Self {
+            llm,
+            tool_executor,
+            guard,
+        }
     }
 
     /// Call the LLM (step 2) then collect the stream (step 3) into a
@@ -193,10 +202,33 @@ impl AgentLoop {
     ///
     /// * `tool_filter` — `Some(set)` restricts the visible and executable tools
     ///   to the names in `set`; `None` exposes all tools from `tool_executor`.
+    ///
+    /// Reports no guard decisions. Use [`AgentLoop::build_observed`] where
+    /// there is a ledger to report to.
     pub fn build(
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
         tool_filter: Option<HashSet<String>>,
+    ) -> Arc<dyn AgentLoopPort> {
+        Self::build_observed(llm, tool_executor, tool_filter, None)
+    }
+
+    /// [`AgentLoop::build`], plus somewhere to report what the guard decides.
+    ///
+    /// # Parameters
+    ///
+    /// * `guard` — `Some(reporter)` counts every decision the loop's guard
+    ///   takes, under the model name the reporter carries (#1091); `None`
+    ///   counts nowhere and changes nothing else about the run.
+    ///
+    /// Separate from `build` rather than a fifth argument to it because
+    /// `build`'s callers are almost entirely tests, none of which has a ledger
+    /// to reach, and threading `None` through all of them would say nothing.
+    pub fn build_observed(
+        llm: Arc<dyn LlmCompletionPort>,
+        tool_executor: Arc<dyn ToolExecutorPort>,
+        tool_filter: Option<HashSet<String>>,
+        guard: Option<AgentGuardReporter>,
     ) -> Arc<dyn AgentLoopPort> {
         let executor: Arc<dyn ToolExecutorPort> = match tool_filter {
             // No filter supplied — expose every tool from the inner executor.
@@ -208,7 +240,7 @@ impl AgentLoop {
             // Non-empty allowlist — restrict to the named set.
             Some(allowed) => Arc::new(FilteredToolExecutor::new(tool_executor, allowed)),
         };
-        Arc::new(Self::new(llm, executor))
+        Arc::new(Self::new(llm, executor, guard))
     }
 
     /// Emit a `FinalAnswer` event, append the assistant reply to `messages`,
@@ -391,7 +423,13 @@ impl AgentLoopPort for AgentLoop {
             //   signature — which also means a text-only iteration does not
             //   break a run, matching the proxy's history scan).
             let batch = guards
-                .check(&config, &response.content, &response.tool_calls, &tx)
+                .check(
+                    &config,
+                    &response.content,
+                    &response.tool_calls,
+                    &tx,
+                    self.guard.as_ref(),
+                )
                 .await?;
 
             if response.tool_calls.is_empty() {
