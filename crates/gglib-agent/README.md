@@ -56,6 +56,7 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 |--------|----------------|
 | `agent_loop` | `AgentLoop` struct + `AgentLoopPort` impl (main state machine) |
 | `context_pruning` | Budget-aware message trimming |
+| `guards` | The stagnation and loop detectors behind one verdict |
 | `stream_collector` | Consumes `LlmStreamEvent` stream, forwards text live |
 | `tool_execution` | Parallel tool dispatch with semaphore + timeout |
 | `util` | Shared internal utilities |
@@ -68,6 +69,7 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`agent_loop.rs`](src/agent_loop.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-agent_loop-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-agent_loop-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-agent_loop-coverage.json) |
+| [`guards.rs`](src/guards.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-guards-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-guards-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-guards-coverage.json) |
 | [`stream_collector.rs`](src/stream_collector.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stream_collector-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stream_collector-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-stream_collector-coverage.json) |
 | [`util.rs`](src/util.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-util-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-util-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-util-coverage.json) |
 | [`context_pruning/`](src/context_pruning/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-coverage.json) |
