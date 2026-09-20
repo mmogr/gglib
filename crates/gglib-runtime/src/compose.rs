@@ -8,8 +8,9 @@
 //! 2. `CombinedToolExecutor::{new, with_sandbox}(…)` — wrap [`McpService`] as a
 //!    [`ToolExecutorPort`], routing qualified names to MCP and bare ones to the
 //!    built-ins.
-//! 3. `AgentLoop::build(llm, tool_executor, tool_filter)` — compose both
-//!    ports into an [`AgentLoopPort`], optionally filtering the tool set.
+//! 3. `AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)` —
+//!    compose both ports into an [`AgentLoopPort`], optionally filtering the
+//!    tool set, and say where the loop's guard decisions are counted.
 //!
 //! Centralising this into a single function eliminates the copy-paste and
 //! ensures both entry points apply the same defaults and wiring order.
@@ -29,7 +30,8 @@ use std::sync::Arc;
 use gglib_agent::AgentLoop;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{
-    AgentLoopPort, LlmCompletionPort, RetryObserver, ToolExecutorPort, UsageSink,
+    AgentGuardReporter, AgentLoopPort, LlmCompletionPort, RetryObserver, ToolExecutorPort,
+    UsageSink,
 };
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::retry::RetryPolicy;
@@ -56,6 +58,14 @@ use crate::{FarMachine, LlmCompletionAdapter};
 /// * `usage_sink` — `Some(sink)` reports each response's token usage (e.g. the
 ///   proxy process's agent-path cache store, for GUI chat); `None` when there
 ///   is nothing to report to.
+/// * `guard` — where the loop reports every decision its guard takes, and the
+///   model name to count those decisions under (#1091). Not an `Option`, and
+///   deliberately: this function has one caller, `POST /api/agent/chat`, which
+///   runs in the same process as the embedded proxy and can always reach its
+///   ledger, so "the wiring reports nothing" is a mistake the compiler can
+///   refuse rather than one a test has to catch. A caller that genuinely has
+///   nowhere to report — the CLI, which runs out of process — wants
+///   [`compose_agent_loop_with_sampling`], whose own parameter is optional.
 /// * `retry_observer` — `Some(observer)` surfaces upstream retries to a live
 ///   consumer, so a user waiting on a contended model is told why. `None` when
 ///   there is no stream to notify.
@@ -79,6 +89,7 @@ pub fn compose_agent_loop(
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
     usage_sink: Option<Arc<dyn UsageSink>>,
+    guard: AgentGuardReporter,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     sampling: Option<InferenceConfig>,
     far_machine: Option<FarMachine>,
@@ -93,6 +104,7 @@ pub fn compose_agent_loop(
         None,
         sampling,
         usage_sink,
+        Some(guard),
         retry_observer,
         // The GUI has no per-turn retry override; the environment defaults apply.
         None,
@@ -104,6 +116,11 @@ pub fn compose_agent_loop(
 ///
 /// `retry_policy` bounds retrying of transient upstream failures; pass `None`
 /// to use the defaults with any `GGLIB_LLM_RETRY_*` overrides applied.
+///
+/// `guard` is optional here where [`compose_agent_loop`]'s is not: this is the
+/// CLI's entry point, and `gglib chat` runs out of process, so the ledger the
+/// GUI reports to is not something it can reach (#1091). `None` makes every
+/// recording a no-op.
 #[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop_with_sampling(
     base_url: String,
@@ -115,6 +132,7 @@ pub fn compose_agent_loop_with_sampling(
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
     usage_sink: Option<Arc<dyn UsageSink>>,
+    guard: Option<AgentGuardReporter>,
     retry_policy: Option<RetryPolicy>,
     far_machine: Option<FarMachine>,
 ) -> Arc<dyn AgentLoopPort> {
@@ -128,6 +146,7 @@ pub fn compose_agent_loop_with_sampling(
         sandbox_root,
         sampling,
         usage_sink,
+        guard,
         // The CLI renders the loop's events directly, so there is no separate
         // consumer to notify — retries surface through the loop's own output.
         None,
@@ -147,6 +166,7 @@ fn compose_agent_loop_inner(
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
     usage_sink: Option<Arc<dyn UsageSink>>,
+    guard: Option<AgentGuardReporter>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     retry_policy: Option<RetryPolicy>,
     far_machine: Option<FarMachine>,
@@ -164,5 +184,5 @@ fn compose_agent_loop_inner(
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
         None => Arc::new(CombinedToolExecutor::new(mcp)),
     };
-    AgentLoop::build(llm, tool_executor, tool_filter)
+    AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)
 }
