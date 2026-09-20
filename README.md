@@ -63,7 +63,13 @@ Everything between the OpenAI request and llama-server is the product:
   schema and silently re-issues failures: with `tool_choice: "required"`,
   which activates llama.cpp's own grammar, or, on a turn gglib's own grammar
   constrained, as a second draw under it. The client only sees a call that
-  validates. [Details →](docs/tool-call-repair.md)
+  validates. Measured through a real proxy on 2026-09-20: on Llama 3.2 3B over
+  a schema-stress suite, 11 of 11 re-issues produced a conformant call, and the
+  proxy arm as a whole — repair among several things it does — scored higher on
+  8 of 15 matched pairs and lower on none; on Qwen3.8-27B nothing broke a
+  schema, so repair attempted nothing.
+  [Details →](docs/tool-call-repair.md),
+  [reading →](docs/adr/0004-observe-the-sampling-boundary.md)
 - **Loop defense**: agentic clients replay the full conversation each turn,
   so the proxy scans the incoming history for tool-call batches repeated back
   to back *and answered the same way*, observation-tool spam, and repeated
