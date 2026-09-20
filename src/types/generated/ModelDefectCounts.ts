@@ -2,6 +2,10 @@
 
 /**
  * Cumulative defect counts for one model.
+ *
+ * Read back as well as written: the agentic eval's stored reports carry one.
+ * A counter missing from a stored report reads as zero, so adding one leaves
+ * every earlier report readable.
  */
 export type ModelDefectCounts = { 
 /**

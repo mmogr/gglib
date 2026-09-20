@@ -34,6 +34,13 @@
 //! control that moves 0.5 says the eval can detect a large change; it says
 //! nothing about whether it can resolve a 0.08 one, which is what the A/A arm
 //! is for.
+//!
+//! Neither of the two real arms passes through `gglib-proxy`, so neither
+//! measures what only the proxy does, tool-call repair above all. One opt-in
+//! arm does, with a baseline ([`AgenticEvalConfig::include_proxy`]): **`proxy`**
+//! ([`EvalArm::Proxy`]) sends every turn through a real proxy, and
+//! **`raw_auto`** ([`EvalArm::RawAuto`]) is its baseline. They are compared
+//! with each other, never with the arms above; [`ProxyArms`] says why.
 
 use serde::{Deserialize, Serialize};
 
@@ -41,12 +48,19 @@ use super::tune::config::ScoreWeights;
 use super::tune::result::{GeneratedOutput, TuneTaskResult};
 use super::tune::task::{TaskCategory, TaskSuite};
 
+#[path = "agentic_paired.rs"]
+mod agentic_paired;
+pub use agentic_paired::{PairedEffect, WILCOXON_MIN_PAIRS};
+#[path = "agentic_proxy.rs"]
+mod agentic_proxy;
+pub use agentic_proxy::{ProxyArmSettings, ProxyArms, ProxyTaskRuns};
+
 /// Configuration for one A/B agentic eval run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgenticEvalConfig {
     /// Database ID of the model to evaluate.
     pub model_id: i64,
-    /// Task suite both arms run — the same schema the tune sweep uses.
+    /// Task suite every arm runs — the same schema the tune sweep uses.
     pub task_suite: TaskSuite,
     /// Weights for each arm's composite score.
     ///
@@ -123,6 +137,14 @@ pub struct AgenticEvalConfig {
     /// reads.
     #[serde(default = "default_control_seeds")]
     pub control_seeds: usize,
+    /// Whether to run the proxy arm and its raw-auto baseline. See
+    /// [`EvalArm::Proxy`] and [`ProxyArms`].
+    ///
+    /// Off by default, so an eval that does not ask for them costs what it
+    /// always did: the two arms add two passes over the suite on the primary
+    /// seeds.
+    #[serde(default)]
+    pub include_proxy: bool,
 }
 
 /// The seeds an eval uses when its config names none.
@@ -289,6 +311,23 @@ pub enum EvalArm {
     /// applies to its instruments: a comparison in which nothing could have
     /// varied, reporting that nothing varied, is not evidence.
     Control,
+    /// **The proxy arm's baseline.** The raw arm, except that a task demanding
+    /// a tool call opens with `tool_choice: "auto"` rather than `"required"`.
+    ///
+    /// It exists only to be compared with [`Self::Proxy`], which opens with
+    /// `"auto"`, under which the proxy judges every call whose schema it can
+    /// judge. Against it, the proxy arm
+    /// differs only in going through the proxy; against [`Self::Raw`] it would
+    /// also differ in `tool_choice`.
+    RawAuto,
+    /// **Every turn through a real `gglib-proxy`**, started in-process in front
+    /// of the loaded model, opening with `tool_choice: "auto"`.
+    ///
+    /// The only arm that reaches what the proxy alone does, above all
+    /// validating each tool call against its schema and re-issuing a broken
+    /// one. The client side sends what [`Self::RawAuto`] sends; the proxy
+    /// applies the request pipeline itself.
+    Proxy,
 }
 
 impl std::fmt::Display for EvalArm {
@@ -296,6 +335,8 @@ impl std::fmt::Display for EvalArm {
         match self {
             Self::Raw => write!(f, "raw"),
             Self::Gglib => write!(f, "gglib"),
+            Self::RawAuto => write!(f, "raw (auto)"),
+            Self::Proxy => write!(f, "proxy"),
             Self::RawReplicate => write!(f, "raw (A/A)"),
             Self::Control => write!(f, "control"),
         }
@@ -589,7 +630,7 @@ pub struct AgenticEvalReport {
     pub quantization: Option<String>,
     /// Parameter count in billions.
     pub param_count_b: f64,
-    /// Context size both arms ran at, in tokens.
+    /// Context size every arm ran at, in tokens.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub ctx_size: u64,
     /// Aggregate scores under the raw arm.
@@ -646,6 +687,11 @@ pub struct AgenticEvalReport {
     /// from the drill-down for reports written before the field existed.
     #[serde(default)]
     pub paired: Option<PairedEffect>,
+    /// The proxy arm and its raw-auto baseline, when
+    /// [`AgenticEvalConfig::include_proxy`] ran them. `None` on every report
+    /// written before they existed.
+    #[serde(default)]
+    pub proxy: Option<ProxyArms>,
 }
 
 /// The smallest composite gap the control arm must open for the apparatus to
@@ -1039,204 +1085,6 @@ fn per_run(total: Option<f64>, runs: usize) -> Option<f64> {
         }
         _ => None,
     }
-}
-
-/// The paired view of the raw-versus-gglib comparison.
-///
-/// The two real arms run the **same seeds on the same tasks**, so every
-/// `(task, seed)` cell is a matched pair — and pairing is what removes the
-/// eval's identical-arm spread from the comparison. The ceiling experiment
-/// (tune runs #12–#32, ADR 0004's postscript) resolved a +0.067 effect
-/// through noise wider than that *only* because it paired per run; the same
-/// data has been sitting in [`AgenticEvalReport::tasks`] all along, compared
-/// only as arm means.
-///
-/// Pairs are on [`TuneTaskResult::tool_match_score`] — the one graded
-/// per-run quality scalar. Pass/fail flips remain visible per task in
-/// [`AgenticTaskComparison::pass_counts`]; folding them in here would double
-/// count, since the match score is most of what decides `passed`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct PairedEffect {
-    /// Matched `(task, seed)` pairs in which both arms produced a real
-    /// observation.
-    pub pairs: usize,
-    /// Pairs both arms ran but at least one side never reached the model —
-    /// dropped from every number here, and reported so the drop is visible.
-    pub unmeasured_pairs: usize,
-    /// Pairs the gglib arm scored strictly higher.
-    pub wins: usize,
-    /// Pairs the raw arm scored strictly higher.
-    pub losses: usize,
-    /// Pairs with identical scores. On a suite where most tasks pass cleanly
-    /// under both arms this is the largest bucket, and that is information:
-    /// the arms mostly agree.
-    pub ties: usize,
-    /// Mean of `gglib − raw` over the measured pairs.
-    pub mean_delta: f64,
-    /// One-sided Wilcoxon signed-rank *p* for "gglib scores higher", by
-    /// normal approximation with tie correction.
-    ///
-    /// `None` below [`WILCOXON_MIN_PAIRS`] non-tied pairs — the approximation
-    /// is not trustworthy there, and rendering a statistic the design cannot
-    /// support is worse than rendering none (the [`EffectVerdict`] rule). At
-    /// small counts, read [`Self::wins`] against [`Self::losses`] instead.
-    pub p_value: Option<f64>,
-}
-
-/// The fewest non-tied pairs the normal-approximation Wilcoxon accepts.
-///
-/// Below this the approximation's error is material and an exact table would
-/// be needed; above it the correction terms keep it honest.
-pub const WILCOXON_MIN_PAIRS: usize = 8;
-
-impl PairedEffect {
-    /// Compute the paired comparison from the per-task drill-down.
-    ///
-    /// `None` when no `(task, seed)` pair has both sides measured — a paired
-    /// analysis of nothing is not a zero effect.
-    #[must_use]
-    pub fn from_tasks(tasks: &[AgenticTaskComparison]) -> Option<Self> {
-        let mut deltas = Vec::new();
-        let mut unmeasured_pairs = 0_usize;
-        for task in tasks {
-            for (raw, gglib) in task.raw.iter().zip(task.gglib.iter()) {
-                if raw.is_measured() && gglib.is_measured() {
-                    deltas.push(gglib.tool_match_score - raw.tool_match_score);
-                } else {
-                    unmeasured_pairs += 1;
-                }
-            }
-        }
-        Self::from_deltas(&deltas, unmeasured_pairs)
-    }
-
-    /// The paired comparison between two runs of the same task list, paired
-    /// by `task_id` — the first argument's score minus the second's, so
-    /// `wins` counts pairs the *first* run took.
-    ///
-    /// Built for the tune apply gate (winner versus incumbent), where the
-    /// two sides are candidates rather than eval arms. A task present in one
-    /// run and absent from the other is skipped, not counted: an unpaired
-    /// task has nothing to compare.
-    #[must_use]
-    pub fn from_paired_runs(a: &[TuneTaskResult], b: &[TuneTaskResult]) -> Option<Self> {
-        let b_by_id: std::collections::HashMap<&str, &TuneTaskResult> =
-            b.iter().map(|r| (r.task_id.as_str(), r)).collect();
-        let mut deltas = Vec::new();
-        let mut unmeasured_pairs = 0_usize;
-        for left in a {
-            let Some(right) = b_by_id.get(left.task_id.as_str()) else {
-                continue;
-            };
-            if left.is_measured() && right.is_measured() {
-                deltas.push(left.tool_match_score - right.tool_match_score);
-            } else {
-                unmeasured_pairs += 1;
-            }
-        }
-        Self::from_deltas(&deltas, unmeasured_pairs)
-    }
-
-    /// Aggregate a delta list into the paired record. `None` on no deltas —
-    /// a paired analysis of nothing is not a zero effect.
-    fn from_deltas(deltas: &[f64], unmeasured_pairs: usize) -> Option<Self> {
-        if deltas.is_empty() {
-            return None;
-        }
-
-        let wins = deltas.iter().filter(|d| **d > 0.0).count();
-        let losses = deltas.iter().filter(|d| **d < 0.0).count();
-        let ties = deltas.len() - wins - losses;
-        #[allow(clippy::cast_precision_loss)]
-        let mean_delta = deltas.iter().sum::<f64>() / deltas.len() as f64;
-
-        Some(Self {
-            pairs: deltas.len(),
-            unmeasured_pairs,
-            wins,
-            losses,
-            ties,
-            mean_delta,
-            p_value: wilcoxon_one_sided(deltas),
-        })
-    }
-}
-
-/// One-sided Wilcoxon signed-rank *p* for "the deltas are positive".
-///
-/// Textbook construction: zeros dropped, absolute deltas ranked with average
-/// ranks over ties, `W⁻` (the rank sum of the negative deltas) compared
-/// against its null distribution by normal approximation with the tie
-/// correction and a continuity correction. Small `W⁻` — losses carrying
-/// little rank weight — yields small *p*.
-///
-/// `None` when fewer than [`WILCOXON_MIN_PAIRS`] non-zero deltas remain.
-fn wilcoxon_one_sided(deltas: &[f64]) -> Option<f64> {
-    let mut nonzero: Vec<f64> = deltas.iter().copied().filter(|d| *d != 0.0).collect();
-    let n = nonzero.len();
-    if n < WILCOXON_MIN_PAIRS {
-        return None;
-    }
-    nonzero.sort_by(|a, b| a.abs().partial_cmp(&b.abs()).expect("scores are finite"));
-
-    // Average ranks over runs of tied |delta|, accumulating the tie
-    // correction term as each run closes.
-    let mut w_minus = 0.0_f64;
-    let mut tie_correction = 0.0_f64;
-    let mut index = 0;
-    while index < n {
-        let mut end = index + 1;
-        // Bitwise equality is the right tie test here: ranks tie when the
-        // stored |delta| values are literally the same number, and a margin
-        // would invent ties between distinct scores.
-        while end < n && (nonzero[end].abs() - nonzero[index].abs()).abs() == 0.0 {
-            end += 1;
-        }
-        #[allow(clippy::cast_precision_loss)]
-        let average_rank = ((index + 1 + end) as f64) / 2.0;
-        let run = end - index;
-        if run > 1 {
-            #[allow(clippy::cast_precision_loss)]
-            let t = run as f64;
-            tie_correction += (t * t).mul_add(t, -t);
-        }
-        for value in &nonzero[index..end] {
-            if *value < 0.0 {
-                w_minus += average_rank;
-            }
-        }
-        index = end;
-    }
-
-    #[allow(clippy::cast_precision_loss)]
-    let nf = n as f64;
-    let mean = nf * (nf + 1.0) / 4.0;
-    let variance = nf * (nf + 1.0) * 2.0f64.mul_add(nf, 1.0) / 24.0 - tie_correction / 48.0;
-    if variance <= 0.0 {
-        // Every |delta| identical and tied: the statistic is degenerate, and
-        // the sign test the caller can read from wins/losses is the honest
-        // fallback.
-        return None;
-    }
-    // Continuity correction toward the mean; "gglib higher" means W⁻ is
-    // small, so the one-sided p is the lower tail.
-    let z = (w_minus - mean + 0.5) / variance.sqrt();
-    Some(normal_cdf(z))
-}
-
-/// Standard normal CDF via Abramowitz–Stegun 7.1.26 on `erf`, accurate to
-/// ~1.5e-7 — orders of magnitude finer than any decision read from a *p*.
-fn normal_cdf(z: f64) -> f64 {
-    let x = z / std::f64::consts::SQRT_2;
-    let t = 1.0 / 0.327_591_1f64.mul_add(x.abs(), 1.0);
-    let poly = t
-        * (0.254_829_592
-            + t * (-0.284_496_736
-                + t * (1.421_413_741 + t * (-1.453_152_027 + t * 1.061_405_429))));
-    let erf = 1.0 - poly * (-x * x).exp();
-    let signed = if x < 0.0 { -erf } else { erf };
-    0.5 * (1.0 + signed)
 }
 
 /// `raw ÷ gglib`, or `None` when either side is unmeasured or the denominator

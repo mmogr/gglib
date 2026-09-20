@@ -16,6 +16,8 @@ const armList = (report: AgenticEvalReport): Array<[EvalArm, ArmScores | null | 
   ['gglib', report.gglib],
   ['raw_replicate', report.raw_replicate],
   ['control', report.control],
+  ['raw_auto', report.proxy?.raw_auto],
+  ['proxy', report.proxy?.proxy],
 ];
 
 /**

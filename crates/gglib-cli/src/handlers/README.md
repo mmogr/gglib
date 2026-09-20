@@ -40,6 +40,7 @@ This module contains the **handler functions** that implement the actual logic f
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`benchmark.rs`](benchmark.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-benchmark-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-benchmark-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-benchmark-coverage.json) |
+| [`benchmark_verdicts.rs`](benchmark_verdicts.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-benchmark_verdicts-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-benchmark_verdicts-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-benchmark_verdicts-coverage.json) |
 | [`completions.rs`](completions.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-completions-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-completions-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-completions-coverage.json) |
 | [`gui.rs`](gui.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-gui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-gui-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-gui-coverage.json) |
 | [`history.rs`](history.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-history-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-history-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-history-coverage.json) |
@@ -75,7 +76,7 @@ handlers were grouped.
 | `up/` | `gglib up` — the one-command setup path |
 | `proxy_dashboard/` | `gglib proxy dashboard` — the live terminal view |
 | `remote/` | `gglib remote enable / disable / status / connect / disconnect / kill` — the tunnel that puts one machine's proxy on another (ADR 0012) |
-| `benchmark.rs` | `gglib benchmark …`, including `tune` |
+| `benchmark.rs`, `benchmark_verdicts.rs` | `gglib benchmark …`, including `tune`; the second holds the agentic report's three verdict blocks |
 | `mcp_cli.rs` | `gglib mcp …` |
 | `history.rs`, `web.rs`, `gui.rs`, `completions.rs`, `proxy_cache_clear.rs` | One command each |
 

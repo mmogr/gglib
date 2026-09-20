@@ -164,9 +164,10 @@ gglib benchmark perf -m Qwen3-4B
 # scored on tool-call accuracy, loop avoidance, and task completion
 gglib benchmark tune -m Qwen3-4B --sweep temperature=0.2,0.5,0.8 --apply
 
-# A/B test: run the agentic suite through raw llama-server vs. through
-# the GGLib proxy on the same model and seeds
-gglib benchmark agentic -m Qwen3-4B --seeds 12345,67890
+# A/B test: run the agentic suite against raw llama-server vs. through
+# GGLib's request pipeline, on the same model and seeds; --proxy adds an
+# arm through a real GGLib proxy, tool-call repair on, and a raw baseline
+gglib benchmark agentic -m Qwen3-4B --seeds 12345,67890 --proxy
 ```
 
 The agentic benchmark includes its own A/A arm and positive control so it

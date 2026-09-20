@@ -1,0 +1,218 @@
+[
+  {
+    "id": "schema_integer_not_string",
+    "category": "single_call",
+    "user_prompt": "Show me the first forty-two lines of server.log.",
+    "tools": [
+      {
+        "name": "read_lines",
+        "description": "Read the first lines of a file.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "max_lines": { "type": "integer" }
+          },
+          "required": ["path", "max_lines"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        { "name": "read_lines", "required_args": { "path": "server.log", "max_lines": 42 } }
+      ]
+    }
+  },
+  {
+    "id": "schema_enum_case",
+    "category": "single_call",
+    "user_prompt": "Turn the logging level up to WARNING for the ingest service.",
+    "tools": [
+      {
+        "name": "set_log_level",
+        "description": "Set a service's log level.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "service": { "type": "string" },
+            "level": { "type": "string", "enum": ["debug", "info", "warn", "error"] }
+          },
+          "required": ["service", "level"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        { "name": "set_log_level", "required_args": { "service": "ingest", "level": "warn" } }
+      ]
+    }
+  },
+  {
+    "id": "schema_nested_required",
+    "category": "single_call",
+    "user_prompt": "Open a P1 ticket titled \"Checkout returns 500\" and assign it to Dana on the payments team.",
+    "tools": [
+      {
+        "name": "create_ticket",
+        "description": "Create an issue ticket.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "priority": { "type": "string", "enum": ["p0", "p1", "p2", "p3"] },
+            "owner": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "team": { "type": "string", "enum": ["payments", "search", "platform"] }
+              },
+              "required": ["name", "team"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["title", "priority", "owner"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "create_ticket",
+          "required_args": {
+            "title": "Checkout returns 500",
+            "priority": "p1",
+            "owner": { "name": "Dana", "team": "payments" }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "schema_parameter_named_if",
+    "category": "single_call",
+    "user_prompt": "Write \"ready\" to status.txt, but only if the file is missing.",
+    "tools": [
+      {
+        "name": "conditional_write",
+        "description": "Write text to a file when a condition on the file holds.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "text": { "type": "string" },
+            "if": { "type": "string", "enum": ["missing", "changed"] }
+          },
+          "required": ["path", "text", "if"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "conditional_write",
+          "required_args": { "path": "status.txt", "text": "ready", "if": "missing" }
+        }
+      ]
+    }
+  },
+  {
+    "id": "schema_array_of_objects",
+    "category": "single_call",
+    "user_prompt": "Schedule two jobs: backup at 02:00 with three retries, and vacuum at 03:30 with no retries.",
+    "tools": [
+      {
+        "name": "schedule_jobs",
+        "description": "Schedule a list of jobs.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "jobs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "at": { "type": "string" },
+                  "retries": { "type": "integer" }
+                },
+                "required": ["name", "at", "retries"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["jobs"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "schedule_jobs",
+          "required_args": {
+            "jobs": [
+              { "name": "backup", "at": "02:00", "retries": 3 },
+              { "name": "vacuum", "at": "03:30", "retries": 0 }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "schema_deep_nesting",
+    "category": "single_call",
+    "user_prompt": "Deploy build 7 to production in the eu-west region.",
+    "tools": [
+      {
+        "name": "deploy",
+        "description": "Deploy a build to an environment.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "build": { "type": "integer" },
+            "target": {
+              "type": "object",
+              "properties": {
+                "env": { "type": "string", "enum": ["staging", "production"] },
+                "region": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "string", "enum": ["us-east", "eu-west", "ap-south"] }
+                  },
+                  "required": ["code"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["env", "region"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["build", "target"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "expected": {
+      "kind": "tool_calls",
+      "calls": [
+        {
+          "name": "deploy",
+          "required_args": {
+            "build": 7,
+            "target": { "env": "production", "region": { "code": "eu-west" } }
+          }
+        }
+      ]
+    }
+  }
+]
