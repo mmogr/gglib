@@ -9,6 +9,7 @@ mod devices;
 mod enrolment;
 mod far_daemon;
 mod gateway;
+mod identity;
 mod invite_watch;
 mod key;
 mod pairing;
@@ -223,7 +224,7 @@ impl RemoteOps {
         // tightening the data directory — and `status` is the call everything else waits
         // behind. Nothing under the serve slot should be doing IO that has
         // nothing to do with the slot.
-        let identity_path = key::identity_path()
+        let identity_path = identity::identity_path()
             .ok()
             .flatten()
             .map(|p| p.display().to_string());

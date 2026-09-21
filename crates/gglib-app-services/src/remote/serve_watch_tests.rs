@@ -29,12 +29,13 @@ use crate::proxy::ProxyOps;
 /// one of each of the two files an arm touches, because both resolve from a
 /// process-wide path:
 ///
-/// - `data/remote_identity`, which modelpipe creates with `create_new` — two
-///   listeners starting at once is an *error* there on purpose, so that
-///   neither silently overwrites the other's key and serves a ticket nobody
-///   holds. On a checkout where the file does not exist yet, which is every
-///   CI run, two arms in the same instant means one of them fails with
-///   `File exists`.
+/// - `data/remote_identity`, which modelpipe places with `fs::hard_link`
+///   from a temporary — two listeners starting at once is an *error* there
+///   on purpose, so that neither silently overwrites the other's key and
+///   serves a ticket nobody holds, and the link is what keeps that error
+///   while making the write atomic. On a checkout where the file does not
+///   exist yet, which is every CI run, two arms in the same instant means
+///   one of them fails with `File exists`.
 /// - `data/remote_devices`, where `forget` is a read-modify-write and each
 ///   `RemoteOps` holds its own `roster` lock — so two of them are two locks
 ///   over one file, and one test's write can carry back a key another test
@@ -154,8 +155,8 @@ async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {
 /// The proxy goes away *after* the tunnel is up. The listener cannot be
 /// re-pointed at another port, so the only honest answer is to stop
 /// fronting it — and leaving it up is worse than having no tunnel, because
-/// modelpipe 0.3.0 forwards `authorization` verbatim to whatever binds that
-/// port next.
+/// the edge presents this daemon's proxy key as `backend_auth` to whatever
+/// binds that port next.
 ///
 /// This is also what pins the watcher's *start*: it takes the slot with
 /// `take_if_ours`, which passes over a reservation, and `watch_proxy` looks
@@ -267,7 +268,7 @@ async fn a_proxy_that_leaves_during_the_key_wait_does_not_outlive_its_tunnel() {
 /// person who ran `git add -A`.
 #[test]
 fn the_endpoint_key_lands_where_the_repository_ignores_it() {
-    let kept = super::key::identity_path()
+    let kept = super::identity::identity_path()
         .expect("the identity path did not resolve")
         .expect("the identity always names a file now");
     assert!(kept.ends_with("remote_identity"));

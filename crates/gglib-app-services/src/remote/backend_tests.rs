@@ -1,11 +1,14 @@
-//! Tests for [`super::Backend`] — the proxy's bind address as a backend
-//! modelpipe will dial — and for when the tunnel stops fronting it.
+//! Tests for when the tunnel stops fronting the proxy it was built for.
 //!
-//! The verdicts asserted here are modelpipe's, restated: `locality::admits`
-//! is `pub(crate)` over there, so this side cannot ask it and instead has to
-//! predict it. Each case names the classification it is predicting, so a
-//! modelpipe release that moves one of those lines fails against a test that
-//! says what it believed rather than a URL that looks arbitrary.
+//! This file used to restate modelpipe's locality verdicts, case by case,
+//! because `locality::admits` was `pub(crate)` over there and this side could
+//! only predict it. [`BackendUrl`] carries the verdict now and modelpipe
+//! tests it, so those cases are gone rather than duplicated. What is left is
+//! gglib's own question — whether the proxy on the other end of this address
+//! is still the one being fronted — plus the single thing the migration can
+//! silently get wrong.
+
+use std::net::SocketAddr;
 
 use super::*;
 use crate::remote::slot::Slot;
@@ -16,7 +19,7 @@ fn addr(s: &str) -> SocketAddr {
 }
 
 /// The address every watcher test uses, as a bind and as the backend the
-/// tunnel was built against. Loopback, so `Backend::at` leaves it alone and
+/// tunnel was built against. Loopback, so `BackendUrl::at` leaves it alone and
 /// the tests are about the watching rather than about the rewrite.
 const BOUND: &str = "127.0.0.1:8080";
 
@@ -30,13 +33,18 @@ const BOUND: &str = "127.0.0.1:8080";
 fn watched() -> (
     watch::Sender<ProxyStatus>,
     watch::Receiver<ProxyStatus>,
-    Backend,
+    BackendUrl,
     CancellationToken,
 ) {
     let (tx, rx) = watch::channel(ProxyStatus::Running {
         address: addr(BOUND),
     });
-    (tx, rx, Backend::at(addr(BOUND)), CancellationToken::new())
+    (
+        tx,
+        rx,
+        BackendUrl::at(addr(BOUND)),
+        CancellationToken::new(),
+    )
 }
 
 /// A `Live` a test can build: a real `modelpipe::ServeHandle` exists nowhere
@@ -49,96 +57,49 @@ fn live_on(handle: &Arc<u8>) -> Live<u8> {
     }
 }
 
-// ── Turning a bind address into a dial address ───────────────────────────
+// ── The permission the address carries ──────────────────────────────────
 
-/// The case that made `enable` fail on a proxy someone had deliberately
-/// made reachable: `0.0.0.0` classifies as `Unspecified`, which modelpipe
-/// refuses whatever the flag says, and the refusal blamed the proxy the user
-/// had just configured on purpose.
-#[test]
-fn a_wildcard_bind_is_dialled_on_loopback_with_its_own_port_kept() {
-    let backend = Backend::at(addr("0.0.0.0:8080"));
-    assert_eq!(backend.url, "http://127.0.0.1:8080");
-    assert!(!backend.allow_private, "loopback needs no flag");
-
-    // Both families, and a port that is not the default one, because
-    // rewriting the host and then losing the port is the mistake a
-    // hardcoded `127.0.0.1:8080` would make.
-    let backend = Backend::at(addr("[::]:19099"));
-    assert_eq!(backend.url, "http://[::1]:19099");
-    assert!(!backend.allow_private);
+/// Options for a listener that reaches no network of its own: no relay to
+/// find and no discovery service to publish to.
+fn offline() -> modelpipe::ServeOptions {
+    let mut opts = modelpipe::ServeOptions::default();
+    opts.auth = modelpipe::TokenPolicy::Named;
+    opts.discovery = false;
+    opts.port_mapping = false;
+    opts
 }
 
-/// The ordinary case has to stay untouched: a loopback bind is already the
-/// address modelpipe wants, and the IPv6 spelling has to survive the trip
-/// bracketed, which is what a URL authority needs and what modelpipe strips
-/// back off before it resolves.
-#[test]
-fn a_loopback_bind_is_dialled_as_written_and_needs_no_flag() {
-    for (bound, url) in [
-        ("127.0.0.1:8080", "http://127.0.0.1:8080"),
-        ("127.0.0.2:1234", "http://127.0.0.2:1234"),
-        ("[::1]:8080", "http://[::1]:8080"),
-    ] {
-        let backend = Backend::at(addr(bound));
-        assert_eq!(backend.url, url, "{bound}");
-        assert!(!backend.allow_private, "{bound}");
-    }
-}
+/// The one thing gglib still has to get right about the backend now that
+/// modelpipe decides the rest: [`BackendUrl::at`] carries a LAN address's
+/// permission to be dialled, and handing `serve` a URL *string* does not.
+///
+/// **What this does and does not cover.** It pins modelpipe's asymmetry,
+/// not gglib's call site: watching `arm` choose `at` would take a real
+/// LAN-bound proxy and a real endpoint, which this suite has neither of.
+/// What protects the call site is structural — with `Backend` and its `url`
+/// field gone there is no string to hand over by accident, and
+/// reintroducing the bug means writing `.url()` on purpose. This test is
+/// here so the hazard is written down, and so it fails loudly if a later
+/// modelpipe makes a bare URL permissive and quietly stops mattering.
+///
+/// A LAN literal with nothing behind it is enough: `serve` classifies the
+/// address before it dials it, so the refusal needs no listener on the far
+/// side, and the whole case runs in milliseconds.
+#[tokio::test]
+async fn a_lan_address_is_permitted_by_at_and_not_by_a_bare_url() {
+    const LAN: &str = "192.168.1.5:8080";
 
-/// A LAN bind names a real interface that loopback would not reach, so it is
-/// dialled as written — and modelpipe classifies it `Private`, which it
-/// refuses unless it is told to expect one. Rewriting this to loopback would
-/// be the wrong repair for the same symptom: it would silently dial a
-/// different server than the operator pointed at.
-#[test]
-fn a_lan_bind_is_dialled_as_written_and_carries_the_flag_modelpipe_needs() {
-    for (bound, url) in [
-        ("192.168.1.5:8080", "http://192.168.1.5:8080"),
-        ("10.0.0.1:8080", "http://10.0.0.1:8080"),
-        ("172.16.0.1:8080", "http://172.16.0.1:8080"),
-        ("[fd12:3456::1]:8080", "http://[fd12:3456::1]:8080"),
-    ] {
-        let backend = Backend::at(addr(bound));
-        assert_eq!(backend.url, url, "{bound}");
-        assert!(backend.allow_private, "{bound} must carry the flag");
-    }
-}
+    let refused = modelpipe::serve(format!("http://{LAN}"), offline()).await;
+    assert!(
+        matches!(refused, Err(modelpipe::ServeError::BackendNotLocal { .. })),
+        "a bare URL converts through `BackendUrl::dial`, which permits no \
+         private address"
+    );
 
-/// The flag is set from the same canonicalization modelpipe does, so an
-/// IPv4-mapped LAN address gets it too. Asking an `Ipv6Addr` whether it is
-/// RFC 1918 answers "no" — correctly, and uselessly.
-#[test]
-fn an_ipv4_mapped_lan_address_is_still_a_private_one() {
-    let backend = Backend::at(addr("[::ffff:192.168.1.5]:8080"));
-    assert!(backend.allow_private);
-
-    // And the unwrapping is applied across the board rather than
-    // special-cased: a mapped loopback address is loopback.
-    assert!(!Backend::at(addr("[::ffff:127.0.0.1]:8080")).allow_private);
-}
-
-/// Link-local and public binds are left exactly as they are, with no flag,
-/// so modelpipe refuses them — which is the correct outcome, not a gap.
-/// `169.254.169.254` is cloud instance metadata and a tunnel that dialled it
-/// on a stranger's behalf would be a credential-exfiltration primitive; a
-/// routable address is a server this machine does not own. Neither is
-/// something this side may quietly readmit, and the flag would not readmit
-/// them anyway — it moves `Private` and nothing else.
-#[test]
-fn a_link_local_or_public_bind_is_left_for_modelpipe_to_refuse() {
-    for bound in [
-        "169.254.169.254:8080",
-        "[fe80::1]:8080",
-        "203.0.113.1:8080",
-        "[2001:db8::1]:8080",
-    ] {
-        let backend = Backend::at(addr(bound));
-        assert!(
-            !backend.allow_private,
-            "{bound} must not be handed a flag that cannot admit it"
-        );
-    }
+    let served = modelpipe::serve(BackendUrl::at(addr(LAN)), offline())
+        .await
+        .expect("`BackendUrl::at` carries the permission the same address needs");
+    served.shutdown().await;
 }
 
 // ── When the tunnel stops fronting its proxy ─────────────────────────────
@@ -149,7 +110,7 @@ fn a_link_local_or_public_bind_is_left_for_modelpipe_to_refuse() {
 /// tunnel still forwarding into a port nobody owns.
 #[test]
 fn both_ways_the_proxy_exits_take_the_tunnel_down() {
-    let backend = Backend::at(addr("127.0.0.1:8080"));
+    let backend = BackendUrl::at(addr("127.0.0.1:8080"));
     assert!(!still_fronting(&ProxyStatus::Stopped, &backend));
     assert!(!still_fronting(&ProxyStatus::Crashed, &backend));
 }
@@ -159,7 +120,7 @@ fn both_ways_the_proxy_exits_take_the_tunnel_down() {
 /// life of a session, and it must not cost the tunnel anything.
 #[test]
 fn a_proxy_still_on_the_address_the_tunnel_dials_is_left_alone() {
-    let backend = Backend::at(addr("127.0.0.1:8080"));
+    let backend = BackendUrl::at(addr("127.0.0.1:8080"));
     let status = ProxyStatus::Running {
         address: addr("127.0.0.1:8080"),
     };
@@ -172,7 +133,7 @@ fn a_proxy_still_on_the_address_the_tunnel_dials_is_left_alone() {
 /// as a stranger, tearing down a healthy tunnel every five seconds.
 #[test]
 fn a_wildcard_bind_still_matches_the_loopback_address_it_was_rewritten_to() {
-    let backend = Backend::at(addr("0.0.0.0:8080"));
+    let backend = BackendUrl::at(addr("0.0.0.0:8080"));
     let status = ProxyStatus::Running {
         address: addr("0.0.0.0:8080"),
     };
@@ -184,7 +145,7 @@ fn a_wildcard_bind_still_matches_the_loopback_address_it_was_rewritten_to() {
 /// leaving the tunnel up would forward to whatever holds it now.
 #[test]
 fn a_proxy_that_came_back_on_another_port_is_not_the_one_being_fronted() {
-    let backend = Backend::at(addr("127.0.0.1:8080"));
+    let backend = BackendUrl::at(addr("127.0.0.1:8080"));
     let status = ProxyStatus::Running {
         address: addr("127.0.0.1:9099"),
     };

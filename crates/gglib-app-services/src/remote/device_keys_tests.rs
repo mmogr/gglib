@@ -30,7 +30,6 @@ async fn listener() -> modelpipe::ServeHandle {
     opts.auth = modelpipe::TokenPolicy::Named;
     opts.discovery = false;
     opts.port_mapping = false;
-    opts.allow_private_backend = true;
     modelpipe::serve(&format!("http://{addr}"), opts)
         .await
         .expect("the listener binds")

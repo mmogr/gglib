@@ -17,10 +17,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use gglib_runtime::proxy::ProxyStatus;
+use modelpipe::BackendUrl;
 
-use super::backend::Backend;
+use super::identity::{discard_empty_identity, identity_path};
 use super::key;
-use super::key::identity_path;
 use super::pairing::Offer;
 use super::rotation::rotation_poll;
 use super::serve_switch::CANCELLED_BY_DISABLE;
@@ -47,7 +47,7 @@ impl RemoteOps {
     ) -> Result<Enabled, GuiError> {
         let settled = key::settle(&self.proxy, &self.core).await?;
 
-        let backend = Backend::at(*addr);
+        let backend = BackendUrl::at(*addr);
 
         let mut opts = modelpipe::ServeOptions::default();
         // Named, not Supplied: nothing admits but the tokens seeded below, and
@@ -57,12 +57,23 @@ impl RemoteOps {
         opts.auth = modelpipe::TokenPolicy::Named;
         opts.backend_auth = Some(settled.key.clone());
         opts.relay = request.relay;
-        opts.identity = identity_path()?;
+        // Healed before `serve` reads it, because `serve` refuses an empty
+        // one permanently rather than minting over it — see
+        // [`identity::discard_empty_identity`].
+        let identity = identity_path()?;
+        if let Some(path) = identity.as_deref() {
+            discard_empty_identity(path)?;
+        }
+        opts.identity = identity;
         opts.port_mapping = false;
         opts.discovery = request.discovery;
         opts.wait_online = Some(WAIT_ONLINE);
-        opts.allow_private_backend = backend.allow_private;
-        let handle = modelpipe::serve(&backend.url, opts).await.map_err(|e| {
+        // No permission flag beside it: the backend carries its own, derived
+        // from the address by `BackendUrl::at`. Passing the whole value is
+        // what keeps them together — handing `serve` a bare URL string would
+        // convert through `BackendUrl::dial`, which permits no private
+        // address.
+        let handle = modelpipe::serve(backend.clone(), opts).await.map_err(|e| {
             GuiError::Internal(format!("could not start the remote tunnel: {}", chain(&e)))
         })?;
         let handle = Arc::new(handle);
@@ -194,12 +205,19 @@ impl RemoteOps {
 
 /// An error and everything under it, joined into one sentence.
 ///
-/// modelpipe's `Display` for `ServeError::Identity` says only that the file
-/// cannot be used and leaves the reason to its source, on the stated grounds
-/// that anyhow prints the chain. Nothing on this path uses anyhow, so
-/// formatting with `{e}` alone dropped the half that says what to do about it
-/// — "the identity file is readable by others (mode 0644) — chmod 600 it" —
-/// and left the operator with a sentence naming a path and no fault.
+/// modelpipe's `Display` for `ServeError::Identity` leaves the reason to its
+/// source, on the stated grounds that anyhow prints the chain. Nothing on
+/// this path uses anyhow, so formatting with `{e}` alone dropped the half
+/// that says what to do about it — "… is readable by others (mode 0644) —
+/// chmod 600 it" — and left the operator with a sentence naming a path and
+/// no fault.
+///
+/// modelpipe names the path in that top-level sentence, and several of the
+/// sources under it name it again — `check_private`'s leads with it, the
+/// empty-file one carries it mid-sentence, and the two failures of placing
+/// the file interpolate it too — so for those the joined sentence says the
+/// path twice. That is the cheaper of the two losses: a repeated path is
+/// noise, a missing remedy is an operator with nothing to do next.
 fn chain(error: &dyn std::error::Error) -> String {
     let mut sentence = error.to_string();
     let mut source = error.source();
