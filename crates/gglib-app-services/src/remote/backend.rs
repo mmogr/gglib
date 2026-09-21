@@ -1,18 +1,21 @@
-//! Which local address the tunnel fronts, and noticing when it stops being
-//! one.
+//! Noticing when the tunnel stops fronting the proxy it was built for.
 //!
-//! `enable` reads the proxy's bound address exactly once, and both halves of
-//! this file are about that single read: one turns a *bind* address into
-//! something `modelpipe::serve` will dial, and the other takes the tunnel
-//! down when that address stops meaning the proxy.
+//! `enable` reads the proxy's bound address exactly once and hands it to
+//! [`BackendUrl::at`], which turns a *bind* address into one
+//! `modelpipe::serve` will dial — rewriting a wildcard to the loopback
+//! literal of its own family and carrying the permission a LAN address
+//! needs. This file used to do that itself, in a struct that mirrored
+//! modelpipe's own locality rule in order to predict its verdict; the rule
+//! now travels with the URL, so what is left here is the other half: taking
+//! the tunnel down when that address stops meaning the proxy.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use gglib_runtime::proxy::ProxyStatus;
+use modelpipe::BackendUrl;
 use tokio::sync::{Mutex, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -22,75 +25,6 @@ use super::slot::Slot;
 use super::{DRAIN, Live, RemoteOps};
 use crate::error::GuiError;
 use crate::proxy::ProxyOps;
-
-/// Where the tunnel dials this machine's proxy, and on what terms.
-pub(super) struct Backend {
-    /// The backend URL handed to `modelpipe::serve`.
-    pub(super) url: String,
-    /// Whether that URL names an address on the operator's own network,
-    /// which modelpipe will not dial unless it is told to expect one.
-    pub(super) allow_private: bool,
-}
-
-impl Backend {
-    /// The backend a proxy bound to `addr` is reached at.
-    ///
-    /// A bind address and a dial address are not the same thing, and
-    /// modelpipe screens the address it dials (`locality::admits`) against a
-    /// rule the proxy's bind never had to satisfy. Two cases differ:
-    ///
-    /// * A **wildcard** bind (`0.0.0.0`, `::`) names no host at all, so
-    ///   modelpipe refuses it whatever it is told — on Linux, dialling it
-    ///   reaches loopback, so admitting it would be an accident rather than
-    ///   a decision. A proxy on the wildcard is listening on loopback as
-    ///   well, so the loopback literal of the same family is what it meant.
-    ///   The port is kept, which is the whole point of rewriting rather than
-    ///   guessing at 8080.
-    /// * A **LAN** bind (`192.168.…`, `10.…`, `fd00::…`) names a real
-    ///   interface that the loopback literal would not reach, so it is
-    ///   dialled as written — with the one flag modelpipe requires before it
-    ///   will dial the operator's own network. That widens nothing else: the
-    ///   URL carries a literal address, so the flag can only ever readmit
-    ///   the address the proxy is already on.
-    ///
-    /// Everything else is passed through untouched and modelpipe decides.
-    /// Link-local and public addresses stay refused however the flag is set,
-    /// and this must not try to talk its way around that: a proxy bound to a
-    /// routable address would be re-exporting a server this machine does not
-    /// own, which is the case the rule exists for.
-    pub(super) fn at(addr: SocketAddr) -> Self {
-        let ip = match addr.ip() {
-            IpAddr::V4(v4) if v4.is_unspecified() => IpAddr::V4(Ipv4Addr::LOCALHOST),
-            IpAddr::V6(v6) if v6.is_unspecified() => IpAddr::V6(Ipv6Addr::LOCALHOST),
-            other => other,
-        };
-        Self {
-            // `SocketAddr`'s `Display` brackets an IPv6 literal, which is
-            // what a URL authority needs — and what modelpipe strips back
-            // off the host before it resolves, so `http://[::1]:8080` is the
-            // spelling that works rather than the one that looks safe.
-            url: format!("http://{}", SocketAddr::new(ip, addr.port())),
-            allow_private: is_private(ip),
-        }
-    }
-}
-
-/// Whether an address is one modelpipe classifies as private — RFC 1918 or
-/// `fc00::/7`.
-///
-/// A mirror of `locality::classify`, whose verdict is the one that actually
-/// decides; this side only has to predict it well enough to set the flag.
-/// IPv4-mapped IPv6 is unwrapped first for the reason it is unwrapped there:
-/// `::ffff:192.168.1.5` is a LAN address wearing an IPv6 hat, and every
-/// per-family check answers the wrong question about it.
-fn is_private(ip: IpAddr) -> bool {
-    match ip.to_canonical() {
-        IpAddr::V4(v4) => v4.is_private(),
-        // fc00::/7, unique local. Matched by prefix because
-        // `Ipv6Addr::is_unique_local` is still unstable.
-        IpAddr::V6(v6) => v6.segments()[0] & 0xFE00 == 0xFC00,
-    }
-}
 
 /// Refuse a tunnel whose proxy went away while it was binding, and let the
 /// half-built listener go.
@@ -117,7 +51,7 @@ fn is_private(ip: IpAddr) -> bool {
 /// `Internal`, naming the state the proxy was found in.
 pub(super) async fn refuse_if_gone(
     proxy: &ProxyOps,
-    backend: &Backend,
+    backend: &BackendUrl,
     handle: &modelpipe::ServeHandle,
 ) -> Result<(), GuiError> {
     let status = proxy.status().await;
@@ -144,10 +78,13 @@ pub(super) async fn refuse_if_gone(
 /// the proxy exiting is to stop fronting it.
 ///
 /// Leaving it up is worse than having no tunnel. The port stops being this
-/// daemon's the moment the proxy lets go of it, another local process may
-/// bind it, and modelpipe 0.3.0 forwards `Authorization` verbatim — so
-/// whatever answers there next is handed the tunnelled request *and* the
-/// gglib key that came with it.
+/// daemon's the moment the proxy lets go of it, and another local process
+/// may bind it. `arm` sets `backend_auth`, so the edge presents *this
+/// daemon's own proxy key* upstream on every admitted request — whatever
+/// answers on that port next is handed the tunnelled request and the key
+/// that opens this machine's proxy. (Left unset, modelpipe forwards the
+/// client's `Authorization` verbatim instead, which is the same hazard
+/// wearing the device's credential rather than the daemon's.)
 ///
 /// Two mechanisms, because one of them has a hole. The exit channel is the
 /// fast path and covers the ordinary exits; the poll is what covers the ones
@@ -159,7 +96,7 @@ pub(super) fn follow_proxy(
     handle: &Arc<modelpipe::ServeHandle>,
     exit: watch::Receiver<ProxyStatus>,
     cancel: CancellationToken,
-    backend: Backend,
+    backend: BackendUrl,
 ) {
     tokio::spawn(watch_proxy(
         Arc::clone(&ops.live),
@@ -201,7 +138,7 @@ async fn watch_proxy(
     proxy: Arc<ProxyOps>,
     mut exit: watch::Receiver<ProxyStatus>,
     cancel: CancellationToken,
-    backend: Backend,
+    backend: BackendUrl,
 ) {
     if !until_gone(&proxy, &mut exit, &cancel, &backend).await {
         return;
@@ -229,7 +166,7 @@ async fn until_gone(
     proxy: &ProxyOps,
     exit: &mut watch::Receiver<ProxyStatus>,
     cancel: &CancellationToken,
-    backend: &Backend,
+    backend: &BackendUrl,
 ) -> bool {
     let mut poll = tokio::time::interval_at(tokio::time::Instant::now() + PROXY_POLL, PROXY_POLL);
     loop {
@@ -278,14 +215,18 @@ pub(super) fn take_if_ours<H>(slot: &mut Slot<Live<H>>, mine: &Arc<H>) -> Option
 }
 
 /// Whether a proxy in this state is still the one this tunnel dials.
-fn still_fronting(status: &ProxyStatus, backend: &Backend) -> bool {
+fn still_fronting(status: &ProxyStatus, backend: &BackendUrl) -> bool {
     match status {
         // The address is compared, not assumed: a proxy that went away and
         // came back on another port is not this tunnel's backend, even
         // though it is running. The comparison goes through the same
         // rewrite `enable` used, so a proxy that rebound the wildcard is
-        // recognised as the same backend rather than as a new one.
-        ProxyStatus::Running { address } => Backend::at(*address).url == backend.url,
+        // recognised as the same backend rather than as a new one. The
+        // whole value is compared rather than the URL string it used to be,
+        // which is simpler and not a behaviour change: `at` derives the
+        // permission from the address, so no two values can agree on the URL
+        // and differ on the permission.
+        ProxyStatus::Running { address } => BackendUrl::at(*address) == *backend,
         // `POST /api/proxy/stop` publishes the first and a proxy task that
         // fell over publishes the second. Both are equally not ours any
         // more, and only reacting to the crash would leave the deliberate

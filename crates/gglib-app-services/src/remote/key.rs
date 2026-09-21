@@ -175,35 +175,6 @@ impl Settled {
     }
 }
 
-/// Where this machine's endpoint key lives.
-///
-/// Always the same file now (ADR 0012, decision 4, reversed — see the
-/// amendment dated 2026-09-10). A ticket names a machine; it is not a
-/// credential, and reaching anything behind it still takes a key this side
-/// issued. Minting a new one every session made the address change for a
-/// reason nobody outside this process could see, so every paired device
-/// paired again after a reboot — paying a real cost daily to buy a
-/// rotation nobody was reaching for.
-///
-/// What made that trade defensible was the arithmetic in decision 3: six
-/// digits and two minutes are enough only while a guesser has to find the
-/// listener first. A lasting ticket removes that step, so the counting had
-/// to move to where the guesses arrive: the tunnel edge, which answers the
-/// code itself and counts wrong codes per endpoint. Retiring the
-/// address is now deleting this file, a thing a person does deliberately
-/// rather than a side effect of a restart. It revokes no device: `arm` seeds
-/// every device key the roster lists onto the listener at the new address,
-/// so cutting a device off is [`RemoteOps::forget`](super::RemoteOps::forget).
-///
-/// Separate from `arm` so the decision can be read without binding an
-/// endpoint or writing a key: `arm` is a network call and a file, and this
-/// is neither.
-pub(super) fn identity_path() -> Result<Option<std::path::PathBuf>, GuiError> {
-    gglib_core::paths::remote_identity_path()
-        .map(Some)
-        .map_err(|e| GuiError::Internal(format!("could not place the stored endpoint key: {e}")))
-}
-
 #[cfg(test)]
 #[path = "key_tests.rs"]
 mod key_tests;
