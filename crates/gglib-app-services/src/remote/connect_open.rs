@@ -108,19 +108,31 @@ impl NotOpened {
                 "the pairing request did not get through, and the code may have been spent on \
                  the way: {e}"
             )),
-            // What a desktop on gglib 0.18 answers: its edge spends the code and
-            // its proxy has no route. Matched on modelpipe 0.6's wording, all
-            // `Unexpected` carries; a rewording falls to the arm below.
-            Self::Pair(PairError::Unexpected(why @ "a status other than 200 or 401")) => {
-                GuiError::Unavailable(format!(
-                    "the far machine answered the pairing request with something that is not a \
-                     pairing answer ({why}) — a desktop on gglib 0.18 or older does, because it \
-                     pairs another way: update it, then run `gglib remote invite` there for a new \
-                     code"
-                ))
-            }
-            // Any other non-answer (a stream closed early, another endpoint's
-            // answer) is not a version problem, and the code may be spent.
+            // What a desktop on gglib 0.18 answers: its edge spends the code
+            // and its proxy has no route, so the pairing request arrives at a
+            // router that has never heard of it.
+            Self::Pair(PairError::UnexpectedStatus { status: 404 }) => GuiError::Unavailable(
+                "the far machine answered the pairing request with HTTP 404, which is not a \
+                 pairing answer — a desktop on gglib 0.18 or older does, because it pairs \
+                 another way: update it, then run `gglib remote invite` there for a new code"
+                    .to_owned(),
+            ),
+            // Any other status is unexplained, and an unexplained status
+            // must not be blamed on a version: 404 is the only one anyone has
+            // traced to a mechanism, and sending an operator after a desktop
+            // that may already be current wastes their time. The code may be
+            // spent either way.
+            Self::Pair(PairError::UnexpectedStatus { status }) => GuiError::Unavailable(format!(
+                "the far machine answered the pairing request with HTTP {status}, which is not a \
+                 pairing answer; the code may have been spent, so run `gglib remote invite` there \
+                 for a new one"
+            )),
+            // The arm that carries no status: an answer this side could not
+            // read as a pairing answer, which mostly means a 200 whose body
+            // was wrong — a field is missing, a body that is not UTF-8, an
+            // empty key or device — or no response head at all. An
+            // answer that stopped before it was whole is `Exchange`, which
+            // this match answers further up, and never reaches here.
             Self::Pair(PairError::Unexpected(why)) => GuiError::Unavailable(format!(
                 "the far machine's answer to the pairing request was not a pairing answer \
                  ({why}); the code may have been spent, so run `gglib remote invite` there for a \

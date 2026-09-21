@@ -425,8 +425,11 @@ running this version, because they send the code as a key, which the tunnel
 edge refuses before the proxy sees it; they report that as a refused pairing
 code. A device either of them has already paired keeps working. Nor can a
 laptop on this version pair with a desktop still on gglib 0.18: that desktop's
-edge spends the code on the attempt, and `join` says the answer was not a
-pairing answer. Update the desktop first.
+edge spends the code on the attempt and its proxy has no route for it, so the
+request comes back HTTP 404 and `join` names that status and says to update
+the desktop. Any other status is reported without blaming a version: 404 is
+the only one anyone has traced to a mechanism, and sending an operator after a
+desktop that may already be current wastes their time.
 
 **The daemon's own API trusts the machine, not the person.** A daemon bound
 on loopback, the default, asks nothing of a request to `127.0.0.1:9887`: the
