@@ -35,8 +35,9 @@ fn a_dial_that_reached_nobody_says_which_way_and_how_long_it_waited() {
 }
 
 /// What a pairing that did not pair says: a refused code is most likely a
-/// mistyped one, which costs only that attempt, and an answer that is not a
-/// pairing answer is what a desktop on gglib 0.18 sends back.
+/// mistyped one, which costs only that attempt; a 404 is what a desktop on
+/// gglib 0.18 sends back; and every other non-answer is unexplained, so it
+/// must not blame a version.
 #[test]
 fn a_pairing_that_did_not_pair_says_what_to_do_next() {
     let GuiError::ValidationFailed(refused) = NotOpened::Pair(PairError::Refused).into_error(None)
@@ -48,11 +49,45 @@ fn a_pairing_that_did_not_pair_says_what_to_do_next() {
         "{refused}"
     );
     let GuiError::Unavailable(old) =
-        NotOpened::Pair(PairError::Unexpected("a status other than 200 or 401")).into_error(None)
+        NotOpened::Pair(PairError::UnexpectedStatus { status: 404 }).into_error(None)
     else {
         panic!("an answer that is not a pairing answer leaves the far machine unavailable");
     };
     assert!(old.contains("a desktop on gglib 0.18 or older"), "{old}");
+    // The half of the remedy this arm exists to restore: without it the
+    // operator is told to update a desktop and not that the code is spent.
+    assert!(old.contains("gglib remote invite"), "{old}");
+
+    // The arm that exists so the one above cannot over-reach. Driven with
+    // *two* statuses on purpose: with one, an arm that hard-coded that same
+    // number would satisfy the assertion, and the test could not tell an
+    // interpolated status from a constant. Neither number means anything —
+    // that is the point of the arm — and 503 is deliberately not one of
+    // them, because it is the example this change argues cannot arise.
+    // Three separate assertions rather than one conjunction, so a mutation
+    // that breaks one of them says which.
+    for status in [429u16, 500] {
+        let GuiError::Unavailable(unexplained) =
+            NotOpened::Pair(PairError::UnexpectedStatus { status }).into_error(None)
+        else {
+            panic!("any status that is not a pairing answer leaves the far machine unavailable");
+        };
+        assert!(
+            unexplained.contains(&status.to_string()),
+            "it names the status it was given: {unexplained}"
+        );
+        assert!(
+            !unexplained.contains("gglib 0.18"),
+            "only the 404 has been traced to an old desktop: {unexplained}"
+        );
+        assert!(
+            unexplained.contains("may have been spent"),
+            "the code may be spent whatever the status: {unexplained}"
+        );
+    }
+
+    // Still produced by modelpipe, and still reaching the arm that carries no
+    // status: this one is not dead, and did not move with the 404.
     let GuiError::Unavailable(other) =
         NotOpened::Pair(PairError::Unexpected("an empty key or device")).into_error(None)
     else {
