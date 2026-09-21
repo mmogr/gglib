@@ -11,16 +11,19 @@
 //! port, and a different port the next morning. The port stays bound now,
 //! whatever the far machine is doing, and answers `502` until it is back.
 //!
-//! What this file decides instead is what to *tell* people, and when to
-//! nudge the transport. A peer away past [`AWAY_AFTER`] is announced as
-//! away — so `gglib remote status` and the popover stop saying "connected"
-//! over nothing — and announced back when it answers. While it is away,
-//! modelpipe is told every [`NUDGE_EVERY`] that the network may have
-//! changed, which is its cue to rebind a socket left on an interface that
-//! no longer exists: a laptop that changed network while suspended is the
-//! case it names. Both are policy, so [`follow`] takes the statuses and the
-//! nudge through closures rather than reading a handle — a policy nothing
-//! can exercise is a comment with a timer attached.
+//! What this file decides instead is what to *tell* people. A peer away
+//! past [`AWAY_AFTER`] is announced as away — so `gglib remote status` and
+//! the popover stop saying "connected" over nothing — and announced back
+//! when it answers. That is the whole policy here now: the nudge that used
+//! to live beside it is modelpipe's, and the clock it ran on is
+//! [`ConnectHandle::idle_for`], read afresh on every turn rather than kept
+//! here.
+//!
+//! [`follow`] still takes the statuses and the clock through closures
+//! rather than reading a handle. A `ConnectHandle` needs an iroh endpoint
+//! and a peer to take away, so a policy that reached for one would be
+//! exercisable only from a two-machine run — a comment with a timer
+//! attached.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -31,11 +34,6 @@ use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use modelpipe::{ConnectHandle, PipeStatus};
 use tokio::sync::Mutex;
-// `tokio::time`'s clock, not `std`'s: the deadlines below are tokio timers,
-// and a clock the runtime cannot advance makes the dwell untestable — a
-// paused-time test would restart it to the same instant every time and
-// agree with whatever it was given.
-use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
@@ -50,13 +48,6 @@ use super::slot::Slot;
 /// short enough that a status read a minute after the lid closed says what
 /// is true.
 pub(super) const AWAY_AFTER: Duration = Duration::from_secs(30);
-
-/// How often, while away, modelpipe is told the network may have changed.
-///
-/// It re-dials on its own; the nudge is for the socket underneath, which a
-/// suspend can leave bound to an interface that is gone. Once a minute is
-/// cheap and is about as long as a person waits before asking why.
-pub(super) const NUDGE_EVERY: Duration = Duration::from_secs(60);
 
 /// Why following a connection stopped.
 #[derive(Debug, PartialEq, Eq)]
@@ -92,9 +83,8 @@ pub(super) async fn watch(
     port: u16,
 ) {
     let over = follow(
-        handle.status(),
         || handle.status_changed(),
-        || handle.notify_network_change(),
+        || handle.idle_for(),
         &cancel,
         |presence| match presence {
             Presence::Away => {
@@ -165,76 +155,95 @@ where
     true
 }
 
-/// Wait out a connection, given where it starts, a way to ask for its next
-/// status, and a way to nudge the transport; report the far machine's
-/// presence as it changes.
-async fn follow<F, Fut, N, NFut>(
-    initial: PipeStatus,
+/// Wait out a connection, given a way to ask for its next status and a way
+/// to ask how long it has been idle; report the far machine's presence as
+/// it changes.
+///
+/// `idle` is [`ConnectHandle::idle_for`]: `None` while the pipe is reaching
+/// the peer, `Some(how long)` while it is not. It needs no seeding from a
+/// starting status, because modelpipe starts that clock when the pipe goes
+/// idle rather than when this watcher first looks — a pipe already idle at
+/// the install is on the clock, not waiting to be noticed.
+async fn follow<F, Fut, I>(
     next: F,
-    nudge: N,
+    idle: I,
     cancel: &CancellationToken,
     mut report: impl FnMut(Presence),
 ) -> Over
 where
     F: Fn() -> Fut,
     Fut: Future<Output = PipeStatus>,
-    N: Fn() -> NFut,
-    NFut: Future<Output = ()>,
+    I: Fn() -> Option<Duration>,
 {
-    // Read before waiting: `status_changed` snapshots at the moment it is
-    // polled, so a pipe that went idle between the install and the first
-    // call has nothing left to report and the clock would never start.
-    let mut idle_since = idle_clock(None, initial);
     let mut away = false;
-    let mut next_nudge: Option<Instant> = None;
     loop {
-        // One deadline at a time: the away threshold while the pipe is idle
-        // and not yet called away, the next nudge while it is away, nothing
-        // while the far machine is here. `pending()` is the arm that says
-        // "there is no deadline right now" without a timer to cancel.
+        // One deadline at a time: what is left of the grace while the pipe
+        // is idle and not yet called away, and nothing otherwise — once the
+        // peer is away there is no timer here at all, because the nudge
+        // that used to keep one is modelpipe's now. `pending()` is the arm
+        // that says "no deadline right now" without a timer to cancel.
+        //
+        // `saturating_sub` because the grace can already be spent when this
+        // is reached — `Duration`'s `Sub` panics on underflow — in which
+        // case the sleep is zero and the arm fires at once.
+        //
+        // That zero sleep is safe because of two things below, not one: this
+        // `away` guard, which stops it recurring once the peer is announced
+        // away, and `>=` rather than `>` in the arm, which stops it
+        // recurring before. Weaken `>` and the loop spins without advancing
+        // a paused clock, which *hangs* the suite rather than failing it: no
+        // `tokio::time::timeout` can bound a busy task. Dropping the `away`
+        // guard does both — it also queues a second `Away`, which the
+        // closing-pipe test catches.
+        let remaining = if away {
+            None
+        } else {
+            idle().map(|spent| AWAY_AFTER.saturating_sub(spent))
+        };
         let deadline = async {
-            match (away, idle_since, next_nudge) {
-                (false, Some(since), _) => tokio::time::sleep_until(since + AWAY_AFTER).await,
-                (true, _, Some(at)) => tokio::time::sleep_until(at).await,
-                _ => std::future::pending().await,
+            match remaining {
+                Some(left) => tokio::time::sleep(left).await,
+                None => std::future::pending().await,
             }
         };
         tokio::select! {
             () = cancel.cancelled() => return Over::Cancelled,
             () = deadline => {
-                if !away {
-                    away = true;
-                    report(Presence::Away);
+                // Read again rather than trust the sleep. `status_changed`
+                // coalesces, so the peer can have been reached and lost
+                // again while this was waiting, with no status arriving to
+                // say so; modelpipe's clock restarted, and the grace this
+                // slept out belongs to an idleness that ended. Anything
+                // short of the threshold re-arms on the way round.
+                match idle() {
+                    Some(spent) if spent >= AWAY_AFTER => {
+                        away = true;
+                        report(Presence::Away);
+                    }
+                    _ => {}
                 }
-                nudge().await;
-                next_nudge = Some(Instant::now() + NUDGE_EVERY);
             }
             status = next() => {
                 info!(path = status.as_str(), "remote connection path changed");
+                // Before any reading of the clock, because `idle_for`
+                // answers `None` for a closed pipe exactly as it does for a
+                // reached one. The status is the only thing that tells them
+                // apart, so this must stay above everything below it.
                 if status == PipeStatus::Closed {
                     return Over::Closed;
                 }
-                idle_since = idle_clock(idle_since, status);
-                if idle_since.is_none() && away {
+                // `!= Idle` reads as belt and braces and is: while `away`
+                // is true the parked `status_changed` cannot answer `Idle`,
+                // because modelpipe's `set_status` no-ops on a repeat. It
+                // stays because "the peer answered" is the condition being
+                // named, and naming it by what it is survives an upstream
+                // that starts republishing.
+                if away && status != PipeStatus::Idle {
                     away = false;
-                    next_nudge = None;
                     report(Presence::Here);
                 }
             }
         }
-    }
-}
-
-/// The idle clock after `status`: `None` while the pipe is reaching the
-/// peer, `Some(when it first went idle)` while it is not.
-///
-/// Only the *first* `Idle` starts it. Restarting on every report would let
-/// a peer that goes from idle to idle — which is what a re-dial that finds
-/// nobody looks like from here — put off being called away for ever.
-fn idle_clock(current: Option<Instant>, status: PipeStatus) -> Option<Instant> {
-    match status {
-        PipeStatus::Idle => current.or_else(|| Some(Instant::now())),
-        _ => None,
     }
 }
 
@@ -251,6 +260,10 @@ pub(super) fn unix_ms() -> i64 {
 #[cfg(test)]
 #[path = "connect_watch_tests.rs"]
 mod connect_watch_tests;
+
+#[cfg(test)]
+#[path = "connect_idle_tests.rs"]
+mod connect_idle_tests;
 
 #[cfg(test)]
 #[path = "connect_teardown_tests.rs"]

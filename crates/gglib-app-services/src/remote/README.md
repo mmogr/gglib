@@ -283,12 +283,29 @@ and it says plainly that it cannot tell a sleeping laptop from a dead one.
 Nothing here acted on it at all, so a peer that went away left `remote
 status` reporting "Connected" and every request answered 502, indefinitely.
 
-`connect_watch.rs` holds the policy: a clock starts on the first `Idle` — the
-first, not each, or a re-dial that keeps finding nobody would keep buying
-time — and ninety seconds later the connection is taken down and announced.
-Ninety because modelpipe's re-dial backoff tops out at thirty and a dial at a
-machine that is off takes iroh about thirty more, so one full cycle is around
-a minute.
+`connect_watch.rs` holds the policy: after thirty seconds of `Idle` the far
+machine is announced away, and the connection is **kept**. Thirty because
+modelpipe's first retry is well inside it, so a dropped packet or a relay
+hiccup is never *announced* — `gglib remote status` still shows the live path,
+so a blip reads as `(idle)` there. Long enough to outlast one, short enough
+that a read a minute after the lid closed says what is true.
+
+The clock is modelpipe's, read through `ConnectHandle::idle_for` on every
+turn rather than kept here. `status_changed` coalesces, so a peer reached and
+lost again between two of this side's polls arrives as no status at all;
+reading afresh puts the grace on the idleness that is actually running rather
+than on one the pipe abandoned. The reading is `None` for a closed pipe
+exactly as it is for a reached one, which is why `Closed` is answered before
+anything here looks at a clock.
+
+An earlier version of `connect_watch.rs` gave up after ninety seconds and
+released the port. That is what turned a closed laptop lid into a dead port,
+and a different port the next morning; the paragraph above described that
+policy long after it had gone. The socket nudge that sat beside the clock has
+gone the same way, for a smaller reason: it is
+`ConnectOptions::idle_network_nudge` upstream, on
+by default, so from the moment gglib pinned modelpipe 0.7 it was running two
+of them.
 
 Deciding is only half of it. `conclude` is the other half: the slot cleared,
 the local port dropped — modelpipe is still re-dialling behind it, so leaving
@@ -311,6 +328,7 @@ no test can drive.
 | [`connect.rs`](connect.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect-coverage.json) |
 | [`connect_dial.rs`](connect_dial.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_dial-coverage.json) |
 | [`connect_gate_tests.rs`](connect_gate_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_gate_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_gate_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_gate_tests-coverage.json) |
+| [`connect_idle_tests.rs`](connect_idle_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_idle_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_idle_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_idle_tests-coverage.json) |
 | [`connect_open_tests.rs`](connect_open_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_open_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_open_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_open_tests-coverage.json) |
 | [`connect_race_tests.rs`](connect_race_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_race_tests-coverage.json) |
 | [`connect_teardown_tests.rs`](connect_teardown_tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_teardown_tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_teardown_tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-remote-connect_teardown_tests-coverage.json) |

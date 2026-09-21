@@ -243,8 +243,9 @@ remembered the same way.
 **The port stays bound while the desktop is away.** A desktop that reboots,
 sleeps, or changes network does not end the connection here: the port keeps
 answering, with `502 tunnel_unavailable`, and the tunnel keeps dialling — for
-as long as the connection is up, with a backoff, and with a nudge to rebind its
-socket every minute in case this laptop changed network while suspended.
+as long as the connection is up, with a backoff, and with a nudge to rebind
+its socket — a minute apart at the closest, and further apart when a dial
+takes longer — in case this laptop changed network while suspended.
 After thirty seconds of that, `gglib remote status` and the popover say
 **away** and for how long, rather than "connected" over nothing; when the
 desktop answers, they say so. Nothing needs typing at either end. Only
