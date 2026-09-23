@@ -22,9 +22,13 @@
 /// Since #1052 a trip is an intervention rather than a rejection: the default
 /// forwards the request with a note.
 ///
-/// It says which detector, and nothing about which path. Only the proxy's
-/// pre-dispatch scan records a trip at all: the agent loop runs the same two
-/// detectors and its trips reach no counter (#1091).
+/// It says which detector, and nothing about which path. Both paths record
+/// one now — the proxy's pre-dispatch scan into `loop_guard_trips` and its
+/// two parts, the agent loop into the `agent_guard_*` four (#1091) — and the
+/// field a count lands in is what says which path it came from.
+///
+/// The loop guard's *log*, which outlives the process and is what ADR 0011's
+/// kill criterion reads, still records the proxy's scan alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -50,7 +54,17 @@ pub enum LoopGuardTrip {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelDefectCounts {
     /// Requests the proxy forwarded (or would have, but for a guard) for
-    /// this model — every rate's denominator.
+    /// this model.
+    ///
+    /// The proxy path's own count, and the denominator for the rates taken
+    /// over it — but not for every rate here, and it is worth knowing which.
+    /// A counter whose doc begins "Of those" is a share of the counter it
+    /// refers to, not of this one: [`Self::repairs_succeeded`] is read
+    /// against [`Self::repairs_attempted`], and each detector count against
+    /// its own trip total. The agent path has a denominator of its own,
+    /// [`Self::agent_guard_scanned`], and its counters are read against that
+    /// rather than against this one — that field says how, and why it is not
+    /// folded in here.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub requests: u64,
     /// Requests the loop/stagnation guard acted on.
@@ -77,6 +91,76 @@ pub struct ModelDefectCounts {
     /// Of those, the ones [`LoopGuardTrip::Stagnation`] raised.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub loop_guard_stagnations: u64,
+    /// Guard decisions taken on the **agent** path for this model — the
+    /// denominator the three agent counts below are read against.
+    ///
+    /// One per turn the agent loop's guard ran on, trip or not. A run with
+    /// both `max_stagnation_steps` and `max_repeated_batch_steps` unset has no
+    /// guard, and records nothing here; that is the proxy's `off` case, which
+    /// records no scan either.
+    ///
+    /// Deliberately not folded into [`Self::requests`]. That counts a request
+    /// the proxy forwarded, and the agent loop forwards nothing — one turn
+    /// here is one upstream call plus whatever tools it runs, and a single
+    /// client conversation is many of them. The two are different populations,
+    /// and one denominator over both would describe neither.
+    ///
+    /// Two things stop this ratio and the proxy's being read the same way,
+    /// and both have to be said, because the whole point of these four is
+    /// that the paths are comparable.
+    ///
+    /// The proxy's two detectors travel together under one setting, so
+    /// stagnation alone never makes it scan, while on the agent path the two
+    /// thresholds are separate `AgentConfig` fields and a run with only one
+    /// of them set is still a scanned run.
+    ///
+    /// And the numerators do not count the same way, so equal ratios do not
+    /// mean equally stuck conversations. An agent trip ends its run, so a run
+    /// contributes at most one; under `note` the proxy re-notes a stuck
+    /// conversation on every later turn, so one conversation can contribute
+    /// many. ADR 0011 makes the same point about reading its log within one
+    /// mode. Read either ratio as trips per decision, which is what it is,
+    /// and not as a rate of conversations that got stuck.
+    ///
+    /// Per process, like every counter here, so it resets when the daemon
+    /// restarts. ADR 0011's kill criterion reads the loop guard's *log*
+    /// instead, and that log records only the proxy's pre-dispatch scan
+    /// (#1091).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub agent_guard_scanned: u64,
+    /// Of those, the decisions that ended the run.
+    ///
+    /// Not the same event as [`Self::loop_guard_trips`], which is why it is
+    /// not the same field. Since #1052 a proxy trip is an *intervention*: the
+    /// default forwards the tripped request with a note and the conversation
+    /// goes on. An agent-path trip emits `AgentEvent::Error` and returns
+    /// `Err`, which ends the run. Summing the two would add an intervention to
+    /// an abort.
+    ///
+    /// The sum of the two counts below. Adding all three double-counts.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub agent_guard_trips: u64,
+    /// Of those, the ones [`LoopGuardTrip::Loop`] raised.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub agent_guard_loops: u64,
+    /// Of those, the ones [`LoopGuardTrip::Stagnation`] raised.
+    ///
+    /// **Expect this to be zero, and do not read anything into it.** On this
+    /// path the detector is nearly inert by construction, not by good
+    /// behaviour: `StagnationDetector` ignores any turn that made tool calls,
+    /// and a turn that made none *is* the final answer in an agent run, so a
+    /// run records at most one turn and cannot reach a threshold above zero.
+    /// Only `max_stagnation_steps = 0`, which fires on the first occurrence,
+    /// can trip it here. ADR 0011 says the same in its own words.
+    ///
+    /// So this is not the reading that retires `StagnationDetector`. The
+    /// detector is shared with the proxy, and ADR 0011's first kill criterion
+    /// asks whether its trips have become *rare* — a question a counter that
+    /// was never able to fire cannot answer. What this field does is make the
+    /// inertness visible instead of assumed, next to an
+    /// [`Self::agent_guard_loops`] that does fire.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub agent_guard_stagnations: u64,
     /// Turns whose tool call failed schema validation and was re-issued,
     /// with `tool_choice: "required"` or as a second draw under gglib's grammar.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]

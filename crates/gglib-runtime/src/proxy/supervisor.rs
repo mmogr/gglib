@@ -259,6 +259,23 @@ impl ProxySupervisor {
         Arc::clone(&self.agent_metrics)
     }
 
+    /// Where an agent loop running in this process reports its guard decisions.
+    ///
+    /// The same ledger every proxy run reports its defects to, handed out
+    /// through the port `gglib-agent` knows — so the agent path's guard is
+    /// counted beside the proxy's instead of not at all (#1091), and both
+    /// counts survive a proxy restart for the reason the field above gives.
+    ///
+    /// Available whether or not a proxy is running: the ledger belongs to the
+    /// supervisor, and an agent loop in this process is not a proxy run.
+    #[must_use]
+    pub fn agent_guard_sink(&self) -> Arc<dyn gglib_core::ports::AgentGuardSink> {
+        // `.clone()` rather than `Arc::clone`: the latter takes its type from
+        // its argument, leaving no coercion site, and the ledger has to become
+        // the port on the way out.
+        self.observers.defects.clone()
+    }
+
     /// Get a watch receiver for proxy exit notifications.
     ///
     /// The receiver yields the new `ProxyStatus` whenever the proxy task exits
@@ -546,3 +563,7 @@ impl fmt::Debug for ProxySupervisor {
 #[cfg(test)]
 #[path = "supervisor_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "supervisor_guard_tests.rs"]
+mod guard_tests;

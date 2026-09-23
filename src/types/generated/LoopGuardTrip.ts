@@ -12,8 +12,12 @@
  * Since #1052 a trip is an intervention rather than a rejection: the default
  * forwards the request with a note.
  *
- * It says which detector, and nothing about which path. Only the proxy's
- * pre-dispatch scan records a trip at all: the agent loop runs the same two
- * detectors and its trips reach no counter (#1091).
+ * It says which detector, and nothing about which path. Both paths record
+ * one now — the proxy's pre-dispatch scan into `loop_guard_trips` and its
+ * two parts, the agent loop into the `agent_guard_*` four (#1091) — and the
+ * field a count lands in is what says which path it came from.
+ *
+ * The loop guard's *log*, which outlives the process and is what ADR 0011's
+ * kill criterion reads, still records the proxy's scan alone.
  */
 export type LoopGuardTrip = "loop" | "stagnation";

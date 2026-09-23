@@ -22,7 +22,7 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
-use gglib_core::ports::{AgentError, RetryObserver};
+use gglib_core::ports::{AgentError, AgentGuardReporter, RetryObserver};
 use gglib_runtime::compose_agent_loop;
 
 use guard::AgentTaskGuard;
@@ -107,6 +107,14 @@ pub(crate) async fn chat(
         // GUI chat runs in the same process as the embedded proxy; report its
         // reuse to the shared agent-path store behind `agent_usage`.
         Some(state.proxy.agent_metrics()),
+        // And its guard decisions to the same process's ledger, which is the
+        // only reason the agent path's trips are counted at all (#1091). The
+        // name is `resolve`'s, not `req`'s: a request that named no model is
+        // counted under the model actually running on the port.
+        AgentGuardReporter {
+            sink: state.proxy.agent_guard_sink(),
+            model: upstream.counted_as,
+        },
         Some(retry_observer),
         sampling,
         upstream.far_machine,

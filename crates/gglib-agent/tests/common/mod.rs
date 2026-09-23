@@ -7,10 +7,13 @@
 //! - [`event_assertions`] — shared predicates and helpers for asserting on
 //!   [`AgentEvent`] slices, including [`event_assertions::collect_events`],
 //!   `has_final_answer`, `has_tool_start`, etc.
+//! - [`guard_recorder`] — a recording [`AgentGuardSink`], and the loops and
+//!   executors the guard-reporting suite drives it with.
 //! - [`for_test`] — construct a customised [`AgentConfig`] from
 //!   [`AgentConfig::default`] without boilerplate mutation blocks.
 
 pub(crate) mod event_assertions;
+pub(crate) mod guard_recorder;
 pub(crate) mod mock_llm;
 pub(crate) mod mock_tools;
 

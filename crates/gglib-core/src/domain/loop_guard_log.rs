@@ -48,8 +48,11 @@
 //! shows it. A zero read from here rules out a trip only as far as those
 //! warnings are absent.
 //!
-//! Only the proxy's pre-dispatch scan writes here. The agent loop runs the same
-//! two detectors and records nothing (#1091).
+//! Only the proxy's pre-dispatch scan writes here. The agent loop runs the
+//! same two detectors and, since #1091, counts its own decisions — but into
+//! the per-process ledger's `agent_guard_*` fields, not into this log. So
+//! anything read here is a reading of the proxy path alone, including the
+//! criterion above. Giving this log a path of its own is #1091's second half.
 //!
 //! # What is stored
 //!

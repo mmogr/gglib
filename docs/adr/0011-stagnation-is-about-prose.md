@@ -280,11 +280,13 @@ property of judging a whole transcript rather than the turn in front of you.
   >
   > **What it can retire, and what it cannot.** The log reads the proxy's
   > pre-dispatch scan only, which is all the struck criterion asked about. The
-  > agent loop runs the same `StagnationDetector` and records nothing
-  > ([#1091](https://github.com/mmogr/gglib/issues/1091)), so this reading
-  > can take the detector out of the proxy's guard; retiring the detector
-  > itself, which would retire it on the agent path too, still waits for that
-  > path's reading.
+  > agent loop runs the same `StagnationDetector` and writes nothing *here* —
+  > since [#1091](https://github.com/mmogr/gglib/issues/1091) it counts its
+  > guard decisions into the per-process ledger, which is a different
+  > quantity, as the reading note immediately above says.
+  > So this reading can take the detector out of the proxy's guard; retiring
+  > the detector itself, which would retire it on the agent path too, still
+  > waits for that path's reading in *this* log.
   >
   > **How to read it, and what it cannot see.**
   >
@@ -330,6 +332,39 @@ property of judging a whole transcript rather than the turn in front of you.
   > **Scope of the evidence: none yet.** The first reading below is still the
   > only one — ten requests in one process. The criterion is now readable; it
   > has not been read.
+
+  > **Amended 2026-09-20 — the agent path is counted, and this criterion
+  > still waits.** [#1091](https://github.com/mmogr/gglib/issues/1091) has
+  > landed its first half. The agent loop reports every decision its guard
+  > takes to the per-process ledger, which carries `agent_guard_scanned`,
+  > `agent_guard_trips` and the two detector counts beside the proxy's.
+  > `gglib proxy dashboard` prints a model's agent trips against that
+  > denominator; the two detector counts print only when non-zero, and a
+  > model whose agent turns never tripped is not listed at all unless
+  > something else about it is unclean. The 2026-09-17 note above says a
+  > trip there "reaches no counter" and calls the instrument one "that does
+  > not exist yet"; both were true when written and are not now.
+  >
+  > **What this does not change is this criterion.** The reading above is the
+  > *log's* `trips` over `scanned`, and the log still records the proxy's
+  > pre-dispatch scan alone — the ledger is the other quantity, the one that
+  > counts one process's snapshots and resets with it. So retiring
+  > `StagnationDetector` itself still waits for the agent path's reading, and
+  > so does widening the window the two paths share. Giving the log a path is
+  > the second half of #1091, and it carries a question this note cannot
+  > answer: the log's rows are keyed by the guard's mode, `note` or `refuse`,
+  > and the agent path has no mode — its guard comes from `AgentConfig`, and a
+  > trip there always ends the run.
+  >
+  > **And the agent path's stagnation count will read zero.** Not because
+  > stagnation has become rare there, but because the detector is nearly
+  > inert on that path by construction, as this ADR already says: it ignores
+  > any turn that made tool calls, and a turn that made none is the final
+  > answer in an agent run, so a run records at most one turn and cannot
+  > reach a threshold above zero. Only `max_stagnation_steps = 0` trips it.
+  > A zero read from `agent_guard_stagnations` is therefore evidence about
+  > the instrument, not about the model, and the field's own documentation
+  > says so first, before anything a reader might do with the number.
 - If cycling sessions become a reported complaint, the gap above is the cause,
   and it wants a mechanism sized by a measurement rather than this ADR's
   reasoning.
@@ -376,6 +411,12 @@ nothing can retire `StagnationDetector` on its own evidence.
 > (the second 2026-09-18 note under the first criterion). The path not
 > counted at all (#1091) still stands between `StagnationDetector` itself and
 > its own evidence; the proxy's guard alone no longer does.
+
+> **Amended 2026-09-20.** #1091's first half has landed: the agent path is no
+> longer counted nowhere — its guard decisions reach the per-process ledger
+> (the 2026-09-20 note under the first criterion). What still stands between
+> `StagnationDetector` itself and its own evidence is that the criterion reads
+> the *log*, and the log still has no agent rows. That is #1091's second half.
 
 ## Notes
 

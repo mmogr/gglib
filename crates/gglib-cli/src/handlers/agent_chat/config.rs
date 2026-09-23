@@ -178,6 +178,10 @@ pub(crate) async fn compose(
         resolved_sampling,
         // No proxy dashboard in the CLI process — nowhere to report reuse.
         None,
+        // Nor anywhere to report the guard's decisions: the ledger the GUI
+        // counts into belongs to the daemon's process, and `gglib chat` is not
+        // in it (#1091).
+        None,
         Some(params.retry_policy),
         upstream.far_machine,
     );

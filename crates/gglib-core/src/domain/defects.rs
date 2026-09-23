@@ -184,7 +184,10 @@ impl ModelDefectLedger {
             .clone()
     }
 
-    fn with(&self, model: &str, update: impl FnOnce(&mut ModelDefectCounts)) {
+    /// `pub(super)` rather than private: the agent path's writer lives in
+    /// [`super::defects_agent`], a sibling module, and bumps these counters
+    /// under the same lock discipline.
+    pub(super) fn with(&self, model: &str, update: impl FnOnce(&mut ModelDefectCounts)) {
         let mut counts = self
             .counts
             .lock()

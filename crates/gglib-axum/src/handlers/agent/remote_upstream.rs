@@ -9,6 +9,7 @@
 //! listener does not inject it), and shapes nothing, because the far proxy
 //! runs its own pipeline over its own models.
 
+use gglib_app_services::types::ServerInfo;
 use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
@@ -32,6 +33,49 @@ pub(super) struct Upstream {
     /// the same field and mean opposite things by an absence, so the
     /// decision is taken here rather than left for the handler.
     pub model: Option<String>,
+    /// The model name this run's guard decisions are counted under (#1091).
+    ///
+    /// Never absent, where [`Self::model`] may be: a counter keyed on nothing
+    /// is not a counter. Locally, the name the request gave, or — when it gave
+    /// none, or gave only whitespace, which is the same absence — the name of
+    /// the model actually running on the port it was sent to. Remotely it is
+    /// the name the request gave, which [`remote_model`] has already refused
+    /// to let be absent.
+    ///
+    /// This is deliberately not `model.unwrap_or(…)` at the point of use: the
+    /// fallback needs the running server, which only this module has, and a
+    /// placeholder would file real traffic under something that is not a
+    /// model.
+    pub counted_as: String,
+}
+
+/// The model this request named, if it named one.
+///
+/// A name that is nothing but whitespace is no name: it reaches llama-server
+/// as an empty model, and it would key a counter on nothing. Both paths read
+/// an absent model through this one function, so what counts as absent cannot
+/// come to differ between them.
+fn named_model(req: &AgentChatRequest) -> Option<String> {
+    req.model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+/// The name a local run's guard decisions are counted under.
+///
+/// The request's own name when it gave one, and otherwise the model actually
+/// running on the port it was sent to. Locally an absent model is the ordinary
+/// case — it means "whatever llama-server loaded" — so recording nothing would
+/// blind the instrument exactly where most of the traffic is, and a
+/// placeholder would file real traffic under something that is not a model.
+///
+/// Its own function because `resolve` cannot be driven in a test: the axum
+/// harness bootstraps an `AppState` with no running servers, so `validate_port`
+/// refuses before any of this is reached.
+fn counted_as(req: &AgentChatRequest, server: &ServerInfo) -> String {
+    named_model(req).unwrap_or_else(|| server.model_name.clone())
 }
 
 /// The far machine's model name, or the refusal that says why there is none.
@@ -44,19 +88,14 @@ pub(super) struct Upstream {
 /// `400` when the body named no model, or named one that is nothing but
 /// whitespace — the same absence, and the same empty model downstream.
 fn remote_model(req: &AgentChatRequest) -> Result<String, HttpError> {
-    req.model
-        .as_deref()
-        .map(str::trim)
-        .filter(|m| !m.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            HttpError::BadRequest(
-                "no model named for the remote machine — name one it serves (`gglib model list` \
+    named_model(req).ok_or_else(|| {
+        HttpError::BadRequest(
+            "no model named for the remote machine — name one it serves (`gglib model list` \
                  there is the list). This machine's default is not sent, because that machine may \
                  not have it"
-                    .to_owned(),
-            )
-        })
+                .to_owned(),
+        )
+    })
 }
 
 /// Resolve the upstream for one request.
@@ -72,7 +111,7 @@ pub(super) async fn resolve(
     req: &AgentChatRequest,
 ) -> Result<Upstream, HttpError> {
     if !req.remote {
-        validate_port(state, req.port).await?;
+        let server = validate_port(state, req.port).await?;
         let model_context =
             request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
         return Ok(Upstream {
@@ -80,6 +119,7 @@ pub(super) async fn resolve(
             far_machine: None,
             model_context,
             model: req.model.clone(),
+            counted_as: counted_as(req, &server),
         });
     }
 
@@ -120,6 +160,9 @@ pub(super) async fn resolve(
             fingerprint: connection.ticket_fingerprint,
         }),
         model_context: ModelContext::passthrough(),
+        // The far machine counts its own guard decisions under this name, in
+        // its own ledger; this one counts what it composed here.
+        counted_as: model.clone(),
         model: Some(model),
     })
 }
@@ -165,6 +208,64 @@ mod tests {
             ))
             .expect("a name"),
             "qwen3"
+        );
+    }
+
+    /// The model the port is actually serving, for the three ways a local
+    /// request declines to name one.
+    fn running(name: &str) -> ServerInfo {
+        ServerInfo {
+            model_id: 1,
+            model_name: name.to_owned(),
+            pid: Some(4242),
+            port: 9000,
+            started_at: 0,
+        }
+    }
+
+    /// Locally an absent model means "whatever is loaded", and that is a real
+    /// model with a real name — so the count goes under it rather than under a
+    /// placeholder, which would put real traffic in a bucket that is not a
+    /// model.
+    #[test]
+    fn a_request_naming_no_model_is_counted_under_the_running_one() {
+        assert_eq!(
+            counted_as(&req(r#"{"port":9000,"messages":[]}"#), &running("qwen3")),
+            "qwen3"
+        );
+    }
+
+    /// The same absence the remote path refuses outright, read the same way
+    /// here so the two cannot drift apart.
+    #[test]
+    fn a_whitespace_model_name_is_no_name_at_all() {
+        assert_eq!(
+            counted_as(
+                &req(r#"{"port":9000,"messages":[],"model":"   "}"#),
+                &running("qwen3")
+            ),
+            "qwen3",
+            "a name of only spaces is an absence, not a model called \"   \""
+        );
+    }
+
+    /// And the fallback is a fallback: a request that named a model is counted
+    /// under that name even when the port is serving something else, because
+    /// the name the client chose is the key it will look the count up by.
+    ///
+    /// Close to, but not identical with, what the proxy would key the same
+    /// traffic under. The proxy counts after `resolve_route`, so a
+    /// `model:profile` request lands under the base model, where this path
+    /// talks straight to llama-server and would count the suffixed string;
+    /// and this trims where the name that goes on the wire does not.
+    #[test]
+    fn a_named_model_is_counted_under_its_own_name() {
+        assert_eq!(
+            counted_as(
+                &req(r#"{"port":9000,"messages":[],"model":" llama3 "}"#),
+                &running("qwen3")
+            ),
+            "llama3"
         );
     }
 }

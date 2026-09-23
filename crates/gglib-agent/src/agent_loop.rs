@@ -38,8 +38,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{
-    AgentError, AgentLoopPort, AgentRunOutput, EmptyToolExecutor, FilteredToolExecutor,
-    LlmCompletionPort, ToolExecutorPort,
+    AgentError, AgentGuardReporter, AgentLoopPort, AgentRunOutput, EmptyToolExecutor,
+    FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort,
 };
 use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
@@ -50,12 +50,11 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
+use crate::guards::Guards;
 use crate::stream_collector::{MAX_TOOL_CALL_INDEX, collect_stream};
 use crate::tool_execution::execute_tools_parallel;
 use crate::util::emit_error_event;
-use gglib_core::domain::agent::{
-    BatchRecord, LoopDetector, StagnationDetector, batch_results_hash, hash_result_text,
-};
+use gglib_core::domain::agent::{batch_results_hash, hash_result_text};
 
 // =============================================================================
 // Private helpers
@@ -137,6 +136,10 @@ async fn report_tool_call_truncation(response: &CollectedResponse, tx: &mpsc::Se
 pub struct AgentLoop {
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
+    /// Where each guard decision is counted (#1091), and the model name to
+    /// count it under. `None` reports nowhere, which is what every caller
+    /// that has no ledger to reach passes.
+    guard: Option<AgentGuardReporter>,
 }
 
 impl AgentLoop {
@@ -153,8 +156,13 @@ impl AgentLoop {
     pub(crate) fn new(
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
+        guard: Option<AgentGuardReporter>,
     ) -> Self {
-        Self { llm, tool_executor }
+        Self {
+            llm,
+            tool_executor,
+            guard,
+        }
     }
 
     /// Call the LLM (step 2) then collect the stream (step 3) into a
@@ -194,10 +202,33 @@ impl AgentLoop {
     ///
     /// * `tool_filter` — `Some(set)` restricts the visible and executable tools
     ///   to the names in `set`; `None` exposes all tools from `tool_executor`.
+    ///
+    /// Reports no guard decisions. Use [`AgentLoop::build_observed`] where
+    /// there is a ledger to report to.
     pub fn build(
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
         tool_filter: Option<HashSet<String>>,
+    ) -> Arc<dyn AgentLoopPort> {
+        Self::build_observed(llm, tool_executor, tool_filter, None)
+    }
+
+    /// [`AgentLoop::build`], plus somewhere to report what the guard decides.
+    ///
+    /// # Parameters
+    ///
+    /// * `guard` — `Some(reporter)` counts every decision the loop's guard
+    ///   takes, under the model name the reporter carries (#1091); `None`
+    ///   counts nowhere and changes nothing else about the run.
+    ///
+    /// Separate from `build` rather than a fifth argument to it because
+    /// `build`'s callers are almost entirely tests, none of which has a ledger
+    /// to reach, and threading `None` through all of them would say nothing.
+    pub fn build_observed(
+        llm: Arc<dyn LlmCompletionPort>,
+        tool_executor: Arc<dyn ToolExecutorPort>,
+        tool_filter: Option<HashSet<String>>,
+        guard: Option<AgentGuardReporter>,
     ) -> Arc<dyn AgentLoopPort> {
         let executor: Arc<dyn ToolExecutorPort> = match tool_filter {
             // No filter supplied — expose every tool from the inner executor.
@@ -209,7 +240,7 @@ impl AgentLoop {
             // Non-empty allowlist — restrict to the named set.
             Some(allowed) => Arc::new(FilteredToolExecutor::new(tool_executor, allowed)),
         };
-        Arc::new(Self::new(llm, executor))
+        Arc::new(Self::new(llm, executor, guard))
     }
 
     /// Emit a `FinalAnswer` event, append the assistant reply to `messages`,
@@ -392,7 +423,13 @@ impl AgentLoopPort for AgentLoop {
             //   signature — which also means a text-only iteration does not
             //   break a run, matching the proxy's history scan).
             let batch = guards
-                .check(&config, &response.content, &response.tool_calls, &tx)
+                .check(
+                    &config,
+                    &response.content,
+                    &response.tool_calls,
+                    &tx,
+                    self.guard.as_ref(),
+                )
                 .await?;
 
             if response.tool_calls.is_empty() {
@@ -420,90 +457,6 @@ impl AgentLoopPort for AgentLoop {
     }
 }
 
-/// Bundles the stagnation and loop-detection detectors so they can be passed
-/// as a single unit rather than two independent `&mut` parameters.
-///
-/// Guards whose corresponding `Option` field in [`AgentConfig`] is `None` are
-/// skipped entirely — `None` disables the guard (e.g. in tests that reuse a
-/// fixed LLM response or deliberately repeat the same tool call batch).
-#[derive(Default)]
-struct Guards {
-    stagnation: StagnationDetector,
-    loop_detector: LoopDetector,
-}
-
-impl Guards {
-    /// Check both stagnation and loop-detection guards against the current
-    /// iteration's response.
-    ///
-    /// Stagnation is checked only on iterations that made **no** tool calls —
-    /// a turn that called a tool is doing work, and the loop detector judges it.
-    ///
-    /// Loop detection is only checked when tool calls are present, since an
-    /// empty batch would produce a degenerate signature — and, now that the
-    /// detector counts back-to-back repeats, skipping is also what stops a
-    /// text-only iteration from breaking a run. See `loop_detection`.
-    ///
-    /// On failure, emits an [`AgentEvent::Error`] on `tx` before returning so
-    /// SSE consumers always see the failure reason before the stream closes.
-    ///
-    /// Returns the [`BatchRecord`] for the batch the loop detector counted, so
-    /// the caller can hand its answers back once they exist. `None` when there
-    /// was no batch to count — an empty `tool_calls`, or loop detection
-    /// disabled — which [`Self::record_results`] accepts and ignores, so the
-    /// caller does not branch on it.
-    async fn check(
-        &mut self,
-        config: &AgentConfig,
-        content: &str,
-        tool_calls: &[ToolCall],
-        tx: &mpsc::Sender<AgentEvent>,
-    ) -> Result<Option<BatchRecord>, AgentError> {
-        if let Some(max_steps) = config.max_stagnation_steps {
-            let did_work = !tool_calls.is_empty();
-            if let Err(e) = self.stagnation.record(content, did_work, max_steps) {
-                emit_error_event(tx, &e.to_string()).await;
-                return Err(e);
-            }
-        }
-        if !tool_calls.is_empty() {
-            if let Some(max_steps) = config.max_repeated_batch_steps {
-                match self.loop_detector.check(
-                    tool_calls,
-                    max_steps,
-                    &config.observation_tools,
-                    config.max_observation_steps,
-                ) {
-                    Err(e) => {
-                        emit_error_event(tx, &e.to_string()).await;
-                        return Err(e);
-                    }
-                    Ok(record) => return Ok(Some(record)),
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    /// Hand the answers back to the loop detector.
-    ///
-    /// Separate from [`Self::check`] because on this path the batch has not run
-    /// at check time, so its answers do not exist yet. The proxy's history scan
-    /// calls both together; this one cannot.
-    ///
-    /// The caller must reach this with no `?` between the execution and here:
-    /// the answers recorded belong to the batch that *just ran*, and the
-    /// comparison at the next `check` is against those. Recording a different
-    /// batch's would invert the measurement silently — which is what
-    /// [`BatchRecord`] exists to make impossible, and why this takes one
-    /// rather than a bare signature.
-    fn record_results(&mut self, record: Option<BatchRecord>, answers: Option<u64>) {
-        if let Some(record) = record {
-            self.loop_detector.record_results(record, answers);
-        }
-    }
-}
-
 /// Soft-recover from a batch that exceeded `max_parallel_tools`.
 ///
 /// Lifted out of `run` because it is a recovery routine rather than a step of
@@ -512,7 +465,8 @@ impl Guards {
 /// move.
 ///
 /// The guards are deliberately not consulted on this path and no batch is
-/// executed, so there is no [`BatchRecord`] and nothing to record: the model is
+/// executed, so there is no [`BatchRecord`](gglib_core::domain::agent::BatchRecord)
+/// and nothing to record: the model is
 /// being told to retry in smaller batches, and the retry is what gets counted.
 async fn recover_from_parallel_overflow(
     messages: &mut Vec<AgentMessage>,

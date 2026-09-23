@@ -9,6 +9,7 @@ pub mod chat;
 mod context_fit;
 pub mod defect_counts;
 pub mod defects;
+mod defects_agent;
 pub mod dialect;
 pub(crate) mod generation_config;
 pub mod gguf;
