@@ -142,7 +142,6 @@ crates/gglib-proxy/src/slots.rs 1246
 crates/gglib-proxy/src/slots_poller.rs 806
 crates/gglib-proxy/src/sse_stream.rs 391
 crates/gglib-proxy/src/token_calibration.rs 370
-crates/gglib-proxy/src/upstream_health.rs 377
 crates/gglib-proxy/tests/fixtures/common.rs 1213
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 462
