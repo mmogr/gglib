@@ -16,9 +16,9 @@
 //!   local on every return path, so there is no code path that "forgets" to
 //!   clean up.
 //! * **Client disconnect** — Axum drops the response body's underlying
-//!   future (or the `tokio::spawn`ed streaming task is aborted) when the
-//!   connection closes, which drops everything the future/task owns,
-//!   including the guard.
+//!   future when the connection closes, and the streaming path's spawned
+//!   task returns after it notices its response channel closed; either drops
+//!   everything it owns, including the guard.
 //! * **Panic** — this workspace does not set `panic = "abort"` in any
 //!   profile, so a panicking task unwinds its stack and runs `Drop` impls
 //!   (including the guard's) before `tokio::spawn`'s `JoinHandle` observes
@@ -39,9 +39,9 @@
 //! made twice.
 //!
 //! The consequence is worth stating plainly: every cleanup guarantee listed
-//! above is also a guarantee that the model's VRAM slot is released. A client
-//! that hangs up mid-stream stops blocking the next model swap immediately,
-//! rather than pinning the GPU until something notices.
+//! above is also a guarantee that the model's VRAM slot is released. When a
+//! client hangs up a streamed request whose task is running, the slot is freed
+//! as that task ends; `spawn_and_return` and `drain_events` say when that is.
 //!
 //! ## And the sampling intent
 //!

@@ -40,6 +40,9 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// response, no further retries occur, and [`drain_events`] reports a
 /// mid-stream failure, a silence past [`StreamBounds::idle`] among them.
 ///
+/// While it waits for the headers it also returns as soon as `tx` closes, as
+/// it does when the client closes its connection; returning drops the request.
+///
 /// `client_wants_progress` is passed through to [`drain_events`], which
 /// forwards `prompt_progress` frames only when the client's own request asked
 /// for them.
@@ -47,7 +50,9 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// When `config` and `session_id` are both `Some` (KV cache enabled), the KV
 /// cache is saved via [`save_after_generation`] immediately after
 /// [`drain_events`] returns — before the semaphore `permit` drops at the end
-/// of this task — unless the turn stalled.
+/// of this task — if
+/// [`StreamOutcome::worth_saving`](crate::forward::StreamOutcome::worth_saving)
+/// says so.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_and_return(
     req_builder: reqwest::RequestBuilder,
@@ -73,10 +78,8 @@ pub(crate) fn spawn_and_return(
     // `connection` is moved into this task so it lives exactly as long
     // as the streaming task does — dropped (unregistering from the
     // dashboard) whether the task finishes normally, the client
-    // disconnects (the task is a detached `tokio::spawn`, but `tx` being
-    // dropped ends the response body stream, and the task itself exits
-    // once `drain_events` observes the closed channel), or
-    // panics.
+    // disconnects (the task is a detached `tokio::spawn`, but it returns
+    // after it notices the response channel closed), or panics.
     tokio::spawn(async move {
         let connection = connection;
         // KV cache semaphore gate (if cache is enabled) — held for this
@@ -106,6 +109,8 @@ pub(crate) fn spawn_and_return(
             let attempt_result = loop {
                 tokio::select! {
                     biased;
+                    // Returning drops `send_future`, and with it the request.
+                    () = tx.closed() => return,
                     result = &mut send_future => break result,
                     () = &mut deadline => {
                         let deadline_secs = bounds.first_byte.as_secs();
@@ -236,7 +241,9 @@ pub(crate) fn spawn_and_return(
                 if outcome.finish_reason.as_deref() == Some("length") {
                     context_metrics.flag_truncated_generation(snapshot_seq);
                 }
-                if !outcome.saw_visible_output {
+                // A client that left before the first generated token says
+                // nothing about the model's answer, so it is not counted here.
+                if !outcome.saw_visible_output && !outcome.left_before_first_token {
                     warn!(
                         model = %model_name_owned,
                         reasoning_only = outcome.saw_reasoning,

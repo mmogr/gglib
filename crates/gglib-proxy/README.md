@@ -487,8 +487,18 @@ between two of them. Stalls are counted in `upstream_health.total_stream_stalls`
 on the dashboard.
 
 None of these bounds a client that stops reading. A client that closes its
-connection is noticed at the next frame sent to it; one that vanishes without a
-FIN is bounded only by TCP retransmission.
+connection before the first generated token, while the proxy waits for
+llama-server's response headers or for the next bytes of its reply, is noticed
+at once: the proxy drops its request to llama-server and the stream ends,
+freeing the model. The turn is not counted as a stall or as an empty response,
+and its KV cache is not saved. After the first token, a client that closes its
+connection is noticed at the next frame sent to it. If llama-server has gone
+silent by then, the idle bound still ends the stream, and the stall is counted
+and asks for a recycle as above. During a tool-call repair's re-issue, the next
+frame is a keepalive sent every 15 s, or the tool call once the re-issue ends,
+at most 60 s later. A client that vanishes without a FIN is not seen to leave:
+once 32 frames queue for it, the proxy waits on the client, where the idle bound
+is not running, so its bound is TCP retransmission.
 
 ## MCP Streamable HTTP Gateway
 

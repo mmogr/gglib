@@ -60,6 +60,7 @@
 //! client would.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
@@ -87,7 +88,7 @@ use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
-use crate::upstream_read::{StreamBounds, UpstreamStalled};
+use crate::upstream_read::{StreamBounds, UpstreamStalled, is_generated_token};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::defects::LoopGuardTrip;
 
@@ -176,6 +177,9 @@ pub(crate) struct StreamOutcome {
     /// Kept because a turn the client abandoned is not evidence about the
     /// upstream — see [`StreamVerdict::ClientAborted`].
     pub client_aborted: bool,
+    /// The drain found the client gone before the upstream's first generated
+    /// token. Implies [`Self::client_aborted`].
+    pub left_before_first_token: bool,
 }
 
 impl StreamOutcome {
@@ -185,8 +189,8 @@ impl StreamOutcome {
     /// once here rather than at the call site:
     ///
     /// 1. **Went silent** comes first: it implies died-upstream and is the
-    ///    more specific claim. A client that left during the silence does not
-    ///    make the silence its doing.
+    ///    more specific claim. A client found gone when the stall's frames are
+    ///    sent does not make the silence its doing.
     /// 2. **Died upstream** comes next. A turn that broke mid-generation
     ///    indicts the server even if it had already emitted good text.
     /// 3. **Visible output** beats a client disconnect. If the upstream
@@ -216,9 +220,12 @@ impl StreamOutcome {
     ///
     /// Not after a stall: the save is one more request to the llama-server
     /// that just stopped answering, and it would hold the slot gate while it
+    /// waited on it. Nor when the client was found gone before the first
+    /// generated token: the server had not begun its answer, so it may be as
+    /// silent as a stalled one, and the save would hold the slot gate while it
     /// waited on it.
     pub(crate) fn worth_saving(&self) -> bool {
-        self.upstream_stalled.is_none()
+        self.upstream_stalled.is_none() && !self.left_before_first_token
     }
 }
 
@@ -996,6 +1003,18 @@ pub(crate) async fn stream_response_to_channel(
 /// tool-call frames, a notice as the turn's own text, the `upstream_timeout`
 /// error frame and the one `[DONE]`. A stall after the turn's `Done` gets only
 /// the `[DONE]`: the answer was complete, and only its trailer was late.
+///
+/// Until the upstream's first generated token (tested as for
+/// [`UpstreamStalled::after_first_token`], before the normalizer can hold
+/// tokens back), the drain also waits for `tx` to close, which it does when
+/// the client closes its connection. The turn then ends at once, as
+/// [`StreamOutcome::left_before_first_token`] and not as a stall. After that
+/// token a departure is seen only when a frame sent to the client fails, so a
+/// silence still ends in a stall at the idle bound, and the stall asks for the
+/// recycle the next request needs. A client that vanishes without a FIN
+/// leaves `tx` open: the drain blocks in `tx.send` once 32 frames queue (the
+/// channel's capacity in [`forward_chat_completion`]), where the per-read
+/// timer is parked, so its bound is TCP retransmission.
 pub(crate) async fn drain_events(
     events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     model_name: String,
@@ -1012,6 +1031,17 @@ pub(crate) async fn drain_events(
         .unwrap_or(0);
     let encoder = SseEncoder::new(id, model_name, created);
 
+    // Set once a generated token comes from the upstream, seen here because
+    // the normalizer can hold tokens back from the loop below.
+    let generated = Arc::new(AtomicBool::new(false));
+    let events = events.inspect({
+        let generated = Arc::clone(&generated);
+        move |event| {
+            if event.as_ref().is_ok_and(is_generated_token) {
+                generated.store(true, Ordering::Relaxed);
+            }
+        }
+    });
     let parser = get_parser(dialect.as_ref());
     let normalized = NormalizingStream::new(Box::pin(events), parser);
     let mut normalized = Box::pin(normalized);
@@ -1040,7 +1070,22 @@ pub(crate) async fn drain_events(
     let repairing = repair.is_some();
     let mut held_tool_frames: Vec<Bytes> = Vec::new();
     let mut tool_calls = crate::repair::ToolCallAccumulator::default();
-    while let Some(event) = normalized.next().await {
+    loop {
+        // Until the first generated token, the client's departure is watched
+        // alongside each read, so a client that leaves a silent prefill ends
+        // the turn at once.
+        let event = tokio::select! {
+            biased;
+            () = left_before_first_token(&tx, &generated) => {
+                client_connected = false;
+                outcome.client_aborted = true;
+                break;
+            }
+            next = normalized.next() => match next {
+                Some(event) => event,
+                None => break,
+            },
+        };
         let frame: Option<Bytes> = match event {
             Ok(ev) => match &ev {
                 LlmStreamEvent::PromptProgress {
@@ -1277,8 +1322,22 @@ pub(crate) async fn drain_events(
             .await;
     }
 
+    outcome.left_before_first_token = outcome.client_aborted && !generated.load(Ordering::Relaxed);
     outcome.dialect_residue = residue.hit().map(ToOwned::to_owned);
     outcome
+}
+
+/// Resolves once the client has gone, if the upstream had sent no generated
+/// token by then; otherwise never. It checks on departure, not when the wait
+/// began, because a token the normalizer holds back arrives mid-wait.
+async fn left_before_first_token(
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    generated: &AtomicBool,
+) {
+    tx.closed().await;
+    if generated.load(Ordering::Relaxed) {
+        std::future::pending::<()>().await;
+    }
 }
 
 /// Issue the repair request, pushing SSE comments while it is in flight.
@@ -1452,3 +1511,9 @@ mod forward_stall_tests;
 #[cfg(test)]
 #[path = "forward_stall_health_tests.rs"]
 mod forward_stall_health_tests;
+
+/// A client that leaves before, and after, the upstream's first generated
+/// token.
+#[cfg(test)]
+#[path = "forward_departure_tests.rs"]
+mod forward_departure_tests;

@@ -10,6 +10,10 @@
 //!   carries out the recycle before forwarding it, and the fresh model answers;
 //! * already inside the wedged upstream: it gives up at its first-byte
 //!   deadline without being sent again, and the next request gets the recycle.
+//!
+//! A person who stops reading the stalled answer does not change this: the
+//! stream still ends at the idle bound as a stall, and asks for the recycle
+//! the next request needs.
 
 mod fixtures;
 
@@ -206,5 +210,27 @@ async fn a_request_already_waiting_on_the_wedged_upstream_gives_up_once_and_the_
     let (answer, _) = text_and_errors(&read_body(ask(&base, "third").await).await);
     assert_eq!(answer, "fresh");
     assert_eq!(*runtime.recycles.lock().unwrap(), [2]);
+    cancel.cancel();
+}
+
+#[tokio::test]
+async fn a_stalled_answer_its_reader_stopped_still_leaves_the_next_request_to_the_recycled_model() {
+    let cancel = CancellationToken::new();
+    // The cache is off, so nothing is ever saved into this directory.
+    let (port, upstream) = spawn_upstream(std::env::temp_dir(), cancel.clone()).await;
+    let runtime = Arc::new(StallRuntime::new(port, Arc::clone(&upstream), false));
+    let base = spawn_proxy(Arc::clone(&runtime), None, cancel.clone()).await;
+
+    // The person reads the first word, sees nothing more, and stops.
+    drop(read_until(ask(&base, "first").await, "Hel").await);
+    let status = status_when_idle(&base).await;
+    assert_eq!(status["upstream_health"]["total_stream_stalls"], 1);
+    assert_eq!(status["upstream_health"]["total_client_aborts"], 0);
+
+    let (answer, codes) = text_and_errors(&read_body(ask(&base, "again").await).await);
+    assert_eq!(answer, "fresh", "the recycled model answered it");
+    assert!(codes.is_empty(), "{codes:?}");
+    assert_eq!(*runtime.recycles.lock().unwrap(), [1]);
+    assert_eq!(upstream.posts_while_wedged.load(Ordering::SeqCst), 1);
     cancel.cancel();
 }
