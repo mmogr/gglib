@@ -1,18 +1,16 @@
 //! `gglib remote join` and `disconnect`: this machine as the laptop.
 //!
-//! `connect` is the name `join` had, and still reaches this for one release.
-//!
 //! Stopping the far machine used to live here as `kill`; it is
 //! `gglib daemon stop --remote` now (ADR 0013), beside the local stop.
 
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonProbe, RemoteConnectBody, RemoteStatusDto};
+use crate::daemon_client::{self, DaemonProbe, RemoteJoinBody, RemoteStatusDto};
 
 /// What `gglib remote join` was asked for.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ConnectArgs {
+pub(crate) struct JoinArgs {
     /// `<ticket>-<code>`, a bare ticket, or `None` for the last one.
     pub pairing: Option<String>,
     /// The loopback port to bind here.
@@ -21,51 +19,27 @@ pub(crate) struct ConnectArgs {
     pub relay: Option<String>,
     /// Dial only the paths the ticket carries.
     pub no_discovery: bool,
-    /// Whether the person typed `connect` rather than `join`.
-    ///
-    /// Only the hint depends on it. Saying nothing when `join` was typed is
-    /// the point: a deprecation notice on the command that replaced the
-    /// deprecated one teaches the wrong thing.
-    pub under_old_name: bool,
 }
 
-/// What `connect` prints to say what it is called now.
-///
-/// A constant so a test can pin it, because this is the one string whose
-/// entire job is to name **both** commands — and a sweep that renamed
-/// `connect` to `join` everywhere reduced it to "`gglib remote join` is
-/// `gglib remote join` now" without a single gate noticing. A message that
-/// exists to explain a rename is exactly the message a rename breaks.
-const RENAME_NOTICE: [&str; 3] = [
-    "  note: `gglib remote connect` is `gglib remote join` now.",
-    "        The old name still works this release and does the same thing;",
-    "        nothing about a pairing you already have changes.",
-];
-
 /// Execute `gglib remote join`.
-pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
+pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
 
-    if args.under_old_name {
-        for line in RENAME_NOTICE {
-            eprintln!("{line}");
-        }
-    }
     let first_pairing = args
         .pairing
         .as_deref()
         .is_some_and(|p| p.rsplit_once('-').is_some_and(|(_, code)| code.len() == 6));
     eprintln!(
-        "  Connecting\u{2026} (reaching the other machine can take a few seconds{})",
+        "  Joining\u{2026} (reaching the other machine can take a few seconds{})",
         if first_pairing {
             ", then the code is redeemed"
         } else {
             ""
         }
     );
-    let connected = handle
-        .remote_connect(&RemoteConnectBody {
+    let joined = handle
+        .remote_join(&RemoteJoinBody {
             pairing: args.pairing,
             port: args.port,
             relay: args.relay,
@@ -74,24 +48,24 @@ pub(crate) async fn connect(ctx: &CliContext, args: ConnectArgs) -> Result<()> {
         .await?;
 
     eprintln!();
-    if connected.paired {
+    if joined.paired {
         eprintln!(
-            "  \u{2705} Paired with {} and connected. Its API key is stored here; next time the \
+            "  \u{2705} Paired with {} and joined. Its API key is stored here; next time the \
              ticket alone, or nothing, will do.",
-            connected.ticket_fingerprint
+            joined.ticket_fingerprint
         );
     } else {
-        eprintln!("  \u{2705} Connected to {}.", connected.ticket_fingerprint);
+        eprintln!("  \u{2705} Joined {}.", joined.ticket_fingerprint);
     }
     eprintln!();
-    if let Some(wanted) = connected.moved_from {
+    if let Some(wanted) = joined.moved_from {
         eprintln!(
             "  Port {wanted} was taken by something else, so this is on {} instead — and that \
              is the port remembered for next time.",
-            connected.base_url
+            joined.base_url
         );
     }
-    eprintln!("  The other machine is now at:  {}", connected.base_url);
+    eprintln!("  The other machine is now at:  {}", joined.base_url);
     eprintln!("  Any other OpenAI-compatible client pointed there needs this device's key as its");
     eprintln!("  API key, which this prints:");
     eprintln!("    gglib remote key --show");
@@ -195,5 +169,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "connect_tests.rs"]
-mod connect_tests;
+#[path = "join_tests.rs"]
+mod join_tests;
