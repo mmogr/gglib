@@ -284,6 +284,9 @@ enforce: ## Run the architecture enforcement checks
 	@# The TypeScript README tables are written by hand. Apart from this, the
 	@# only check on them is that the README exists and has its markers.
 	@./scripts/check_readme_tables.py
+	@# A link into docs/adr/ breaks when an ADR or a heading is renamed, and
+	@# rustdoc does not follow a URL.
+	@./scripts/check_adrs.py --check
 
 ##@ Bindings
 

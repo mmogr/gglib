@@ -131,6 +131,11 @@ jobs:
       - name: Check README tables match their directories
         run: ./scripts/check_readme_tables.py
 
+      # A link into docs/adr/ breaks when an ADR or a heading is renamed, and
+      # nothing else in CI checks it: rustdoc does not follow a URL.
+      - name: Check links into the ADRs resolve
+        run: ./scripts/check_adrs.py --check
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-latest

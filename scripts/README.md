@@ -16,6 +16,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
 | [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
 | [check_swallowed_db_errors.sh](#check_swallowed_db_errorssh) | No `sqlx` query has its `Result` discarded | CI |
+| [check_adrs.py](#check_adrspy) | Every link into `docs/adr/` resolves; every ADR reference is defined | CI |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
 | [install-llama.sh](#install-llamash) | Install llama.cpp with GPU detection | `make llama-install-auto` |
 | [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Create missing README stubs | Manual |
@@ -191,6 +192,48 @@ fails if it finds no queries at all.
 ./scripts/check_swallowed_db_errors.sh
 ```
 
+### `check_adrs.py`
+
+Fails if a link into `docs/adr/` does not resolve, or an ADR uses a reference
+link it does not define. Over every file git tracks, it reads:
+
+1. a relative link in a Markdown file that points into `docs/adr/`, or whose
+   path has an `adr` segment, reference definitions and HTML `href`s
+   included. The target must be a tracked file or a directory holding one,
+   and a `#fragment` must name a heading's id or an HTML anchor;
+2. a `https://github.com/mmogr/gglib/blob/main/docs/adr/…` URL in any file,
+   the form doc comments use. URLs into other repositories are not read;
+3. a bare `docs/adr/NNNN-name.md` or `docs/adr/log-NNNN.md` mention in any
+   file;
+4. inside `docs/adr/*.md`, logs included, every `[text][label]`, `[text][]`
+   and `[label]`, which must have its definition in the same file. A block
+   moved into a log without its definitions fails here.
+
+A bracket in an ADR that is not a link is escaped, `\[like this\]`; one that
+holds no letter, `#` or code span, such as the interval `[+0.1, +0.2]`, is
+left alone. Links out of `docs/adr/`, and relative paths in files that are
+not Markdown, are not checked.
+
+Heading ids are computed by the script, not fetched from GitHub. A setext
+heading is found only when its text is one line, after a blank line or an ATX
+heading, that does not start with `#`, `>`, `|` or a list marker. GitHub
+renders more setext headings than that, among them one whose text runs over
+several lines or sits in a list item or blockquote, and a link to one of those
+fails here. Each heading in the self-test's fixture gets the id GitHub gives
+it, apart from the multi-line setext case; a heading written another way may
+not. Emphasis is paired without CommonMark's rule of three, and across a
+link's brackets, which GitHub does not do.
+
+`--check` runs the self-test first, a fixture tree that plants faults for each
+of the four checks above beside constructs that must not be read as links,
+then scans, and fails if it finds no ADR or no link. `--self-test` runs the
+fixtures alone.
+
+```bash
+./scripts/check_adrs.py --check
+./scripts/check_adrs.py --self-test
+```
+
 ---
 
 ## Development Utility Scripts
@@ -304,7 +347,7 @@ The main CI workflows that use these scripts:
 | Workflow | Job | Scripts Used |
 |----------|-----|--------------|
 | `ci.yml` | `boundaries` | `check_boundaries.sh` |
-| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` |
+| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_adrs.py` |
 | `ci.yml` | `quality` | `check_workflow_yaml.sh` |
 | `check-issue-form.yml` | — | `check_issue_form_mapping.mjs` |
 | `bump-version.yml` | — | `sync_versions.py` |
