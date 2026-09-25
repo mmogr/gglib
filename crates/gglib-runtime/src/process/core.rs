@@ -256,20 +256,23 @@ impl GuiProcessCore {
     }
 }
 
-// Note: Drop is not async, so the SIGTERM-then-SIGKILL sequence `kill` uses
-// cannot run here. This is a backstop that kills outright; anything wanting a
-// graceful stop has to go through `kill` before the core is dropped.
+// Drop cannot await, so the SIGTERM-then-SIGKILL sequence `kill` uses cannot
+// run here; anything wanting a graceful stop goes through `kill` first. This
+// backstop kills outright through each child's own handle: `start_kill` is
+// SIGKILL on Unix and `TerminateProcess` on Windows, needs no runtime, and
+// signals nothing once the handle has reaped its child. The pidfiles stay, so
+// the next sweep can still find a child this failed to stop.
 impl Drop for GuiProcessCore {
     fn drop(&mut self) {
-        // Best effort: just kill the child handles
-        for (_, running) in self.processes.drain() {
-            let _ = std::process::Command::new("kill")
-                .arg("-9")
-                .arg(running.info.pid.to_string())
-                .output();
+        for (_, mut running) in self.processes.drain() {
+            let _ = running.child.start_kill();
         }
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "core_drop_tests.rs"]
+mod drop_tests;
 
 #[cfg(test)]
 mod tests {

@@ -1,10 +1,8 @@
 //! Kill orphaned processes by PID without reaping (no Child handle available).
 
 use std::io;
-
-#[cfg(unix)]
 use std::time::Duration;
-#[cfg(unix)]
+
 use tokio::time::sleep;
 
 #[cfg(unix)]
@@ -14,13 +12,17 @@ use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
 
-/// Kill an orphaned process by PID with SIGTERM → SIGKILL escalation.
+/// Kill an orphaned process by PID: SIGTERM → SIGKILL escalation on Unix, a
+/// hard kill on Windows.
 ///
-/// # Strategy
+/// # Strategy on Unix
 /// 1. Send SIGTERM
 /// 2. Poll for up to 2 seconds to verify process exit
 /// 3. If still alive, send SIGKILL
 /// 4. Poll again for up to 2 seconds to verify exit
+///
+/// On Windows there is no SIGTERM step: `taskkill /F` from the start, then
+/// the same 2-second poll (see `kill_pid_windows`).
 ///
 /// # Differences from `shutdown_child`
 /// - No `Child` handle, so **cannot reap** the process
@@ -29,7 +31,8 @@ use nix::unistd::Pid;
 ///
 /// # Returns
 /// - `Ok(())` if process was killed or already gone
-/// - `Err` if kill operations fail (excluding ESRCH)
+/// - `Err` if kill operations fail (excluding ESRCH), or the process is still
+///   there after the last poll
 pub async fn kill_pid(pid: u32) -> io::Result<()> {
     #[cfg(unix)]
     {
@@ -107,20 +110,55 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     ))
 }
 
+/// A hard kill, then up to 2 seconds of polling for the process to go.
+///
+/// `sysinfo::Process::kill` runs `taskkill /PID <pid> /F`, which terminates
+/// the process at once: nothing is asked first, and the process gets no
+/// chance to clean up. A kill that reports failure is not an error if the
+/// process has gone anyway, since it may have exited on its own meanwhile.
 #[cfg(not(unix))]
-async fn kill_pid_windows(_pid: u32) -> io::Result<()> {
-    // Windows orphan cleanup would require different approach
-    // For now, not implemented - primarily a macOS/Linux concern
+async fn kill_pid_windows(pid: u32) -> io::Result<()> {
+    use crate::pidfile::pid_exists;
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+
+    // Scoped so no `System` is held across an await.
+    let killed = {
+        let target = sysinfo::Pid::from_u32(pid);
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&[target]),
+            true,
+            ProcessRefreshKind::nothing(),
+        );
+        match sys.process(target) {
+            Some(process) => process.kill(),
+            None => return Ok(()),
+        }
+    };
+    if !killed {
+        if pid_exists(pid) {
+            return Err(io::Error::other(format!(
+                "taskkill /F could not stop process {pid}"
+            )));
+        }
+        return Ok(());
+    }
+
+    for _ in 0..20 {
+        sleep(Duration::from_millis(100)).await;
+        if !pid_exists(pid) {
+            return Ok(());
+        }
+    }
     Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "orphan cleanup not implemented on Windows",
+        io::ErrorKind::TimedOut,
+        format!("process {pid} did not exit after taskkill /F"),
     ))
 }
 
-// Gated on `unix` as well as `test`: every test here drives a real signal at a
-// real PID, which `kill_pid` only implements on unix — on Windows it returns
-// `ErrorKind::Unsupported`. Gating the module rather than each test is what
-// keeps the imports from reading as unused there.
+// Gated on `unix` as well as `test`: `kill_pid_terminates_process` spawns
+// `sleep`, which Windows does not have. Gating the module rather than each
+// test is what keeps the imports from reading as unused there.
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

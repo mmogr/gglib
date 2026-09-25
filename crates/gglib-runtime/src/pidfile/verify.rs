@@ -1,9 +1,9 @@
 //! Process verification to ensure PIDs belong to llama-server.
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use gglib_core::paths::llama_server_path;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use sysinfo::System;
 
 #[cfg(target_os = "linux")]
@@ -12,7 +12,7 @@ use std::fs;
 /// Check if a PID belongs to our llama-server binary.
 ///
 /// # Platform behavior
-/// - **macOS**: Uses `sysinfo` to check executable path
+/// - **macOS** and **Windows**: Uses `sysinfo` to check executable path
 /// - **Linux**: Reads `/proc/<pid>/exe` symlink
 /// - **Other**: Always returns `false` (conservative)
 ///
@@ -20,9 +20,9 @@ use std::fs;
 /// Returns `false` if verification fails or PID doesn't match our binary.
 /// This prevents accidentally killing unrelated processes with reused PIDs.
 pub fn is_our_llama_server(pid: u32) -> bool {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
-        is_our_llama_server_macos(pid)
+        is_our_llama_server_sysinfo(pid)
     }
 
     #[cfg(target_os = "linux")]
@@ -30,15 +30,15 @@ pub fn is_our_llama_server(pid: u32) -> bool {
         is_our_llama_server_linux(pid)
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     {
         let _ = pid;
         false
     }
 }
 
-#[cfg(target_os = "macos")]
-fn is_our_llama_server_macos(pid: u32) -> bool {
+#[cfg(any(target_os = "macos", windows))]
+fn is_our_llama_server_sysinfo(pid: u32) -> bool {
     let Ok(expected_path) = llama_server_path() else {
         return false;
     };
@@ -81,7 +81,8 @@ fn is_our_llama_server_linux(pid: u32) -> bool {
 
 /// Check if a PID exists (without verifying it's our process).
 ///
-/// Uses `kill` with null signal which doesn't send a signal but checks existence.
+/// On Unix, uses `kill` with null signal which doesn't send a signal but
+/// checks existence.
 #[cfg(unix)]
 pub fn pid_exists(pid: u32) -> bool {
     use nix::sys::signal;
@@ -95,9 +96,21 @@ pub fn pid_exists(pid: u32) -> bool {
     }
 }
 
+/// Check if a PID exists (without verifying it's our process).
+///
+/// Off Unix, asks `sysinfo` whether its process snapshot lists the pid.
 #[cfg(not(unix))]
-pub fn pid_exists(_pid: u32) -> bool {
-    false // Not implemented on non-Unix
+pub fn pid_exists(pid: u32) -> bool {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate};
+
+    let pid = Pid::from_u32(pid);
+    let mut sys = sysinfo::System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+    sys.process(pid).is_some()
 }
 
 #[cfg(test)]

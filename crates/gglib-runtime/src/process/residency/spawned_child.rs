@@ -109,7 +109,7 @@ impl Drop for SpawnedChild {
         } else {
             // No reactor to spawn onto — a `Drop` during runtime shutdown, or
             // in a test. `GuiProcessCore`'s own `Drop` is the backstop there;
-            // it SIGKILLs everything it still tracks.
+            // it kills everything it still tracks outright.
             warn!(
                 model_id = %model_id,
                 "no runtime to stop the child of a failed launch; \

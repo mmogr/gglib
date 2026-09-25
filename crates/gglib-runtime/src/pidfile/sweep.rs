@@ -14,7 +14,8 @@ use crate::process::shutdown::kill_pid;
 /// 1. Read all PID files from `~/.gglib/pids/`
 /// 2. For each PID:
 ///    - Verify it's actually our llama-server binary (not a reused PID)
-///    - If verified, kill it with SIGTERM → SIGKILL
+///    - If verified, kill it with `kill_pid`: SIGTERM → SIGKILL on Unix,
+///      `taskkill /F` on Windows
 ///    - If not verified or already gone, just delete the PID file
 /// 3. Log results
 ///
