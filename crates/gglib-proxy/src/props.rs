@@ -99,7 +99,7 @@
 //! model-supplied field gets its own verdict and counts against coverage.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
-//! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-pin-the-llama-cpp-build.md
+//! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 
 use std::time::Duration;
