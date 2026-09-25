@@ -228,6 +228,24 @@ impl Settings {
             self.remote_devices.clone_from(v);
         }
     }
+
+    /// Every field back to [`Settings::with_defaults`], except
+    /// `proxy_api_key` and the four remote fields, which keep their values.
+    ///
+    /// What `gglib config settings reset` applies. The five it keeps are not
+    /// preferences: the machine this one joined, the roster of devices it
+    /// admits, whether and how it serves remote access, and the proxy's API
+    /// key.
+    pub fn reset_preferences(&mut self) {
+        *self = Self {
+            proxy_api_key: self.proxy_api_key.take(),
+            remote_pairing: self.remote_pairing.take(),
+            remote_enabled: self.remote_enabled.take(),
+            remote_serve: self.remote_serve.take(),
+            remote_devices: self.remote_devices.take(),
+            ..Self::with_defaults()
+        };
+    }
 }
 
 /// The remote half of [`validate_settings`](super::validate_settings).

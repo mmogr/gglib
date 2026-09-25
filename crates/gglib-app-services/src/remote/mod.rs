@@ -121,10 +121,9 @@ pub struct RemoteOps {
     ///
     /// It covers the roster's own writers and nothing else, and needs to: any
     /// other settings write — `disable`, `connect`, the settings form, a proxy
-    /// minting its key, `gglib config settings set` in another process — goes
-    /// through `SettingsRepository::modify`, one transaction that rewrites only
-    /// the fields it changed. Only `gglib config settings reset` writes the
-    /// whole record, roster included, and it means to.
+    /// minting its key, `gglib config settings set` or `reset` in another
+    /// process — goes through `SettingsRepository::modify`, one transaction
+    /// that rewrites only the fields it changed.
     roster: Arc<Mutex<()>>,
     /// True from the first line of the daemon's startup `resume` to its last:
     /// a wider span than the reservation that resume takes, because
