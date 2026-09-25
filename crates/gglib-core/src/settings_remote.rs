@@ -25,9 +25,11 @@ use super::{Settings, SettingsError, SettingsUpdate};
 /// disagreement unrepresentable rather than merely wrong, and gives the
 /// stale-key question — *whose* key is this? — an answer.
 ///
-/// Written only by `gglib remote join`: there is no CLI flag and no GUI
-/// control, and `gglib config settings show` reports the key as held-or-not
-/// rather than printing it.
+/// What it holds comes from `connect`, which `gglib remote join` and the
+/// GUI's pairing-string field both reach, and from a `--remote` turn, which
+/// sets `default_model` and no other field. `gglib config settings set` has
+/// no flag for it and the settings form no field, and `gglib config settings
+/// show` reports the key as held-or-not rather than printing it.
 /// Persisted as one `settings_kv` row holding a JSON object, the way
 /// `inference_defaults` is — camelCase inside, to match it and so that the
 /// CLI's kebab-casing of nested keys reads `remote-pairing.api-key`.
@@ -101,9 +103,8 @@ pub struct RemotePairing {
 /// The flags `gglib remote enable` accepts, and nothing else: this is a
 /// record of a decision, not a place to configure one. There is no CLI path
 /// that writes it directly and no GUI field for it — `enable` writes it
-/// whole, the way `remote_pairing` is written whole, because the flags were
-/// one decision taken at one moment and a half-applied set of them is not a
-/// state anybody asked for.
+/// whole, because the flags were one decision taken at one moment and a
+/// half-applied set of them is not a state anybody asked for.
 ///
 /// Persisted as one `settings_kv` row holding a JSON object, camelCase
 /// inside, matching `remote_pairing`.

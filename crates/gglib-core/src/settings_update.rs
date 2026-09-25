@@ -53,12 +53,16 @@ pub struct SettingsUpdate {
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,
-    /// See [`Settings::remote_pairing`](super::Settings::remote_pairing). Written whole or not at all: the
-    /// two halves have no separate update, which is what keeps them bound.
+    /// See [`Settings::remote_pairing`](super::Settings::remote_pairing).
+    /// Sets, clears or leaves the whole record: there is no field here for
+    /// half of it. The pairing's own writers, `connect` and a `--remote`
+    /// turn, do not come through here; they change the record inside
+    /// [`SettingsRepository::modify`](crate::ports::SettingsRepository::modify),
+    /// as it stands when the write lands.
     pub remote_pairing: Option<Option<RemotePairing>>,
     /// See [`Settings::remote_enabled`](super::Settings::remote_enabled).
     pub remote_enabled: Option<Option<bool>>,
-    /// See [`Settings::remote_serve`](super::Settings::remote_serve). Written whole, like the pairing.
+    /// See [`Settings::remote_serve`](super::Settings::remote_serve). Written whole.
     pub remote_serve: Option<Option<RemoteServe>>,
     /// See [`Settings::remote_devices`](super::Settings::remote_devices). Written whole.
     pub remote_devices: Option<Option<Vec<Device>>>,

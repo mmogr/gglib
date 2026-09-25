@@ -8,7 +8,7 @@
 //! does, and asking it in two places is how the two drift.
 
 use gglib_core::services::AppCore;
-use gglib_core::{RemotePairing, SettingsUpdate};
+use gglib_core::{RemotePairing, Settings, validate_settings};
 use modelpipe::Ticket;
 
 use crate::error::GuiError;
@@ -52,9 +52,9 @@ pub(super) fn names_the_same_machine(stored: &RemotePairing, ticket: &Ticket) ->
 /// live tunnel, so a decision reachable only *through* `modelpipe::connect`
 /// — an iroh endpoint and a peer that answers — is a comment with an `await`
 /// in it rather than something a test can drive. Both arms are decisions
-/// worth driving. Which of the two writes takes a redeemed key is the whole
-/// reason [`store_redeemed`] is not [`remember`]; and on the codeless arm,
-/// that a dial to the machine already recorded writes nothing at all.
+/// worth driving: what a redeemed key replaces and what it keeps, and on the
+/// codeless arm, that a dial to the machine already recorded writes nothing
+/// at all.
 ///
 /// `code` is whatever `redeem` spends, and a secret either way: `dial` passes
 /// the key `modelpipe::pair` already bought and redeems it by handing it
@@ -76,65 +76,81 @@ pub(super) async fn settle(
     match code {
         Some(code) => {
             let key = redeem(code).await?;
-            store_redeemed(core, key, ticket.to_string(), port).await?;
+            store_redeemed(core, key, ticket, port).await?;
             Ok(true)
         }
         None => {
             // The caller refused a codeless dial with no key for this
-            // machine, so `held` is `Some`. Re-storing that key under the
-            // ticket just dialled is how the record follows a machine that
-            // moved: same identity, new addresses, same key — and under the
+            // machine, so `held` is `Some`. Filing the ticket just dialled
+            // beside that machine's key is how the record follows a machine
+            // that moved: same identity, new addresses, same key — and the
             // port just bound, which is how the address a client was
             // configured against stays the address. It is the only write on
             // this arm, so a dial to the machine already recorded, on the
             // port already recorded, touches nothing.
-            if let Some(held) =
-                held.filter(|held| held.ticket != ticket.to_string() || held.port != Some(port))
+            if held.is_some_and(|held| held.ticket != ticket.to_string() || held.port != Some(port))
             {
-                remember(
-                    core,
-                    RemotePairing {
-                        ticket: ticket.to_string(),
-                        port: Some(port),
-                        ..held.clone()
-                    },
-                )
-                .await?;
+                remember(core, |stored| follow(stored, ticket, port)).await?;
             }
             Ok(false)
         }
     }
 }
 
-/// Persist what a connection taught us, as one record.
+/// Change the stored pairing as it stands when the write lands.
 ///
-/// There is deliberately no way to write half of it. The two were separate
-/// `SettingsUpdate` fields, and the codeless arm of `connect` passed `None`
-/// for the key — which does not clear the old key, it leaves it exactly
-/// where it was, now filed under a ticket for somebody else. The record is
-/// taken whole for the same reason: a dial to a machine that moved keeps
-/// what this machine remembered about it, and a fresh pairing starts with
-/// nothing remembered.
+/// Not as `connect` read it before the dial. A `--remote` turn in a terminal
+/// remembers its model on the same record while a dial is under way, and the
+/// record can be cleared meanwhile; one rebuilt from the earlier read would
+/// undo either. So `change` is handed the record inside one
+/// [`modify`](gglib_core::ports::SettingsRepository::modify), and each caller
+/// decides from that record what to keep.
 ///
 /// # Errors
 ///
-/// `Internal` when settings cannot be written.
-pub(super) async fn remember(core: &AppCore, pairing: RemotePairing) -> Result<(), GuiError> {
+/// `Internal` when settings cannot be written, including when the result
+/// does not validate.
+pub(super) async fn remember(
+    core: &AppCore,
+    change: impl Fn(&mut Option<RemotePairing>) + Send + Sync,
+) -> Result<(), GuiError> {
     core.settings()
-        .update(SettingsUpdate {
-            remote_pairing: Some(Some(pairing)),
-            ..SettingsUpdate::default()
+        .repo()
+        .modify(&|settings: &mut Settings| {
+            change(&mut settings.remote_pairing);
+            validate_settings(settings)
         })
         .await
         .map(drop)
         .map_err(|e| GuiError::Internal(format!("could not store the pairing: {e}")))
 }
 
+/// The ticket and the port a codeless dial used, filed on the record of the
+/// machine it reached.
+///
+/// Only on that machine's record. Another machine's, paired while this dial
+/// was under way, keeps its own ticket beside its own key, and a record
+/// forgotten meanwhile stays forgotten.
+fn follow(stored: &mut Option<RemotePairing>, ticket: &Ticket, port: u16) {
+    if let Some(stored) = stored
+        .as_mut()
+        .filter(|stored| names_the_same_machine(stored, ticket))
+    {
+        stored.ticket = ticket.to_string();
+        stored.port = Some(port);
+    }
+}
+
 /// Store a pairing whose code has just been redeemed.
 ///
-/// Separate from [`remember`] only in what a failure says, and that is the
-/// whole point: by the time this runs the code is gone, so "could not store
-/// the pairing" is the one reading a person must not be left with.
+/// The ticket, the key and the port are this dial's. The model is kept when
+/// the record already names the machine just paired with, since it is a
+/// name in that machine's catalogue, whenever it was remembered; a pairing
+/// with any other machine starts with nothing remembered.
+///
+/// Its failure says more than [`remember`]'s, and that is the point: by the
+/// time this runs the code is gone, so "could not store the pairing" is the
+/// one reading a person must not be left with.
 ///
 /// # Errors
 ///
@@ -142,18 +158,21 @@ pub(super) async fn remember(core: &AppCore, pairing: RemotePairing) -> Result<(
 pub(super) async fn store_redeemed(
     core: &AppCore,
     api_key: String,
-    ticket: String,
+    ticket: &Ticket,
     port: u16,
 ) -> Result<(), GuiError> {
-    remember(
-        core,
-        RemotePairing {
-            ticket,
-            api_key,
-            default_model: None,
+    remember(core, |stored| {
+        let default_model = stored
+            .take()
+            .filter(|stored| names_the_same_machine(stored, ticket))
+            .and_then(|stored| stored.default_model);
+        *stored = Some(RemotePairing {
+            ticket: ticket.to_string(),
+            api_key: api_key.clone(),
+            default_model,
             port: Some(port),
-        },
-    )
+        });
+    })
     .await
     .map_err(spent_code)
 }

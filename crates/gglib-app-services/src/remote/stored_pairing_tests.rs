@@ -13,49 +13,141 @@
 
 use super::*;
 use crate::test_support::test_core;
-use crate::test_support_remote::{KEY_A, KEY_B, TICKET_A, TICKET_B, paired_with, ticket};
+use crate::test_support_remote::{
+    KEY_A, KEY_B, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, remember_a_model, ticket,
+};
 
 /// A plausible six-digit code, never checked here: what the far machine
 /// makes of it is the far machine's, and `redeem` is the seam.
 const CODE: &str = "483920";
 
-/// A second pairing replaces the first whole, rather than half of it.
-///
-/// The inversion of the characterisation this test replaces, which pinned
-/// that `remember(None, ticket_b)` left machine A's key sitting under
-/// machine B's ticket. There is no longer a call that can do it: the two
-/// halves are one `RemotePairing` and `remember` writes both or neither, so
-/// the key that outlives the machine that issued it has no shape to live in.
-/// A pairing as `remember` is handed one.
-fn record(ticket: &str, api_key: &str) -> RemotePairing {
-    RemotePairing {
-        ticket: ticket.to_owned(),
-        api_key: api_key.to_owned(),
-        default_model: None,
-        port: None,
-    }
-}
+/// The key machine A hands over when it is paired with a second time.
+const KEY_A_AGAIN: &str = "sk-zzq-the-key-machine-a-handed-over-again";
 
-#[tokio::test]
-async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
-    let core = test_core().await;
+/// A model name, as a `--remote` turn remembers one on the stored pairing.
+const MODEL: &str = "qwen3-coder";
 
-    remember(&core, record(TICKET_A, KEY_A))
-        .await
-        .expect("machine A's pairing is stored");
-    remember(&core, record(TICKET_B, KEY_B))
-        .await
-        .expect("machine B's pairing replaces it");
-
-    let stored = core
-        .settings()
+/// The stored pairing, which each test here expects to exist.
+async fn stored(core: &AppCore) -> RemotePairing {
+    core.settings()
         .get()
         .await
         .expect("settings load")
         .remote_pairing
-        .expect("a pairing is stored");
+        .expect("a pairing is stored")
+}
+
+/// A second pairing replaces the first whole, rather than half of it, and
+/// starts with nothing remembered.
+///
+/// The ticket and the key are one record, written together, so machine A's
+/// key has no shape to outlive machine A in. Nor does its model: that is a
+/// name in machine A's catalogue, not in machine B's.
+#[tokio::test]
+async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
+    let core = test_core().await;
+
+    store_redeemed(&core, KEY_A.to_owned(), &ticket(TICKET_A), 8180)
+        .await
+        .expect("machine A's pairing is stored");
+    remember_a_model(&core, MODEL).await;
+    store_redeemed(&core, KEY_B.to_owned(), &ticket(TICKET_B), 8180)
+        .await
+        .expect("machine B's pairing replaces it");
+
+    let stored = stored(&core).await;
     assert_eq!(stored.ticket, TICKET_B);
     assert_eq!(stored.api_key, KEY_B);
+    assert_eq!(
+        stored.default_model, None,
+        "machine A's model was carried to machine B"
+    );
+}
+
+/// Pair with machine A again, dialling `dialled`, while a `--remote` turn
+/// remembers a model on the record machine A's first pairing left, and
+/// return what is stored afterwards.
+///
+/// `redeem` is where the dial spends its time, so a turn run in a terminal
+/// meanwhile lands its write there.
+async fn pair_with_machine_a_again_during_a_turn(core: &AppCore, dialled: &str) -> RemotePairing {
+    core.settings()
+        .update(paired_with(TICKET_A, KEY_A))
+        .await
+        .expect("machine A's pairing is stored");
+    let held = stored(core).await;
+
+    let paired = settle(
+        core,
+        &ticket(dialled),
+        Some(&held),
+        Some(CODE.to_owned()),
+        8181,
+        async |_code| {
+            remember_a_model(core, MODEL).await;
+            Ok(KEY_A_AGAIN.to_owned())
+        },
+    )
+    .await
+    .expect("the far machine handed a key back and settings took it");
+
+    assert!(paired, "a redeemed code is a pairing");
+    stored(core).await
+}
+
+/// A model remembered while a pairing dial was under way survives the
+/// pairing it raced.
+///
+/// The pairing is with the machine the record already names, so the model
+/// is still a name in that machine's catalogue, and the new key is filed
+/// beside it.
+#[tokio::test]
+async fn a_model_remembered_during_the_dial_survives_the_pairing() {
+    let core = test_core().await;
+
+    let stored = pair_with_machine_a_again_during_a_turn(&core, TICKET_A).await;
+
+    assert_eq!(
+        stored.default_model.as_deref(),
+        Some(MODEL),
+        "the pairing dropped a model remembered on machine A's record during the dial"
+    );
+    assert_eq!(
+        stored.api_key, KEY_A_AGAIN,
+        "the redeemed key was not stored"
+    );
+    assert_eq!(
+        stored.port,
+        Some(8181),
+        "the port just bound was not stored"
+    );
+}
+
+/// The model survives a pairing with the same machine at a new address.
+///
+/// The ticket differs and the fingerprint does not, and the fingerprint is
+/// what says which machine will answer, so the model is still a name in its
+/// catalogue.
+#[tokio::test]
+async fn a_model_survives_a_pairing_with_the_same_machine_at_a_new_address() {
+    let core = test_core().await;
+
+    let stored = pair_with_machine_a_again_during_a_turn(&core, TICKET_A_MOVED).await;
+
+    assert_eq!(
+        stored.ticket,
+        ticket(TICKET_A_MOVED).to_string(),
+        "the pairing was not filed under the ticket just dialled"
+    );
+    assert_eq!(
+        stored.default_model.as_deref(),
+        Some(MODEL),
+        "machine A at a new address was taken for another machine"
+    );
+    assert_eq!(
+        stored.api_key, KEY_A_AGAIN,
+        "the redeemed key was not stored"
+    );
 }
 
 /// A pairing that cannot be stored says the code has already been spent.
@@ -74,7 +166,7 @@ async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
 async fn a_pairing_that_cannot_be_stored_says_the_code_is_already_spent() {
     let core = test_core().await;
 
-    let err = store_redeemed(&core, "   ".to_owned(), TICKET_A.to_owned(), 8180)
+    let err = store_redeemed(&core, "   ".to_owned(), &ticket(TICKET_A), 8180)
         .await
         .expect_err("a blank key is not a key, and settings refuse it");
     let GuiError::Internal(message) = err else {
@@ -112,13 +204,7 @@ async fn a_redeemed_code_is_stored_under_the_ticket_that_was_dialled() {
     .expect("the far machine handed a key back and settings took it");
 
     assert!(paired, "a redeemed code is a pairing");
-    let stored = core
-        .settings()
-        .get()
-        .await
-        .expect("settings load")
-        .remote_pairing
-        .expect("a pairing is stored");
+    let stored = stored(&core).await;
     assert_eq!(stored.ticket, TICKET_B);
     assert_eq!(stored.api_key, KEY_B);
 }
