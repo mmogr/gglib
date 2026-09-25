@@ -221,6 +221,16 @@ pub(crate) async fn spawn_proxy(
     slot_dir: Option<PathBuf>,
     cancel: CancellationToken,
 ) -> String {
+    spawn_proxy_under(BOUNDS, runtime, slot_dir, cancel).await
+}
+
+/// [`spawn_proxy`] under `bounds`, over any runtime.
+pub(crate) async fn spawn_proxy_under(
+    bounds: StreamBounds,
+    runtime: Arc<dyn ModelRuntimePort>,
+    slot_dir: Option<PathBuf>,
+    cancel: CancellationToken,
+) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("bound");
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
@@ -251,7 +261,7 @@ pub(crate) async fn spawn_proxy(
         .await
         .ok();
     };
-    tokio::spawn(TEST_STREAM_BOUNDS.scope(BOUNDS, serve));
+    tokio::spawn(TEST_STREAM_BOUNDS.scope(bounds, serve));
     tokio::time::sleep(Duration::from_millis(50)).await;
     format!("http://{addr}")
 }

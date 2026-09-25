@@ -2,9 +2,10 @@
 //! silent on a schedule, a client that reads at its own pace, and the drain
 //! run between them.
 //!
-//! A module of its own so both stall test files can use them. Real time
-//! throughout, with a short idle bound: a paused clock does not promise the
-//! woken drain is polled before the test looks (see `dashboard_tests.rs`).
+//! A module of its own so the stall and departure test files can use them.
+//! Real time throughout, with a short idle bound: a paused clock does not
+//! promise the woken drain is polled before the test looks (see
+//! `dashboard_tests.rs`).
 
 use std::time::{Duration, Instant};
 

@@ -32,8 +32,8 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
 /// (`tx.send`) or on a repair re-issue, the reader is parked at its `yield` and
 /// no read is being timed, so a slow client is never mistaken for a silent
 /// upstream. The converse holds too: this bound does not notice a client that
-/// stops reading. A client that closes its connection is noticed at the next
-/// send; one that vanishes without a FIN is bounded only by TCP retransmission.
+/// stops reading. What notices a client that leaves is described on
+/// [`drain_events`](crate::forward::drain_events).
 ///
 /// Prefill sets the floor. The proxy asks llama-server for `return_progress`
 /// (see `inject_streaming_body_overrides` in [`crate::forward`]), so it sends
@@ -187,12 +187,7 @@ where
             };
             let (events, stop) = decoder.feed_bytes(&chunk);
             for event in events {
-                after_first_token |= matches!(
-                    event,
-                    Ok(LlmStreamEvent::TextDelta { .. }
-                        | LlmStreamEvent::ReasoningDelta { .. }
-                        | LlmStreamEvent::ToolCallDelta { .. })
-                );
+                after_first_token |= event.as_ref().is_ok_and(is_generated_token);
                 yield event;
             }
             if stop {
@@ -204,6 +199,19 @@ where
             yield Ok(fallback);
         }
     }
+}
+
+/// Whether `event` is a generated token: content, reasoning or a tool call.
+/// Once one has arrived, prefill is over. It is the test behind
+/// [`UpstreamStalled::after_first_token`], and the drain applies it to the
+/// same events, before the normalizer can hold any back.
+pub(crate) fn is_generated_token(event: &LlmStreamEvent) -> bool {
+    matches!(
+        event,
+        LlmStreamEvent::TextDelta { .. }
+            | LlmStreamEvent::ReasoningDelta { .. }
+            | LlmStreamEvent::ToolCallDelta { .. }
+    )
 }
 
 /// One `upstream_timeout` error frame carrying `message`: the one place the

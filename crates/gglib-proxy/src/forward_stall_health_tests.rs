@@ -3,7 +3,8 @@
 //! A stall after the first token asks for a recycle at once; one before it,
 //! which a slow prefill can cause, only strikes. A stall after the turn's
 //! `Done` is quiet on the wire but still a stall, and a client that leaves
-//! during the silence does not turn the stall into its own doing.
+//! during a silence after the first token does not turn the stall into its
+//! own doing.
 
 use serde_json::json;
 
