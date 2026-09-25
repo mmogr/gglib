@@ -99,13 +99,18 @@ impl<B: HttpBackend> HfClient<B> {
     }
 
     /// Get the commit SHA for a model repository.
+    ///
+    /// Fails with `InvalidResponse` when the model info has no non-empty
+    /// string `sha`; no branch name stands in for the commit.
     pub(crate) async fn get_commit_sha(&self, repo: &HfRepoRef) -> HfResult<String> {
         let info = self.get_model_info(repo).await?;
-        Ok(info
-            .get("sha")
-            .and_then(|v| v.as_str())
-            .unwrap_or("main")
-            .to_string())
+        info.get("sha")
+            .and_then(serde_json::Value::as_str)
+            .filter(|sha| !sha.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| HfError::InvalidResponse {
+                message: format!("the model info for {} names no commit sha", repo.id()),
+            })
     }
 }
 
@@ -262,20 +267,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_commit_sha_missing_defaults_to_main() {
-        let backend = FakeBackend::new().with_response(
-            "Llama-2-7B-GGUF",
-            CannedResponse {
-                json: json!({"id": "TheBloke/Llama-2-7B-GGUF"}),
-                has_more: false,
-            },
-        );
+    async fn a_model_info_that_names_no_commit_sha_is_an_invalid_response() {
+        let with_sha = |sha| json!({"id": "TheBloke/Llama-2-7B-GGUF", "sha": sha});
+        let infos = [
+            json!({"id": "TheBloke/Llama-2-7B-GGUF"}),
+            with_sha(json!(null)),
+            with_sha(json!(42)),
+            with_sha(json!("")),
+        ];
 
-        let client = HfClient::with_backend(test_config(), backend);
-        let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
+        for info in infos {
+            let backend = FakeBackend::new().with_response(
+                "Llama-2-7B-GGUF",
+                CannedResponse {
+                    json: info.clone(),
+                    has_more: false,
+                },
+            );
+            let client = HfClient::with_backend(test_config(), backend);
+            let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
 
-        let sha = client.get_commit_sha(&repo).await.unwrap();
+            let result = client.get_commit_sha(&repo).await;
 
-        assert_eq!(sha, "main");
+            assert!(
+                matches!(result, Err(HfError::InvalidResponse { .. })),
+                "{info}: {result:?}"
+            );
+        }
     }
 }
