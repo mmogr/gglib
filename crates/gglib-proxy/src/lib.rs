@@ -53,6 +53,7 @@ pub(crate) mod token_calibration;
 pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;
+pub(crate) mod upstream_read;
 
 pub use observers::ProxyObservers;
 pub use server::serve;

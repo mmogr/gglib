@@ -16,6 +16,7 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visib
 use crate::repair::{RepairContext, RepairTurn};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
+use crate::upstream_read::first_byte_timeout_frame;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::DialectSpec;
 
@@ -138,22 +139,7 @@ pub(crate) fn spawn_and_return(
                             "slot-queue wait exceeded first-byte deadline with no other active request; treating upstream as degraded"
                         );
                         upstream_health.record_timeout();
-                        let visible = visible_content_frame(
-                            &model_name_owned,
-                            &format!(
-                                "⚠️ [proxy] upstream model server did not begin responding within {FIRST_BYTE_DEADLINE_SECS}s — it may be overloaded or wedged. Retry; if it persists the model will be recycled."
-                            ),
-                        );
-                        let payload = serde_json::json!({
-                            "error": {
-                                "message": format!(
-                                    "upstream did not respond within {FIRST_BYTE_DEADLINE_SECS}s"
-                                ),
-                                "type": "server_error",
-                                "code": "upstream_timeout",
-                            }
-                        });
-                        let frame = format!("{visible}data: {payload}\n\ndata: [DONE]\n\n");
+                        let frame = first_byte_timeout_frame(&model_name_owned);
                         let _ = tx.send(Ok(Bytes::from(frame))).await;
                         return;
                     }
