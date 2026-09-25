@@ -26,14 +26,6 @@ This module provides low-level utility functions for CLI-specific concerns, prim
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Modules
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-| [`input.rs`](input.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-input-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-input-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-input-coverage.json) |
-<!-- module-table:end -->
-
 ## Components
 
 ### Input Handling

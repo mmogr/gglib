@@ -105,12 +105,5 @@ defaults:
 
 ## Internal Structure
 
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-<!-- module-table:end -->
-
-</details>
+`src/lib.rs` is the whole crate: it defines the constants above, reading the commit
+id and fingerprint from the variables `build.rs` emits.

@@ -1,21 +1,15 @@
 #!/bin/bash
-# generate_submodule_readmes.sh — Manage README files across all crate src/ subdirs
+# generate_submodule_readmes.sh — Create missing README stubs
 #
-# Default mode (no flags):
-#   Updates existing README files — fills in minimal ones, appends module-table
-#   to those that lack it. Does NOT create new files.
-#
-# --create mode:
+# --create:
 #   Creates README stubs for every src/ subdir (Rust/TypeScript/tests) that
 #   currently lacks one. Extracts //! doc comments from mod.rs verbatim into
 #   the module-docs section, prepends #![doc = include_str!("README.md")] to
 #   mod.rs, and leaves the original //! block with a migration comment.
-#   Exits after creating stubs; does NOT run the existing-README scan.
+#   A README that already exists is never touched.
 #
 # Usage:
-#   ./scripts/generate_submodule_readmes.sh              # update existing
 #   ./scripts/generate_submodule_readmes.sh --create     # create missing
-#   ./scripts/generate_submodule_readmes.sh --dry-run    # preview updates
 #   ./scripts/generate_submodule_readmes.sh --create --dry-run
 
 set -e
@@ -35,12 +29,15 @@ for arg in "$@"; do
     esac
 done
 
-if $DRY_RUN && $CREATE; then
+if ! $CREATE; then
+    echo "Usage: $0 --create [--dry-run]" >&2
+    exit 1
+fi
+
+if $DRY_RUN; then
     echo "=== CREATE MODE (DRY RUN) ==="
-elif $CREATE; then
+else
     echo "=== CREATE MODE ==="
-elif $DRY_RUN; then
-    echo "=== DRY RUN MODE ==="
 fi
 
 # Function to get crate name from path
@@ -87,151 +84,6 @@ get_badge_prefix() {
 # Function to get module name (directory name)
 get_module_name() {
     basename "$1"
-}
-
-# Function to list files/directories in a module
-list_module_entries() {
-    local dir="$1"
-    local entries=()
-    
-    # List .rs files (excluding mod.rs and lib.rs)
-    for f in "$dir"/*.rs; do
-        [[ -f "$f" ]] || continue
-        local name=$(basename "$f")
-        [[ "$name" == "mod.rs" || "$name" == "lib.rs" ]] && continue
-        entries+=("$name")
-    done
-    
-    # List subdirectories that have code
-    for d in "$dir"/*/; do
-        [[ -d "$d" ]] || continue
-        local name=$(basename "$d")
-        [[ "$name" == "target" ]] && continue
-        # Check if directory has .rs files
-        if ls "$d"/*.rs &>/dev/null; then
-            entries+=("$name/")
-        fi
-    done
-    
-    printf '%s\n' "${entries[@]}" | sort
-}
-
-# Function to generate badge row for a file or directory
-generate_badge_row() {
-    local entry="$1"
-    local badge_prefix="$2"
-    local crate_name="$3"
-    local is_dir=false
-    
-    if [[ "$entry" == */ ]]; then
-        is_dir=true
-        entry="${entry%/}"
-    fi
-    
-    # Remove .rs extension for badge name
-    local badge_name="${entry%.rs}"
-    local full_prefix="${badge_prefix}-${badge_name}"
-    
-    # For directories, use simplified naming (crate-dirname) matching CI convention
-    if $is_dir; then
-        full_prefix="${crate_name}-${badge_name}"
-    fi
-    
-    local link_text="$entry"
-    # Strip .rs extension from link target for rustdoc compatibility
-    local link_target="${entry%.rs}"
-    if $is_dir; then
-        link_text="$entry/"
-        link_target="$entry/"
-    fi
-    
-    # 4 columns: LOC, Complexity, Coverage (no Tests - matches generate_module_tables.sh)
-    cat << EOF
-| [\`${link_text}\`](${link_target}) | ![](https://img.shields.io/endpoint?url=${BADGE_BASE}/${full_prefix}-loc.json) | ![](https://img.shields.io/endpoint?url=${BADGE_BASE}/${full_prefix}-complexity.json) | ![](https://img.shields.io/endpoint?url=${BADGE_BASE}/${full_prefix}-coverage.json) |
-EOF
-}
-
-# Function to generate full README content for empty/minimal READMEs
-generate_readme_content() {
-    local dir="$1"
-    local module_name=$(get_module_name "$dir")
-    local badge_prefix=$(get_badge_prefix "$dir")
-    local crate_name=$(get_crate_name "$dir")
-    
-    # Header with module-docs markers (no top-level badges for submodules)
-    cat << EOF
-# ${module_name}
-
-<!-- module-docs:start -->
-
-Module documentation pending.
-
-<!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-EOF
-
-    # Generate rows for each entry
-    while IFS= read -r entry; do
-        [[ -n "$entry" ]] && generate_badge_row "$entry" "$badge_prefix" "$crate_name"
-    done < <(list_module_entries "$dir")
-    
-    cat << EOF
-<!-- module-table:end -->
-
-</details>
-EOF
-}
-
-# Function to generate just the module table section
-generate_table_section() {
-    local dir="$1"
-    local badge_prefix=$(get_badge_prefix "$dir")
-    local crate_name=$(get_crate_name "$dir")
-    
-    cat << EOF
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-EOF
-    
-    while IFS= read -r entry; do
-        [[ -n "$entry" ]] && generate_badge_row "$entry" "$badge_prefix" "$crate_name"
-    done < <(list_module_entries "$dir")
-    
-    cat << EOF
-<!-- module-table:end -->
-
-</details>
-EOF
-}
-
-# Check if README is empty or minimal (less than 50 bytes or just a title)
-is_readme_minimal() {
-    local readme="$1"
-    local size=$(wc -c < "$readme" | tr -d ' ')
-    
-    # Less than 50 bytes is definitely minimal
-    if [[ $size -lt 50 ]]; then
-        return 0
-    fi
-    
-    # Check if it's just a title line
-    local line_count=$(wc -l < "$readme" | tr -d ' ')
-    if [[ $line_count -le 2 ]]; then
-        return 0
-    fi
-    
-    return 1
 }
 
 # ── TypeScript badge prefix ────────────────────────────────────────────────
@@ -283,8 +135,6 @@ generate_rust_stub() {
     module_name=$(get_module_name "$dir")
     local badge_prefix
     badge_prefix=$(get_badge_prefix "$dir")
-    local crate_name
-    crate_name=$(get_crate_name "$dir")
     local modrs="$dir/mod.rs"
 
     # Extract //! doc content for the module-docs section
@@ -310,27 +160,11 @@ EOF
 cat << EOF
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-EOF
-    while IFS= read -r entry; do
-        [[ -n "$entry" ]] && generate_badge_row "$entry" "$badge_prefix" "$crate_name"
-    done < <(list_module_entries "$dir")
-cat << EOF
-<!-- module-table:end -->
-
-</details>
 EOF
 }
 
 # Generate a README stub for a TypeScript src/ subdir.
-# Includes LOC/Complexity badges and module-docs markers; no module-table
-# (TypeScript does not have the same module hierarchy as Rust).
+# Includes LOC/Complexity badges and module-docs markers.
 generate_ts_stub() {
     local dir="$1"
     local module_name
@@ -475,67 +309,8 @@ create_missing_readmes() {
         echo "  Total READMEs created:        $total"
     fi
     echo ""
-    echo "Next steps:"
-    echo "  Run: ./scripts/generate_module_tables.sh  (populate badge tables)"
+    echo "Next step:"
     echo "  Run: ./scripts/check_readmes.sh           (verify coverage)"
 }
 
-# ── Dispatch ───────────────────────────────────────────────────────────────
-if $CREATE; then
-    create_missing_readmes
-    exit 0
-fi
-
-# Main logic
-echo "Scanning for existing READMEs to update..."
-echo ""
-
-UPDATED=0
-FILLED=0
-SKIPPED=0
-
-# Find all existing README.md files in crates
-while IFS= read -r readme; do
-    dir=$(dirname "$readme")
-    rel_path=$(echo "$readme" | sed "s|$CRATES_DIR/||")
-    
-    # Skip crate root READMEs (handled separately, they have different structure)
-    if [[ "$dir" == */crates/gglib-* && ! "$dir" == */src* ]]; then
-        continue
-    fi
-    
-    # Skip the top-level crates/README.md
-    if [[ "$readme" == "$CRATES_DIR/README.md" ]]; then
-        continue
-    fi
-    
-    # Check if README already has module-table
-    if grep -q "module-table:start" "$readme"; then
-        ((SKIPPED++))
-        continue
-    fi
-    
-    # Check if README is empty/minimal
-    if is_readme_minimal "$readme"; then
-        echo "Filling: $rel_path (empty/minimal)"
-        if ! $DRY_RUN; then
-            generate_readme_content "$dir" > "$readme"
-        fi
-        ((FILLED++))
-    else
-        # Has content but no module-table - append one
-        echo "Updating: $rel_path (adding module table)"
-        if ! $DRY_RUN; then
-            generate_table_section "$dir" >> "$readme"
-        fi
-        ((UPDATED++))
-    fi
-done < <(find "$CRATES_DIR" -name "README.md" -type f | sort)
-
-echo ""
-echo "Summary:"
-echo "  Filled (empty/minimal): $FILLED"
-echo "  Updated (added table):  $UPDATED"
-echo "  Skipped (already done): $SKIPPED"
-echo ""
-echo "Done!"
+create_missing_readmes

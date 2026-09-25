@@ -27,13 +27,3 @@ function bodies and must run via [`tokio::task::spawn_blocking`] from async cont
 [`run_llama_source_build`] handles this wrapping automatically.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-<!-- module-table:end -->
-
-</details>

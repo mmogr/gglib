@@ -18,8 +18,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check_swallowed_db_errors.sh](#check_swallowed_db_errorssh) | No `sqlx` query has its `Result` discarded | CI |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
 | [install-llama.sh](#install-llamash) | Install llama.cpp with GPU detection | `make llama-install-auto` |
-| [generate_module_tables.sh](#generate_module_tablessh) | Update README badge tables | Manual |
-| [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Update submodule README templates | Manual |
+| [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Create missing README stubs | Manual |
 | [complexity_hotspots.sh](#complexity_hotspotssh) | Find high-complexity files | Manual |
 | [sync_versions.py](#sync_versionspy) | Sync version across package files | Release |
 | [macos-install.command](#macos-installcommand) | macOS app installer | Release bundle |
@@ -239,27 +238,22 @@ Requires [scc](https://github.com/boyter/scc) (`brew install scc`).
 
 ## Documentation Generation Scripts
 
-These scripts generate and maintain the badge tables and README documentation.
-
-### `generate_module_tables.sh`
-
-Regenerates module badge tables in README files with `<!-- module-table:start/end -->` markers:
-
-```bash
-./scripts/generate_module_tables.sh           # Update all READMEs
-./scripts/generate_module_tables.sh --check   # CI mode (exit 1 if outdated)
-./scripts/generate_module_tables.sh --dry-run # Show changes without writing
-```
-
 ### `generate_submodule_readmes.sh`
 
-Updates existing README files with badge table templates:
+Creates missing README stubs: one wherever a README is missing in a
+directory below a crate's `src/`, below `src-tauri/src/` or below the
+TypeScript `src/` (with the `module-docs` markers), and in `tests/` or a
+directory below it. A Rust stub takes its text from the `//!` block of the
+directory's `mod.rs` when it has one. For each directory it stubs whose
+`mod.rs` lacks `#![doc = include_str!("README.md")]`, the script adds that
+line and puts a `// MIGRATION` comment above any `//!` block. It never
+deletes a `//!` block; that is left to the author.
 
 ```bash
-./scripts/generate_submodule_readmes.sh [--dry-run]
+./scripts/generate_submodule_readmes.sh --create [--dry-run]
 ```
 
-**Note**: Never creates new README files — only updates existing ones.
+**Note**: Never modifies an existing README.
 
 ---
 

@@ -14,13 +14,3 @@ selected model, etc.).
 - `state_sync` - Menu state synchronization with app state
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-<!-- module-table:end -->
-
-</details>

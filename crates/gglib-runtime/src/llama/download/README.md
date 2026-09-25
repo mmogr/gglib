@@ -27,13 +27,3 @@ knowledge of a terminal, an HTTP response or a WebView. Rate and ETA are
 measured here so that no surface has to derive them.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-<!-- module-table:end -->
-
-</details>

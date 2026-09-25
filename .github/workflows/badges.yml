@@ -451,32 +451,7 @@ jobs:
             fi
           }
           
-          # gglib-core modules
-          CORE_LCOV="$(find artifacts -name 'gglib-core-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in domain ports services events paths download utils request_pipeline; do
-            extract_module_cov "$CORE_LCOV" "src/$MODULE/" "gglib-core-$MODULE"
-          done
-          
-          # gglib-db modules
-          DB_LCOV="$(find artifacts -name 'gglib-db-lcov.info' -type f 2>/dev/null | head -1)"
-          extract_module_cov "$DB_LCOV" "src/repositories/" "gglib-db-repositories"
-          
-          # gglib-gguf modules
-          GGUF_LCOV="$(find artifacts -name 'gglib-gguf-lcov.info' -type f 2>/dev/null | head -1)"
-          extract_module_cov "$GGUF_LCOV" "src/capabilities/" "gglib-gguf-capabilities"
-          
-          # gglib-download modules
-          DL_LCOV="$(find artifacts -name 'gglib-download-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in queue executor resolver cli_exec; do
-            extract_module_cov "$DL_LCOV" "src/$MODULE/" "gglib-download-$MODULE"
-          done
-          
-          # gglib-runtime modules
-          RT_LCOV="$(find artifacts -name 'gglib-runtime-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in llama proxy process system ports_impl; do
-            extract_module_cov "$RT_LCOV" "src/$MODULE/" "gglib-runtime-$MODULE"
-          done
-          
+          # Each module below has a README whose header badges read its coverage.
           # gglib-cli modules
           CLI_LCOV="$(find artifacts -name 'gglib-cli-lcov.info' -type f 2>/dev/null | head -1)"
           for MODULE in handlers presentation utils; do
@@ -488,159 +463,6 @@ jobs:
           extract_module_cov "$CLI_LCOV" "src/handlers/config/check_deps/" "gglib-cli-check_deps"
           extract_module_cov "$CLI_LCOV" "src/handlers/config/check_deps/instructions/" "gglib-cli-instructions"
           
-          # gglib-axum modules
-          AXUM_LCOV="$(find artifacts -name 'gglib-axum-lcov.info' -type f 2>/dev/null | head -1)"
-          extract_module_cov "$AXUM_LCOV" "src/dto/" "gglib-axum-dto"
-          
-          
-          # gglib-hf modules
-          HF_LCOV="$(find artifacts -name 'gglib-hf-lcov.info' -type f 2>/dev/null | head -1)"
-          extract_module_cov "$HF_LCOV" "src/client/" "gglib-hf-client"
-          
-          # gglib-proxy modules
-          PROXY_LCOV="$(find artifacts -name 'gglib-proxy-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in server models forward; do
-            extract_module_cov "$PROXY_LCOV" "src/$MODULE.rs" "gglib-proxy-$MODULE"
-          done
-          
-          # gglib-mcp modules
-          MCP_LCOV="$(find artifacts -name 'gglib-mcp-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in client manager service path tool_executor; do
-            extract_module_cov "$MCP_LCOV" "src/$MODULE.rs" "gglib-mcp-$MODULE"
-          done
-          # gglib-mcp resolver submodule (directory, not single file)
-          extract_module_cov "$MCP_LCOV" "src/resolver/" "gglib-mcp-resolver"
-          
-          # gglib-agent file modules
-          AGENT_LCOV="$(find artifacts -name 'gglib-agent-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in agent_loop stream_collector util; do
-            extract_module_cov "$AGENT_LCOV" "src/$MODULE.rs" "gglib-agent-$MODULE"
-          done
-          # gglib-agent directory modules
-          for MODULE in context_pruning tool_execution; do
-            extract_module_cov "$AGENT_LCOV" "src/$MODULE/" "gglib-agent-$MODULE"
-          done
-          
-          # gglib-app-services modules
-          APP_SVC_LCOV="$(find artifacts -name 'gglib-app-services-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in error downloads models servers settings mcp proxy types setup; do
-            extract_module_cov "$APP_SVC_LCOV" "src/$MODULE.rs" "gglib-app-services-$MODULE"
-          done
-          
-          # gglib-bootstrap modules (split across config/built/builder/download_trigger)
-          BOOTSTRAP_LCOV="$(find artifacts -name 'gglib-bootstrap-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in config built builder download_trigger; do
-            extract_module_cov "$BOOTSTRAP_LCOV" "src/$MODULE.rs" "gglib-bootstrap-$MODULE"
-          done
-          
-          # =============================================================================
-          # Per-file coverage extraction (dynamic discovery)
-          # =============================================================================
-          
-          # Helper function to extract file-level coverage from lcov
-          extract_file_cov() {
-            local LCOV_FILE=$1
-            local FILE_PATH=$2
-            local BADGE_NAME=$3
-            
-            if [ -f "$LCOV_FILE" ]; then
-              # Extract records matching the exact file path
-              TL=$(awk -v path="$FILE_PATH" '
-                /^SF:/ { in_file = (index($0, path) > 0 && $0 ~ path"$") }
-                in_file && /^LF:/ { split($0, a, ":"); total += a[2] }
-                END { print total+0 }
-              ' "$LCOV_FILE")
-              
-              CL=$(awk -v path="$FILE_PATH" '
-                /^SF:/ { in_file = (index($0, path) > 0 && $0 ~ path"$") }
-                in_file && /^LH:/ { split($0, a, ":"); covered += a[2] }
-                END { print covered+0 }
-              ' "$LCOV_FILE")
-              
-              if [ "$TL" -gt 0 ]; then
-                COV=$(awk -v c="$CL" -v t="$TL" 'BEGIN { printf "%d", (c/t)*100 }')
-                MSG="${COV}%"
-                COL=$(cov_color $COV)
-                echo "{\"schemaVersion\":1,\"label\":\"cov\",\"message\":\"$MSG\",\"color\":\"$COL\"}" > "badges/$BADGE_NAME-coverage.json"
-              fi
-            fi
-          }
-          
-          # Helper function to convert file path to badge name
-          # Uses the naming convention from the hardcoded badges:
-          # - 1 level (file.rs): just "file"
-          # - 2 levels (subdir/file.rs): "subdir-file"
-          # - 3+ levels (a/b/file.rs): just "b-file" (last 2 components)
-          path_to_badge_name() {
-            local FILE_PATH=$1
-            # Remove src/ prefix and .rs suffix
-            local CLEAN=$(echo "$FILE_PATH" | sed 's|^src/||' | sed 's|\.rs$||')
-            # Count path components
-            local DEPTH=$(echo "$CLEAN" | tr '/' '\n' | wc -l | tr -d ' ')
-            
-            if [ "$DEPTH" -le 2 ]; then
-              # 1-2 levels: use full path with slashes replaced by dashes
-              echo "$CLEAN" | sed 's|/|-|g'
-            else
-              # 3+ levels: use only last 2 components
-              echo "$CLEAN" | rev | cut -d'/' -f1-2 | rev | sed 's|/|-|g'
-            fi
-          }
-          
-          echo "Generating file-level coverage badges (dynamic discovery)..."
-          
-          # Dynamically discover and generate file-level coverage for each crate
-          for CRATE in $ALL_CRATES; do
-            LCOV_FILE="$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)"
-            if [ -n "$LCOV_FILE" ] && [ -f "$LCOV_FILE" ]; then
-              echo "  Processing $CRATE file-level coverage..."
-              
-              # Extract all source files from the lcov (SF: records)
-              grep "^SF:" "$LCOV_FILE" | sed 's/^SF://' | while read -r FULL_PATH; do
-                # Extract relative path from src/
-                if [[ "$FULL_PATH" == *"/src/"* ]]; then
-                  REL_PATH=$(echo "$FULL_PATH" | sed 's|.*/src/|src/|')
-                  BADGE_SUFFIX=$(path_to_badge_name "$REL_PATH")
-                  BADGE_NAME="$CRATE-$BADGE_SUFFIX"
-                  
-                  # Skip lib.rs and mod.rs files (they're just re-exports)
-                  if [[ "$REL_PATH" != "src/lib.rs" ]] && [[ "$REL_PATH" != *"/mod.rs" ]]; then
-                    extract_file_cov "$LCOV_FILE" "$REL_PATH" "$BADGE_NAME"
-                  fi
-                fi
-              done
-            fi
-          done
-          
-          echo "Generated file-level coverage badges"
-          
-          # Also generate 0% coverage badges for files that exist but aren't in lcov
-          # This ensures all files shown in READMEs have coverage badges
-          echo "Generating missing coverage badges (0% for untested files)..."
-          for CRATE in $ALL_CRATES; do
-            # Check out main to scan filesystem (we're on badges branch)
-            git fetch origin main --depth=1 2>/dev/null || true
-            
-            # List files from main branch
-            git ls-tree -r --name-only origin/main "crates/$CRATE/src" 2>/dev/null | grep '\.rs$' | while read -r FULL_PATH; do
-              FILENAME=$(basename "$FULL_PATH")
-              
-              # Skip lib.rs, mod.rs, main.rs
-              if [[ "$FILENAME" != "lib.rs" ]] && [[ "$FILENAME" != "mod.rs" ]] && [[ "$FILENAME" != "main.rs" ]]; then
-                REL_PATH=$(echo "$FULL_PATH" | sed "s|crates/$CRATE/||")
-                BADGE_SUFFIX=$(path_to_badge_name "$REL_PATH")
-                BADGE_NAME="$CRATE-$BADGE_SUFFIX"
-                
-                # Only create if badge doesn't already exist
-                if [ ! -f "badges/$BADGE_NAME-coverage.json" ]; then
-                  echo "{\"schemaVersion\":1,\"label\":\"cov\",\"message\":\"0%\",\"color\":\"red\"}" > "badges/$BADGE_NAME-coverage.json"
-                fi
-              fi
-            done
-          done
-          
-          echo "Generated missing coverage badges"
-
           # --- TypeScript coverage ---
           TS_COV_FILE="$(find artifacts -name 'coverage-summary.json' -type f 2>/dev/null | head -1)"
           if [ -n "$TS_COV_FILE" ] && [ -f "$TS_COV_FILE" ]; then
@@ -743,189 +565,20 @@ jobs:
           done
           
           # =============================================================================
-          # Per-module badges for gglib-core
-          # =============================================================================
-          for MODULE in domain ports services events paths download utils request_pipeline; do
-            if [ -d "crates/gglib-core/src/$MODULE" ]; then
-              SCC_DATA=$(scc "crates/gglib-core/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-              LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-              COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-              LOC_COL=$(loc_color $LOC)
-              CX_COL=$(cx_color $COMPLEXITY)
-              echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-core-$MODULE-loc.json"
-              echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-core-$MODULE-complexity.json"
-              echo "  gglib-core/$MODULE: $LOC loc, $COMPLEXITY complexity"
-            fi
-          done
-          
-          # =============================================================================
-          # Per-module badges for gglib-db
-          # =============================================================================
-          if [ -d "crates/gglib-db/src/repositories" ]; then
-            SCC_DATA=$(scc "crates/gglib-db/src/repositories" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-            LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-            COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-            LOC_COL=$(loc_color $LOC)
-            CX_COL=$(cx_color $COMPLEXITY)
-            echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-db-repositories-loc.json"
-            echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-db-repositories-complexity.json"
-            echo "  gglib-db/repositories: $LOC loc, $COMPLEXITY complexity"
-          fi
-          
-          # =============================================================================
-          # Per-module badges for gglib-gguf
-          # =============================================================================
-          if [ -d "crates/gglib-gguf/src/capabilities" ]; then
-            SCC_DATA=$(scc "crates/gglib-gguf/src/capabilities" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-            LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-            COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-            LOC_COL=$(loc_color $LOC)
-            CX_COL=$(cx_color $COMPLEXITY)
-            echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-gguf-capabilities-loc.json"
-            echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-gguf-capabilities-complexity.json"
-            echo "  gglib-gguf/capabilities: $LOC loc, $COMPLEXITY complexity"
-          fi
-          
-          # =============================================================================
-          # Per-module badges for gglib-download
-          # =============================================================================
-          for MODULE in queue executor resolver cli_exec; do
-            if [ -d "crates/gglib-download/src/$MODULE" ]; then
-              SCC_DATA=$(scc "crates/gglib-download/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-              LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-              COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-              LOC_COL=$(loc_color $LOC)
-              CX_COL=$(cx_color $COMPLEXITY)
-              echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-download-$MODULE-loc.json"
-              echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-download-$MODULE-complexity.json"
-              echo "  gglib-download/$MODULE: $LOC loc, $COMPLEXITY complexity"
-            fi
-          done
-          
-          # =============================================================================
-          # Per-module badges for gglib-runtime
-          # =============================================================================
-          for MODULE in llama proxy process system; do
-            if [ -d "crates/gglib-runtime/src/$MODULE" ]; then
-              SCC_DATA=$(scc "crates/gglib-runtime/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-              LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-              COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-              LOC_COL=$(loc_color $LOC)
-              CX_COL=$(cx_color $COMPLEXITY)
-              echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-runtime-$MODULE-loc.json"
-              echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-runtime-$MODULE-complexity.json"
-              echo "  gglib-runtime/$MODULE: $LOC loc, $COMPLEXITY complexity"
-            fi
-          done
-          
-          # =============================================================================
-          # Per-module badges for gglib-cli
-          # =============================================================================
-          for MODULE in handlers presentation utils; do
-            if [ -d "crates/gglib-cli/src/$MODULE" ]; then
-              SCC_DATA=$(scc "crates/gglib-cli/src/$MODULE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-              LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-              COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-              LOC_COL=$(loc_color $LOC)
-              CX_COL=$(cx_color $COMPLEXITY)
-              echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-cli-$MODULE-loc.json"
-              echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-cli-$MODULE-complexity.json"
-              echo "  gglib-cli/$MODULE: $LOC loc, $COMPLEXITY complexity"
-            fi
-          done
-          
-          # =============================================================================
-          # Per-module badges for gglib-axum
-          # =============================================================================
-          if [ -d "crates/gglib-axum/src/dto" ]; then
-            SCC_DATA=$(scc "crates/gglib-axum/src/dto" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-            LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-            COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-            LOC_COL=$(loc_color $LOC)
-            CX_COL=$(cx_color $COMPLEXITY)
-            echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-axum-dto-loc.json"
-            echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-axum-dto-complexity.json"
-            echo "  gglib-axum/dto: $LOC loc, $COMPLEXITY complexity"
-          fi
-          
-          
-          # =============================================================================
-          # Per-module badges for gglib-hf
-          # =============================================================================
-          if [ -d "crates/gglib-hf/src/client" ]; then
-            SCC_DATA=$(scc "crates/gglib-hf/src/client" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-            LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-            COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-            LOC_COL=$(loc_color $LOC)
-            CX_COL=$(cx_color $COMPLEXITY)
-            echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-hf-client-loc.json"
-            echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-hf-client-complexity.json"
-            echo "  gglib-hf/client: $LOC loc, $COMPLEXITY complexity"
-          fi
-          
-          # =============================================================================
-          # Per-file badges for ALL crates (dynamic discovery)
+          # Per-directory badges for ALL crates (dynamic discovery)
           # =============================================================================
           
-          echo "Generating file-level LOC and complexity badges (dynamic discovery)..."
+          echo "Generating directory-level LOC and complexity badges (dynamic discovery)..."
           
-          # Helper function to convert file path to badge name
-          # Uses the naming convention from the hardcoded badges:
-          # - 1 level (file.rs): just "file"
-          # - 2 levels (subdir/file.rs): "subdir-file"
-          # - 3+ levels (a/b/file.rs): just "b-file" (last 2 components)
-          path_to_badge_name() {
-            local FILE_PATH=$1
-            # Remove src/ prefix and .rs suffix
-            local CLEAN=$(echo "$FILE_PATH" | sed 's|^src/||' | sed 's|\.rs$||')
-            # Count path components
-            local DEPTH=$(echo "$CLEAN" | tr '/' '\n' | wc -l | tr -d ' ')
-            
-            if [ "$DEPTH" -le 2 ]; then
-              # 1-2 levels: use full path with slashes replaced by dashes
-              echo "$CLEAN" | sed 's|/|-|g'
-            else
-              # 3+ levels: use only last 2 components
-              echo "$CLEAN" | rev | cut -d'/' -f1-2 | rev | sed 's|/|-|g'
-            fi
-          }
-          
-          # Dynamically discover and generate file-level LOC/Complexity for each crate
           for CRATE in $ALL_CRATES; do
             if [ -d "crates/$CRATE/src" ]; then
-              echo "  Processing $CRATE file-level metrics..."
+              echo "  Processing $CRATE directory-level metrics..."
               
-              # Find all .rs files (excluding lib.rs and mod.rs)
-              find "crates/$CRATE/src" -name "*.rs" -type f | while read -r FULL_PATH; do
-                FILENAME=$(basename "$FULL_PATH")
-                
-                # Skip lib.rs and mod.rs (they're just re-exports)
-                if [[ "$FILENAME" != "lib.rs" ]] && [[ "$FILENAME" != "mod.rs" ]]; then
-                  # Extract relative path from src/
-                  REL_PATH=$(echo "$FULL_PATH" | sed "s|crates/$CRATE/||")
-                  BADGE_SUFFIX=$(path_to_badge_name "$REL_PATH")
-                  BADGE_NAME="$CRATE-$BADGE_SUFFIX"
-                  
-                  # Generate LOC and Complexity using scc
-                  SCC_DATA=$(scc "$FULL_PATH" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-                  LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-                  COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-                  LOC_COL=$(loc_color $LOC)
-                  CX_COL=$(cx_color $COMPLEXITY)
-                  
-                  echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/$BADGE_NAME-loc.json"
-                  echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/$BADGE_NAME-complexity.json"
-                fi
-              done
-              
-              # Also generate directory aggregate badges for subdirectories with multiple files
               find "crates/$CRATE/src" -type d -mindepth 1 | while read -r DIR_PATH; do
                 # Only generate aggregate if directory has .rs files (not just mod.rs)
                 RS_COUNT=$(find "$DIR_PATH" -maxdepth 1 -name "*.rs" ! -name "mod.rs" -type f 2>/dev/null | wc -l | tr -d ' ')
                 if [ "$RS_COUNT" -gt 0 ]; then
-                  REL_PATH=$(echo "$DIR_PATH" | sed "s|crates/$CRATE/||")
                   # For directories, use simplified naming: just the last directory component
-                  # This matches the convention used by generate_module_tables.sh
                   DIR_NAME=$(basename "$DIR_PATH")
                   BADGE_NAME="$CRATE-$DIR_NAME"
                   
@@ -942,7 +595,7 @@ jobs:
             fi
           done
           
-          echo "Generated file-level LOC and complexity badges"
+          echo "Generated directory-level LOC and complexity badges"
           
           # =============================================================================
           # TypeScript module badges
