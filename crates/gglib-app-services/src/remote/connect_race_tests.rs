@@ -1,13 +1,13 @@
 //! Tests for two connect-side commands arriving at once.
 //!
 //! Its own file rather than more of `connect_tests.rs`, which is at the
-//! size budget, and because these are one subject: `connect` reserves the
+//! size budget, and because these are one subject: `join` reserves the
 //! connect side for the length of a dial, and every other command has to
 //! stay answerable while it does.
 //!
 //! Three of the four need no network. Two put the slot into the state a
 //! dial leaves it in and ask what the other commands do with it; the third
-//! drives the real `connect` into `dial` by taking the loopback port it
+//! drives the real `join` into `dial` by taking the loopback port it
 //! would bind, because `modelpipe::connect` binds that listener before it
 //! touches iroh. Without the third the other two would still pass with
 //! every line between the reservation and the install deleted.
@@ -40,7 +40,7 @@ const CLI_STATUS_TIMEOUT: Duration = Duration::from_secs(5);
 #[tokio::test]
 async fn status_and_disconnect_do_not_wait_on_a_reserved_connect_side() {
     let (_, ops, events) = test_remote_ops().await;
-    // What `connect` leaves in the slot for the length of its dial.
+    // What `join` leaves in the slot for the length of its dial.
     let cancel = ops
         .live_connect
         .lock()
@@ -71,7 +71,7 @@ async fn status_and_disconnect_do_not_wait_on_a_reserved_connect_side() {
     );
 }
 
-/// A second `connect` during a dial is refused, and told which of the two
+/// A second `join` during a dial is refused, and told which of the two
 /// busy states it met.
 ///
 /// "Already connected — disconnect first" would be the wrong sentence:
@@ -92,9 +92,9 @@ async fn a_second_connect_while_one_is_dialling_says_a_dial_is_in_flight() {
         .expect("nothing holds the connect side");
 
     let err = ops
-        .connect(ConnectRequest {
+        .join(JoinRequest {
             pairing: Some(TICKET_A.to_owned()),
-            ..ConnectRequest::default()
+            ..JoinRequest::default()
         })
         .await
         .expect_err("one dial at a time");
@@ -104,14 +104,14 @@ async fn a_second_connect_while_one_is_dialling_says_a_dial_is_in_flight() {
     assert!(message.contains("already dialling"), "{message}");
 }
 
-/// `connect` reserves the connect side, dials holding no lock, and gives
+/// `join` reserves the connect side, dials holding no lock, and gives
 /// the reservation back when the dial fails.
 ///
 /// The test that proves the two above are about a state production reaches.
 /// They put the slot into `Filling` by hand, so on their own they say only
 /// what `status` and `disconnect` do when they find it that way — every
-/// line of `connect` between the reservation and the install could be
-/// deleted and they would still pass. This one drives the real `connect`
+/// line of `join` between the reservation and the install could be
+/// deleted and they would still pass. This one drives the real `join`
 /// through that whole span.
 ///
 /// It gets there without a network because `modelpipe::connect` binds the
@@ -121,9 +121,9 @@ async fn a_second_connect_while_one_is_dialling_says_a_dial_is_in_flight() {
 /// every host, IPv6 or not.
 ///
 /// The timeout is the assertion that no lock is held across the dial, not
-/// housekeeping. Giving the slot back re-locks the mutex `connect` would
+/// housekeeping. Giving the slot back re-locks the mutex `join` would
 /// have been holding, and `tokio::sync::Mutex` is not reentrant — a
-/// `connect` that kept its guard for the dial deadlocks here rather than
+/// `join` that kept its guard for the dial deadlocks here rather than
 /// returning the error.
 #[tokio::test]
 async fn a_dial_that_fails_gives_the_connect_side_back() {
@@ -139,11 +139,11 @@ async fn a_dial_that_fails_gives_the_connect_side_back() {
 
     let err = tokio::time::timeout(
         CLI_STATUS_TIMEOUT,
-        ops.connect(ConnectRequest {
+        ops.join(JoinRequest {
             pairing: Some(TICKET_A.to_owned()),
             port: Some(port),
             discovery: false,
-            ..ConnectRequest::default()
+            ..JoinRequest::default()
         }),
     )
     .await
@@ -168,7 +168,7 @@ async fn a_dial_that_fails_gives_the_connect_side_back() {
 /// `status` answers while a *real* dial is in flight — finding A1, end to
 /// end.
 ///
-/// `connect` held `live_connect` from its first line to its last, across
+/// `join` held `live_connect` from its first line to its last, across
 /// `modelpipe::connect` and a redeem that may take twenty seconds, while
 /// `status` locked the same mutex to read the connect snapshot. It now
 /// checks and reserves under the lock, releases it across the dial, and
@@ -187,7 +187,7 @@ async fn a_dial_that_fails_gives_the_connect_side_back() {
 /// Nothing rests on it. The three tests above make the same claim without a
 /// network: two against the state a dial leaves behind, and
 /// [`a_dial_that_fails_gives_the_connect_side_back`] through the real
-/// `connect`, which reaches the dial by taking the port it would bind.
+/// `join`, which reaches the dial by taking the port it would bind.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "binds a real iroh endpoint, and says nothing on a host with no IPv6 route"]
 async fn status_answers_while_a_dial_is_in_flight() {
@@ -200,10 +200,10 @@ async fn status_answers_while_a_dial_is_in_flight() {
     let dialling = Arc::clone(&ops);
     let dial = tokio::spawn(async move {
         dialling
-            .connect(ConnectRequest {
+            .join(JoinRequest {
                 pairing: Some(TICKET_UNREACHABLE.to_owned()),
                 discovery: false,
-                ..ConnectRequest::default()
+                ..JoinRequest::default()
             })
             .await
     });

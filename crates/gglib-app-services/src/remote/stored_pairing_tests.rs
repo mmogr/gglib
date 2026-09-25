@@ -1,9 +1,9 @@
 //! Tests for the record settings keep of the machine this one paired with.
 //!
-//! Everything `connect` decides *after* its dial has come up is here rather
+//! Everything `join` decides *after* its dial has come up is here rather
 //! than in `connect_tests.rs`, and that is the point of [`settle`] existing
 //! at all: `modelpipe::connect` wants an iroh endpoint and a peer that
-//! answers, so a test driven through `connect` never reaches the arm it is
+//! answers, so a test driven through `join` never reaches the arm it is
 //! about. It reaches the guards in front of the dial and stops. `settle`
 //! takes the redemption as a closure, so both arms can be driven here with
 //! no tunnel and no far machine.
@@ -209,7 +209,7 @@ async fn a_redeemed_code_is_stored_under_the_ticket_that_was_dialled() {
     assert_eq!(stored.api_key, KEY_B);
 }
 
-/// The failure a spent code leaves behind reaches the caller of `connect`,
+/// The failure a spent code leaves behind reaches the caller of `join`,
 /// not just the caller of `store_redeemed`.
 ///
 /// This is the arm the wording exists for, and the reason it is not

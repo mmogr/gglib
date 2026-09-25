@@ -3,7 +3,7 @@
 //! The interesting cases are all races written out in order: a teardown
 //! that lands between a reservation and its install, and a watcher that
 //! comes back after its connection has been replaced. Neither is reachable
-//! from `connect` or `enable` in a unit test — one wants an iroh dial and
+//! from `join` or `enable` in a unit test — one wants an iroh dial and
 //! the other a real proxy port — so the ordering is asserted here, where
 //! the state machine is.
 
@@ -73,7 +73,7 @@ fn a_release_gives_the_slot_back_and_never_takes_a_later_ones() {
 /// A watcher only takes down the connection it was watching.
 ///
 /// `generation` exists for this: a watcher whose pipe closed a moment after
-/// `disconnect` and a re-`connect` would otherwise clear the *new*
+/// `disconnect` and a re-`join` would otherwise clear the *new*
 /// connection and announce a disconnection that never happened.
 #[test]
 fn a_stale_watcher_takes_down_nothing() {

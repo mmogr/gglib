@@ -6,7 +6,7 @@
 //! pairing code likewise; the status carries a fingerprint and never the
 //! ticket, because `GET` is the verb anything can call twice.
 
-use gglib_app_services::{ConnectRequest, Connected, EnableRequest, Enabled};
+use gglib_app_services::{EnableRequest, Enabled, JoinRequest, Joined};
 
 /// Body for `POST /api/remote/enable`. Every field optional; an empty body
 /// is the default: no `/mcp`, public relays, discovery on.
@@ -132,8 +132,8 @@ pub(crate) struct RemoteConnectBody {
 }
 
 impl RemoteConnectBody {
-    pub(crate) fn into_request(self) -> ConnectRequest {
-        ConnectRequest {
+    pub(crate) fn into_request(self) -> JoinRequest {
+        JoinRequest {
             pairing: self.pairing,
             port: self.port,
             relay: self.relay,
@@ -159,8 +159,8 @@ pub(crate) struct RemoteConnectResponse {
     pub moved_from: Option<u16>,
 }
 
-impl From<Connected> for RemoteConnectResponse {
-    fn from(c: Connected) -> Self {
+impl From<Joined> for RemoteConnectResponse {
+    fn from(c: Joined) -> Self {
         Self {
             moved_from: c.moved_from,
             port: c.port,

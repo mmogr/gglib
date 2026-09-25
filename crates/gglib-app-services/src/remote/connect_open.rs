@@ -15,7 +15,7 @@ use modelpipe::{
 };
 use tokio_util::sync::CancellationToken;
 
-use super::super::super::types::ConnectRequest;
+use super::super::super::types::JoinRequest;
 use super::super::{DRAIN, cancelled, connect_error};
 use crate::error::GuiError;
 
@@ -183,7 +183,7 @@ fn unreached(why: Unreached) -> GuiError {
 /// keep while gglib redeemed the code itself, and it is modelpipe's now.
 pub(super) async fn open(
     pairing: &PairingString,
-    request: &ConnectRequest,
+    request: &JoinRequest,
     port: Option<u16>,
     cancel: &CancellationToken,
 ) -> Result<Opened, NotOpened> {

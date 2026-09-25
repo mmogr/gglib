@@ -17,7 +17,7 @@ use tracing::{info, warn};
 
 use super::slot::{Busy, Taken};
 use super::stored_pairing::names_the_same_machine;
-use super::types::{ConnectRequest, ConnectSnapshot, Connected};
+use super::types::{ConnectSnapshot, JoinRequest, Joined};
 use super::{RemoteOps, far_daemon};
 use crate::error::GuiError;
 
@@ -31,7 +31,7 @@ pub(super) const DRAIN: Duration = Duration::from_secs(5);
 pub(super) struct LiveConnect {
     handle: Arc<ConnectHandle>,
     ticket_fingerprint: String,
-    /// Which `connect` this is, so a watcher that outlives its connection
+    /// Which `join` this is, so a watcher that outlives its connection
     /// cannot take down the next one.
     generation: u64,
     watcher: CancellationToken,
@@ -42,7 +42,7 @@ pub(super) struct LiveConnect {
 }
 
 impl LiveConnect {
-    /// Which `connect` built this, for a watcher checking it is still the
+    /// Which `join` built this, for a watcher checking it is still the
     /// connection it was given.
     pub(super) const fn generation(&self) -> u64 {
         self.generation
@@ -73,8 +73,8 @@ impl RemoteOps {
     /// ticket for a machine this one holds no key for, or a code the far
     /// side refuses; `Unavailable` when the peer cannot be reached;
     /// `Internal` when settings cannot be written.
-    pub async fn connect(&self, request: ConnectRequest) -> Result<Connected, GuiError> {
-        // Refused before any work is done, so `connect` while connected
+    pub async fn join(&self, request: JoinRequest) -> Result<Joined, GuiError> {
+        // Refused before any work is done, so `join` while connected
         // still says "already connected" rather than reporting the first
         // thing it happens to find wrong with the arguments. The lock is
         // gone by the end of this line; the reservation below is the one
@@ -115,8 +115,8 @@ impl RemoteOps {
         // Reserve the slot, then let the lock go for the dial. Holding it
         // across `modelpipe::connect` is what made `gglib remote status`
         // blow the five seconds the CLI gives it, and `gglib remote
-        // disconnect` — the one command that ends a hanging connect — queue
-        // behind the connect it was cancelling.
+        // disconnect` — the one command that ends a hanging join — queue
+        // behind the join it was cancelling.
         let generation = self.connect_generation.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = self
             .live_connect
@@ -137,9 +137,9 @@ impl RemoteOps {
     /// Close the loopback port; the far machine is unaffected and the stored
     /// pairing stays.
     ///
-    /// Also ends a `connect` that is still dialling, which is the case it
+    /// Also ends a `join` that is still dialling, which is the case it
     /// exists for and could not reach: it waited on the same mutex the dial
-    /// was holding, so the command for cancelling a hanging connect hung
+    /// was holding, so the command for cancelling a hanging join hung
     /// behind it.
     ///
     /// # Errors
@@ -163,7 +163,7 @@ impl RemoteOps {
             // announced as gone. The dial finds the slot taken and shuts
             // down whatever it managed to build.
             Taken::Cancelled => {
-                info!("cancelled a remote connect that was still dialling");
+                info!("cancelled a remote join that was still dialling");
                 Ok(())
             }
             Taken::Empty => Err(GuiError::Conflict("not connected to a remote".to_owned())),
@@ -250,10 +250,10 @@ fn busy_dialling(busy: &Busy) -> GuiError {
 /// A conflict rather than a failure: nothing went wrong with the dial, it
 /// was simply no longer wanted by the time it finished.
 pub(super) fn cancelled() -> GuiError {
-    GuiError::Conflict("the connect was cancelled by `gglib remote disconnect`".to_owned())
+    GuiError::Conflict("the join was cancelled by `gglib remote disconnect`".to_owned())
 }
 
-/// A `ConnectError` as the person who typed `connect` needs to hear it.
+/// A `ConnectError` as the person who typed `join` needs to hear it.
 fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
     match e {
         // One producer left at modelpipe 0.3.0, and it is not a machine

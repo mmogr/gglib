@@ -57,7 +57,7 @@ pub(crate) const TICKET_A_MOVED: &str = TICKET_UNREACHABLE;
 pub(crate) const KEY_A: &str = "sk-zzq-the-key-machine-a-handed-over";
 pub(crate) const KEY_B: &str = "sk-zzq-the-key-machine-b-handed-over";
 
-/// The pairing `connect` writes once a code has been redeemed, as a
+/// The pairing `join` writes once a code has been redeemed, as a
 /// settings update.
 pub(crate) fn paired_with(ticket: &str, api_key: &str) -> SettingsUpdate {
     SettingsUpdate {

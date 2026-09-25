@@ -42,7 +42,7 @@ pub struct FarMachine {
     ///
     /// The only name this side has for the other side, and the one every
     /// other remote surface already prints: `gglib remote status`, the CLI's
-    /// pre-turn banner and the connect confirmation all name the far machine
+    /// pre-turn banner and the join confirmation all name the far machine
     /// this way, so a message built from it names something the user has
     /// already been shown.
     pub fingerprint: String,

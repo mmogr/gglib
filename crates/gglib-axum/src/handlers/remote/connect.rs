@@ -18,7 +18,7 @@ pub(crate) async fn connect(
     Json(body): Json<Option<RemoteConnectBody>>,
 ) -> Result<Json<RemoteConnectResponse>, HttpError> {
     let request = body.unwrap_or_default().into_request();
-    let connected = state.remote.connect(request).await?;
+    let connected = state.remote.join(request).await?;
     Ok(Json(RemoteConnectResponse::from(connected)))
 }
 
