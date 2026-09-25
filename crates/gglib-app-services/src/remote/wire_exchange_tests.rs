@@ -1,10 +1,6 @@
-//! Tests for what the remote tunnel is asked.
-//!
-//! A `#[path]` sibling rather than an inline `mod tests`, because the two
-//! together crossed the 300-line budget `scripts/check_rust_complexity.sh`
-//! allows and the shapes are what the file is for. The subject here is what
-//! a body means when it is empty, and what an older client's body still
-//! means; `status_tests.rs` has the answers.
+//! Tests for the enable and join exchanges: what a body means when it is
+//! empty, and what an older client's body still means. `wire_tests.rs` has
+//! the status.
 
 use super::*;
 
@@ -14,6 +10,43 @@ fn an_empty_body_is_the_safe_default() {
     assert!(!req.allow_mcp);
     assert!(req.relay.is_none());
     assert!(req.discovery, "discovery is on unless switched off");
+}
+
+/// Every body and answer of the two exchanges that says nothing still reads,
+/// every field at its default.
+#[test]
+fn an_exchange_that_says_nothing_still_reads() {
+    let enable_body: RemoteEnableBody = serde_json::from_str("{}").expect("an empty enable body");
+    let join_body: RemoteJoinBody = serde_json::from_str("{}").expect("an empty join body");
+    let enabled: RemoteEnableResponse =
+        serde_json::from_str("{}").expect("an enable answer that says nothing");
+    let joined: RemoteJoinResponse =
+        serde_json::from_str("{}").expect("a join answer that says nothing");
+
+    assert_eq!(enable_body, RemoteEnableBody::default());
+    assert_eq!(join_body, RemoteJoinBody::default());
+    assert_eq!(
+        enabled,
+        RemoteEnableResponse {
+            ticket: String::new(),
+            code: None,
+            pairing: None,
+            expires_in_s: None,
+            device: None,
+            mcp_allowed: false,
+            already_up: false,
+        }
+    );
+    assert_eq!(
+        joined,
+        RemoteJoinResponse {
+            port: 0,
+            base_url: String::new(),
+            ticket_fingerprint: String::new(),
+            paired: false,
+            moved_from: None,
+        }
+    );
 }
 
 /// A client built against the old shape still gets a 200.

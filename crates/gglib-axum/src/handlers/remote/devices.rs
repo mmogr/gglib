@@ -1,93 +1,14 @@
 //! The three device routes: invite one, list them, retire one.
 //!
-//! Their DTOs live here beside them rather than in `wire.rs`, along a
-//! subject: `wire.rs` is what the tunnel is asked — enable, join, kill —
-//! `status.rs` is what it says, and this is who may use it.
-//!
-//! `invite` has no DTO of its own. `RemoteOps::invite` answers with the same
-//! `Enabled` an `enable --invite` does, so this route answers with
+//! `invite` has no shape of its own. `RemoteOps::invite` answers with the
+//! same `Enabled` an `enable --invite` does, so this route answers with
 //! [`RemoteEnableResponse`] and a client needs no second shape to decode.
 
 use axum::Json;
 use axum::extract::{Path, State};
-use gglib_app_services::DeviceView;
+use gglib_app_services::{RemoteDevice, RemoteEnableResponse, RemoteForgotten};
 
-use super::wire::RemoteEnableResponse;
 use crate::{error::HttpError, state::AppState};
-
-/// One device this machine has issued a key to.
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteDevice {
-    /// The name the tunnel edge holds this device's key under, and the value
-    /// it sends back on every request. Not a secret.
-    pub id: String,
-    /// What the device called itself when it joined, if it said.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-    /// Unix milliseconds at which this device's invite was minted.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub joined_at: i64,
-    /// Unix milliseconds at which a device redeemed the invite, or `null` if
-    /// none ever has.
-    ///
-    /// A row with no `redeemed_at` **and** no `last_seen` is an invite nobody
-    /// took, and a surface should say so rather than render it as a device.
-    /// Both halves matter: this is written by a background task, so a device
-    /// that has plainly made requests must not be called never-joined
-    /// because the one advisory write was lost.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    pub redeemed_at: Option<i64>,
-    /// Unix milliseconds of the last request that arrived under its key.
-    /// Advisory, and written at most once a minute per device.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    pub last_seen: Option<i64>,
-    /// The fingerprint of the endpoint that redeemed this device's invite, or
-    /// `null` if none was recorded. A record, not a check: a device that does
-    /// not keep its endpoint key presents a new fingerprint every time it
-    /// connects.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
-    pub peer: Option<String>,
-    /// Whether the edge is admitting it right now, or `null` when the tunnel
-    /// is down — nothing admits then, and `false` would read as "this one
-    /// device was dropped".
-    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null"))]
-    pub admitted: Option<bool>,
-    /// Whether the roster lists this device. `false` is a key this machine
-    /// holds with no row for it, which nothing should leave but a surface
-    /// must show: `id` and `admitted` are all that is known of it, and a
-    /// `DELETE` of it retires the key.
-    pub recorded: bool,
-}
-
-impl From<DeviceView> for RemoteDevice {
-    fn from(d: DeviceView) -> Self {
-        Self {
-            id: d.id,
-            label: d.label,
-            joined_at: d.joined_at,
-            redeemed_at: d.redeemed_at,
-            last_seen: d.last_seen,
-            peer: d.peer,
-            admitted: d.admitted,
-            recorded: d.recorded,
-        }
-    }
-}
-
-/// What `DELETE /api/remote/devices/{device}` did.
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteForgotten {
-    /// Whether this machine held anything under that name.
-    ///
-    /// `false` is a `200`, not a `404`: retiring a device that is already
-    /// gone is the outcome asked for. A surface that wants to say "no such
-    /// device" has this to say it with; one that just wants the device gone
-    /// can ignore it.
-    pub forgotten: bool,
-}
 
 /// `POST /api/remote/invite` — mint a key for one new device, and a code.
 ///
@@ -111,8 +32,7 @@ pub(crate) async fn invite(
 pub(crate) async fn list(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<RemoteDevice>>, HttpError> {
-    let devices = state.remote.list().await?;
-    Ok(Json(devices.into_iter().map(RemoteDevice::from).collect()))
+    Ok(Json(state.remote.list().await?))
 }
 
 /// `DELETE /api/remote/devices/{device}` — stop admitting one device.

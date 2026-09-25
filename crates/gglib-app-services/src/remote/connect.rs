@@ -17,7 +17,8 @@ use tracing::{info, warn};
 
 use super::slot::{Busy, Taken};
 use super::stored_pairing::names_the_same_machine;
-use super::types::{ConnectSnapshot, JoinRequest, Joined};
+use super::types::{JoinRequest, Joined};
+use super::wire::RemoteConnection;
 use super::{RemoteOps, far_daemon};
 use crate::error::GuiError;
 
@@ -207,9 +208,9 @@ impl RemoteOps {
     }
 
     /// The connect side for the status surface.
-    pub(super) async fn connect_snapshot(&self) -> Option<ConnectSnapshot> {
+    pub(super) async fn connection(&self) -> Option<RemoteConnection> {
         let live = self.live_connect.lock().await;
-        live.full().map(|live| ConnectSnapshot {
+        live.full().map(|live| RemoteConnection {
             port: live.handle.local_addr().port(),
             base_url: live.handle.base_url(),
             ticket_fingerprint: live.ticket_fingerprint.clone(),

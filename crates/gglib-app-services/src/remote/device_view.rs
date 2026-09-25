@@ -7,10 +7,12 @@
 
 use gglib_core::Device;
 
-use super::types::DeviceView;
+use super::device_line::{describe, joined};
+use super::wire::RemoteDevice;
 
 /// Roster rows as the surfaces see them, given what the edge is admitting,
-/// then a row for each key `held` that no roster row lists.
+/// then a row for each key `held` that no roster row lists, each described
+/// as of `now_ms`.
 ///
 /// Shared by [`RemoteOps::list`](super::RemoteOps::list) and
 /// [`RemoteOps::status`](super::RemoteOps::status). Two spellings of "is this
@@ -30,14 +32,15 @@ pub(super) fn viewed(
     roster: Vec<Device>,
     held: &[String],
     admitting: Option<&[String]>,
-) -> Vec<DeviceView> {
+    now_ms: i64,
+) -> Vec<RemoteDevice> {
     // `None` with the tunnel down: nothing admits then, and saying `false`
     // would read as "this device was dropped".
     let admitted = |id: &str| admitting.map(|names| names.iter().any(|name| name == id));
-    let unrecorded: Vec<DeviceView> = held
+    let unrecorded: Vec<RemoteDevice> = held
         .iter()
         .filter(|id| !roster.iter().any(|row| &row.id == *id))
-        .map(|id| DeviceView {
+        .map(|id| RemoteDevice {
             admitted: admitted(id),
             id: id.clone(),
             label: None,
@@ -46,11 +49,13 @@ pub(super) fn viewed(
             last_seen: None,
             peer: None,
             recorded: false,
+            description: String::new(),
+            joined: false,
         })
         .collect();
     roster
         .into_iter()
-        .map(|d| DeviceView {
+        .map(|d| RemoteDevice {
             admitted: admitted(&d.id),
             id: d.id,
             label: d.label,
@@ -59,8 +64,15 @@ pub(super) fn viewed(
             last_seen: d.last_seen,
             peer: d.peer,
             recorded: true,
+            description: String::new(),
+            joined: false,
         })
         .chain(unrecorded)
+        .map(|mut row| {
+            row.joined = joined(&row);
+            row.description = describe(&row, now_ms);
+            row
+        })
         .collect()
 }
 

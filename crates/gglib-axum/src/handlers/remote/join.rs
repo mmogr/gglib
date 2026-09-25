@@ -2,11 +2,20 @@
 //! machine reaching another.
 
 use axum::{Json, extract::State};
-use gglib_app_services::GuiError;
+use gglib_app_services::{GuiError, RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
 
-use super::status::RemoteStatus;
-use super::wire::{RemoteJoinBody, RemoteJoinResponse, RemoteKillBody};
 use crate::{error::HttpError, state::AppState};
+
+/// Body for `POST /api/remote/kill`. The word is required, as it is on the
+/// proxy route this forwards to: a one-way door is not opened by an empty
+/// `POST`.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub(crate) struct RemoteKillBody {
+    /// Must be the literal `"shutdown"`.
+    #[serde(default)]
+    pub confirm: Option<String>,
+}
 
 /// `POST /api/remote/join` — bind a loopback port here that is the far
 /// machine's proxy, redeeming a pairing code for its key when one is given.
@@ -32,7 +41,7 @@ pub(crate) async fn disconnect(
         Ok(()) | Err(GuiError::Conflict(_)) => {}
         Err(e) => return Err(e.into()),
     }
-    Ok(Json(RemoteStatus::from(state.remote.status().await)))
+    Ok(Json(state.remote.status().await))
 }
 
 /// `POST /api/remote/kill` — stop the far daemon through the tunnel, then
@@ -55,5 +64,5 @@ pub(crate) async fn kill(
         .into());
     }
     state.remote.kill_remote().await?;
-    Ok(Json(RemoteStatus::from(state.remote.status().await)))
+    Ok(Json(state.remote.status().await))
 }
