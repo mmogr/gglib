@@ -37,9 +37,6 @@ anyhow.workspace = true
 # Logging
 tracing.workspace = true
 
-# HuggingFace Hub SDK (for CLI execution)
-hf-hub.workspace = true
-
 # HTTP client (for API calls and the native download path)
 reqwest = { workspace = true }
 futures-util.workspace = true

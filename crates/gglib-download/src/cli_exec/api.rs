@@ -6,51 +6,27 @@
 use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
 use gglib_core::{Quantization, repo_short_name, strip_gguf_suffix};
-use gglib_hf::{DefaultHfClient, HfClientConfig};
-use hf_hub::api::sync::Api;
+use gglib_hf::{DefaultHfClient, HfClientConfig, build_file_url};
 use reqwest::header::CONTENT_LENGTH;
-use std::path::Path;
 use std::time::Duration;
 
-/// Create `HuggingFace` Hub API client.
-pub fn create_hf_api(token: Option<String>, models_dir: &Path) -> Result<Api> {
-    let mut api_builder = hf_hub::api::sync::ApiBuilder::new();
-
-    if let Some(token) = token {
-        api_builder = api_builder.with_token(Some(token));
-    }
-
-    // Set cache directory to our models directory
-    let cache_dir = models_dir.join(".cache");
-    api_builder = api_builder.with_cache_dir(cache_dir);
-
-    api_builder
-        .build()
-        .map_err(|e| anyhow!("Failed to create HF API client: {e}"))
+/// A Hub client that sends `token`, when there is one, as a bearer token on
+/// every request.
+pub(super) fn hub_client(token: Option<String>) -> DefaultHfClient {
+    DefaultHfClient::new(&HfClientConfig::default().with_optional_token(token))
 }
 
 /// List available GGUF quantizations for a model.
-pub async fn list_quantizations(
-    model_id: &str,
-    models_dir: &Path,
-    token: Option<String>,
-) -> Result<()> {
+pub async fn list_quantizations(model_id: &str, token: Option<String>) -> Result<()> {
     println!("Finding available GGUF quantizations for {model_id}...");
 
-    let api = create_hf_api(token.clone(), models_dir)?;
-    let hf_api_repo = api.repo(hf_hub::Repo::with_revision(
-        model_id.to_string(),
-        hf_hub::RepoType::Model,
-        "main".to_string(),
-    ));
+    let client = hub_client(token.clone());
 
-    match hf_api_repo.info() {
-        Ok(info) => {
+    match HfClientPort::get_commit_sha(&client, model_id).await {
+        Ok(sha) => {
             println!("Repository found: {model_id}");
-            println!("Commit SHA: {}", info.sha);
+            println!("Commit SHA: {sha}");
             println!("\nSearching for GGUF files using HuggingFace API...");
-
-            let client = DefaultHfClient::new(&HfClientConfig::default());
 
             match client.list_quantizations(model_id).await {
                 Ok(quantizations) => {
@@ -77,7 +53,7 @@ pub async fn list_quantizations(
                 }
                 Err(e) => {
                     println!("Failed to fetch quantizations: {e}");
-                    if let Err(err) = fallback_file_search(&hf_api_repo, model_id, token).await {
+                    if let Err(err) = fallback_file_search(model_id, token).await {
                         println!("Fallback pattern search also failed: {err}");
                     }
                 }
@@ -118,11 +94,7 @@ fn fallback_candidates(model_name_clean: &str) -> Vec<String> {
 /// Probes candidate filenames via a HEAD request rather than downloading
 /// each one, since a repository can contain many GB of files and this path
 /// only needs to confirm existence.
-async fn fallback_file_search(
-    repo: &hf_hub::api::sync::ApiRepo,
-    model_id: &str,
-    token: Option<String>,
-) -> Result<()> {
+async fn fallback_file_search(model_id: &str, token: Option<String>) -> Result<()> {
     println!("\nFalling back to pattern matching...");
     let mut found_files = Vec::new();
 
@@ -133,7 +105,7 @@ async fn fallback_file_search(
         .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
 
     for pattern in fallback_candidates(model_name_clean) {
-        let mut request = client.head(repo.url(&pattern));
+        let mut request = client.head(build_file_url(model_id, &pattern, None));
         if let Some(ref tok) = token {
             request = request.header("Authorization", format!("Bearer {tok}"));
         }

@@ -10,7 +10,6 @@ use gglib_download::cli_exec::list_quantizations;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
-use gglib_core::paths::resolve_models_dir;
 
 use super::remote;
 
@@ -34,11 +33,10 @@ pub(crate) struct DownloadArgs<'a> {
 /// itself.
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     let _ = ctx;
-    let models_dir = resolve_models_dir(None)?.path;
 
     // --list-quants: show available quantizations and exit (uses cli_exec directly).
     if args.list_quants {
-        list_quantizations(args.model_id, &models_dir, args.token.map(String::from)).await?;
+        list_quantizations(args.model_id, args.token.map(String::from)).await?;
         return Ok(());
     }
 

@@ -333,7 +333,7 @@ impl SystemProbePort for DefaultSystemProbe {
             ),
             system_dep(
                 "libssl-dev",
-                "Required for HTTPS support",
+                "Required for llama.cpp's HTTPS support",
                 distro,
                 check_libssl(),
             ),

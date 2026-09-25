@@ -764,7 +764,7 @@ main() {
     check_dep "gcc" "Required for llama.cpp compilation" "true" "gcc"
     check_dep "g++" "Required for llama.cpp compilation" "true" "g++"
     check_dep "pkg-config" "Required for building with system libraries" "true" "pkg-config"
-    check_lib "libssl-dev" "Required for HTTPS support" "true" "openssl"
+    check_lib "libssl-dev" "Required for llama.cpp's HTTPS support" "true" "openssl"
     check_dep "cmake" "Required for llama.cpp build" "true" "cmake"
     check_python
     

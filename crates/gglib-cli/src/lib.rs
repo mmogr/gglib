@@ -11,7 +11,6 @@ use tokio_test as _;
 // Dependencies used by handlers module (will be used as handlers are migrated)
 use anyhow as _;
 use dotenvy as _;
-use hf_hub as _;
 use rustyline as _;
 use tokio as _;
 use tracing as _;

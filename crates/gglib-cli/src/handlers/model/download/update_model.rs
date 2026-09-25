@@ -94,7 +94,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
 /// First 8 characters of a commit SHA, without assuming there are 8.
 /// HuggingFace returns 40, but a truncated or empty value must not panic a
 /// command whose whole job is repairing a model.
-fn short_sha(sha: &str) -> &str {
+pub(super) fn short_sha(sha: &str) -> &str {
     &sha[..sha.len().min(8)]
 }
 

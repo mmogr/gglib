@@ -146,7 +146,8 @@ HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
 ```
 
 ### `check-updates`
-Check if downloaded models have updates on HuggingFace Hub.
+Check if downloaded models have updates on HuggingFace Hub. Sends `HF_TOKEN` to
+the Hub when it is set.
 
 **Module:** `check_updates.rs`
 
