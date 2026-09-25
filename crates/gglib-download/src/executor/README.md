@@ -51,14 +51,3 @@ queueing (`queue`), or emitting
 do with them.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-| [`native.rs`](native.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-executor-native-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-executor-native-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-executor-native-coverage.json) |
-<!-- module-table:end -->
-
-</details>

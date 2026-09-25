@@ -57,17 +57,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-| [`events.rs`](src/events.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-events-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-events-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-events-coverage.json) |
-<!-- module-table:end -->
-
-</details>
-
 **Module Descriptions:**
 - **`events.rs`** — The names of every event the app emits to its webviews, and `emit_or_log`
 

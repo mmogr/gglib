@@ -58,21 +58,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
                               └───────────────────┘
 ```
 
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-| [`database_file.rs`](src/database_file.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-database_file-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-database_file-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-database_file-coverage.json) |
-| [`factory.rs`](src/factory.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-factory-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-factory-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-factory-coverage.json) |
-| [`loop_guard_trip_writer.rs`](src/loop_guard_trip_writer.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loop_guard_trip_writer-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loop_guard_trip_writer-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loop_guard_trip_writer-coverage.json) |
-| [`setup.rs`](src/setup.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-setup-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-setup-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-setup-coverage.json) |
-| [`repositories/`](src/repositories/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-repositories-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-repositories-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-repositories-coverage.json) |
-<!-- module-table:end -->
-
-</details>
-
 **Module Descriptions:**
 - **`database_file.rs`** — The database and its directory made private to this user before `SQLite` opens them
 - **`factory.rs`** — Database connection factory and pooling

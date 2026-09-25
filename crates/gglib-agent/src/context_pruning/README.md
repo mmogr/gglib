@@ -19,16 +19,3 @@ count exceeds [`AgentConfig::context_budget_chars`], applying two passes:
    [`AgentConfig::prune_keep_tail_messages`] non-system messages.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-| [`tail_pruning.rs`](tail_pruning.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tail_pruning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tail_pruning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tail_pruning-coverage.json) |
-| [`tests.rs`](tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tests-coverage.json) |
-| [`tool_pruning.rs`](tool_pruning.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tool_pruning-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tool_pruning-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-tool_pruning-coverage.json) |
-<!-- module-table:end -->
-
-</details>

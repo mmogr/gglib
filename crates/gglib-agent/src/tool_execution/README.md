@@ -25,14 +25,3 @@ Parallel tool execution with bounded concurrency and per-tool timeout.
   sent on `tx` before and after each call.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-| [`tests.rs`](tests.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-tests-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-tests-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-tests-coverage.json) |
-<!-- module-table:end -->
-
-</details>

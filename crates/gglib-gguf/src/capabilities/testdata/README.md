@@ -19,13 +19,3 @@ shapes the real templates render.
   outside the JSON; likewise refused.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-<!-- module-table:end -->
-
-</details>

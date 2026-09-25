@@ -58,13 +58,3 @@ optimistic write next to a poll is a lost update: a request that read before
 the action can land after it.
 
 <!-- module-docs:end -->
-
-<details>
-<summary><h2>Modules</h2></summary>
-
-<!-- module-table:start -->
-| Module | LOC | Complexity | Coverage |
-|--------|-----|------------|----------|
-<!-- module-table:end -->
-
-</details>

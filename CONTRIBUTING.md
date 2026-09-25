@@ -364,7 +364,7 @@ Every public module has a `README.md` alongside its `mod.rs`. The README is the 
 
 #### README structure
 
-Each submodule README must contain these two marker pairs (used by CI and badge generation):
+Each submodule README must contain this marker pair (checked by `scripts/check_readmes.sh`):
 
 ```markdown
 <!-- module-docs:start -->
@@ -374,13 +374,6 @@ What it is **not** responsible for (prevents scope creep).
 If part of a streaming pipeline, a table of consumers.
 
 <!-- module-docs:end -->
-```
-
-```markdown
-<!-- module-table:start -->
-| Module | Tests | Coverage | LOC | Complexity |
-|--------|-------|----------|-----|------------|
-<!-- module-table:end -->
 ```
 
 **Example** (`crates/gglib-runtime/src/llama/download/README.md`):
@@ -408,9 +401,6 @@ It is **not** responsible for rendering: no `println!`, no progress bar, no
 knowledge of a terminal, an HTTP response or a WebView.
 
 <!-- module-docs:end -->
-
-<!-- module-table:start -->
-<!-- module-table:end -->
 ```
 
 #### Cargo doc link syntax in READMEs
@@ -550,28 +540,6 @@ Shields.io resolves badge URLs like:
 https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json
 ```
 
-### Module badge tables in READMEs
-
-Crate READMEs contain per-module badge tables delimited by HTML comment markers:
-
-```html
-<!-- module-table:start -->
-| Module | Tests | Coverage | LOC | Complexity |
-|--------|-------|----------|-----|------------|
-| ...    | ...   | ...      | ... | ...        |
-<!-- module-table:end -->
-```
-
-`scripts/generate_module_tables.sh` regenerates these tables by discovering the actual `.rs` files and subdirectories in each crate and wiring up the corresponding badge URLs. Run it after adding or removing modules:
-
-```bash
-./scripts/generate_module_tables.sh           # update all tables in-place
-./scripts/generate_module_tables.sh --check   # CI mode: exit 1 if any table is out of date
-./scripts/generate_module_tables.sh --dry-run # preview changes without writing
-```
-
-The `--check` mode is not currently a CI gate but is intended to become one. Keep tables current when you add modules.
-
 ### Adding a badge to a new crate README
 
 Badge URLs follow the pattern `gglib-{crate-name}-{metric}.json` on the `badges` branch. For a new crate `gglib-foo`:
@@ -585,11 +553,11 @@ Badge URLs follow the pattern `gglib-{crate-name}-{metric}.json` on the `badges`
 
 The badge JSON files will appear on the `badges` branch automatically after the first CI run that includes the new crate. Until then, the badges render as "unknown" — that is expected.
 
-To pre-generate badge structure for a new crate or update module tables, use `scripts/generate_submodule_readmes.sh`. This script updates existing README files with the standard badge block and module table markers; it does not create new README files.
+To scaffold READMEs for new directories, use `scripts/generate_submodule_readmes.sh --create`. It writes a stub wherever a README is missing in a directory below a crate's `src/`, below `src-tauri/src/` or below the TypeScript `src/`, and in `tests/` or a directory below it. A stub under a `src/` has a title, LOC and complexity badges, and the `module-docs` markers around the `//!` text of the directory's `mod.rs`, or around a `TODO:` line when there is none; a stub under `tests/` has a title and a `TODO:` line. For each directory it stubs whose `mod.rs` lacks `#![doc = include_str!("README.md")]`, it adds that line and puts a `// MIGRATION` comment above any `//!` block. It never deletes a `//!` block: delete it, and the comment, yourself, since a module with a README carries no `//!` block (see Surface 2). It never touches a README that already exists.
 
 ```bash
-./scripts/generate_submodule_readmes.sh           # update all existing READMEs
-./scripts/generate_submodule_readmes.sh --dry-run # preview changes
+./scripts/generate_submodule_readmes.sh --create           # create missing READMEs
+./scripts/generate_submodule_readmes.sh --create --dry-run # preview without writing
 ```
 
 ---
@@ -739,7 +707,6 @@ Before requesting review, confirm each item:
 - [ ] `cargo test --doc` passes.
 - [ ] Any new public type or enum has `///` doc comments on all items.
 - [ ] Any architectural change is documented in `//!` module-level Rustdoc. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.
-- [ ] If a new module was added, `./scripts/generate_module_tables.sh` has been run and the updated badge table is committed.
 - [ ] Subprocess I/O is captured with `Stdio::piped()` and read on an OS thread, not a Tokio task.
 - [ ] Environment variable merging uses read-then-append, not a bare `.env()` that overwrites.
 - [ ] Any feature gated behind `#[cfg(feature = "...")]` is declared correctly in all consuming `Cargo.toml` files.

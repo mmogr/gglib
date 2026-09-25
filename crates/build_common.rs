@@ -9,22 +9,21 @@
 /// Process a crate's README.md for rustdoc, applying necessary link transformations.
 ///
 /// Transformations:
-/// 1. Point module-table source links (`](src/cors.rs)`) at the repository
+/// 1. Point source links (`](src/cors.rs)`) at the repository
 /// 2. Convert relative README links (../../README.md) to absolute repo URLs
 ///
 /// The repo URL is read from workspace Cargo.toml, keeping READMEs URL-agnostic.
 ///
 /// # Why source links and not module links
 ///
-/// This used to strip `src/` and `.rs` so `](src/cors.rs)` became `](cors)` —
-/// an intra-doc link to the module. That only resolves for modules that are
-/// public, non-ambiguous and actually compiled, and the module tables list
-/// every file: private modules, `#[cfg(test)]` modules, and names shared by a
-/// function and a module. rustdoc warned on every one of them.
-///
-/// A row's link text is a *filename*, so a file is the honest target. Pointing
-/// at the source on the repo works for every row, needs no visibility
-/// analysis, and reads the same on GitHub and in rustdoc.
+/// A `](src/…)` link names a *path*, so the source is the honest target. Turned
+/// into an intra-doc link to the module, it would break for a `#[cfg(test)]`
+/// module, which rustdoc does not compile, and for a name shared by a function
+/// and a module, which is ambiguous; rustdoc warns on both. It would resolve
+/// for a private module only under `--document-private-items`, which
+/// `make doc-check` and the ci, docs and release workflows pass. Pointing at
+/// the source on the repo works for every link, needs no visibility analysis,
+/// and reads the same on GitHub and in rustdoc.
 fn process_readme_for_rustdoc(crate_dir: &str) {
     println!("cargo:rerun-if-changed=README.md");
     println!("cargo:rerun-if-changed=../../Cargo.toml");
@@ -51,7 +50,7 @@ fn process_readme_for_rustdoc(crate_dir: &str) {
         // Transform ../../README.md links to repo URL (agnostic - reads from Cargo.toml)
         rustdoc_content = rustdoc_content.replace("](../../README.md", &format!("]({url}"));
 
-        // Module-table rows link to source files. Absolutize them so rustdoc
+        // `](src/…)` links point at source files. Absolutize them so rustdoc
         // renders a working link instead of trying to resolve a module path.
         // Without a repo URL they stay relative, which rustdoc leaves alone.
         if let Some(crate_path) = crate_relative_path(crate_dir) {
@@ -67,7 +66,7 @@ fn process_readme_for_rustdoc(crate_dir: &str) {
 
 /// Rewrite every `](src/…)` link to an absolute repository URL.
 ///
-/// Directory rows (`](src/domain/)`) get `tree`, file rows (`](src/cors.rs)`)
+/// Directory links (`](src/domain/)`) get `tree`, file links (`](src/cors.rs)`)
 /// get `blob`. GitHub redirects `blob` to `tree` for a directory, so the
 /// distinction is not load-bearing — it just means the emitted URL is the one
 /// that answers rather than the one that bounces.

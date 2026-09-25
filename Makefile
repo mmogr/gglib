@@ -279,13 +279,8 @@ enforce: ## Run the architecture enforcement checks
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
 	@# required nullable rather than an optional. Neither fails to compile.
 	@./scripts/check_ts_bindings.sh
-	@# The script has had a --check mode since it was written and nothing ever
-	@# ran it, so a new module simply never reached the tables unless someone
-	@# remembered to regenerate them.
-	@./scripts/generate_module_tables.sh --check
-	@# The Rust tables above are generated and cannot drift. The TypeScript
-	@# ones are written by hand, and nothing compared them to the directories
-	@# they describe — only that the README existed and had its markers.
+	@# The TypeScript README tables are written by hand. Apart from this, the
+	@# only check on them is that the README exists and has its markers.
 	@./scripts/check_readme_tables.py
 
 ##@ Bindings

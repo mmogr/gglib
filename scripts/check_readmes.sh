@@ -4,7 +4,6 @@
 # Checks performed:
 #   [always]  Rust crate src/ subdirs have README.md
 #   [always]  Rust subdir READMEs have <!-- module-docs:start/end --> markers
-#   [always]  Rust subdir READMEs have <!-- module-table:start/end --> markers
 #   [always]  Crate-level READMEs have ## Architecture + ## Internal Structure headings
 #   [always]  TypeScript src/ subdirs have README.md with <!-- module-docs --> markers
 #   [always]  tests/ and all its subdirs have README.md
@@ -20,9 +19,8 @@
 #              check_boundaries.sh can merge the results into boundary-status.json.
 #   --verbose  Print each passing check in addition to failures.
 #
-# Failure fix hints (printed on detection):
+# Failure fix hint (printed on detection):
 #   Missing README.md:  ./scripts/generate_submodule_readmes.sh --create
-#   Stale tables:       ./scripts/generate_module_tables.sh
 #
 # Exit codes:
 #   0  All README checks pass
@@ -147,15 +145,6 @@ check_rust_subdir_readmes() {
                 any_fail=1
             fi
 
-            # Hard check: <!-- module-table:start/end --> markers must be present
-            if ! grep -q "module-table:start" "$readme"; then
-                log "  ${RED}INCOMPLETE${NC} $rel/  — no <!-- module-table --> markers"
-                violations+=("$(json_escape "$rel/: missing <!-- module-table:start --> markers")")
-                (( HARD_FAIL++ )) || true
-                dir_ok=0
-                any_fail=1
-            fi
-
             if $STRICT; then
                 # Strict check: module-docs block must not contain "TODO:" placeholder
                 if readme_has_todo "$readme"; then
@@ -259,7 +248,7 @@ check_rust_crate_readmes() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CHECK 3: TypeScript src/ subdir READMEs
-# Checks: existence + <!-- module-docs --> markers (no module-table required for TS).
+# Checks: existence + <!-- module-docs --> markers.
 # ─────────────────────────────────────────────────────────────────────────────
 check_ts_subdir_readmes() {
     log "${CYAN}📘 TypeScript src/ subdir READMEs${NC}"
