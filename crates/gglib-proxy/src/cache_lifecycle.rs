@@ -1,8 +1,8 @@
 //! Semaphore-gated KV cache lifecycle: restore before generation, save after.
 //!
 //! The semaphore permit covers the ENTIRE restore→forward→save cycle without
-//! release (Design Directive 1). For non-streaming requests the permit is held
-//! inline; for streaming it is moved into the spawned task (Step 4).
+//! release. For non-streaming requests the permit is held inline; for
+//! streaming it is moved into the spawned task.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -57,7 +57,7 @@ pub struct StreamConfig {
 /// Restore KV cache for a session, with retry on transient failures.
 ///
 /// Always removes the per-session cleared flag AND resets the global clear
-/// flag afterward (unconditional — Bug 5 fix). This prevents the global
+/// flag afterward, unconditionally. This prevents the global
 /// clear deadlock: once a restore attempt occurs (success or failure), the
 /// system is back to "live" state and should accept future saves.
 pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> SlotIoResult {
@@ -179,7 +179,7 @@ pub(crate) async fn save_after_generation(config: &StreamConfig, sanitized_sessi
 
 /// Non-streaming cache lifecycle: acquire permit, restore→generate→save, release.
 ///
-/// The semaphore permit is held across the ENTIRE cycle (Design Directive 1).
+/// The semaphore permit is held across the ENTIRE cycle.
 /// Sanitization happens BEFORE acquire so bad session IDs never enter the gate.
 pub(crate) async fn run_with_cache<F, Fut, T>(
     config: &StreamConfig,
@@ -245,7 +245,7 @@ where
 
 /// Streaming cache lifecycle: acquire permit, restore, return permit for spawn.
 ///
-/// The caller (Step 4: `sse_stream::spawn_and_return`) receives the
+/// The caller (`sse_stream::spawn_and_return`) receives the
 /// `OwnedSemaphorePermit` and moves it into the spawned task, where it is
 /// held across generation→save→drop.
 ///
@@ -308,12 +308,12 @@ pub(crate) async fn resolve_cache_triple(
 
 /// Clear slot files for a session (or all sessions if None).
 ///
-/// Deliberately does NOT acquire the semaphore (Design A) — clears are instant
+/// Deliberately does NOT acquire the semaphore — clears are instant
 /// from CLI/GUI with no spinner. The cleared flag prevents subsequent saves.
 ///
 /// Without a flag, a cycle already mid-generation when the clear runs (started
-/// before the clear, holding the slot permit, unaffected by Design A's no-op
-/// semaphore) would have its `save_after_generation` re-write the very file
+/// before the clear, holding the slot permit, which the clear never waits
+/// for) would have its `save_after_generation` re-write the very file
 /// this call just deleted. Setting `clear_all_pending` for the global case
 /// closes that race: `attempt_save` checks it before writing, and the next
 /// cycle's `restore_with_retry` clears it again once it's no longer needed.
@@ -321,7 +321,7 @@ pub(crate) async fn clear_cache(
     config: &StreamConfig,
     session_id: Option<&str>,
 ) -> std::io::Result<()> {
-    // NO semaphore acquire — Design A: instant clear
+    // NO semaphore acquire: the clear is instant
     let result = slots::clear_slot_files(&config.slot_dir, session_id).await;
 
     match session_id {

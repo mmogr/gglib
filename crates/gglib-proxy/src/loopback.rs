@@ -13,10 +13,11 @@
 //! workspace's reqwest `system-proxy` feature, so present in every binary gglib
 //! ships), the operating system's own proxy settings. Its matcher skips only
 //! the hosts named in `NO_PROXY`; loopback is not special-cased. So on a
-//! machine with a proxy in the environment, gglib asked its own daemon through
-//! somebody else's machine (#1085): a fresh llama-server never read as healthy,
-//! the proxy forwarded prompts to the proxy host, and `gglib` on the command
-//! line reported its own daemon's port as held by another program.
+//! machine with a proxy in the environment, such a client asks gglib's own
+//! daemon through somebody else's machine ([#1085]): a fresh llama-server
+//! never reads as healthy, the proxy forwards prompts to the proxy host, and
+//! `gglib` on the command line reports its own daemon's port as held by
+//! another program.
 //!
 //! [`client_builder`] is a `reqwest::ClientBuilder` with `no_proxy()` already
 //! applied; a caller adds its own timeouts. [`client`] is the `no_proxy()` twin
@@ -27,9 +28,9 @@
 //! `no_proxy()` is also what keeps a client's first request fast on macOS and
 //! Windows. Without it `build()` pushes `ProxyMatcher::system()`, which on
 //! macOS opens an `SCDynamicStore` and copies the system proxies
-//! synchronously: 470–490 ms in a warm process and 3.19 s in a cold one,
-//! against 4–5 µs with `no_proxy()`, measured for #1084. On Linux the matcher
-//! reads environment variables only, which is cheap, so CI never saw this.
+//! synchronously: about half a second in a warm process, against
+//! microseconds with `no_proxy()` ([#1084]). On Linux the matcher reads
+//! environment variables only, which is cheap.
 //!
 //! Two CLI commands take the proxy's host from the user (`proxy dashboard` and
 //! `proxy cache-clear`, default `127.0.0.1`, and a proxy started with
@@ -42,6 +43,9 @@
 //! variables point at a recorder, and asserts the recorder saw neither.
 //! `loopback_tests` here reads the sources of the crates that talk to this
 //! machine and fails on any `reqwest` client built anywhere but here.
+//!
+//! [#1084]: https://github.com/mmogr/gglib/issues/1084
+//! [#1085]: https://github.com/mmogr/gglib/issues/1085
 
 /// A client builder that will never route through a proxy.
 ///

@@ -3,12 +3,10 @@
 /**
  * How much of the table a reading actually covered.
  *
- * A tagged union rather than the `conclusive: bool` it replaced, and the bool
- * is worth describing because of how it failed. It was computed as *"any
- * field reached a verdict"*, so a report in which two of seven fields were
- * checked and five could not be reported itself as conclusive — and the
- * dashboard's only conclusive-and-undrifted rendering is the sentence "All 7
- * sampler defaults match the values this build was measured at."
+ * A tagged union rather than a `conclusive: bool`: a bool computed as *"any
+ * field reached a verdict"* reports two checked fields of seven as
+ * conclusive, and the dashboard's all-clear is the sentence "All 7 sampler
+ * defaults match the values this build was measured at."
  *
  * That is [`AuditState`](crate::sampling_audit::AuditState)'s failure one
  * level up: not a field rendered as agreeing when it was unknown, but a

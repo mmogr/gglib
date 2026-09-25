@@ -101,8 +101,7 @@ async fn spawn_proxy(
 
 /// With the disk layer off — the common configuration — a global clear must
 /// still recycle the model, because that is the only way to drop llama-server's
-/// host-RAM prompt cache. Previously this reported "cache not enabled" and did
-/// nothing at all, leaving the only cache actually in use unclearable.
+/// host-RAM prompt cache.
 #[tokio::test]
 async fn cache_clear_recycles_the_model_when_disk_cache_is_disabled() {
     let (base_url, cancel, stops) = spawn_proxy(false, None).await;

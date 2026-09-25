@@ -198,10 +198,8 @@ impl ContextMetricsStore {
         let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.dialect_residue = true;
-            // Also per model. This was the one flag of the three that never
-            // reached the ledger, so drift was visible fleet-wide but could
-            // not be attributed — and attribution is the whole point, since
-            // residue is a property of one model's dialect, not of traffic.
+            // Also per model: attribution is the whole point, since residue
+            // is a property of one model's dialect, not of traffic.
             if let Some(ledger) = &self.ledger {
                 ledger.record_dialect_residue(&snapshot.model_name);
             }
@@ -338,11 +336,6 @@ impl ContextMetricsStore {
     }
 
     /// Per-model defect counts, for the dashboard.
-    ///
-    /// The ledger is written on every request and, until this existed, read by
-    /// nothing: the auto-tune scheduler was its only reader and went with ADR
-    /// 0006. Counters nobody can see are not diagnosis, they are a memory
-    /// leak with good intentions.
     ///
     /// Empty when no ledger is wired (the proxy can run without one).
     #[must_use]

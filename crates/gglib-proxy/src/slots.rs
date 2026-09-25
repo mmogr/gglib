@@ -25,11 +25,10 @@
 //! probing, no risk of a partially-unknown schema causing the whole
 //! response to fail to parse.
 //!
-//! `params` used to be on that list. It carries the sampler settings
-//! llama-server actually parsed for the request occupying the slot — the
-//! wire evidence #621 and #745 were both read by hand — so it is now named
-//! and handed to [`crate::sampling_audit`]. It appears **only on a slot that
-//! is processing**; an idle slot omits it entirely, which is why that audit
+//! `params` is named: it carries the sampler settings llama-server actually
+//! parsed for the request occupying the slot, and is handed to
+//! [`crate::sampling_audit`]. It appears **only on a slot that is
+//! processing**; an idle slot omits it entirely, which is why that audit
 //! samples rather than censuses.
 
 use std::path::{Path, PathBuf};
@@ -756,13 +755,12 @@ async fn classify_slot_response(resp: reqwest::Response) -> SlotIoResult {
     classify_slot_status(status, &body)
 }
 
-/// Generous timeout for a slot save. Live slot files run 2-6.4 GB, so the
-/// previous 3s budget was never enough to complete a write; a save that hit
-/// it did not stop llama-server's write, it just stopped *waiting* for it,
-/// so a retry could race a still-writing prior attempt onto the same file.
-/// That race is now impossible: [`save_slot`] asks the server to write a
-/// per-attempt temp name and only renames it onto the real `.bin` name after
-/// a confirmed-complete write, so a generous timeout here costs nothing but
+/// Generous timeout for a slot save. Live slot files run 2-6.4 GB, and a save
+/// that hits the timeout does not stop llama-server's write, it just stops
+/// *waiting* for it. A retry cannot race a still-writing prior attempt onto
+/// the same file: [`save_slot`] asks the server to write a per-attempt temp
+/// name and only renames it onto the real `.bin` name after a
+/// confirmed-complete write, so a generous timeout here costs nothing but
 /// time.
 const SAVE_TIMEOUT: Duration = Duration::from_secs(120);
 

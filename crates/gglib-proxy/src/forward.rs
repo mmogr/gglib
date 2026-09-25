@@ -7,7 +7,7 @@
 //! which owns their order and its rationale, and the proxy runs the whole of
 //! it with a single [`apply`](gglib_core::request_pipeline::apply()) call — the
 //! same call the in-process agent path makes, so the two cannot drift.  What
-//! is proxy-specific, and therefore still here, is exactly two things:
+//! is proxy-specific, and therefore here, is exactly two things:
 //! the `Bytes` ⇄ `Value` conversion at the HTTP boundary
 //! ([`shape_request_body`]), and mapping the pipeline's one failure mode onto
 //! this surface's wire contract — HTTP 400 / `context_length_exceeded`.
@@ -28,10 +28,9 @@
 //!
 //! That lookup happens in `chat_completions`, *before* the model is ensured
 //! running, and the resulting [`ModelContext`] arrives here on
-//! [`ForwardRequest`].  It used to happen here, which was one round-trip
-//! either way — but resolving before the swap is what lets the handler refuse
-//! a request the loaded model could never serve without paying for a model
-//! load first.
+//! [`ForwardRequest`].  Resolving before the swap is what lets the handler
+//! refuse a request the loaded model could never serve without paying for a
+//! model load first.
 //!
 //! ## Response pipeline
 //!
@@ -255,12 +254,11 @@ pub(crate) fn should_forward_header(name: &str) -> bool {
 /// surfaced to the client as visible assistant text instead of being silently
 /// dropped.
 ///
-/// The old behaviour logged a `warn!` and discarded the offending bytes, so a
-/// turn whose entire output was an unparseable `<tool_call>` reached the client
-/// as a zero-content stream — indistinguishable from "the model returned an
-/// empty response". Surfacing the raw body (visually flagged) means the human
-/// always sees *something* and can tell the model attempted a tool call the
-/// proxy could not parse.
+/// Discarding the bytes would send a turn whose entire output was an
+/// unparseable `<tool_call>` as a zero-content stream, indistinguishable from
+/// "the model returned an empty response". Surfacing the raw body (visually
+/// flagged) means the human always sees *something* and can tell the model
+/// attempted a tool call the proxy could not parse.
 pub(crate) const NORMALIZATION_NOTICE_PREFIX: &str = "\n\n⚠️ [proxy: unparsed tool-call output] ";
 
 /// Prefix prepended to reasoning text that is promoted into the content
@@ -303,7 +301,7 @@ const EMPTY_STREAM_NOTICE: &str = "⚠️ [proxy] The model produced no output f
 /// wait is extended for another cycle rather than failed (see the keepalive
 /// loop). Only an expiry with no other active request counts as degradation.
 ///
-/// Requests for the *same* model no longer stack up behind each other here:
+/// Requests for the *same* model do not stack up behind each other here:
 /// admission caps them at what llama-server was launched to serve at once, so
 /// that queue forms in the runtime rather than inside the upstream.
 pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
@@ -437,12 +435,11 @@ struct ShapedRequest {
     /// so by the time a decision reaches a consumer, *which* level was dropped
     /// and *who* asked for it are gone.
     ///
-    /// This field is the fix for a real drop: both construction sites below
-    /// discarded `PipelineReport::effort_suppressed`, so on every request
-    /// against a model whose template ignores the variable, the pipeline
-    /// computed the record ADR 0007 exists to preserve and the proxy binned it.
-    /// Nothing downstream could notice — neither reasoning control is echoed by
-    /// any readback (finding 7a), so there was no wire evidence to contradict.
+    /// Without it, on every request against a model whose template ignores
+    /// the variable, the pipeline would compute the record ADR 0007 exists to
+    /// preserve and the proxy would bin it. Nothing downstream could notice —
+    /// neither reasoning control is echoed by any readback (finding 7a), so
+    /// there is no wire evidence to contradict.
     effort_suppressed: Option<SuppressedEffort>,
 }
 
@@ -578,12 +575,11 @@ pub(crate) struct ForwardRequest<'a> {
     /// snapshot (see
     /// [`crate::token_calibration::TokenCalibration::session_chars_per_token`]);
     /// `None` when no session id was resolved, which falls back to the live
-    /// per-model ratio exactly as before. Distinct from the `session_id`
-    /// parameter of [`Self::send`]: that one is only populated when disk
-    /// KV-slot caching is enabled, but this budget-stability fix must work
-    /// even when it's off (e.g. for hybrid/sliding-window-attention models,
-    /// where disk caching is disabled but the host-RAM prompt cache — the
-    /// thing this fix protects — still applies).
+    /// per-model ratio. Distinct from the `session_id` parameter of
+    /// [`Self::send`]: that one is only populated when disk KV-slot caching is
+    /// enabled, but the frozen budget must hold even when it's off (e.g. for
+    /// hybrid/sliding-window-attention models, where disk caching is disabled
+    /// but the host-RAM prompt cache it protects still applies).
     pub calibration_session_id: Option<&'a str>,
     /// Cache-hit telemetry sink, fed from both the streaming and
     /// non-streaming response paths.
@@ -855,8 +851,8 @@ pub(crate) async fn forward_chat_completion(
             return Err(ForwardError::UpstreamDead);
         }
 
-        // Phase 2 — channel-backed response + keepalive background task,
-        // relocated to `sse_stream::spawn_and_return` (Step 4).
+        // Phase 2 — channel-backed response + keepalive background task, in
+        // `sse_stream::spawn_and_return`.
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let model_name_owned = model_name.to_owned();
         let dialect = context.dialect;

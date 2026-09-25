@@ -9,11 +9,8 @@ import type { BaselineReport } from "./BaselineReport";
  * read it yet" and "the read was attempted and failed, and here is why" are
  * different facts, and an `Option` flattens both into the same `None` — after
  * which the only thing a surface can say is "not read yet", which is a claim
- * about a read that did happen.
- *
- * That is the blind-rendered-as-health collapse this subsystem exists to
- * prevent, one level down from where it was being prevented: the slot half
- * carried `Blind { reason }` from the start, and the baseline half did not.
+ * about a read that did happen. That is the blind-rendered-as-health
+ * collapse this subsystem exists to prevent.
  */
 export type BaselineState = { "state": "not_yet_read" } | { "state": "unreadable", 
 /**

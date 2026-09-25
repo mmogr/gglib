@@ -117,12 +117,9 @@ pub(crate) async fn origin_guard(
 /// Applied with `route_layer` so it runs only on matched routes, leaving
 /// `/health` — registered outside the protected group — open.
 ///
-/// **Installed unconditionally**, unlike before. The layer used to exist only
-/// when a token was configured at bind, which made the open default free but
-/// also made it permanent: a key set afterwards had no middleware to be
-/// enforced by. The unauthenticated path now costs one cache read and an
-/// `Arc` clone per request, which is the price of being able to close an
-/// endpoint without restarting it.
+/// **Installed unconditionally**, so a key set after bind is enforced without
+/// a restart. With no key configured the guard costs one cache read and an
+/// `Arc` clone per request.
 ///
 /// [`BearerPolicy`] decides which token is required *now* — see its docs for
 /// why that is a live question and what the staleness bound is.

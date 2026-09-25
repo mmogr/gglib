@@ -78,8 +78,8 @@ fn a_trip_reaches_the_ledger_under_the_detector_that_raised_it() {
 
 /// `recent_requests` is a public route, so the detector's spelling there is a
 /// contract: snake case like every other enum on it, and `null` for a request
-/// that did not trip. Since #1052 a *noted* request is let through and still
-/// names its detector.
+/// that did not trip. A *noted* request is let through and still names its
+/// detector.
 #[test]
 fn a_snapshot_names_the_detector_in_snake_case_or_null() {
     let mut snapshot = make_snapshot("a");

@@ -19,9 +19,9 @@
 //!
 //! - `"tool_calls": null` is what anything serialising an assistant message
 //!   from an `Optional[list]` emits — the OpenAI Python SDK's `model_dump()`,
-//!   LiteLLM, LangChain. Typed as `Vec<_>` it failed the whole envelope.
+//!   LiteLLM, LangChain. Typed as `Vec<_>` it would fail the whole envelope.
 //! - `"function": "search"` and `"arguments": {…}` are the same trap one level
-//!   down. `arguments` was already fixed for it; `function` was not.
+//!   down.
 //!
 //! So nothing here is typed. Values are read through `as_str` / `as_array` /
 //! `get`, and a shape this module does not recognise yields an empty call
@@ -29,7 +29,7 @@
 //!
 //! ## The one exception, stated rather than left to be discovered
 //!
-//! [`HistoryEnvelope::messages`] is still `Vec<HistoryMessage>`, so a
+//! [`HistoryEnvelope::messages`] is `Vec<HistoryMessage>`, so a
 //! `messages` that is not an array of objects does fail the envelope. That is
 //! the intended fail-open: a body whose `messages` is not a list of messages is
 //! not a shape quirk in content the guard is inspecting, it is a request the
@@ -62,8 +62,8 @@ pub(super) struct HistoryMessage {
     pub(super) tool_calls: Value,
     /// Present on `role: "tool"` messages: the id of the call this is the
     /// result of. The join key between the model's request and the
-    /// environment's answer, and the reason this struct is no longer
-    /// assistant-only.
+    /// environment's answer, and the reason this struct reads `tool` messages
+    /// as well as assistant ones.
     #[serde(default)]
     pub(super) tool_call_id: Value,
 }

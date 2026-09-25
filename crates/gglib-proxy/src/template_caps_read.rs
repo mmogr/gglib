@@ -3,9 +3,9 @@
 //! [`crate::props`] reads one endpoint that carries two independent facts:
 //! the build's default sampler table (`default_generation_settings.params`,
 //! the ADR 0003 baseline) and the loaded template's capability self-report
-//! (`chat_template_caps`, ADR 0007). They used to be collapsed into one
-//! all-or-nothing result, which discarded caps present in a body whose
-//! `params` was missing — this module exists to hold the two halves apart.
+//! (`chat_template_caps`, ADR 0007). One all-or-nothing result would discard
+//! caps present in a body whose `params` is missing; this module holds the
+//! two halves apart.
 //!
 //! A separate module rather than more of `props.rs` for the same reason
 //! `props_parse_tests.rs` is: `props.rs` sits at its file budget, and the

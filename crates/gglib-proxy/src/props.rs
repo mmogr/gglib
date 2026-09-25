@@ -27,12 +27,10 @@
 //! slot comparison it is a census: one read per launch, no sampling, no
 //! attribution problem, nothing to abstain over.
 //!
-//! # What blinded it, and what un-blinded it
+//! # What a launch flag hides
 //!
-//! Worth keeping in full, because the failure mode is easy to re-create and
-//! looks like health while it lasts.
-//!
-//! Measured on the pinned build, not assumed:
+//! The failure mode is easy to re-create and looks like health while it
+//! lasts. Measured on the pinned build, not assumed:
 //!
 //! ```text
 //!   field              build default   flag passed   /props reports
@@ -46,20 +44,16 @@
 //! ```
 //!
 //! Every sampler launch flag overwrites the field it names in
-//! `default_generation_settings.params`. gglib used to pass all seven on the
-//! `gglib serve` path, at values chosen to equal upstream's — so this check
-//! would have compared gglib's floor against gglib's own flag and reported an
-//! agreement it could never have failed to report. [ADR 0002] finding 2's
-//! inert-module trap in a new place: an organ reading its own reflection and
-//! calling it health.
+//! `default_generation_settings.params`. With flags passed at values chosen to
+//! equal upstream's, this check would compare gglib's floor against gglib's
+//! own flag and report an agreement it could never fail to report: [ADR 0002]
+//! finding 2's inert-module trap, an organ reading its own reflection and
+//! calling it health. A value the request body names beats the flag for that
+//! request (measured for `temperature`, [ADR 0003] finding 3), which does not
+//! make the flag harmless: `/props` reports the flag.
 //!
-//! ADR 0003 finding 3 had called those flags "inert twice over", correctly
-//! about *request behaviour* — the body wins, so no model saw them. They were
-//! never inert for observation.
-//!
-//! [ADR 0003]'s deferral deleted them, which is what opened this instrument's
-//! eyes. [`SAMPLER_LAUNCH_FLAGS_PASSED`] is now `false` and stays as a guard
-//! against re-adding one.
+//! gglib passes none ([ADR 0003]). [`SAMPLER_LAUNCH_FLAGS_PASSED`] is `false`
+//! and stays as a guard against re-adding one.
 //!
 //! # Two claims, and only one of them is always safe
 //!
@@ -71,12 +65,11 @@
 //!
 //! # Three things can mask it, not one
 //!
-//! [`SAMPLER_LAUNCH_FLAGS_PASSED`] tracks the first and was for a while
-//! presented as the whole story. It is not.
+//! [`SAMPLER_LAUNCH_FLAGS_PASSED`] tracks only the first.
 //!
-//! 1. **A gglib launch flag.** Measured above. `false` since ADR 0003.
-//! 2. **The model's own GGUF.** llama.cpp PR #17120 — in the pinned build —
-//!    added `common_init_sampler_from_model`, which overwrites
+//! 1. **A gglib launch flag.** Measured above; gglib passes none.
+//! 2. **The model's own GGUF.** In the pinned build, llama.cpp's
+//!    `common_init_sampler_from_model` ([llama.cpp#17120]) overwrites
 //!    `params.sampling` from `general.sampling.*` for every field no CLI flag
 //!    set, and this endpoint is rendered from that struct. Five of the seven
 //!    fields here can be moved that way; `presence_penalty` and
@@ -101,6 +94,7 @@
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [llama.cpp#17120]: https://github.com/ggml-org/llama.cpp/pull/17120
 
 use std::time::Duration;
 
@@ -123,17 +117,16 @@ const FLOAT_EPSILON: f64 = 1e-6;
 
 /// Whether gglib passes sampler values as llama-server launch flags.
 ///
-/// **`false` since [ADR 0003]'s deferral shipped**, which is what opened this
-/// instrument's eyes: while it was `true` every field in [`UPSTREAM_DEFAULTS`]
-/// was masked and [`check_baseline`] could only return
-/// [`BaselineVerdict::Indeterminate`].
+/// **`false`** ([ADR 0003]). Were it `true`, every field in
+/// [`UPSTREAM_DEFAULTS`] would be masked and [`check_baseline`] could only
+/// return [`BaselineVerdict::Indeterminate`].
 ///
-/// Kept rather than deleted along with the flags, because the failure it
-/// guards against is *re-adding* one. A sampler flag overwrites the field it
-/// names in `/props`, so a well-meaning launch-path change could silently
-/// return this module to reading gglib's own values back — reporting agreement
-/// it cannot fail to report. `no_sampler_flag_may_reappear_unnoticed` fails
-/// the build if that happens without this constant being flipped back.
+/// It exists because the failure it guards against is *re-adding* a flag. A
+/// sampler flag overwrites the field it names in `/props`, so a well-meaning
+/// launch-path change could silently return this module to reading gglib's
+/// own values back — reporting agreement it cannot fail to report.
+/// `no_sampler_flag_may_reappear_unnoticed` fails the build if that happens
+/// without this constant being flipped back.
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 pub const SAMPLER_LAUNCH_FLAGS_PASSED: bool = false;
@@ -188,7 +181,7 @@ struct DefaultGenerationSettings {
 }
 
 /// What one `/props` read yielded for the default sampler table — one half of
-/// a [`PropsReading`], beside the template-caps half it used to swallow.
+/// a [`PropsReading`], beside the template-caps half.
 ///
 /// Mirrors [`crate::slots::SlotsPollResult`]'s shape deliberately: a failure
 /// is a variant, not an `Err`, because every caller's response to "could not
@@ -253,8 +246,8 @@ pub enum BaselineVerdict {
     /// The effective default came from **this model's own GGUF**, not the
     /// build.
     ///
-    /// Not agreement and not drift — a third answer, and since llama.cpp PR
-    /// #17120 the common one. `common_init_sampler_from_model` overwrites
+    /// Not agreement and not drift — a third answer, and the common one.
+    /// llama.cpp's `common_init_sampler_from_model` overwrites
     /// `params.sampling` from `general.sampling.*` for every field no CLI flag
     /// sets, and `/props` is rendered from that struct, so the number here is
     /// the model's, faithfully reported.
@@ -387,12 +380,10 @@ fn verdict_for(
 
 /// How much of the table a reading actually covered.
 ///
-/// A tagged union rather than the `conclusive: bool` it replaced, and the bool
-/// is worth describing because of how it failed. It was computed as *"any
-/// field reached a verdict"*, so a report in which two of seven fields were
-/// checked and five could not be reported itself as conclusive — and the
-/// dashboard's only conclusive-and-undrifted rendering is the sentence "All 7
-/// sampler defaults match the values this build was measured at."
+/// A tagged union rather than a `conclusive: bool`: a bool computed as *"any
+/// field reached a verdict"* reports two checked fields of seven as
+/// conclusive, and the dashboard's all-clear is the sentence "All 7 sampler
+/// defaults match the values this build was measured at."
 ///
 /// That is [`AuditState`](crate::sampling_audit::AuditState)'s failure one
 /// level up: not a field rendered as agreeing when it was unknown, but a
@@ -521,11 +512,8 @@ impl BaselineReport {
 /// read it yet" and "the read was attempted and failed, and here is why" are
 /// different facts, and an `Option` flattens both into the same `None` — after
 /// which the only thing a surface can say is "not read yet", which is a claim
-/// about a read that did happen.
-///
-/// That is the blind-rendered-as-health collapse this subsystem exists to
-/// prevent, one level down from where it was being prevented: the slot half
-/// carried `Blind { reason }` from the start, and the baseline half did not.
+/// about a read that did happen. That is the blind-rendered-as-health
+/// collapse this subsystem exists to prevent.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "snake_case")]

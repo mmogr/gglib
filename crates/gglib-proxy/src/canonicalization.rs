@@ -12,16 +12,11 @@
 //!
 //! # Why not extract them
 //!
-//! It used to move the lines into a `user` message appended after the
-//! conversation. That kept the prefix stable but put a synthetic turn in the
-//! position with the most attention — the model read `Current date: …` as the
-//! last thing before generating, instead of the user's actual instruction.
-//!
-//! It also did nothing at all for the client that motivated it: the extraction
-//! required string-form `content`, and the VS Code LLM Gateway sends the
-//! array-form the `OpenAI` spec allows, so the whole pass early-returned and
-//! the volatile lines stayed in the prompt. Stabilising in place fixes both,
-//! and handles either content shape.
+//! Moving the lines into a `user` message after the conversation would keep
+//! the prefix stable but put a synthetic turn in the position with the most
+//! attention: the model would read `Current date: …` last, instead of the
+//! user's instruction. Stabilising in place avoids that, and handles both
+//! content shapes, including the array form the VS Code LLM Gateway sends.
 
 use std::sync::LazyLock;
 
@@ -203,7 +198,7 @@ fn canonicalize_system_prompt_with(body: Bytes, disabled: bool) -> Bytes {
 ///
 /// llama.cpp's Jinja template renders tool/function schemas early in the
 /// prompt, right after the system message (see [`log_tool_names_for_diagnostics`]
-/// for how this was diagnosed). If the calling client sends `tools[]` in a
+/// for how to diagnose it). If the calling client sends `tools[]` in a
 /// different order between two turns of the same conversation, those early
 /// tokens change and llama.cpp's common-prefix match breaks for everything
 /// after — a full cold re-prefill even though the conversation didn't
@@ -283,12 +278,9 @@ const FALLBACK_ID_DIGEST_BYTES: usize = 16;
 ///
 /// # Preconditions
 ///
-/// None. This used to require pre-canonicalized input, because it hashed the
-/// system prompt verbatim and would otherwise have fingerprinted the clock.
-/// It now strips the dynamic lines itself, so the id is stable whether or not
-/// canonicalisation ran — including when it is switched off via
-/// [`DISABLE_CANONICALIZATION_ENV`], which previously would have rotated the
-/// session id on every request.
+/// None. It strips the dynamic lines itself, so the id is stable whether or
+/// not canonicalisation ran, including when it is switched off via
+/// [`DISABLE_CANONICALIZATION_ENV`].
 ///
 /// Returns `None` when the body has no usable `messages` array, or neither
 /// a system nor a first user message is present — callers should treat that
@@ -355,10 +347,9 @@ pub(crate) fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
 /// schemas are typically enumerated early), so when a restore's LCP
 /// similarity comes back low for a session that should be stable, the
 /// question is whether the *client* changed the tool list shape between
-/// turns rather than anything gglib did. Since [`canonicalize_tool_order`]
-/// now runs before this (see the call site in `chat_completions`), *order*
-/// drift is no longer a possible answer — it's structurally eliminated
-/// upstream. What's left for this log to diagnose is *membership* drift:
+/// turns rather than anything gglib did. [`canonicalize_tool_order`] runs
+/// before this (see the call site in `chat_completions`), so *order* drift
+/// cannot be the answer. What this log diagnoses is *membership* drift:
 /// comparing two consecutive log lines for the same session_id, identical
 /// list → not the cause; different names → a real client-side change
 /// (a tool added/removed), outside the proxy's control.
@@ -450,8 +441,7 @@ mod tests {
         assert_eq!(first, second);
     }
 
-    /// The shape the VS Code LLM Gateway actually sends. The previous
-    /// implementation required string content and silently did nothing here.
+    /// The shape the VS Code LLM Gateway actually sends.
     #[test]
     fn array_form_system_content_is_stabilised() {
         let body = Bytes::from(

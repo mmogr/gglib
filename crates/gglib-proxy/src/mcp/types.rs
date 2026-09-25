@@ -34,7 +34,7 @@ pub(crate) const INVALID_PARAMS: i32 = -32602;
 /// When `id` is `Some`, the server must return a response with the same id.
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcRequest {
-    /// Must be `"2.0"`, and now checked to be: serde rejects a body that omits
+    /// Must be `"2.0"`, and is checked to be: serde rejects a body that omits
     /// this field, and `post_mcp` rejects one that carries any other version.
     pub jsonrpc: String,
     /// Request identifier. Absent for notifications.

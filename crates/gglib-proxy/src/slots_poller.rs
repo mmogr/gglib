@@ -237,8 +237,8 @@ async fn read_baseline(
     // The caps half rides the same read and the same latch (ADR 0007's
     // once-per-launch snapshot): stored on every attempt, so a body carrying
     // caps but no sampler table still lands its half, and a failed read holds
-    // an honest `Unreadable` rather than the previous model's report. Storage
-    // only — nothing consumes it until a later PR of the arc.
+    // an honest `Unreadable` rather than the previous model's report. The
+    // audit snapshot reads it back as `reasoning.effort_support`.
     audit.set_template_caps(reading.caps);
 
     match reading.params {

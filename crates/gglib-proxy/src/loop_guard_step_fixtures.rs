@@ -1,9 +1,7 @@
 //! Fixtures for the loop guard step's tests: the model name, the settings
 //! and store builders, and the history shapes that do or do not trip.
 //!
-//! A module of its own so that more than one test file can use them —
-//! `loop_guard_step_tests.rs` was 292 of the 300 lines a file may be when
-//! the step gained a second subject to test.
+//! A module of its own so that more than one test file can use them.
 
 use std::sync::Arc;
 
@@ -19,8 +17,8 @@ pub(super) const MODEL: &str = "test-model";
 
 /// Settings whose loop guard runs in `mode`.
 ///
-/// Every test that wants a refusal asks for one: the default is `note`, and
-/// the whole point of #1052 is that the guard no longer refuses by default.
+/// Every test that wants a refusal asks for one: the default is `note`, which
+/// does not refuse.
 pub(super) fn in_mode(mode: LoopGuardMode) -> Settings {
     Settings {
         loop_guard_mode: Some(mode),

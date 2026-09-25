@@ -58,7 +58,6 @@ seed: number | null,
  *
  * Not compared against anything — gglib never sets `--samplers`, so
  * there is no intent to diverge from. Captured because the order is
- * load-bearing for four simultaneously-sent truncation samplers and was
- * unstated anywhere in the tree until it was measured.
+ * load-bearing for four simultaneously-sent truncation samplers.
  */
 samplers: Array<string> | null, };

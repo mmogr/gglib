@@ -12,7 +12,7 @@
 //! on 26 of 30 calls; where `tool_choice: "required"` installs llama.cpp's
 //! own schema-derived grammar, the same model is conformant 30 of 30.
 //!
-//! So repair is not "originate a grammar" — that work was dropped in ADR 0002
+//! So repair is not "originate a grammar" — ADR 0002 leaves that to upstream
 //! — but "ask upstream to use the one it already has". On an `auto` turn the
 //! repair request is the original with `tool_choice` forced to `"required"`,
 //! which is enough. On a turn gglib's own grammar constrained, upstream's
@@ -30,12 +30,9 @@
 //! repair it would convert the re-issue into a request for no tool call at
 //! all: a full generation spent, nothing changed, no error anywhere.
 //!
-//! A `PipelinePass` marker used to encode this, suppressing the stage on a
-//! repair pass. It was removed because the case never arose — the repair path
-//! does not call `apply`, so every caller passed `Initial` and the other
-//! branch was unreachable. The hazard is real but structural, and is pinned
-//! by this module's `the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`
-//! test rather than by a flag nobody sets.
+//! The hazard is structural — the repair path does not call `apply` — and is
+//! pinned by this module's `the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it`
+//! test rather than by a flag.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md

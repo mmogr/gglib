@@ -26,9 +26,8 @@
 //! history at turn N shows responses 1..N-1). Under `refuse` that caps a
 //! runaway session at threshold+1 turns; under the default it does not cap it
 //! at all — the model is told and left to decide, and a client that ignores
-//! the note spends a generation per stuck turn. The cap was the old bargain
-//! and is now one of three, which is why the mode is a setting rather than a
-//! constant.
+//! the note spends a generation per stuck turn. The cap is one of three
+//! bargains, which is why the mode is a setting rather than a constant.
 //!
 //! Parse policy is **fail-open**: this guard is protection, not validation.
 //! An unparseable body yields [`LoopGuardVerdict::Pass`] (routing already
@@ -173,12 +172,11 @@ impl LoopGuardVerdict {
 /// and whether its results were identical is the difference between a model
 /// stuck in a loop and a model making progress that happens to look alike.
 ///
-/// The verdict now reads that difference too — ADR 0010 — but not through
-/// these bits. Two of them are computed from a session-wide map keyed by
+/// The verdict reads that difference too — ADR 0010 — but not through these
+/// bits. Two of them are computed from a session-wide map keyed by
 /// signature, while the detector compares within the current run, so they
 /// answer neighbouring questions rather than the same one. The third is the
-/// detector's own outcome, and exists so the change ADR 0010 made has a
-/// reading of its own.
+/// detector's own outcome, so ADR 0010's rescue has a reading of its own.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ScanOutcome {
     /// Whether to forward, and if not, why.
@@ -222,9 +220,9 @@ pub(crate) struct ScanOutcome {
     /// but "did the guard decline to act because the answer moved".
     ///
     /// Only a turn that would otherwise have been refused counts. A repeat
-    /// still inside the allowance was never at risk, so nothing was withheld
-    /// on it — counting those made the rate say the rescue had customers it
-    /// did not have. ADR 0010's kill criteria read it against
+    /// still inside the allowance is never at risk, so nothing is withheld on
+    /// it — counting those would make the rate say the rescue has customers it
+    /// does not have. ADR 0010's kill criteria read it against
     /// `identical_result_repeat`.
     pub(crate) repeat_rescued: bool,
 }
@@ -241,7 +239,7 @@ pub(crate) struct ScanOutcome {
 /// records every assistant message's text (the detector itself skips empty
 /// text), and the loop detector only sees non-empty tool-call batches.
 ///
-/// That second half decides what breaks a loop run, now that the detector
+/// That second half decides what breaks a loop run, because the detector
 /// counts consecutively. Only an assistant turn carrying a *different* batch
 /// does. A `role: "tool"` result, a prose answer and a user interjection are
 /// all transparent to it — which is load bearing rather than incidental, since
@@ -315,8 +313,8 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
         // but not these bits: it compares within its own run, and these are a
         // session-wide reading.
         let calls: Vec<ToolCall> = wire::domain_calls(&msg.tool_calls);
-        // Hoisted so the verdict below can read it. The bits are still computed
-        // in the branch, and still before the guards run.
+        // Declared here so the verdict below can read it. The bits are
+        // computed in the branch, before the guards run.
         let mut results = None;
         if calls.is_empty() {
             // A prose turn ends the observation. Without this the bits stay
@@ -354,11 +352,12 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 // on every replay of a 400'd body, and inflate precisely the
                 // ratio ADR 0010's first kill criterion reads.
                 //
-                // Since a turn that called a tool is no longer recorded, this
-                // arm is now reachable only on a prose turn — where the branch
-                // above has already cleared all three. Kept explicit rather
-                // than collapsed to that observation: the invariant lives in
-                // another crate, and a `false` costs nothing to state twice.
+                // `stagnation.record` ignores a turn that called a tool, so
+                // this arm is reachable only on a prose turn — where the
+                // branch above has already cleared all three. Kept explicit
+                // rather than collapsed to that observation: the invariant
+                // lives in another crate, and a `false` costs nothing to
+                // state twice.
                 repeat_rescued: false,
             };
         }
@@ -386,8 +385,8 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
                 Ok(record) => {
                     // Read from the verdict, not from the reset below. The
                     // reset that saved this turn happened on an earlier one,
-                    // and `check` is where "would the old rule have refused
-                    // this?" is answerable.
+                    // and `check` is where "would signature-only counting
+                    // have refused this?" is answerable.
                     repeat_rescued = record.rescued();
                     loops.record_results(record, results);
                 }

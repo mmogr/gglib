@@ -7,12 +7,6 @@
 //! returned by `GET /v1/proxy/status` and pushed (via
 //! [`gglib_sse::Broadcaster`]) over `GET /v1/proxy/status/stream`.
 //!
-//! This fully replaces the old `{snapshots, total_requests}` response shape
-//! — there is no back-compat shim. Nothing outside this crate consumed the
-//! old shape (it was explicitly documented as a not-yet-consumed "future"
-//! data contract), so the replacement is a clean cut, not an additive
-//! extension.
-//!
 //! ## Live updates without spreading broadcast plumbing everywhere
 //!
 //! An alternative design would thread a broadcast call into every mutation
@@ -455,10 +449,6 @@ impl DashboardSnapshot {
 
 /// Shared handle to the dashboard's underlying stores plus the SSE
 /// broadcaster that pushes [`DashboardSnapshot`]s to subscribers.
-///
-/// Consolidates what used to be three separate `AppState` fields
-/// (`metrics`, `connections`, `slots`) into one, per the "no backwards
-/// compatibility" design for this phase.
 pub struct DashboardState {
     pub connections: Arc<ActiveConnectionsRegistry>,
     pub slots: Arc<SlotsCache>,
