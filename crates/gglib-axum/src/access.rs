@@ -8,6 +8,11 @@
 //! [`gglib_core::ProxyAccessConfig`], shared with the proxy; this module
 //! only adapts it to the daemon's router and error shape.
 //!
+//! A third gate, [`origin_guard`], refuses a change a browser sends from a
+//! page on another site. A page can post to `127.0.0.1:9887` with a loopback
+//! `Host` and a body no preflight is asked for; on a loopback daemon, which
+//! asks no token, neither gate above refuses it.
+//!
 //! One deliberate divergence from the proxy: when the daemon is bound off
 //! loopback (`--share-lan`), a `Host` header that is an IP literal is
 //! accepted without being listed. DNS rebinding is a hostname attack — a
@@ -20,11 +25,11 @@ use std::sync::Arc;
 use axum::{
     Json,
     extract::{Request, State},
-    http::{StatusCode, header},
+    http::{Method, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{BearerPolicy, is_loopback_host, normalize_host};
+use gglib_core::access::{BearerPolicy, is_loopback_host, may_change, normalize_host};
 use gglib_core::services::SettingsCache;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use serde_json::json;
@@ -52,7 +57,10 @@ impl DaemonAccess {
     /// That boundary is the machine, not the user. Any local process, another
     /// account's included, can reach `/api/remote/enable` and
     /// `/api/remote/invite`, and with them mint itself a device key that
-    /// outlives it. `docs/remote.md`, "How it stays private", says so.
+    /// outlives it. A page in a browser cannot, unless it is the daemon's own
+    /// page (its `Origin` names the `Host` it was sent to) or one the router's
+    /// CORS lets read: [`origin_guard`] refuses the rest. `docs/remote.md`,
+    /// "How it stays private", says so.
     #[must_use]
     pub fn new(api_key: Option<String>, bind_host: &str, extra_hosts: Vec<String>) -> Self {
         Self {
@@ -157,6 +165,55 @@ pub(crate) async fn host_guard(
             ),
             "status": StatusCode::FORBIDDEN.as_u16(),
             "type": "HOST_NOT_ALLOWED",
+        })),
+    )
+        .into_response()
+}
+
+/// Refuse a change a browser sends from a page on another site.
+///
+/// [`may_change`] is the policy, asked of everything but `GET`, `HEAD` and
+/// `OPTIONS`; `cors` is the config the router's CORS layer answers from, so
+/// a page that names any origin but the endpoint's own may change something
+/// exactly when the CORS layer lets it read the answer. Sound only where
+/// [`host_guard`] runs too, since it is what vouches for the `Host` a
+/// same-origin request is matched against.
+pub(crate) async fn origin_guard(
+    State(cors): State<Arc<CorsConfig>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    let headers = req.headers();
+    // An `Origin` that is not text is refused as `""`, never read as absent.
+    let origin = headers
+        .get(header::ORIGIN)
+        .map(|v| v.to_str().unwrap_or_default());
+    let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    if may_change(&cors, origin, fetch_site, host) {
+        return next.run(req).await;
+    }
+
+    warn!(
+        origin,
+        fetch_site,
+        path = %req.uri().path(),
+        "refused a change sent by a page on another site"
+    );
+    (
+        StatusCode::FORBIDDEN,
+        Json(json!({
+            "error": "A page on another site may not change anything here. The daemon takes \
+                      changes from its own pages, from the origins it lets read its answers, \
+                      and from programs, which send no Origin.",
+            "status": StatusCode::FORBIDDEN.as_u16(),
+            "type": "ORIGIN_NOT_ALLOWED",
         })),
     )
         .into_response()

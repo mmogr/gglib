@@ -4,12 +4,12 @@ use std::sync::Arc;
 use axum::{
     Json,
     extract::{Request, State},
-    http::{StatusCode, header},
+    http::{Method, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::ProxyAccessConfig;
-use gglib_core::access::BearerPolicy;
+use gglib_core::access::{BearerPolicy, may_change};
+use gglib_core::{CorsConfig, ProxyAccessConfig};
 use tracing::warn;
 
 use crate::models::ErrorResponse;
@@ -57,6 +57,56 @@ pub(crate) async fn host_guard(
             ),
             "invalid_request_error",
             "host_not_allowed",
+        )),
+    )
+        .into_response()
+}
+
+/// Refuse a change a browser sends from a page on another site.
+///
+/// [`may_change`] is the policy, asked of everything but `GET`, `HEAD` and
+/// `OPTIONS`; `cors` is the config the CORS layer answers from, so a page that
+/// names any origin but the endpoint's own may change something exactly when
+/// the CORS layer lets it read the answer. A page can post a `text/plain` body
+/// to `/v1/chat/completions`, which reads raw bytes, without a preflight; this
+/// is what refuses it. Sound only where [`host_guard`] runs too, since it is
+/// what vouches for the `Host` a same-origin request is matched against.
+pub(crate) async fn origin_guard(
+    State(cors): State<Arc<CorsConfig>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    let headers = req.headers();
+    // An `Origin` that is not text is refused as `""`, never read as absent.
+    let origin = headers
+        .get(header::ORIGIN)
+        .map(|v| v.to_str().unwrap_or_default());
+    let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    if may_change(&cors, origin, fetch_site, host) {
+        return next.run(req).await;
+    }
+
+    warn!(
+        origin,
+        fetch_site,
+        path = %req.uri().path(),
+        "refused a change sent by a page on another site"
+    );
+    (
+        StatusCode::FORBIDDEN,
+        Json(ErrorResponse::with_code(
+            "A page on another site may not change anything here. This proxy takes changes \
+             from its own origin (one naming the Host the request was sent to), from the \
+             origins it lets read its answers, and from programs, which send no Origin.",
+            "invalid_request_error",
+            "origin_not_allowed",
         )),
     )
         .into_response()

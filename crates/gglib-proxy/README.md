@@ -196,7 +196,11 @@ gglib proxy cache-clear --host 127.0.0.1 --port 8080 --session-id my-session
 "Auth" is whether the endpoint requires `Authorization: Bearer <key>` *when a
 key is configured*. With no key configured — the loopback default — nothing on
 this table requires one. The Host allowlist applies to every row regardless,
-including `/health`; see the [`access`](src/access/) module.
+including `/health`. A `POST` or `DELETE` whose `Origin` is neither a local
+page nor the proxy's own is refused with `403 origin_not_allowed`: one from a
+page on another site, and one from a browser extension (`chrome-extension://`,
+`moz-extension://`), which no setting admits. A program, which sends no
+`Origin`, is not affected. See the [`access`](src/access/) module.
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
