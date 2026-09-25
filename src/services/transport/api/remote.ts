@@ -3,7 +3,7 @@
  *
  * Eight calls, three groups. `enable`/`disable`/`getRemoteStatus` are this
  * machine as the desktop: the tunnel in front of its own proxy.
- * `connect`/`disconnect`/`kill` are this machine as the laptop: a loopback
+ * `join`/`disconnect`/`kill` are this machine as the laptop: a loopback
  * port here that is another machine's proxy. `invite`/`forgetDevice` are who
  * may use the desktop's tunnel — a key per device, so retiring one leaves the
  * others connected. Every one goes to the daemon over HTTP — there are no
@@ -18,21 +18,21 @@
 
 import { del, get, post } from './client';
 import {
-  REMOTE_CONNECT_PATH,
   REMOTE_DEVICES_PATH,
   REMOTE_DISABLE_PATH,
   REMOTE_DISCONNECT_PATH,
   REMOTE_ENABLE_PATH,
   REMOTE_INVITE_PATH,
+  REMOTE_JOIN_PATH,
   REMOTE_KILL_PATH,
   REMOTE_STATUS_PATH,
 } from '../../api/routes';
 import type {
-  RemoteConnectBody,
-  RemoteConnectResponse,
   RemoteEnableBody,
   RemoteEnableResponse,
   RemoteForgotten,
+  RemoteJoinBody,
+  RemoteJoinResponse,
   RemoteStatus,
 } from '../types/remote';
 
@@ -62,8 +62,8 @@ export async function disableRemote(): Promise<RemoteStatus> {
  * `pairing` as `<ticket>-<code>` the code is redeemed for that machine's key
  * and stored; omitted, the last ticket is dialled with the stored key.
  */
-export async function connectRemote(body: Partial<RemoteConnectBody> = {}): Promise<RemoteConnectResponse> {
-  return post<RemoteConnectResponse>(REMOTE_CONNECT_PATH, body);
+export async function joinRemote(body: Partial<RemoteJoinBody> = {}): Promise<RemoteJoinResponse> {
+  return post<RemoteJoinResponse>(REMOTE_JOIN_PATH, body);
 }
 
 /** Close the loopback port. Idempotent; the stored pairing stays. */

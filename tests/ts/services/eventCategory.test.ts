@@ -59,7 +59,7 @@ describe('getEventCategory', () => {
       'remote_enabled',
       'remote_disabled',
       'remote_paired',
-      'remote_connected',
+      'remote_joined',
       'remote_disconnected',
     ]) {
       expect(getEventCategory(tag)).toBe('remote');

@@ -9,6 +9,7 @@ import {
   HF_SEARCH_PATH,
   HF_QUANTIZATIONS_PATH,
   HF_TOOL_SUPPORT_PATH,
+  REMOTE_JOIN_PATH,
   VERSION_PATH,
 } from '../../../../src/services/api/routes';
 
@@ -19,6 +20,12 @@ describe('services/api/routes', () => {
     // build provenance is this path resolving.
     it('VERSION_PATH is canonical', () => {
       expect(VERSION_PATH).toBe('/api/version');
+    });
+
+    // `REMOTE_JOIN_PATH` in `gglib-core::contracts::http::daemon`. The daemon
+    // routes no other name for it, so a stale path here is a 405.
+    it('REMOTE_JOIN_PATH is canonical', () => {
+      expect(REMOTE_JOIN_PATH).toBe('/api/remote/join');
     });
   });
 

@@ -53,7 +53,7 @@ last_peer: string | null,
  */
 connected: RemoteConnection | null, 
 /**
- * Fingerprint of the ticket a bare `connect` would dial. Never the
+ * Fingerprint of the ticket a bare `join` would dial. Never the
  * ticket.
  */
 stored_ticket_fingerprint: string | null, 

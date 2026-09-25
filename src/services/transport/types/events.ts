@@ -126,9 +126,9 @@ export type ProxyEvent = Extract<AppEvent, { type: `proxy_${string}` }>;
 
 /**
  * The remote tunnel's lifecycle (ADR 0012): enabled, disabled, paired,
- * connected, disconnected. The ticket never travels here — `remote_enabled`
- * carries its fingerprint — because this stream is readable by any local
- * client.
+ * joined, disconnected, away, back. The ticket never travels here —
+ * `remote_enabled` carries its fingerprint — because this stream is
+ * readable by any local client.
  */
 export type RemoteEvent = Extract<AppEvent, { type: `remote_${string}` }>;
 

@@ -90,9 +90,9 @@ describe('initRemoteEvents', () => {
     await vi.waitFor(() => expect(getRemoteStatus).toHaveBeenCalledTimes(1));
 
     const handler = subscribeSseEvent.mock.calls[0][1] as (evt: unknown) => void;
-    handler({ type: 'remote_connected', port: 41234 });
+    handler({ type: 'remote_joined', port: 41234 });
 
-    expect(ingestRemoteEvent).toHaveBeenCalledWith({ type: 'remote_connected', port: 41234 });
+    expect(ingestRemoteEvent).toHaveBeenCalledWith({ type: 'remote_joined', port: 41234 });
     await vi.waitFor(() => expect(getRemoteStatus).toHaveBeenCalledTimes(2));
 
     cleanupRemoteEvents();

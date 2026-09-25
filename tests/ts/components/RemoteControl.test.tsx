@@ -3,7 +3,7 @@
  *
  * What is pinned here is the shape of the one-time reveal — a pairing exists
  * on a screen only in the answer to `enable --invite` or `invite`, so the
- * panel has to show it the moment it arrives and nowhere else; the connect
+ * panel has to show it the moment it arrives and nowhere else; the join
  * half's guard rails, where the button is dead with nothing to dial and a
  * stored ticket without a stored key says so instead of failing later; and
  * what a device row may and may not be called, which is the half of this
@@ -29,12 +29,12 @@ import {
 } from '../../../src/services/remoteRegistry';
 
 const enableRemote = vi.fn();
-const connectRemote = vi.fn();
+const joinRemote = vi.fn();
 const inviteRemote = vi.fn();
 const forgetDevice = vi.fn();
 
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ enableRemote, connectRemote, inviteRemote, forgetDevice }),
+  getTransport: () => ({ enableRemote, joinRemote, inviteRemote, forgetDevice }),
 }));
 const refreshRemoteStatus = vi.fn(() => Promise.resolve(true));
 vi.mock('../../../src/services/remoteEvents', () => ({
@@ -89,7 +89,7 @@ describe('RemoteControl', () => {
     resetRemoteState();
     applyRemoteStatus(IDLE_STATUS);
     enableRemote.mockReset();
-    connectRemote.mockReset();
+    joinRemote.mockReset();
     inviteRemote.mockReset();
     forgetDevice.mockReset();
     refreshRemoteStatus.mockReset().mockResolvedValue(true);
@@ -672,33 +672,33 @@ describe('RemoteControl', () => {
     expect(screen.queryByText(/Every other device is untouched\./)).not.toBeInTheDocument();
   });
 
-  it('connect is dead with nothing to dial, and alive once a string is typed', async () => {
+  it('join is dead with nothing to dial, and alive once a string is typed', async () => {
     const user = await open();
-    const connect = screen.getByRole('button', { name: /^connect$/i });
-    expect(connect).toBeDisabled();
+    const join = screen.getByRole('button', { name: /^join$/i });
+    expect(join).toBeDisabled();
 
     await user.type(screen.getByLabelText(/pairing string/i), `${TICKET}-483920`);
-    expect(connect).toBeEnabled();
+    expect(join).toBeEnabled();
 
-    connectRemote.mockResolvedValue({
+    joinRemote.mockResolvedValue({
       port: 41234,
       base_url: 'http://127.0.0.1:41234/v1',
       ticket_fingerprint: '3ca82708b995',
       paired: true,
     });
-    await user.click(connect);
-    expect(connectRemote).toHaveBeenCalledWith({ pairing: `${TICKET}-483920` });
+    await user.click(join);
+    expect(joinRemote).toHaveBeenCalledWith({ pairing: `${TICKET}-483920` });
   });
 
   it('a remembered ticket without a key is named as the problem', async () => {
     applyRemoteStatus({ ...IDLE_STATUS, stored_ticket_fingerprint: '3ca82708b995', has_remote_key: false });
     await open();
     expect(screen.getByText(/no key is stored/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^connect$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^join$/i })).toBeDisabled();
   });
 
   it('a connection that has not named its peer yet does not name one', async () => {
-    // The window between `remote_connected` and the status read: a port is
+    // The window between `remote_joined` and the status read: a port is
     // known and nothing else. The panel used to fill the gap with whichever
     // ticket happened to be stored, which on a dial to a new machine names
     // the machine being left.
@@ -771,16 +771,25 @@ describe('RemoteControl', () => {
     expect(getRemoteState().chatRequestedAt).toEqual(expect.any(Number));
   });
 
-  it('a remembered pairing lets connect dial it with an empty box', async () => {
+  it('a remembered pairing lets join dial it with an empty box, and says it joined', async () => {
     applyRemoteStatus({ ...IDLE_STATUS, stored_ticket_fingerprint: '3ca82708b995', has_remote_key: true });
-    connectRemote.mockResolvedValue({
+    joinRemote.mockResolvedValue({
       port: 41234,
       base_url: 'http://127.0.0.1:41234/v1',
       ticket_fingerprint: '3ca82708b995',
       paired: false,
     });
     const user = await open();
-    await user.click(screen.getByRole('button', { name: /^connect$/i }));
-    expect(connectRemote).toHaveBeenCalledWith({});
+    await user.click(screen.getByRole('button', { name: /^join$/i }));
+    expect(joinRemote).toHaveBeenCalledWith({});
+    expect(await screen.findByText('Joined 3ca82708b995.')).toBeInTheDocument();
+  });
+
+  it('a join the daemon refuses says it could not join, and why', async () => {
+    applyRemoteStatus({ ...IDLE_STATUS, stored_ticket_fingerprint: '3ca82708b995', has_remote_key: true });
+    joinRemote.mockRejectedValue(new Error('already connected to a remote'));
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /^join$/i }));
+    expect(await screen.findByText(/^Could not join: .*already connected to a remote/)).toBeInTheDocument();
   });
 });

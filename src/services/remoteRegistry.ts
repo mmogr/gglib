@@ -85,7 +85,7 @@ export function applyRemoteStatus(status: RemoteStatus): void {
   // A different peer is as much a reason to drop the routing choice and a
   // pending chat request as a disconnection is: neither was decided about
   // whoever is there now. This arm covers the swap a status read is the first
-  // news of; a dial whose event arrived is caught by `remote_connected`,
+  // news of; a dial whose event arrived is caught by `remote_joined`,
   // because the placeholder erases the peer this would have compared against.
   // Read from the status rather than the name's attribution — the box can be
   // ticked with the field empty, and that choice is no more transferable.
@@ -102,13 +102,13 @@ export function applyRemoteStatus(status: RemoteStatus): void {
 /**
  * Move the status forward on an event, without waiting for the re-read.
  *
- * Each arm changes only what the event proves. `remote_connected` carries a
+ * Each arm changes only what the event proves. `remote_joined` carries a
  * port and nothing else, so the connection it writes is a placeholder the
  * next status read replaces — but it is enough for a panel to switch to the
  * connected view now rather than a fetch later.
  *
  * The placeholder names no peer, deliberately. It used to borrow
- * `stored_ticket_fingerprint` — the ticket a bare `connect` would dial,
+ * `stored_ticket_fingerprint` — the ticket a bare `join` would dial,
  * which on a dial to a *new* machine is the old one's, so anything comparing
  * it would judge the peer by whoever was reached last.
  */
@@ -153,7 +153,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
         status: { ...status, pairing_active: false, paired: true, last_peer: evt.peer },
       });
       break;
-    case 'remote_connected':
+    case 'remote_joined':
       store.setState({
         ...prev,
         status: {
