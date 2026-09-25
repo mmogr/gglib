@@ -111,11 +111,11 @@ impl From<Enabled> for RemoteEnableResponse {
     }
 }
 
-/// Body for `POST /api/remote/connect`. An empty body dials the ticket this
+/// Body for `POST /api/remote/join`. An empty body dials the ticket this
 /// machine last connected to.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteConnectBody {
+pub(crate) struct RemoteJoinBody {
     /// `<ticket>-<code>` for a first pairing, a bare ticket afterwards,
     /// omitted to reuse the last one.
     #[serde(default)]
@@ -131,7 +131,7 @@ pub(crate) struct RemoteConnectBody {
     pub discovery: Option<bool>,
 }
 
-impl RemoteConnectBody {
+impl RemoteJoinBody {
     pub(crate) fn into_request(self) -> JoinRequest {
         JoinRequest {
             pairing: self.pairing,
@@ -142,10 +142,10 @@ impl RemoteConnectBody {
     }
 }
 
-/// What `POST /api/remote/connect` answers.
+/// What `POST /api/remote/join` answers.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteConnectResponse {
+pub(crate) struct RemoteJoinResponse {
     /// The loopback port that is now the far machine.
     pub port: u16,
     /// `http://127.0.0.1:<port>/v1`, ready for a client.
@@ -159,7 +159,7 @@ pub(crate) struct RemoteConnectResponse {
     pub moved_from: Option<u16>,
 }
 
-impl From<Joined> for RemoteConnectResponse {
+impl From<Joined> for RemoteJoinResponse {
     fn from(c: Joined) -> Self {
         Self {
             moved_from: c.moved_from,

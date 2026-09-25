@@ -1,25 +1,26 @@
-//! The connect side's handlers: this machine reaching another.
+//! The connect side's handlers, `join`, `disconnect` and `kill`: this
+//! machine reaching another.
 
 use axum::{Json, extract::State};
 use gglib_app_services::GuiError;
 
 use super::status::RemoteStatus;
-use super::wire::{RemoteConnectBody, RemoteConnectResponse, RemoteKillBody};
+use super::wire::{RemoteJoinBody, RemoteJoinResponse, RemoteKillBody};
 use crate::{error::HttpError, state::AppState};
 
-/// `POST /api/remote/connect` — bind a loopback port here that is the far
+/// `POST /api/remote/join` — bind a loopback port here that is the far
 /// machine's proxy, redeeming a pairing code for its key when one is given.
 ///
 /// Not idempotent, like `enable` and for the same reason turned around: a
-/// second `connect` while connected is a `409` rather than a silent reuse,
+/// second `join` while connected is a `409` rather than a silent reuse,
 /// because the second call may name a different machine.
-pub(crate) async fn connect(
+pub(crate) async fn join(
     State(state): State<AppState>,
-    Json(body): Json<Option<RemoteConnectBody>>,
-) -> Result<Json<RemoteConnectResponse>, HttpError> {
+    Json(body): Json<Option<RemoteJoinBody>>,
+) -> Result<Json<RemoteJoinResponse>, HttpError> {
     let request = body.unwrap_or_default().into_request();
-    let connected = state.remote.join(request).await?;
-    Ok(Json(RemoteConnectResponse::from(connected)))
+    let joined = state.remote.join(request).await?;
+    Ok(Json(RemoteJoinResponse::from(joined)))
 }
 
 /// `POST /api/remote/disconnect` — close the loopback port. Idempotent: not

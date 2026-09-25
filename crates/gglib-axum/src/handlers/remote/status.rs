@@ -1,7 +1,7 @@
 //! What `GET /api/remote/status` reports.
 //!
 //! Split from `wire.rs` on the seam its own module doc names: that file is
-//! what the tunnel is *asked* — enable, connect, kill — and this is what it
+//! what the tunnel is *asked* — enable, join, kill — and this is what it
 //! *says*. The split is also what keeps either under the 300-line budget
 //! `scripts/check_rust_complexity.sh` allows a file not in its baseline.
 //!
@@ -82,7 +82,7 @@ pub(crate) struct RemoteStatus {
     pub last_peer: Option<String>,
     /// The connect side, when this machine is reaching another.
     pub connected: Option<RemoteConnection>,
-    /// Fingerprint of the ticket a bare `connect` would dial. Never the
+    /// Fingerprint of the ticket a bare `join` would dial. Never the
     /// ticket.
     pub stored_ticket_fingerprint: Option<String>,
     /// Whether this machine holds a key from an earlier pairing.
