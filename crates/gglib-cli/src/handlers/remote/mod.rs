@@ -5,6 +5,7 @@ mod devices;
 mod disable;
 mod enable;
 mod invite;
+mod key;
 mod pairing_tui;
 
 use connect::{ConnectArgs, connect, disconnect};
@@ -12,6 +13,7 @@ use devices::{forget, list};
 use disable::disable;
 use enable::{EnableArgs, enable};
 use invite::invite;
+use key::key;
 
 use anyhow::Result;
 
@@ -87,6 +89,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             .await
         }
         RemoteCommand::Disconnect => disconnect(ctx).await,
+        RemoteCommand::Key { show } => key(ctx, show).await,
     }
 }
 

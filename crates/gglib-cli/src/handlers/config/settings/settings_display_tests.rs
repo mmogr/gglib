@@ -134,18 +134,20 @@ fn the_proxy_api_key_is_shown_rather_than_masked() {
 /// The received remote key is not, for the opposite reason — and it is
 /// masked *inside* the pairing record, one level down.
 ///
-/// It belongs to the other machine and arrives over the wire; re-pairing
-/// replaces it, so nothing needs to read it back. The field's own doc said
-/// no settings surface exposed it while this one printed it in full. The
-/// depth is the part worth a test: masking was a check on the top-level
-/// key alone, and the day the key moved inside the pairing that check
-/// stopped matching anything while still reporting success.
+/// It is this device's key, received from the other machine by
+/// `gglib remote join`; re-pairing replaces it, and `gglib remote key --show`
+/// prints it alone when asked, so printing it here too buys nothing. The
+/// field's own doc said no settings surface exposed it while this one
+/// printed it in full. The depth is the part worth a test: masking was a
+/// check on the top-level key alone, and the day the key moved inside the
+/// pairing that check stopped matching anything while still reporting
+/// success.
 #[test]
 fn the_received_remote_key_is_masked_inside_the_pairing_record() {
     let settings = Settings {
         remote_pairing: Some(RemotePairing {
             ticket: "ticket-abc".to_owned(),
-            api_key: "the-other-machines-key".to_owned(),
+            api_key: "this-devices-key".to_owned(),
             default_model: None,
             port: None,
         }),
@@ -162,9 +164,7 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
 
     assert_eq!(value("remote-pairing.api-key"), MASKED_VALUE, "{rows:?}");
     assert!(
-        !rows
-            .iter()
-            .any(|(_, v)| v.contains("the-other-machines-key")),
+        !rows.iter().any(|(_, v)| v.contains("this-devices-key")),
         "the key must not reach any row: {rows:?}"
     );
     assert_eq!(
