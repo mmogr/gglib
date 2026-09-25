@@ -98,7 +98,7 @@ impl DaemonHandle {
         body: &RemoteConnectBody,
     ) -> Result<RemoteConnectDto> {
         let response = self
-            .post(paths::REMOTE_CONNECT_PATH)
+            .post(paths::REMOTE_JOIN_PATH)
             .json(body)
             .timeout(Duration::from_secs(60))
             .send()

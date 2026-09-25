@@ -76,10 +76,10 @@ fn remote_event_names_and_shape() {
     );
     assert_eq!(AppEvent::remote_disabled().event_name(), "remote:disabled");
     assert_eq!(AppEvent::remote_paired(None).event_name(), "remote:paired");
-    assert_eq!(
-        AppEvent::remote_connected(8081).event_name(),
-        "remote:connected"
-    );
+    let joined = AppEvent::remote_joined(8081);
+    assert_eq!(joined.event_name(), "remote:joined");
+    let json = serde_json::to_string(&joined).unwrap();
+    assert!(json.contains("\"type\":\"remote_joined\""), "{json}");
     assert_eq!(
         AppEvent::remote_disconnected().event_name(),
         "remote:disconnected"

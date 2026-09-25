@@ -23,9 +23,9 @@ impl AppEvent {
         Self::RemotePaired { peer }
     }
 
-    /// Create a [`AppEvent::RemoteConnected`] event.
-    pub const fn remote_connected(port: u16) -> Self {
-        Self::RemoteConnected { port }
+    /// Create a [`AppEvent::RemoteJoined`] event.
+    pub const fn remote_joined(port: u16) -> Self {
+        Self::RemoteJoined { port }
     }
 
     /// Create a [`AppEvent::RemoteDisconnected`] event.

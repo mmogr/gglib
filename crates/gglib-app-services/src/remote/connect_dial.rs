@@ -115,7 +115,7 @@ impl RemoteOps {
             port,
         ));
         info!(ticket = %ticket_fingerprint, port, paired, ?moved_from, "connected to a remote");
-        self.emitter.emit(AppEvent::remote_connected(port));
+        self.emitter.emit(AppEvent::remote_joined(port));
         Ok(Connected {
             port,
             base_url,
