@@ -6,9 +6,10 @@ mod python_protocol;
 mod xet_poller;
 
 use std::fs;
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
-use gglib_core::ports::QuantizationResolver;
+use gglib_core::ports::{HfClientPort, QuantizationResolver};
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
 use super::utils::model_directory;
@@ -31,25 +32,16 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         request.model_id
     ));
 
-    // Get commit SHA
-    let api = super::api::create_hf_api(request.token.clone(), &request.models_dir)?;
-    let repo = api.repo(hf_hub::Repo::with_revision(
-        request.model_id.clone(),
-        hf_hub::RepoType::Model,
-        "main".to_string(),
-    ));
-    // Synchronous ureq call — see the note in `check_update`.
-    let repo_info = tokio::task::spawn_blocking(move || repo.info())
+    let hub: Arc<dyn HfClientPort> = Arc::new(super::api::hub_client(request.token.clone()));
+    let commit_sha = hub
+        .get_commit_sha(&request.model_id)
         .await
-        .map_err(|e| anyhow!("Repo info task panicked: {e}"))?
         .map_err(|e| anyhow!("Failed to get repo info: {e}"))?;
-    let commit_sha = repo_info.sha.clone();
     gglib_core::telemetry::console_println(&format!("Found repository, commit SHA: {commit_sha}"));
 
     // Resolve files using the HuggingFace resolver
     gglib_core::telemetry::console_println(&format!("Looking for {quant} quantization..."));
-    let client = gglib_hf::DefaultHfClient::new(&gglib_hf::HfClientConfig::default());
-    let resolver = HfQuantizationResolver::new(std::sync::Arc::new(client));
+    let resolver = HfQuantizationResolver::new(hub);
 
     let quantization = gglib_core::download::Quantization::from_filename(quant);
     let resolution = resolver.resolve(&request.model_id, quantization).await
@@ -113,7 +105,8 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
     })
 }
 
-/// Check if a model has an update available.
+/// Check if a model has an update available, asking the Hub with `token`
+/// when there is one.
 ///
 /// `has_update` is true when no `current_sha` is recorded: there is no
 /// baseline to compare against, so the caller cannot claim the model is
@@ -122,25 +115,22 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
 pub async fn check_update(
     repo_id: &str,
     current_sha: Option<&str>,
-    models_dir: &std::path::Path,
+    token: Option<String>,
 ) -> Result<UpdateCheckResult> {
-    let api = super::api::create_hf_api(None, models_dir)?;
-    let repo = api.repo(hf_hub::Repo::with_revision(
-        repo_id.to_string(),
-        hf_hub::RepoType::Model,
-        "main".to_string(),
-    ));
+    check_update_with(&super::api::hub_client(token), repo_id, current_sha).await
+}
 
-    // `hf_hub`'s API here is the synchronous (ureq) client with no timeout, so
-    // calling it directly would park a tokio worker for the length of the
-    // round-trip. Now that the daemon reaches this path via the upgrade
-    // routes, that has to move off the async workers.
-    let repo_info = tokio::task::spawn_blocking(move || repo.info())
+/// [`check_update`] against a given hub. Fails when the hub answers with no
+/// commit.
+async fn check_update_with(
+    hub: &dyn HfClientPort,
+    repo_id: &str,
+    current_sha: Option<&str>,
+) -> Result<UpdateCheckResult> {
+    let latest_sha = hub
+        .get_commit_sha(repo_id)
         .await
-        .map_err(|e| anyhow!("Repo info task panicked: {e}"))?
         .map_err(|e| anyhow!("Failed to get repo info: {e}"))?;
-
-    let latest_sha = repo_info.sha;
     let has_update = current_sha.is_none_or(|s| s != latest_sha);
 
     Ok(UpdateCheckResult {
@@ -163,3 +153,7 @@ pub async fn update_model(request: CliUpdateRequest) -> Result<CliDownloadResult
 
     download(download_request).await
 }
+
+#[cfg(test)]
+#[path = "check_update_tests.rs"]
+mod tests;

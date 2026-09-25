@@ -7,6 +7,8 @@ use anyhow::Result;
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
 
+use super::update_model::short_sha;
+
 /// Execute the check-updates command.
 ///
 /// Checks if locally downloaded models have updates available on HuggingFace.
@@ -47,38 +49,29 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
     Ok(())
 }
 
-/// Check if a single model needs updates.
+/// Check if a single model needs updates, asking the Hub with the `HF_TOKEN`
+/// in the environment when it is set.
 async fn check_model_update(model: &gglib_core::domain::Model, hf_repo: &str) -> Result<()> {
-    use gglib_core::paths::resolve_models_dir;
-
     println!("Checking updates for: {}", model.name);
 
-    let models_dir = resolve_models_dir(None)?.path;
-    let cache_dir = models_dir.join(".cache");
+    let check = gglib_download::cli_exec::check_update(
+        hf_repo,
+        model.hf_commit_sha.as_deref(),
+        std::env::var("HF_TOKEN").ok(),
+    )
+    .await;
 
-    let api = hf_hub::api::sync::ApiBuilder::new()
-        .with_cache_dir(cache_dir)
-        .build()
-        .map_err(|e| anyhow::anyhow!("Failed to create HF API client: {}", e))?;
-
-    let repo = api.repo(hf_hub::Repo::with_revision(
-        hf_repo.to_string(),
-        hf_hub::RepoType::Model,
-        "main".to_string(),
-    ));
-
-    match repo.info() {
-        Ok(repo_info) => {
-            let latest_sha = repo_info.sha;
-
-            if let Some(stored_sha) = &model.hf_commit_sha {
-                if *stored_sha == latest_sha {
-                    println!("  ✓ Model is up to date (SHA: {})", &latest_sha[..8]);
-                } else {
+    match check {
+        Ok(check) => {
+            let latest_sha = short_sha(&check.latest_sha);
+            if let Some(stored_sha) = &check.current_sha {
+                if check.has_update {
                     println!("  🔄 Update available!");
-                    println!("    Current SHA: {}", &stored_sha[..8]);
-                    println!("    Latest SHA:  {}", &latest_sha[..8]);
+                    println!("    Current SHA: {}", short_sha(stored_sha));
+                    println!("    Latest SHA:  {latest_sha}");
                     println!("    Use: gglib model upgrade {} to update", model.id);
+                } else {
+                    println!("  ✓ Model is up to date (SHA: {latest_sha})");
                 }
             } else {
                 println!("  ⚠️  No commit SHA stored, cannot check for updates");

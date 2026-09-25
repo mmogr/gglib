@@ -96,7 +96,7 @@ fn the_import_check_reads_both_forms() {
     assert!(imports("use reqwest::{Client, StatusCode};\n", "Client"));
     assert!(imports("use reqwest::ClientBuilder;\n", "ClientBuilder"));
     assert!(!imports("use reqwest::StatusCode;\n", "Client"));
-    assert!(!imports("use hf_hub::Client;\n", "Client"));
+    assert!(!imports("use hyper::Client;\n", "Client"));
 }
 
 #[test]

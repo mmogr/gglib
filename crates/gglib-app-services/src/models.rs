@@ -476,14 +476,11 @@ impl ModelOps {
     pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         let (repo, _quant) = Self::upgrade_source(&model)?;
-        let models_dir = gglib_core::paths::resolve_models_dir(None)
-            .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
-            .path;
 
         let check = gglib_download::cli_exec::check_update(
             &repo,
             model.hf_commit_sha.as_deref(),
-            &models_dir,
+            std::env::var("HF_TOKEN").ok(),
         )
         .await
         .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
@@ -514,7 +511,7 @@ impl ModelOps {
         let check = gglib_download::cli_exec::check_update(
             &repo,
             model.hf_commit_sha.as_deref(),
-            &models_dir,
+            std::env::var("HF_TOKEN").ok(),
         )
         .await
         .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
