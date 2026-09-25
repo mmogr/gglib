@@ -41,6 +41,7 @@ use crate::sampling_audit::SamplingAuditStore;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
+use crate::upstream_read::StreamBounds;
 use dashmap::DashSet;
 use gglib_core::services::SettingsCache;
 use gglib_sse::SseOptions;
@@ -99,6 +100,8 @@ pub(crate) struct AppState {
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
     upstream_health: Arc<UpstreamHealth>,
+    /// How long a streamed reply may wait on a silent upstream.
+    stream_bounds: StreamBounds,
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.
     pub(crate) calibration: Arc<TokenCalibration>,
@@ -245,10 +248,11 @@ pub async fn serve(
     //   limit on how long an actual inference may take.
     //
     // Built by `loopback`, so it never goes through a proxy to reach 127.0.0.1.
-    // Dead-server protection during streaming is handled separately: if
-    // llama-server crashes mid-stream the reqwest byte-stream returns an
-    // error, which forward_chat_completion surfaces as ForwardError::UpstreamDead
-    // and the handler clears stale state for the next request.
+    // A streamed reply is bounded by the drain instead, which times each read
+    // of the body (`StreamBounds::idle`): a llama-server that crashes
+    // mid-stream breaks the byte stream, and one that wedges with the socket
+    // open is caught by that bound. `drain_events` documents what the client
+    // is then sent.
     let client = crate::loopback::client_builder()
         .pool_max_idle_per_host(10)
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -332,6 +336,7 @@ pub async fn serve(
         daemon_shutdown: daemon_cancel,
         remote: access.remote.clone(),
         upstream_health,
+        stream_bounds: StreamBounds::for_serve(),
         calibration: Arc::new(TokenCalibration::new()),
         inference_override,
         default_profile,
@@ -597,31 +602,11 @@ pub(crate) async fn chat_completions(
         crate::loop_guard_step::GuardStep::Refuse(response) => return response,
     }
 
-    // Watchdog: if the upstream tripped the consecutive-failure threshold on
-    // prior requests (empty responses / first-byte timeouts while still
-    // passing /health), recycle it now — before routing this request into a
-    // server that has proven it is not producing output.
-    //
-    // Gate the recycle on the upstream being idle: this check runs before the
-    // current request registers its connection, so a non-empty registry means
-    // another request is in flight. With `--parallel 1` that request owns the
-    // only slot, and stop_current() would kill its live generation. The `&&`
-    // short-circuits so the recycle flag is left un-consumed when busy and is
-    // honored by the next request that arrives while the upstream is idle.
-    if state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request() {
-        warn!("upstream watchdog: recycling degraded model before next request");
-        // Taking the request already cleared the flag and zeroed the streak, so
-        // a swallowed failure here spends the watchdog's entire case against a
-        // server that is still sick. Put it back instead, the way the cache
-        // clear path above already reports its own recycle failures.
-        if let Err(e) = state.runtime_port.stop_current().await {
-            warn!(
-                error = %e,
-                "upstream watchdog: recycle failed; re-arming for the next idle request"
-            );
-            state.upstream_health.rearm_recycle();
-        }
-    }
+    // Watchdog: if prior requests asked for a recycle (a strike streak, or a
+    // stall after the first token, while the server still passes /health),
+    // carry it out now — before routing this request into a server that has
+    // proven it is not producing output.
+    recycle_if_asked_and_idle(&state).await;
 
     // The one catalog round-trip this request pays for. Resolved here rather
     // than inside `forward_chat_completion` — same single lookup either way,
@@ -669,21 +654,33 @@ pub(crate) async fn chat_completions(
     // `admission.lease` is held for the whole of this request — moved into
     // `ForwardRequest` below — and is what stops the model being swapped out
     // from under a response that is still streaming.
-    let admission = match state
-        .runtime_port
-        .admit(
-            &model_name,
-            num_ctx,
-            state.default_ctx,
-            gglib_core::ports::LaunchOverrides::default(),
-        )
-        .await
-    {
-        Ok(admission) => admission,
-        Err(e) => {
-            return handle_runtime_error(e);
-        }
+    let admit = async || {
+        let overrides = gglib_core::ports::LaunchOverrides::default();
+        state
+            .runtime_port
+            .admit(&model_name, num_ctx, state.default_ctx, overrides)
+            .await
     };
+    let mut admission = match admit().await {
+        Ok(admission) => admission,
+        Err(e) => return handle_runtime_error(e),
+    };
+    // Ask the watchdog again now that this request is through the queue. It
+    // may have waited there behind a turn that stalled and asked for a recycle
+    // as it ended, after the check above had found that turn in flight; left
+    // alone, it would be forwarded to the server just condemned. The stop runs
+    // under this request's lease: with one request per server
+    // (`--parallel 1`), no other request can be admitted onto the server this
+    // one was admitted to until the lease goes back, which is after the stop
+    // and before the request queues again.
+    if state.upstream_health.recycle_pending() && state.dashboard.connections.is_empty() {
+        recycle_if_asked_and_idle(&state).await;
+        drop(admission);
+        admission = match admit().await {
+            Ok(admission) => admission,
+            Err(e) => return handle_runtime_error(e),
+        };
+    }
     let target = admission.target.clone();
     let lease = admission.lease;
 
@@ -808,6 +805,7 @@ pub(crate) async fn chat_completions(
         sampling,
         connection,
         upstream_health: state.upstream_health.clone(),
+        stream_bounds: state.stream_bounds,
         calibration: state.calibration.clone(),
         calibration_session_id: sanitized_session_id.as_deref(),
         cache_metrics: state.dashboard.cache_metrics.clone(),
@@ -866,16 +864,7 @@ pub(crate) async fn chat_completions(
             // GPU is oversubscribed rather than that this model is still
             // loading, so it falls through to a 503 + Retry-After and the
             // client controls its own backoff. (PR #587)
-            let retry_admission = match state
-                .runtime_port
-                .admit(
-                    &model_name,
-                    num_ctx,
-                    state.default_ctx,
-                    gglib_core::ports::LaunchOverrides::default(),
-                )
-                .await
-            {
+            let retry_admission = match admit().await {
                 Ok(admission) => admission,
                 Err(e) => return handle_runtime_error(e),
             };
@@ -950,6 +939,7 @@ pub(crate) async fn chat_completions(
                 sampling: retry_sampling,
                 connection: retry_connection,
                 upstream_health: state.upstream_health.clone(),
+                stream_bounds: state.stream_bounds,
                 calibration: state.calibration.clone(),
                 calibration_session_id: sanitized_session_id.as_deref(),
                 cache_metrics: state.dashboard.cache_metrics.clone(),
@@ -980,6 +970,31 @@ pub(crate) async fn chat_completions(
                 }
             }
         }
+    }
+}
+
+/// Stop the model if the watchdog asked for a recycle and nothing is in flight.
+///
+/// "Nothing in flight" is read from the connection registry, so it means
+/// something only before the calling request registers its own connection.
+/// With `--parallel 1` a request in flight owns the only slot, and
+/// `stop_current` would kill its live generation. The `&&` leaves the request
+/// untaken when busy, for the next request that finds the upstream idle.
+async fn recycle_if_asked_and_idle(state: &AppState) {
+    if !(state.dashboard.connections.is_empty() && state.upstream_health.take_recycle_request()) {
+        return;
+    }
+    warn!("upstream watchdog: recycling degraded model before next request");
+    // Taking the request already cleared the flag and zeroed the streak, so a
+    // swallowed failure here spends the watchdog's entire case against a
+    // server that is still sick. Put it back instead, the way the cache clear
+    // path reports its own recycle failures.
+    if let Err(e) = state.runtime_port.stop_current().await {
+        warn!(
+            error = %e,
+            "upstream watchdog: recycle failed; re-arming for the next idle request"
+        );
+        state.upstream_health.rearm_recycle();
     }
 }
 

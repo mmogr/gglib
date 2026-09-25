@@ -5,14 +5,16 @@
 //! stops returning `200`). It does **not** catch the subtler failure modes this
 //! module targets: a server whose `/health` is still green but which has
 //! degraded to the point of producing **empty responses**, **dying
-//! mid-generation**, or never returning the first token. Each manifests to the
-//! client as a turn that simply failed.
+//! mid-generation**, **going silent mid-reply**, or never returning the first
+//! token. Each manifests to the client as a turn that simply failed.
 //!
 //! [`UpstreamHealth`] accumulates such degraded outcomes across requests. When
 //! [`STRIKE_THRESHOLD`] consecutive strikes occur it raises a one-shot
 //! "recycle requested" flag; the chat handler consumes that flag before the
 //! next request and proactively stops the current model, forcing a fresh
 //! respawn — the same cure a human applies by restarting the proxy, automated.
+//! A stall after the first token raises the flag at once; see
+//! [`StreamVerdict::Stalled`].
 //!
 //! ## What may cast a vote
 //!
@@ -39,8 +41,8 @@ pub(crate) const STRIKE_THRESHOLD: u32 = 2;
 
 /// What one streamed turn revealed about the upstream's health.
 ///
-/// Deliberately four states rather than a bool. The two that a bool collapses
-/// are the ones that made the watchdog read the world backwards:
+/// Deliberately more than a bool. The two states a bool collapses are the ones
+/// that made the watchdog read the world backwards:
 ///
 /// * [`Self::UpstreamError`] — the turn *died upstream*. Under a bool this
 ///   arrived as "healthy", because the error frame is renderable and the drain
@@ -73,6 +75,21 @@ pub enum StreamVerdict {
     /// about the upstream, so it is recorded as nothing at all — neither a
     /// strike nor a reset.
     ClientAborted,
+    /// The upstream went silent mid-reply for longer than the idle bound
+    /// ([`StreamBounds::idle`](crate::upstream_read::StreamBounds)). It strikes
+    /// and is counted apart from [`Self::UpstreamError`].
+    ///
+    /// After the first generated token it also asks for a recycle at once:
+    /// prefill was over, and nothing legitimate keeps a generating
+    /// llama-server silent that long. Before it, the silence can be a slow
+    /// prefill on a slow host (see
+    /// [`STREAM_IDLE_TIMEOUT`](crate::upstream_read::STREAM_IDLE_TIMEOUT)), so
+    /// it only strikes: recycling there would restart the same prefill, which
+    /// would stall again.
+    Stalled {
+        /// Whether a generated token had arrived before the silence.
+        after_first_token: bool,
+    },
 }
 
 /// Serializable, point-in-time view of the watchdog's cumulative counters.
@@ -95,6 +112,14 @@ pub struct UpstreamHealthSnapshot {
     /// them together would report a crashing server as a quiet one.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_upstream_errors: u64,
+    /// Total turns that ended because the upstream went silent mid-reply for
+    /// longer than the idle bound, since the proxy started.
+    ///
+    /// Separate from [`Self::total_upstream_errors`] for the same reason that
+    /// one is separate from the empty responses: a server that stops talking
+    /// and one that falls over are different illnesses.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub total_stream_stalls: u64,
     /// Total first-byte deadline expiries since the proxy started.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_first_byte_timeouts: u64,
@@ -126,12 +151,14 @@ pub struct UpstreamHealthSnapshot {
 pub struct UpstreamHealth {
     /// Count of consecutive degraded outcomes since the last healthy one.
     consecutive_strikes: AtomicU32,
-    /// One-shot flag: set when the strike threshold is reached, cleared by
-    /// [`UpstreamHealth::take_recycle_request`].
+    /// One-shot flag: set when the strike threshold is reached, by a stall
+    /// after the first token, or by [`UpstreamHealth::rearm_recycle`]; cleared
+    /// by [`UpstreamHealth::take_recycle_request`].
     recycle_requested: AtomicBool,
     /// Cumulative counters for observability (never reset).
     total_empty_responses: AtomicU64,
     total_upstream_errors: AtomicU64,
+    total_stream_stalls: AtomicU64,
     total_first_byte_timeouts: AtomicU64,
     total_client_aborts: AtomicU64,
     total_recycles: AtomicU64,
@@ -172,6 +199,13 @@ impl UpstreamHealth {
                 self.total_upstream_errors.fetch_add(1, Ordering::Relaxed);
                 self.record_strike();
             }
+            StreamVerdict::Stalled { after_first_token } => {
+                self.total_stream_stalls.fetch_add(1, Ordering::Relaxed);
+                self.record_strike();
+                if after_first_token {
+                    self.recycle_requested.store(true, Ordering::Relaxed);
+                }
+            }
             // Abstain: the client ended the turn, so it carries no evidence
             // either way. Counted for observability, never scored.
             StreamVerdict::ClientAborted => {
@@ -195,10 +229,24 @@ impl UpstreamHealth {
         }
     }
 
+    /// Whether a recycle has been asked for and not yet taken.
+    ///
+    /// A look, not a take. The chat handler asks it once a request is through
+    /// admission, to carry out a recycle asked for while the request waited
+    /// there. The streaming path asks it before re-sending a request whose
+    /// first-byte deadline expired: a re-send into an upstream already known
+    /// to be sick is a second submission to a server that has not answered
+    /// the first.
+    #[must_use]
+    pub fn recycle_pending(&self) -> bool {
+        self.recycle_requested.load(Ordering::Relaxed)
+    }
+
     /// Consume the recycle request, if any.
     ///
-    /// Returns `true` at most once per tripped threshold. On a `true` return
-    /// the strike counter is also reset, so the freshly recycled server starts
+    /// Returns `true` if the flag was set, and clears it, so the next call
+    /// returns `false` until the flag is set again. On a `true` return the
+    /// strike counter is also reset, so the freshly recycled server starts
     /// with a clean slate.
     pub fn take_recycle_request(&self) -> bool {
         let requested = self.recycle_requested.swap(false, Ordering::Relaxed);
@@ -233,6 +281,7 @@ impl UpstreamHealth {
             consecutive_strikes: self.consecutive_strikes.load(Ordering::Relaxed),
             total_empty_responses: self.total_empty_responses.load(Ordering::Relaxed),
             total_upstream_errors: self.total_upstream_errors.load(Ordering::Relaxed),
+            total_stream_stalls: self.total_stream_stalls.load(Ordering::Relaxed),
             total_first_byte_timeouts: self.total_first_byte_timeouts.load(Ordering::Relaxed),
             total_client_aborts: self.total_client_aborts.load(Ordering::Relaxed),
             total_recycles: self.total_recycles.load(Ordering::Relaxed),
@@ -242,136 +291,5 @@ impl UpstreamHealth {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn healthy_outcome_keeps_strikes_zero() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Healthy);
-        h.record_stream_outcome(StreamVerdict::Healthy);
-        assert_eq!(h.snapshot().consecutive_strikes, 0);
-        assert!(!h.take_recycle_request());
-    }
-
-    #[test]
-    fn single_strike_does_not_trip_recycle() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty);
-        assert_eq!(h.snapshot().consecutive_strikes, 1);
-        assert!(!h.take_recycle_request());
-    }
-
-    #[test]
-    fn two_consecutive_strikes_trip_recycle_once() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty);
-        h.record_timeout();
-        assert!(h.take_recycle_request());
-        // One-shot: a second consume returns false and the counter is reset.
-        assert!(!h.take_recycle_request());
-        assert_eq!(h.snapshot().consecutive_strikes, 0);
-    }
-
-    #[test]
-    fn a_healthy_outcome_resets_the_strike_streak() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty);
-        h.record_stream_outcome(StreamVerdict::Healthy);
-        h.record_stream_outcome(StreamVerdict::Empty);
-        // Only one strike since the reset — threshold not reached.
-        assert!(!h.take_recycle_request());
-        assert_eq!(h.snapshot().consecutive_strikes, 1);
-    }
-
-    #[test]
-    fn cumulative_counters_track_events() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty); // empty #1, strike #1
-        h.record_timeout(); // timeout #1, strike #2 → recycle armed
-        assert!(h.take_recycle_request()); // recycle #1
-        let snap = h.snapshot();
-        assert_eq!(snap.total_empty_responses, 1);
-        assert_eq!(snap.total_first_byte_timeouts, 1);
-        assert_eq!(snap.total_recycles, 1);
-        assert_eq!(snap.consecutive_strikes, 0);
-    }
-
-    /// The regression this module's four-state verdict exists for: a server
-    /// dying mid-stream used to arrive as "healthy", because the error frame
-    /// it emitted was renderable. Every request failing therefore held the
-    /// streak at zero and the recycle never fired.
-    #[test]
-    fn a_stream_that_dies_upstream_strikes_instead_of_resetting() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::UpstreamError);
-        assert_eq!(h.snapshot().consecutive_strikes, 1);
-        h.record_stream_outcome(StreamVerdict::UpstreamError);
-        assert!(h.take_recycle_request());
-        let snap = h.snapshot();
-        assert_eq!(snap.total_upstream_errors, 2);
-        // Not folded into the empty-response count — a crashing server and a
-        // silent one are different illnesses.
-        assert_eq!(snap.total_empty_responses, 0);
-    }
-
-    /// The other half: hanging up is a person's action. Two cancellations in a
-    /// row used to be indistinguishable from two empty responses, which at
-    /// `STRIKE_THRESHOLD == 2` was enough to recycle a healthy model server.
-    #[test]
-    fn a_client_hangup_neither_strikes_nor_resets() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty);
-        h.record_stream_outcome(StreamVerdict::ClientAborted);
-        h.record_stream_outcome(StreamVerdict::ClientAborted);
-        // The one real strike still stands — abstaining is not forgiving.
-        assert_eq!(h.snapshot().consecutive_strikes, 1);
-        assert!(!h.take_recycle_request());
-        assert_eq!(h.snapshot().total_client_aborts, 2);
-    }
-
-    /// A recycle that could not be carried out must not spend the watchdog's
-    /// case. Before this, a failed stop left the flag cleared and the streak
-    /// zeroed, so a server that was still sick got a clean slate and needed
-    /// two fresh strikes before anyone tried again.
-    #[test]
-    fn a_failed_recycle_rearms_instead_of_spending_the_request() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty);
-        h.record_stream_outcome(StreamVerdict::Empty);
-        assert!(h.take_recycle_request(), "threshold reached");
-
-        // The stop failed, so the request goes back.
-        h.rearm_recycle();
-        assert!(
-            h.take_recycle_request(),
-            "the re-armed request is available to the next idle caller"
-        );
-
-        let snap = h.snapshot();
-        assert_eq!(snap.total_recycle_failures, 1);
-        // Both takes count as triggered — the failure is tracked separately
-        // rather than by rewriting a cumulative counter.
-        assert_eq!(snap.total_recycles, 2);
-    }
-
-    #[test]
-    fn rearming_is_not_needed_on_the_happy_path() {
-        let h = UpstreamHealth::new();
-        h.record_stream_outcome(StreamVerdict::Empty);
-        h.record_stream_outcome(StreamVerdict::Empty);
-        assert!(h.take_recycle_request());
-        assert!(!h.take_recycle_request(), "still one-shot when it succeeds");
-        assert_eq!(h.snapshot().total_recycle_failures, 0);
-    }
-
-    #[test]
-    fn client_aborts_alone_never_trip_a_recycle() {
-        let h = UpstreamHealth::new();
-        for _ in 0..STRIKE_THRESHOLD + 5 {
-            h.record_stream_outcome(StreamVerdict::ClientAborted);
-        }
-        assert_eq!(h.snapshot().consecutive_strikes, 0);
-        assert!(!h.take_recycle_request());
-    }
-}
+#[path = "upstream_health_tests.rs"]
+mod tests;

@@ -125,7 +125,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
-- **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout) llama-server; feeds `DashboardSnapshot.upstream_health`
+- **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout / stalled) llama-server; feeds `DashboardSnapshot.upstream_health`
 - **`loopback.rs`** — The one builder of an HTTP client for a server on this machine: `no_proxy()` applied, so a request to `127.0.0.1` never goes through `HTTP_PROXY` or the system proxy (#1085); used by this crate's upstream client and by every other crate that talks to the daemon or llama-server
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
 - **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting, or, on a turn gglib's own grammar constrained, as a second draw under that same grammar. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
@@ -134,7 +134,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability, plus content-hash session-id fallback derivation
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
-- **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, and the `upstream_timeout` body a streaming client is sent when the first-byte deadline expires on its last attempt with no other request active
+- **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
@@ -460,6 +460,32 @@ SSE responses are forwarded with proper headers:
 - `Connection: keep-alive`
 
 The proxy preserves upstream headers (minus hop-by-hop) and strips `Authorization`.
+
+### When the upstream stops talking
+
+A streamed chat completion has three bounds on a silent upstream. None is
+configurable.
+
+| Bound | Value | What it times | What the client gets |
+|-------|-------|---------------|----------------------|
+| First byte | 300 s a cycle | The wait for llama-server's response headers, that is, for a slot. Extended while another request is being served; otherwise retried twice, or not at all while a recycle is pending | A notice, `upstream_timeout`, `[DONE]` |
+| Idle | 300 s | Each read of the reply once it has begun. Time spent waiting on the client, or on a repair re-issue, does not count | The answer so far, a notice, `upstream_timeout`, `[DONE]`; only `[DONE]` if the answer had already finished |
+| Repair re-issue | 60 s | The second request of a tool-call repair | The original tool call |
+
+A stall after the first generated token (content, reasoning or a tool call)
+asks for the model to be recycled at once, and the stalled stream ends, freeing
+the model. The recycle is carried out by the next request that finds nothing in
+flight, including one that was waiting in admission behind the stalled stream.
+A stall before the first token only strikes, like an empty response: prefill
+sends a progress frame after each 2048-token batch, and a host that prefills
+slower than about 6.8 tokens a second can take longer than the idle bound
+between two of them. Stalls are counted in `upstream_health.total_stream_stalls`
+on the dashboard.
+
+None of these bounds a client that stops reading. A client that closes its
+connection is noticed at the next frame sent to it; one that vanishes without a
+FIN is bounded only by TCP retransmission.
+
 ## MCP Streamable HTTP Gateway
 
 The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) gateway at `/mcp`. This lets any MCP-compatible client (including OpenWebUI) discover and invoke tools from gglib's configured MCP servers — no separate `mcpo` process or Python dependency required.

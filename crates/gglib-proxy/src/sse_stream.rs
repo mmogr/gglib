@@ -12,11 +12,11 @@ use tracing::{debug, error, warn};
 
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
 use crate::connections::ConnectionGuard;
-use crate::forward::{FIRST_BYTE_DEADLINE_SECS, stream_response_to_channel, visible_content_frame};
+use crate::forward::{drain_events, visible_content_frame};
 use crate::repair::{RepairContext, RepairTurn};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
-use crate::upstream_read::first_byte_timeout_frame;
+use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_events};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::DialectSpec;
 
@@ -29,24 +29,25 @@ const MAX_RETRIES: u32 = 2;
 const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Spawn the detached keepalive/streaming task and return the immediate SSE
-/// response — relocated verbatim from `forward_chat_completion`'s streaming
-/// branch (Step 4).
+/// response.
 ///
 /// Bounds the pre-generation connection-establishment phase (TCP send /
-/// first-byte-deadline wait) with a bounded retry (`MAX_RETRIES` attempts,
-/// `RETRY_BACKOFF` apart). Retries stop the moment a response is obtained —
-/// once [`stream_response_to_channel`] begins draining a successful
-/// response, no further retries occur; mid-stream failures become inline
-/// error frames, exactly as before.
+/// first-byte-deadline wait, [`StreamBounds::first_byte`]) with a bounded
+/// retry (`MAX_RETRIES` attempts, `RETRY_BACKOFF` apart). The retry after an
+/// expired first-byte deadline is skipped while the watchdog has a recycle
+/// pending; the retry after a failed send is not. Retries stop the moment a
+/// response is obtained — once [`drain_events`] begins draining a successful
+/// response, no further retries occur, and [`drain_events`] reports a
+/// mid-stream failure, a silence past [`StreamBounds::idle`] among them.
 ///
-/// `client_wants_progress` is passed through to
-/// [`stream_response_to_channel`], which forwards `prompt_progress` frames
-/// only when the client's own request asked for them.
+/// `client_wants_progress` is passed through to [`drain_events`], which
+/// forwards `prompt_progress` frames only when the client's own request asked
+/// for them.
 ///
 /// When `config` and `session_id` are both `Some` (KV cache enabled), the KV
 /// cache is saved via [`save_after_generation`] immediately after
-/// [`stream_response_to_channel`] returns — before the semaphore `permit`
-/// drops at the end of this task.
+/// [`drain_events`] returns — before the semaphore `permit` drops at the end
+/// of this task — unless the turn stalled.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_and_return(
     req_builder: reqwest::RequestBuilder,
@@ -57,6 +58,7 @@ pub(crate) fn spawn_and_return(
     model_name_owned: String,
     dialect: Option<DialectSpec>,
     upstream_health: Arc<UpstreamHealth>,
+    bounds: StreamBounds,
     calibration: Arc<TokenCalibration>,
     cache_metrics: Arc<CacheMetricsStore>,
     context_metrics: Arc<crate::metrics::ContextMetricsStore>,
@@ -73,7 +75,7 @@ pub(crate) fn spawn_and_return(
     // dashboard) whether the task finishes normally, the client
     // disconnects (the task is a detached `tokio::spawn`, but `tx` being
     // dropped ends the response body stream, and the task itself exits
-    // once `stream_response_to_channel` observes the closed channel), or
+    // once `drain_events` observes the closed channel), or
     // panics.
     tokio::spawn(async move {
         let connection = connection;
@@ -98,8 +100,7 @@ pub(crate) fn spawn_and_return(
             // Overall first-byte deadline: bounds pathological slot-queue
             // waits so a wedged upstream cannot hang the client indefinitely
             // on keepalive comments.
-            let deadline =
-                tokio::time::sleep(std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS));
+            let deadline = tokio::time::sleep(bounds.first_byte);
             tokio::pin!(deadline);
 
             let attempt_result = loop {
@@ -107,6 +108,7 @@ pub(crate) fn spawn_and_return(
                     biased;
                     result = &mut send_future => break result,
                     () = &mut deadline => {
+                        let deadline_secs = bounds.first_byte.as_secs();
                         // The single-slot upstream may legitimately be busy
                         // serving another (possibly minutes-long) request, in
                         // which case this request is correctly queued, not
@@ -115,19 +117,22 @@ pub(crate) fn spawn_and_return(
                         // slot; otherwise extend the deadline and keep waiting.
                         if connection.others_active() {
                             warn!(
-                                deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                                deadline_secs,
                                 "slot-queue wait exceeded deadline but another request is active; extending (upstream busy, not wedged)"
                             );
-                            deadline.as_mut().reset(
-                                tokio::time::Instant::now()
-                                    + std::time::Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
-                            );
+                            deadline
+                                .as_mut()
+                                .reset(tokio::time::Instant::now() + bounds.first_byte);
                             continue;
                         }
-                        if retries < MAX_RETRIES {
+                        // With a recycle pending the upstream is already known
+                        // to be sick, and a retry would submit this request to
+                        // it a second time while the first may still be queued
+                        // there. Give up now, so the recycle is not held off.
+                        if retries < MAX_RETRIES && !upstream_health.recycle_pending() {
                             retries += 1;
                             warn!(
-                                deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                                deadline_secs,
                                 retries,
                                 "slot-queue wait exceeded first-byte deadline; retrying pre-generation phase"
                             );
@@ -135,11 +140,11 @@ pub(crate) fn spawn_and_return(
                             continue 'retry;
                         }
                         warn!(
-                            deadline_secs = FIRST_BYTE_DEADLINE_SECS,
+                            deadline_secs,
                             "slot-queue wait exceeded first-byte deadline with no other active request; treating upstream as degraded"
                         );
                         upstream_health.record_timeout();
-                        let frame = first_byte_timeout_frame(&model_name_owned);
+                        let frame = first_byte_timeout_frame(&model_name_owned, bounds.first_byte);
                         let _ = tx.send(Ok(Bytes::from(frame))).await;
                         return;
                     }
@@ -193,8 +198,8 @@ pub(crate) fn spawn_and_return(
                     request_body: body.clone(),
                     turn: repair_turn,
                 });
-                let outcome = stream_response_to_channel(
-                    resp,
+                let outcome = drain_events(
+                    upstream_events(resp.bytes_stream(), bounds.idle),
                     model_name_owned.clone(),
                     dialect,
                     tx,
@@ -273,7 +278,9 @@ pub(crate) fn spawn_and_return(
                 }
                 // KV cache save (opt-in): awaited, never detached, happens
                 // after stream exhaustion and before the permit drops.
-                if let (Some(cfg), Some(sid)) = (config.as_ref(), session_id.as_ref()) {
+                if outcome.worth_saving()
+                    && let (Some(cfg), Some(sid)) = (config.as_ref(), session_id.as_ref())
+                {
                     save_after_generation(cfg, sid).await;
                 }
             }

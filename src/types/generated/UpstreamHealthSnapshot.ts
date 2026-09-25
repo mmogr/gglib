@@ -25,6 +25,15 @@ total_empty_responses: number,
  */
 total_upstream_errors: number, 
 /**
+ * Total turns that ended because the upstream went silent mid-reply for
+ * longer than the idle bound, since the proxy started.
+ *
+ * Separate from [`Self::total_upstream_errors`] for the same reason that
+ * one is separate from the empty responses: a server that stops talking
+ * and one that falls over are different illnesses.
+ */
+total_stream_stalls: number, 
+/**
  * Total first-byte deadline expiries since the proxy started.
  */
 total_first_byte_timeouts: number, 
