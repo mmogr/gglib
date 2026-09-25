@@ -6,7 +6,7 @@
 //! that fit. `settings set` cannot express it — `handle_set` builds
 //! `args.default_context_size.map(Some)`, which produces `None` (leave alone) or
 //! `Some(Some(v))` (write a value) and never `Some(None)` (clear) — so the only
-//! way back was `settings reset`, which clears every other setting too.
+//! way back was `settings reset`, which clears every other preference too.
 //!
 //! The valid keys are read from [`UpdateSettingsRequest`] rather than listed
 //! here. A hand-written list is a second place to forget a field, and this

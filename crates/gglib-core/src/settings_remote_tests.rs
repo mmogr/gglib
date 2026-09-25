@@ -1,4 +1,4 @@
-//! Tests for the remote tunnel's stored pairing (ADR 0012).
+//! Tests for the remote tunnel's settings (ADR 0012) and what a reset keeps.
 //!
 //! Split out via `#[path]`, like `settings_tests.rs`, and separately from it
 //! because that file is at its budget.
@@ -128,4 +128,130 @@ fn a_pairing_stored_before_the_remembered_model_still_loads() {
     let round: RemotePairing =
         serde_json::from_str(&serde_json::to_string(&with).unwrap()).unwrap();
     assert_eq!(round.default_model.as_deref(), Some("qwen3"));
+}
+
+/// The five fields a reset keeps, as the stored record names them.
+const KEPT: [&str; 5] = [
+    "proxy_api_key",
+    "remote_pairing",
+    "remote_enabled",
+    "remote_serve",
+    "remote_devices",
+];
+
+/// A machine that joined another, admits one device, serves remote access
+/// with MCP on, holds a proxy key, and holds a value other than its default
+/// in every other field.
+///
+/// The literal names every field, so a field added to `Settings` does not
+/// compile here until it is given a value.
+fn a_remote_machine() -> Settings {
+    let sampling = InferenceConfig {
+        temperature: Some(0.2),
+        ..InferenceConfig::default()
+    };
+    Settings {
+        proxy_api_key: Some("proxy-key".to_owned()),
+        remote_pairing: Some(pairing()),
+        remote_enabled: Some(true),
+        remote_serve: Some(RemoteServe {
+            allow_mcp: true,
+            relay: Some("https://relay.example".to_owned()),
+            discovery: false,
+        }),
+        remote_devices: Some(vec![Device {
+            id: "dev-0a1b2c3d".to_owned(),
+            label: Some("phone".to_owned()),
+            joined_at: 1,
+            redeemed_at: Some(2),
+            last_seen: Some(3),
+            peer: None,
+        }]),
+        default_download_path: Some("/models/elsewhere".to_owned()),
+        default_context_size: Some(4096),
+        proxy_port: Some(9191),
+        llama_base_port: Some(9500),
+        max_download_queue_size: Some(3),
+        show_memory_fit_indicators: Some(false),
+        max_tool_iterations: Some(40),
+        max_stagnation_steps: Some(9),
+        default_model_id: Some(7),
+        inference_defaults: Some(sampling.clone()),
+        inference_profiles: Some(vec![InferenceProfile {
+            name: "focused".to_owned(),
+            description: None,
+            config: sampling,
+            list_in_models: true,
+        }]),
+        setup_completed: Some(true),
+        title_generation_prompt: Some("Name this chat.".to_owned()),
+        bind_host: Some("0.0.0.0".to_owned()),
+        share_lan: Some(true),
+        trust_client_sampling: Some(true),
+        loop_guard_mode: Some(LoopGuardMode::Refuse),
+        proxy_loop_detection: Some(false),
+        tool_call_repair: Some(false),
+        agentic_sampling: Some(true),
+        proxy_autostart: Some(true),
+        close_to_tray: Some(true),
+        start_at_login: Some(true),
+    }
+}
+
+#[test]
+fn a_reset_keeps_the_pairing_the_roster_and_the_remote_switch_and_flags() {
+    let before = a_remote_machine();
+    let mut after = a_remote_machine();
+
+    after.reset_preferences();
+
+    assert_eq!(after.remote_pairing, before.remote_pairing);
+    assert_eq!(after.remote_devices, before.remote_devices);
+    assert_eq!(after.remote_enabled, Some(true));
+    assert_eq!(after.remote_serve, before.remote_serve);
+}
+
+#[test]
+fn a_reset_keeps_the_proxy_api_key() {
+    let mut after = a_remote_machine();
+
+    after.reset_preferences();
+
+    assert_eq!(after.proxy_api_key.as_deref(), Some("proxy-key"));
+}
+
+/// Everything that is not one of the five kept fields comes back as
+/// `with_defaults` holds it.
+///
+/// The loop holds the fixture to its word: every field outside the five
+/// differs from its default, so a reset that also kept any of them fails the
+/// comparison below. A field given its default in the fixture fails the loop.
+#[test]
+fn a_reset_still_puts_every_preference_back_to_its_default() {
+    let before = a_remote_machine();
+    let stored = serde_json::to_value(&before).unwrap();
+    let defaults = serde_json::to_value(Settings::with_defaults()).unwrap();
+    let fields = stored.as_object().expect("settings serialize as a map");
+    for (field, value) in fields.iter().filter(|(f, _)| !KEPT.contains(&f.as_str())) {
+        assert_ne!(
+            Some(value),
+            defaults.get(field),
+            "the fixture holds `{field}` at its default"
+        );
+    }
+    let mut after = a_remote_machine();
+
+    after.reset_preferences();
+
+    assert_eq!(
+        after,
+        Settings {
+            proxy_api_key: before.proxy_api_key,
+            remote_pairing: before.remote_pairing,
+            remote_enabled: before.remote_enabled,
+            remote_serve: before.remote_serve,
+            remote_devices: before.remote_devices,
+            ..Settings::with_defaults()
+        }
+    );
 }

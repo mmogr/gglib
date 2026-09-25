@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod profiles;
+mod reset;
 mod set;
 mod settings_display;
 mod unset;
@@ -142,22 +143,7 @@ pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) 
         }
         SettingsCommand::Set(args) => set::handle_set(ctx, *args).await,
         SettingsCommand::Unset { key } => unset::handle_unset(ctx, &key).await,
-        SettingsCommand::Reset { force } => {
-            if !force {
-                let confirm = crate::utils::input::prompt_confirmation(
-                    "Are you sure you want to reset all settings to defaults?",
-                )?;
-                if !confirm {
-                    println!("Reset cancelled.");
-                    return Ok(());
-                }
-            }
-
-            let defaults = Settings::with_defaults();
-            ctx.app.settings().save(&defaults).await?;
-            println!("✓ All settings have been reset to defaults.");
-            Ok(())
-        }
+        SettingsCommand::Reset { force } => reset::handle_reset(ctx, force).await,
     }
 }
 

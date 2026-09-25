@@ -226,7 +226,10 @@ pub enum SettingsCommand {
         /// The setting to clear, as shown by `settings show`
         key: String,
     },
-    /// Reset all settings to defaults
+    /// Reset every preference to its default
+    ///
+    /// Keeps the machine this one joined, the devices it admits, whether and
+    /// how it serves remote access, and the proxy's API key.
     Reset {
         /// Skip confirmation prompt
         #[arg(short, long)]

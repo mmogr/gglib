@@ -456,11 +456,11 @@ fn test_profiles_round_trip_through_json_and_default_when_absent() {
 
 /// The property `test_default_settings`' `None` is only the shadow of.
 ///
-/// `gglib config settings reset` writes `Settings::with_defaults()` verbatim,
-/// so what that constructor holds decides which context rung a reset user
-/// lands on. Asserting the field is `None` says what the value is; this says
-/// why it matters, and it is the assertion that fails if someone restores the
-/// floor because "reset should reset it to the default".
+/// `gglib config settings reset` writes each preference as `with_defaults`
+/// has it, so what that constructor holds decides which context rung a reset
+/// user lands on. Asserting the field is `None` says what the value is; this
+/// says why it matters, and it is the assertion that fails if someone restores
+/// the floor because "reset should reset it to the default".
 ///
 /// The converse — a number the user actually typed still outranking the fit —
 /// is already `server_config`'s `a_user_set_global_default_beats_the_fitted_value`.
