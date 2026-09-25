@@ -21,6 +21,7 @@ This document is the definitive engineering guide for contributors. Read it befo
 13. [CI Pipeline](#ci-pipeline)
 14. [Issue & PR Labeling](#issue--pr-labeling)
 15. [Pull Request Checklist](#pull-request-checklist)
+16. [Licensing your contribution](#licensing-your-contribution)
 
 ---
 
@@ -746,3 +747,10 @@ Before requesting review, confirm each item:
 - [ ] If the change adds a new long-running operation: for Tier 1 (runtime behaviour), all three surfaces (CLI, Axum, Tauri) are wired up in this PR; for Tier 2 (management/inspection), the CLI is wired and the surface gap is tracked in a linked issue.
 - [ ] `Cargo.lock` is up to date and committed.
 - [ ] No new dependency has been introduced from a higher layer to a lower layer.
+- [ ] I agree to the terms in [Licensing your contribution](#licensing-your-contribution).
+
+---
+
+## Licensing your contribution
+
+By opening a pull request you agree that (1) you wrote the contribution or have the right to submit it; (2) it is licensed to everyone under AGPL-3.0-only, like the rest of gglib; and (3) you also grant Matt O'Grady (@mmogr), the copyright holder, a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, modify, sublicense and relicense it under any terms, including a commercial license. You keep your copyright.
