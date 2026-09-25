@@ -6,8 +6,10 @@
  * panel has to show it the moment it arrives and nowhere else; the join
  * half's guard rails, where the button is dead with nothing to dial and a
  * stored ticket without a stored key says so instead of failing later; and
- * what a device row may and may not be called, which is the half of this
- * panel that can talk somebody into revoking the wrong machine.
+ * how a device row is shown, which is the half of this panel that can talk
+ * somebody into revoking the wrong machine. What a row is *called* is the
+ * daemon's: each row arrives with its `description`, and the fixtures below
+ * carry the words the daemon writes for them.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -74,6 +76,8 @@ function paired(): RemoteDevice {
     admitted: true,
     peer: null,
     recorded: true,
+    description: 'last seen 1m ago',
+    joined: true,
   };
 }
 
@@ -210,6 +214,8 @@ describe('RemoteControl', () => {
           admitted: true,
           peer: null,
           recorded: true,
+          description: 'last seen 2m ago',
+          joined: true,
         },
       ],
     });
@@ -237,6 +243,8 @@ describe('RemoteControl', () => {
           admitted: true,
           peer: null,
           recorded: true,
+          description: 'invited 1h ago, never joined',
+          joined: false,
         },
       ],
     });
@@ -259,6 +267,8 @@ describe('RemoteControl', () => {
           admitted: false,
           peer: null,
           recorded: true,
+          description: 'invited 1h ago, never joined · not admitted',
+          joined: false,
         },
       ],
     });
@@ -268,8 +278,8 @@ describe('RemoteControl', () => {
   });
 
   it('a row says which state it is in, and never mistakes one for another', async () => {
-    // Three states a redeemed row can be in; the CLI's own tests pin two of
-    // them, tunnel down and no requests yet. `admitted: null` is the one that
+    // Three states a redeemed row can be in, as the daemon describes them;
+    // its own tests pin how each is worded. `admitted: null` is the one that
     // matters most: with the tunnel down nothing is admitted, so a row reading
     // "not admitted" would name one device as the one that was dropped.
     applyRemoteStatus({
@@ -284,6 +294,8 @@ describe('RemoteControl', () => {
           admitted: null,
           peer: null,
           recorded: true,
+          description: 'last seen just now · tunnel down',
+          joined: true,
         },
         {
           id: 'dev-22222222',
@@ -294,6 +306,8 @@ describe('RemoteControl', () => {
           admitted: false,
           peer: null,
           recorded: true,
+          description: 'last seen just now · not admitted',
+          joined: true,
         },
         {
           id: 'dev-33333333',
@@ -304,6 +318,8 @@ describe('RemoteControl', () => {
           admitted: true,
           peer: null,
           recorded: true,
+          description: 'no requests yet',
+          joined: true,
         },
       ],
     });
@@ -322,7 +338,13 @@ describe('RemoteControl', () => {
     applyRemoteStatus({
       ...IDLE_STATUS,
       enabled: true,
-      devices: [{ ...paired(), peer: '3ca82708b995' }],
+      devices: [
+        {
+          ...paired(),
+          peer: '3ca82708b995',
+          description: 'last seen 1m ago · paired from 3ca82708b995',
+        },
+      ],
     });
     await open();
 
@@ -345,6 +367,8 @@ describe('RemoteControl', () => {
           admitted: true,
           peer: null,
           recorded: false,
+          description: 'key held, no record · admitted',
+          joined: false,
         },
       ],
     });
@@ -355,10 +379,11 @@ describe('RemoteControl', () => {
     expect(screen.getByRole('button', { name: 'Forget dev-11112222' })).toBeInTheDocument();
   });
 
-  it('a row from a daemon older than the record flag reads as a device, not a stray key', async () => {
+  it('a row from a daemon older than the description still names the device', async () => {
     // The desktop app adopts whatever daemon answers, with no version check,
-    // and an older one sends no `recorded`. Every row it sends is a roster
-    // row, and reading the missing field as false would offer to forget each.
+    // and an older one sends rows with no `description`. The row is still a
+    // device with a name, an id and a Forget button; it just says nothing
+    // more about itself.
     const older = {
       id: 'dev-33334444',
       label: 'iPad',
@@ -370,8 +395,9 @@ describe('RemoteControl', () => {
     applyRemoteStatus({ ...IDLE_STATUS, enabled: true, devices: [older] });
     await open();
 
-    expect(screen.queryByText(/no record/)).not.toBeInTheDocument();
-    expect(screen.getByText(/last seen/)).toBeInTheDocument();
+    expect(screen.getByText('iPad')).toBeInTheDocument();
+    expect(screen.getByText('dev-33334444')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Forget iPad (dev-33334444)' })).toBeInTheDocument();
   });
 
   it('two devices that named themselves the same thing are still two devices', async () => {
@@ -385,6 +411,8 @@ describe('RemoteControl', () => {
       admitted: true,
       peer: null,
       recorded: true,
+      description: 'last seen just now',
+      joined: true,
     };
     applyRemoteStatus({
       ...IDLE_STATUS,
@@ -444,11 +472,16 @@ describe('RemoteControl', () => {
     expect(enableRemote).toHaveBeenCalledWith({ allow_mcp: false, invite: false });
   });
 
-  it('a device seen but never stamped redeemed counts as joined on enable', async () => {
-    // `redeemed_at` can be lost, and `last_seen` is the second opinion — so a
-    // row with requests on it is a device that arrived, and a re-enable must
-    // not mint an invite for it.
-    applyRemoteStatus({ ...IDLE_STATUS, devices: [{ ...paired(), redeemed_at: null }] });
+  it('enable takes whether a device joined from the daemon, not from the timestamps', async () => {
+    // What counts as joined is the daemon's rule — a redemption or a request,
+    // either of which can be lost on its own — and each row carries its
+    // answer. The panel does not work it out again, so a row the daemon calls
+    // joined is joined here whatever timestamps it arrived with, and a
+    // re-enable mints no invite for it.
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      devices: [{ ...paired(), redeemed_at: null, last_seen: null, joined: true }],
+    });
     enableRemote.mockResolvedValue({ ticket: TICKET });
     const user = await open();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
@@ -460,7 +493,15 @@ describe('RemoteControl', () => {
     // that expired, and then offer no pairing on the one enable that needs it.
     applyRemoteStatus({
       ...IDLE_STATUS,
-      devices: [{ ...paired(), redeemed_at: null, last_seen: null }],
+      devices: [
+        {
+          ...paired(),
+          redeemed_at: null,
+          last_seen: null,
+          description: 'invited 1d ago, never joined',
+          joined: false,
+        },
+      ],
     });
     enableRemote.mockResolvedValue({ ticket: TICKET });
     const user = await open();
@@ -547,6 +588,8 @@ describe('RemoteControl', () => {
       admitted: true,
       peer: null,
       recorded: true,
+      description: 'invited just now, never joined',
+      joined: false,
     };
     applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
     inviteRemote.mockResolvedValue({

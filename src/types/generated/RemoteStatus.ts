@@ -4,7 +4,8 @@ import type { RemoteDevice } from "./RemoteDevice";
 import type { RemotePeer } from "./RemotePeer";
 
 /**
- * `GET /api/remote/status` and the `disable` response.
+ * `GET /api/remote/status`, and the answer to `disable`, `disconnect` and
+ * `kill`.
  */
 export type RemoteStatus = { 
 /**
@@ -21,7 +22,7 @@ ticket_fingerprint: string | null,
 pairing_active: boolean, 
 /**
  * Whether a device redeemed the code now on offer. Per code, not per
- * session, and says nothing about the roster.
+ * session: offering a new one clears it. Says nothing about the roster.
  */
 paired: boolean, 
 /**
@@ -53,8 +54,8 @@ last_peer: string | null,
  */
 connected: RemoteConnection | null, 
 /**
- * Fingerprint of the ticket a bare `join` would dial. Never the
- * ticket.
+ * Fingerprint of the ticket a bare `join` would dial, from the stored
+ * pairing. Never the ticket.
  */
 stored_ticket_fingerprint: string | null, 
 /**
@@ -62,7 +63,11 @@ stored_ticket_fingerprint: string | null,
  */
 has_remote_key: boolean, 
 /**
- * Whether this machine comes back reachable after a restart.
+ * Whether this machine comes back reachable after a restart: the switch
+ * `enable` and `disable` set. It can disagree with `enabled` in either
+ * direction: on with nothing bound is a machine still arming, or one
+ * that failed to arm at boot; bound with the switch off cannot outlive
+ * the process.
  */
 remote_enabled: boolean, 
 /**
