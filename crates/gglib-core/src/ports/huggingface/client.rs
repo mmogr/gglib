@@ -51,7 +51,8 @@ pub trait HfClientPort: Send + Sync {
 
     /// Get the current commit SHA for a model.
     ///
-    /// Used for version tracking and update detection.
+    /// Used for version tracking and update detection. Fails when the Hub
+    /// names no commit.
     async fn get_commit_sha(&self, model_id: &str) -> HfPortResult<String>;
 
     /// Get detailed information about a model.
