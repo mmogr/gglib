@@ -97,10 +97,9 @@ impl RemoteGateway {
     /// session outlives any one code: `invite` offers a second one against a
     /// tunnel that is already up, which is the point of offering a code
     /// without taking every other device down. Left set from the first
-    /// device, it would have the pairing screen report success — naming that
-    /// first device, off `last_peer` — within a second of the second code
-    /// being shown, and stop watching while the code stayed live and
-    /// redeemable for the rest of its `ttl`.
+    /// device, it would have the pairing screen report success within a
+    /// second of the second code being shown, and stop watching while the
+    /// code stayed live and redeemable for the rest of its `ttl`.
     pub(in crate::remote) fn offer_pairing(
         &self,
         epoch: u64,
@@ -207,9 +206,10 @@ impl RemoteGateway {
                 info!(device = %device, peer = %peer, "a device redeemed its invite");
                 // The pairing request crossed the tunnel like any other, and
                 // while the proxy answered it `status` counted it and named its
-                // endpoint. The edge answers it now, so it is counted here, and
-                // before `paired` flips: the pairing screen names the device
-                // from the last peer the moment it reads `paired`.
+                // endpoint. The edge answers it now, so it is counted here,
+                // before `paired` flips, for a status that reads `paired` to
+                // count the request that paired and name its endpoint as the
+                // last peer.
                 self.note_tunnelled_request(Some(&peer), None);
                 self.paired.store(true, Ordering::Relaxed);
                 self.note(Note::Joined {

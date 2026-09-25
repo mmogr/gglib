@@ -7,8 +7,9 @@
 //! pairing is visible from the tree; `StartServerDto` narrows
 //! `gglib_app_services::types::StartServerResponse`, and `QueueDownloadBody`
 //! pairs with `gglib_axum::handlers::model::downloads`. The tests in
-//! `wire_tests.rs` pin `StartProxyBody` and `StartServerDto`.
-//! `ProxyStatusDto` and `QueueDownloadBody` are not pinned.
+//! `wire_tests.rs` pin `StartProxyBody`, `StartServerDto`, and the `device`
+//! a `RemoteEnableDto` reads. `ProxyStatusDto` and `QueueDownloadBody` are
+//! not pinned.
 //!
 //! Split out of `daemon_client/mod.rs`, which owns the *connection* — finding
 //! the daemon, launching it, checking its identity. That is a different
@@ -109,6 +110,11 @@ pub(crate) struct RemoteEnableDto {
     pub code: Option<String>,
     pub pairing: Option<String>,
     pub expires_in_s: Option<u64>,
+    /// The device the code will issue a key to, when there is one: the id
+    /// `gglib remote list` shows and `forget` takes. `None` from a daemon
+    /// that predates per-device keys and names none.
+    #[serde(default)]
+    pub device: Option<String>,
     /// What the daemon says about `/mcp` on the session it acted on, which
     /// is not always the one this call asked for: `--invite` against a
     /// tunnel that is already up leaves the flags alone.

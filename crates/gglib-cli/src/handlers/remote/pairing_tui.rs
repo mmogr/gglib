@@ -18,8 +18,10 @@ use crate::daemon_client::{DaemonHandle, RemoteEnableDto, RemoteStatusDto};
 /// How the screen ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Outcome {
-    /// The daemon reported a device paired.
-    Paired { peer: Option<String> },
+    /// The daemon reported the code redeemed. `device` is the one the code
+    /// was for, as the enable answer named it; `None` from a daemon that
+    /// names none.
+    Paired { device: Option<String> },
     /// The code expired with nobody pairing.
     Expired,
     /// The daemon let go of the code before it expired, and nobody paired.
@@ -80,6 +82,22 @@ pub(super) fn withdrawn_notice(tunnel_up: bool) -> [&'static str; 2] {
     }
 }
 
+/// The line that says a device paired, naming the one its code was for.
+///
+/// One copy for `enable` and `invite`, as [`withdrawn_notice`] is.
+pub(super) fn paired_line(device: Option<&str>) -> String {
+    match device {
+        Some(device) => format!("  \u{2705} Paired {device}. `gglib remote list` shows it."),
+        None => "  \u{2705} A device paired.".to_owned(),
+    }
+}
+
+/// What the plain pairing says about the device its code is for, beside the
+/// command that withdraws the code before anyone redeems it.
+pub(super) fn code_is_for(device: &str) -> String {
+    format!("  The code is for {device}; `gglib remote forget {device}` withdraws it.")
+}
+
 /// Show the pairing until a device pairs, the code expires or is withdrawn,
 /// or Ctrl-C.
 pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Result<Outcome> {
@@ -95,7 +113,7 @@ pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Res
     // every exit path, including a `?`.
     let _restore = Restore;
 
-    let mut watch = Watch::default();
+    let mut watch = Watch::for_offer(enabled);
     let outcome = loop {
         let left = ttl.saturating_sub(started.elapsed());
         draw(&mut out, enabled, rendered.as_deref(), left)?;
@@ -119,13 +137,32 @@ pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Res
 }
 
 /// What the polls have said so far, and when that is enough to leave.
-#[derive(Debug, Default)]
+///
+/// Built only by [`Watch::for_offer`], so the device a pairing names is
+/// always the one the offer on screen named.
+#[derive(Debug)]
 struct Watch {
     /// The last read said no code was live and nobody had paired.
     gone: bool,
+    /// The device the code on screen was minted for.
+    device: Option<String>,
 }
 
 impl Watch {
+    /// A watch on the code `enabled` offered.
+    ///
+    /// The device is taken from the answer that offered the code, never from
+    /// a status read. A status names endpoints, not devices: `last_peer` is
+    /// whichever endpoint sent the last tunnelled request, which can be
+    /// another device's by the time the screen reads it, and neither `list`
+    /// nor `forget` takes a fingerprint.
+    fn for_offer(enabled: &RemoteEnableDto) -> Self {
+        Self {
+            gone: false,
+            device: enabled.device.clone(),
+        }
+    }
+
     /// One status read, with `left` before the countdown ends; `Some` when the
     /// screen should leave.
     ///
@@ -144,9 +181,7 @@ impl Watch {
     fn read(&mut self, status: RemoteStatusDto, left: Duration) -> Option<Outcome> {
         if status.paired {
             return Some(Outcome::Paired {
-                peer: status
-                    .last_peer
-                    .or_else(|| status.peers.first().map(|p| p.fingerprint.clone())),
+                device: self.device.clone(),
             });
         }
         let gone_before = std::mem::replace(&mut self.gone, !status.pairing_active);
@@ -192,6 +227,9 @@ fn draw(
     writeln!(out, "  ticket  {}\r", enabled.ticket)?;
     let code = enabled.code.as_deref().unwrap_or_default();
     writeln!(out, "  code    {code}\r")?;
+    if let Some(device) = &enabled.device {
+        writeln!(out, "  device  {device}\r")?;
+    }
     writeln!(out, "\r")?;
     writeln!(
         out,

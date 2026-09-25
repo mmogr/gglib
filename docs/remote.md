@@ -48,11 +48,11 @@ laptop dials again from the pairing it stored.
 tunnel in front of it. On its own it hands out nothing: it prints the ticket
 and says the machine is reachable, and that is all. Adding `--invite` also
 mints a key for one new device and a six-digit code that hands it over once,
-shown in the terminal's alternate screen — a QR code, the ticket, and the
-code — the way `less` shows a file: leaving the screen restores the terminal,
-and nothing is left in the scrollback. The screen goes away by itself the
-moment a device pairs, the code expires, or the invite is withdrawn on this
-machine. `--no-qr`, or a stdout that is not
+shown in the terminal's alternate screen — a QR code, the ticket, the code,
+and the id of the device it is for — the way `less` shows a file: leaving
+the screen restores the terminal, and nothing is left in the scrollback. The
+screen goes away by itself the moment a device pairs, the code expires, or
+the invite is withdrawn on this machine. `--no-qr`, or a stdout that is not
 a terminal, prints the pairing as plain text instead.
 
 A restart never invites. The daemon brings the tunnel back up with the flags

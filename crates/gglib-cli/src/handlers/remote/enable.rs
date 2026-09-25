@@ -107,12 +107,9 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     }
 
     match pairing_tui::run(&handle, &enabled).await? {
-        Outcome::Paired { peer } => {
+        Outcome::Paired { device } => {
             eprintln!();
-            match peer {
-                Some(peer) => eprintln!("  \u{2705} Paired with device {peer}."),
-                None => eprintln!("  \u{2705} A device paired."),
-            }
+            eprintln!("{}", pairing_tui::paired_line(device.as_deref()));
             eprintln!(
                 "  It holds a key of its own now; the tunnel stays up until \
                  `gglib remote disable`, and forgetting that device retires only its key."
@@ -171,6 +168,9 @@ fn print_plain(enabled: &RemoteEnableDto) {
     eprintln!();
     eprintln!("  On the other machine, within {expires}s:");
     eprintln!("    gglib remote join {pairing}");
+    if let Some(device) = enabled.device.as_deref() {
+        eprintln!("{}", pairing_tui::code_is_for(device));
+    }
 }
 
 /// The tunnel is up and no device is being paired right now.
