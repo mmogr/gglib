@@ -69,7 +69,7 @@ Everything between the OpenAI request and llama-server is the product:
   8 of 15 matched pairs and lower on none; on Qwen3.8-27B nothing broke a
   schema, so repair attempted nothing.
   [Details →](docs/tool-call-repair.md),
-  [reading →](docs/adr/0004-observe-the-sampling-boundary.md)
+  [reading →](docs/adr/log-0004.md#addendum--the-first-reading-through-the-proxy-2026-09-20)
 - **Loop defense**: agentic clients replay the full conversation each turn,
   so the proxy scans the incoming history for tool-call batches repeated back
   to back *and answered the same way*, observation-tool spam, and repeated
@@ -178,7 +178,7 @@ gglib benchmark agentic -m Qwen3-4B --seeds 12345,67890 --proxy
 
 The agentic benchmark includes its own A/A arm and positive control so it
 can't overclaim. Full methodology:
-[ADR 0004](docs/adr/0004-observe-the-sampling-boundary.md).
+[ADR 0004's log](docs/adr/log-0004.md#addendum--the-ab-instrument-and-the-first-thing-it-measured).
 
 ## Interfaces
 

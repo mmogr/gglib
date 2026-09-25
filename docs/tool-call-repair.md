@@ -352,7 +352,8 @@ On Llama 3.2 the proxy scored higher on tool-match score in 8 of 15 matched
 because three of that pair's runs never reached the model. The 8 are the proxy
 arm's, not repair's: they are everything the proxy does to a request and its
 answer.
-[ADR 0004](adr/0004-observe-the-sampling-boundary.md)'s 2026-09-20 addendum
+The 2026-09-20 addendum in
+[ADR 0004's log](adr/log-0004.md#addendum--the-first-reading-through-the-proxy-2026-09-20)
 has the reading, the axis that moved the other way, and what none of it
 licenses.
 
