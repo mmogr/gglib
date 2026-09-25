@@ -1,11 +1,17 @@
 //! Tests for [`super`] — the decisions that depend on which machine a turn
 //! runs on, without a machine.
 //!
-//! Everything that needs a daemon or a settings store is below the seam and
-//! is exercised where it always was; what is checked here is the table, the
-//! refusal, and the two pure decisions.
+//! Everything that needs a daemon is below the seam and is exercised where
+//! it always was; what is checked here is the table, the refusal, the two
+//! pure decisions, and what remembering a model writes to a settings store
+//! that another writer shares.
 
+use std::sync::Mutex;
+
+use async_trait::async_trait;
 use clap::Parser as _;
+use gglib_core::RemotePairing;
+use gglib_core::ports::RepositoryError;
 
 use super::*;
 use crate::parser::Cli;
@@ -113,4 +119,120 @@ fn the_flag_is_the_only_way_to_the_paired_machine() {
     assert_eq!(Target::from_flag(false), Target::Local);
     assert_eq!(Target::from_flag(true), Target::Remote);
     assert_eq!(Target::default(), Target::Local);
+}
+
+// ── Remembering the model ────────────────────────────────────────────────
+
+const TICKET_A: &str = "pipe-machine-a";
+const TICKET_B: &str = "pipe-machine-b";
+
+/// A write that lands between a turn's read of the settings and its write.
+type Between = Box<dyn FnOnce(&mut Settings) + Send>;
+
+/// A settings store another writer shares: the first `load` answers with
+/// the settings as they stood, and then `between` lands, the way a write
+/// from the daemon would while the turn is under way.
+struct Shared {
+    stored: Mutex<Settings>,
+    between: Mutex<Option<Between>>,
+}
+
+impl Shared {
+    fn paired_with_a(between: impl FnOnce(&mut Settings) + Send + 'static) -> Self {
+        let mut settings = Settings::with_defaults();
+        settings.remote_pairing = pairing(TICKET_A, "key-a");
+        Self {
+            stored: Mutex::new(settings),
+            between: Mutex::new(Some(Box::new(between))),
+        }
+    }
+
+    fn pairing(&self) -> Option<RemotePairing> {
+        self.stored.lock().unwrap().remote_pairing.clone()
+    }
+}
+
+#[async_trait]
+impl SettingsRepository for Shared {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
+        let mut stored = self.stored.lock().unwrap();
+        let read = stored.clone();
+        if let Some(write) = self.between.lock().unwrap().take() {
+            write(&mut stored);
+        }
+        Ok(read)
+    }
+
+    async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
+        *self.stored.lock().unwrap() = settings.clone();
+        Ok(())
+    }
+}
+
+fn pairing(ticket: &str, api_key: &str) -> Option<RemotePairing> {
+    Some(RemotePairing {
+        ticket: ticket.to_owned(),
+        api_key: api_key.to_owned(),
+        default_model: None,
+        port: Some(8180),
+    })
+}
+
+/// A model named on a turn is remembered on the pairing it was named for.
+#[tokio::test]
+async fn a_model_named_on_a_turn_is_remembered_on_its_pairing() {
+    let store = Shared::paired_with_a(|_| {});
+
+    let model = remembered_model(&store, "qwen3".to_owned()).await;
+
+    assert_eq!(model.expect("a model was named"), "qwen3");
+    let stored = store.pairing().expect("the pairing is still stored");
+    assert_eq!(stored.default_model.as_deref(), Some("qwen3"));
+    assert_eq!(stored.api_key, "key-a", "remembering touched the key");
+}
+
+/// Remembering a model keeps the key a re-pair wrote while the turn ran.
+#[tokio::test]
+async fn remembering_a_model_keeps_the_key_a_re_pair_wrote() {
+    let store = Shared::paired_with_a(|now| now.remote_pairing = pairing(TICKET_A, "key-a-again"));
+
+    remembered_model(&store, "qwen3".to_owned())
+        .await
+        .expect("a model was named");
+
+    let stored = store.pairing().expect("the pairing is still stored");
+    assert_eq!(
+        stored.api_key, "key-a-again",
+        "the re-pair's key was put back"
+    );
+    assert_eq!(stored.default_model.as_deref(), Some("qwen3"));
+}
+
+/// A model named for one machine is not remembered on a pairing with
+/// another, which a join wrote while the turn ran.
+#[tokio::test]
+async fn a_model_is_not_remembered_for_another_machine() {
+    let store = Shared::paired_with_a(|now| now.remote_pairing = pairing(TICKET_B, "key-b"));
+
+    remembered_model(&store, "qwen3".to_owned())
+        .await
+        .expect("the turn still runs on the model it named");
+
+    assert_eq!(
+        store.pairing(),
+        pairing(TICKET_B, "key-b"),
+        "the other machine's pairing was changed"
+    );
+}
+
+/// A pairing forgotten while the turn ran stays forgotten.
+#[tokio::test]
+async fn a_forgotten_pairing_is_not_brought_back() {
+    let store = Shared::paired_with_a(|now| now.remote_pairing = None);
+
+    remembered_model(&store, "qwen3".to_owned())
+        .await
+        .expect("the turn still runs on the model it named");
+
+    assert_eq!(store.pairing(), None, "remembering a model brought it back");
 }

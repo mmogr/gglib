@@ -71,6 +71,21 @@ pub(crate) fn paired_with(ticket: &str, api_key: &str) -> SettingsUpdate {
     }
 }
 
+/// Remember `model` on the stored pairing, as a `--remote` turn does: that
+/// field of the record as it stands, and nothing else.
+pub(crate) async fn remember_a_model(core: &AppCore, model: &str) {
+    core.settings()
+        .repo()
+        .modify(&|settings: &mut gglib_core::Settings| {
+            if let Some(pairing) = settings.remote_pairing.as_mut() {
+                pairing.default_model = Some(model.to_owned());
+            }
+            Ok(())
+        })
+        .await
+        .expect("the model is remembered");
+}
+
 /// An emitter that keeps what it was told, in the order it was told.
 ///
 /// The shape `remote/gateway_tests.rs` already uses. `RemoteOps` emits on

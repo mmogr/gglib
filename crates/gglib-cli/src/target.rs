@@ -20,9 +20,10 @@
 //! refuses the flag with a sentence rather than ignoring it.
 
 use anyhow::{Result, anyhow, bail};
+use gglib_core::Settings;
 use gglib_core::domain::Model;
+use gglib_core::ports::SettingsRepository;
 use gglib_core::request_pipeline::{self, ModelContext};
-use gglib_core::{RemotePairing, SettingsUpdate};
 use gglib_runtime::FarMachine;
 
 use crate::bootstrap::CliContext;
@@ -178,7 +179,7 @@ impl Target {
         match self {
             Self::Local if typed.is_empty() => here().await,
             Self::Local => Ok(typed),
-            Self::Remote => remembered_model(ctx, typed).await,
+            Self::Remote => remembered_model(ctx.settings_repo.as_ref(), typed).await,
         }
     }
 
@@ -240,14 +241,12 @@ pub(crate) struct Upstream {
 
 /// The paired machine's model for this turn: `typed`, remembered for next
 /// time; or what was remembered; or a refusal that says how to find one.
-async fn remembered_model(ctx: &CliContext, typed: String) -> Result<String> {
-    let settings = ctx
-        .app
-        .settings()
-        .get()
+async fn remembered_model(settings: &dyn SettingsRepository, typed: String) -> Result<String> {
+    let stored = settings
+        .load()
         .await
         .map_err(|e| anyhow!("failed to load settings: {e}"))?;
-    let Some(pairing) = settings.remote_pairing else {
+    let Some(pairing) = stored.remote_pairing else {
         bail!(
             "this machine has not paired with a remote — `gglib remote join <ticket>-<code>` \
              first"
@@ -262,19 +261,32 @@ async fn remembered_model(ctx: &CliContext, typed: String) -> Result<String> {
         });
     }
     if pairing.default_model.as_deref() != Some(typed.as_str()) {
-        ctx.app
-            .settings()
-            .update(SettingsUpdate {
-                remote_pairing: Some(Some(RemotePairing {
-                    default_model: Some(typed.clone()),
-                    ..pairing
-                })),
-                ..SettingsUpdate::default()
+        settings
+            .modify(&|now: &mut Settings| {
+                remember_model(now, &pairing.ticket, &typed);
+                Ok(())
             })
             .await
             .map_err(|e| anyhow!("could not remember the model for that machine: {e}"))?;
     }
     Ok(typed)
+}
+
+/// Write `model` into the stored pairing, and no other field of it, when
+/// that pairing still names `ticket`, the one this turn read.
+///
+/// Applied to the settings as they stand when the write lands, because the
+/// daemon writes the same record: one rebuilt from the earlier read would
+/// put back the key a re-pair replaced, or a pairing since cleared, and a
+/// model named for one machine means nothing on another.
+fn remember_model(settings: &mut Settings, ticket: &str, model: &str) {
+    if let Some(pairing) = settings
+        .remote_pairing
+        .as_mut()
+        .filter(|pairing| pairing.ticket == ticket)
+    {
+        pairing.default_model = Some(model.to_owned());
+    }
 }
 
 #[cfg(test)]
