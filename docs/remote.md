@@ -220,9 +220,8 @@ changes, and the ticket is the same ticket.
 
 ### The laptop: `join`, `disconnect`, `key`
 
-`gglib remote join` was called `gglib remote connect`, and still answers to
-it for one release — the old name prints a note saying so and does exactly
-what it did before. Nothing about a pairing you already have changes.
+`gglib remote connect`, this command's old name, is gone, and so is
+`POST /api/remote/connect`. A pairing you already have is unaffected.
 
 `gglib remote join <ticket>-<code>` binds a loopback port that is now the
 desktop's proxy, waits up to twenty-five seconds for the desktop to answer,
@@ -452,7 +451,7 @@ answers with the pairing string, code included. A process that calls both and
 redeems the code from anywhere the ticket reaches holds a device key of its
 own, on a roster row it named itself, and the edge admits that key after the
 process has gone and across restarts, until `gglib remote forget` retires it.
-`POST /api/remote/connect` points this machine's `--remote` turns at whatever
+`POST /api/remote/join` points this machine's `--remote` turns at whatever
 machine a pairing string names, `disconnect` ends that connection, and `kill`
 stops the daemon at the other end. Code running as you gains little by this,
 since it can already read gglib's data directory. Another account on the same

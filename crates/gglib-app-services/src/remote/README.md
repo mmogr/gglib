@@ -27,11 +27,11 @@ remote/
                       the bind, the install
   resume_wait.rs    — the daemon's own resume saying it is working, and
                       `enable` and `invite` waiting it out
-  connect.rs        — RemoteOps: connect / disconnect / kill_remote — this
+  connect.rs        — RemoteOps: join / disconnect / kill_remote — this
                       machine as the laptop
   backend.rs        — taking the tunnel down when the proxy it fronts
                       stops being the one at that address
-  connect_dial.rs   — the span of connect with the slot reserved and the
+  connect_dial.rs   — the span of join with the slot reserved and the
                       lock released: the record and the install
   connect_open.rs   — reaching the far machine for a join: pair or wait,
                       and what each refusal says
@@ -214,7 +214,7 @@ operator.
 
 # The connect side
 
-`connect` binds a loopback port here that is the far machine's proxy
+`join` binds a loopback port here that is the far machine's proxy
 (`modelpipe::connect`). It does **not** inject `Authorization` (ADR 0012,
 decision 7): gglib's own commands attach the key from the stored pairing, and
 a third-party client supplies it as its API key, the ordinary arrangement. A
@@ -253,8 +253,8 @@ that waits out an unreachable peer, an `enable` that waits five seconds for
 the settings cache and ten for a relay. Both held their slot's mutex for the
 whole of it, and `status` reads both — so the command someone runs to find
 out what is happening was the one that could not answer while anything was
-happening, and `disconnect`, whose whole job is ending a hanging connect,
-queued behind the connect it was cancelling. `tokio::sync::Mutex` is
+happening, and `disconnect`, whose whole job is ending a hanging join,
+queued behind the join it was cancelling. `tokio::sync::Mutex` is
 FIFO-fair; there is no jumping the line.
 
 `slot.rs` is the answer. A caller reserves the slot, drops the lock, does the

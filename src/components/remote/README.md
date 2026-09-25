@@ -14,7 +14,7 @@ The `RemoteControl` popover's sections ([ADR 0012](../../../docs/adr/0012-the-re
 | `ServeSection.tsx` | This machine as the desktop: enable (with the `/mcp` grant off by default), invite one more device, the status lines, disable |
 | `DevicesSection.tsx` | Who holds a key, and the button that retires one. Rows come off the status this panel already reads rather than a fetch of their own, so the list cannot disagree with the tunnel state beside it |
 | `PairingReveal.tsx` | The ticket and the code, shown once: the answer to `enable --invite` or `invite` is the only time the daemon hands that code out. Counts the code down and leaves at zero; the parent drops it the moment a device pairs, or once the daemon stops holding the code |
-| `ConnectSection.tsx` | This machine as the laptop: the pairing string, the connected port as an `EndpointCopyBar`, the use-for-chat choice and the far machine's model name, disconnect, and the one-way door behind a confirm |
+| `JoinSection.tsx` | This machine as the laptop: the pairing string, the connected port as an `EndpointCopyBar`, the use-for-chat choice and the far machine's model name, disconnect, and the one-way door behind a confirm |
 
 ## What is deliberately not here
 
