@@ -87,14 +87,7 @@ impl ServerHealthChecker {
         crate::pidfile::pid_exists(pid)
     }
 
-    /// On non-Unix we cannot check cheaply, so assume alive and let the HTTP
-    /// check detect failures.
-    ///
-    /// Deliberately **not** delegating to `pidfile::pid_exists`: its
-    /// `cfg(not(unix))` arm returns `false` ("not implemented"), which would
-    /// report every Windows server *that supplied a PID* as `ProcessDied` —
-    /// reintroducing there the exact bug this change removes from macOS.
-    /// `x86_64-pc-windows-msvc` is a release target.
+    /// Off Unix, assume alive and let the HTTP check detect failures.
     #[cfg(not(unix))]
     fn is_process_alive(_pid: u32) -> bool {
         true
