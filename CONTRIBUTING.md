@@ -1,26 +1,33 @@
 # Contributing to gglib
 
-This document is the definitive engineering guide for contributors. Read it before opening a pull request.
+This document is the definitive engineering guide to how the project's own changes are made and checked. For what gglib accepts from others, see [Outside contributions](#outside-contributions).
 
 ---
 
 ## Table of Contents
 
-1. [Core Philosophy](#core-philosophy)
-2. [Architecture Overview](#architecture-overview)
-3. [GUI Parity Principle](#gui-parity-principle)
-4. [UI Conventions](#ui-conventions)
-5. [Model Architecture Registry](#model-architecture-registry)
-6. [Concurrency Model](#concurrency-model)
-7. [Subprocess Invocation](#subprocess-invocation)
-8. [Crate Boundaries](#crate-boundaries)
-9. [Documentation Standards](#documentation-standards)
-10. [Architecture Decision Records](#architecture-decision-records)
-11. [Badges Pipeline](#badges-pipeline)
-12. [Development Workflow](#development-workflow)
-13. [CI Pipeline](#ci-pipeline)
-14. [Issue & PR Labeling](#issue--pr-labeling)
-15. [Pull Request Checklist](#pull-request-checklist)
+1. [Outside contributions](#outside-contributions)
+2. [Core Philosophy](#core-philosophy)
+3. [Architecture Overview](#architecture-overview)
+4. [GUI Parity Principle](#gui-parity-principle)
+5. [UI Conventions](#ui-conventions)
+6. [Model Architecture Registry](#model-architecture-registry)
+7. [Concurrency Model](#concurrency-model)
+8. [Subprocess Invocation](#subprocess-invocation)
+9. [Crate Boundaries](#crate-boundaries)
+10. [Documentation Standards](#documentation-standards)
+11. [Architecture Decision Records](#architecture-decision-records)
+12. [Badges Pipeline](#badges-pipeline)
+13. [Development Workflow](#development-workflow)
+14. [CI Pipeline](#ci-pipeline)
+15. [Issue & PR Labeling](#issue--pr-labeling)
+16. [Pull Request Checklist](#pull-request-checklist)
+
+---
+
+## Outside contributions
+
+Code from outside contributors is not accepted yet. Issues, bug reports and ideas are welcome through the [issue tracker](https://github.com/mmogr/gglib/issues). The reason: the README's [License](README.md#license) section says a separate commercial license may be offered, and there is no contributor agreement that would let outside code be covered by one.
 
 ---
 
