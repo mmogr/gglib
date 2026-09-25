@@ -134,6 +134,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability, plus content-hash session-id fallback derivation
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
+- **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, and the `upstream_timeout` body a streaming client is sent when the first-byte deadline expires on its last attempt with no other request active
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
@@ -141,7 +142,6 @@ This crate provides an OpenAI-compatible HTTP server that:
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
   - **`mcp/session.rs`** — `Mcp-Session-Id` tracking and validation
 - **`lib.rs`** — Public API and module re-exports
-
 
 ## KV Cache Session Persistence
 

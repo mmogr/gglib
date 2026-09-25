@@ -78,7 +78,7 @@ use gglib_core::request_pipeline::{
     self, ModelContext, SamplingDecision, SamplingLayers, SuppressedEffort, TruncationError,
     TruncationReport,
 };
-use gglib_core::sse::{DONE_SENTINEL, SseEncoder, SseStreamDecoder};
+use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
 
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
@@ -87,6 +87,7 @@ use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
+use crate::upstream_read::upstream_events;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::defects::LoopGuardTrip;
 
@@ -951,33 +952,7 @@ pub(crate) async fn stream_response_to_channel(
         .unwrap_or(0);
     let encoder = SseEncoder::new(id, model_name, created);
 
-    let byte_stream = response.bytes_stream();
-    let event_stream = async_stream::stream! {
-        let mut decoder = SseStreamDecoder::default();
-        let mut byte_stream = std::pin::pin!(byte_stream);
-
-        'outer: while let Some(chunk_result) = byte_stream.next().await {
-            let chunk = match chunk_result {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!("upstream SSE byte-stream error: {e}");
-                    yield Err(anyhow::anyhow!("upstream SSE byte-stream error: {e}"));
-                    return;
-                }
-            };
-            let (events, stop) = decoder.feed_bytes(&chunk);
-            for event in events {
-                yield event;
-            }
-            if stop {
-                break 'outer;
-            }
-        }
-
-        if let Some(fallback) = decoder.finish() {
-            yield Ok(fallback);
-        }
-    };
+    let event_stream = upstream_events(response.bytes_stream());
 
     let parser = get_parser(dialect.as_ref());
     let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
