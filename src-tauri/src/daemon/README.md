@@ -5,6 +5,9 @@
 The desktop app's connection to the gglib daemon, and the one task that keeps
 its picture of it true.
 
+This module is the one place in this crate that knows the daemon's base URL:
+every request the app's Rust code sends the daemon is built on `base_url`.
+
 The daemon — not this app — owns llama-server. On startup `connect_or_launch`
 probes the fixed daemon port; if nothing answers it launches `gglib daemon run`
 detached when a CLI binary can be found, and otherwise hosts the same daemon

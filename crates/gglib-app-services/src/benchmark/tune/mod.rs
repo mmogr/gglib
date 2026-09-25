@@ -1,7 +1,4 @@
 #![doc = include_str!("README.md")]
-//!
-//! See the module README for the full design rationale (why no MCP
-//! dependency, why no per-candidate model reload).
 
 use std::sync::Arc;
 use std::time::Instant;

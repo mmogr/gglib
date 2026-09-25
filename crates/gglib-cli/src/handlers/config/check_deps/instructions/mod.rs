@@ -1,10 +1,5 @@
 #![doc = include_str!("README.md")]
 
-//! Installation instructions by platform.
-//!
-//! This module provides platform-specific installation instructions
-//! for missing dependencies.
-
 mod common;
 mod linux;
 mod macos;

@@ -9,11 +9,13 @@
 #   [always]  tests/ and all its subdirs have README.md
 #   [--strict] module-docs block does not contain "TODO:" placeholder text
 #   [--strict] mod.rs with a sibling README.md uses #![doc = include_str!("README.md")]
+#   [--strict] a mod.rs that includes its README.md has no //! lines of its own
 #
 # Usage: ./scripts/check_readmes.sh [--strict] [--json] [--verbose]
 #
 # Options:
-#   --strict   Also fail on TODO: placeholders and missing include_str! parity.
+#   --strict   Also fail on TODO: placeholders, missing include_str! parity, and
+#              //! lines in a mod.rs that includes its README.md.
 #              Called with --strict by default from check_boundaries.sh in CI.
 #   --json     Write readme-status.txt (NDJSON: one JSON entry per line) so
 #              check_boundaries.sh can merge the results into boundary-status.json.
@@ -162,6 +164,17 @@ check_rust_subdir_readmes() {
                 if [[ -f "$modrs" ]] && ! grep -qF '#![doc = include_str!("README.md")]' "$modrs"; then
                     log "  ${YELLOW}PARITY${NC}     $rel/  — mod.rs missing #![doc = include_str!(\"README.md\")]"
                     parity_violations+=("$(json_escape "$rel/: mod.rs missing #![doc = include_str!(\"README.md\")]")")
+                    (( STRICT_FAIL++ )) || true
+                fi
+
+                # Strict check: a directory module is documented by its README
+                # alone. Inner doc comments in a mod.rs that includes the README
+                # render beside it in rustdoc and never on GitHub; what they say
+                # belongs in the README's module-docs section.
+                if [[ -f "$modrs" ]] && grep -qF '#![doc = include_str!("README.md")]' "$modrs" \
+                    && grep -qE '^[[:space:]]*(//!|/\*!)' "$modrs"; then
+                    log "  ${YELLOW}PARITY${NC}     $rel/  — mod.rs includes README.md and also has //! lines"
+                    parity_violations+=("$(json_escape "$rel/: mod.rs includes README.md and also has //! lines; move them into the README")")
                     (( STRICT_FAIL++ )) || true
                 fi
             fi
@@ -369,7 +382,7 @@ check_tests_readmes() {
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
     log "🔍 Checking README coverage and quality..."
-    $STRICT && log "   (strict mode: TODO + include_str! parity checks enabled)" || true
+    $STRICT && log "   (strict mode: TODO, include_str! parity and README-only module docs checks enabled)" || true
     log ""
 
     check_rust_subdir_readmes

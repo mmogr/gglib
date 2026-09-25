@@ -1,10 +1,5 @@
 #![doc = include_str!("README.md")]
 
-//! Check system dependencies handler.
-//!
-//! This module handles checking for required system dependencies
-//! and displaying them in a formatted, user-friendly way.
-
 mod display;
 mod instructions;
 mod platform;

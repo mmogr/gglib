@@ -1,33 +1,4 @@
 #![doc = include_str!("README.md")]
-//!
-//! ## Redraw strategy: cursor movement, not raw mode
-//!
-//! Earlier CLI work in this crate (see
-//! [`crate::handlers::model::download::run_interactive_monitor`]) already
-//! established
-//! that `crossterm::terminal::enable_raw_mode()` breaks `println!`-based
-//! redraws (it disables `OPOST`, so `\n` stops returning the cursor to column
-//! 0). This module never touches raw mode. Instead, each frame after the
-//! first moves the cursor up by the previous frame's *physical row* count
-//! (see [`visual_row_count`]) and clears everything below before printing
-//! the next frame — plain `crossterm::cursor`/`terminal` commands in normal
-//! (cooked) mode, which compose fine with ordinary `print!`/`println!`.
-//! Cooked mode means a line longer than the terminal's width auto-wraps onto
-//! an extra physical row, which is exactly what `visual_row_count` accounts
-//! for when computing how far to move the cursor up on the next tick. When
-//! stdout is not a TTY (piped output, CI), frames are printed sequentially
-//! instead, since there is no cursor to move.
-//!
-//! ## Shutdown
-//!
-//! `Ctrl+C` is raced directly against each stream-chunk read via
-//! `tokio::select!`, so it is handled between chunks rather than only after a
-//! full frame arrives. [`TerminalGuard`] hides the cursor for the duration of
-//! the dashboard and unconditionally restores it (and prints a trailing
-//! newline) on drop — including on the `Ctrl+C` path, an early `?` return, or
-//! a panic — so the terminal is never left in a half-drawn state. Dropping
-//! the `reqwest` response stream (which happens automatically once
-//! `execute()` returns) closes the underlying SSE connection.
 
 use std::io::{IsTerminal, Write, stdout};
 

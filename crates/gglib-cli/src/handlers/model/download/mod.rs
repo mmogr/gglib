@@ -1,11 +1,5 @@
 #![doc = include_str!("README.md")]
 
-//! Download command handlers.
-//!
-//! This module contains handlers for download-related CLI commands.
-//! Uses gglib-download's cli_exec module for actual download execution,
-//! then registers models in the database via CliContext.
-
 mod browse;
 mod check_updates;
 mod exec;
