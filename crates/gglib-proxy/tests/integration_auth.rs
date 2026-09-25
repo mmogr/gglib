@@ -1,5 +1,6 @@
-//! Verifies the proxy's two request guards: the optional bearer token and the
-//! always-on Host-header allowlist.
+//! Verifies two of the three guards in the proxy's `access` module: the
+//! optional bearer token and the always-on Host-header allowlist. The
+//! third, the origin guard, has its own suite, `integration_origin.rs`.
 //!
 //! The endpoint has an MCP gateway attached that executes filesystem tools, so
 //! "who may talk to this port" is not a theoretical question. Two independent
@@ -16,64 +17,11 @@
 //! mock ports with the other integration tests via `tests/fixtures` rather
 //! than duplicating them.
 
-use std::sync::Arc;
-
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use reqwest::{Client, StatusCode};
-use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
 
 mod fixtures;
-use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
-
-// ─── Proxy harness ─────────────────────────────────────────────────────────
-
-/// Spawn the real `gglib_proxy::serve` under a given access policy.
-///
-/// No upstream is configured — none of these tests reach a handler that needs
-/// one. `/v1/models` is served from the (empty) catalog, and every other
-/// assertion is about a request being refused before it gets that far.
-///
-/// Returns `(proxy_base_url, port, cancel)`. The port is returned separately
-/// because the Host-header tests need to construct authorities by hand.
-async fn spawn_proxy(access: ProxyAccessConfig) -> (String, u16, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(MockSettingsRepo),
-            None,  // inference_override
-            None,  // default_profile
-            false, // cache_enabled
-            None,  // slot_dir
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &access,
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (format!("http://{addr}"), addr.port(), cancel)
-}
+use fixtures::access::spawn_proxy;
 
 /// An access policy with a token, bound loopback.
 fn with_key(key: &str) -> ProxyAccessConfig {

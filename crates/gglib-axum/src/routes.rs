@@ -14,38 +14,30 @@ use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::access::{DaemonAccess, bearer_guard, host_guard};
+use crate::access::{DaemonAccess, bearer_guard, host_guard, origin_guard};
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
 use gglib_core::CorsConfig;
 use gglib_core::services::SettingsCache;
 
-/// Build CORS layer from configuration.
+/// Build CORS layer from configuration. It lets an origin read exactly when
+/// [`CorsConfig::allows_origin`] does, the test `origin_guard` asks too.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    match config {
-        CorsConfig::AllowAll => CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-        CorsConfig::AllowOrigins(origins) => {
-            use axum::http::HeaderValue;
-            let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
-            CorsLayer::new()
-                .allow_origin(allowed)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        CorsConfig::LocalOnly => {
-            let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
-                gglib_core::is_local_origin(origin.to_str().unwrap_or(""))
-            });
-            CorsLayer::new()
-                .allow_origin(local)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    }
+    let origins = if matches!(config, CorsConfig::AllowAll) {
+        AllowOrigin::any()
+    } else {
+        let config = config.clone();
+        AllowOrigin::predicate(move |origin: &axum::http::HeaderValue, _req_headers| {
+            origin
+                .to_str()
+                .is_ok_and(|origin| config.allows_origin(origin))
+        })
+    };
+    CorsLayer::new()
+        .allow_origin(origins)
+        .allow_methods(Any)
+        .allow_headers(Any)
 }
 
 /// Build all API routes without `/api` prefix (for nesting under /api).
@@ -353,9 +345,10 @@ fn config_routes() -> Router<AppState> {
         )
 }
 
-/// The router core shared by [`create_router`] and [`create_spa_router`]:
-/// `/health` plus `/api/*`, with CORS and (when a key is configured) the
-/// bearer guard scoped to `/api/*`.
+/// The router core shared by [`create_router`], [`create_spa_router`] and
+/// [`crate::create_embedded_spa_router`]: `/health` plus `/api/*`, with CORS,
+/// the origin guard and the bearer guard scoped to `/api/*`. The bearer guard
+/// is always installed; it asks a token only when the daemon bound with one.
 ///
 /// The Host guard is *not* applied here — each public constructor layers it
 /// last, after any fallback service, so it wraps everything the router will
@@ -369,12 +362,16 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
     // rotation of it, and one that bound without demands nothing and keeps
     // demanding nothing — `DaemonAccess::bearer_policy` says why that asymmetry
     // is the point. /health stays outside the group: probes must not need
-    // credentials. CORS is layered *after* (outside) the bearer guard so
-    // preflight OPTIONS requests — which never carry Authorization — are
-    // answered by the CORS layer instead of dying on a 401.
+    // credentials. The origin guard reads the same config CORS does. CORS is
+    // layered outside both guards so preflight OPTIONS requests, which never
+    // carry Authorization, are answered by the CORS layer instead of a 401.
     let api = api_routes()
         .with_state(state)
         .layer(middleware::from_fn_with_state(policy, bearer_guard))
+        .layer(middleware::from_fn_with_state(
+            Arc::new(cfg.clone()),
+            origin_guard,
+        ))
         .layer(cors);
 
     Router::new()

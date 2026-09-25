@@ -2,6 +2,7 @@
 mod bearer;
 mod device_keys;
 mod host;
+mod origin;
 
 #[cfg(test)]
 mod access_tests;
@@ -13,6 +14,7 @@ pub use device_keys::{
     DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys,
 };
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
+pub use origin::may_change;
 
 use std::sync::Arc;
 
@@ -71,16 +73,22 @@ pub fn generate_api_key() -> String {
 
 /// Who may reach the proxy, and how they prove it.
 ///
-/// Two independent gates that happen to travel together, because both are
-/// decided at bind time and both are needed by the same layer of the router:
+/// Three gates that travel together, because one router applies all three:
 ///
 /// * [`api_key`](Self::api_key) is opt-in. `None` leaves the endpoint exactly
 ///   as it behaved before authentication existed.
 /// * [`allowed_hosts`](Self::allowed_hosts) is always enforced. It is the
 ///   DNS-rebinding defence, and it does not depend on a token being set.
+/// * [`cors`](Self::cors) is always enforced too. For every method but `GET`,
+///   `HEAD` and `OPTIONS`, [`may_change`] admits a request carrying an
+///   `Origin` only when it names the endpoint's own page or one `cors` lets
+///   read.
 #[derive(Debug, Clone, Default)]
 pub struct ProxyAccessConfig {
-    /// Which origins the CORS layer accepts.
+    /// Which origins the CORS layer lets read the proxy's answers, so a page
+    /// that names any origin but the endpoint's own may change something
+    /// through it exactly when the CORS layer lets it read the answer
+    /// ([`may_change`]).
     pub cors: CorsConfig,
     /// Bearer token required on `/v1/*` and `/mcp`. `None` disables the check.
     pub api_key: Option<String>,

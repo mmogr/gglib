@@ -370,18 +370,19 @@ async fn handle_notification(
 
 /// Validate the Origin header.
 ///
-/// Per spec §Security Warning: servers MUST validate the Origin header.
-/// We reject requests from browser origins that don't match localhost.
+/// Per spec §Security Warning: servers MUST validate the Origin header. This
+/// holds `POST /mcp` to local pages and to the proxy's own origin, whatever
+/// the proxy's CORS config lets read.
 #[allow(clippy::result_large_err)]
 fn validate_origin(headers: &HeaderMap) -> Result<(), Response> {
-    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok())
-        && !gglib_core::is_local_origin(origin)
-    {
-        warn!(origin, "MCP: rejected request with disallowed Origin");
-        return Err(StatusCode::FORBIDDEN.into_response());
+    let text = |name: &str| headers.get(name).map(|v| v.to_str().unwrap_or_default());
+    let (origin, local) = (text("origin"), gglib_core::CorsConfig::LocalOnly);
+    let host = text("host").unwrap_or_default();
+    if gglib_core::access::may_change(&local, origin, text("sec-fetch-site"), host) {
+        return Ok(());
     }
-    // No Origin header = non-browser client (curl, OpenWebUI server-side) — allow
-    Ok(())
+    warn!(origin, "MCP: rejected request with disallowed Origin");
+    Err(StatusCode::FORBIDDEN.into_response())
 }
 
 /// Verify the request carries a valid `Mcp-Session-Id`.
@@ -440,51 +441,16 @@ fn json_rpc_error_response(status: StatusCode, id: Value, error: JsonRpcError) -
     (status, Json(JsonRpcResponse::error(id, error))).into_response()
 }
 
+/// `validate_origin`, the tool gateway's own Origin check.
+#[cfg(test)]
+#[path = "handlers_origin_tests.rs"]
+mod origin_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
     use http_body_util::BodyExt;
-
-    #[test]
-    fn validate_origin_allows_no_origin_header() {
-        let headers = HeaderMap::new();
-        assert!(validate_origin(&headers).is_ok());
-    }
-
-    #[test]
-    fn validate_origin_allows_localhost() {
-        for origin in [
-            "http://localhost",
-            "http://localhost:3000",
-            "https://localhost:8443",
-            "http://127.0.0.1:9887",
-            "https://127.0.0.1",
-        ] {
-            let mut headers = HeaderMap::new();
-            headers.insert("origin", HeaderValue::from_str(origin).unwrap());
-            assert!(
-                validate_origin(&headers).is_ok(),
-                "expected {origin} to be allowed"
-            );
-        }
-    }
-
-    #[test]
-    fn validate_origin_rejects_external_origins() {
-        for origin in [
-            "https://evil.example.com",
-            "http://attacker.io",
-            "https://192.168.1.1:8080",
-        ] {
-            let mut headers = HeaderMap::new();
-            headers.insert("origin", HeaderValue::from_str(origin).unwrap());
-            assert!(
-                validate_origin(&headers).is_err(),
-                "expected {origin} to be rejected"
-            );
-        }
-    }
 
     #[tokio::test]
     async fn json_rpc_error_response_has_correct_structure() {

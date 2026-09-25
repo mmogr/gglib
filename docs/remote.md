@@ -445,20 +445,48 @@ desktop that may already be current wastes their time.
 
 **The daemon's own API trusts the machine, not the person.** A daemon bound
 on loopback, the default, asks nothing of a request to `127.0.0.1:9887`: the
-socket is the boundary, so anything that can open it can do whatever `gglib`
-itself can. Two of those things reach past this machine. `POST
+socket is the boundary, so any process that can open it can do whatever
+`gglib` itself can. Several of those things reach past this machine. `POST
 /api/remote/enable` switches the tunnel on, and `POST /api/remote/invite`
 answers with the pairing string, code included. A process that calls both and
 redeems the code from anywhere the ticket reaches holds a device key of its
 own, on a roster row it named itself, and the edge admits that key after the
 process has gone and across restarts, until `gglib remote forget` retires it.
-Code running as you gains little by this, since it can already read gglib's
-data directory. Another account on the same machine cannot read
-`<data root>/data`, where the keys and the database are, since it is private
-to its owner, but it can reach loopback, so on a shared machine these two
-routes are a way off it. `gglib remote list` shows every row, one a process
-named itself included. A daemon started with `--share-lan` already demands
-its own token on every `/api/*` route, these two among them.
+`POST /api/remote/connect` points this machine's `--remote` turns at whatever
+machine a pairing string names, `disconnect` ends that connection, and `kill`
+stops the daemon at the other end. Code running as you gains little by this,
+since it can already read gglib's data directory. Another account on the same
+machine cannot read `<data root>/data`, where the keys and the database are,
+since it is private to its owner, but it can reach loopback, so on a shared
+machine these routes are a way off it; a credential on loopback would close
+that, and [#1039](https://github.com/mmogr/gglib/issues/1039) tracks it.
+`gglib remote list` shows every row, one a process named itself included. A
+daemon started with `--share-lan` already demands its own token on every
+`/api/*` route, these among them.
+
+**A web page is not such a process.** Your browser opens that socket for any
+site you visit, but it says which site is asking, in `Origin`. Any request to
+an `/api` route but a `GET`, `HEAD` or `OPTIONS` from another site is refused
+with `403 ORIGIN_NOT_ALLOWED`, so a page cannot switch the tunnel, mint an invite,
+disconnect, stop the daemon or touch the llama.cpp install. A site counts as
+another unless it is the daemon's own or on the daemon's CORS list, so a page
+that names any origin but the daemon's own may change something exactly when
+the daemon's CORS lets it read the answer. The desktop
+app (`tauri://localhost`, and `http://tauri.localhost` on Windows) and the dev
+server at `http://localhost:5173` are on that list; the dev server opened under
+another name, such as `127.0.0.1:5173`, is not, and its changes are refused. The
+dashboard the daemon serves passes under any name the daemon answers to; the
+CLI and other programs send no `Origin` and pass. `Origin: null` is refused,
+and so is a request with no `Origin` marked `Sec-Fetch-Site: cross-site`. The
+proxy on `:8080` holds the same line against its own CORS, which lets pages on
+`localhost`, `127.0.0.1` and `[::1]`, on any port, and the desktop app read, so
+a page elsewhere cannot run a turn, load a model or clear the cache through it
+either. Nor can a browser extension: its origin, such as
+`chrome-extension://…` or `moz-extension://…`, is not among them, so the proxy
+refuses its changes even where the extension may read the answer, and no
+setting admits one. A daemon started with `--share-lan` lets every page read,
+and its token is what refuses them. Whatever serves a page on `localhost` is a
+process, the case above.
 
 **One identity, kept.** `enable` reuses this machine's stored endpoint key, so
 the ticket is the same ticket every time and a device pairs once rather than
@@ -602,6 +630,7 @@ here is one the desktop can retire on its own.
 | `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
+| `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |

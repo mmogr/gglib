@@ -6,14 +6,15 @@
 //! decides; the handlers live where their subject does.
 //!
 //! ```text
-//! CorsLayer              outermost — answers OPTIONS preflight itself
-//!   host_guard           every route, every path, always on
-//!     remote_marker      every route: is this request tunnelled?
-//!       (route match)
-//!         bearer_guard   the protected group only
-//!           device_gate  the protected group: tunnelled ⇒ names a device
-//!             mcp_tunnel_guard   /mcp only: tunnelled ⇒ needs --allow-mcp
-//!               handler
+//! CorsLayer                outermost — answers OPTIONS preflight itself
+//!   host_guard             every route, every path, always on
+//!     origin_guard         every route: a change from another site is refused
+//!       remote_marker      every route: is this request tunnelled?
+//!         (route match)
+//!           bearer_guard   the protected group only
+//!             device_gate  the protected group: tunnelled ⇒ names a device
+//!               mcp_tunnel_guard   /mcp only: tunnelled ⇒ needs --allow-mcp
+//!                 handler
 //! ```
 //!
 //! `/health` sits outside the bearer group on purpose: it is polled before
@@ -102,6 +103,14 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             state.clone(),
             crate::remote::remote_marker,
         ))
+        // A change a page on another site sends is refused, judged by the
+        // same config the CORS layer below answers from. Inside the Host
+        // guard, which vouches for the `Host` a same-origin page is matched
+        // against; outside the marker, so a refused request is not counted.
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(access.cors.clone()),
+            crate::access::origin_guard,
+        ))
         // Host allowlist: always on, and outside the router so it covers
         // `/health` and unmatched paths too. This is the DNS-rebinding guard;
         // see the `access` module for why CORS alone does not cover it.
@@ -119,31 +128,23 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         .with_state(state)
 }
 
-/// Build CORS layer from configuration.
+/// Build CORS layer from configuration. It lets an origin read exactly when
+/// [`CorsConfig::allows_origin`] does, the test `origin_guard` asks too.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    match config {
-        CorsConfig::AllowAll => CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-        CorsConfig::AllowOrigins(origins) => {
-            use axum::http::HeaderValue;
-            let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
-            CorsLayer::new()
-                .allow_origin(allowed)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        CorsConfig::LocalOnly => {
-            let local = AllowOrigin::predicate(|origin: &axum::http::HeaderValue, _req_headers| {
-                gglib_core::is_local_origin(origin.to_str().unwrap_or(""))
-            });
-            CorsLayer::new()
-                .allow_origin(local)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    }
+    let origins = if matches!(config, CorsConfig::AllowAll) {
+        AllowOrigin::any()
+    } else {
+        let config = config.clone();
+        AllowOrigin::predicate(move |origin: &axum::http::HeaderValue, _req_headers| {
+            origin
+                .to_str()
+                .is_ok_and(|origin| config.allows_origin(origin))
+        })
+    };
+    CorsLayer::new()
+        .allow_origin(origins)
+        .allow_methods(Any)
+        .allow_headers(Any)
 }
 
 #[cfg(test)]
