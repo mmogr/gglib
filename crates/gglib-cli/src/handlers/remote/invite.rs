@@ -35,15 +35,12 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
     }
 
     match pairing_tui::run(&handle, &offered).await? {
-        Outcome::Paired { peer } => {
+        Outcome::Paired { device } => {
             eprintln!();
-            match peer {
-                Some(peer) => eprintln!("  \u{2705} Paired with device {peer}."),
-                None => eprintln!("  \u{2705} A device paired."),
-            }
+            eprintln!("{}", pairing_tui::paired_line(device.as_deref()));
             eprintln!(
-                "  It holds a key of its own now. `gglib remote list` shows it, and \
-                 `gglib remote forget` retires that one device and no other."
+                "  It holds a key of its own now, and `gglib remote forget` retires that \
+                 one device and no other."
             );
         }
         Outcome::Expired => {
@@ -93,4 +90,7 @@ fn print_plain(offered: &RemoteEnableDto) {
     eprintln!();
     eprintln!("  On the other machine, within {expires}s:");
     eprintln!("    gglib remote join {pairing}");
+    if let Some(device) = offered.device.as_deref() {
+        eprintln!("{}", pairing_tui::code_is_for(device));
+    }
 }

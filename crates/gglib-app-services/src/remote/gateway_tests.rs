@@ -139,8 +139,8 @@ fn arming_a_session_starts_it_unpaired() {
 /// pairing left it true for the rest of the session. `enable --invite`
 /// against a tunnel that is already up — the path that exists so pairing a
 /// second device costs nobody else their connection — would then have the
-/// pairing screen break out on the first device's answer, name that device,
-/// and stop watching, while the second code stayed redeemable unwatched.
+/// pairing screen break out on the first device's answer and stop watching,
+/// while the second code stayed redeemable unwatched.
 #[test]
 fn offering_a_second_code_says_nobody_has_taken_it_yet() {
     let (_, gateway) = gateway();

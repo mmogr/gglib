@@ -32,7 +32,7 @@ fn a_redeemed_invite_pairs_the_session_and_records_the_device_and_its_endpoint()
     assert_eq!(
         (gateway.tunnelled_requests(), gateway.last_peer()),
         (1, Some(fingerprint.clone())),
-        "the pairing is counted as the request it was, from the endpoint the pairing screen names"
+        "the pairing is counted as the request it was, and its endpoint is the last peer"
     );
     let Ok(Note::Joined {
         device,
