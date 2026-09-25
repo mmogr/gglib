@@ -1,9 +1,13 @@
-//! Tests for [`super`]: the upstream reply read into events, and the
-//! first-byte timeout body.
+//! Tests for [`super`]: the upstream reply read into events under the idle
+//! bound, and the `upstream_timeout` bodies.
 
 use std::cell::Cell;
+use std::time::Instant;
 
 use super::*;
+
+/// The idle bound the timing tests read under.
+const IDLE: Duration = Duration::from_millis(200);
 
 /// One SSE frame whose delta is the content `text`.
 fn content_frame(text: &str) -> Bytes {
@@ -19,7 +23,7 @@ async fn read_all(
 ) -> (Vec<anyhow::Result<LlmStreamEvent>>, usize) {
     let reads = Cell::new(0);
     let bytes = futures_util::stream::iter(chunks).inspect(|_| reads.set(reads.get() + 1));
-    let events = upstream_events(bytes).collect().await;
+    let events = upstream_events(bytes, IDLE).collect().await;
     (events, reads.get())
 }
 
@@ -52,7 +56,7 @@ fn mask_one(body: &str, key: &str, keep: fn(char) -> bool, mask: &str) -> String
 /// to these bytes is a change to what clients are sent.
 #[test]
 fn the_first_byte_timeout_body_is_a_notice_then_upstream_timeout_then_done() {
-    let body = first_byte_timeout_frame("some-model");
+    let body = first_byte_timeout_frame("some-model", StreamBounds::default().first_byte);
     let body = mask_one(&body, "\"id\":\"chatcmpl-", |c| c.is_ascii_hexdigit(), "ID");
     let body = mask_one(&body, "\"created\":", |c| c.is_ascii_digit(), "0");
     assert_eq!(body, EXPECTED_FIRST_BYTE_TIMEOUT_BODY);
@@ -144,5 +148,142 @@ async fn a_body_that_just_ends_gets_a_fallback_done_with_no_finish_reason() {
                 finish_reason: None
             },
         ]
+    );
+}
+
+/// Every event of `events`, failing the test rather than hanging it if they
+/// never end.
+async fn within_patience<S>(events: S) -> Vec<anyhow::Result<LlmStreamEvent>>
+where
+    S: futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>>,
+{
+    tokio::time::timeout(IDLE * 30, events.collect())
+        .await
+        .expect("the events end")
+}
+
+/// The stall error a read's events ended with, if they ended in one.
+fn stall_of(event: &anyhow::Result<LlmStreamEvent>) -> Option<UpstreamStalled> {
+    event
+        .as_ref()
+        .err()?
+        .downcast_ref::<UpstreamStalled>()
+        .copied()
+}
+
+/// An upstream that sends each of `chunks` `gap` after it is asked for the
+/// next, then says nothing more.
+fn then_silent(
+    chunks: Vec<Bytes>,
+    gap: Duration,
+) -> impl futures_util::Stream<Item = Result<Bytes, std::io::Error>> {
+    futures_util::stream::iter(chunks)
+        .then(move |chunk| async move {
+            tokio::time::sleep(gap).await;
+            Ok(chunk)
+        })
+        .chain(futures_util::stream::pending())
+}
+
+/// A read that waits past the bound ends the events in a stall, after what
+/// had already arrived, and no sooner than the bound.
+#[tokio::test]
+async fn a_reply_that_goes_silent_past_the_bound_ends_in_a_stall() {
+    let started = Instant::now();
+    let silent = then_silent(vec![content_frame("hel")], Duration::ZERO);
+    let events = within_patience(upstream_events(silent, IDLE)).await;
+
+    assert!(started.elapsed() >= IDLE);
+    assert_eq!(events.len(), 2, "{events:?}");
+    assert!(matches!(events[0], Ok(LlmStreamEvent::TextDelta { .. })));
+    assert_eq!(
+        stall_of(&events[1]),
+        Some(UpstreamStalled {
+            after: IDLE,
+            after_first_token: true,
+        })
+    );
+}
+
+/// Chunks that keep arriving inside the bound are never cut, however long
+/// the reply runs in all.
+#[tokio::test]
+async fn bytes_that_keep_arriving_inside_the_bound_are_never_cut() {
+    let mut chunks: Vec<_> = (0..6).map(|i| content_frame(&i.to_string())).collect();
+    chunks.push(Bytes::from_static(b"data: [DONE]\n\n"));
+    let started = Instant::now();
+    let events = within_patience(upstream_events(then_silent(chunks, IDLE / 2), IDLE)).await;
+
+    assert!(started.elapsed() > IDLE * 2);
+    assert_eq!(all_ok(events).len(), 7, "six texts and the Done");
+}
+
+/// The timer runs while a read waits and at no other time: a consumer that
+/// takes longer than the bound to ask for the next event does not make the
+/// upstream look silent, even though the next chunk then takes half the bound
+/// to come.
+#[tokio::test]
+async fn the_bound_does_not_run_while_nobody_asks_for_the_next_chunk() {
+    let chunks = vec![content_frame("hel"), content_frame("lo")];
+    let events = upstream_events(then_silent(chunks, IDLE / 2), IDLE);
+    let mut events = std::pin::pin!(events);
+
+    assert!(matches!(
+        events.next().await,
+        Some(Ok(LlmStreamEvent::TextDelta { .. }))
+    ));
+    tokio::time::sleep(IDLE * 2).await;
+    let second = events.next().await.expect("a second event");
+    assert_eq!(
+        second.expect("the second chunk, not a stall"),
+        LlmStreamEvent::TextDelta {
+            content: "lo".to_owned()
+        }
+    );
+}
+
+/// Silence after prefill progress alone is a stall before the first token.
+#[tokio::test]
+async fn a_stall_before_any_generated_token_says_so() {
+    let progress = Bytes::from_static(
+        b"data: {\"prompt_progress\":{\"cache\":0,\"processed\":1,\"total\":9,\"time_ms\":1}}\n\n",
+    );
+    let silent = then_silent(vec![progress], Duration::ZERO);
+    let events = within_patience(upstream_events(silent, IDLE)).await;
+
+    let stall = events.last().and_then(stall_of).expect("ends in a stall");
+    assert!(!stall.after_first_token);
+}
+
+/// What the client is sent for a stall: the notice, which promises a recycle
+/// only when there will be one, and the error frame, byte for byte.
+#[test]
+fn a_stall_is_told_as_a_notice_and_an_upstream_timeout_frame() {
+    let after = Duration::from_secs(300);
+    let mid = UpstreamStalled {
+        after,
+        after_first_token: true,
+    };
+    let early = UpstreamStalled {
+        after,
+        after_first_token: false,
+    };
+
+    assert_eq!(
+        mid.notice(),
+        "\n\n⚠️ [proxy] upstream model server went silent for 300s mid-response — it may be wedged; this model is being recycled."
+    );
+    assert_eq!(
+        early.notice(),
+        "\n\n⚠️ [proxy] upstream model server went silent for 300s mid-response — it may be wedged."
+    );
+    assert_eq!(
+        mid.error_frame(),
+        concat!(
+            r#"data: {"error":{"code":"upstream_timeout","#,
+            r#""message":"upstream sent nothing for 300s mid-response","#,
+            r#""type":"server_error"}}"#,
+            "\n\n",
+        )
     );
 }

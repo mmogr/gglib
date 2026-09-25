@@ -64,3 +64,7 @@ pub use server::serve;
 // them. Mirrors `gglib-db`'s `test-utils`.
 #[cfg(any(test, feature = "test-support"))]
 pub use cache_lifecycle::{StreamConfig, restore_with_retry};
+// Same gate, same reason: `tests/` start `serve` inside
+// `TEST_STREAM_BOUNDS.scope(..)` so a stall takes milliseconds, not minutes.
+#[cfg(any(test, feature = "test-support"))]
+pub use upstream_read::{StreamBounds, TEST_STREAM_BOUNDS};

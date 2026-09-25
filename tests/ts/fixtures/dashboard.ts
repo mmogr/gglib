@@ -127,6 +127,7 @@ const SNAPSHOT: DashboardSnapshot = {
     consecutive_strikes: 0,
     total_empty_responses: 0,
     total_upstream_errors: 0,
+    total_stream_stalls: 0,
     total_first_byte_timeouts: 0,
     total_client_aborts: 0,
     total_recycles: 0,

@@ -7,4 +7,5 @@ pub(crate) mod profile_mocks;
 pub(crate) mod recorder;
 pub(crate) mod remote;
 pub(crate) mod sse;
+pub(crate) mod stall;
 pub(crate) mod tunnel;

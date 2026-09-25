@@ -55,7 +55,7 @@ fn cumulative_counters_track_events() {
     assert_eq!(snap.consecutive_strikes, 0);
 }
 
-/// The regression this module's four-state verdict exists for: a server
+/// The regression this module's verdict type exists for: a server
 /// dying mid-stream used to arrive as "healthy", because the error frame
 /// it emitted was renderable. Every request failing therefore held the
 /// streak at zero and the recycle never fired.
@@ -131,4 +131,50 @@ fn client_aborts_alone_never_trip_a_recycle() {
     }
     assert_eq!(h.snapshot().consecutive_strikes, 0);
     assert!(!h.take_recycle_request());
+}
+
+/// A generating server that goes silent is not given a second chance: prefill
+/// was over, so the recycle is asked for on the first stall, and the stall is
+/// counted in a total of its own.
+#[test]
+fn a_stall_after_the_first_token_asks_for_a_recycle_at_once_and_is_counted_apart() {
+    let h = UpstreamHealth::new();
+    h.record_stream_outcome(StreamVerdict::Stalled {
+        after_first_token: true,
+    });
+    assert!(h.take_recycle_request(), "one stall is enough");
+    let snap = h.snapshot();
+    assert_eq!(snap.total_stream_stalls, 1);
+    assert_eq!(snap.total_upstream_errors, 0);
+    assert_eq!(snap.total_empty_responses, 0);
+}
+
+/// Before the first token the silence may be a slow prefill, so a stall there
+/// strikes like any other failure and recycles only at the threshold.
+#[test]
+fn a_stall_before_the_first_token_strikes_once_and_waits_for_the_threshold() {
+    let h = UpstreamHealth::new();
+    let early = StreamVerdict::Stalled {
+        after_first_token: false,
+    };
+    h.record_stream_outcome(early);
+    assert!(!h.recycle_pending());
+    assert_eq!(h.snapshot().consecutive_strikes, 1);
+    h.record_stream_outcome(early);
+    assert!(h.take_recycle_request(), "two strikes in a row");
+    assert_eq!(h.snapshot().total_stream_stalls, 2);
+}
+
+/// Looking at a pending recycle does not take it.
+#[test]
+fn a_pending_recycle_can_be_seen_without_being_taken() {
+    let h = UpstreamHealth::new();
+    assert!(!h.recycle_pending());
+    h.record_stream_outcome(StreamVerdict::Stalled {
+        after_first_token: true,
+    });
+    assert!(h.recycle_pending());
+    assert!(h.recycle_pending(), "still there after a look");
+    assert!(h.take_recycle_request());
+    assert!(!h.recycle_pending());
 }

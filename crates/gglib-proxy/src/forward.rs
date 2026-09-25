@@ -87,7 +87,7 @@ use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
-use crate::upstream_read::upstream_events;
+use crate::upstream_read::{StreamBounds, UpstreamStalled};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::defects::LoopGuardTrip;
 
@@ -102,7 +102,7 @@ pub(crate) enum ForwardError {
 }
 
 /// Outcome of draining one upstream streaming response through the
-/// normalization pipeline, returned by [`stream_response_to_channel`].
+/// normalization pipeline, returned by [`drain_events`].
 ///
 /// Used by the caller to distinguish a healthy response from a degenerate one
 /// (no output at all) for upstream-health bookkeeping.
@@ -157,6 +157,10 @@ pub(crate) struct StreamOutcome {
     ///
     /// Client disconnects never set this; hanging up is not a model defect.
     pub upstream_errored: bool,
+    /// The upstream went silent mid-reply for longer than the idle bound.
+    /// Implies [`Self::upstream_errored`]. Unless the turn's `Done` had already
+    /// gone out, the client was sent `upstream_timeout`.
+    pub upstream_stalled: Option<UpstreamStalled>,
     /// Normalization discarded a malformed dialect tool call and surfaced the
     /// raw body as visible text instead.
     ///
@@ -180,17 +184,24 @@ impl StreamOutcome {
     /// The precedence is the whole content of this function, so it is stated
     /// once here rather than at the call site:
     ///
-    /// 1. **Died upstream** wins outright. A turn that broke mid-generation
+    /// 1. **Went silent** comes first: it implies died-upstream and is the
+    ///    more specific claim. A client that left during the silence does not
+    ///    make the silence its doing.
+    /// 2. **Died upstream** comes next. A turn that broke mid-generation
     ///    indicts the server even if it had already emitted good text.
-    /// 2. **Visible output** beats a client disconnect. If the upstream
+    /// 3. **Visible output** beats a client disconnect. If the upstream
     ///    demonstrably produced, that is positive evidence of health and the
     ///    client leaving afterwards does not retract it.
-    /// 3. **Client abort** with nothing produced is genuinely unknowable — the
+    /// 4. **Client abort** with nothing produced is genuinely unknowable — the
     ///    model may have been mid-prefill — so it abstains.
-    /// 4. Otherwise the turn produced nothing and nobody left: an empty
+    /// 5. Otherwise the turn produced nothing and nobody left: an empty
     ///    response, the degradation this watchdog was built for.
     pub(crate) fn health_verdict(&self) -> StreamVerdict {
-        if self.upstream_errored {
+        if let Some(stall) = self.upstream_stalled {
+            StreamVerdict::Stalled {
+                after_first_token: stall.after_first_token,
+            }
+        } else if self.upstream_errored {
             StreamVerdict::UpstreamError
         } else if self.saw_visible_output {
             StreamVerdict::Healthy
@@ -199,6 +210,15 @@ impl StreamOutcome {
         } else {
             StreamVerdict::Empty
         }
+    }
+
+    /// Whether the KV cache of this turn's slot is worth saving to disk.
+    ///
+    /// Not after a stall: the save is one more request to the llama-server
+    /// that just stopped answering, and it would hold the slot gate while it
+    /// waited on it.
+    pub(crate) fn worth_saving(&self) -> bool {
+        self.upstream_stalled.is_none()
     }
 }
 
@@ -289,7 +309,8 @@ pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 /// own turn and wrong here, because a re-issue happens *while the client is
 /// receiving nothing*: the frames it would have shown are being withheld, the
 /// keepalive that guarded the wait for a slot has already stopped, and the
-/// drain loop has no timer of its own.
+/// drain's idle bound ([`StreamBounds::idle`]) is not running: it times reads
+/// of the original reply, and none is in progress while the re-issue is.
 ///
 /// So this is the one bound that keeps an unresponsive upstream from turning a
 /// repair into an unbounded silence. Comfortably under
@@ -330,7 +351,7 @@ const REPAIR_KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from
 /// Because `return_progress` is the proxy's own override and not the client's
 /// request, the returned flag records whether the *client* asked for progress
 /// frames. It decides whether `prompt_progress` frames are forwarded
-/// downstream (see [`stream_response_to_channel`]): a `prompt_progress` chunk
+/// downstream (see [`drain_events`]): a `prompt_progress` chunk
 /// carries no `choices` key, which is a llama.cpp extension and not valid
 /// `OpenAI` streaming JSON, so clients that validate chunks against the
 /// `OpenAI` schema (anything on the Vercel AI SDK — `OpenCode`, and others)
@@ -542,6 +563,8 @@ pub(crate) struct ForwardRequest<'a> {
     /// any visible output resets it) so the handler can recycle a
     /// degraded-but-`/health`-green upstream before the next request.
     pub upstream_health: Arc<UpstreamHealth>,
+    /// How long a streamed reply may wait on a silent upstream.
+    pub stream_bounds: StreamBounds,
     /// Per-model chars-per-token calibration store.
     pub calibration: Arc<TokenCalibration>,
     /// Session id used to look up/freeze this session's chars-per-token
@@ -630,6 +653,7 @@ pub(crate) async fn forward_chat_completion(
         sampling,
         connection,
         upstream_health,
+        stream_bounds,
         calibration,
         calibration_session_id,
         cache_metrics,
@@ -839,6 +863,7 @@ pub(crate) async fn forward_chat_completion(
             model_name_owned,
             dialect,
             upstream_health,
+            stream_bounds,
             calibration,
             cache_metrics,
             Arc::clone(&metrics),
@@ -921,12 +946,42 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
     format!("data: {value}\n\n")
 }
 
-/// Feed a streaming response through the normalization pipeline and send each
+/// [`drain_events`] over a whole upstream response, read at the production
+/// idle bound: the entry point for tests that drive the drain with a real
+/// HTTP response rather than chosen chunks.
+#[cfg(test)]
+pub(crate) async fn stream_response_to_channel(
+    response: reqwest::Response,
+    model_name: String,
+    dialect: Option<DialectSpec>,
+    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    connection: &ConnectionGuard,
+    repair: Option<RepairContext>,
+    client_wants_progress: bool,
+) -> StreamOutcome {
+    let events = crate::upstream_read::upstream_events(
+        response.bytes_stream(),
+        crate::upstream_read::STREAM_IDLE_TIMEOUT,
+    );
+    drain_events(
+        events,
+        model_name,
+        dialect,
+        tx,
+        connection,
+        repair,
+        client_wants_progress,
+    )
+    .await
+}
+
+/// Feed the upstream's events through the normalization pipeline and send each
 /// encoded frame to `tx`.
 ///
-/// Used by the keepalive streaming path in [`forward_chat_completion`] where
-/// the `Response` has already been returned to the client before llama.cpp
-/// assigns a slot.
+/// `events` comes from [`upstream_events`](crate::upstream_read::upstream_events),
+/// which reads the response under the idle bound. Used by the keepalive
+/// streaming path in [`forward_chat_completion`], where the `Response` has
+/// already been returned to the client before llama.cpp assigns a slot.
 ///
 /// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
 /// records them on `connection` (the dashboard registry entry for this
@@ -936,8 +991,13 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
 /// [`inject_streaming_body_overrides`]), and a `prompt_progress` chunk has no
 /// `choices` key, so re-emitting it unasked puts a non-`OpenAI` chunk in front
 /// of every schema-validating client.
-pub(crate) async fn stream_response_to_channel(
-    response: reqwest::Response,
+///
+/// When the events end in an [`UpstreamStalled`], the client gets any held
+/// tool-call frames, a notice as the turn's own text, the `upstream_timeout`
+/// error frame and the one `[DONE]`. A stall after the turn's `Done` gets only
+/// the `[DONE]`: the answer was complete, and only its trailer was late.
+pub(crate) async fn drain_events(
+    events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     model_name: String,
     dialect: Option<DialectSpec>,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
@@ -952,10 +1012,8 @@ pub(crate) async fn stream_response_to_channel(
         .unwrap_or(0);
     let encoder = SseEncoder::new(id, model_name, created);
 
-    let event_stream = upstream_events(response.bytes_stream());
-
     let parser = get_parser(dialect.as_ref());
-    let normalized = NormalizingStream::new(Box::pin(event_stream), parser);
+    let normalized = NormalizingStream::new(Box::pin(events), parser);
     let mut normalized = Box::pin(normalized);
 
     // Drift alarm: watch the post-normalization client-visible text for
@@ -966,6 +1024,9 @@ pub(crate) async fn stream_response_to_channel(
 
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
+    // Set once the turn's `Done` has gone out: a stall after it is a late
+    // trailer, not a broken answer.
+    let mut turn_done = false;
     // Accumulates reasoning text for the promotion path below. Bounded in
     // practice by the request's `max_tokens`.
     let mut reasoning_buf = String::new();
@@ -1067,6 +1128,7 @@ pub(crate) async fn stream_response_to_channel(
                 LlmStreamEvent::Done { finish_reason } => {
                     connection.mark_generating();
                     outcome.finish_reason = finish_reason.clone();
+                    turn_done = true;
 
                     // The turn's tool calls are complete exactly here, so this
                     // is the only point at which a repair can be judged. The
@@ -1107,11 +1169,12 @@ pub(crate) async fn stream_response_to_channel(
             },
             Err(e) => {
                 error!("proxy stream error: {e}");
-                outcome.saw_visible_output = true;
-                // The upstream byte stream broke mid-generation (a crashed
-                // llama-server, a severed connection) — the same
-                // turn-died-upstream fact as an explicit error event.
+                // The upstream byte stream broke or went silent mid-generation
+                // (a crashed llama-server, a severed connection, a wedged
+                // server) — the same turn-died-upstream fact as an explicit
+                // error event.
                 outcome.upstream_errored = true;
+                outcome.upstream_stalled = e.downcast_ref::<UpstreamStalled>().copied();
                 // The inner stream returns without a terminating `Done`, so the
                 // flush in that arm never happens. Whatever the hold-back
                 // captured is real model output a non-repairing turn would have
@@ -1120,16 +1183,31 @@ pub(crate) async fn stream_response_to_channel(
                     client_connected = false;
                     outcome.client_aborted = true;
                 }
-                let payload = serde_json::json!({
-                    "error": {
-                        "message": e.to_string(),
-                        "type": "server_error",
-                        "code": "upstream_error",
+                // No inline [DONE] in either frame -- appended once,
+                // unconditionally, after the wire stream is exhausted (see
+                // below).
+                match outcome.upstream_stalled {
+                    Some(_) if turn_done => None,
+                    Some(stall) => {
+                        outcome.saw_visible_output = true;
+                        let notice = LlmStreamEvent::TextDelta {
+                            content: stall.notice(),
+                        };
+                        let notice = encoder.encode(&notice).unwrap_or_default();
+                        Some(Bytes::from(notice + &stall.error_frame()))
                     }
-                });
-                // No inline [DONE] here -- appended once, unconditionally,
-                // after the wire stream is exhausted (see below).
-                Some(Bytes::from(format!("data: {payload}\n\n")))
+                    None => {
+                        outcome.saw_visible_output = true;
+                        let payload = serde_json::json!({
+                            "error": {
+                                "message": e.to_string(),
+                                "type": "server_error",
+                                "code": "upstream_error",
+                            }
+                        });
+                        Some(Bytes::from(format!("data: {payload}\n\n")))
+                    }
+                }
             }
         };
 
@@ -1207,8 +1285,9 @@ pub(crate) async fn stream_response_to_channel(
 ///
 /// The whole point is that the client is receiving *nothing* during this
 /// window: its tool-call frames are withheld pending the outcome, the
-/// slot-wait keepalive has already stopped, and the drain loop that called us
-/// has no timer. A comment every [`REPAIR_KEEPALIVE_INTERVAL`] keeps the
+/// slot-wait keepalive has already stopped, and the idle bound of the drain
+/// that called us times only reads of the original reply, of which none is in
+/// progress. A comment every [`REPAIR_KEEPALIVE_INTERVAL`] keeps the
 /// connection observably alive without showing the client anything.
 ///
 /// Returns `None` if the client disconnected mid-flight — there is then no
@@ -1357,3 +1436,19 @@ mod forward_progress_tests;
 #[cfg(test)]
 #[path = "forward_repair_grammar_tests.rs"]
 mod forward_repair_grammar_tests;
+
+/// The byte streams the stall tests feed the drain, and the turn they read.
+#[cfg(test)]
+#[path = "forward_stall_fixtures.rs"]
+mod forward_stall_fixtures;
+
+/// What the client is sent when the upstream goes silent mid-reply, and what
+/// is not mistaken for that.
+#[cfg(test)]
+#[path = "forward_stall_tests.rs"]
+mod forward_stall_tests;
+
+/// What a stalled turn tells the watchdog, and what it is not worth.
+#[cfg(test)]
+#[path = "forward_stall_health_tests.rs"]
+mod forward_stall_health_tests;

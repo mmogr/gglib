@@ -9,9 +9,10 @@ build = "build.rs"
 
 [features]
 default = []
-# Exposes the two `cache_lifecycle` items this crate's own `tests/` need.
-# They link the crate as an external consumer, so `#[cfg(test)]` does not
-# reach them — mirrors `gglib-db`'s `test-utils`.
+# Exposes the two `cache_lifecycle` items this crate's own `tests/` need,
+# and the stream bounds they shorten. They link the crate as an external
+# consumer, so `#[cfg(test)]` does not reach them — mirrors `gglib-db`'s
+# `test-utils`.
 test-support = []
 # Emit TypeScript for the dashboard/audit records the GUI reads. Optional
 # dependency, so the default graph is unchanged and

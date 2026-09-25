@@ -5,14 +5,16 @@
 //! stops returning `200`). It does **not** catch the subtler failure modes this
 //! module targets: a server whose `/health` is still green but which has
 //! degraded to the point of producing **empty responses**, **dying
-//! mid-generation**, or never returning the first token. Each manifests to the
-//! client as a turn that simply failed.
+//! mid-generation**, **going silent mid-reply**, or never returning the first
+//! token. Each manifests to the client as a turn that simply failed.
 //!
 //! [`UpstreamHealth`] accumulates such degraded outcomes across requests. When
 //! [`STRIKE_THRESHOLD`] consecutive strikes occur it raises a one-shot
 //! "recycle requested" flag; the chat handler consumes that flag before the
 //! next request and proactively stops the current model, forcing a fresh
 //! respawn — the same cure a human applies by restarting the proxy, automated.
+//! A stall after the first token raises the flag at once; see
+//! [`StreamVerdict::Stalled`].
 //!
 //! ## What may cast a vote
 //!
@@ -39,8 +41,8 @@ pub(crate) const STRIKE_THRESHOLD: u32 = 2;
 
 /// What one streamed turn revealed about the upstream's health.
 ///
-/// Deliberately four states rather than a bool. The two that a bool collapses
-/// are the ones that made the watchdog read the world backwards:
+/// Deliberately more than a bool. The two states a bool collapses are the ones
+/// that made the watchdog read the world backwards:
 ///
 /// * [`Self::UpstreamError`] — the turn *died upstream*. Under a bool this
 ///   arrived as "healthy", because the error frame is renderable and the drain
@@ -73,6 +75,21 @@ pub enum StreamVerdict {
     /// about the upstream, so it is recorded as nothing at all — neither a
     /// strike nor a reset.
     ClientAborted,
+    /// The upstream went silent mid-reply for longer than the idle bound
+    /// ([`StreamBounds::idle`](crate::upstream_read::StreamBounds)). It strikes
+    /// and is counted apart from [`Self::UpstreamError`].
+    ///
+    /// After the first generated token it also asks for a recycle at once:
+    /// prefill was over, and nothing legitimate keeps a generating
+    /// llama-server silent that long. Before it, the silence can be a slow
+    /// prefill on a slow host (see
+    /// [`STREAM_IDLE_TIMEOUT`](crate::upstream_read::STREAM_IDLE_TIMEOUT)), so
+    /// it only strikes: recycling there would restart the same prefill, which
+    /// would stall again.
+    Stalled {
+        /// Whether a generated token had arrived before the silence.
+        after_first_token: bool,
+    },
 }
 
 /// Serializable, point-in-time view of the watchdog's cumulative counters.
@@ -95,6 +112,14 @@ pub struct UpstreamHealthSnapshot {
     /// them together would report a crashing server as a quiet one.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_upstream_errors: u64,
+    /// Total turns that ended because the upstream went silent mid-reply for
+    /// longer than the idle bound, since the proxy started.
+    ///
+    /// Separate from [`Self::total_upstream_errors`] for the same reason that
+    /// one is separate from the empty responses: a server that stops talking
+    /// and one that falls over are different illnesses.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub total_stream_stalls: u64,
     /// Total first-byte deadline expiries since the proxy started.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_first_byte_timeouts: u64,
@@ -126,12 +151,14 @@ pub struct UpstreamHealthSnapshot {
 pub struct UpstreamHealth {
     /// Count of consecutive degraded outcomes since the last healthy one.
     consecutive_strikes: AtomicU32,
-    /// One-shot flag: set when the strike threshold is reached, cleared by
-    /// [`UpstreamHealth::take_recycle_request`].
+    /// One-shot flag: set when the strike threshold is reached, by a stall
+    /// after the first token, or by [`UpstreamHealth::rearm_recycle`]; cleared
+    /// by [`UpstreamHealth::take_recycle_request`].
     recycle_requested: AtomicBool,
     /// Cumulative counters for observability (never reset).
     total_empty_responses: AtomicU64,
     total_upstream_errors: AtomicU64,
+    total_stream_stalls: AtomicU64,
     total_first_byte_timeouts: AtomicU64,
     total_client_aborts: AtomicU64,
     total_recycles: AtomicU64,
@@ -172,6 +199,13 @@ impl UpstreamHealth {
                 self.total_upstream_errors.fetch_add(1, Ordering::Relaxed);
                 self.record_strike();
             }
+            StreamVerdict::Stalled { after_first_token } => {
+                self.total_stream_stalls.fetch_add(1, Ordering::Relaxed);
+                self.record_strike();
+                if after_first_token {
+                    self.recycle_requested.store(true, Ordering::Relaxed);
+                }
+            }
             // Abstain: the client ended the turn, so it carries no evidence
             // either way. Counted for observability, never scored.
             StreamVerdict::ClientAborted => {
@@ -195,10 +229,24 @@ impl UpstreamHealth {
         }
     }
 
+    /// Whether a recycle has been asked for and not yet taken.
+    ///
+    /// A look, not a take. The chat handler asks it once a request is through
+    /// admission, to carry out a recycle asked for while the request waited
+    /// there. The streaming path asks it before re-sending a request whose
+    /// first-byte deadline expired: a re-send into an upstream already known
+    /// to be sick is a second submission to a server that has not answered
+    /// the first.
+    #[must_use]
+    pub fn recycle_pending(&self) -> bool {
+        self.recycle_requested.load(Ordering::Relaxed)
+    }
+
     /// Consume the recycle request, if any.
     ///
-    /// Returns `true` at most once per tripped threshold. On a `true` return
-    /// the strike counter is also reset, so the freshly recycled server starts
+    /// Returns `true` if the flag was set, and clears it, so the next call
+    /// returns `false` until the flag is set again. On a `true` return the
+    /// strike counter is also reset, so the freshly recycled server starts
     /// with a clean slate.
     pub fn take_recycle_request(&self) -> bool {
         let requested = self.recycle_requested.swap(false, Ordering::Relaxed);
@@ -233,6 +281,7 @@ impl UpstreamHealth {
             consecutive_strikes: self.consecutive_strikes.load(Ordering::Relaxed),
             total_empty_responses: self.total_empty_responses.load(Ordering::Relaxed),
             total_upstream_errors: self.total_upstream_errors.load(Ordering::Relaxed),
+            total_stream_stalls: self.total_stream_stalls.load(Ordering::Relaxed),
             total_first_byte_timeouts: self.total_first_byte_timeouts.load(Ordering::Relaxed),
             total_client_aborts: self.total_client_aborts.load(Ordering::Relaxed),
             total_recycles: self.total_recycles.load(Ordering::Relaxed),
