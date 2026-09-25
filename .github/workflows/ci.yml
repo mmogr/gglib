@@ -328,20 +328,11 @@ jobs:
           shared-key: "ci-bindings"
           cache-on-failure: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # `crates/gglib-axum/src/ui.rs` embeds `../../web_ui` through rust-embed
-      # with `debug-embed`, so the crate does not compile without it — this is
-      # not optional even though nothing here serves a page.
-      - name: Build Web UI
-        run: |
-          npm ci
-          npm run build
-
+      # No frontend build. gglib-axum compiles without `web_ui/`: the
+      # `#[allow_missing = true]` in its `src/ui.rs` leaves the embedded asset
+      # set empty. The one member whose build can need it is gglib-app, whose
+      # `tauri::generate_context!()` embeds `frontendDist` when its
+      # `custom-protocol` feature is on, and `make bindings` excludes it.
       - name: Check generated TypeScript bindings are current
         run: make bindings-check
 
@@ -392,21 +383,11 @@ jobs:
           shared-key: "ci-rustdoc"
           cache-on-failure: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # `crates/gglib-axum/src/ui.rs` embeds `../../web_ui` through rust-embed
-      # with `debug-embed`, so the crate does not compile without it — this is
-      # not optional even though nothing here serves a page.
-      - name: Build Web UI
-        run: |
-          npm ci
-          npm run build
-
-
+      # No frontend build. gglib-axum compiles without `web_ui/`: the
+      # `#[allow_missing = true]` in its `src/ui.rs` leaves the embedded asset
+      # set empty. The one member whose build can need it is gglib-app, whose
+      # `tauri::generate_context!()` embeds `frontendDist` when its
+      # `custom-protocol` feature is on, and `--exclude gglib-app` leaves it out.
       - name: Check rustdoc has no warnings
         env:
           RUSTDOCFLAGS: -D warnings

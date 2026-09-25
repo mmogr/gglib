@@ -70,7 +70,8 @@ jobs:
             ${{ runner.os }}-cargo-registry-
 
       - name: Build documentation
-        # Exclude gglib-app (Tauri desktop) as it requires the web_ui directory to be built.
+        # Exclude gglib-app (Tauri desktop): the one member whose build can need the Web UI
+        # (its `tauri::generate_context!()` embeds `frontendDist` when `custom-protocol` is on).
         # gglib-app has minimal API documentation (6 items) and is not the primary doc target.
         # gglib-core (119 items) is the comprehensive library documentation.
         #

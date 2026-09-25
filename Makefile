@@ -215,7 +215,9 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# matters: `--document-private-items` is what makes these docs worth
 	@# reading (most of this codebase is private), and it is also what the
 	@# workspace's `private_intra_doc_links = "allow"` is predicated on.
-	@# `--exclude gglib-app` because that crate needs the Web UI built first.
+	@# `--exclude gglib-app`: the one member whose build can need the Web UI
+	@# (its `tauri::generate_context!()` embeds `frontendDist` when
+	@# `custom-protocol` is on); see the note above `bindings`.
 	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
 
 ##@ Frontend and architecture checks
@@ -293,6 +295,12 @@ BINDINGS_LOG := target/bindings-export.log
 # crate that declares it later, which a hand-maintained package list would
 # not.
 #
+# `--exclude gglib-app`: that package defines no `ts-bindings` and derives no
+# `TS`, so it has nothing to export, and leaving it out keeps the export clear
+# of the one member whose build can need the Web UI (its
+# `tauri::generate_context!()` embeds `frontendDist` when `custom-protocol` is
+# on). A `TS` derive added there would not be exported while it is excluded.
+#
 # `export` rather than a command-prefix assignment, and this is not style.
 # `$(CARGO)` expands to `. $$HOME/.cargo/env && …cargo`, so
 # `VAR=x $(CARGO) test` prefixes the `.` builtin, not cargo — and that
@@ -317,7 +325,7 @@ bindings bindings-check: export TS_RS_EXPORT_DIR := $(CURDIR)/$(BINDINGS_DIR).ne
 bindings: ## Regenerate src/types/generated from the Rust wire types
 	@mkdir -p target
 	@rm -rf $(BINDINGS_DIR).new
-	@$(CARGO) test --workspace --features ts-bindings export_bindings_ \
+	@$(CARGO) test --workspace --exclude gglib-app --features ts-bindings export_bindings_ \
 		> $(BINDINGS_LOG) 2>&1 || { rm -rf $(BINDINGS_DIR).new; cat $(BINDINGS_LOG); exit 1; }
 	@ran=$$(grep -cE 'export_bindings_[a-z0-9_]+ \.\.\. ok' $(BINDINGS_LOG) || true); \
 	 if [ "$$ran" -lt 1 ]; then \
