@@ -16,10 +16,11 @@ use join::{JoinArgs, disconnect, join};
 use key::key;
 
 use anyhow::Result;
+use gglib_app_services::RemoteStatus;
 
 use crate::bootstrap::CliContext;
 use crate::commands::RemoteCommand;
-use crate::daemon_client::{self, DaemonProbe, RemoteStatusDto};
+use crate::daemon_client::{self, DaemonProbe};
 use crate::presentation::style;
 
 /// Route a `gglib remote` subcommand to its handler.
@@ -99,7 +100,7 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
 }
 
 /// The status, one line per fact.
-fn print_status(status: &RemoteStatusDto) {
+fn print_status(status: &RemoteStatus) {
     if !status.enabled {
         // The switch being on with nothing bound is worth its own sentence:
         // it is a machine that failed to arm at boot, or is still arming,
@@ -169,7 +170,7 @@ fn print_status(status: &RemoteStatusDto) {
 /// perfectly healthy connection — read twice as "it isn't working" during the
 /// first two-machine session. Keep this conditional: the connecting side is
 /// told where the number lives instead of being handed a meaningless zero.
-fn print_traffic(status: &RemoteStatusDto) {
+fn print_traffic(status: &RemoteStatus) {
     if !status.enabled {
         if status.connected.is_some() {
             eprintln!(

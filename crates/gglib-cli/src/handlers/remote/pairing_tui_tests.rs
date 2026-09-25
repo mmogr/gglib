@@ -11,7 +11,7 @@ use super::*;
 /// A status as the daemon's JSON has it. Built from JSON rather than a struct
 /// literal, so the serde defaults the screen relies on are part of what is
 /// under test.
-fn status(enabled: bool, pairing_active: bool, paired: bool) -> RemoteStatusDto {
+fn status(enabled: bool, pairing_active: bool, paired: bool) -> RemoteStatus {
     serde_json::from_value(serde_json::json!({
         "enabled": enabled,
         "pairing_active": pairing_active,
@@ -23,7 +23,7 @@ fn status(enabled: bool, pairing_active: bool, paired: bool) -> RemoteStatusDto 
 /// An enable answer that offered a code, as the daemon's JSON has it,
 /// naming `device` or, like a daemon that predates per-device keys, none.
 /// Built from JSON for the same reason `status` is.
-fn offer(device: Option<&str>) -> RemoteEnableDto {
+fn offer(device: Option<&str>) -> RemoteEnableResponse {
     let mut answer = serde_json::json!({
         "ticket": "pipeaaaa",
         "code": "483920",
@@ -106,7 +106,7 @@ fn a_redemption_read_between_its_two_writes_is_still_a_pairing() {
 #[test]
 fn a_pairing_names_the_device_its_code_was_for_not_the_last_peer() {
     let enabled = offer(Some("dev-a1b2c3d4"));
-    let paired: RemoteStatusDto = serde_json::from_value(serde_json::json!({
+    let paired: RemoteStatus = serde_json::from_value(serde_json::json!({
         "enabled": true,
         "paired": true,
         "last_peer": "0123456789ab",

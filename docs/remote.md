@@ -93,8 +93,8 @@ shows none.
 ```console
 $ gglib remote list
   ID            DEVICE
-  dev-4e5f6a7b  Matt's MacBook  (last seen 4m ago; paired from 3ca82708b995)
-  dev-0a1b2c3d  Matt's iPhone  (no requests yet; paired from 91d0e4f2a6c8)
+  dev-4e5f6a7b  Matt's MacBook  (last seen 4m ago · paired from 3ca82708b995)
+  dev-0a1b2c3d  Matt's iPhone  (no requests yet · paired from 91d0e4f2a6c8)
   dev-9c2b77f1  —  (invited 3d ago, never joined)
 
   Retire one:  gglib remote forget <id>

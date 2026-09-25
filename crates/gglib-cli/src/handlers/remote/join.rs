@@ -4,9 +4,10 @@
 //! `gglib daemon stop --remote` now (ADR 0013), beside the local stop.
 
 use anyhow::Result;
+use gglib_app_services::{RemoteJoinBody, RemoteStatus};
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonProbe, RemoteJoinBody, RemoteStatusDto};
+use crate::daemon_client::{self, DaemonProbe};
 
 /// What `gglib remote join` was asked for.
 #[derive(Debug, Clone, Default)]
@@ -103,7 +104,7 @@ pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
 }
 
 /// The connect side's lines of `gglib remote status`.
-pub(super) fn print_connection(status: &RemoteStatusDto) {
+pub(super) fn print_connection(status: &RemoteStatus) {
     match &status.connected {
         Some(c) => match c.away_for_s {
             Some(secs) => eprintln!(
