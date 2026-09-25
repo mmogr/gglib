@@ -3,8 +3,9 @@
 <!-- module-docs:start -->
 
 `gglib remote` — the tunnel that puts one machine's proxy on another
-([ADR 0012](../../../../../docs/adr/0012-the-remote-tunnel.md)). Thin clients
-over `/api/remote/*` on the daemon; the tunnel itself lives in
+([ADR 0012](../../../../../docs/adr/0012-the-remote-tunnel.md)). Mostly thin
+clients over `/api/remote/*` on the daemon; `key` reads the stored pairing
+from settings instead. The tunnel itself lives in
 `gglib-app-services::RemoteOps` and this crate never sees it.
 
 # Module Layout
@@ -25,6 +26,9 @@ remote/
                     the invite is withdrawn
   connect.rs      — `join` (and `connect`, its old name): this machine as
                     the laptop, plus `disconnect`
+  key.rs          — `gglib remote key`: this device's key, printed on
+                    stdout alone under `--show`, for a client that is not
+                    gglib
 ```
 
 # Who may use it
@@ -52,6 +56,12 @@ key and the ticket. Without it the stored key is used; with no argument at
 all the stored ticket is dialled. The daemon reports the loopback port that
 is now the far machine, and this prints it with the reminder that a client
 pointed there supplies the key itself — the port does not inject it.
+
+`key --show` is where such a client gets it. Stdout carries the key and
+nothing else, so `$(gglib remote key --show)` is exactly the key; the warning
+that it is a secret goes to stderr, where `key` never writes the key. A bare
+`key` prints nothing on stdout and says how to ask, and with no pairing stored
+both fail.
 
 Stopping the far machine is `gglib daemon stop --remote` (ADR 0013): a
 `daemon` command pointed at another machine, beside the local stop, asking

@@ -309,8 +309,8 @@ pub struct Settings {
     /// ticket is part of the record. `gglib q --remote` and
     /// `gglib chat --remote` attach the key as the bearer. Nothing writes it
     /// by hand, and `gglib config settings show` reports the key as held or
-    /// not rather than printing it, because re-pairing replaces it and
-    /// nothing needs to read it back.
+    /// not rather than printing it; `gglib remote key --show` prints it,
+    /// alone and only when asked, for a client that is not gglib.
     ///
     /// A database written before the halves were bound holds
     /// `remote_api_key` and `remote_last_ticket` as separate rows, and both

@@ -218,7 +218,7 @@ per-device keys holds the old shared key, and the edge no longer admits it.
 Invite each device once and they are back; nothing else about the machine
 changes, and the ticket is the same ticket.
 
-### The laptop: `join`, `disconnect`
+### The laptop: `join`, `disconnect`, `key`
 
 `gglib remote join` was called `gglib remote connect`, and still answers to
 it for one release — the old name prints a note saying so and does exactly
@@ -268,6 +268,11 @@ stops the daemon here, pointed at the other machine. It stops that daemon
 through the tunnel — proxy, models, downloads — and then disconnects, and it
 asks you to type `shutdown` first, because nothing can start that daemon
 again from the laptop. `--yes` skips the question for scripts.
+
+`gglib remote key --show` prints this laptop's device key on stdout, and
+nothing else, for a client that is not gglib (see [Using it](#using-it)). The
+warning that it is a secret goes to stderr. Without `--show` it prints nothing
+on stdout and says how to ask; with no pairing stored it exits 1.
 
 ## Using it
 
@@ -353,9 +358,15 @@ device key as its API key. The port does not add the key for you — that is
 deliberate; see [Why the port does not inject the key](#why-the-port-does-not-inject-the-key).
 The key is the one this laptop was given when it paired — its own device
 key, not the desktop's `proxy_api_key`, which never leaves the desktop.
-`gglib remote status` here says whether this machine holds one. The per-client
-recipes in [clients.md](clients.md) apply unchanged apart from the port and
-the key.
+`gglib remote status` here says whether this machine holds one, and
+`gglib remote key --show` prints it, alone, so a script can hand it on:
+
+```sh
+curl -H "Authorization: Bearer $(gglib remote key --show)" http://127.0.0.1:8180/v1/models
+```
+
+The per-client recipes in [clients.md](clients.md) apply unchanged apart from
+the port and the key.
 
 ## How it stays private
 
@@ -573,7 +584,8 @@ configuration. It does not, on purpose: that would make every process on
 the laptop an authenticated client of the desktop, which is a larger grant
 than the one you made when you paired. gglib's own commands attach the key
 because you asked them to; a third-party client supplies it as its API key,
-which is the ordinary OpenAI-compatible arrangement. The key in question is
+which is the ordinary OpenAI-compatible arrangement, and
+`gglib remote key --show` prints it for that client. The key in question is
 this device's own, which is also what bounds the mistake: a key that leaks
 here is one the desktop can retire on its own.
 

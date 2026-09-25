@@ -240,4 +240,16 @@ pub enum RemoteCommand {
     },
     /// Close the local port; the far machine and the stored pairing stay
     Disconnect,
+    /// Print this device's key, for a client that is not gglib
+    ///
+    /// The key `join` stored when this device paired. The port `join` binds
+    /// does not add it, so any other OpenAI-compatible client pointed there
+    /// presents it as its API key. Without `--show` nothing is printed on
+    /// stdout; with it, stdout is the key alone, so
+    /// `$(gglib remote key --show)` is exactly the key.
+    Key {
+        /// Print the key on stdout. It is a secret
+        #[arg(long)]
+        show: bool,
+    },
 }

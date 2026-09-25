@@ -20,9 +20,10 @@ const HIDDEN_KEYS: &[&str] = &["setup-completed"];
 /// credentials with opposite recovery stories. The proxy generates its own key
 /// and `settings show` is the only place left to read it, which is why
 /// `the_proxy_api_key_is_shown_rather_than_masked` defends printing it. This
-/// one is *received* from the other machine by `gglib remote join`, and
-/// re-pairing replaces it — so printing it costs a credential's confidentiality
-/// on a surface people paste into bug reports and buys back nothing.
+/// one is *received* from the other machine by `gglib remote join`, re-pairing
+/// replaces it, and `gglib remote key --show` prints it, alone and only when
+/// asked — so printing it here as well costs a credential's confidentiality on
+/// a surface people paste into bug reports and buys back nothing.
 ///
 /// The pairing's ticket stays printed: its own doc calls it an address rather
 /// than a credential, and it is useless without the key beside it.

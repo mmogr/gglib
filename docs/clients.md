@@ -51,10 +51,11 @@ When this machine is connected to another with `gglib remote join`
 ([Remote access](remote.md)), the other machine's proxy is at
 `http://127.0.0.1:<port>/v1` here — the port `join` printed, also shown
 by `gglib remote status`. Every recipe above works against it with two
-changes: that port instead of `8080`, and the *other* machine's API key
-instead of a placeholder. The key is that machine's `proxy_api_key`
-(`gglib config settings show` there); the port does not add it for you, on
-purpose — see [Why the port does not inject the key](remote.md#why-the-port-does-not-inject-the-key).
+changes: that port instead of `8080`, and this machine's device key instead
+of a placeholder. The device key is the one this machine was given when it
+paired, not the other machine's `proxy_api_key`; `gglib remote key --show`
+prints it. The port does not add it for you, on purpose — see
+[Why the port does not inject the key](remote.md#why-the-port-does-not-inject-the-key).
 
 `gglib q --remote` and `gglib chat --remote` need neither: they attach the
 key themselves.
