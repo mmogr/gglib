@@ -13,18 +13,18 @@ without a GPU, a network, or a running llama-server, and therefore testable.
 
 ## Architecture
 
-This crate is the **Core Layer** — the innermost ring of the architecture. All other crates depend on it; it depends on none.
+This crate is the **Core Layer** — the innermost ring of the architecture. It depends on no other gglib crate, and every other workspace crate except `gglib-build-info`, `gglib-sse` and `gglib-tauri` depends on it (`gglib-integration-tests` as a dev-dependency).
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                    Core Layer                                       │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
 │   │                         ►►► gglib-core ◄◄◄                                  │   │
-│   │              Pure domain types, ports & traits (no infra deps)              │   │
+│   │        Domain types, ports & traits (no database, HTTP or UI crates)        │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────────────┘
+                                          ▲
                                           │
-                                          ▼
               ┌───────────────────────────────────────────────────────┐
               │  gglib-db, gglib-gguf, gglib-hf, gglib-mcp,           │
               │  gglib-download, gglib-runtime                        │
@@ -69,7 +69,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 ## Design Principles
 
-1. **No Infrastructure Dependencies** — No `SQLx`, no HTTP clients, no filesystem I/O
+1. **No database, HTTP or UI crates** — no `sqlx`, no HTTP client or server, no CLI or desktop framework. It does local file I/O, such as data directories, the `.env` overrides file and device keys
 2. **Trait-Based Ports** — All external capabilities defined as traits for DI
 3. **Pure Data Types** — Domain types are serializable, cloneable, and testable
 4. **Event-Driven** — `AppEventEmitter` trait enables decoupled UI updates
