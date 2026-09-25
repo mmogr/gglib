@@ -19,7 +19,7 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
         .version(Some(gglib_build_info::SEMVER))
         .short_version(gglib_build_info::HAS_GIT_SHA.then_some(gglib_build_info::GIT_SHA))
         .authors(Some(vec!["mmogr".to_string()]))
-        .license(Some("AGPL-3.0"))
+        .license(Some("AGPL-3.0-only"))
         .website(Some("https://github.com/mmogr/gglib"))
         .website_label(Some("GitHub"))
         .build();

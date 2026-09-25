@@ -4,7 +4,7 @@
 [![Coverage](https://github.com/mmogr/gglib/actions/workflows/coverage.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/coverage.yml)
 [![Release](https://github.com/mmogr/gglib/actions/workflows/release.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release.yml)
 ![Version](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/version.json)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue)](LICENSE)
 
 **The local model runtime that makes llama.cpp behave like an API provider.**
 
@@ -275,5 +275,8 @@ for conventions, and [generated API docs](https://mmogr.github.io/gglib).
 
 ## License
 
-[AGPL-3.0](LICENSE). Personal and open-source use is free. Commercial use
-requires a commercial license. Contact [@mmogr](https://github.com/mmogr).
+[AGPL-3.0-only](LICENSE). Anyone may use, modify and redistribute gglib,
+commercially or not, under its terms: distributing it, or letting users reach
+a modified copy over a network, means offering them the corresponding source
+under AGPL-3.0. If you cannot meet those terms,
+[@mmogr](https://github.com/mmogr) may offer a separate commercial license; ask.
