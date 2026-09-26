@@ -83,6 +83,10 @@ fn find_repo_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
 ///
 /// Looks for the `.app` bundle (macOS), an `AppImage` or `gglib-app` (Linux), or
 /// `gglib-app.exe` (Windows) next to the running executable.
+#[allow(
+    clippy::manual_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn launch_prebuilt() -> Result<()> {
     let exe_dir = std::env::current_exe()
         .and_then(|p| p.canonicalize())

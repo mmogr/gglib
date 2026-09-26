@@ -113,6 +113,10 @@ pub(super) fn mean_time_to_first_tool_call_ms(results: &[TuneTaskResult]) -> Opt
 ///
 /// Even-length samples take the mean of the two middle values, so a 2-run arm
 /// reports the midpoint rather than arbitrarily picking a side.
+#[allow(
+    clippy::manual_midpoint,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn median_time_to_first_tool_call_ms(results: &[TuneTaskResult]) -> Option<f64> {
     let mut samples: Vec<u64> = results
         .iter()

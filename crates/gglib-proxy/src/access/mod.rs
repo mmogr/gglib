@@ -20,6 +20,10 @@ use crate::models::ErrorResponse;
 /// as an outer `layer`, so it covers every route including `/health` and
 /// including paths that match nothing — a check this cheap has no reason to
 /// have holes in it.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn host_guard(
     State(access): State<Arc<ProxyAccessConfig>>,
     req: Request,

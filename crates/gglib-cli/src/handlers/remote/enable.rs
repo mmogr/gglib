@@ -11,6 +11,10 @@ use crate::daemon_client;
 
 /// What `gglib remote enable` was asked for.
 #[derive(Debug, Clone, Default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) struct EnableArgs {
     /// Let tunnelled requests reach `/mcp`.
     pub allow_mcp: bool,

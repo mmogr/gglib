@@ -19,6 +19,10 @@ use crate::presentation::style;
 /// Grouping these fields into a struct keeps function signatures short and
 /// makes it easy to pass the entire rendering context to helpers without
 /// repeating six parameters.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) struct RenderContext {
     /// Buffered content tokens (Rich mode only).
     pub buf: String,

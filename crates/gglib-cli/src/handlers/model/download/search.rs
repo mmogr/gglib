@@ -127,6 +127,10 @@ pub(crate) async fn execute(
 }
 
 /// Format large numbers with K/M suffixes.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn format_number(n: u64) -> String {
     if n >= 1_000_000 {
         format!("{:.1}M", n as f64 / 1_000_000.0)

@@ -61,6 +61,11 @@ pub(crate) struct QuestionArgs {
 }
 
 /// Run a single-turn agentic question, with optional continuation into chat.
+#[allow(
+    clippy::default_trait_access,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> {
     let QuestionArgs {
         question,

@@ -16,6 +16,11 @@ use crate::presentation::style;
 /// Merge saved [`ConversationSettings`] into [`ChatArgs`].
 ///
 /// CLI-provided values always win; saved settings fill in blanks.
+#[allow(
+    clippy::assigning_clones,
+    clippy::ref_option,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn apply_saved_settings(
     args: &ChatArgs,
     saved_system_prompt: &Option<String>,

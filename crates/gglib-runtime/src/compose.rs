@@ -81,6 +81,10 @@ use crate::{FarMachine, LlmCompletionAdapter};
 ///   can say which machine refused it. `None` for a llama-server on loopback,
 ///   which demands nothing and is not another machine.
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::implicit_hasher,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub fn compose_agent_loop(
     base_url: String,
     http_client: Client,
@@ -122,6 +126,10 @@ pub fn compose_agent_loop(
 /// GUI reports to is not something it can reach (#1091). `None` makes every
 /// recording a no-op.
 #[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::implicit_hasher,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub fn compose_agent_loop_with_sampling(
     base_url: String,
     http_client: Client,

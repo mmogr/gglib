@@ -133,6 +133,10 @@ async fn read(conn: &mut SqliteConnection) -> Result<Settings, RepositoryError> 
 }
 
 /// Store `value` as `key`'s row, or remove the row when there is no value.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn write_row(
     conn: &mut SqliteConnection,
     key: &str,

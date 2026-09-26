@@ -118,6 +118,10 @@ pub(super) fn closes(line: &str, closing: &str) -> bool {
     rest.is_empty() || rest.starts_with("//")
 }
 
+#[allow(
+    clippy::unused_peekable,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn production_lines(text: &str) -> Vec<(usize, &str)> {
     let mut kept = Vec::new();
     let mut lines = text.lines().enumerate().peekable();

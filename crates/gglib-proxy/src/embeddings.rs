@@ -52,6 +52,10 @@ use crate::unary_body::forward_non_streaming_response;
 pub(crate) const EMBEDDING_TAG: &str = "embedding";
 
 /// Handle an embeddings request — ensure the model is running, then proxy.
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn embeddings(
     State(state): State<AppState>,
     headers: HeaderMap,

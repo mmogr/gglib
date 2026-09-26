@@ -89,6 +89,10 @@ pub(crate) fn log_inference_info(config: &InferenceConfig) {
 /// which is accurate, useless, and not what anyone typed. Narrowing back to
 /// `f32` before formatting restores the shortest representation that
 /// round-trips, so `--temperature 0.1` prints `0.1`.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn render(value: &serde_json::Value) -> String {
     match value.as_f64() {
         // Integral values print without a synthetic ".0" — `max-tokens: 512`,

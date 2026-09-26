@@ -1,4 +1,9 @@
 #![doc = include_str!("README.md")]
+#[allow(
+    clippy::manual_let_else,
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod cuda;
 mod metal;
 pub(crate) mod tools;
@@ -104,6 +109,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::single_match_else,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn test_detect_optimal_acceleration() {
         match detect_optimal_acceleration() {
             Ok(accel) => {

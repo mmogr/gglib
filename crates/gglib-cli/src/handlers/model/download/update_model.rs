@@ -19,6 +19,10 @@ use crate::handlers::model::resolver;
 ///
 /// Upgrades a model to the latest revision from `HuggingFace`. `force` skips
 /// the confirmation prompt; everything else is identical to the GUI path.
+#[allow(
+    clippy::items_after_statements,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 

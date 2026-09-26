@@ -79,6 +79,10 @@ impl MissingPackage {
 /// can provide targeted remediation advice.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct VulkanStatus {
     /// Vulkan runtime loader is present and working.
     pub has_loader: bool,

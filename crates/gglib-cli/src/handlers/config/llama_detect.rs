@@ -14,6 +14,10 @@ use gglib_runtime::llama::{Acceleration, detect_optimal_acceleration, vulkan_sta
 /// Returns `Ok(())` when all build dependencies for the detected
 /// acceleration are present. Returns `Err` (non-zero exit) when
 /// dependencies are missing.
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn execute(json: bool) -> Result<()> {
     let accel = detect_optimal_acceleration();
     let vk = vulkan_status();
@@ -44,6 +48,10 @@ pub(crate) fn execute(json: bool) -> Result<()> {
 }
 
 /// JSON output for machine consumption by shell scripts.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn print_json(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanStatus) {
     let (acceleration, ready) = match accel {
         Ok(a) => {

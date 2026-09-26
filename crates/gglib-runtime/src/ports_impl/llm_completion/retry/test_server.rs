@@ -124,11 +124,19 @@ pub(super) fn json_with(status: u16, reason: &str, body: &str, extra: &[(&str, &
 }
 
 /// An SSE response body, as llama-server would stream it.
+#[allow(
+    clippy::format_collect,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn sse(frames: &[&str]) -> String {
     let body: String = frames.iter().map(|f| format!("data: {f}\n\n")).collect();
     with_headers(200, "OK", &body, "text/event-stream", &[])
 }
 
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn with_headers(
     status: u16,
     reason: &str,

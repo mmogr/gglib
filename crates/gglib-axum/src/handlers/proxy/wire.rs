@@ -93,6 +93,10 @@ pub(crate) struct StartPinnedBody {
 }
 
 /// Convert runtime `ProxyStatus` to API `ProxyStatus`.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {

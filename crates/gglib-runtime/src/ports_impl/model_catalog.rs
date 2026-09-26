@@ -29,6 +29,11 @@ fn format_param_count(param_b: f64) -> String {
 }
 
 /// Helper to convert Model to `ModelSummary` (for listing).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn model_to_summary(m: &Model) -> ModelSummary {
     // Get file size from disk if possible, otherwise 0
     let file_size = m.file_path.metadata().map_or(0, |md| md.len());
@@ -53,6 +58,11 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 }
 
 /// Helper to convert Model to `ModelLaunchSpec` (for launching).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = total_model_bytes(&m.file_path);
     let kv_elems_per_token =

@@ -100,6 +100,10 @@ pub struct AxumContext {
 }
 
 /// Bootstrap the Axum server with all services.
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // Log resolved paths at startup for diagnostics
     let db_path = match &config.db_path {

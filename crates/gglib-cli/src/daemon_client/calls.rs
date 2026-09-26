@@ -16,6 +16,10 @@ use super::{DaemonHandle, auth, base_url, paths};
 
 impl DaemonHandle {
     /// One absolute URL on the daemon.
+    #[allow(
+        clippy::unused_self,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub(super) fn url(&self, path: &str) -> String {
         format!("{}{path}", base_url())
     }

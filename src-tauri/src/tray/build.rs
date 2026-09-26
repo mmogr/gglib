@@ -49,6 +49,10 @@ pub(super) struct Handle {
 }
 
 /// Apply the daemon's state to the icon, tooltip and menu.
+#[allow(
+    clippy::unused_async,
+    reason = "one signature for both tray backends, and the Linux one awaits"
+)]
 pub(super) async fn sync(handle: &Handle, snapshot: &DaemonSnapshot) -> Result<(), String> {
     let visual = icon::derive(snapshot);
     let image =
@@ -74,6 +78,10 @@ pub(super) fn build(app: &AppHandle) -> Result<Handle, String> {
     build_inner(app).map_err(|e| format!("Failed to build system tray: {e}"))
 }
 
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
     let mut items: HashMap<&'static str, MenuItem<Wry>> = HashMap::new();
     // Separators are positional and never looked up again, so they are kept
@@ -150,6 +158,10 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
 ///
 /// Lives here rather than in `handlers` because `MenuEvent` is this backend's
 /// type; the Linux backend delivers ids straight to `dispatch`.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Tauri hands a menu event to its handler by value"
+)]
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     handlers::dispatch(app, event.id().as_ref());
 }
@@ -159,6 +171,10 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 /// Only `Up` is acted on so the panel does not appear under a button that is
 /// still held down. Never fires on Linux, which is why that platform uses a
 /// different backend entirely — see the module README.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Tauri hands a tray icon event to its handler by value"
+)]
 fn on_icon_event(tray: &TrayIcon, event: TrayIconEvent) {
     let TrayIconEvent::Click {
         button: MouseButton::Left,

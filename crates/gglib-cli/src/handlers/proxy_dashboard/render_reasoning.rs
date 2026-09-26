@@ -23,6 +23,10 @@ use super::wire_sampling::{EffortSupport, SamplingAudit};
 /// one prints gglib's record and says so — the server sends the sentence, and
 /// it is printed beside a value rather than permanently, because a warning that
 /// qualifies nothing is a warning people learn to skip.
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width: u16) -> String {
     let mut out = String::from("Reasoning controls\n");
     let Some(reasoning) = audit.and_then(|a| a.reasoning.as_ref()) else {
@@ -135,6 +139,10 @@ fn effort_support_label(support: &EffortSupport) -> String {
 /// [`super::wire_sampling`]), and rendering that silence as "nothing was
 /// dropped" turns an unobserved state into a clean reading — the exact
 /// collapse the section above this one exists to prevent.
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn render_client_fields_section(audit: Option<&SamplingAudit>) -> String {
     let mut out = String::from("Client sampling dropped (trust_client_sampling off)\n");
     let Some(names) = audit.and_then(|a| a.client_field_names.as_ref()) else {

@@ -3,11 +3,24 @@
 
 pub mod args;
 #[cfg(feature = "cli")]
+#[allow(
+    clippy::option_if_let_else,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod build;
 pub mod build_events;
 mod config;
 mod deps;
 mod detect;
+#[allow(
+    clippy::case_sensitive_file_extension_comparisons,
+    clippy::items_after_statements,
+    clippy::manual_let_else,
+    clippy::match_same_arms,
+    clippy::needless_collect,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod download;
 #[cfg(feature = "cli")]
 mod ensure;

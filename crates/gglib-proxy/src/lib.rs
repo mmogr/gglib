@@ -7,6 +7,10 @@
 
 mod access;
 mod admin;
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod audit_records;
 // Crate-internal. The seven that stay `pub` below are the ones other crates
 // name by path: dashboard, loopback, models, props, repair, slot_eviction, slots.
@@ -20,35 +24,125 @@ pub(crate) mod audit_records;
 // with the feature on the lint applies normally, which is the configuration CI's
 // `--all-features` clippy run checks.
 #[cfg_attr(not(any(test, feature = "test-support")), allow(unreachable_pub))]
+#[allow(
+    clippy::redundant_clone,
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod cache_lifecycle;
+#[allow(
+    clippy::format_collect,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod canonicalization;
+#[allow(
+    clippy::items_after_statements,
+    clippy::missing_fields_in_debug,
+    clippy::redundant_closure_for_method_calls,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::float_cmp,
+    clippy::option_if_let_else,
+    clippy::struct_excessive_bools,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
 pub(crate) mod load_endpoint;
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod loop_guard;
 pub(crate) mod loop_guard_note;
 pub(crate) mod loop_guard_step;
 pub mod loopback;
 pub(crate) mod mcp;
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod metrics;
+#[allow(
+    clippy::match_same_arms,
+    clippy::unreadable_literal,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod models;
 pub(crate) mod models_endpoint;
 pub(crate) mod observers;
 pub(crate) mod profiles;
+#[allow(
+    clippy::match_wildcard_for_single_variants,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod props;
 pub(crate) mod remote;
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod repair;
 pub(crate) mod router;
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "a guard's scope is its critical section, so this lint is never applied \
+              in admission, residency or proxy lock code"
+)]
+#[allow(
+    clippy::cast_sign_loss,
+    clippy::large_types_passed_by_value,
+    clippy::redundant_closure_for_method_calls,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod sampling_audit;
+#[allow(
+    clippy::option_if_let_else,
+    clippy::single_match_else,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod server;
 pub mod slot_eviction;
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::manual_let_else,
+    clippy::option_if_let_else,
+    clippy::too_long_first_doc_paragraph,
+    clippy::unreadable_literal,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod slots;
+#[allow(
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod slots_poller;
+#[allow(
+    clippy::needless_continue,
+    clippy::option_if_let_else,
+    clippy::single_match_else,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod sse_stream;
 pub mod template_caps_read;
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    clippy::significant_drop_tightening,
+    clippy::suboptimal_flops,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod token_calibration;
 pub(crate) mod unary_body;
 

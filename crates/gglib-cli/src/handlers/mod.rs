@@ -1,6 +1,15 @@
 #![doc = include_str!("README.md")]
 
 pub(crate) mod agent_chat;
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::fn_params_excessive_bools,
+    clippy::future_not_send,
+    clippy::match_same_arms,
+    clippy::or_fun_call,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod benchmark;
 pub(crate) mod completions;
 pub(crate) mod config;

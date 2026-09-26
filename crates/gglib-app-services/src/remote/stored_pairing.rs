@@ -65,6 +65,10 @@ pub(super) fn names_the_same_machine(stored: &RemotePairing, ticket: &Ticket) ->
 /// Whatever `redeem` says, and `Internal` when settings cannot be written —
 /// in [`store_redeemed`]'s wording on the redeemed arm, because by then the
 /// code is gone.
+#[allow(
+    clippy::similar_names,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) async fn settle(
     core: &AppCore,
     ticket: &Ticket,
@@ -190,6 +194,10 @@ pub(super) async fn store_redeemed(
 /// It does not get the key back. Nothing at this layer can: the key exists
 /// only in the response that was just read, and the store that would have
 /// kept it is the thing that failed.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn spent_code(e: GuiError) -> GuiError {
     GuiError::Internal(format!(
         "{e} — the pairing code was already spent redeeming this key, so `gglib remote join` \

@@ -109,6 +109,10 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
 /// An NVIDIA card without the CUDA toolkit is called out rather than reported
 /// as plain "NVIDIA": it is the difference between a fast install and a build
 /// that silently falls back to CPU.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn backend_label(gpu: &GpuInfoDto) -> String {
     if gpu.has_metal {
         return "Metal".to_string();

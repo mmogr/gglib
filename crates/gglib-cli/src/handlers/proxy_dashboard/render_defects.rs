@@ -44,6 +44,11 @@ use super::wire::ModelDefectCounts;
 /// had moved. They print below the defects under an `observed` heading of their
 /// own, and a model whose only signal is one of them still earns a line. The
 /// section is named for signals rather than defects because of them.
+#[allow(
+    clippy::format_push_string,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCounts>) -> String {
     let mut out = String::from("Per-model signals (this proxy run)\n");
 

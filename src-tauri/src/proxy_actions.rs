@@ -62,6 +62,10 @@ pub(crate) async fn stop(app: &AppHandle) -> Result<(), String> {
 /// to fall back to and the snapshot is the only source of the port.
 ///
 /// Goes through the frontend because clipboard access is a webview capability.
+#[allow(
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn copy_endpoint_url(app: &AppHandle) {
     let state = app.state::<AppState>();
     let url = state.snapshot.read().await.endpoint_url();

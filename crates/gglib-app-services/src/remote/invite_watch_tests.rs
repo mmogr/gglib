@@ -49,6 +49,10 @@ async fn settled(
 /// `serve_invite_tests.rs`: this mints a real key into the key file, and a
 /// panic between the mint and the `forget` would leave it there.
 #[tokio::test(flavor = "multi_thread")]
+#[allow(
+    clippy::similar_names,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn a_device_that_redeems_its_invite_is_recorded_with_the_endpoint_it_paired_from() {
     let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
     let enabled = ops

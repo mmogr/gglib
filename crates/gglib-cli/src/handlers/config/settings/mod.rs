@@ -1,4 +1,8 @@
 #![doc = include_str!("README.md")]
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod profiles;
 mod reset;
 mod set;
@@ -38,6 +42,10 @@ async fn resolve_model_display(ctx: &CliContext, settings: &Settings) -> Result<
 /// - No args: show current default
 /// - With identifier: set as default
 /// - With --clear: remove default
+#[allow(
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn handle_default_model(
     ctx: &CliContext,
     identifier: Option<String>,

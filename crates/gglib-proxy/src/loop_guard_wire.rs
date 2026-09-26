@@ -150,6 +150,10 @@ pub(super) fn extract_text(content: &Value) -> String {
 ///
 /// `None` when any call is unanswered — a partially-answered batch says
 /// nothing about whether work repeated.
+#[allow(
+    clippy::zero_sized_map_values,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> Option<u64> {
     let mut answers: HashMap<&str, u64> = HashMap::new();
     for m in rest.iter().take_while(|m| m.role.as_str() == Some("tool")) {

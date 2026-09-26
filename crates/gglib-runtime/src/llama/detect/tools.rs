@@ -84,6 +84,11 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 
 /// Check if git is installed, returning its version string on success.
 #[cfg(any(feature = "cli", test))]
+#[allow(
+    clippy::option_if_let_else,
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn has_git() -> Result<Option<String>> {
     match command_stdout("git", &["--version"]) {
         Some(v) => {
@@ -96,6 +101,11 @@ pub(crate) fn has_git() -> Result<Option<String>> {
 
 /// Check if cmake is installed, returning its version string on success.
 #[cfg(any(feature = "cli", test))]
+#[allow(
+    clippy::option_if_let_else,
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn has_cmake() -> Result<Option<String>> {
     match command_stdout("cmake", &["--version"]) {
         Some(v) => {
@@ -118,6 +128,10 @@ pub(crate) fn has_cmake() -> Result<Option<String>> {
 /// - **macOS**: `clang++`, `g++`
 /// - **Linux**: `g++`, `clang++`
 #[cfg(any(feature = "cli", test))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn has_cpp_compiler() -> Result<Option<String>> {
     let compilers = if cfg!(target_os = "windows") {
         vec!["cl", "g++", "clang++"]

@@ -40,6 +40,10 @@ use super::thinking_dispatch::{
 ///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
+#[allow(
+    clippy::debug_assert_with_mut_call,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn drain_event_stream(
     rx: &mut mpsc::Receiver<AgentEvent>,
     verbose: bool,

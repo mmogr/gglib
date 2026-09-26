@@ -10,6 +10,11 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 ///
 /// Browses popular/recent/trending GGUF models on `HuggingFace` Hub.
 /// No database access required.
+#[allow(
+    clippy::match_same_arms,
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) -> Result<()> {
     let sort_param = match category.as_str() {
         "popular" => "downloads",
@@ -92,6 +97,10 @@ pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) 
 }
 
 /// Format large numbers with K/M suffixes.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn format_number(n: u64) -> String {
     if n >= 1_000_000 {
         format!("{:.1}M", n as f64 / 1_000_000.0)

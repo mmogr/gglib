@@ -84,6 +84,11 @@ fn is_our_llama_server_linux(pid: u32) -> bool {
 /// On Unix, uses `kill` with null signal which doesn't send a signal but
 /// checks existence.
 #[cfg(unix)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub fn pid_exists(pid: u32) -> bool {
     use nix::sys::signal;
     use nix::unistd::Pid;
@@ -126,6 +131,10 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[allow(
+        clippy::unreadable_literal,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn pid_exists_false_for_impossible_pid() {
         assert!(!pid_exists(999999));
     }

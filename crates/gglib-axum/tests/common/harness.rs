@@ -56,6 +56,10 @@ use super::ports::TEST_BASE_PORT;
 /// (Cargo runs this crate's test binaries one at a time; it is the tests
 /// *within* a binary that share a process. The binary name is in the path
 /// for legibility, not for exclusion.)
+#[allow(
+    clippy::unnecessary_debug_formatting,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let exe = std::env::current_exe().expect("locate the test executable");
     let mut name = exe

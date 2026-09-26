@@ -59,6 +59,10 @@ pub(super) enum Then {
 
 /// An upstream that sends each chunk once its delay has passed, then does
 /// what `then` says.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn upstream(
     chunks: Vec<(Duration, Bytes)>,
     then: Then,

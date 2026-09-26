@@ -41,6 +41,10 @@ pub(crate) fn print_launch_narration(narration: &LaunchNarration) {
 /// Split from the printing so the layout is testable without capturing
 /// stdout — the alignment and the provenance placement are the parts worth
 /// asserting on, and neither is observable through `println!`.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn render_launch_narration(narration: &LaunchNarration, color: bool) -> Vec<String> {
     let (dim, bold, reset) = if color {
         (DIM, BOLD, RESET)

@@ -66,6 +66,10 @@ async fn a_pipe_already_half_way_through_the_grace_is_called_away_on_time() {
 /// see a round trip it was never told about, so it called the peer away on
 /// an anchor the pipe had already abandoned.
 #[tokio::test(start_paused = true)]
+#[allow(
+    clippy::unchecked_time_subtraction,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn a_round_trip_nobody_saw_restarts_the_grace() {
     let (_tx, source) = source();
     let clock = Clock::new();

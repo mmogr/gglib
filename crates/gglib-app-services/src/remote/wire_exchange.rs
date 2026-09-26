@@ -15,6 +15,10 @@ use super::types::{EnableRequest, Enabled, JoinRequest, Joined};
 /// is the default: no `/mcp`, public relays, discovery on.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[allow(
+    clippy::pub_underscore_fields,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct RemoteEnableBody {
     /// Let tunnelled requests reach `/mcp`. Off unless asked for.
     #[serde(default)]

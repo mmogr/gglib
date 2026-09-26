@@ -163,6 +163,10 @@ mod tests {
 
     /// Build a snapshot the way the watcher does, so these tests exercise the
     /// same construction the app runs.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn snapshot(proxy: serde_json::Value, servers: serde_json::Value) -> DaemonSnapshot {
         DaemonSnapshot::from_responses(&proxy, &servers)
     }

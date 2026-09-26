@@ -14,6 +14,10 @@ async fn test_health_checker_http_unreachable() {
 }
 
 #[test]
+#[allow(
+    clippy::unreadable_literal,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn test_process_check_with_invalid_pid() {
     // PID 999999 should not exist
     let handle = ProcessHandle::new(1, "test".to_string(), Some(999999), 8080, 0);
@@ -30,6 +34,10 @@ fn test_process_check_without_pid() {
 }
 
 #[tokio::test]
+#[allow(
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn test_monitor_cancellation() {
     // Create a monitor for an unused port (will be unreachable)
     let handle = ProcessHandle::new(1, "test".to_string(), None, 65433, 0);

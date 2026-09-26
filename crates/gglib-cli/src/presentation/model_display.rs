@@ -49,6 +49,10 @@ impl<'a> ModelSummaryOpts<'a> {
 /// // For removal confirmation
 /// display_model_summary(&model, ModelSummaryOpts::for_removal());
 /// ```
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn display_model_summary(model: &Model, opts: ModelSummaryOpts) {
     if let Some(title) = opts.title {
         println!("{title}");

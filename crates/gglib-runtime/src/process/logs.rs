@@ -33,6 +33,10 @@ pub struct ServerLogEntry {
 
 impl ServerLogEntry {
     /// Create a new log entry with current timestamp
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn new(line: String, port: u16) -> Self {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -86,6 +90,10 @@ impl ServerLogManager {
     }
 
     /// Add a log line for a server (sync - can be called from std threads)
+    #[allow(
+        clippy::significant_drop_tightening,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn add_log(&self, port: u16, line: &str) {
         let entry = ServerLogEntry::new(line.to_string(), port);
 

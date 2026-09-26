@@ -27,6 +27,10 @@ use crate::handlers;
 /// * `remote`  — Value of the global `--remote` flag (ADR 0013). Becomes the
 ///   [`Target`] every command that uses a machine is told; every other
 ///   command refuses it here, in one sentence, before anything runs.
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub async fn dispatch(
     ctx: &CliContext,
     command: Commands,

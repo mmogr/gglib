@@ -17,6 +17,10 @@ pub(crate) struct LlamaStatus {
 
 /// Check if llama.cpp is installed.
 #[tauri::command]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn check_llama_status() -> Result<LlamaStatus, String> {
     let installed = check_llama_installed();
     let can_download = matches!(

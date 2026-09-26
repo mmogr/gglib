@@ -12,6 +12,10 @@ mod command;
 pub(crate) mod compose;
 mod health;
 pub(crate) mod health_monitor;
+#[allow(
+    clippy::many_single_char_names,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod launch_narration;
 pub mod llama;
 pub mod pidfile;
@@ -19,6 +23,12 @@ pub mod ports_impl;
 pub mod process;
 pub mod proxy;
 pub(crate) mod server_config;
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    clippy::too_many_lines,
+    clippy::used_underscore_binding,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod system;
 pub mod unified_server_config;
 

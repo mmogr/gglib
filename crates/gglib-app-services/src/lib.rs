@@ -20,6 +20,11 @@ mod error;
 mod helpers;
 
 pub mod benchmark;
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod downloads;
 pub mod launch_options;
 mod mcp;
@@ -27,11 +32,27 @@ mod models;
 mod proxy;
 mod proxy_guard;
 mod proxy_port;
+#[allow(
+    clippy::significant_drop_in_scrutinee,
+    clippy::significant_drop_tightening,
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod remote;
 mod sampling_explain;
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::needless_continue,
+    clippy::significant_drop_tightening,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod servers;
 mod service_graph;
 mod settings;
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod setup;
 pub mod types;
 

@@ -115,6 +115,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn snapshot(proxy: serde_json::Value, servers: serde_json::Value) -> DaemonSnapshot {
         DaemonSnapshot::from_responses(&proxy, &servers)
     }

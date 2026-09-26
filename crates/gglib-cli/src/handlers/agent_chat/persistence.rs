@@ -46,6 +46,10 @@ impl<'a> Conversation<'a> {
     ///
     /// Loads the existing message count so [`Conversation::save_new`] only
     /// persists the delta.
+    #[allow(
+        clippy::unused_async,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub(crate) async fn resume(
         service: &'a ChatHistoryService,
         id: i64,

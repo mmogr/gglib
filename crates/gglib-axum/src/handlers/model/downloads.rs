@@ -90,6 +90,10 @@ pub(crate) async fn remove(
 /// This endpoint is idempotent: returns 204 No Content whether or not
 /// the download exists. This prevents client-side errors during race
 /// conditions (e.g., SSE removes download while cancel is in-flight).
+#[allow(
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn cancel(
     State(state): State<AppState>,
     Path(id): Path<String>,

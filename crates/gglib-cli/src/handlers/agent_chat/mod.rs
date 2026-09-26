@@ -3,6 +3,10 @@ pub(crate) mod config;
 pub(crate) mod drain;
 mod markdown;
 pub(crate) mod persistence;
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod renderer;
 pub(crate) mod repl;
 pub(crate) mod resume_settings;
@@ -27,6 +31,11 @@ use self::persistence::Conversation;
 /// When `args.continue_id` is set, loads a previous conversation and resumes
 /// with the original session parameters (saved settings fill in any CLI args
 /// the user didn't explicitly provide).
+#[allow(
+    clippy::default_trait_access,
+    clippy::useless_let_if_seq,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // 1. If resuming, load the conversation first and merge saved settings
     //    into args so the agent is composed with the correct parameters.

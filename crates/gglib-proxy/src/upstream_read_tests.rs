@@ -18,6 +18,10 @@ fn content_frame(text: &str) -> Bytes {
 
 /// The events [`upstream_events`] yields for `chunks`, and how many chunks it
 /// read to get them.
+#[allow(
+    clippy::future_not_send,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn read_all(
     chunks: Vec<Result<Bytes, std::io::Error>>,
 ) -> (Vec<anyhow::Result<LlmStreamEvent>>, usize) {

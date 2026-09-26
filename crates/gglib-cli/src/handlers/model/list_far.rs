@@ -50,6 +50,10 @@ pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
 }
 
 /// The table, as text, so it can be checked without a machine.
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn render(models: &[FarModel]) -> String {
     let width = models.iter().map(|m| m.id.len()).max().unwrap_or(4).max(4);
     let mut out = format!("{:<width$}  {:>9}\n", "NAME", "CONTEXT");

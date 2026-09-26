@@ -8,6 +8,16 @@ pub(crate) mod list;
 pub(crate) mod remove;
 pub(crate) mod resolver;
 pub(crate) mod retag;
+#[allow(
+    clippy::assigning_clones,
+    clippy::option_if_let_else,
+    clippy::ref_option,
+    clippy::struct_excessive_bools,
+    clippy::too_many_lines,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod update;
 pub(crate) mod verification;
 
@@ -41,6 +51,10 @@ pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
 }
 
 /// Dispatch a `model` subcommand to its handler.
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn dispatch(
     ctx: &CliContext,
     command: ModelCommand,

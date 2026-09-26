@@ -180,6 +180,10 @@ async fn answer(mut stream: TcpStream, seen: Arc<Mutex<Vec<Value>>>) {
 }
 
 /// A streamed response of `chunks`, then `[DONE]`.
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn sse(chunks: &[Value]) -> String {
     let mut out = String::from(
         "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",

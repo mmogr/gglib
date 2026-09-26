@@ -119,6 +119,10 @@ impl DaemonAccess {
     /// loopback-only by design; anything reaching this machine from another one
     /// goes through the tunnel, which is guarded at the proxy.
     #[must_use]
+    #[allow(
+        clippy::option_if_let_else,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn bearer_policy(&self, settings: Arc<SettingsCache>) -> BearerPolicy {
         match self.api_key() {
             Some(key) => BearerPolicy::tracking(Some(key), settings),
@@ -132,6 +136,10 @@ impl DaemonAccess {
 /// Applied as the outermost layer so it covers every route — `/health`, the
 /// SPA assets, and paths that match nothing. A check this cheap has no
 /// reason to have holes in it.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn host_guard(
     State(access): State<Arc<DaemonAccess>>,
     req: Request,

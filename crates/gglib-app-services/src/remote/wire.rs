@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 /// `kill`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct RemoteStatus {
     /// Whether the serve side is up.
     pub enabled: bool,

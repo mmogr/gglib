@@ -18,6 +18,12 @@ use crate::bootstrap::CliContext;
 /// spelled `--verbose`: that id belongs to the global logging flag, and a
 /// local one by the same name stops the global from ever reaching this
 /// command.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::match_same_arms,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute_verify(
     ctx: &CliContext,
     identifier: &str,
@@ -155,6 +161,10 @@ pub(crate) async fn execute_verify(
 /// Execute the repair command.
 ///
 /// Repairs a corrupt model by deleting failed shards and re-downloading them.
+#[allow(
+    clippy::items_after_statements,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute_repair(
     ctx: &CliContext,
     identifier: &str,

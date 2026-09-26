@@ -146,6 +146,10 @@ async fn warm_request(
 /// through `/v1/models`, which is precisely what `gglib serve` exists for.
 /// Sending someone there with the unpinned base URL would fail in a way that
 /// looks like gglib being broken.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn render_client_config(
     addr: SocketAddr,
     model: &str,

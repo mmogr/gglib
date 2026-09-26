@@ -14,6 +14,13 @@ const BAR_WIDTH: usize = 20;
 /// default terminal width so output still looks reasonable when piped.
 const DEFAULT_TERM_WIDTH: u16 = 80;
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod render;
 /// The per-model signals, whose rules are about what not to print.
 mod render_defects;

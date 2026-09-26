@@ -85,6 +85,10 @@ async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>
     Ok(filtered.into_iter().map(GuiModel::from_domain).collect())
 }
 
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> {
     let mut url = format!(
         "http://127.0.0.1:{port}{}?sort={}&order={}",

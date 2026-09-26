@@ -157,6 +157,10 @@ pub(crate) async fn run_perf(
 }
 
 /// Spawn `llama-bench` for one model, capture output, and build a result.
+#[allow(
+    clippy::or_fun_call,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn run_single_perf(
     _deps: &BenchmarkDeps,
     model_id: i64,

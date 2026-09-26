@@ -46,6 +46,10 @@ pub(crate) fn prompt_string(prompt: &str) -> Result<String> {
 /// # Returns
 ///
 /// * `Result<String>` - The user's input or default value
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) -> Result<String> {
     if let Some(default_val) = default {
         println!("{prompt} [{default_val}]: ");
@@ -86,6 +90,10 @@ pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) ->
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
+#[allow(
+    clippy::needless_continue,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
     loop {
         let input = prompt_string(&format!("{prompt} (y/N)"))?;
@@ -115,6 +123,10 @@ pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
+#[allow(
+    clippy::needless_continue,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
     loop {
         let input = prompt_string(&format!("{prompt} (Y/n)"))?;
@@ -141,6 +153,10 @@ pub(crate) fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
 /// # Returns
 ///
 /// * `Result<f64>` - The user's input as a positive float
+#[allow(
+    clippy::needless_continue,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn prompt_float(prompt: &str) -> Result<f64> {
     loop {
         let input: String = prompt_string(prompt)?;
@@ -172,6 +188,10 @@ pub(crate) fn prompt_float(prompt: &str) -> Result<f64> {
 /// # Returns
 ///
 /// * `Result<f64>` - The user's input or default value as a positive float
+#[allow(
+    clippy::needless_continue,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> Result<f64> {
     loop {
         let input: String = if let Some(default_val) = default {

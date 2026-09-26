@@ -32,6 +32,13 @@ use tracing_subscriber as _; // Used by main.rs binary
 // and nothing under `handlers` is reachable from outside this crate.
 pub(crate) mod access;
 pub(crate) mod bootstrap;
+#[allow(
+    clippy::option_option,
+    clippy::ref_option,
+    clippy::struct_field_names,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod chat_api;
 pub(crate) mod config;
 pub(crate) mod daemon;

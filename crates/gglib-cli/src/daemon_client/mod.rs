@@ -45,6 +45,10 @@ pub(crate) async fn probe(client: &reqwest::Client) -> DaemonProbe {
 
 /// [`probe`], with a timeout of the caller's choosing, for the one caller
 /// that acts on the daemon being absent rather than only reporting it.
+#[allow(
+    clippy::manual_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn probe_within(client: &reqwest::Client, timeout: Duration) -> DaemonProbe {
     let url = format!("{}{}", base_url(), paths::HEALTH_PATH);
     let response = match client.get(&url).timeout(timeout).send().await {

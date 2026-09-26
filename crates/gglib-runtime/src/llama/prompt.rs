@@ -92,6 +92,10 @@ impl InstallPrompt for AutoConfirmPrompt {
 /// This is only available with the `cli` feature flag.
 #[cfg(feature = "cli")]
 pub mod cli_prompt {
+    #[allow(
+        clippy::wildcard_imports,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     use super::*;
     use std::io::{self, BufRead, Write};
 

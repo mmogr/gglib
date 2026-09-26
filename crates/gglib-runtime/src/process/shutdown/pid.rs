@@ -46,6 +46,11 @@ pub async fn kill_pid(pid: u32) -> io::Result<()> {
 }
 
 #[cfg(unix)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     let nix_pid = Pid::from_raw(pid as i32);
 
@@ -165,6 +170,10 @@ mod tests {
     use tokio::process::Command;
 
     #[tokio::test]
+    #[allow(
+        clippy::unreadable_literal,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     async fn kill_pid_handles_already_gone() {
         // Use a PID that's very unlikely to exist
         let result = kill_pid(999999).await;

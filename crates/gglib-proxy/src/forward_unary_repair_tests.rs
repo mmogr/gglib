@@ -93,6 +93,10 @@ async fn spawn_ordinal_mock(
 
 /// A `read_file` request as forwarded upstream, non-streaming, with `extra`
 /// merged in.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn forwarded_body(extra: serde_json::Value) -> Bytes {
     let mut body = json!({
         "model": "m",

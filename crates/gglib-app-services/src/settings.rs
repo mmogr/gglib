@@ -64,6 +64,10 @@ impl SettingsOps {
     }
 
     /// Update the models directory.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn update_models_directory(
         &self,
         new_path: String,
@@ -130,6 +134,10 @@ impl SettingsOps {
     /// Get system memory information.
     ///
     /// Returns None if memory information is unavailable (probe failed, too small, etc.).
+    #[allow(
+        clippy::items_after_statements,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn get_system_memory(&self) -> Result<Option<SystemMemoryInfo>, GuiError> {
         let mem_info = self.deps.system_probe.get_system_memory_info();
 

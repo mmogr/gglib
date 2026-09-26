@@ -9,6 +9,10 @@ use gglib_core::domain::{DialectSpec, ModelCapabilities};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use serde_json::json;
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn request(tool_choice: Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "model": "m",

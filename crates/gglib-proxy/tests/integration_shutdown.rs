@@ -119,6 +119,10 @@ async fn shutdown_completes_with_no_subscribers() {
 /// the desktop app can genuinely have the tray panel, the dashboard modal and
 /// a CLI dashboard attached at once.
 #[tokio::test]
+#[allow(
+    clippy::collection_is_never_read,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn shutdown_completes_with_several_streams_open() {
     let (base, cancel, handle) = spawn_proxy().await;
 

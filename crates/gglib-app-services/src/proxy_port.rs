@@ -15,6 +15,10 @@ use crate::error::GuiError;
 /// Validates that the port is in the valid range (1024-65535).
 ///
 /// Returns (port, `source_description`) for logging.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn resolve_llama_base_port(
     override_port: Option<u16>,
     settings: &Settings,

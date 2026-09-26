@@ -157,6 +157,10 @@ pub(super) fn row(label: &str, value: &str, note: Option<&str>) {
 
 /// The rendered line, as data — split out so the layout is testable without
 /// capturing stdout.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn render_row(label: &str, value: &str, note: Option<&str>, color: bool) -> Vec<String> {
     let (dim, reset) = if color {
         (

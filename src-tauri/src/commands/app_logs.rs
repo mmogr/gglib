@@ -41,6 +41,14 @@ pub(crate) struct FrontendLogEntry {
 /// RUST_LOG=gglib=debug,gglib_frontend=debug
 /// ```
 #[tauri::command]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "a Tauri command takes its arguments by value"
+)]
 pub(crate) fn log_from_frontend(entry: FrontendLogEntry) -> Result<(), String> {
     let message = &entry.message;
     let category = &entry.category;

@@ -56,6 +56,10 @@ pub fn check_dependencies() -> Result<DependencyStatus> {
 /// Fields prefixed with _ as struct is returned but fields not currently read.
 #[cfg(feature = "cli")]
 #[derive(Debug)]
+#[allow(
+    clippy::pub_underscore_fields,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct DependencyStatus {
     pub _git: String,
     pub _cmake: String,
