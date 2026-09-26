@@ -374,7 +374,7 @@ property of judging a whole transcript rather than the turn in front of you.
 ### First reading, 2026-08-28
 
 The first evaluation of these three criteria. Same session as
-[ADR 0009](0009-fit-the-context-to-the-machine.md)'s first reading, which
+[ADR 0009's first reading](log-0009.md#first-reading-2026-08-28), which
 carries the provenance: ten requests, one model, Qwen3.8-27B via VS Code
 Copilot, read from `gglib proxy dashboard`, per-process counters that reset on
 restart and cannot be re-read.
