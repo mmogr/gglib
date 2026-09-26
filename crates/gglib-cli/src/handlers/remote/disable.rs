@@ -16,9 +16,7 @@ use crate::daemon_client::{self, DaemonProbe};
 /// Execute `gglib remote disable`.
 ///
 /// With no gglib daemon to ask, the switch is cleared here instead, so the
-/// next start does not put the tunnel back ([#1037]). This used to print that
-/// nothing was being broadcast and leave the switch on, and the daemon's next
-/// start then resumed the tunnel it had just been asked to stop.
+/// next start does not put the tunnel back ([#1037]).
 ///
 /// [#1037]: https://github.com/mmogr/gglib/issues/1037
 pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {

@@ -18,11 +18,8 @@ pub(super) fn print_instructions(missing: &[&Dependency], distro: LinuxDistro) {
 
 /// Print the one command that installs every missing system package.
 ///
-/// This used to be four near-identical functions — one per distribution —
-/// each mapping the same dependency names to their own package names. Keeping
-/// them in step was manual, and they had already drifted: three of them still
-/// named the pre-Ayatana `libappindicator-gtk3`, which on Arch cannot be
-/// installed at all. One table now answers for every distribution.
+/// Every distribution's package names come from one table, [`packages_for`],
+/// so no distribution's list can drift from the others'.
 fn print_package_instructions(missing: &[&Dependency], distro: LinuxDistro) {
     let Some(installer) = distro.installer() else {
         print_unidentified_distro_instructions(missing);

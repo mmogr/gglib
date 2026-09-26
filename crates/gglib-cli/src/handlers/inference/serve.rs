@@ -153,8 +153,7 @@ async fn serve_here(
             allowed_hosts: access.allowed_hosts.clone(),
             // The live path. gglib emits no sampler flags to llama-server
             // (ADR 0003/0004), so a value that does not travel as a
-            // proxy-wide override does not reach the model at all — which is
-            // exactly what used to happen to every `serve` sampling flag.
+            // proxy-wide override does not reach the model at all.
             inference_override: sampling.clone().into_override(),
         },
     );
@@ -212,11 +211,9 @@ async fn serve_here(
             pinned: Some(plan.pinned),
             cache_disk_gb: cache.cache_disk_gb,
             // Sampling rides the proxy-wide override, not the pinned model's
-            // launch options. The comment that used to stand here claimed the
-            // opposite and was wrong in a way nothing caught: the launch
-            // options write to `ServerConfig::inference_config`, which is
-            // documented as read by nobody, so every `serve` sampling flag was
-            // resolved, printed, and discarded.
+            // launch options: those write to `ServerConfig::inference_config`,
+            // which is documented as read by nobody, so a sampling flag sent
+            // that way would be resolved, printed, and discarded.
             inference_override: proxy_config.inference_override.clone(),
             // The profile is carried by name: the proxy re-reads its list per
             // request, so an edit takes effect without restarting this endpoint.

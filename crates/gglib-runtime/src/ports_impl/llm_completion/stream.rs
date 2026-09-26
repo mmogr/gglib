@@ -50,10 +50,9 @@ pub(super) fn normalized_event_stream(
                     // through `error::decode`, so an idle-timeout and a
                     // mid-stream connection reset share the Display string
                     // "error decoding response body" and are told apart only
-                    // by the source beneath it. Formatting with `{e}` here
-                    // discarded exactly that, and cost the 2026-08-28 eval a
-                    // diagnosis: five runs died at a timeout nothing named.
-                    // Readers must use `{:#}` to see the chain.
+                    // by the source beneath it, which formatting with `{e}`
+                    // here would discard. Readers must use `{:#}` to see the
+                    // chain.
                     yield Err(anyhow::Error::new(e).context("SSE byte-stream error"));
                     return;
                 }

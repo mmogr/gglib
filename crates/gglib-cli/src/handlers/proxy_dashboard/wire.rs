@@ -7,9 +7,8 @@
 //! from a different build.
 //!
 //! `slots` is the exception, reusing [`gglib_proxy::slots::SlotSnapshot`]
-//! directly — llama.cpp's `/slots` schema has shifted shape more than once,
-//! and every shift used to mean editing the same `tokens_in_use()` fallback
-//! chain in two crates.
+//! directly: llama.cpp's `/slots` schema shifts shape, and reusing the type
+//! keeps its `tokens_in_use()` fallback chain in one crate.
 
 use std::collections::BTreeMap;
 

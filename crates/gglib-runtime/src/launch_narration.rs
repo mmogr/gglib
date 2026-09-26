@@ -324,10 +324,9 @@ fn dialect_decision(inputs: &NarrationInputs<'_>) -> LaunchDecision {
 /// Sampling is decided per request, not at launch.
 ///
 /// Unconditional, and stated rather than omitted for the same reason
-/// `dialect_decision` is: the launch used to carry seven sampler flags, and a
-/// banner that simply stopped mentioning them would read as a regression or an
-/// oversight. This says the absence is the decision, and where the real one is
-/// made. See `llama::args::sampling`.
+/// `dialect_decision` is: a banner silent about sampling would read as an
+/// oversight. This says the absence of sampler flags is the decision, and
+/// where the real one is made. See `llama::args::sampling`.
 fn sampling_decision() -> LaunchDecision {
     LaunchDecision::new(
         "sampling",
@@ -579,8 +578,8 @@ mod tests {
     }
 
     /// Turning jinja off is at least as worth narrating as turning it on: it
-    /// is the case a user chose deliberately, and the case that until now did
-    /// not take effect at all.
+    /// is the case a user chose deliberately, against llama-server's jinja-on
+    /// default.
     #[test]
     fn flags_line_names_an_explicitly_disabled_jinja() {
         let (s, r) = (spec(&[]), cache_ram(Some(6144), CacheRamSource::Auto));

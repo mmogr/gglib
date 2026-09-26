@@ -14,12 +14,8 @@ const LAUNCH_DEADLINE_FLOOR_SECS: u64 = 120;
 /// is not coming up is holding a slot while somebody watches a spinner, and
 /// surfacing the error beats waiting longer.
 ///
-/// This is a wall-clock bound, which it only became when the poll loop below
-/// was given a real deadline. It used to be an *attempt count* — one second of
-/// sleep plus a request that could itself take two — so a hung server that
-/// accepted TCP and never answered stretched the same number to three times
-/// its face value. The loosest case was exactly the one the ceiling exists to
-/// bound.
+/// A wall-clock bound: [`wait_for_http_health`] polls against a deadline, not
+/// an attempt count.
 const LAUNCH_DEADLINE_CEILING_SECS: u64 = 600;
 
 /// Seconds of grace per GiB of weights.
@@ -73,10 +69,10 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
     info!("Waiting for llama-server to be ready at {}", health_url);
 
     // A wall-clock deadline, not an attempt count. Each pass costs a second of
-    // sleep plus a request that can itself take two, so counting attempts made
-    // `timeout_secs` mean anywhere between one and three times its face value
-    // depending on whether the server refused the connection or accepted it
-    // and hung — and the hung case, the one worth bounding, was the loosest.
+    // sleep plus a request that can itself take two, so counting attempts
+    // would make `timeout_secs` mean anywhere between one and three times its
+    // face value depending on whether the server refused the connection or
+    // accepted it and hung — loosest in the hung case, the one worth bounding.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
     let mut attempt = 0;
     let client = crate::health::loopback_client()?;

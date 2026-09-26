@@ -13,15 +13,14 @@
 //! - gglib has no opinion — no `agent` tag, no override — which needs *no*
 //!   flag, leaving upstream's default in place.
 //!
-//! This used to be one `enabled: bool`, where `false` meant "emit nothing".
-//! That silently discarded the first case: an explicit jinja-off produced a
-//! server running with jinja, and nothing said so. [`JinjaMode`] names the
-//! three answers so the emitter cannot conflate them again.
+//! A bool whose `false` meant "emit nothing" would discard the first case
+//! silently: an explicit jinja-off would produce a server running with jinja.
+//! [`JinjaMode`] names the three answers so the emitter cannot conflate them.
 //!
 //! Note the consequence for the second case: an untagged model with no
 //! override gets jinja from upstream. gglib does not take that away — doing so
-//! would newly break tool-call templating and template kwargs for every
-//! non-agent model.
+//! would break tool-call templating and template kwargs for every non-agent
+//! model.
 
 use gglib_core::domain::capability_tags;
 use gglib_core::ports::JinjaMode;
@@ -93,9 +92,9 @@ mod tests {
         names.iter().map(|s| (*s).to_string()).collect()
     }
 
-    /// The bug this module was rewritten for: an explicit false used to
-    /// resolve to `enabled: false`, which emitted nothing, which left the
-    /// server running with upstream's jinja-on default.
+    /// An explicit false resolves to `Off`, which emits `--no-jinja`, and not
+    /// to silence, which would leave the server running with upstream's
+    /// jinja-on default.
     #[test]
     fn an_explicit_false_resolves_to_off_not_to_silence() {
         let r = resolve_jinja_flag(Some(false), &tags(&["agent"]));
@@ -118,9 +117,8 @@ mod tests {
     }
 
     /// Tags reach the catalog from GGUF detection, `HuggingFace` metadata and
-    /// hand edits, and only the first is guaranteed lowercase. Preserved from
-    /// the hand-rolled `eq_ignore_ascii_case` this now delegates to
-    /// [`capability_tags::has`].
+    /// hand edits, and only the first is guaranteed lowercase, so the match
+    /// goes through [`capability_tags::has`], which ignores ASCII case.
     #[test]
     fn the_agent_tag_match_is_case_insensitive() {
         assert_eq!(

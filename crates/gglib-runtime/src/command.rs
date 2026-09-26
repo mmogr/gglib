@@ -423,9 +423,9 @@ mod tests {
         assert_eq!(args[idx + 1], SERVER_PARALLEL.to_string());
     }
 
-    /// The bug: an explicit jinja-off used to emit nothing, and llama-server
-    /// starts with `use_jinja = true`, so the user's "off" produced a server
-    /// running with jinja and no sign that anything had been ignored.
+    /// llama-server starts with `use_jinja = true`, so an explicit jinja-off
+    /// must emit `--no-jinja`: emitting nothing leaves the server running with
+    /// jinja and no sign that the user's "off" was ignored.
     #[test]
     fn an_explicit_jinja_off_emits_no_jinja() {
         let config = ServerConfig {

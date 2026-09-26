@@ -70,16 +70,15 @@ pub struct ResidentSet {
 /// Resolve one launch's [`ServerConfigOptions`] and context size together.
 ///
 /// Pulled out of the admission path so the context-resolution logic can be
-/// tested without spawning a process — this is the exact computation that was
-/// previously duplicated as a wrong `effective_ctx`
-/// (`num_ctx.unwrap_or(default_ctx)`, skipping `model_server_ctx` entirely) and
-/// a separate, correct `resolve_context_size` call used only for the KV-cache
-/// estimate. See #685.
+/// tested without spawning a process. Its result is the one context the rest
+/// of a launch reads, so no later step sizes the context its own way ([#685]).
 ///
 /// The context chain is assigned onto the overlaid template rather than
 /// overlaid itself: the manager is authoritative for every rung, and a
 /// stale `model_server_ctx` inherited from `template` would silently size the
 /// launch for a different model than `model_server_ctx` names here.
+///
+/// [#685]: https://github.com/mmogr/gglib/issues/685
 fn resolve_launch_opts(
     template: &ServerConfigOptions,
     per_call: &ServerConfigOptions,
@@ -423,8 +422,8 @@ impl ResidentSet {
     /// Computed *before* [`AdmissionQueue::poll`] takes the queue's lock,
     /// necessarily: the probe can block (it may fork `nvidia-smi`), and no
     /// caller code may run inside the queue's critical section — a callback
-    /// version of this once re-entered the queue from under its own lock and
-    /// deadlocked the daemon (#721).
+    /// that re-enters the queue from under its own lock deadlocks the daemon
+    /// ([#721](https://github.com/mmogr/gglib/issues/721)).
     fn secondary_verdict(&self, request: &LaunchRequest) -> SecondarySlotDecision {
         let kv_types = crate::llama::args::resolve_kv_cache_types(
             request.opts.cache_type_k,

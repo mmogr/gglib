@@ -18,9 +18,9 @@ pub(crate) const DANGER: &str = "\x1b[31m";
 pub(crate) const WARNING: &str = "\x1b[33m";
 /// Blue — informational labels, commands, headings.
 pub(crate) const INFO: &str = "\x1b[34m";
-/// Grey — idle/stopped states. Mirrors --color-offline in the GUI's
-/// variables.css. Before this constant existed, idle states had nowhere
-/// to go but DANGER, which is why a stopped proxy used to print red.
+/// Grey — idle/stopped states, which are not failures, and secondary notes
+/// such as the benchmark report's. Mirrors --color-offline in the GUI's
+/// variables.css.
 pub(crate) const MUTED: &str = "\x1b[90m";
 /// Bold — emphasis, table headers.
 pub(crate) const BOLD: &str = "\x1b[1m";

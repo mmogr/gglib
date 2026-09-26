@@ -175,10 +175,10 @@ pub(crate) async fn dispatch(
         } => {
             // Registration happens daemon-side as a queue lifecycle phase, so
             // honouring this flag needs a protocol change. Say so rather than
-            // registering silently — but do not refuse the download: the flag
-            // was already a no-op, and failing here would break invocations
-            // that used to work. `--list-quants` never touched the database,
-            // so it is not worth a warning at all.
+            // registering silently — but do not refuse the download: failing
+            // here would break invocations that otherwise download fine.
+            // `--list-quants` never touches the database, so it is not worth
+            // a warning at all.
             if skip_db && !list_quants {
                 eprintln!(
                     "warning: --skip-db is not currently honoured — downloads register through \

@@ -259,9 +259,8 @@ pub fn update_acceleration() -> Result<Acceleration> {
 ///
 /// Differs from [`run_llama_source_build`] only in the pull: that reuses an
 /// existing checkout as-is, which is right for an install and wrong for an
-/// update. Everything after the pull is the same pipeline, so an update now
-/// installs `llama-bench` alongside `llama-server` and reports progress,
-/// neither of which the old inline implementation did.
+/// update. Everything after the pull is the same pipeline, so an update
+/// installs `llama-bench` alongside `llama-server` and reports progress.
 ///
 /// [`run_llama_source_build`]: super::run_llama_source_build
 pub async fn run_llama_update(
@@ -362,8 +361,7 @@ pub async fn handle_update() -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<BuildEvent>(64);
     let update = tokio::spawn(run_llama_update(acceleration, llama_dir, binary_path, tx));
 
-    // Previously this channel's receiver was dropped on the floor, so the
-    // build ran silently. Print what it reports.
+    // Print what the build reports; a dropped receiver would run it silently.
     while let Some(event) = rx.recv().await {
         match event {
             BuildEvent::Log { message } => println!("{message}"),
@@ -407,9 +405,9 @@ mod tests {
     }
 
     /// The counterpart hazard to the one above, on the live path: a failed
-    /// comparison used to parse as `unwrap_or(0)`, which the caller reports
-    /// with `comparable: true` — i.e. "up to date" — for a repository it
-    /// could not read at all.
+    /// comparison read as zero commits behind would reach the caller with
+    /// `comparable: true` — i.e. "up to date" — for a repository it could not
+    /// read at all.
     #[test]
     fn failed_comparison_is_an_error_not_zero() {
         let err = parse_commits_behind(false, "", "fatal: bad revision 'origin/master'")

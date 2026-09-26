@@ -1,9 +1,8 @@
 //! Retag command handler.
 //!
 //! Re-derives auto-generated tags (capability flags + `format:*` dialect
-//! tags) for one or more models from their persisted GGUF metadata. Used
-//! to backfill the new `format:*` tags introduced by the universal
-//! normalization pipeline on catalogs that pre-date that change.
+//! tags) for one or more models from their persisted GGUF metadata, which
+//! backfills the `format:*` tags on a catalog row that lacks them.
 //!
 //! Default behaviour is additive: missing tags are appended, nothing is
 //! removed. `--full` drops and re-derives the entire auto-generated

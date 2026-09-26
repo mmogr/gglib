@@ -7,11 +7,6 @@
 //! |-------------|--------------|--------------------------------------------------------------------------|
 //! | CLI         | `gglib-cli`  | `indicatif` spinner + progress bar via `consume_build_events_cli`         |
 //!
-//! There were two more. #834 removed both as dead end to end: the SSE route at
-//! `POST /api/system/build-llama-from-source` and the Tauri command behind it,
-//! neither of which had a caller, taking the `llama-build-progress` event the
-//! WebView listened for with them.
-//!
 //! The sender end is a `tokio::sync::mpsc::Sender<BuildEvent>` with capacity 64.
 //! When the sender is dropped the consumer loop terminates naturally.
 //!

@@ -3,12 +3,10 @@
 //! This module provides process spawning, tracking, and management with
 //! integrated log streaming and event broadcasting.
 //!
-//! [`GuiProcessCore`] keeps its `Gui` prefix from a time when a second,
-//! port-aligned `ProcessCore` sat beside it in `process_core.rs` and
-//! implemented a `ProcessRunner` trait for the CLI. Both are gone, though not
-//! together: `process_core.rs` went in #708, and the trait outlived it until
-//! #849, by which point nothing implemented it. This is now the only process
-//! core, serving every caller rather than only the GUI.
+//! [`GuiProcessCore`] is the only process core, and it serves every caller,
+//! not only the GUI ([#849]).
+//!
+//! [#849]: https://github.com/mmogr/gglib/pull/849
 
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
@@ -74,12 +72,11 @@ impl GuiProcessCore {
         }
 
         let port = self.resolve_port(config.port)?;
-        // TEMPORARY diagnostic for the proxy-dashboard port-mismatch bug
-        // report (gglib PR #568) — logs the configured base port alongside
-        // the port actually allocated for this spawn, so a future repro can
-        // confirm whether `--llama-port` reached this point correctly.
-        // Safe to remove once the bug is confirmed resolved or a root cause
-        // is found elsewhere.
+        // A diagnostic, added with the proxy dashboard (#568), for a
+        // port-mismatch report: logs the configured base port alongside the
+        // port actually allocated for this spawn, so a repro can confirm
+        // whether `--llama-port` reached this point correctly. Safe to remove
+        // once that report is resolved or a root cause is found elsewhere.
         tracing::info!(
             model_id = %model_id,
             base_port = %self.base_port,
@@ -202,9 +199,8 @@ impl GuiProcessCore {
 
     /// Check if a model is running.
     ///
-    /// Test-only: its production caller was `ProcessManager::is_serving`,
-    /// removed in this commit. Gated so `dead_code` keeps telling the truth
-    /// about production reach.
+    /// Test-only, gated so `dead_code` keeps telling the truth about
+    /// production reach.
     #[cfg(test)]
     pub(crate) fn is_running(&self, model_id: u32) -> bool {
         self.processes.contains_key(&model_id)
@@ -212,8 +208,8 @@ impl GuiProcessCore {
 
     /// Get count of running processes.
     ///
-    /// Test-only, and already so before this commit — nothing outside the test
-    /// below calls it. Gated for the same reason as [`Self::is_running`].
+    /// Test-only: nothing outside the test below calls it. Gated for the same
+    /// reason as [`Self::is_running`].
     #[cfg(test)]
     pub(crate) fn count(&self) -> usize {
         self.processes.len()

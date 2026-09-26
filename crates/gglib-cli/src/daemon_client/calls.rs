@@ -142,11 +142,10 @@ impl DaemonHandle {
 
     /// The daemon's download queue snapshot — what the dashboard renders.
     ///
-    /// `GET` and `POST` share one path by design. The snapshot handler was once
-    /// double-mounted at `/api/models/downloads` as well, and when that second
-    /// mount was retired as unused (#834) the CLI was still polling it. The bare
-    /// path then fell through to `/api/models/{id}`, whose `i64` extractor
-    /// answers `400 text/plain` — which the poller tried to parse as JSON.
+    /// `GET` and `POST` share one path by design; the snapshot has no other
+    /// mount ([#834]).
+    ///
+    /// [#834]: https://github.com/mmogr/gglib/pull/834
     pub(crate) async fn download_queue(&self) -> Result<QueueSnapshot> {
         let response = self
             .get(paths::DOWNLOADS_QUEUE_PATH)
@@ -161,7 +160,7 @@ impl DaemonHandle {
     ///
     /// The 401 arm is not redundant with the `Ok(false)` one. This is the only
     /// call that reads the status itself rather than going through
-    /// [`Self::expect_ok`], so a refused credential used to arrive as
+    /// [`Self::expect_ok`], so without it a refused credential would arrive as
     /// `Ok(false)` and print "not running as a daemon" — which is a different
     /// problem with a different remedy.
     pub(crate) async fn shutdown_daemon(&self) -> Result<bool> {

@@ -55,10 +55,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // Step 4: the proxy. Its own banners take over from here.
     step(4, "Endpoint");
     let settings = ctx.app.settings().get().await?;
-    // Passed through, not resolved. `up` is the path that computes a fitted
-    // context, prints it as the number that earns the user's trust, and then
-    // used to start the proxy at a flat 4096 — because resolving here turned
-    // "the user set nothing" into "the user set 4096", which outranked the
+    // Passed through, not resolved. `up` computes a fitted context and prints
+    // it as the number that earns the user's trust; resolving here would turn
+    // "the user set nothing" into "the user set 4096", which outranks the
     // fitted value at launch. Sending `None` lets the launch fit it.
     let default_context = settings.default_context_size;
 

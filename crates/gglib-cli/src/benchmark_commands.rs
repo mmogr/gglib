@@ -143,8 +143,8 @@ pub enum BenchmarkCommand {
         /// *measured* defaults — through the gate: the winner must clear the
         /// incumbent pair's mean by twice the run's own drift, with the
         /// per-task pairs agreeing. A refusal prints its evidence and
-        /// changes nothing. (`--apply-best` is the old name for the ungated
-        /// version of this and is kept as an alias.)
+        /// changes nothing. (`--apply-best` is an alias and goes through the
+        /// same gate.)
         #[arg(long = "apply", alias = "apply-best")]
         apply: bool,
     },
