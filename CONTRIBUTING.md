@@ -309,17 +309,19 @@ let mut child = Command::new("cmake")
 
 ## Crate Boundaries
 
-The CI runs `scripts/check_boundaries.sh` on every push and pull request. Violations fail the build.
+CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request into `main` and every push to it, and a violation fails the build. The script reads each checked crate's direct dependencies with `cargo tree --depth 1 --all-features --target all`: normal, build and dev dependencies, optional ones, and those declared for any platform. Of the rules below, only what a bullet says `check_boundaries.sh` rejects or allow-lists is checked, and only on those direct edges; the rest, such as `gglib-db` depending on no other `gglib-*` crate, are not.
 
-**`gglib-core`** — Pure domain types, error types, and path resolution utilities. No I/O, no async runtime, no adapter crates.
+**`gglib-core`** — Domain types, port traits, error types and path utilities. May read and write local files and build the process `Command`s other crates spawn (its tokio carries the `fs` and `process` features). Must not depend on a database, HTTP, CLI or UI crate: `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `reqwest`, `clap`, `tauri` and `sqlx` there.
 
-**`gglib-db`** — May depend on `gglib-core` and `sqlx`. Nothing else.
+**`gglib-db`** — May depend on `gglib-core`, `sqlx` and utility crates, and on no other `gglib-*` crate. `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `clap` and `tauri` there.
 
-**`gglib-runtime`**, **`gglib-agent`**, **`gglib-download`**, **`gglib-hf`** — May depend on `gglib-core`, `gglib-db`, and peer library crates in the same layer. Must not depend on any surface crate.
+**`gglib-runtime`**, **`gglib-proxy`**, **`gglib-agent`**, **`gglib-download`**, **`gglib-hf`**, **`gglib-mcp`**, **`gglib-gguf`**, **`gglib-sse`**, **`gglib-bootstrap`**, **`gglib-build-info`**, **`gglib-integration-tests`** — the infrastructure crates. May depend on `gglib-core`, `gglib-db` and each other, except `gglib-sse`, which depends on no `gglib-*` crate. Must not depend on a surface crate, and `check_boundaries.sh` rejects a direct dependency on one from every crate in this list. It also rejects `axum`, `tower`, `tower-http`, `hyper`, `clap`, `tauri` and `sqlx` in `gglib-runtime`, `gglib-agent`, `gglib-download`, `gglib-hf`, `gglib-mcp` and `gglib-gguf`, and `clap`, `tauri`, `sqlx` and `tower-http` in `gglib-sse`; `gglib-proxy` and `gglib-sse` depend on `axum`.
 
-**`gglib-app-services`** — Backend bridge used by both `gglib-axum` and `gglib-tauri`. No surface-specific code.
+**`gglib-app-services`** — The backend bridge: its consumers are `gglib-axum`, `gglib-cli` and `src-tauri`. No surface-specific code. `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `clap`, `tauri` and `sqlx` there.
 
-**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) — May depend on anything in lower layers. Must not depend on each other, with one documented exception: `gglib-cli` may depend on `gglib-axum` to start the Axum HTTP server for the `gglib web` command — splitting that single call site into a fourth surface crate would be more churn than the exception is worth. `scripts/check_boundaries.sh` allow-lists exactly this edge; any other surface-to-surface dependency is a violation.
+**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) — May depend on anything in lower layers. Must not depend on each other, with one documented exception: `gglib-cli` may depend on `gglib-axum` to host the daemon in `gglib daemon run` (which `gglib web --share-lan` also runs) — splitting that one module into a fourth surface crate would be more churn than the exception is worth. `scripts/check_boundaries.sh` allow-lists exactly this edge; any other surface-to-surface dependency is a violation.
+
+**`src-tauri`** (package `gglib-app`) — The desktop app binary, and the one crate that depends on two surfaces: `gglib-tauri` for its Tauri event emission, and `gglib-axum` to host the daemon in-process when it cannot launch an external one. It also depends on `gglib-app-services`, `gglib-runtime`, `gglib-proxy`, `gglib-core` and `gglib-build-info`. No crate depends on it, and `check_boundaries.sh` does not check it.
 
 If your change requires adding a dependency from a lower layer to a higher layer, reconsider the design. The dependency should flow in the opposite direction via the channel/event pattern described above.
 
@@ -329,9 +331,9 @@ If your change requires adding a dependency from a lower layer to a higher layer
 
 | Feature | Includes | Use in |
 |---|---|---|
-| *(default)* | Inference and server management | `gglib-axum`, `gglib-app-services` |
-| `prebuilt` | Pre-built binary download support | `gglib-tauri`, `gglib-app-services` |
-| `cli` | Source build pipeline (`build/`, `install/`) — implies `prebuilt` | `gglib-cli`, any crate that drives source builds |
+| *(default)* | Inference and server management | No dependent crate: each turns on `prebuilt` or `cli` |
+| `prebuilt` | Pre-built binary download support | `gglib-app-services` |
+| `cli` | Source build pipeline (`build/`, `install/`) — implies `prebuilt` | `gglib-cli`, `gglib-axum`, `src-tauri` |
 
 When adding a new flag-gated import in a surface crate, ensure its `Cargo.toml` declares the correct `features = [...]` value. A missing feature flag will produce a confusing "function not found" compile error rather than a clear feature gate message.
 
@@ -352,15 +354,15 @@ Each crate's `README.md` serves two narrow purposes:
 
 Crate READMEs are **not** the place for API documentation, usage examples, or explanatory prose about how individual types work — that belongs in Rustdoc.
 
-### Surface 2: Module-level documentation (`README.md` + `include_str!`)
+### Surface 2: Module-level documentation (a directory's `README.md`, or a file's `//!`)
 
-Every public module has a `README.md` alongside its `mod.rs`. The README is the canonical location for module-level documentation and is pulled into `cargo doc` via an inner attribute at the top of `mod.rs`:
+Every directory below a crate's `src/`, and below `src-tauri/src/`, has a `README.md` (`check_readmes.sh` checks this). For a directory module that README is its module documentation, pulled into `cargo doc` by an inner attribute on the first line of its `mod.rs`:
 
 ```rust
 #![doc = include_str!("README.md")]
 ```
 
-**Do not write `//!` blocks.** The README is the single source of truth — rustdoc, GitHub, and the CI README-coverage check all read from it. Writing `//!` in addition to a README causes duplicate content in the generated docs.
+**A directory module is documented by its README alone; a single-file module documents itself with `//!`.** A `mod.rs` that also carries `//!` lines renders them after the README in the generated docs, so what they say belongs in the README's `module-docs` section instead. A single-file module (`foo.rs`) has no README of its own, and its `//!` block is its documentation.
 
 #### README structure
 
@@ -413,7 +415,9 @@ Because the README is included via `include_str!`, it is processed as rustdoc. Y
 
 These links resolve at `cargo doc` time and show as hyperlinks in the generated docs. They appear as plain text on GitHub — that is acceptable.
 
-#### Adding a new Rust module
+#### Adding a new directory module
+
+A new single-file module needs only its `//!` block. A new directory module:
 
 1. Create `README.md` next to `mod.rs` with the structure above.
 2. Add `#![doc = include_str!("README.md")]` as the **first line** of `mod.rs`.
@@ -440,9 +444,19 @@ All `pub` types, enums, variants, traits, and functions must have a `///` doc co
 Complete { version: String, acceleration: String },
 ```
 
-### The `cargo test --doc` gate
+### Comments say what is true now
 
-CI runs `cargo test --doc --verbose` on every PR. This compiles all `///` example blocks as Rust code — a dangling import or wrong type in a doc-test will fail CI. When you add a triple-backtick Rust example, make sure it compiles. If an example requires external infrastructure, mark it `no_run`:
+A comment (`//`, `///` or `//!`) states what the code keeps true now: the invariant first, then, if a reader will need the evidence, one link to it.
+
+- **No history prose.** No "used to", "previously", "was renamed" or "since #N", and no account of how the code got here. That belongs in the commit message and the pull request.
+- **Evidence is linked, not kept.** A measurement, a reproduction, a table of runs or a pull request's argument lives in its issue, its pull request, an ADR or an ADR's log. The comment keeps the invariant that evidence supports and one link to it, even when several pull requests contributed.
+- **What stays:** the invariant, in the present tense; a link the invariant depends on; the `///` line every `pub` item needs (Surface 3); a safety argument, in full; a compatibility fact about a stored or wire field, with its link; every fenced block in a doc comment; and every intra-doc link definition (`[Foo]: path`) that something still uses.
+
+Guidance, not a rule, and nothing checks it: a doc block on a non-public item is usually under 10 lines. A block that states an invariant or a safety argument is exempt however long it is.
+
+### Doctests run in the `test` job
+
+CI's `test` job runs `cargo test --no-fail-fast`, which runs the doctests along with the unit and integration tests; there is no separate `cargo test --doc` step. In a library crate, an untagged or `rust` code block in a doc comment, or in a README that rustdoc includes, is a doctest, so a dangling import or wrong type in one fails CI. `cargo test --doc` runs them alone; `cargo test --all-targets` does not run them at all, which is why the `test` job never passes it (see [Where the per-crate test numbers come from](#where-the-per-crate-test-numbers-come-from)). When you add a triple-backtick Rust example, make sure it compiles. If an example requires external infrastructure, mark it `no_run`:
 
 ````rust
 /// ```no_run
@@ -467,7 +481,7 @@ The published site redirects to `gglib_core/index.html`, which is the primary AP
 
 ## Architecture Decision Records
 
-`docs/adr/NNNN-kebab-title.md`, numbered sequentially, never renumbered.
+`docs/adr/NNNN-kebab-title.md`, numbered sequentially, never renumbered. An ADR's log, when it has one, is `docs/adr/log-NNNN.md`.
 
 An ADR records a decision and the evidence behind it. Rustdoc says what the code does; an ADR says why it is that way and what would have to change for it to be different. The two are complements — a module implementing a decision should link its ADR, and the ADR should name the modules it governs.
 
@@ -479,12 +493,22 @@ An ADR records a decision and the evidence behind it. Rustdoc says what the code
 
 ### Conventions
 
-- **Status, date, and dependencies in a header block.** Amend in place with a dated note rather than opening a near-duplicate.
-- **Record retractions, do not delete them.** When a later finding overturns an earlier one, strike the original and say why it was wrong. ADR 0002's finding 4 overturned its own finding 1; leaving both is what stops the same reasoning error recurring.
+- **A header block**: `Status`, `Date`, `Depends on`, `Supersedes` and `Superseded by`, and a `Log` line once the ADR has a log.
 - **State the scope of the evidence.** "60/60 on one model, one build, one schema" is a finding. "Upstream enforces schemas" is a claim the evidence does not support, and ADR 0002 was overturned by a second model precisely because that distinction was written down.
 - **Cite the reproducer.** A measurement that cannot be re-run is an opinion with a table.
 - **A kill criterion must name a reading that exists.** Not a counter somebody intends to add, not a number a `debug!` emits into a log nothing collects — a reading a person can actually take, named where it is taken from. A criterion nobody can read is not a criterion; it is a promise that the decision will be revisited, and it will not be. [ADR 0011](docs/adr/0011-stagnation-is-about-prose.md)'s first criterion named `loop_guard_trips` for a question that counter cannot answer, and it took the first live reading, months later, to notice. Where the reading is a survey rather than a tally, name the command that produces it, as [ADR 0009](docs/adr/0009-fit-the-context-to-the-machine.md)'s first criterion names `gglib model explain`.
 - **Record zeros with their denominators.** "0 events across 10 requests, 2026-08-28" is a reading; "none" is not, because it cannot distinguish a mechanism that does not fire from one nobody exercised. This matters most for the criteria that are *satisfied* by zeros — "if it stays at zero, delete it" — where the ambiguity is what turns a small sample into a wrong deletion.
+
+### An accepted ADR is frozen
+
+An ADR is frozen when it is accepted. After that its header's `Status`, `Superseded by` and `Log` lines are kept current, and otherwise it changes only by a retraction's strike, an erratum, or the one move of the readings and bookkeeping already in its body to its log. Everything else goes elsewhere:
+
+- **A reversal is a new ADR.** Keep it short, and let its header say exactly what it replaces: `Supersedes: the <part> ADR NNNN chose, and nothing else in it`. The old ADR's `Status` and `Superseded by` lines then name the new one.
+- **Readings and bookkeeping go to the ADR's log**, `docs/adr/log-NNNN.md`: a measurement taken later, a follow-up that landed, a count brought up to date. A log is appended to and never edited, and an entry that cites a line number names the commit it read that line at.
+- **A retraction is a log entry plus a one-line strike.** The entry says what was wrong and why. In the ADR the retracted text is struck through, not deleted, and followed by one line that links the entry. ADR 0002 keeps finding 1 beside the finding 4 that overturned it; leaving both is what stops the same reasoning error recurring.
+- **An erratum is corrected in place**: a typo, a broken link, a name that was wrong when it was written. A correction that changes what the ADR decided or found is a retraction or a reversal instead.
+- **An open arc keeps a log and writes its ADR at close.** While the work a decision belongs to is still moving, its readings and interim decisions go into `log-NNNN.md`, under the number its ADR will take, and the ADR is written from the log when the arc closes.
+- **Readings already in an accepted ADR move to its log once.** Readings and bookkeeping still in an accepted ADR's body move to its log verbatim, and each moved block leaves its heading behind as a stub that links the log entry. The same change may rewrite the ADR's `Date` line to list only the changes made in place to its decisions, and the log's preamble to state these rules.
 
 ### Handoff briefs
 
@@ -621,7 +645,8 @@ make lint
 make doc
 
 # Run all pre-commit checks in sequence: fmt, lint, check, test, lint-web,
-# typecheck-web, test-web, boundaries, enforce
+# typecheck-web, deadcode-web, test-web, boundaries, enforce, bindings-check,
+# doc-check
 make pre-commit
 ```
 
@@ -651,21 +676,23 @@ The Cargo lockfile (`Cargo.lock`) is committed and must stay consistent. CI runs
 
 ## CI Pipeline
 
-Every PR must pass the following gates in order. They are not advisory.
+`.github/workflows/ci.yml` runs on every pull request into `main` and every push to it. Every PR must pass the jobs below; they are not advisory. The `CI Success` job fails if any of them failed or was cancelled. They start in parallel, except the two cross-OS jobs, which wait for `clippy`.
 
-| Gate | Command | What it enforces |
+| Job | Runs | What it enforces |
 |---|---|---|
-| **Format** | `cargo fmt --all -- --check` | Consistent code style |
-| **Boundaries** | `./scripts/check_boundaries.sh` | Layer dependency rules |
-| **Architecture** | `./scripts/check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh` | Tauri policy; no IPC in product routes; no frontend transport branching; no catch-all over `ParamSource`; every setting reachable; no discarded `sqlx` error; the two file-size ratchets |
-| **Clippy** | `cargo clippy --all-targets --all-features -- -D warnings` | No warnings, ever |
-| **Rust tests** | `cargo test` (aggregate + per-crate) | Correctness |
-| **Doc tests** | `cargo test --doc --verbose` | Doc examples compile and run |
-| **Frontend tests** | `npm run test:run` | TypeScript correctness |
-| **Lint & typecheck** | `npm run lint -- --max-warnings 0`, `npm run typecheck`, `./scripts/check_workflow_yaml.sh` | Design-system guardrails; TS correctness; parseable workflows |
-| **Cross-OS check** | `cargo test -p gglib-cli --no-run` on Linux/macOS/Windows | No platform-specific breakage |
+| `fmt` | `cargo fmt --all -- --check` | Consistent code style |
+| `quality` | `./scripts/check_workflow_yaml.sh`, `npm run lint -- --max-warnings 0`, `npm run typecheck` | No duplicate key in a workflow file, plus that script's `bump-version.yml` and `badges.yml` checks; the ESLint rules, warnings included; TypeScript types |
+| `boundaries` | `./scripts/check_boundaries.sh`, which also runs `check_readmes.sh --strict` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage |
+| `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_context_floor.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_ts_bindings.sh`, `check_readme_tables.py`, all in `scripts/` | Tauri commands only in the approved files; frontend `invoke()` only with allowlisted commands; no transport branching in frontend client modules; no catch-all over `ParamSource`; nothing outside the resolver fabricates the context floor; every setting reachable from a surface; no discarded `sqlx` result; the Rust and TypeScript/CSS file-size ratchets; the ts-rs binding annotations; TypeScript README tables that match their directories |
+| `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
+| `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
+| `rustdoc` | `cargo doc --workspace --no-deps --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings` | No rustdoc warning |
+| `test-frontend` | `npm run deadcode`, `npm run test:run` | No TypeScript file that nothing imports, and no unused or undeclared dependency; the frontend tests pass |
+| `clippy` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` | No Clippy warning on Linux |
+| `cli-cross-os` | `cargo test -p gglib-cli --no-run` on Linux, macOS and Windows | `gglib-cli` and its tests compile on each. Pull requests only |
+| `clippy-cross-os` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` on macOS and Windows | No Clippy warning on either, including in code only that OS compiles. Pull requests only |
 
-After each successful CI run, `badges.yml` downloads the test/boundary/coverage artifacts and pushes updated badge JSON files to the `badges` branch. Shields.io badges in crate READMEs resolve from there.
+When a CI or Coverage run on `main` completes, `badges.yml` downloads its artifacts and pushes badge JSON to the `badges` branch, where the shields.io badges in crate READMEs read it.
 
 Coverage is measured on every push to `main` with `cargo-llvm-cov` and feeds into the same badge pipeline.
 
@@ -703,13 +730,15 @@ In practice: if your PR closes a fully-labelled issue, you'll rarely touch label
 
 Before requesting review, confirm each item:
 
-- [ ] `make pre-commit` passes locally — everything CI requires, including the frontend gates and the architecture checks.
-- [ ] `cargo test --doc` passes.
+- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. The two cross-OS jobs run only in CI.
+- [ ] A new doc example compiles and passes as a doctest (`cargo test --doc` runs them alone).
 - [ ] Any new public type or enum has `///` doc comments on all items.
-- [ ] Any architectural change is documented in `//!` module-level Rustdoc. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.
+- [ ] Any architectural change is documented with its module: in the README of a directory module, in the `//!` block of a single-file module. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.
+- [ ] A new or changed comment says what is true now: the invariant, at most one link, no history ([Comments say what is true now](#comments-say-what-is-true-now)).
+- [ ] An accepted ADR changes only as [An accepted ADR is frozen](#an-accepted-adr-is-frozen) allows: a reading or bookkeeping goes to its `log-NNNN.md`, a reversal to a new ADR.
 - [ ] Subprocess I/O is captured with `Stdio::piped()` and read on an OS thread, not a Tokio task.
 - [ ] Environment variable merging uses read-then-append, not a bare `.env()` that overwrites.
 - [ ] Any feature gated behind `#[cfg(feature = "...")]` is declared correctly in all consuming `Cargo.toml` files.
 - [ ] If the change adds a new long-running operation: for Tier 1 (runtime behaviour), all three surfaces (CLI, Axum, Tauri) are wired up in this PR; for Tier 2 (management/inspection), the CLI is wired and the surface gap is tracked in a linked issue.
 - [ ] `Cargo.lock` is up to date and committed.
-- [ ] No new dependency has been introduced from a higher layer to a lower layer.
+- [ ] No crate has gained a dependency on a crate in a higher layer.

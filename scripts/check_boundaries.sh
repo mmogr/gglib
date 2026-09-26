@@ -5,6 +5,7 @@
 # - gglib-core: Pure domain types, no adapter/infra deps
 # - gglib-db: Core + sqlx only, no adapter deps
 # - Adapters (cli, axum, tauri): Core + db + their local deps only
+# - Infrastructure crates: no direct dependency on a surface crate
 #
 # Usage: ./scripts/check_boundaries.sh [--verbose]
 # Output: boundary-status.json with pass/fail per crate
@@ -38,6 +39,14 @@ log_verbose() {
     fi
 }
 
+# A crate's direct dependencies, one name per line: normal, build and dev
+# edges, with every feature of the crate on and every target platform's
+# dependency tables read, so an optional or platform-specific edge is seen
+# on any host.
+direct_deps() {
+    cargo tree -p "$1" --depth 1 --prefix none --all-features --target all 2>/dev/null | tail -n +2 | awk '{print $1}'
+}
+
 check_crate_deps() {
     local crate=$1
     shift
@@ -45,9 +54,8 @@ check_crate_deps() {
     
     log_verbose "${YELLOW}Checking $crate...${NC}"
     
-    # Get direct dependencies (depth 1)
     local deps
-    deps=$(cargo tree -p "$crate" --depth 1 --prefix none 2>/dev/null | tail -n +2 | awk '{print $1}')
+    deps=$(direct_deps "$crate")
     
     local violations=()
     for dep in $deps; do
@@ -74,7 +82,7 @@ check_crate_deps() {
 check_surface_isolation() {
     local crate=$1
     local deps
-    deps=$(cargo tree -p "$crate" --depth 1 --prefix none 2>/dev/null | tail -n +2 | awk '{print $1}')
+    deps=$(direct_deps "$crate")
 
     local violations=()
     for dep in $deps; do
@@ -103,15 +111,50 @@ check_surface_isolation() {
     fi
 }
 
+# An infrastructure crate may not depend on a surface crate. The forbidden
+# lists above name external crates only, so they cannot see an edge to a
+# sibling `gglib-*` surface; this names the surfaces. A crate `cargo tree`
+# cannot resolve fails here rather than passing with no dependencies read.
+check_no_surface_dependency() {
+    local crate=$1
+    local deps
+    if ! deps=$(direct_deps "$crate"); then
+        log "${RED}FAIL${NC}: $crate"
+        log "  cargo tree could not read its dependencies"
+        RESULTS+=("{\"crate\": \"$crate-no-surface\", \"status\": \"fail\", \"violations\": [\"cargo tree failed\"]}")
+        return 1
+    fi
+
+    local violations=()
+    for dep in $deps; do
+        for surface in "${SURFACE_CRATES[@]}"; do
+            [[ "$dep" == "$surface" ]] && violations+=("$dep")
+        done
+    done
+
+    if [[ ${#violations[@]} -gt 0 ]]; then
+        log "${RED}FAIL${NC}: $crate"
+        log "  Depends on a surface crate: ${violations[*]}"
+        local violations_json
+        violations_json=$(printf '"%s",' "${violations[@]}" | sed 's/,$//')
+        RESULTS+=("{\"crate\": \"$crate-no-surface\", \"status\": \"fail\", \"violations\": [$violations_json]}")
+        return 1
+    else
+        log "${GREEN}PASS${NC}: $crate"
+        RESULTS+=("{\"crate\": \"$crate-no-surface\", \"status\": \"pass\", \"violations\": []}")
+        return 0
+    fi
+}
+
 main() {
     log "🔍 Checking workspace crate boundaries..."
     log ""
     
     # Adapter/infra dependencies that should NOT appear in core
-    ADAPTER_DEPS=(axum tower tower-http clap tauri sqlx hyper)
+    ADAPTER_DEPS=(axum tower tower-http clap tauri sqlx hyper reqwest)
     
     # gglib-core: Pure domain, no adapter or infra deps
-    log "📦 gglib-core (pure domain - no adapters, no sqlx)"
+    log "📦 gglib-core (pure domain - no adapters, no sqlx, no HTTP client)"
     if ! check_crate_deps "gglib-core" "${ADAPTER_DEPS[@]}"; then
         FAILED=1
     fi
@@ -219,6 +262,22 @@ main() {
     if ! check_crate_deps "gglib-sse" "${SSE_FORBIDDEN[@]}"; then
         FAILED=1
     fi
+    log ""
+
+    # Every infrastructure crate, the four with no forbidden list above
+    # (gglib-proxy, gglib-bootstrap, gglib-build-info and
+    # gglib-integration-tests) included.
+    INFRA_CRATES=(
+        gglib-runtime gglib-proxy gglib-agent gglib-download gglib-hf
+        gglib-mcp gglib-gguf gglib-sse gglib-bootstrap gglib-build-info
+        gglib-integration-tests
+    )
+    log "📦 Infrastructure crates (no direct dependency on a surface crate)"
+    for infra_crate in "${INFRA_CRATES[@]}"; do
+        if ! check_no_surface_dependency "$infra_crate"; then
+            FAILED=1
+        fi
+    done
     log ""
 
     # Source-level guards: shared composition root (gglib-bootstrap) is the
