@@ -1,0 +1,116 @@
+chore(lints): enforcement checks lint inheritance and each crate's allow count
+
+scripts/check_lint_inheritance.sh fails unless each workspace member's
+manifest has one lints table, `[lints]`, holding only
+`workspace = true`. Cargo will not combine that key with a crate's own
+lint keys.
+
+It also counts, per member, every lint named inside an `allow(...)` or
+`expect(...)` attribute in the member's .rs files, cfg_attr forms,
+tests/ crate roots and build scripts included, and compares two numbers
+with scripts/lint-allow-baseline.txt: all such lints, and those in an
+attribute without a `reason`. Neither may grow. `--update` rewrites the
+baseline to the counts; it will raise the first number but not the
+second.
+
+A count that failed, a baseline row listed twice and a baseline row
+whose second or third field is not a number each fail the check, and
+`--update` then writes nothing. Without that, `[ -gt ]` on a value that
+is not a number errors, the comparison reads false, and the row passes:
+an unreadable .rs file and a doubled row each printed the pass line, and
+`--update` over the doubled row rewrote it.
+
+The files counted are the ones git lists: tracked, or untracked and not
+ignored. An ignored file, such as build output or a worktree nested in
+the checkout, is not counted. A version that walked the directory tree
+also counted the 977 .rs files under the ignored .claude/ of the main
+checkout, and failed there.
+
+The .rs files that no member directory holds are counted the same way,
+in a row named `(outside-members)` whose failure names them.
+crates/build_common.rs is one: several members' build scripts
+`include!` it, and it sits in none of their directories.
+
+The baseline starts at 496 lints across the 18 members, 182 of them
+without a reason, none of those from the previous commit, and at 0
+outside them.
+
+The count covers rustc lints as well as clippy's, because an
+`allow(unsafe_code)` or `allow(unreachable_pub)` steps outside the
+workspace lints as surely as a clippy one does.
+
+A self-test runs before every check. It has five manifests that must
+fail the inheritance rule: a [lints.clippy] table, a key beside
+`workspace = true`, no [lints] table, an empty one, and
+`workspace = false`; and a member with no manifest. They are tried
+together, and then the missing manifest and one with a key beside
+`workspace = true` each as the only failure. It has files whose
+counts are known: 10 lints, 5 without a reason, in a src/lib.rs, among
+them an attribute naming two lints without a reason, one followed by a
+comment, one whose reason holds `//` and a cfg_attr holding two, beside
+a comment line, a method call and an `#[error]` string that must not
+count; 5 lints and 2 without a reason in a tests/ crate root, a build
+script, a src/target/ module and a file the index holds three times, as
+a merge conflict leaves it; 1 without a reason outside every member; and
+none in ignored target/ and .claude/ files, a tracked file deleted from
+the working tree, or a README. It has baselines that each number of a
+member's row and of the outside row must fail against without
+`--update`, and that the member's second number must also fail against
+under it; one whose first number `--update` must raise; one that
+`--update` must rewrite to exactly those counts; a baseline row naming
+no member; and a tree in which git lists no .rs file. It has a counter
+that exits 1 without printing a count, a baseline row listed twice, and
+a baseline row with `x` for its first number and then for its second,
+each of which must fail, and the row listed twice under `--update`,
+which must leave the baseline byte for byte as it was. Each fixture
+that must fail must also make the check exit non-zero, not only print
+its message.
+
+The self-test's fixture repository reads no global or system git config
+and copies no init template, so a `target/` pattern in the caller's
+~/.config/git/ignore, in an excludes file their global or system config
+names, or in their init template's info/exclude cannot hide the
+fixture's src/target/ module. Without that, each of those failed the
+self-test on a passing tree.
+
+Each mutation named here was run under bash 5.2.21 and 3.2.57, with
+the same result under both. These twenty-three fail the
+self-test: ignoring cfg_attr, reading only the first allow in a
+cfg_attr, counting comments, dropping every line that holds `//`,
+counting bare attributes rather than bare lints, counting only src/,
+skipping the files outside every member, dropping any one of git's
+--cached, --others, --exclude-standard or --deduplicate, emptying the
+check for a missing or empty [lints] table, letting either number grow,
+letting the outside row's first number grow, letting a member's second
+number grow when `--update` is not given, an `--update` that will not
+raise the first number, removing the number check, dropping either
+baseline number from it, letting it pass an empty value or a row listed
+twice, and skipping it under `--update`. So do ten that keep a failure's
+message and drop only the failure: the check returning 0, either
+comparison, the number check or the empty-listing guard returning 0,
+and dropping the record of a failure for a missing manifest, a bad
+manifest, a member's count, the outside row or a stale baseline row.
+Of those named here, two survive, each dropping one of the two counts
+from the number check: the counter prints both counts or neither, so
+the count left in the check is empty too and still fails.
+
+The five that drop one of the four settings that isolate the fixture
+from the caller's git, or the line that exports them, each passed the
+self-test in an environment with no excludes file and git's default
+template. Each was also run with `target/` in ~/.config/git/ignore, in
+an excludes file ~/.gitconfig names, in one the system config names,
+and in the init template's info/exclude, one at a time. With each of
+those the unmutated script passes, and dropping XDG_CONFIG_HOME fails
+with the first, GIT_CONFIG_GLOBAL with the second, GIT_CONFIG_NOSYSTEM
+with the third, --template= with the fourth, and the export line with
+each of the first three.
+
+The script first unsets the variables `git rev-parse --local-env-vars`
+lists. A hook in a linked worktree exports GIT_DIR and GIT_INDEX_FILE,
+and with them set the self-test wrote its fixtures into the caller's
+index.
+
+It runs in `make enforce` and in the CI enforcement job, which needs no
+Rust toolchain for it: bash, awk, perl and git. scripts/README.md
+documents it, and CONTRIBUTING's CI table names it.
+
