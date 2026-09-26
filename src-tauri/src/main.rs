@@ -46,10 +46,10 @@ fn main() {
             // The daemon owns the backend: connect to a running one, launch
             // `gglib daemon run` detached, or — bundle-only fallback — host
             // the daemon composition in this process behind the same lock.
-            // A daemon that will not start is a state, not a crash. Panicking
-            // here killed the process before `setup_app` had built a tray or
-            // shown a window, so gglib never appeared at all and the reason
-            // was only in a log file.
+            // A daemon that will not start is a state, not a crash: a panic
+            // here would kill the process before `setup_app` has built a tray
+            // or shown a window, so gglib would never appear and the reason
+            // would be only in a log file.
             let (daemon, startup_failure) =
                 match tauri::async_runtime::block_on(Daemon::connect_or_launch()) {
                     Ok(daemon) => (daemon, None),
@@ -78,7 +78,7 @@ fn main() {
             }
 
             // Register/unregister the login item to match settings once the
-            // window exists. (Proxy autostart is the daemon's job now.)
+            // window exists. (Proxy autostart is the daemon's job.)
             {
                 let handle_for_autostart = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -149,8 +149,8 @@ fn main() {
             match event {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     // The exit `request_shutdown` itself asks for comes back
-                    // through here; preventing that one is what used to
-                    // strand the app.
+                    // through here, and preventing that one would strand the
+                    // app.
                     if !lifecycle::should_prevent_exit(lifecycle::is_shutting_down()) {
                         info!("Shutdown complete - letting the app exit");
                         return;
@@ -187,13 +187,13 @@ fn main() {
 ///
 /// Read at close time rather than cached at startup, so toggling the setting
 /// takes effect on the very next close. Read through the daemon: settings
-/// belong to the backend, and the backend is the daemon now.
+/// belong to the backend, and the backend is the daemon.
 async fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
     let state: tauri::State<AppState> = app.state();
     match state.daemon.settings().await {
         Ok(settings) => settings.close_to_tray == Some(true),
         Err(e) => {
-            // Falling back to quitting keeps the historical behaviour; a
+            // Falling back to quitting matches the setting's default; a
             // hidden window with no way back would be worse.
             error!(error = %e, "Could not read close_to_tray; quitting instead");
             false

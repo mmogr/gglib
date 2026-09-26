@@ -24,14 +24,14 @@ const TRIP_LOG_DRAIN: Duration = Duration::from_secs(2);
 
 /// Resolve when *either* trigger fires, then cancel the token so both converge.
 ///
-/// The cancel is the whole point, and its absence was a real bug. The daemon has
-/// two ways to stop — a signal, or `POST /api/daemon/shutdown` — and the select
-/// alone only *observed* the token. On the signal path the token therefore stayed
-/// live, so anything bounded by it never ended: `/api/events` streams held
-/// `with_graceful_shutdown` open, `perform_shutdown` never ran, and the liveness
-/// watchdog force-exited later. Ctrl-C, `systemctl stop` and `kill` all take
-/// that path; `POST /api/daemon/shutdown` cancels the token itself and so was
-/// unaffected.
+/// The cancel is the whole point. The daemon has two ways to stop — a signal,
+/// or `POST /api/daemon/shutdown` — and the select alone only *observes* the
+/// token. Without the cancel the token would stay live on the signal path, so
+/// anything bounded by it would never end: `/api/events` streams would hold
+/// `with_graceful_shutdown` open, `perform_shutdown` would never run, and the
+/// liveness watchdog would force-exit later (#891). Ctrl-C, `systemctl stop`
+/// and `kill` all take that path; `POST /api/daemon/shutdown` cancels the
+/// token itself.
 ///
 /// `CancellationToken::cancel` is idempotent, so firing it on the API path too
 /// costs nothing. gglib-proxy avoids this shape entirely by passing one token to
@@ -132,8 +132,8 @@ pub(super) async fn perform_shutdown(state: &AppState) {
 /// Everything the teardown does to this daemon's own state, in order: steps 0
 /// to 4.
 ///
-/// Apart from [`perform_shutdown`] so a test can run it: the watchdog and the
-/// final pidfile audit act on the whole machine — the audit kills every
+/// Separate from [`perform_shutdown`] so a test can run it: the watchdog and
+/// the final pidfile audit act on the whole machine — the audit kills every
 /// llama-server its pidfiles verify — and have no place in a test.
 pub(super) async fn teardown(state: &AppState) {
     // 0. Take the remote tunnel down first, so nothing new arrives from
@@ -142,7 +142,7 @@ pub(super) async fn teardown(state: &AppState) {
     //
     //    `shut_down`, not `disable`: the switch says whether this machine is
     //    meant to be reachable, and stopping the daemon is not an answer to
-    //    that question. The ticket survives now too — it is this machine's
+    //    that question. The ticket survives too — it is this machine's
     //    address, and it is the same one when the daemon comes back.
     if let Err(e) = state.remote.shut_down().await {
         tracing::debug!("remote disable during shutdown: {e}");

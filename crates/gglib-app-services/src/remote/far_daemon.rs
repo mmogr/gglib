@@ -2,9 +2,9 @@
 //!
 //! It goes to the far proxy over the local listener, which is the point: the
 //! shutdown route is the far machine's, and this side reaches it the way any
-//! client would. It is not retried, because it is a one-way door. Pairing,
-//! the other request that used to be made from here, is modelpipe's now: the
-//! far edge answers it, and `connect_open` calls `modelpipe::pair`.
+//! client would. It is not retried, because it is a one-way door. Pairing is
+//! modelpipe's: the far edge answers it, and `connect_open` calls
+//! `modelpipe::pair`.
 
 use std::time::Duration;
 

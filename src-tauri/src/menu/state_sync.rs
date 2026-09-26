@@ -61,7 +61,7 @@ async fn sync_app_menu(
         model_selected: selected_id.is_some(),
         // A selected model with a running server enables Stop rather than
         // Start. The snapshot already carries every resident model id, so this
-        // no longer costs a `/api/servers` round trip of its own.
+        // costs no `/api/servers` round trip of its own.
         selected_model_server_active: selected_id.is_some_and(|id| snapshot.serves(id)),
     })
     .map_err(|e| format!("Failed to sync menu state: {e}"))

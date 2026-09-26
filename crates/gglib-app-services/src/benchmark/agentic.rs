@@ -89,10 +89,11 @@ pub(crate) async fn run_agentic_eval(
         .await
         .context("failed to create agentic eval run record")?;
 
-    // Passed through, not resolved, exactly as the tune sweep now does.
-    // `.unwrap_or(DEFAULT_CONTEXT_SIZE)` turned "the user set nothing" into
-    // "the user set 4096" and sent it as `num_ctx` — the explicit rung — so
-    // the fit was computed and discarded on every benchmark launch.
+    // Passed through, not resolved, exactly as the tune sweep does.
+    // `.unwrap_or(DEFAULT_CONTEXT_SIZE)` here would turn "the user set
+    // nothing" into "the user set 4096" and send it as `num_ctx` — the
+    // explicit rung — so the fit would be computed and discarded on every
+    // benchmark launch.
     let settings = deps.settings_repo.load().await.ok();
     let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
 
@@ -497,10 +498,10 @@ fn plan_arms(config: &AgenticEvalConfig) -> Vec<ArmPlan> {
 
     if config.replicate_raw {
         // One plan per requested pair, each on its own derived seed set —
-        // pair 1 is the legacy set, so a multi-pair run's first pair stays
-        // comparable with every single-pair run before it. Clamped at one:
-        // zero pairs with replicate_raw on would be an A/A arm that does not
-        // run while the config says it does.
+        // pair 1 is `replicate_seeds`, the set a single-pair run uses, so a
+        // multi-pair run's first pair stays comparable with every single-pair
+        // run. Clamped at one: zero pairs with replicate_raw on would be an
+        // A/A arm that does not run while the config says it does.
         for pair in 1..=u32::try_from(config.replicate_pairs.max(1)).unwrap_or(1) {
             // Unseeded, the A/A arm is simply the same request again — which
             // still measures drift, since nothing was pinned in the first
@@ -655,10 +656,9 @@ fn demands_tool_call(task: &TuneTask) -> bool {
 
 /// Say why the control failed, in terms that name the fix.
 ///
-/// The two failures want different actions and must not share wording. An
-/// earlier version reported both as "changed by only {gap}", which described a
-/// control that had moved 0.090 in the wrong direction as though it had barely
-/// moved at all.
+/// The two failures want different actions and must not share wording: one
+/// sentence for both would describe a control that moved 0.090 in the wrong
+/// direction as though it had barely moved at all.
 fn warn_control(verdict: ControlVerdict, report: &AgenticEvalReport) {
     let control = report.control.as_ref().map_or(f64::NAN, |c| c.composite);
     match verdict {

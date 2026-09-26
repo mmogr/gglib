@@ -1,12 +1,11 @@
 //! Enrolling a device and retiring one: the two-store transaction underneath
 //! `invite` and `forget`.
 //!
-//! Split from `devices.rs`, which is at its size budget, and by subject: that
-//! file is about the three verbs and about consulting the live tunnel, and
-//! this one is about the order two stores are written in and what unwinds
-//! when a step fails. The ordering is the whole content — get it wrong and a
-//! device pairs successfully and is refused on its first real request, which
-//! is the least debuggable failure this feature has.
+//! `devices.rs` is about the three verbs and about consulting the live
+//! tunnel; this file is about the order two stores are written in and what
+//! unwinds when a step fails. The ordering is the whole content — get it
+//! wrong and a device pairs successfully and is refused on its first real
+//! request, which is the least debuggable failure this feature has.
 //!
 //! Every write here takes `RemoteOps::roster` first and touches the key file
 //! before the roster, so a concurrent invite and forget cannot interleave.

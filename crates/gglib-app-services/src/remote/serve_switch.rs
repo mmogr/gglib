@@ -1,12 +1,10 @@
 //! The switch: whether this machine is meant to be reachable, and putting
 //! it back that way at boot.
 //!
-//! A `#[path]` child of `serve.rs`, split off when that file crossed its
-//! budget, along the line the file already had. `serve.rs` is about *arming*
-//! — binding an endpoint, minting a code, holding the slot — and this is
-//! about the standing answer to a different question: does a person want
-//! this machine reachable at all? `enable` and `disable` are where the two
-//! meet, so they stay there and call in here.
+//! `serve.rs` is about *arming* — binding an endpoint, minting a code,
+//! holding the slot — and this is about the standing answer to a different
+//! question: does a person want this machine reachable at all? `enable` and
+//! `disable` are where the two meet, so they stay there and call in here.
 //!
 //! The distinction is load-bearing rather than tidy. A daemon stopping is
 //! not an answer to that question, which is why `shut_down` exists beside
@@ -145,12 +143,12 @@ impl RemoteOps {
             // `resume_arm` passes `Offer::Silent` regardless.
             invite: false,
         };
-        // No pairing code is minted here, and `resume_arm` rather than
-        // `enable` is what makes that true: `enable` mints one
-        // unconditionally, so resuming through it opened a live two-minute
-        // code at every boot, which nobody would ever read, on a
-        // ticket that no longer changes. Devices already paired hold a key
-        // and need no code; a new one is added with `gglib remote invite`.
+        // No pairing code is minted here, and `resume_arm` is what
+        // guarantees it: it passes `Offer::Silent` whatever the request
+        // says, so no stored flag can open a live two-minute code at boot,
+        // which nobody would read, on an endpoint key a restart does not
+        // change. Devices already paired hold a key and need no code; a new
+        // one is added with `gglib remote invite`.
         match self.resume_arm(request, disables).await {
             Ok(()) => info!("remote access resumed from settings"),
             Err(e) => warn!("could not resume remote access: {e}"),

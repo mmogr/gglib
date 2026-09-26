@@ -16,10 +16,9 @@ import type { Support } from "./Support";
  *
  * # Not a superset of [`GuiModel`]
  *
- * It was described as one for a long time, and a TypeScript mirror was
- * written to match by extending the list row — which advertised
- * `server_defaults` and `benchmark_summary` on a response that has never
- * carried either. The two shapes overlap; neither contains the other.
+ * The two shapes overlap; neither contains the other. A TypeScript mirror
+ * that extended the list row would advertise `server_defaults` and
+ * `benchmark_summary` on a response that carries neither.
  */
 export type ModelDetailDto = { 
 /**

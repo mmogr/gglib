@@ -23,9 +23,9 @@ const LAUNCH_WAIT: Duration = Duration::from_secs(15);
 /// How this app came by the daemon it is talking to.
 ///
 /// The distinction decides what quitting is allowed to take down with it, and
-/// [`Daemon::connect_or_launch`] already knows it — it used to be flattened
-/// into a single "hosted" bool, which could not tell a daemon we started from
-/// one that was already serving somebody else.
+/// [`Daemon::connect_or_launch`] already knows it. A single "hosted" bool
+/// could not tell a daemon we started from one that was already serving
+/// somebody else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Ownership {
     /// Already answering when we probed. Someone else's — a CLI session's, or
@@ -90,13 +90,10 @@ async fn probe(client: &reqwest::Client) -> Probe {
 impl Daemon {
     /// A client for a daemon that is not there.
     ///
-    /// The app used to `expect` its way past a failed connection, so a port
-    /// 9887 held by another program, or a `gglib daemon run` that died on
-    /// startup, killed the process before `setup_app` had built a tray or
-    /// shown a window: gglib simply never appeared, and the reason was in a
-    /// log file. Coming up disconnected instead means the tray exists, reads
-    /// "not running", and offers Start gglib Service — which is the state that
-    /// affordance was added for.
+    /// A port 9887 held by another program, or a `gglib daemon run` that died
+    /// on startup, leaves the app coming up disconnected rather than exiting
+    /// before `setup_app` has built a tray or shown a window: the tray exists,
+    /// reads "not running", and offers Start gglib Service.
     ///
     /// Every call made through this fails until a daemon answers, which is
     /// exactly what the watcher reports as unreachable.

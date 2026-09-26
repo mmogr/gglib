@@ -1,9 +1,9 @@
 //! Application lifecycle and shutdown orchestration.
 //!
 //! Quit means quit. Close-to-tray is already the verb for "keep serving
-//! without a window", so an exit that silently left a daemon holding VRAM —
-//! with the tray icon gone and nothing on screen to say so — was one button
-//! doing another's job.
+//! without a window", so an exit that silently leaves a daemon holding VRAM —
+//! with the tray icon gone and nothing on screen to say so — would be one
+//! button doing another's job.
 //!
 //! What quitting ends is decided by [`crate::daemon::Ownership`]: one this app launched
 //! or hosts gets its ordered teardown (proxy drain, child shutdown, pidfile
@@ -46,8 +46,7 @@ pub(crate) fn is_shutting_down() -> bool {
 ///
 /// Prevent the first one, so cleanup gets a chance to run before the process
 /// goes away. Allow any later one: that is [`request_shutdown`]'s own
-/// `exit(0)` coming back around, and preventing it is precisely what left the
-/// app running with a dead embedded API server.
+/// `exit(0)` coming back around, and preventing it would strand the process.
 pub(crate) const fn should_prevent_exit(shutting_down: bool) -> bool {
     !shutting_down
 }
@@ -114,18 +113,16 @@ mod tests {
     }
 
     /// The second must not be. It is the `exit(0)` at the end of
-    /// `request_shutdown` coming back through the event loop, and preventing it
-    /// is the bug this guard exists for — the app stayed up with its embedded
-    /// API server already aborted, so every window's HTTP call failed.
+    /// `request_shutdown` coming back through the event loop, and preventing
+    /// it would strand the process.
     #[test]
     fn the_exit_we_asked_for_is_allowed_through() {
         assert!(!should_prevent_exit(true));
     }
 
-    /// A daemon this app started or hosts is this app's to end. The old rule
-    /// tore down only the in-process fallback, so the ordinary case — an
-    /// external daemon this app launched itself — survived a quit that had
-    /// just warned it was stopping the proxy.
+    /// A daemon this app started or hosts is this app's to end, and that
+    /// includes the ordinary case: an external daemon this app launched
+    /// itself.
     #[test]
     fn quitting_ends_the_daemon_this_app_started() {
         assert!(Ownership::Launched.ends_with_the_app());

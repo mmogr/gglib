@@ -1,12 +1,11 @@
 //! The agentic eval's proxy arm: a real `gglib-proxy`, started in-process just
 //! before that arm and stopped just after it.
 //!
-//! Every other arm posts to llama-server directly, so until this arm existed
-//! nothing the benchmark measured passed through the proxy — tool-call repair
-//! and the loop guard, the two things it is chosen for, had no regression
-//! evidence (#1047). This arm sends every turn through `gglib_proxy::serve`,
-//! bound to a free loopback port, in front of the model the eval already
-//! holds.
+//! Every other arm posts to llama-server directly; this one measures
+//! tool-call repair and the loop guard, the two things it is chosen for,
+//! through the proxy that applies them (#1047). It sends every turn through
+//! `gglib_proxy::serve`, bound to a free loopback port, in front of the model
+//! the eval already holds.
 //!
 //! What the proxy is given, and why:
 //!

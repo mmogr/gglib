@@ -1,10 +1,8 @@
 //! The span of `join` in which the slot is reserved and the lock is not.
 //!
-//! A second `impl` block carved off `connect.rs` because that file is at
-//! its size budget — the same answer `settings_validate.rs` and
-//! `stored_pairing.rs` are — and because the span is worth naming: between
-//! the reservation and the install, a `disconnect` may take the slot away,
-//! and everything here has to be written as though it will.
+//! A second `impl` block beside `connect.rs`'s, because the span is worth
+//! naming: between the reservation and the install, a `disconnect` may take
+//! the slot away, and everything here has to be written as though it will.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
@@ -32,8 +30,8 @@ impl RemoteOps {
     /// Everything from the dial to the install, with the slot already
     /// reserved.
     ///
-    /// Split out for one reason: it is the span in which the reservation is
-    /// held while the lock is not, and every way out of it has to give the
+    /// One function for one reason: it is the span in which the reservation
+    /// is held while the lock is not, and every way out of it has to give the
     /// slot back. One function with one caller means one place that does
     /// that, rather than a release on each of six error paths and a seventh
     /// added later without one.

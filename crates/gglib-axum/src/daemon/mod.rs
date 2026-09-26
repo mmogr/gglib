@@ -20,12 +20,6 @@ use crate::state::AppState;
 // Stays `pub` because `lib.rs` re-exports it — a re-export chain must be public
 // the whole way, and demoting this link is E0365. The lint tracks the chain
 // correctly; it only fires if the root re-export is missing.
-//
-// It did fire here once, and rightly: the line used to read
-// `pub use lock::{DaemonLock, LockError, LockInfo}`, and the other two are named
-// nowhere in the workspace. The lint pointed at those; the `pub` it offers to
-// demote covers the whole statement, so applying that fix took `DaemonLock` with
-// them. They are gone now, and the line is honest.
 pub use lock::DaemonLock;
 
 /// CORS origins the daemon always allows.
@@ -53,7 +47,7 @@ pub struct DaemonOptions {
     /// Directory with a built frontend to serve as an SPA. `None` — the only
     /// value anything in this workspace sets — means serve the dashboard
     /// compiled into this binary. Nothing sets it implicitly, so the working
-    /// directory can no longer decide what is served.
+    /// directory does not decide what is served.
     ///
     /// `Some` overrides the embed with a directory. Note that no CLI flag or
     /// env var reaches this today: it is settable only by constructing
@@ -109,8 +103,7 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 
     // 2. Orphan sweep. Only the daemon does this — it holds the lock, so any
     //    recorded llama-server pid is from a dead process, never a live
-    //    sibling's. (This used to live in the desktop app's startup, where it
-    //    killed servers a concurrently running CLI had just spawned.)
+    //    sibling's.
     if let Err(e) = gglib_runtime::pidfile::cleanup_orphaned_servers().await {
         warn!("orphan sweep at startup failed: {e}");
     }
@@ -143,11 +136,8 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     ));
 
     // Router. The dashboard is compiled in (see `crate::ui`); a directory is
-    // only ever an explicit override. This used to probe the *working
-    // directory* for `./web_ui` and friends, which meant a release tarball run
-    // from anywhere but its own extract directory silently served no
-    // dashboard — and because the daemon is a singleton, whichever client
-    // started it decided that for everyone.
+    // only ever an explicit override, never found by probing the working
+    // directory.
     let app = if let Some(dir) = opts.static_dir.clone() {
         info!(
             "serving dashboard from {} (explicit override)",
@@ -184,8 +174,8 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
         Err(e) => warn!("no local addr for the liveness watchdog: {e}"),
     }
 
-    // 5. The proxy belongs to the daemon now: honour autostart here, not in
-    //    the desktop app.
+    // 5. The proxy belongs to the daemon: honour autostart here, not in the
+    //    desktop app.
     match state.core.settings().get().await {
         Ok(settings) if settings.proxy_autostart == Some(true) => {
             let proxy = Arc::clone(&state.proxy);

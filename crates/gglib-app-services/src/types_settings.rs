@@ -1,10 +1,8 @@
 //! The settings UI's DTOs: what it reads, and the partial update it writes.
 //!
-//! A `#[path]` child of `types.rs`, split out because that file sits exactly
-//! on its ratchet baseline and the remote tunnel's settings have to go
-//! somewhere. Everything here is re-exported from `types`, so no import
-//! path changed. `scripts/check_settings_surfaces.sh` reads this file by
-//! name for the `double_option` guard.
+//! A `#[path]` child of `types.rs`, and everything here is re-exported from
+//! `types`. `scripts/check_settings_surfaces.sh` reads this file by name for
+//! the `double_option` guard.
 
 use gglib_core::LoopGuardMode;
 use serde::{Deserialize, Serialize};
@@ -46,15 +44,15 @@ pub struct AppSettings {
     // Proxy loop guard; `None` means the default, `note` (see
     // `gglib_core::Settings::loop_guard_mode`)
     pub loop_guard_mode: Option<LoopGuardMode>,
-    // Deprecated, for one release; superseded by `loop_guard_mode`
+    // Deprecated (#1052); superseded by `loop_guard_mode`
     pub proxy_loop_detection: Option<bool>,
     /// Whether a tool call failing schema validation is re-issued, with
     /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
     pub tool_call_repair: Option<bool>,
     /// Whether structured-output turns get their temperature capped when no
-    /// human chose one. Absent means on (see `gglib_core::Settings`). Was
-    /// write-only until the GUI grew a toggle — a toggle that saves but
-    /// cannot read back silently resets on every reopen.
+    /// human chose one. Absent means on (see `gglib_core::Settings`). Read
+    /// back here for the GUI's toggle: a toggle that saves but cannot read
+    /// back silently resets on every reopen.
     pub agentic_sampling: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,

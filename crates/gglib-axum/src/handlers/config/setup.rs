@@ -31,10 +31,6 @@ pub(crate) async fn status(State(state): State<AppState>) -> Result<Json<SetupSt
 /// Streams [`LlamaProgressEvent`] verbatim — one SSE event name per variant,
 /// the payload its JSON — exactly as [`update_llama`] streams [`BuildEvent`].
 /// The browser reads the payload's `type`; the event name is a convenience.
-///
-/// This route used to declare a private three-variant event type of its own
-/// and adapt a byte-counting callback into it, which is why it could report
-/// neither the phase nor the speed the runtime already knew.
 pub(crate) async fn install_llama(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {

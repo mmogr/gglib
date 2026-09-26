@@ -120,11 +120,11 @@ impl Settled {
     /// (ADR 0012, decision 2), and clearing it again would reopen the local
     /// proxy — `/mcp` included — for anything that adopted it in between.
     /// So it must not happen for a tunnel that never came up. Ahead of the
-    /// bind, as it used to be, every `modelpipe::serve` failure left the
-    /// machine authenticating with nothing to show for it and nothing said:
-    /// the error is the CLI's `?`, so `print_notice` — the one thing that
-    /// tells the operator the local door just locked, promised by
-    /// `docs/remote.md` "every time it runs" — never ran.
+    /// bind, every `modelpipe::serve` failure would leave the machine
+    /// authenticating with nothing to show for it and nothing said: the error
+    /// is the CLI's `?`, so `print_notice` — the one thing that tells the
+    /// operator the local door just locked, promised by `docs/remote.md`
+    /// "every time it switches remote access on" — would never run.
     ///
     /// The wait stays: the proxy's tracking policy reads settings through a
     /// cache, and handing out a ticket before the local door is locked would
@@ -133,7 +133,7 @@ impl Settled {
     /// tunnel whose ticket has not left this process.
     ///
     /// The cost of coming last is that
-    /// [`backend::refuse_if_gone`](super::backend::refuse_if_gone) now runs
+    /// [`backend::refuse_if_gone`](super::backend::refuse_if_gone) runs
     /// before this wait rather than after it, so on a first enable its answer
     /// can be a cache window old. That is the better half of the trade:
     /// asking it afterwards would keep the answer fresh to the last instant

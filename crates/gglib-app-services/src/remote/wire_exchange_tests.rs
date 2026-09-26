@@ -49,14 +49,8 @@ fn an_exchange_that_says_nothing_still_reads() {
     );
 }
 
-/// A client built against the old shape still gets a 200.
-///
-/// `keep_identity` asked for what every `enable` now does anyway, so the
-/// field is accepted and dropped rather than rejected: a desktop app or
-/// script that still sends it must not get a 422 for a word that stopped
-/// meaning anything. Both values are tested because both must be inert —
-/// `false` especially, since it used to mean "mint a throwaway identity"
-/// and must no longer be able to ask for one.
+/// A body that sends `keep_identity`, `true` or `false`, deserialises, and
+/// the request it becomes still has discovery on and `/mcp` off.
 #[test]
 fn a_body_that_still_sends_keep_identity_is_accepted_and_the_flag_ignored() {
     for sent in ["true", "false"] {

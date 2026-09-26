@@ -175,8 +175,8 @@ mod tests {
         serde_json::from_str(json).expect("parses")
     }
 
-    /// The whole defect in one assertion: a body with `remote` and no `model`
-    /// used to travel, arriving at the far proxy as `"model": ""`.
+    /// A body with `remote` and no `model` is refused here, rather than
+    /// arriving at the far proxy as `"model": ""`.
     #[test]
     fn a_remote_request_naming_no_model_is_refused_here() {
         let err = remote_model(&req(r#"{"port":9000,"messages":[],"remote":true}"#))

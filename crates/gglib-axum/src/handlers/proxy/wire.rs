@@ -1,9 +1,9 @@
 //! The proxy endpoints' request and response shapes, and their conversions.
 //!
-//! Split from the handlers so the resolution rules below — which are where the
-//! surprises live, since an omitted field means "use what is configured"
-//! rather than "use the compile-time default" — can be read and tested without
-//! the routing around them.
+//! Separate from the handlers so the resolution rules below — which are where
+//! the surprises live, since an omitted field means "use what is configured"
+//! rather than "use the compile-time default" — can be read and tested
+//! without the routing around them.
 
 use gglib_app_services::types::AppSettings;
 use gglib_core::server_config::{

@@ -2,7 +2,7 @@
 //!
 //! `start_at_login` registers the OS login item so the app (and with it the
 //! daemon it connects to or hosts) is simply there after a reboot.
-//! `proxy_autostart` is the daemon's job now — it brings the proxy up when
+//! `proxy_autostart` is the daemon's job — it brings the proxy up when
 //! it starts, whoever started it.
 //!
 //! Both operations are best-effort. Neither is worth failing a launch over:

@@ -1,11 +1,9 @@
 //! Arming the serve side: everything from the key to the armed pairing,
 //! with the slot already reserved.
 //!
-//! Split from `serve.rs` when that file reached its budget, along the seam
-//! `arm`'s own doc already named. `serve.rs` decides whether to arm and holds
-//! the reservation; this is the span in which the reservation is held while
-//! the lock is not. One function with one caller, so there is still one place
-//! that gives the slot back.
+//! `serve.rs` decides whether to arm and holds the reservation; this is the
+//! span in which the reservation is held while the lock is not. One function
+//! with one caller, so there is one place that gives the slot back.
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -33,7 +31,7 @@ impl RemoteOps {
     /// Everything from the key to the armed pairing, with the slot already
     /// reserved.
     ///
-    /// Split out for the reason `dial` is: it is the span in which the
+    /// One function for the reason `dial` is: it is the span in which the
     /// reservation is held while the lock is not, and one function with one
     /// caller means one place that gives the slot back.
     pub(super) async fn arm(

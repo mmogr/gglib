@@ -1,26 +1,16 @@
-//! One assembly of the domain-ops graph, shared by every GUI adapter.
+//! One assembly of the domain-ops graph.
 //!
-//! ## Why this module exists
-//!
-//! The Axum and Tauri adapters each need the same eight `*Ops` wired to the
-//! same shared infrastructure, and each had its own copy of that wiring — four
-//! copies in total once Tauri's `bootstrap`, `bootstrap_early` and
-//! `bootstrap_with` are counted. The copies had already drifted: they
-//! disagreed on construction *order*, which matters here, because the shared
-//! `ProcessManager` must be built before anything that drives models through
-//! it.
-//!
-//! [`build_service_graph`] is the single assembly. `gglib-app-services` owns
-//! every `*Ops` type, so it is where the knowledge of how they fit together
-//! belongs.
+//! [`build_service_graph`] wires every `*Ops` to the same shared
+//! infrastructure, in an order that matters: the shared `ProcessManager` is
+//! built before anything that drives models through it. `gglib-app-services`
+//! owns every `*Ops` type, so it is where the knowledge of how they fit
+//! together belongs.
 //!
 //! ## What stays with the adapter
 //!
-//! Only genuinely adapter-shaped concerns: the event emitter (SSE broadcaster
-//! vs Tauri handle), server-event sink, HTTP client, semaphores, and each
-//! context's own extra fields. `AxumContext` and `TauriContext` keep their
-//! existing field names and are populated *from* an [`AppServices`], so no
-//! handler call site changes.
+//! Only genuinely adapter-shaped concerns: the event emitter, server-event
+//! sink, HTTP client, the agent-loop semaphore, and the context's own extra
+//! fields. `AxumContext` is populated *from* an [`AppServices`].
 //!
 //! ## Ordering invariant
 //!
@@ -102,10 +92,8 @@ pub struct ServiceGraphParams {
     pub device_keys_path: Option<PathBuf>,
 }
 
-/// The domain-ops graph both GUI adapters share.
-///
-/// `AxumContext` and `TauriContext` are populated from one of these; they add
-/// only their own adapter-specific fields on top.
+/// The domain-ops graph [`build_service_graph`] assembles; `AxumContext` is
+/// populated from one.
 pub struct AppServices {
     /// Model catalogue operations.
     pub models: Arc<ModelOps>,
@@ -161,9 +149,8 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         device_keys_path,
     } = params;
 
-    // Resolved here, once, so both adapters honour `Settings.llama_base_port`.
-    // Previously only the GUI start path consulted it and the proxy path did
-    // not, which is how the two ended up on different ports.
+    // Resolved here, once, and handed to the one `ProcessManager` below, so
+    // the GUI start path and the proxy path cannot end up on different ports.
     let settings = core.settings().get().await?;
     let (base_port, base_port_source) =
         crate::proxy_port::resolve_llama_base_port(base_port, &settings)
@@ -225,7 +212,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
 
     let models = Arc::new(ModelOps::new(ModelDeps {
         core: Arc::clone(&core),
-        // The shared runtime, not a standalone runner: `ServerOps` now starts
+        // The shared runtime, not a standalone runner: `ServerOps` starts
         // models through it, so it is the only registry that knows what is
         // actually running.
         runtime: Arc::clone(&runtime),

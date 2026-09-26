@@ -1,9 +1,7 @@
 //! The proxy crash watcher.
 //!
-//! Split from `bootstrap.rs`, which is at its file-size budget, when the
-//! remote tunnel joined the context it assembles. One job: turn the
-//! supervisor's exit channel into a `ProxyCrashed` event on the SSE stream,
-//! with no polling.
+//! One job: turn the supervisor's exit channel into a `ProxyCrashed` event
+//! on the SSE stream, with no polling.
 
 use std::sync::Arc;
 

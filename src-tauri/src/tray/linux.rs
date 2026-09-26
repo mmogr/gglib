@@ -2,14 +2,13 @@
 //!
 //! Tauri's tray goes through `libappindicator`, which registers its item with
 //! `ItemIsMenu` and delivers no click events at all: `on_tray_icon_event` never
-//! fires and `TrayIcon::rect` is always `None`. That is why the panel could
-//! only be opened from a menu entry, and why it had no icon position to anchor
-//! to.
+//! fires and `TrayIcon::rect` is always `None`. Through it the panel would
+//! open only from a menu entry, with no icon position to anchor to.
 //!
-//! Talking SNI directly fixes both. `Activate` carries the screen coordinates
-//! of the click — the spec calls them "a hint to the item where to show
-//! eventual windows" — which is exactly what [`super::layer_shell`] needs to
-//! put the panel beside the icon.
+//! Talking SNI directly gives both the click and a position. `Activate`
+//! carries the screen coordinates of the click — the spec calls them "a hint
+//! to the item where to show eventual windows" — which is exactly what
+//! [`super::layer_shell`] needs to put the panel beside the icon.
 //!
 //! The menu is [`super::items::ITEMS`] and the routing is
 //! [`super::handlers::dispatch`], both shared with the `muda` backend, so the

@@ -6,19 +6,15 @@ use crate::app::AppState;
 use crate::menu::state_sync;
 use tauri::AppHandle;
 
-/// Where the frontend reaches the backend API.
-///
-/// The name predates the daemon: the WebView used to talk to an embedded
-/// server on an ephemeral port with a bearer token. It now points at the
-/// daemon's fixed loopback port, which is unauthenticated — the token field
-/// went with the embedded server, having been an empty string ever since.
+/// Where the frontend reaches the backend API: the daemon's fixed loopback
+/// port, which is unauthenticated, so there is no token.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct ApiInfo {
     /// Port of the daemon's management API.
     pub port: u16,
 }
 
-/// Get backend API info (port and auth token).
+/// Get backend API info (its port).
 ///
 /// The frontend calls this once at startup to discover where the API lives.
 #[tauri::command]
@@ -64,9 +60,8 @@ pub(crate) async fn set_selected_model(
 /// **Ask for a poll**, because `sync_all_state` paints from
 /// `AppState::snapshot` and only `daemon::watch` writes it. Painting without
 /// asking redraws from what was true *before* the action, and it stays wrong
-/// until the next tick. The Rust-side callers were all converted to
-/// `Refresh::now` when the watcher landed; this is the frontend's equivalent
-/// and was missed.
+/// until the next tick. This is the frontend's equivalent of the Rust-side
+/// callers' `Refresh::now`.
 ///
 /// **Then paint anyway**, because not everything the menu reads is in that
 /// snapshot — `llama_installed` is a filesystem check, and an install changes

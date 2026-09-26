@@ -91,12 +91,13 @@ pub async fn run_tune(
     // ── Load the model once — every candidate only varies per-request
     // sampling parameters, never the loaded llama-server process. ──────────
     let settings = deps.settings_repo.load().await.ok();
-    // Passed through, not resolved. `.unwrap_or(DEFAULT_CONTEXT_SIZE)` turned
-    // "the user set nothing" into "the user set 4096" and sent it as `num_ctx`
-    // — the explicit rung — so the fit below it was computed and discarded on
-    // every benchmark launch, and the resident it produced disagreed with the
-    // one the proxy wanted. They share a `ProcessManager`, so that disagreement
-    // is an evict and a relaunch, both ways.
+    // Passed through, not resolved. `.unwrap_or(DEFAULT_CONTEXT_SIZE)` here
+    // would turn "the user set nothing" into "the user set 4096" and send it
+    // as `num_ctx` — the explicit rung — so the fit below it would be computed
+    // and discarded on every benchmark launch, and the resident it produced
+    // would disagree with the one the proxy wants. They share a
+    // `ProcessManager`, so that disagreement is an evict and a relaunch, both
+    // ways.
     let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
     // The lease is held for the whole sweep: a candidate measured across a
     // model swap would be measuring the swap.
@@ -680,8 +681,8 @@ const fn should_retry(result: &TuneTaskResult, retries: u32) -> bool {
 /// Small on purpose. This exists so a single transient transport failure does
 /// not delete a run from one arm and silently skew the comparison — not so the
 /// eval can grind through a genuinely dead upstream. An arm whose every run is
-/// unmeasured still aborts the eval, and does so three times slower now, which
-/// is the price of not mistaking a blip for a corpse.
+/// unmeasured still aborts the eval, after three attempts at each run rather
+/// than one, which is the price of not mistaking a blip for a corpse.
 const TRANSPORT_RETRY_ATTEMPTS: u32 = 2;
 
 /// One attempt at a task. See [`run_task_with_llm`], which owns the retry.
@@ -714,10 +715,10 @@ where
     let agent_loop = AgentLoop::build(llm, tool_executor, None);
 
     // The agent's own capacity, not a smaller local one. `TextDelta` arrives
-    // per fragment, so at 64 this consumer became the generator's rate limit —
-    // the eval was measuring its own reader as much as the model, and the
-    // measurement got worse the more the model generated, which is precisely
-    // backwards for the runs worth understanding.
+    // per fragment, so at 64 this consumer would be the generator's rate
+    // limit — the eval would measure its own reader as much as the model, and
+    // the measurement would get worse the more the model generated, which is
+    // precisely backwards for the runs worth understanding.
     let (event_tx, mut event_rx) =
         tokio::sync::mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let agent_config = AgentConfig::default();
@@ -847,7 +848,7 @@ where
 ///
 /// Tasks the guards aborted count towards both sides of the ratio: their
 /// tokens survive the abort, so a result set that loops on half its tasks is
-/// no longer measured only on the half that behaved.
+/// measured on all of them, not only on the half that behaved.
 pub(crate) fn throughput_tps(results: &[TuneTaskResult]) -> Option<f64> {
     let tokens: u64 = results.iter().filter_map(|r| r.completion_tokens).sum();
     let millis: u64 = results
@@ -1057,10 +1058,10 @@ mod tests {
         }
     }
 
-    /// The defect this axis was rebuilt around: a task that finished before a
-    /// second tool batch existed cannot have looped, so counting it as
-    /// "avoided a loop" inflates the score with tasks that never took the
-    /// risk. The old code scored this set `2/3 = 0.667`.
+    /// A task that finished before a second tool batch existed cannot have
+    /// looped, so counting it as "avoided a loop" would inflate the score with
+    /// tasks that never took the risk: counting all three scores this set
+    /// `2/3 = 0.667`.
     #[test]
     fn loop_avoidance_ignores_tasks_that_could_not_loop() {
         let mut answered_directly = task_result(1.0, true, false);
@@ -1116,10 +1117,9 @@ mod tests {
         }
     }
 
-    /// The regression test for the reported artifact: a bare llama-server arm
-    /// that generated to its token cap on every task, took one batch, and
-    /// never iterated again scored a perfect 1.000 on an axis it had never
-    /// been measured against.
+    /// A bare llama-server arm that generates to its token cap on every task,
+    /// takes one batch, and never iterates again has not been measured on this
+    /// axis, and must not score a perfect 1.000 on it.
     #[test]
     fn a_suite_that_never_risked_a_loop_reports_no_loop_avoidance() {
         let results: Vec<_> = (0..9)

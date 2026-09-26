@@ -33,7 +33,6 @@ use gglib_core::paths::{data_root, database_path, resolve_models_dir, resource_r
 /// Application context for the Axum adapter.
 ///
 /// This struct holds all initialized services for the web server.
-/// It mirrors `TauriContext` but is tailored for the Axum web adapter.
 pub struct AxumContext {
     // 7 domain ops
     pub models: Arc<ModelOps>,

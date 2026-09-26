@@ -1,7 +1,7 @@
 //! Finding the `gglib` CLI and launching a detached `gglib daemon run`.
 //!
-//! Split out of [`super`] so the binary-name resolution has somewhere to be
-//! tested, and so the parent module stays inside the file-size ratchet.
+//! Separate from [`super`] so the binary-name resolution has somewhere to be
+//! tested.
 //!
 //! The app prefers an external daemon over hosting one in-process: it survives
 //! a crash of this app, and it is the same process the CLI would have started.
@@ -80,10 +80,10 @@ fn daemon_log_file() -> std::io::Result<std::fs::File> {
 mod tests {
     use super::*;
 
-    /// The name must carry the platform's executable suffix. Joining the bare
-    /// string `"gglib"` — which both lookups above used to do — cannot match a
-    /// real file on Windows, so `spawn_external_daemon` always failed there and
-    /// the app fell back to an in-process daemon that dies with the window.
+    /// The name must carry the platform's executable suffix. The bare string
+    /// `"gglib"` cannot match a real file on Windows, so `spawn_external_daemon`
+    /// would always fail there and the app fall back to an in-process daemon
+    /// that dies with the window.
     #[test]
     fn cli_binary_name_carries_the_platform_exe_suffix() {
         let name = cli_binary_name();

@@ -21,7 +21,7 @@ use crate::tray::{handlers, ids, window};
 
 /// The built menu items, keyed by id so `sync` can find them again.
 ///
-/// A map rather than named fields because the item list lives in `items` now;
+/// A map rather than named fields because the item list lives in `items`;
 /// naming them here would be a second copy of the same structure.
 pub(super) struct TrayMenu {
     items: HashMap<&'static str, MenuItem<Wry>>,

@@ -145,10 +145,9 @@ fn open_preferences(app: &AppHandle) {
 
 /// Confirm before quitting takes a running service with it, then exit.
 ///
-/// The warning describes what will actually happen rather than assuming it.
-/// It used to claim quitting stopped the proxy, which stopped being true when
-/// the daemon took ownership of the runtime — against an adopted daemon there
-/// is nothing to warn about, because it keeps serving.
+/// The warning describes what will actually happen rather than assuming it:
+/// against an adopted daemon there is nothing to warn about, because it keeps
+/// serving.
 fn confirm_quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {

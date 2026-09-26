@@ -28,10 +28,8 @@ use tokio_stream as _;
 use tracing as _;
 use tracing_subscriber as _; // Used by main.rs binary
 
-// Crate-internal: the re-export list below is the whole public surface. Only
-// `daemon` had consumers naming it by module path, and the three items they
-// wanted are re-exported instead — which keeps the 35 `pub mod` under
-// `handlers` auditable rather than reachable from anywhere in the workspace.
+// Crate-internal: the re-export list below is the whole public surface,
+// and nothing under `handlers` is reachable from outside this crate.
 pub(crate) mod access;
 pub(crate) mod bootstrap;
 pub(crate) mod chat_api;

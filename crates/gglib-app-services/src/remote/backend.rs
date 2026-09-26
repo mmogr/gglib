@@ -4,10 +4,9 @@
 //! [`BackendUrl::at`], which turns a *bind* address into one
 //! `modelpipe::serve` will dial — rewriting a wildcard to the loopback
 //! literal of its own family and carrying the permission a LAN address
-//! needs. This file used to do that itself, in a struct that mirrored
-//! modelpipe's own locality rule in order to predict its verdict; the rule
-//! now travels with the URL, so what is left here is the other half: taking
-//! the tunnel down when that address stops meaning the proxy.
+//! needs. The locality rule travels with the URL, so this file does the
+//! other half: taking the tunnel down when that address stops meaning the
+//! proxy.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -222,10 +221,9 @@ fn still_fronting(status: &ProxyStatus, backend: &BackendUrl) -> bool {
         // though it is running. The comparison goes through the same
         // rewrite `enable` used, so a proxy that rebound the wildcard is
         // recognised as the same backend rather than as a new one. The
-        // whole value is compared rather than the URL string it used to be,
-        // which is simpler and not a behaviour change: `at` derives the
-        // permission from the address, so no two values can agree on the URL
-        // and differ on the permission.
+        // whole value is compared: `at` derives the permission from the
+        // address, so no two values can agree on the URL and differ on the
+        // permission.
         ProxyStatus::Running { address } => BackendUrl::at(*address) == *backend,
         // `POST /api/proxy/stop` publishes the first and a proxy task that
         // fell over publishes the second. Both are equally not ours any

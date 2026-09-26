@@ -33,11 +33,11 @@ pub struct ServerDeps {
     pub core: Arc<AppCore>,
     /// The proxy the GUI drives models through.
     ///
-    /// Replaces the former direct `ProcessRunner`: starting a model from the
-    /// GUI now goes through the same pipeline as `gglib proxy` and `gglib
-    /// serve`, so it gains the dashboard, cache lifecycle and request
-    /// normalization those already had, and can no longer contend with the
-    /// proxy for the GPU by running a second llama-server alongside it.
+    /// Starting a model from the GUI goes through the same pipeline as
+    /// `gglib proxy` and `gglib serve`, so it has the dashboard, cache
+    /// lifecycle and request normalization those have, and cannot contend
+    /// with the proxy for the GPU by running a second llama-server alongside
+    /// it.
     pub proxy: Arc<ProxyOps>,
     pub emitter: Arc<dyn AppEventEmitter>,
     pub server_events: Arc<dyn gglib_core::events::ServerEvents>,
@@ -163,8 +163,8 @@ impl ServerOps {
     ///
     /// Cache sizing is deliberately absent: the process manager resolves the
     /// RAM budget and KV cache types at spawn, against live system memory and
-    /// the model's actual KV footprint. This path used to duplicate that
-    /// arithmetic and could only drift from it.
+    /// the model's actual KV footprint; a copy of that arithmetic here could
+    /// only drift from it.
     fn launch_overrides(
         model: &Model,
         request: &StartServerRequest,

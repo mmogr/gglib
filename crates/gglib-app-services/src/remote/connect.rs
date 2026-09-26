@@ -59,9 +59,9 @@ impl RemoteOps {
     /// only the ticket — or nothing, since the ticket is part of the record.
     ///
     /// Without a code, the dial is admitted only when the stored pairing
-    /// names *that* machine. "Some key is stored" was the old test, and it
-    /// admitted a bare ticket for machine B on the strength of machine A's
-    /// key: connected, `status` reporting a pairing, and every request 401.
+    /// names *that* machine, not merely when some key is stored: a bare
+    /// ticket for machine B admitted on the strength of machine A's key would
+    /// connect, have `status` report a pairing, and answer every request 401.
     ///
     /// The connect side is *reserved* rather than held for the length of
     /// the dial, so `status` and `disconnect` answer throughout.
@@ -113,11 +113,11 @@ impl RemoteOps {
             ));
         }
 
-        // Reserve the slot, then let the lock go for the dial. Holding it
-        // across `modelpipe::connect` is what made `gglib remote status`
-        // blow the five seconds the CLI gives it, and `gglib remote
-        // disconnect` — the one command that ends a hanging join — queue
-        // behind the join it was cancelling.
+        // Reserve the slot, then let the lock go for the dial. Held across
+        // `modelpipe::connect`, it would make `gglib remote status` blow the
+        // five seconds the CLI gives it, and `gglib remote disconnect` — the
+        // one command that ends a hanging join — queue behind the join it was
+        // cancelling.
         let generation = self.connect_generation.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = self
             .live_connect
@@ -139,9 +139,8 @@ impl RemoteOps {
     /// pairing stays.
     ///
     /// Also ends a `join` that is still dialling, which is the case it
-    /// exists for and could not reach: it waited on the same mutex the dial
-    /// was holding, so the command for cancelling a hanging join hung
-    /// behind it.
+    /// exists for: the dial holds a reservation, not the mutex, so this does
+    /// not wait behind it.
     ///
     /// # Errors
     ///
@@ -257,13 +256,12 @@ pub(super) fn cancelled() -> GuiError {
 /// A `ConnectError` as the person who typed `join` needs to hear it.
 fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
     match e {
-        // One producer left at modelpipe 0.3.0, and it is not a machine
-        // that is off: `transport::addr_from`, for a ticket whose endpoint
-        // id is not a curve point. A peer that is merely *absent* is no
-        // longer reported here at all — `connect` now returns as soon as
-        // the local port is bound, and waiting for the machine is
-        // `connect_open`'s, which is where that sentence went. iroh defers
-        // the curve check further still, so nothing produces this today;
+        // One producer at modelpipe 0.7.0, and it is not a machine that is
+        // off: `transport::addr_from`, for a ticket whose endpoint id is not
+        // a curve point. A peer that is merely *absent* is not reported here
+        // at all — `connect` returns as soon as the local port is bound, and
+        // waiting for the machine is `connect_open`'s. iroh defers the curve
+        // check further still, so nothing produces this today;
         // the arm stays because that is iroh's choice to revisit, not this
         // repo's, and `ConnectError` is `#[non_exhaustive]`.
         //

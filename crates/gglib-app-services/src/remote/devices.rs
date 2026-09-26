@@ -161,8 +161,8 @@ impl RemoteOps {
         // pairs, sees a green checkmark, and is refused on its first real
         // request, the least debuggable failure this has and the one
         // `offer`'s ordering exists to prevent from the other end. Withdrawn
-        // last, as it was, it was also skipped whenever a store write failed,
-        // which left the code live for the rest of its two minutes.
+        // last, it would also be skipped whenever a store write failed,
+        // leaving the code live for the rest of its two minutes.
         if let Some(pending) = self.gateway.withdraw_pairing_for(device) {
             info!(device = %pending, "withdrew the open invite for a device being forgotten");
         }

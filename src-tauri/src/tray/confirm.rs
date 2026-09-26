@@ -3,9 +3,9 @@
 //! Two menu entries can end an endpoint other programs are pointed at — Quit
 //! and Stop gglib Service — so the sentence describing what is about to be
 //! lost is derived once, here, from the same snapshot the icon is drawn from.
-//! Deriving it rather than hardcoding it is the point: the warning used to say
-//! quitting stopped the proxy, which stopped being true when the daemon took
-//! ownership of the runtime, and nothing made the two disagree loudly.
+//! Deriving it rather than hardcoding it is the point: a hardcoded warning
+//! can go false silently, and one derived from the snapshot cannot disagree
+//! with the icon.
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -77,8 +77,8 @@ pub(super) fn stop_service(app: &AppHandle, snap: &DaemonSnapshot) -> bool {
 /// Tell the user an action they asked for did not happen.
 ///
 /// The tray has no toast host and, with close-to-tray on, often no window
-/// either — so a failed menu item used to be an `error!` in a log nobody was
-/// reading and a menu that appeared to do nothing at all. The daemon's own
+/// either — so without this a failed menu item is an `error!` in a log nobody
+/// is reading and a menu that appears to do nothing at all. The daemon's own
 /// messages are worth showing verbatim: "Port 8080 is already in use … Stop
 /// it, or change the proxy port in Settings" is the whole answer.
 ///
@@ -139,8 +139,7 @@ mod tests {
         assert_eq!(at_stake(&snap).as_deref(), Some("the proxy on :8080"));
     }
 
-    /// A model held in VRAM is worth naming even with nothing listening — it
-    /// is the case the tray could not previously see at all.
+    /// A model held in VRAM is worth naming even with nothing listening.
     #[test]
     fn resident_models_count_on_their_own() {
         let snap = snapshot(json!({"running": false}), json!([{"model_id": 1}]));

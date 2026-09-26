@@ -48,7 +48,7 @@ pub(super) async fn rotation_poll(
         //
         // Devices are untouched by this: they hold their own keys, and what
         // rotates is only what the edge presents to the backend in their
-        // place. Rotating the proxy's key no longer un-pairs anybody.
+        // place. Rotating the proxy's key un-pairs nobody.
         match handle.set_backend_auth(Some(next.clone())) {
             Ok(()) => {
                 info!("remote tunnel now presents the rotated API key to the proxy");

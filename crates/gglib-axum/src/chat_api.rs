@@ -543,7 +543,7 @@ pub(crate) async fn proxy_chat(
         // this path, stage 5b included. A level named here reaches a template
         // that may ignore it in silence.
         //
-        // That is why `ModelDetailDto` now carries the template's
+        // That is why `ModelDetailDto` carries the template's
         // `reasoning_effort` support: the gating this path cannot do server-side
         // is done by the client that decides whether to offer the control at
         // all. Moving this endpoint onto the pipeline is the real fix and is

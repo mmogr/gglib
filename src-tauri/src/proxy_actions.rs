@@ -57,9 +57,8 @@ pub(crate) async fn stop(app: &AppHandle) -> Result<(), String> {
 
 /// Put the endpoint URL on the clipboard.
 ///
-/// Shared by the tray menu and the macOS application menu, which had a copy of
-/// this each — including a copy each of a default port to fall back on. Both
-/// surfaces disable the action while the proxy is stopped, so there is nothing
+/// Shared by the tray menu and the macOS application menu. Both surfaces
+/// disable the action while the proxy is stopped, so there is no default port
 /// to fall back to and the snapshot is the only source of the port.
 ///
 /// Goes through the frontend because clipboard access is a webview capability.

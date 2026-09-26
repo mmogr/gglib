@@ -1,9 +1,8 @@
 //! Keeping the app's picture of the daemon true.
 //!
-//! Nothing in this process used to ask the daemon anything. Proxy state was
-//! whatever the tray menu had last done itself, so a proxy brought up by
-//! `proxy_autostart` — the daemon's job since the daemon consolidation — or by
-//! the CLI, or by the window, left the tray permanently wrong.
+//! A proxy can be brought up by `proxy_autostart` — the daemon's job — by
+//! the CLI, or by the window, so the app's picture comes from asking the
+//! daemon, never from what the tray menu last did itself.
 //!
 //! One task polls, and it is the **only** writer of [`DaemonSnapshot`]. That
 //! matters: an optimistic write next to a poll is a lost update waiting to
@@ -65,8 +64,8 @@ impl Refresh {
 /// Start watching the daemon, repainting every surface whenever it changes.
 ///
 /// Polls once immediately so the first paint shows the daemon's real state
-/// rather than the struct defaults — which is what used to leave a launch with
-/// `proxy_autostart` on reading "proxy stopped".
+/// rather than the struct defaults, which read "proxy stopped" on a launch
+/// with `proxy_autostart` on.
 pub(crate) fn spawn(app: &AppHandle) {
     let app = app.clone();
 

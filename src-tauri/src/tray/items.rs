@@ -4,9 +4,6 @@
 //! Linux — and they share no menu model, so the list itself is the only thing
 //! that can keep them in step. Order, labels and the enabled rule live here
 //! once; each backend only knows how to draw an [`Item`].
-//!
-//! The distro tables in `gglib-core` are the cautionary tale: four copies of
-//! the same knowledge drifted apart until three of them were wrong.
 
 use crate::daemon::DaemonSnapshot;
 use crate::tray::ids;

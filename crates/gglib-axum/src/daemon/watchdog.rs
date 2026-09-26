@@ -5,8 +5,8 @@
 //! — TCP connects succeed, so nothing looks dead from outside — while no
 //! request is ever serviced. That state blocks graceful `daemon stop` (the
 //! stop endpoint is HTTP), blocks a replacement daemon (the port is held), and
-//! defeats `ensure_daemon` (a connect is its health signal). The only way out
-//! was a manual `kill -9`.
+//! defeats `ensure_daemon` (a connect is its health signal). Without this
+//! watchdog the only way out is a manual `kill -9`.
 //!
 //! The watchdog turns that terminal state into a restart: it probes the
 //! daemon's own `/health` from outside the runtime, and after
@@ -184,12 +184,10 @@ mod tests {
     /// These tests assert a behavioural property — a healthy server passes,
     /// a silent one does not — never a latency one. The timeout is scaffolding.
     ///
-    /// Five seconds was not scaffolding enough. Under a full-workspace
-    /// `cargo test` the loopback connect alone was measured at **4.0s** on an
-    /// otherwise-healthy machine, leaving the read almost no budget and making
-    /// this fail in CI while passing whenever the crate was tested alone. The
-    /// delay is *before* the request is even written, which is why a readiness
-    /// handshake and a full request drain both failed to fix it.
+    /// Five seconds is not scaffolding enough: under a full-workspace
+    /// `cargo test` the loopback connect alone can take most of it, *before*
+    /// the request is even written, so no readiness handshake or request
+    /// drain helps (#820).
     ///
     /// The product's own [`PROBE_TIMEOUT`] stays at five seconds: that is a
     /// real decision about how long a wedged daemon may hide, and a test's

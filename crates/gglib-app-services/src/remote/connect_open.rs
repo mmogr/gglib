@@ -179,8 +179,8 @@ fn unreached(why: Unreached) -> GuiError {
 /// the port down with the key already stored.
 ///
 /// Nor can the code be presented before the far machine is reached: `pair`
-/// connects, waits, and only then exchanges. That ordering was gglib's to
-/// keep while gglib redeemed the code itself, and it is modelpipe's now.
+/// connects, waits, and only then exchanges. That ordering is modelpipe's
+/// to keep.
 pub(super) async fn open(
     pairing: &PairingString,
     request: &JoinRequest,

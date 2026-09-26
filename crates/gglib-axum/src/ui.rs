@@ -1,15 +1,14 @@
 //! The dashboard, compiled into the binary.
 //!
-//! The daemon used to find its frontend by probing `./web_ui/dist`, `./dist`,
-//! `./web_ui/assets` and `./web_ui` — all relative to the **working
-//! directory**. A release tarball extracted to `~/bin` and run from anywhere
-//! else therefore served the API with no dashboard and no diagnostic. Worse,
-//! the daemon is a singleton behind [`crate::DaemonLock`]: if the desktop app
-//! started it (working directory `/` when launched from Finder), the dashboard
-//! was off for every later client too, permanently.
+//! The daemon does not look for its frontend relative to the **working
+//! directory**. A frontend found that way would be missing whenever a
+//! release tarball runs from anywhere but its own directory, and the daemon
+//! is a singleton behind [`crate::DaemonLock`]: whichever client started it
+//! — the desktop app launched from Finder runs in `/` — would decide for
+//! every later client whether there is a dashboard.
 //!
 //! Compiling the assets in removes the question. It also makes the two
-//! binaries symmetric — `gglib-app` already embeds this exact Vite output via
+//! binaries symmetric — `gglib-app` embeds this exact Vite output via
 //! Tauri's `frontendDist` and `custom-protocol`.
 //!
 //! What is lost against `tower_http::services::ServeDir`, and why it is
@@ -98,8 +97,8 @@ async fn embedded_handler<E: RustEmbed>(request: Request) -> Response {
 
 /// Resolve one request against an embedded asset set.
 ///
-/// Split from the handler so it is callable as a plain function from tests —
-/// no runtime, no `AppState`, no bootstrap.
+/// Separate from the handler so it is callable as a plain function from
+/// tests — no runtime, no `AppState`, no bootstrap.
 fn respond<E: RustEmbed>(path: &str, headers: &HeaderMap) -> Response {
     let rel = path.trim_start_matches('/');
 
@@ -124,10 +123,9 @@ fn respond<E: RustEmbed>(path: &str, headers: &HeaderMap) -> Response {
     // success and then fails parsing the shell as JSON, which reports a
     // deserialisation error instead of "no such route".
     //
-    // The directory-backed router has always had this shape, but it used to be
-    // reached only when the working-directory probe happened to find `web_ui`;
-    // now the embedded router is unconditional, so what was rare became
-    // universal. Hence the guard here rather than in the frontend.
+    // Every daemon that carries a dashboard and is given no directory serves
+    // through this router, so this path is the common one. Hence the guard
+    // here rather than in the frontend.
     if rel == "api" || rel.starts_with("api/") {
         return StatusCode::NOT_FOUND.into_response();
     }
