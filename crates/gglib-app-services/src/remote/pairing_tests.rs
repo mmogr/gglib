@@ -120,6 +120,6 @@ fn the_fake_keeps_the_first_ending_as_modelpipe_does() {
 /// endpoint before the edge locks that endpoint out.
 #[test]
 fn the_code_lives_two_minutes_and_locks_an_endpoint_out_after_three_wrong_codes() {
-    assert_eq!(PAIRING_TTL, Duration::from_secs(120));
+    assert_eq!(PAIRING_TTL, Duration::from_mins(2));
     assert_eq!(MAX_ATTEMPTS_AT_EDGE.get(), 3);
 }

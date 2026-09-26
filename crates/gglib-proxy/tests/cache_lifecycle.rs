@@ -51,14 +51,14 @@ async fn stale_slot_file_skips_restore_and_fails_open() {
     let bin_path = slot_bin_path(&slot_dir, 1, session_id);
     std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
     std::fs::write(&bin_path, b"fake kv state").unwrap();
-    let stale_mtime = SystemTime::now() - Duration::from_secs(3600);
+    let stale_mtime = SystemTime::now() - Duration::from_hours(1);
     std::fs::File::open(&bin_path)
         .unwrap()
         .set_modified(stale_mtime)
         .unwrap();
 
     let response = Client::new()
-        .post(format!("{}/v1/chat/completions", proxy_base))
+        .post(format!("{proxy_base}/v1/chat/completions"))
         .header("X-Gglib-Session-Id", session_id)
         .json(&json!({
             "model": "test-model",
@@ -90,8 +90,7 @@ async fn stale_slot_file_skips_restore_and_fails_open() {
     assert_eq!(
         actions,
         vec![1, 2],
-        "expected generate→save only (no restore `0` — the file was skipped as stale), got: {:?}",
-        actions
+        "expected generate→save only (no restore `0` — the file was skipped as stale), got: {actions:?}"
     );
 
     proxy_cancel.cancel();

@@ -141,7 +141,7 @@ pub(crate) async fn run_repl_with_history(
         let ed = Arc::clone(&editor);
         let line = tokio::task::spawn_blocking(move || {
             ed.lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .readline("You: ")
         })
         .await?;

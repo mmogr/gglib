@@ -281,7 +281,7 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
         run_id: i64,
     ) -> Result<i64, RepositoryError> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        let was_truncated: i64 = if result.was_truncated { 1 } else { 0 };
+        let was_truncated: i64 = i64::from(result.was_truncated);
 
         let mut tx = self
             .pool
@@ -528,7 +528,7 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
         let task_results_json = serde_json::to_string(&result.task_results)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
-        let pruned: i64 = if result.pruned { 1 } else { 0 };
+        let pruned: i64 = i64::from(result.pruned);
 
         let rec = sqlx::query(
             "INSERT INTO benchmark_tune_results

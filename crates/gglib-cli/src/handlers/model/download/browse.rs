@@ -1,6 +1,6 @@
-//! Browse handler for HuggingFace Hub.
+//! Browse handler for `HuggingFace` Hub.
 //!
-//! This command doesn't require AppCore - it's pure HF API calls.
+//! This command doesn't require `AppCore` - it's pure HF API calls.
 
 use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
@@ -8,7 +8,7 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 
 /// Execute the browse command.
 ///
-/// Browses popular/recent/trending GGUF models on HuggingFace Hub.
+/// Browses popular/recent/trending GGUF models on `HuggingFace` Hub.
 /// No database access required.
 pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) -> Result<()> {
     let sort_param = match category.as_str() {
@@ -18,13 +18,13 @@ pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) 
         _ => "downloads",
     };
 
-    println!("🌐 Browsing {} GGUF models...", category);
+    println!("🌐 Browsing {category} GGUF models...");
 
     let client = DefaultHfClient::new(&HfClientConfig::default());
 
     // Search for models with GGUF-related tags
     let search_query = if let Some(ref model_size) = size {
-        format!("gguf {}", model_size)
+        format!("gguf {model_size}")
     } else {
         "gguf".to_string()
     };
@@ -44,10 +44,10 @@ pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) 
     let response = client
         .search(&options)
         .await
-        .map_err(|e| anyhow!("Search failed: {}", e))?;
+        .map_err(|e| anyhow!("Search failed: {e}"))?;
 
     if response.items.is_empty() {
-        println!("No {} models found.", category);
+        println!("No {category} models found.");
         return Ok(());
     }
 
@@ -77,9 +77,9 @@ pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) 
             let short_desc = if desc.len() > 100 {
                 format!("{}...", &desc[..97])
             } else {
-                desc.to_string()
+                desc.clone()
             };
-            println!("    {}", short_desc);
+            println!("    {short_desc}");
         }
 
         println!();

@@ -8,7 +8,7 @@ use gglib_runtime::llama::{
 use tauri::AppHandle;
 use tokio::sync::mpsc;
 
-/// Response for check_llama_status command.
+/// Response for `check_llama_status` command.
 #[derive(serde::Serialize)]
 pub(crate) struct LlamaStatus {
     pub installed: bool,
@@ -32,7 +32,7 @@ pub(crate) fn check_llama_status() -> Result<LlamaStatus, String> {
 
 /// Install llama.cpp by downloading pre-built binaries.
 ///
-/// The WebView receives [`LlamaProgressEvent`] verbatim on
+/// The `WebView` receives [`LlamaProgressEvent`] verbatim on
 /// `llama-install-progress` — byte for byte the payload the SSE route streams,
 /// so both transports render from one type. The pipeline says which phase it
 /// is in and how fast it is going, so this command only forwards.

@@ -264,7 +264,7 @@ mod tests {
     /// A foreign request must be refused without the catalog ever being
     /// consulted, proving it short-circuits ahead of the admission machinery
     /// rather than failing somewhere inside it. The stub resolves every model
-    /// to `None`, so reaching the catalog would surface as ModelNotFound.
+    /// to `None`, so reaching the catalog would surface as `ModelNotFound`.
     #[tokio::test]
     async fn foreign_model_is_refused_before_catalog_lookup() {
         let err = pinned_manager()

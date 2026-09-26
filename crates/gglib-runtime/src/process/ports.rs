@@ -40,9 +40,8 @@ pub(super) fn allocate_port(base_port: u16, used_ports: &[u16]) -> Result<u16> {
                 std::thread::sleep(std::time::Duration::from_millis(10));
                 if is_port_available(port) {
                     return Ok(port);
-                } else {
-                    debug!(port = %port, "Port became unavailable, retrying");
                 }
+                debug!(port = %port, "Port became unavailable, retrying");
             } else {
                 debug!(port = %port, "Port unavailable on system, skipping");
             }

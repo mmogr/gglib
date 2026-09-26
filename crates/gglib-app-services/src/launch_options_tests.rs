@@ -138,7 +138,7 @@ fn cache_master_switch_gates_the_slot_dir() {
 }
 
 /// The request's llama port must reach the pin's launch options — the
-/// ServeModal's Port field on the pinned path (review-gate blocker).
+/// `ServeModal`'s Port field on the pinned path (review-gate blocker).
 #[test]
 fn request_port_reaches_the_pin() {
     let plan = plan_pinned_launch(

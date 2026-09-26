@@ -161,7 +161,7 @@ fn a_proxy_that_does_not_report_the_readback_says_so() {
 }
 
 /// **The count could not answer the question; the name can.** "Is gglib
-/// ignoring the reasoning_effort I sent?" is about one field, and a total is
+/// ignoring the `reasoning_effort` I sent?" is about one field, and a total is
 /// not an answer to it.
 #[test]
 fn dropped_client_fields_are_listed_by_name_and_by_kind() {

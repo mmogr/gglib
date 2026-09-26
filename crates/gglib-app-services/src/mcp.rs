@@ -28,7 +28,7 @@ impl McpOps {
         Self { mcp: deps.mcp }
     }
 
-    /// Convert McpTool to McpToolInfo.
+    /// Convert `McpTool` to `McpToolInfo`.
     fn tool_to_info(tool: &McpTool) -> McpToolInfo {
         McpToolInfo {
             name: tool.name.clone(),
@@ -38,7 +38,7 @@ impl McpOps {
         }
     }
 
-    /// Convert core McpServer to DTO.
+    /// Convert core `McpServer` to DTO.
     fn server_to_dto(server: &gglib_core::McpServer) -> McpServerDto {
         McpServerDto {
             id: server.id,

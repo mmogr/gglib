@@ -21,7 +21,7 @@
 //!   answers **405**. Reading the `Allow` header is what exposes it.
 //! - `/api/models/downloads` matches `/api/models/{id}`, whose `i64` extractor
 //!   answers **400 `Invalid URL: Cannot parse "downloads" to a i64`** — the
-//!   original bug, which the poller fed to serde_json and reported as a parse
+//!   original bug, which the poller fed to `serde_json` and reported as a parse
 //!   error at column 1.
 //!
 //! So: a `TRACE` (which no route registers, so it never runs a handler) reads

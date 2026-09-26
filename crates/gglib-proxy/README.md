@@ -7,7 +7,7 @@
 
 **OpenAI-compatible proxy** — the front door to your local models, with an integrated MCP Streamable HTTP gateway.
 
-Everything between the OpenAI request and llama-server happens here: dialect
+Everything between the `OpenAI` request and llama-server happens here: dialect
 normalization (with a drift alarm that logs, counts, and flags any dialect
 markup that survives into client-visible output), context defense, sampling
 authority, and admission. This is the crate that makes a local model behave
@@ -15,7 +15,7 @@ like an API provider.
 
 ## Architecture
 
-This crate is in the **Infrastructure Layer** — it provides external API compatibility by bridging OpenAI clients to internal llama-server instances.
+This crate is in the **Infrastructure Layer** — it provides external API compatibility by bridging `OpenAI` clients to internal llama-server instances.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -50,7 +50,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 This crate provides an OpenAI-compatible HTTP server that:
 
-1. **Receives requests** in OpenAI API format (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`)
+1. **Receives requests** in `OpenAI` API format (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`)
 2. **Routes to llama-server** instances managed by gglib-runtime
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
@@ -78,8 +78,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 - **Ports-only dependency**: Depends only on `gglib-core` (no sqlx, no gglib-runtime)
 - **Bind externally**: `serve()` takes a pre-bound `TcpListener` from supervisor
-- **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and OpenAI content variants (array-form `content`, bare-string `stop`, future extensions) pass through as they came, except where a request-pipeline stage rewrites message text in either shape. Schema validation is llama-server's responsibility.
-- **Domain → API mapping**: OpenAI types live here, domain types in gglib-core
+- **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and `OpenAI` content variants (array-form `content`, bare-string `stop`, future extensions) pass through as they came, except where a request-pipeline stage rewrites message text in either shape. Schema validation is llama-server's responsibility.
+- **Domain → API mapping**: `OpenAI` types live here, domain types in gglib-core
 
 ## Module Architecture
 
@@ -270,7 +270,7 @@ model actually runs, so it never reaches the pinned guard.
 chat completions, so admission control, model swap, launch narration and the
 dashboard all apply unchanged. It is also the endpoint that benefits most from
 the second resident slot: an embedding model small enough to co-reside is
-admitted without displacing the chat model at all.  `input` accepts both OpenAI shapes — a bare string and an
+admitted without displacing the chat model at all.  `input` accepts both `OpenAI` shapes — a bare string and an
 array of strings — along with `encoding_format` and anything llama-server
 grows later, because the proxy reads only `model` out of the body and forwards
 the rest as raw bytes.
@@ -427,7 +427,7 @@ picker; unlisted profiles remain usable by name.
 Settings are read once per request from `settings_cache::SettingsCache`, a
 snapshot refreshed at most once every 5 seconds, rather than queried per
 request.  A TTL rather than invalidation-on-write because the CLI writes the
-same SQLite file from a separate process, which an in-process hook could never
+same `SQLite` file from a separate process, which an in-process hook could never
 observe.  A failed load never fails a request: it serves the last good snapshot,
 or defaults if there is none.
 
@@ -502,7 +502,7 @@ is not running, so its bound is TCP retransmission.
 
 ## MCP Streamable HTTP Gateway
 
-The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) gateway at `/mcp`. This lets any MCP-compatible client (including OpenWebUI) discover and invoke tools from gglib's configured MCP servers — no separate `mcpo` process or Python dependency required.
+The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) gateway at `/mcp`. This lets any MCP-compatible client (including `OpenWebUI`) discover and invoke tools from gglib's configured MCP servers — no separate `mcpo` process or Python dependency required.
 
 ### How it works
 
@@ -515,13 +515,13 @@ The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol
 
 Tool names are qualified as `{server_name}__{tool_name}` so tools from different MCP servers never collide.
 
-### Configuring OpenWebUI
+### Configuring `OpenWebUI`
 
-When running the proxy (e.g. `gglib proxy --port 8080`), configure OpenWebUI with:
+When running the proxy (e.g. `gglib proxy --port 8080`), configure `OpenWebUI` with:
 
 | Setting | Value |
 |---------|-------|
-| **OpenAI API Base URL** | `http://localhost:8080/v1` |
+| **`OpenAI` API Base URL** | `http://localhost:8080/v1` |
 | **MCP Server URL** | `http://localhost:8080/mcp` |
 
 Both chat completions and MCP tools are served from the same proxy — a single connection point for all gglib capabilities.
@@ -674,7 +674,7 @@ still means. Either spelling clears the other when written.
 The note is delivered inside the last message rather than as a trailing
 `system` message because a `system` message at the tail raises on Qwen3.5,
 two Mistral-family templates and Apertus, is hoisted to the head of the prompt
-by the DeepSeek family and three others, and is silently dropped by gpt-oss and
+by the `DeepSeek` family and three others, and is silently dropped by gpt-oss and
 four more — 63 of 101 renderable template × tail pairs land it where it was
 put, against 99 for the in-content delivery. Measured with minijinja over
 llama.cpp's bundled templates (65 of the 69 compile there), not against a

@@ -136,7 +136,7 @@ pub enum Commands {
         #[arg(long = "max-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.
-        /// Omit to allow all tools. (e.g. "mcp_search,builtin_time")
+        /// Omit to allow all tools. (e.g. "`mcp_search,builtin_time`")
         /// Note: the filter is evaluated once at session start. To change the
         /// available tools mid-session, exit and restart with a new --tools list.
         #[arg(long, value_delimiter = ',')]
@@ -160,8 +160,8 @@ pub enum Commands {
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.
         /// Omit to use the built-in defaults, which cover the read-only tools
-        /// browser and coding agents repeat — snapshot, screenshot, read_file,
-        /// list_dir, grep_search and similar. Passing any value replaces that
+        /// browser and coding agents repeat — snapshot, screenshot, `read_file`,
+        /// `list_dir`, `grep_search` and similar. Passing any value replaces that
         /// list entirely rather than adding to it.
         /// Pass an empty string to disable observation classification entirely.
         #[arg(long = "observation-tool", value_delimiter = ',')]
@@ -233,8 +233,8 @@ pub enum Commands {
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.
         /// Omit to use the built-in defaults, which cover the read-only tools
-        /// browser and coding agents repeat — snapshot, screenshot, read_file,
-        /// list_dir, grep_search and similar. Passing any value replaces that
+        /// browser and coding agents repeat — snapshot, screenshot, `read_file`,
+        /// `list_dir`, `grep_search` and similar. Passing any value replaces that
         /// list entirely rather than adding to it.
         #[arg(long = "observation-tool", value_delimiter = ',')]
         observation_tools: Vec<String>,
@@ -298,7 +298,7 @@ pub enum Commands {
     /// Prints a completion script to stdout. Pipe it into your shell's config:
     ///
     ///   gglib completions fish > ~/.config/fish/completions/gglib.fish
-    ///   gglib completions bash > ~/.bash_completion
+    ///   gglib completions bash > ~/.`bash_completion`
     ///   gglib completions zsh  > ~/.zsh/_gglib
     #[command(display_order = 30)]
     Completions {
@@ -310,7 +310,7 @@ pub enum Commands {
     /// Start OpenAI-compatible proxy with MCP tool gateway
     ///
     /// Serves /v1 chat completions and /mcp (MCP Streamable HTTP) from a single port.
-    /// Configure OpenWebUI with the /v1 base URL and connect MCP tools via /mcp.
+    /// Configure `OpenWebUI` with the /v1 base URL and connect MCP tools via /mcp.
     ///
     /// When a request arrives for a model that is not yet running, the proxy
     /// auto-starts a llama-server and automatically enables the appropriate

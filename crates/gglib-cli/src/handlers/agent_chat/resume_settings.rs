@@ -92,7 +92,7 @@ pub(crate) fn apply_saved_settings(
 pub(crate) fn print_memory_jogger(db_messages: &[gglib_core::domain::chat::Message], title: &str) {
     use gglib_core::domain::chat::MessageRole;
 
-    println!("\n{}Resuming: {}{}\n", style::INFO, title, style::RESET,);
+    println!("\n{}Resuming: {}{}\n", style::INFO, title, style::RESET);
 
     // Find last user message and last assistant message
     let last_user = db_messages

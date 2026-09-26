@@ -985,7 +985,7 @@ fn the_snapshot_carries_the_reason_the_reasoning_readback_is_blind() {
 }
 
 /// **The count could not answer the question; the names can.** "Is gglib
-/// ignoring my reasoning_effort?" is a question about one field, and a total of
+/// ignoring my `reasoning_effort`?" is a question about one field, and a total of
 /// four drops across an unnamed set is not an answer to it.
 #[test]
 fn discarded_client_fields_reach_the_snapshot_by_name() {

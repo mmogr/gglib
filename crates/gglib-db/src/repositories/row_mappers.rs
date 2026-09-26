@@ -225,7 +225,7 @@ pub(crate) fn normalized_file_path_string(path: &Path) -> String {
     gglib_core::paths::canonical_model_path_string(path)
 }
 
-/// Parse a database row into a ModelFile.
+/// Parse a database row into a `ModelFile`.
 pub(crate) fn map_model_file_row(
     row: &sqlx::sqlite::SqliteRow,
 ) -> Result<gglib_core::domain::ModelFile, sqlx::Error> {

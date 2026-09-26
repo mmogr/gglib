@@ -39,8 +39,7 @@ fn detect_nvidia_hardware() -> bool {
     if cmd("nvidia-smi")
         .arg("--list-gpus")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
     {
         return true;
     }
@@ -48,16 +47,12 @@ fn detect_nvidia_hardware() -> bool {
     // Try lspci on Linux
     #[cfg(target_os = "linux")]
     {
-        if cmd("lspci")
-            .output()
-            .map(|output| {
-                output.status.success()
-                    && String::from_utf8_lossy(&output.stdout)
-                        .to_lowercase()
-                        .contains("nvidia")
-            })
-            .unwrap_or(false)
-        {
+        if cmd("lspci").output().is_ok_and(|output| {
+            output.status.success()
+                && String::from_utf8_lossy(&output.stdout)
+                    .to_lowercase()
+                    .contains("nvidia")
+        }) {
             return true;
         }
     }

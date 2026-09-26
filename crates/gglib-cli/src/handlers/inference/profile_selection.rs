@@ -25,7 +25,7 @@
 //! # Why the port, not the context
 //!
 //! [`select`] takes `&dyn ModelCatalogPort` and a profile slice rather than
-//! `&CliContext`, which owns a live `AppCore`, an MCP service and a SQLite
+//! `&CliContext`, which owns a live `AppCore`, an MCP service and a `SQLite`
 //! pool and cannot be built in a unit test. The narrow signature is what makes
 //! the conflict and not-found paths testable at all.
 

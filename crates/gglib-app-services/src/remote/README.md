@@ -111,7 +111,7 @@ the local door is locked before a ticket exists — it is `enable`'s *return*
 that has to be behind that wait, not the bind, and nothing can reach a tunnel
 whose ticket has not left the process.
 
-Rotation has no event to hook. The CLI writes the same SQLite file from
+Rotation has no event to hook. The CLI writes the same `SQLite` file from
 another process, so `RemoteOps` polls `proxy_api_key` on the settings cache's
 cadence and calls `ServeHandle::set_backend_auth` when it changes — **never
 `set_token`**, which would give the listener a primary key it does not have

@@ -213,6 +213,10 @@ must_use_candidate = "allow"
 collapsible_if = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
+# Nursery, and its verdict depends on the target: a function whose platform
+# branches are compiled out is const-eligible on one OS and not on another, so
+# a `const` added to satisfy one build breaks the next.
+missing_const_for_fn = "allow"
 # Irreconcilable with `unreachable_pub`. For an item in a private module the two
 # ask for opposite things: `pub` trips `unreachable_pub`, `pub(crate)` trips
 # this. One of them has to be off, and this is the nursery one.

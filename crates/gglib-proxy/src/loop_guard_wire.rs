@@ -81,7 +81,7 @@ pub(super) fn domain_calls(tool_calls: &Value) -> Vec<ToolCall> {
         .unwrap_or_default()
 }
 
-/// Bridge one OpenAI wire tool call to the domain [`ToolCall`] the detectors
+/// Bridge one `OpenAI` wire tool call to the domain [`ToolCall`] the detectors
 /// hash.
 ///
 /// A malformed arguments string falls back to hashing the raw string —
@@ -114,7 +114,7 @@ fn str_or_empty(field: Option<&Value>) -> String {
     field.and_then(Value::as_str).unwrap_or_default().to_owned()
 }
 
-/// Extract the assistant-visible text from an OpenAI `content` value.
+/// Extract the assistant-visible text from an `OpenAI` `content` value.
 ///
 /// `content` may be a plain string, `null` (tool-call-only turns), or an
 /// array of typed parts; only `{"type": "text"}` parts contribute. Anything

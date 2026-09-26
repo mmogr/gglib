@@ -20,10 +20,10 @@ on a `tokio::sync::mpsc::Sender` and is consumed by:
 |----------|--------------------------------------------------------|
 | CLI      | `indicatif` progress bar                               |
 | Axum     | SSE stream at `POST /api/config/system/install-llama`  |
-| Tauri    | `llama-install-progress` event to the WebView          |
+| Tauri    | `llama-install-progress` event to the `WebView`          |
 
 It is **not** responsible for rendering: no `println!`, no progress bar, no
-knowledge of a terminal, an HTTP response or a WebView. Rate and ETA are
+knowledge of a terminal, an HTTP response or a `WebView`. Rate and ETA are
 measured here so that no surface has to derive them.
 
 <!-- module-docs:end -->

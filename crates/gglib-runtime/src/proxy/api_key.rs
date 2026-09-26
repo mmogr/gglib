@@ -128,7 +128,7 @@ mod tests {
             *self.saves.lock().unwrap() += 1;
             Ok(())
         }
-        /// The read, the change and the write under one lock, as the SQLite
+        /// The read, the change and the write under one lock, as the `SQLite`
         /// store's one transaction is.
         async fn modify(&self, change: &SettingsChange<'_>) -> Result<Settings, CoreError> {
             let mut stored = self.stored.lock().unwrap();

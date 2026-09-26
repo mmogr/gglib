@@ -76,12 +76,12 @@ pub(crate) async fn run_compare(
         // ── Cooperative cancellation check ───────────────────────────────
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => {
+            () = cancel.cancelled() => {
                 deps.bench_repo.fail_run(run_id, "Aborted by user").await.ok();
                 deps.runtime.stop_current().await.ok();
                 return Ok(());
             }
-            _ = std::future::ready(()) => {}
+            () = std::future::ready(()) => {}
         }
 
         let model = match deps.model_repo.get_by_id(model_id).await {

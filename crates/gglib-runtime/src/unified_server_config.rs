@@ -134,9 +134,7 @@ impl Default for GlobalDefaults {
 /// resolved at all, matching what the standalone proxy has always done.
 #[must_use]
 pub fn default_slot_dir() -> PathBuf {
-    gglib_core::paths::data_root()
-        .map(|d| d.join("slots"))
-        .unwrap_or_else(|_| PathBuf::from("slots"))
+    gglib_core::paths::data_root().map_or_else(|_| PathBuf::from("slots"), |d| d.join("slots"))
 }
 
 /// The launch settings that go through the 3-tier cascade, across every

@@ -244,7 +244,7 @@ async fn launch(
     let (config, capabilities) = build_server_config_narrated(
         i64::from(spec.id),
         spec.name.clone(),
-        model_path.to_path_buf(),
+        model_path.clone(),
         0, // base_port unused — GuiProcessCore resolves the port itself
         &spec.tags,
         opts,

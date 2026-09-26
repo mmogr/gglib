@@ -87,7 +87,7 @@ mod tests {
         assert!(table.contains("qwen3:coding          -"), "{table}");
     }
 
-    /// The far side speaks the OpenAI shape and may say more than this
+    /// The far side speaks the `OpenAI` shape and may say more than this
     /// listing reads; what it says extra must not break the listing.
     #[test]
     fn a_published_list_with_fields_this_build_does_not_know_still_reads() {

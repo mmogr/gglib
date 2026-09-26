@@ -61,7 +61,7 @@ fn health_client() -> Result<&'static Client> {
 /// Makes a single request to the health endpoint and returns
 /// whether the server responded successfully.
 pub async fn check_http_health(port: u16) -> Result<bool> {
-    let health_url = format!("http://127.0.0.1:{}/health", port);
+    let health_url = format!("http://127.0.0.1:{port}/health");
 
     match health_client()?.get(&health_url).send().await {
         Ok(response) if response.status().is_success() => Ok(true),

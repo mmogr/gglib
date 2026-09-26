@@ -24,7 +24,7 @@ pub enum MissingPackage {
     ///
     /// llama.cpp's `ggml-vulkan.cpp` includes this header directly. It is
     /// shipped as a separate package on every Linux distribution
-    /// (independent of `vulkan-headers`) and is bundled inside the LunarG
+    /// (independent of `vulkan-headers`) and is bundled inside the `LunarG`
     /// Vulkan SDK on Windows.
     SpirvHeaders,
 }
@@ -33,10 +33,10 @@ impl MissingPackage {
     /// Return a human-readable label for this missing component.
     pub fn label(&self) -> &str {
         match self {
-            MissingPackage::VulkanLoader => "Vulkan loader (libvulkan)",
-            MissingPackage::VulkanHeaders => "Vulkan development headers",
-            MissingPackage::Glslc => "SPIR-V shader compiler (glslc)",
-            MissingPackage::SpirvHeaders => "SPIR-V headers (spirv-headers)",
+            Self::VulkanLoader => "Vulkan loader (libvulkan)",
+            Self::VulkanHeaders => "Vulkan development headers",
+            Self::Glslc => "SPIR-V shader compiler (glslc)",
+            Self::SpirvHeaders => "SPIR-V headers (spirv-headers)",
         }
     }
 
@@ -45,22 +45,22 @@ impl MissingPackage {
     /// Returns a list of `(distro_label, command)` pairs.
     pub fn install_hints(&self) -> Vec<(&str, &str)> {
         match self {
-            MissingPackage::VulkanLoader => vec![
+            Self::VulkanLoader => vec![
                 ("Arch", "sudo pacman -S vulkan-icd-loader"),
                 ("Ubuntu/Debian", "sudo apt install libvulkan1"),
                 ("Fedora", "sudo dnf install vulkan-loader"),
             ],
-            MissingPackage::VulkanHeaders => vec![
+            Self::VulkanHeaders => vec![
                 ("Arch", "sudo pacman -S vulkan-headers"),
                 ("Ubuntu/Debian", "sudo apt install libvulkan-dev"),
                 ("Fedora", "sudo dnf install vulkan-devel"),
             ],
-            MissingPackage::Glslc => vec![
+            Self::Glslc => vec![
                 ("Arch", "sudo pacman -S shaderc"),
                 ("Ubuntu/Debian", "sudo apt install glslc"),
                 ("Fedora", "sudo dnf install glslc"),
             ],
-            MissingPackage::SpirvHeaders => vec![
+            Self::SpirvHeaders => vec![
                 ("Arch", "sudo pacman -S spirv-headers"),
                 ("Ubuntu/Debian", "sudo apt install spirv-headers"),
                 ("Fedora", "sudo dnf install spirv-headers-devel"),
@@ -108,7 +108,7 @@ impl VulkanStatus {
     /// Metal is the native GPU API). This is not an error — it is the
     /// canonical representation of "Vulkan does not apply here".
     pub fn absent() -> Self {
-        VulkanStatus {
+        Self {
             has_loader: false,
             has_headers: false,
             has_glslc: false,

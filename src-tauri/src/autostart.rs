@@ -52,7 +52,7 @@ pub(crate) const fn should_start_hidden(
 ///
 /// Hides rather than shows, which is the opposite of the obvious design and is
 /// load-bearing on Wayland. A window created hidden and shown later never gets
-/// a correct `xdg_surface` configure round-trip from KWin, so its server-side
+/// a correct `xdg_surface` configure round-trip from `KWin`, so its server-side
 /// titlebar buttons are dead until a resize forces one — the app looks broken
 /// on every ordinary launch to buy tidiness on the rare automatic one.
 ///

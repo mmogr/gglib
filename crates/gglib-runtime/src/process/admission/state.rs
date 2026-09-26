@@ -104,7 +104,7 @@ pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
 /// `owes_slot_to_rival` makes an idle slot stand aside for a waiting rival. So
 /// reaching this deadline is the exception, not the ordinary outcome of two
 /// clients sharing an endpoint.
-pub const ADMISSION_DEADLINE: Duration = Duration::from_secs(180);
+pub const ADMISSION_DEADLINE: Duration = Duration::from_mins(3);
 
 /// A model loaded in VRAM, and everything the fast path needs to know about it.
 ///

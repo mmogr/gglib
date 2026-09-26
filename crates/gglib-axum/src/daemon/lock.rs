@@ -2,7 +2,7 @@
 //!
 //! An exclusive advisory file lock on `<dir>/daemon.lock`. The lock is held
 //! for the owning process's lifetime and released by the kernel on any exit
-//! — clean, crashed, or SIGKILLed — so there is no stale state to recover
+//! — clean, crashed, or `SIGKILLed` — so there is no stale state to recover
 //! from. The file's *contents* (`{"pid":…,"port":…}`) are advisory metadata
 //! for the refusal message and for `gglib daemon status`; the lock itself is
 //! what enforces exclusivity.

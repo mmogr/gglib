@@ -29,8 +29,7 @@ pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
     cmd(program)
         .args(args)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Run a command and return its stdout as a trimmed `String` on success.
@@ -68,7 +67,7 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = version_str.split('.').collect();
     if parts.len() >= 2 {
         let parse_numeric = |part: &str| -> Option<u32> {
-            let numeric_str: String = part.chars().take_while(|c| c.is_ascii_digit()).collect();
+            let numeric_str: String = part.chars().take_while(char::is_ascii_digit).collect();
             numeric_str.parse::<u32>().ok()
         };
         let major = parse_numeric(parts[0])?;

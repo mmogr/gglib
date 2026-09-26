@@ -39,7 +39,7 @@ pub struct AxumContext {
     pub servers: Arc<ServerOps>,
     pub downloads: Arc<DownloadOps>,
     pub settings: Arc<SettingsOps>,
-    /// Named mcp_ops to avoid clashing with `mcp: Arc<McpService>` below.
+    /// Named `mcp_ops` to avoid clashing with `mcp: Arc<McpService>` below.
     pub mcp_ops: Arc<McpOps>,
     pub proxy: Arc<ProxyOps>,
     /// The remote tunnel (ADR 0012).
@@ -49,7 +49,7 @@ pub struct AxumContext {
     pub core: Arc<AppCore>,
     /// MCP service for managing MCP servers.
     pub mcp: Arc<McpService>,
-    /// HuggingFace client for model discovery.
+    /// `HuggingFace` client for model discovery.
     pub hf_client: Arc<dyn HfClientPort>,
     /// SSE broadcaster for real-time events.
     pub sse: Arc<SseBroadcaster>,
@@ -78,7 +78,7 @@ pub struct AxumContext {
     /// The loop guard's log read back: what the daemon's route answers with,
     /// from the same database the writer writes to.
     pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
-    /// Benchmark operations: run_compare and run_perf with SSE streaming.
+    /// Benchmark operations: `run_compare` and `run_perf` with SSE streaming.
     pub benchmark: Arc<BenchmarkOps>,
     /// Shared `ModelRuntimePort` wrapping the one `ProcessManager`.
     ///

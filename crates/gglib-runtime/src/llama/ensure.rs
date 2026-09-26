@@ -28,7 +28,7 @@ fn declined() -> anyhow::Error {
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{}", e))
+    r.map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// Ensure that llama.cpp binaries are installed.

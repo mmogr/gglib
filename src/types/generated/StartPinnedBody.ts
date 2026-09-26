@@ -8,7 +8,7 @@ import type { StartServerRequest } from "./StartServerRequest";
  * The GUI names a model and its overrides; the daemon runs the same
  * cascade as `gglib serve` (`gglib_app_services::launch_options`) so the
  * two surfaces cannot drift. `options` uses the camelCase wire form of the
- * bare `/api/servers/start` body; `proxy` the snake_case form of
+ * bare `/api/servers/start` body; `proxy` the `snake_case` form of
  * `/api/proxy/start`.
  */
 export type StartPinnedBody = { model_id: number, options: StartServerRequest, proxy: StartProxyConfig, };

@@ -18,7 +18,7 @@ use gglib_runtime::llama::{
 };
 
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{}", e))
+    r.map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// Handle the install command.
@@ -38,11 +38,11 @@ pub(crate) async fn handle_install(
     // Check if already installed
     let server_path = path_err(llama_server_path())?;
     if server_path.exists() && !force {
-        let install_dir = server_path
-            .parent()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| server_path.display().to_string());
-        println!("llama-server is already installed in: {}", install_dir);
+        let install_dir = server_path.parent().map_or_else(
+            || server_path.display().to_string(),
+            |p| p.display().to_string(),
+        );
+        println!("llama-server is already installed in: {install_dir}");
         println!("Use --force to rebuild or refresh binaries.");
         return Ok(());
     }
@@ -65,7 +65,7 @@ pub(crate) async fn handle_install(
             Ok(()) => return Ok(()),
             Err(e) => {
                 println!();
-                println!("⚠️  Failed to download pre-built binaries: {}", e);
+                println!("⚠️  Failed to download pre-built binaries: {e}");
                 println!("Falling back to building from source...");
                 println!();
             }
@@ -151,7 +151,7 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
                 "Missing Vulkan build dependencies: {}",
                 vk.missing
                     .iter()
-                    .map(|p| p.label())
+                    .map(gglib_runtime::llama::MissingPackage::label)
                     .collect::<Vec<_>>()
                     .join(", ")
             );
@@ -314,7 +314,7 @@ async fn consume_build_events_cli(mut rx: mpsc::Receiver<BuildEvent>) {
                 if let Some(pb) = &active {
                     pb.println(&message);
                 } else {
-                    println!("{}", message);
+                    println!("{message}");
                 }
             }
             BuildEvent::Completed {
@@ -326,15 +326,15 @@ async fn consume_build_events_cli(mut rx: mpsc::Receiver<BuildEvent>) {
                 }
                 println!();
                 println!("✓ llama.cpp installed successfully!");
-                println!("  Version:       {}", version);
-                println!("  Acceleration:  {}", acceleration);
+                println!("  Version:       {version}");
+                println!("  Acceleration:  {acceleration}");
                 println!("You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.");
             }
             BuildEvent::Failed { message } => {
                 if let Some(pb) = active.take() {
                     pb.finish_and_clear();
                 }
-                eprintln!("✗ Build failed: {}", message);
+                eprintln!("✗ Build failed: {message}");
             }
         }
     }

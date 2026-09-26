@@ -82,7 +82,7 @@ pub(super) fn check_libclang() -> Option<String> {
 
     // Method 3: Check llvm-specific paths
     for major in (11..=20).rev() {
-        let llvm_lib = format!("/usr/lib/llvm-{}/lib", major);
+        let llvm_lib = format!("/usr/lib/llvm-{major}/lib");
         let path = std::path::Path::new(&llvm_lib);
         if path.exists()
             && let Ok(entries) = std::fs::read_dir(path)

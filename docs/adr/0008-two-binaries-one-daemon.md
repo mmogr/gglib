@@ -5,6 +5,7 @@
 - **Depends on:** nothing
 - **Supersedes:** nothing
 - **Superseded by:** nothing
+- **Log:** [log-0008](log-0008.md)
 
 ## Context
 

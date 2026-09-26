@@ -24,7 +24,7 @@
 //! `serve()` awaits the returned `JoinHandle` after `axum::serve` completes,
 //! so the task is always joined rather than left detached.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use reqwest::Client;
@@ -84,7 +84,7 @@ impl SlotsCache {
     pub fn get(&self) -> SlotsPollResult {
         self.latest
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
 
@@ -92,7 +92,7 @@ impl SlotsCache {
     /// directly by `dashboard`'s unit tests to seed a known state without
     /// spinning up the poller.
     pub(crate) fn set(&self, result: SlotsPollResult) {
-        *self.latest.lock().unwrap_or_else(|e| e.into_inner()) = result;
+        *self.latest.lock().unwrap_or_else(PoisonError::into_inner) = result;
     }
 }
 

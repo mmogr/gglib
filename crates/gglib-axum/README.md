@@ -70,7 +70,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`sse.rs`** — Server-Sent Events utilities for streaming
 - **`ui.rs`** — The dashboard, compiled into the binary, and its HTTP contract
 - **`dto/`** — Request/response DTOs for API endpoints
-- **`handlers/model/`** — Model CRUD, verification, downloads, HuggingFace discovery handlers
+- **`handlers/model/`** — Model CRUD, verification, downloads, `HuggingFace` discovery handlers
 - **`handlers/config/`** — Settings and system setup handlers
 
 ## Endpoints
@@ -82,7 +82,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `DELETE` | `/api/models/:id` | Remove a model |
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
-| `POST` | `/api/models/hf/search` | Search HuggingFace |
+| `POST` | `/api/models/hf/search` | Search `HuggingFace` |
 | `POST` | `/api/models/downloads/queue` | Queue a download |
 | `GET` | `/api/models/downloads/queue` | Download queue snapshot |
 | `GET` | `/api/config/settings` | Get application settings |
@@ -90,7 +90,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `GET` | `/api/mcp/servers` | List MCP servers |
 | `POST` | `/api/mcp/servers/:id/start` | Start MCP server |
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
-| `GET` | `/api/models/:id/updates` | Check for HuggingFace updates |
+| `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
 | `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
 
 ## Usage
@@ -120,6 +120,6 @@ async fn run() -> anyhow::Result<()> {
 ## Design Decisions
 
 1. **Axum Framework** — Chosen for async-first design and tower middleware ecosystem
-2. **Shared GuiBackend** — Same façade as Tauri for feature parity
+2. **Shared `GuiBackend`** — Same façade as Tauri for feature parity
 3. **Thin Handlers** — No logic, just parse → delegate → serialize
 4. **CORS Support** — Configurable CORS for web UI development

@@ -5,7 +5,7 @@
 pub(super) const STATUS: &str = "tray_status";
 
 /// Show the live proxy panel. Also the left-click action where the platform
-/// reports one — see the module README on Linux's AppIndicator.
+/// reports one — see the module README on Linux's `AppIndicator`.
 pub(super) const OPEN_PANEL: &str = "tray_open_panel";
 
 pub(super) const START_PROXY: &str = "tray_start_proxy";

@@ -1,7 +1,7 @@
-//! Integration tests for CorsConfig::LocalOnly behavior.
+//! Integration tests for `CorsConfig::LocalOnly` behavior.
 //!
-//! Verifies that the LocalOnly CORS policy correctly accepts localhost origins
-//! and rejects remote origins, and that ServerConfig defaults are correct.
+//! Verifies that the `LocalOnly` CORS policy correctly accepts localhost origins
+//! and rejects remote origins, and that `ServerConfig` defaults are correct.
 
 mod common;
 
@@ -34,8 +34,7 @@ async fn local_only_rejects_remote_origin() {
     let allow_origin = response.headers().get("Access-Control-Allow-Origin");
     assert!(
         allow_origin.is_none(),
-        "Remote origin should be rejected (no Access-Control-Allow-Origin header), got: {:?}",
-        allow_origin
+        "Remote origin should be rejected (no Access-Control-Allow-Origin header), got: {allow_origin:?}"
     );
 }
 

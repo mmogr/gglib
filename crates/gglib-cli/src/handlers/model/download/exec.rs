@@ -18,7 +18,7 @@ pub(crate) struct DownloadArgs<'a> {
     pub model_id: &'a str,
     pub quantization: Option<&'a str>,
     pub list_quants: bool,
-    /// HuggingFace token for private models.
+    /// `HuggingFace` token for private models.
     ///
     /// Used only for `--list-quants`. For downloads, prefer the `HF_TOKEN`
     /// environment variable which is read at startup and wired into the

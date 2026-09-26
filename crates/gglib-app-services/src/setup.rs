@@ -123,24 +123,23 @@ impl SetupOps {
         };
 
         // Models directory
-        let models_directory = gglib_core::paths::resolve_models_dir(None)
-            .map(|r| {
+        let models_directory = gglib_core::paths::resolve_models_dir(None).map_or(
+            ModelsDirectoryDto {
+                path: String::new(),
+                exists: false,
+                writable: false,
+            },
+            |r| {
                 let exists = r.path.exists();
-                let writable = exists
-                    && std::fs::metadata(&r.path)
-                        .map(|m| !m.permissions().readonly())
-                        .unwrap_or(false);
+                let writable =
+                    exists && std::fs::metadata(&r.path).is_ok_and(|m| !m.permissions().readonly());
                 ModelsDirectoryDto {
                     path: r.path.to_string_lossy().to_string(),
                     exists,
                     writable,
                 }
-            })
-            .unwrap_or(ModelsDirectoryDto {
-                path: String::new(),
-                exists: false,
-                writable: false,
-            });
+            },
+        );
 
         // Optional hf_xet accelerator. Neither of these gates downloading —
         // that runs natively over HTTP — they only tell the wizard whether the

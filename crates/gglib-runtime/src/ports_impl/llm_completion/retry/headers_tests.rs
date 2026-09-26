@@ -43,7 +43,7 @@ fn surrounding_whitespace_is_tolerated() {
 fn an_http_date_becomes_a_relative_delay() {
     // Two minutes after the fixed `now`.
     let parsed = parse_retry_after(&headers_with("Wed, 21 Oct 2015 07:30:00 GMT"), now());
-    assert_eq!(parsed, Some(Duration::from_secs(120)));
+    assert_eq!(parsed, Some(Duration::from_mins(2)));
 }
 
 #[test]

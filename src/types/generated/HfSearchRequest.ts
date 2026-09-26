@@ -2,6 +2,6 @@
 import type { HfSortField } from "./HfSortField";
 
 /**
- * Request for searching HuggingFace models.
+ * Request for searching `HuggingFace` models.
  */
 export type HfSearchRequest = { query: string | null, min_params_b: number | null, max_params_b: number | null, page: number, limit: number, sort_by: HfSortField, sort_ascending: boolean, };

@@ -1,7 +1,7 @@
 //! Model management subcommands.
 //!
 //! This module defines the model CRUD, verification, download, and
-//! HuggingFace discovery commands that live under `gglib model <sub>`.
+//! `HuggingFace` discovery commands that live under `gglib model <sub>`.
 
 use clap::Subcommand;
 
@@ -10,7 +10,7 @@ pub(crate) use crate::model_sort::{CliModelSortBy, CliSortOrder};
 /// Model management commands.
 ///
 /// Covers the full lifecycle of GGUF models: adding, listing, removing,
-/// updating metadata, downloading from HuggingFace, verifying integrity,
+/// updating metadata, downloading from `HuggingFace`, verifying integrity,
 /// and repairing corrupt files.
 // `Update` carries one optional flag per inference parameter and dwarfs the
 // other variants. That is fine here: exactly one value of this enum ever
@@ -55,11 +55,11 @@ pub enum ModelCommand {
         /// Only show models with at most this many parameters (in billions).
         #[arg(long)]
         max_params: Option<f64>,
-        /// Only include models whose latest_tg_tps >= this value (t/s).
+        /// Only include models whose `latest_tg_tps` >= this value (t/s).
         /// Models with no benchmark data are excluded.
         #[arg(long)]
         min_speed: Option<f64>,
-        /// Only include models whose latest_tg_tps <= this value (t/s).
+        /// Only include models whose `latest_tg_tps` <= this value (t/s).
         /// Models with no benchmark data are excluded.
         #[arg(long)]
         max_speed: Option<f64>,
@@ -233,7 +233,7 @@ pub enum ModelCommand {
         force: bool,
     },
 
-    /// Download a GGUF model from HuggingFace Hub.
+    /// Download a GGUF model from `HuggingFace` Hub.
     ///
     /// Routes through the shared download queue (same path as the GUI), so
     /// progress is rendered in the terminal and multiple models can be added
@@ -248,9 +248,9 @@ pub enum ModelCommand {
     /// `Downloading` → `Finalizing` (gathering HF metadata) → `Registering`
     /// (writing model row) → terminal `Completed` / `Failed` / `Cancelled`.
     Download {
-        /// HuggingFace model repository (e.g., "bartowski/Qwen2.5-7B-Instruct-GGUF")
+        /// `HuggingFace` model repository (e.g., "bartowski/Qwen2.5-7B-Instruct-GGUF")
         model_id: String,
-        /// Specific quantization to download (e.g., "Q4_K_M", "F16", or an
+        /// Specific quantization to download (e.g., "`Q4_K_M`", "F16", or an
         /// Unsloth Dynamic quant like "UD-Q4_K_M")
         #[arg(short, long)]
         quantization: Option<String>,
@@ -262,7 +262,7 @@ pub enum ModelCommand {
         /// `gglib model remove <id>` afterwards to drop the row and keep the file.
         #[arg(long)]
         skip_db: bool,
-        /// HuggingFace token for private models (for `--list-quants` only).
+        /// `HuggingFace` token for private models (for `--list-quants` only).
         ///
         /// For downloads, set the `HF_TOKEN` environment variable instead.
         /// It is read at startup and wired into the download manager config,
@@ -290,7 +290,7 @@ pub enum ModelCommand {
         force: bool,
     },
 
-    /// Search HuggingFace Hub for GGUF models
+    /// Search `HuggingFace` Hub for GGUF models
     Search {
         /// Search query (model name, author, or keywords)
         query: String,
@@ -305,7 +305,7 @@ pub enum ModelCommand {
         gguf_only: bool,
     },
 
-    /// Browse popular GGUF models on HuggingFace Hub
+    /// Browse popular GGUF models on `HuggingFace` Hub
     Browse {
         /// Category to browse: "popular", "recent", "trending"
         #[arg(default_value = "popular")]
@@ -356,7 +356,7 @@ pub enum ModelCommand {
     /// Display full details for a single model.
     ///
     /// Shows every piece of stored information: architecture, quantization,
-    /// context length, MoE topology, HuggingFace provenance, capability flags,
+    /// context length, `MoE` topology, `HuggingFace` provenance, capability flags,
     /// inference defaults, and timestamps.
     ///
     /// # Examples

@@ -27,7 +27,7 @@ async fn resolve_model_display(ctx: &CliContext, settings: &Settings) -> Result<
     match settings.default_model_id {
         Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
             Some(model) => Ok(Some(format!("{} ({})", model_id, model.name))),
-            None => Ok(Some(format!("{} (not found)", model_id))),
+            None => Ok(Some(format!("{model_id} (not found)"))),
         },
         None => Ok(None),
     }
@@ -74,7 +74,7 @@ pub(crate) async fn handle_default_model(
                         println!("Default model: {} (ID: {})", model.name, model.id);
                     }
                     None => {
-                        println!("Default model ID: {} (warning: model not found)", model_id);
+                        println!("Default model ID: {model_id} (warning: model not found)");
                     }
                 },
                 None => {

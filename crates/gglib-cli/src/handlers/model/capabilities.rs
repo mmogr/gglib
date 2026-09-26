@@ -3,7 +3,7 @@
 //! Displays or overrides the [`ModelCapabilities`] flags stored for a model.
 //! All mutations go through [`ModelOps::set_capabilities`] in
 //! `gglib-app-services`, which is the single shared implementation consumed
-//! by this CLI, the Axum WebUI, and the Tauri app.
+//! by this CLI, the Axum `WebUI`, and the Tauri app.
 //!
 //! [`ModelCapabilities`]: gglib_core::ModelCapabilities
 //! [`ModelOps::set_capabilities`]: gglib_app_services::ModelOps::set_capabilities

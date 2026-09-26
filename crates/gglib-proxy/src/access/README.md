@@ -50,7 +50,7 @@ request which token, if any, it asks for; with none set it asks nothing.
 | `origin_guard` | 403 | `origin_not_allowed` | `GET`, `HEAD` and `OPTIONS` are never refused |
 | `bearer_guard` | 401 | `invalid_api_key` | `WWW-Authenticate: Bearer` |
 
-All three use the OpenAI error envelope, which is what the rest of `/v1/*` already
+All three use the `OpenAI` error envelope, which is what the rest of `/v1/*` already
 speaks. `/mcp` is the exception on paper: it answers errors as JSON-RPC. A
 middleware runs before the body is parsed, so it has no request `id` to echo
 back and cannot construct a valid JSON-RPC error anyway — MCP clients key off

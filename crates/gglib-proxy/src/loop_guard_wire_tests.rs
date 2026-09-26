@@ -61,8 +61,8 @@ fn the_control_history_is_a_loop() {
 /// The shape that made this a bug rather than a theory.
 ///
 /// Anything serialising an assistant message from a struct whose `tool_calls`
-/// is an `Optional[list]` emits `null` when there were none — the OpenAI Python
-/// SDK's `model_dump()`, LiteLLM, LangChain. Typed as `Vec<WireToolCall>` this
+/// is an `Optional[list]` emits `null` when there were none — the `OpenAI` Python
+/// SDK's `model_dump()`, `LiteLLM`, `LangChain`. Typed as `Vec<WireToolCall>` this
 /// failed the envelope, and `scan_history`'s fail-open arm then returned `Pass`
 /// for the request. A replayed history only grows, so it returned `Pass` for
 /// every later turn of that conversation too.

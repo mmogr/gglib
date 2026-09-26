@@ -148,7 +148,7 @@ pub(crate) struct ToolCapabilities {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct McpToolSpec {
-    /// Qualified tool name (e.g. "server_name__tool_name").
+    /// Qualified tool name (e.g. "`server_name__tool_name`").
     pub name: String,
     /// Human-readable description.
     #[serde(skip_serializing_if = "Option::is_none")]

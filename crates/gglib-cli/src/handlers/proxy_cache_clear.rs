@@ -13,7 +13,7 @@ pub(crate) async fn execute(
     session_id: Option<&str>,
     api_key: Option<&str>,
 ) -> Result<()> {
-    let url = format!("http://{}:{}/v1/proxy/cache/clear", host, port);
+    let url = format!("http://{host}:{port}/v1/proxy/cache/clear");
 
     let mut builder = gglib_proxy::loopback::client_for(host).post(&url);
 
@@ -26,8 +26,7 @@ pub(crate) async fn execute(
     }
 
     let response = builder.send().await.context(format!(
-        "Failed to connect to proxy at {} — is it running?",
-        url
+        "Failed to connect to proxy at {url} — is it running?"
     ))?;
 
     let status = response.status();
@@ -81,8 +80,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("Failed to connect") || err_msg.contains("Connection refused"),
-            "Error message should mention connection failure, got: {}",
-            err_msg
+            "Error message should mention connection failure, got: {err_msg}"
         );
     }
 }

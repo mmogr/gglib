@@ -149,7 +149,7 @@ pub enum RemoteCommand {
     Enable {
         /// Let requests arriving through the tunnel reach /mcp
         ///
-        /// Off by default: invoke_tool starts the MCP servers configured on
+        /// Off by default: `invoke_tool` starts the MCP servers configured on
         /// this machine, and a leaked key with a shell server configured is
         /// remote code execution.
         #[arg(long)]

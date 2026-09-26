@@ -65,7 +65,7 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
         // Check if process still exists using kill with null signal (works on Linux/macOS)
         // On nix 0.29, we can't use Signal::from_c_int, but we can check process existence via errno
         match signal::kill(nix_pid, None) {
-            Ok(_) => {
+            Ok(()) => {
                 // Still alive, continue polling
             }
             Err(Errno::ESRCH) => {
@@ -91,7 +91,7 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
         sleep(Duration::from_millis(100)).await;
 
         match signal::kill(nix_pid, None) {
-            Ok(_) => {
+            Ok(()) => {
                 // Still alive (very unusual after SIGKILL)
             }
             Err(Errno::ESRCH) => {
@@ -106,7 +106,7 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     // If we get here, process didn't exit even after SIGKILL (rare)
     Err(io::Error::new(
         io::ErrorKind::TimedOut,
-        format!("process {} did not exit after SIGKILL", pid),
+        format!("process {pid} did not exit after SIGKILL"),
     ))
 }
 
@@ -184,7 +184,7 @@ mod tests {
         // Kill it by PID (won't reap since we don't own the Child in kill_pid)
         let result = kill_pid(pid).await;
         if let Err(ref e) = result {
-            eprintln!("kill_pid failed: {}", e);
+            eprintln!("kill_pid failed: {e}");
         }
 
         // Reap the child to clean up zombie

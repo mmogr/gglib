@@ -35,7 +35,7 @@ const LAUNCH_DEADLINE_SECS_PER_GIB: u64 = 60;
 ///
 /// **The per-GiB constant is a guess about the host, not a fact about the
 /// model.** 60s/GiB is roughly 17 MiB/s effective, which is pessimistic for
-/// NVMe and optimistic for a cold network filesystem, and the motivating case
+/// `NVMe` and optimistic for a cold network filesystem, and the motivating case
 /// — a first-run Metal shader compile — scales with the kernel set rather than
 /// with file size at all. It is a bounded, deliberately generous budget that
 /// buys a large model its first load; it is not a model of anything. The
@@ -65,7 +65,7 @@ pub(crate) const fn launch_deadline_secs(weights_bytes: u64) -> u64 {
 /// Polls the llama-server's /health endpoint until it returns 200 OK
 /// or the timeout is reached.
 pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
-    let health_url = format!("http://127.0.0.1:{}/health", port);
+    let health_url = format!("http://127.0.0.1:{port}/health");
     info!("Waiting for llama-server to be ready at {}", health_url);
 
     // A wall-clock deadline, not an attempt count. Each pass costs a second of
@@ -86,21 +86,7 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
                 let status = response.status();
 
                 // Only accept 200 OK - anything else is wrong
-                if !status.is_success() {
-                    debug!(
-                        "Health check returned status {} (expected 200), retrying...",
-                        status
-                    );
-
-                    // If we get a clear error from wrong service, fail faster
-                    if (status.as_u16() == 403 || status.as_u16() == 404) && attempt > 3 {
-                        return Err(anyhow::anyhow!(
-                            "Port {} appears to be in use by another service (status {}). Try using a different port range.",
-                            port,
-                            status
-                        ));
-                    }
-                } else {
+                if status.is_success() {
                     // Got 200 OK - verify it's actually llama-server
                     match response.text().await {
                         Ok(body) => {
@@ -113,19 +99,29 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
                             {
                                 info!("llama-server is ready on port {}", port);
                                 return Ok(());
-                            } else {
-                                debug!("Health check returned unexpected response: {}", body);
-                                if attempt > 5 {
-                                    return Err(anyhow::anyhow!(
-                                        "Port {} is responding but doesn't appear to be llama-server",
-                                        port
-                                    ));
-                                }
+                            }
+                            debug!("Health check returned unexpected response: {}", body);
+                            if attempt > 5 {
+                                return Err(anyhow::anyhow!(
+                                    "Port {port} is responding but doesn't appear to be llama-server"
+                                ));
                             }
                         }
                         Err(e) => {
                             debug!("Failed to read health response: {}", e);
                         }
+                    }
+                } else {
+                    debug!(
+                        "Health check returned status {} (expected 200), retrying...",
+                        status
+                    );
+
+                    // If we get a clear error from wrong service, fail faster
+                    if (status.as_u16() == 403 || status.as_u16() == 404) && attempt > 3 {
+                        return Err(anyhow::anyhow!(
+                            "Port {port} appears to be in use by another service (status {status}). Try using a different port range."
+                        ));
                     }
                 }
             }
@@ -136,10 +132,7 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 
         if tokio::time::Instant::now() >= deadline {
             return Err(anyhow::anyhow!(
-                "llama-server failed to start within {}s on port {} (after {} probes). Check if the port is available.",
-                timeout_secs,
-                port,
-                attempt
+                "llama-server failed to start within {timeout_secs}s on port {port} (after {attempt} probes). Check if the port is available."
             ));
         }
     }

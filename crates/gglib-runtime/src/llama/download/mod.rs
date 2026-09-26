@@ -28,7 +28,7 @@ use super::install_events::{InstallPhase, LlamaProgressEvent};
 // Helper to convert PathError to anyhow::Error
 #[cfg(feature = "prebuilt")]
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{}", e))
+    r.map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// Check if llama.cpp binaries are installed.
@@ -472,7 +472,7 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
         let dest_path = bin_dir.join(&file_name);
         entry
             .unpack(&dest_path)
-            .with_context(|| format!("Failed to extract: {}", file_name))?;
+            .with_context(|| format!("Failed to extract: {file_name}"))?;
 
         #[cfg(unix)]
         {
@@ -481,12 +481,12 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
             // targets that may not yet be extracted, which would return ENOENT.
             // Symlinks cannot be chmod'd on macOS/Linux so we skip them.
             let meta = fs::symlink_metadata(&dest_path)
-                .with_context(|| format!("Failed to read metadata: {}", file_name))?;
+                .with_context(|| format!("Failed to read metadata: {file_name}"))?;
             if !meta.file_type().is_symlink() {
                 let mut perms = meta.permissions();
                 perms.set_mode(0o755);
                 fs::set_permissions(&dest_path, perms)
-                    .with_context(|| format!("Failed to set permissions: {}", file_name))?;
+                    .with_context(|| format!("Failed to set permissions: {file_name}"))?;
             }
         }
 
@@ -550,18 +550,18 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             .with_context(|| format!("Failed to create file: {}", dest_path.display()))?;
 
         io::copy(&mut entry, &mut dest_file)
-            .with_context(|| format!("Failed to extract: {}", file_name))?;
+            .with_context(|| format!("Failed to extract: {file_name}"))?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             let meta = fs::symlink_metadata(&dest_path)
-                .with_context(|| format!("Failed to read metadata: {}", file_name))?;
+                .with_context(|| format!("Failed to read metadata: {file_name}"))?;
             if !meta.file_type().is_symlink() {
                 let mut perms = meta.permissions();
                 perms.set_mode(0o755);
                 fs::set_permissions(&dest_path, perms)
-                    .with_context(|| format!("Failed to set permissions: {}", file_name))?;
+                    .with_context(|| format!("Failed to set permissions: {file_name}"))?;
             }
         }
 
@@ -662,7 +662,7 @@ async fn download_cuda_runtime(
 /// the channel decides how a failure is worded, exactly as the source-build
 /// pipeline leaves it.
 ///
-/// This function knows nothing about terminals, HTTP responses or WebViews.
+/// This function knows nothing about terminals, HTTP responses or `WebViews`.
 /// The three copies it replaced each knew about one.
 #[cfg(feature = "prebuilt")]
 pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) -> Result<()> {

@@ -85,7 +85,7 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 /// A database and a device key file of its own for each context.
 ///
 /// Per test rather than per binary: tests in one binary run concurrently, so
-/// a shared file both deadlocks on SQLite's write lock and lets one test see
+/// a shared file both deadlocks on `SQLite`'s write lock and lets one test see
 /// another's rows. The key file is the same argument for the devices a test
 /// invites or lists, and left unnamed it would be the checkout's own.
 fn isolated_paths() -> (PathBuf, PathBuf) {

@@ -90,7 +90,7 @@ HTTP cannot do, and those commands live in
 | `sync_menu_state` | util | Update native menu item states |
 | `check_llama_status` | llama | Check llama.cpp installation |
 | `install_llama` | llama | Install/build llama.cpp |
-| `log_from_frontend` | app_logs | Forward frontend logs to Rust logger |
+| `log_from_frontend` | `app_logs` | Forward frontend logs to Rust logger |
 
 `scripts/check-frontend-ipc.sh` holds the allowlist this table describes; the
 two are checked against each other in CI.

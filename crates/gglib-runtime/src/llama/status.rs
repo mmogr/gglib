@@ -42,7 +42,7 @@ impl From<BuildConfig> for LlamaBuildInfo {
 /// A projection of [`RuntimeCapabilities`] rather than that type itself:
 /// `RuntimeCapabilities` is a shared core type that is also `Deserialize`d
 /// from stored records, so it carries no `rename_all` and would put
-/// snake_case keys inside this otherwise-camelCase payload.
+/// `snake_case` keys inside this otherwise-camelCase payload.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlamaRuntimeInfo {
@@ -99,8 +99,8 @@ pub struct LlamaStatus {
 /// in the returned struct. Only a failure to resolve the data directory
 /// itself is an `Err`.
 pub fn llama_status() -> anyhow::Result<LlamaStatus> {
-    let binary_path = llama_server_path().map_err(|e| anyhow::anyhow!("{}", e))?;
-    let config_path = llama_config_path().map_err(|e| anyhow::anyhow!("{}", e))?;
+    let binary_path = llama_server_path().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let config_path = llama_config_path().map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let mut status = LlamaStatus {
         installed: binary_path.exists(),
@@ -173,7 +173,7 @@ mod tests {
     }
 
     /// The runtime block is a projection, not the core type — serialising
-    /// `RuntimeCapabilities` directly would put snake_case keys inside this
+    /// `RuntimeCapabilities` directly would put `snake_case` keys inside this
     /// camelCase payload, which is what the TS mirror silently tripped over.
     #[test]
     fn runtime_block_is_camel_case() {

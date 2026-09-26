@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{}", e))
+    r.map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// How far behind upstream the local llama.cpp checkout is.
@@ -225,7 +225,7 @@ pub async fn handle_check_updates() -> Result<()> {
     println!();
     println!("Recent changes:");
     for line in &check.recent_commits {
-        println!("  {}", line);
+        println!("  {line}");
     }
     println!();
     println!("Run 'gglib config llama update' to upgrade");

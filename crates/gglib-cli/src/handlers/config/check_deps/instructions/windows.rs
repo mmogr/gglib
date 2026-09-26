@@ -77,13 +77,13 @@ pub(super) fn print_instructions(missing: &[&Dependency]) {
     }
 
     // GPU notes
-    println!("\n{}GPU Support:{}", BOLD, RESET);
+    println!("\n{BOLD}GPU Support:{RESET}");
     println!();
-    println!("  {}NVIDIA GPU:{}", BOLD, RESET);
+    println!("  {BOLD}NVIDIA GPU:{RESET}");
     println!("  Install CUDA Toolkit from:");
     println!("  https://developer.nvidia.com/cuda-downloads");
     println!();
-    println!("  {}AMD GPU:{}", BOLD, RESET);
+    println!("  {BOLD}AMD GPU:{RESET}");
     println!("  Install Vulkan drivers (usually included with GPU drivers).");
     println!("  Verify with: vulkaninfo --summary");
     println!();

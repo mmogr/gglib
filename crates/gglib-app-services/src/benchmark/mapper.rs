@@ -82,16 +82,16 @@ pub fn extract_compare_timings(
     let timings = val.get("timings");
     let prompt_ms = timings
         .and_then(|t| t.get("prompt_ms"))
-        .and_then(|v| v.as_f64());
+        .and_then(Value::as_f64);
     let generation_ms = timings
         .and_then(|t| t.get("predicted_ms"))
-        .and_then(|v| v.as_f64());
+        .and_then(Value::as_f64);
     let prompt_tps = timings
         .and_then(|t| t.get("prompt_per_second"))
-        .and_then(|v| v.as_f64());
+        .and_then(Value::as_f64);
     let generation_tps = timings
         .and_then(|t| t.get("predicted_per_second"))
-        .and_then(|v| v.as_f64());
+        .and_then(Value::as_f64);
     (prompt_ms, generation_ms, prompt_tps, generation_tps)
 }
 
@@ -104,10 +104,10 @@ pub fn extract_usage(val: &Value) -> (Option<i64>, Option<i64>) {
     let usage = val.get("usage");
     let prompt_tokens = usage
         .and_then(|u| u.get("prompt_tokens"))
-        .and_then(|v| v.as_i64());
+        .and_then(Value::as_i64);
     let completion_tokens = usage
         .and_then(|u| u.get("completion_tokens"))
-        .and_then(|v| v.as_i64());
+        .and_then(Value::as_i64);
     (prompt_tokens, completion_tokens)
 }
 
@@ -181,21 +181,21 @@ pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
     let mut ngl: Option<i64> = None;
 
     for entry in &array {
-        let entry_n_prompt = entry.get("n_prompt").and_then(|v| v.as_i64()).unwrap_or(0);
-        let entry_n_gen = entry.get("n_gen").and_then(|v| v.as_i64()).unwrap_or(0);
+        let entry_n_prompt = entry.get("n_prompt").and_then(Value::as_i64).unwrap_or(0);
+        let entry_n_gen = entry.get("n_gen").and_then(Value::as_i64).unwrap_or(0);
 
         // PP throughput: old-style explicit field, or new-style avg_ts on a
         // prompt-only entry (n_gen == 0).
         if pp_tps.is_none() {
             pp_tps = entry
                 .get("t_avg_pp")
-                .and_then(|v| v.as_f64())
+                .and_then(Value::as_f64)
                 .filter(|&v| v > 0.0)
                 .or_else(|| {
                     if entry_n_prompt > 0 && entry_n_gen == 0 {
                         entry
                             .get("avg_ts")
-                            .and_then(|v| v.as_f64())
+                            .and_then(Value::as_f64)
                             .filter(|&v| v > 0.0)
                     } else {
                         None
@@ -208,13 +208,13 @@ pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
         if tg_tps.is_none() {
             tg_tps = entry
                 .get("t_avg_tg")
-                .and_then(|v| v.as_f64())
+                .and_then(Value::as_f64)
                 .filter(|&v| v > 0.0)
                 .or_else(|| {
                     if entry_n_gen > 0 && entry_n_prompt == 0 {
                         entry
                             .get("avg_ts")
-                            .and_then(|v| v.as_f64())
+                            .and_then(Value::as_f64)
                             .filter(|&v| v > 0.0)
                     } else {
                         None
@@ -235,7 +235,7 @@ pub fn parse_perf_output(stdout: &[u8]) -> Option<PerfBenchOutput> {
                 .map(String::from);
         }
         if ngl.is_none() {
-            ngl = entry.get("n_gpu_layers").and_then(|v| v.as_i64());
+            ngl = entry.get("n_gpu_layers").and_then(Value::as_i64);
         }
     }
 
@@ -502,7 +502,7 @@ mod tests {
         assert_eq!(out.ngl, Some(-1));
     }
 
-    /// Old-format single entry with explicit t_avg_pp / t_avg_tg still parses.
+    /// Old-format single entry with explicit `t_avg_pp` / `t_avg_tg` still parses.
     #[test]
     fn test_perf_bench_old_format_single_entry() {
         let stdout = serde_json::to_vec(&json!([{

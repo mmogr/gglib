@@ -79,7 +79,7 @@ pub(crate) struct StartProxyConfig {
 /// The GUI names a model and its overrides; the daemon runs the same
 /// cascade as `gglib serve` (`gglib_app_services::launch_options`) so the
 /// two surfaces cannot drift. `options` uses the camelCase wire form of the
-/// bare `/api/servers/start` body; `proxy` the snake_case form of
+/// bare `/api/servers/start` body; `proxy` the `snake_case` form of
 /// `/api/proxy/start`.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

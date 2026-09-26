@@ -81,7 +81,7 @@ pub async fn handle_uninstall(force: bool) -> Result<()> {
 
     let outcome = uninstall_llama().await?;
     for path in &outcome.removed_paths {
-        println!("✓ Removed {}", path);
+        println!("✓ Removed {path}");
     }
 
     println!("llama.cpp uninstalled successfully.");

@@ -26,7 +26,7 @@ const SERVICE_STOP_WAIT: Duration = Duration::from_secs(12);
 /// Perform the action a menu item id names.
 ///
 /// The single entry point for every tray backend, so the tray reaches the same
-/// code as the WebUI and the CLI however the click arrived.
+/// code as the `WebUI` and the CLI however the click arrived.
 pub(super) fn dispatch(app: &AppHandle, id: &str) {
     debug!(tray_id = %id, "Tray menu event received");
 

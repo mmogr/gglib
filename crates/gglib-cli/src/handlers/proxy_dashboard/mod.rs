@@ -152,8 +152,7 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
                     // terminal resize is picked up rather than rendering
                     // against a stale width.
                     let term_width = terminal::size()
-                        .map(|(cols, _rows)| cols)
-                        .unwrap_or(DEFAULT_TERM_WIDTH);
+                        .map_or(DEFAULT_TERM_WIDTH, |(cols, _rows)| cols);
                     let frame = render_frame(&url, &snapshot, term_width);
                     if is_tty {
                         let mut out = stdout();

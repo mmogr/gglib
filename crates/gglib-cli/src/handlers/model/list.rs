@@ -6,7 +6,7 @@
 //! * **Proxy mode** – when a live daemon is detected on the configured port,
 //!   the request is forwarded to `GET /api/models?...` so filtering happens
 //!   on the backend using the exact same canonical logic.
-//! * **Direct mode** – models are loaded from the local SQLite database and
+//! * **Direct mode** – models are loaded from the local `SQLite` database and
 //!   filtered in-process via [`gglib_core::domain::apply_query`].
 //!
 //! Both paths produce a `Vec<GuiModel>` that is rendered by a single table
@@ -206,16 +206,14 @@ fn render_table(models: &[GuiModel]) {
         let quant = model.quantization.as_deref().unwrap_or("--");
         let context = model
             .context_length
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| "--".to_string());
+            .map_or_else(|| "--".to_string(), |c| c.to_string());
 
         if show_speed {
             let speed = model
                 .benchmark_summary
                 .as_ref()
                 .and_then(|s| s.latest_tg_tps)
-                .map(|t| format!("{t:.1}"))
-                .unwrap_or_else(|| "--".to_string());
+                .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             println!(
                 "{:<3} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<20} {}",
                 model.id,

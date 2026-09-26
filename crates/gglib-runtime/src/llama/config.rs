@@ -35,7 +35,7 @@ impl BuildConfig {
             cmake_flags: acceleration
                 .cmake_flags()
                 .iter()
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
                 .collect(),
         }
     }

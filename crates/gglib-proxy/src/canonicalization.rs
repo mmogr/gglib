@@ -319,7 +319,7 @@ pub(crate) fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
         .iter()
         .find(|m| m.role == "user")
         .and_then(|m| m.content.clone())
-        .map(|c| c.into_string())
+        .map(gglib_core::MessageContent::into_string)
         .unwrap_or_default();
 
     if system_text.is_empty() && first_user_text.is_empty() {
@@ -350,7 +350,7 @@ pub(crate) fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
 /// turns rather than anything gglib did. [`canonicalize_tool_order`] runs
 /// before this (see the call site in `chat_completions`), so *order* drift
 /// cannot be the answer. What this log diagnoses is *membership* drift:
-/// comparing two consecutive log lines for the same session_id, identical
+/// comparing two consecutive log lines for the same `session_id`, identical
 /// list → not the cause; different names → a real client-side change
 /// (a tool added/removed), outside the proxy's control.
 ///

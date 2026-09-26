@@ -288,7 +288,7 @@ impl SettingsRepository for ProfileSettingsRepo {
 
 // ─── McpServerRepository mock (includes update_last_connected) ────────────
 
-/// Empty MCP repository — list returns empty, lookups return NotFound.
+/// Empty MCP repository — list returns empty, lookups return `NotFound`.
 pub(crate) struct EmptyMcpRepo;
 
 #[async_trait]
@@ -1127,7 +1127,7 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
 
     // Give the proxy time to start listening.
     tokio::time::sleep(Duration::from_millis(50)).await;
-    (format!("http://{}", addr), cancel)
+    (format!("http://{addr}"), cancel)
 }
 
 /// [`spawn_proxy_with_cache_for_model`] with defaults matching the common
@@ -1174,7 +1174,7 @@ pub(crate) fn parse_sse_frames(body: &str) -> (Vec<Value>, bool) {
     (frames, saw_done)
 }
 
-/// Assert that every frame has the OpenAI canonical envelope and a stable
+/// Assert that every frame has the `OpenAI` canonical envelope and a stable
 /// `id` / `model` / `created` triple. Returns the (id, model, created).
 pub(crate) fn assert_sse_canonical_envelope(
     frames: &[Value],

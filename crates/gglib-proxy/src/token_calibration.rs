@@ -22,7 +22,7 @@
 //! [`crate::metrics::ContextMetricsStore`].
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use gglib_core::request_pipeline::CHARS_PER_TOKEN_APPROX;
@@ -51,7 +51,7 @@ const MAX_SESSION_SNAPSHOTS: usize = 256;
 /// ever crosses it; short enough that a session left open for hours
 /// eventually re-aligns with reality instead of carrying a first-request
 /// guess forever.
-const SESSION_SNAPSHOT_TTL: Duration = Duration::from_secs(2 * 60 * 60);
+const SESSION_SNAPSHOT_TTL: Duration = Duration::from_hours(2);
 
 /// A chars-per-token ratio frozen at a point in time for one session.
 #[derive(Debug, Clone, Copy)]
@@ -123,7 +123,7 @@ impl TokenCalibration {
         let observed =
             (payload_chars as f64 / f64::from(prompt_tokens)).clamp(MIN_RATIO, MAX_RATIO);
 
-        let mut guard = self.ratios.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.ratios.lock().unwrap_or_else(PoisonError::into_inner);
         guard
             .entry(model.to_owned())
             .and_modify(|current| {
@@ -136,7 +136,7 @@ impl TokenCalibration {
     /// ([`CHARS_PER_TOKEN_APPROX`]) if the model has no observations yet.
     #[must_use]
     pub(crate) fn chars_per_token(&self, model: &str) -> f64 {
-        let guard = self.ratios.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self.ratios.lock().unwrap_or_else(PoisonError::into_inner);
         guard
             .get(model)
             .copied()
@@ -165,7 +165,7 @@ impl TokenCalibration {
         let mut guard = self
             .session_snapshots
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(PoisonError::into_inner);
 
         if let Some(snap) = guard.values.get(&key)
             && now.duration_since(snap.taken_at) < SESSION_SNAPSHOT_TTL
@@ -192,7 +192,7 @@ impl TokenCalibration {
     pub(crate) fn clear_session(&self, session_id: &str) {
         self.session_snapshots
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .remove_session(session_id);
     }
 
@@ -201,7 +201,7 @@ impl TokenCalibration {
         *self
             .session_snapshots
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = SessionSnapshots::default();
+            .unwrap_or_else(PoisonError::into_inner) = SessionSnapshots::default();
     }
 }
 
@@ -342,7 +342,7 @@ mod tests {
         let frozen = cal.session_chars_per_token("m", "sess-1", t0);
 
         cal.record("m", 20_000, 10_000); // drift while "frozen"
-        let still_frozen = cal.session_chars_per_token("m", "sess-1", t0 + Duration::from_secs(60));
+        let still_frozen = cal.session_chars_per_token("m", "sess-1", t0 + Duration::from_mins(1));
         assert_eq!(still_frozen, frozen, "well within the TTL");
 
         let after_ttl = cal.session_chars_per_token(

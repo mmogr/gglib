@@ -44,7 +44,7 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
 /// chunks. Such a stall comes before the first token, so it strikes once
 /// rather than recycling the model; see
 /// [`StreamVerdict::Stalled`](crate::upstream_health::StreamVerdict::Stalled).
-pub(crate) const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+pub(crate) const STREAM_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 
 /// How long a streamed chat completion waits on a silent upstream.
 ///

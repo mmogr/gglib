@@ -29,13 +29,13 @@ impl SqliteSettingsRepository {
     /// Call this during initialization to set up the schema.
     pub async fn ensure_table(&self) -> Result<(), RepositoryError> {
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS settings_kv (
                 key TEXT PRIMARY KEY NOT NULL,
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            "#,
+            ",
         )
         .execute(&self.pool)
         .await

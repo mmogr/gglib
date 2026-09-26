@@ -59,7 +59,7 @@ pub struct ServiceGraphParams {
     pub repos: Repos,
     /// Download manager.
     pub downloads: Arc<dyn DownloadManagerPort>,
-    /// HuggingFace client.
+    /// `HuggingFace` client.
     pub hf_client: Arc<dyn HfClientPort>,
     /// GGUF parser.
     pub gguf_parser: Arc<dyn GgufParserPort>,

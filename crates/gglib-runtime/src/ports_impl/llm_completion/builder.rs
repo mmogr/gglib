@@ -27,7 +27,7 @@ impl LlmCompletionAdapter {
     /// `"http://127.0.0.1:9000"`.  This accepts any reachable host, not just
     /// loopback.
     ///
-    /// `model` is forwarded verbatim in the OpenAI `model` field.  Pass `None`
+    /// `model` is forwarded verbatim in the `OpenAI` `model` field.  Pass `None`
     /// to send an empty string, which is the right default for llama-server
     /// when it is serving a single model.
     ///
@@ -44,7 +44,7 @@ impl LlmCompletionAdapter {
     /// `base_url` is the server root without a trailing slash, e.g.
     /// `"http://127.0.0.1:9000"`.  A trailing slash is tolerated and stripped.
     ///
-    /// `model` is forwarded verbatim in the OpenAI `model` field.  Pass `None`
+    /// `model` is forwarded verbatim in the `OpenAI` `model` field.  Pass `None`
     /// to send an empty string (the default for llama-server in single-model
     /// mode).  Pass a name when the server is routing by `--model-alias`.
     ///

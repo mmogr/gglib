@@ -1,7 +1,7 @@
 //! Access control for the daemon's management API.
 //!
 //! The management API can start and stop inference, change settings, and
-//! queue downloads, so it gets the same two gates the OpenAI proxy received
+//! queue downloads, so it gets the same two gates the `OpenAI` proxy received
 //! in the `--api-key`/`--allowed-host` work: a Host-header allowlist (the
 //! DNS-rebinding guard, always on) and an optional bearer token. The pure
 //! policy — normalization, loopback detection, the allowlist itself — is

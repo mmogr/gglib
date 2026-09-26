@@ -1,4 +1,4 @@
-//! OpenAI request-body construction for [`LlmCompletionAdapter`].
+//! `OpenAI` request-body construction for [`LlmCompletionAdapter`].
 //!
 //! Pure translation from domain types to the OpenAI-compatible JSON wire
 //! format, kept separate from the transport concerns in
@@ -25,7 +25,7 @@ use gglib_core::{
 // Wire-format helpers
 // =============================================================================
 
-/// Map a domain [`AgentMessage`] to the OpenAI `messages` array element.
+/// Map a domain [`AgentMessage`] to the `OpenAI` `messages` array element.
 fn message_to_openai(msg: &AgentMessage) -> Value {
     match msg {
         AgentMessage::System { content } => {
@@ -65,9 +65,9 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
     }
 }
 
-/// Map a domain [`ToolCall`] to the OpenAI `tool_calls` array element.
+/// Map a domain [`ToolCall`] to the `OpenAI` `tool_calls` array element.
 ///
-/// The OpenAI API requires `arguments` to be a **JSON string**, not an object.
+/// The `OpenAI` API requires `arguments` to be a **JSON string**, not an object.
 fn tool_call_to_openai(tc: &ToolCall) -> Value {
     json!({
         "id": tc.id,
@@ -80,7 +80,7 @@ fn tool_call_to_openai(tc: &ToolCall) -> Value {
     })
 }
 
-/// Map a domain [`ToolDefinition`] to the OpenAI `tools` array element.
+/// Map a domain [`ToolDefinition`] to the `OpenAI` `tools` array element.
 fn tool_def_to_openai(def: &ToolDefinition) -> Value {
     let parameters = def
         .input_schema
@@ -101,7 +101,7 @@ fn tool_def_to_openai(def: &ToolDefinition) -> Value {
 // Body construction
 // =============================================================================
 
-/// Build the full OpenAI `/v1/chat/completions` request body.
+/// Build the full `OpenAI` `/v1/chat/completions` request body.
 ///
 /// Always emits `model`, `messages`, `stream` and `return_progress`.  `tools` /
 /// `tool_choice` are added only when `tools` is non-empty, and sampling keys

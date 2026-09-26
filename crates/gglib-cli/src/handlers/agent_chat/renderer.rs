@@ -155,7 +155,7 @@ mod tests {
 
     use super::render_event;
 
-    /// Convenience: call render_event and assert it does not panic.
+    /// Convenience: call `render_event` and assert it does not panic.
     fn smoke(event: AgentEvent) {
         render_event(&event, false, false, false);
         render_event(&event, true, false, false);

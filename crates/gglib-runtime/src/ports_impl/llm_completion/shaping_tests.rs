@@ -312,8 +312,8 @@ fn raw_passthrough_skips_the_pipeline_entirely() {
     assert_eq!(body["stream"], true, "transport fields still present");
 }
 
-/// A caller-set tool_choice lands in the body where the pipeline (and the
-/// upstream) read it, overriding build_chat_body's `auto` default — but only
+/// A caller-set `tool_choice` lands in the body where the pipeline (and the
+/// upstream) read it, overriding `build_chat_body`'s `auto` default — but only
 /// on the opening turn.
 ///
 /// Holding a model at `required` for every turn makes a final answer

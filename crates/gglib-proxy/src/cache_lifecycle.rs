@@ -16,7 +16,7 @@ use tracing::{debug, warn};
 
 use crate::slots::{self, SlotIoResult};
 
-/// Composite key for the hot-cache bypass: (model_id, session_id).
+/// Composite key for the hot-cache bypass: (`model_id`, `session_id`).
 /// Both fields must match to consider a session "hot" in RAM.
 #[derive(Clone, Debug)]
 pub struct LastLoadedSession {
@@ -33,7 +33,7 @@ use slots::{MAX_RETRIES, RETRY_BACKOFF};
 ///
 /// Holds `Arc`-wrapped shared state so it can be cloned and moved across
 /// `tokio::spawn` boundaries. Deliberately does NOT hold the semaphore —
-/// that is an AppState concurrency control, passed as `&Semaphore`.
+/// that is an `AppState` concurrency control, passed as `&Semaphore`.
 #[derive(Clone)]
 pub struct StreamConfig {
     pub client: Client,
@@ -49,7 +49,7 @@ pub struct StreamConfig {
     /// Used by mtime guard to skip restoring stale slot files.
     pub server_start_time: Arc<AtomicU64>,
     /// Last session successfully loaded into RAM (hot in KV cache).
-    /// Composite key (model_id + session_id) used to bypass disk restore
+    /// Composite key (`model_id` + `session_id`) used to bypass disk restore
     /// when the same model+session is already hot.
     pub last_loaded_session: Arc<tokio::sync::RwLock<Option<LastLoadedSession>>>,
 }
@@ -80,9 +80,7 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
     // instance (see `slots::slot_file_is_stale` for the fail-open contract).
     let server_start_secs = config.server_start_time.load(Ordering::SeqCst);
 
-    let mut result = if !file_exists {
-        SlotIoResult::NotFound
-    } else {
+    let mut result = if file_exists {
         let is_stale = slots::slot_file_is_stale(
             &config.slot_dir,
             config.model_id,
@@ -106,6 +104,8 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
             )
             .await
         }
+    } else {
+        SlotIoResult::NotFound
     };
 
     // Retry only transient failures (UpstreamDead / timeout / network error)
@@ -140,13 +140,13 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
     match &result {
         SlotIoResult::Ok => debug!("restored KV cache for {session_id}"),
         SlotIoResult::NotFound => {
-            debug!("no cached slot for {session_id} — proceeding cold")
+            debug!("no cached slot for {session_id} — proceeding cold");
         }
         SlotIoResult::Transient(e) => {
-            warn!("restore failed for {session_id} after retries: {e} — degrading to cold start")
+            warn!("restore failed for {session_id} after retries: {e} — degrading to cold start");
         }
         SlotIoResult::Permanent(e) => {
-            warn!("restore permanently failed for {session_id}: {e}")
+            warn!("restore permanently failed for {session_id}: {e}");
         }
     }
 
@@ -229,7 +229,7 @@ where
     match &restore_result {
         SlotIoResult::Ok => tracing::debug!("Cache restored for session {}", sanitized),
         SlotIoResult::NotFound => {
-            tracing::info!("No cached slot for session {} — full re-prefill", sanitized)
+            tracing::info!("No cached slot for session {} — full re-prefill", sanitized);
         }
         SlotIoResult::Transient(msg) => tracing::warn!(
             "Transient cache restore failure for session {}: {}",
@@ -237,7 +237,7 @@ where
             msg
         ),
         SlotIoResult::Permanent(msg) => {
-            tracing::warn!("Cache restore failed for session {}: {}", sanitized, msg)
+            tracing::warn!("Cache restore failed for session {}: {}", sanitized, msg);
         }
     }
     Ok((result, restore_result))
@@ -467,20 +467,18 @@ mod tests {
 
         assert!(
             matches!(result, SlotIoResult::NotFound),
-            "missing slot file should be treated as NotFound, got {:?}",
-            result
+            "missing slot file should be treated as NotFound, got {result:?}"
         );
         assert!(
             elapsed < Duration::from_millis(150),
-            "existence check should short-circuit before any network retry loop, took {:?}",
-            elapsed
+            "existence check should short-circuit before any network retry loop, took {elapsed:?}"
         );
     }
 
     /// Regression test for the mtime guard: a slot file written before the
     /// current llama-server instance started must never reach the network
     /// restore call. Proven by timing — a real call to a refused port would
-    /// retry MAX_RETRIES times with RETRY_BACKOFF between them (200ms+); the
+    /// retry `MAX_RETRIES` times with `RETRY_BACKOFF` between them (200ms+); the
     /// guard short-circuits to `NotFound` immediately instead.
     #[tokio::test]
     async fn test_restore_with_retry_skips_stale_slot_file() {
@@ -516,13 +514,11 @@ mod tests {
 
         assert!(
             matches!(result, SlotIoResult::NotFound),
-            "stale slot file should be treated as NotFound, got {:?}",
-            result
+            "stale slot file should be treated as NotFound, got {result:?}"
         );
         assert!(
             elapsed < Duration::from_millis(150),
-            "guard should short-circuit before any network retry loop, took {:?}",
-            elapsed
+            "guard should short-circuit before any network retry loop, took {elapsed:?}"
         );
     }
 
@@ -560,8 +556,7 @@ mod tests {
         // network path was taken, which surfaces as Transient after retries.
         assert!(
             matches!(result, SlotIoResult::Transient(_)),
-            "fresh slot file should reach the real restore call, got {:?}",
-            result
+            "fresh slot file should reach the real restore call, got {result:?}"
         );
     }
 

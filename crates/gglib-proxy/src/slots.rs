@@ -77,7 +77,7 @@ where
 /// forwarding, or the dashboard's SSE stream. A poll that genuinely never
 /// returns (dead server, not just a busy one) is still eventually caught,
 /// just after a much more forgiving wait.
-const SLOTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(900);
+const SLOTS_REQUEST_TIMEOUT: Duration = Duration::from_mins(15);
 
 // =============================================================================
 // SlotSnapshot
@@ -682,7 +682,7 @@ mod tests {
 /// `NotFound` means no cached slot exists for this session (not an error —
 /// the request proceeds cold). `Transient` failures may be retried.
 /// `Permanent` failures are terminal (e.g., invalid session ID).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SlotIoResult {
     Ok,
     NotFound,
@@ -704,7 +704,7 @@ pub fn sanitize_session_id(id: &str) -> Result<String, String> {
             .chars()
             .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(format!("invalid session ID: {:?}", id));
+        return Err(format!("invalid session ID: {id:?}"));
     }
     Ok(id.to_lowercase())
 }
@@ -762,11 +762,11 @@ async fn classify_slot_response(resp: reqwest::Response) -> SlotIoResult {
 /// name and only renames it onto the real `.bin` name after a
 /// confirmed-complete write, so a generous timeout here costs nothing but
 /// time.
-const SAVE_TIMEOUT: Duration = Duration::from_secs(120);
+const SAVE_TIMEOUT: Duration = Duration::from_mins(2);
 
 /// Generous timeout for a slot restore — reading a multi-GB file back from
 /// disk (cold cache, slow storage) can take a while.
-const RESTORE_TIMEOUT: Duration = Duration::from_secs(60);
+const RESTORE_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// Per-attempt nonce for temp save filenames, so a timed-out-but-still-writing
 /// previous attempt can never collide with a retry's temp file.
@@ -917,7 +917,7 @@ pub async fn restore_slot(
     }
 }
 
-/// Clear per-slot cache files from disk. Uses tokio::fs for async safety.
+/// Clear per-slot cache files from disk. Uses `tokio::fs` for async safety.
 ///
 /// Slot files are flat as `{slot_dir}/{model_id}__{session}.bin`.
 ///
@@ -1003,10 +1003,10 @@ pub async fn attempt_save(
         SlotIoResult::Ok => {}
         SlotIoResult::NotFound => warn!("save failed for {session_id}: 404 Not Found"),
         SlotIoResult::Transient(e) => {
-            warn!("save failed for {session_id} after retries: {e}")
+            warn!("save failed for {session_id} after retries: {e}");
         }
         SlotIoResult::Permanent(e) => {
-            warn!("save failed for {session_id} (permanent): {e}")
+            warn!("save failed for {session_id} (permanent): {e}");
         }
     }
 }

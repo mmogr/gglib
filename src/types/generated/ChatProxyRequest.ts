@@ -31,23 +31,23 @@ maxTokens: number | null,
  */
 temperature: number | null, 
 /**
- * Optional top_p (inference parameter - will be resolved via hierarchy).
+ * Optional `top_p` (inference parameter - will be resolved via hierarchy).
  */
 topP: number | null, 
 /**
- * Optional top_k (inference parameter - will be resolved via hierarchy).
+ * Optional `top_k` (inference parameter - will be resolved via hierarchy).
  */
 topK: number | null, 
 /**
- * Optional repeat_penalty (inference parameter - will be resolved via hierarchy).
+ * Optional `repeat_penalty` (inference parameter - will be resolved via hierarchy).
  */
 repeatPenalty: number | null, 
 /**
- * Optional presence_penalty (inference parameter - will be resolved via hierarchy).
+ * Optional `presence_penalty` (inference parameter - will be resolved via hierarchy).
  */
 presencePenalty: number | null, 
 /**
- * Optional min_p sampling threshold (inference parameter - will be resolved via hierarchy).
+ * Optional `min_p` sampling threshold (inference parameter - will be resolved via hierarchy).
  */
 minP: number | null, 
 /**

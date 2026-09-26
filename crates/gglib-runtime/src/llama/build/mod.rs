@@ -141,14 +141,14 @@ fn configure_cmake(
     if matches!(acceleration, Acceleration::Cuda)
         && let Err(e) = validate_cuda_gcc_compatibility()
     {
-        bail!("{}", e);
+        bail!("{e}");
     }
 
     // For CUDA builds, set CUDA paths explicitly
     let cuda_args = if matches!(acceleration, Acceleration::Cuda) {
         if let Some(cuda_path) = get_cuda_path() {
             let _ = tx.blocking_send(BuildEvent::Log {
-                message: format!("Using CUDA installation at: {}", cuda_path),
+                message: format!("Using CUDA installation at: {cuda_path}"),
             });
 
             // Set environment variables for FindCUDAToolkit
@@ -157,7 +157,7 @@ fn configure_cmake(
             cmd.env("CUDA_TOOLKIT_ROOT_DIR", &cuda_path);
 
             // Also pass as CMake arguments (more reliable)
-            let nvcc_path = format!("{}/bin/nvcc", cuda_path);
+            let nvcc_path = format!("{cuda_path}/bin/nvcc");
             vec![
                 format!("-DCUDAToolkit_ROOT={}", cuda_path),
                 format!("-DCMAKE_CUDA_COMPILER={}", nvcc_path),
@@ -170,7 +170,7 @@ fn configure_cmake(
     };
 
     // Combine all arguments
-    args.extend(cuda_args.iter().map(|s| s.as_str()));
+    args.extend(cuda_args.iter().map(std::string::String::as_str));
     cmd.args(&args);
 
     let mut child = cmd

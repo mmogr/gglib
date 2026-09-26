@@ -178,7 +178,7 @@ fn handle_ping(id: Value) -> Response {
 
 /// Handle `tools/list` — return the three progressive-disclosure meta-tools.
 ///
-/// External clients (VS Code Copilot, OpenWebUI, etc.) receive exactly three
+/// External clients (VS Code Copilot, `OpenWebUI`, etc.) receive exactly three
 /// stable tool specs rather than the full registry. This keeps the baseline
 /// context cost constant regardless of how many MCP servers are running.
 async fn handle_meta_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Response {

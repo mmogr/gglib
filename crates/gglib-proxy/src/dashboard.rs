@@ -22,7 +22,7 @@
 //! near-real-time updates — the same cadence as the `/slots` poller itself,
 //! so slot data is never staler than what's already being polled.
 
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 use gglib_core::domain::CacheRamHealth;
@@ -210,7 +210,7 @@ impl CacheStatusCache {
     pub fn get(&self) -> Option<CacheStatus> {
         self.latest
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
 
@@ -219,7 +219,7 @@ impl CacheStatusCache {
     /// Skips the write when nothing changed, so the steady state (every
     /// request resolving the same model) never contends with the publisher.
     pub fn set(&self, status: CacheStatus) {
-        let mut guard = self.latest.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.latest.lock().unwrap_or_else(PoisonError::into_inner);
         if guard.as_ref() != Some(&status) {
             *guard = Some(status);
         }
@@ -253,7 +253,7 @@ impl LaunchNarrationCache {
     pub fn get(&self) -> Option<LaunchNarration> {
         self.latest
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
 
@@ -262,7 +262,7 @@ impl LaunchNarrationCache {
     /// Skips the write when nothing changed, so the steady state — every
     /// request resolving the same model — never contends with the publisher.
     pub fn set(&self, narration: LaunchNarration) {
-        let mut guard = self.latest.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.latest.lock().unwrap_or_else(PoisonError::into_inner);
         if guard.as_ref() != Some(&narration) {
             *guard = Some(narration);
         }

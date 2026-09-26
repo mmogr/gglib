@@ -96,7 +96,7 @@ fn rejected(field: &'static str) -> FieldIssue {
 }
 
 /// **The point of the whole record.** The count said four fields were dropped;
-/// only the names can say which, and "why did my reasoning_effort do nothing?"
+/// only the names can say which, and "why did my `reasoning_effort` do nothing?"
 /// is answerable from one and not the other.
 #[test]
 fn names_are_kept_beside_the_counts_and_the_two_kinds_stay_apart() {

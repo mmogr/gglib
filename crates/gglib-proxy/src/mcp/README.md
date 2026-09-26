@@ -8,7 +8,7 @@
 MCP Streamable HTTP gateway for the proxy.
 
 Implements the MCP Streamable HTTP transport (spec 2025-03-26) so
-external clients like OpenWebUI can discover and invoke gglib's
+external clients like `OpenWebUI` can discover and invoke gglib's
 MCP tools through the same proxy that serves OpenAI-compatible
 chat completions.
 

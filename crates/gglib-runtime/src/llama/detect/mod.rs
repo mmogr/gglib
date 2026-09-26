@@ -32,20 +32,20 @@ impl Acceleration {
     /// Get the display name for this acceleration type.
     pub fn display_name(&self) -> &str {
         match self {
-            Acceleration::Metal => "Metal",
-            Acceleration::Cuda => "CUDA",
-            Acceleration::Vulkan => "Vulkan",
-            Acceleration::Cpu => "CPU",
+            Self::Metal => "Metal",
+            Self::Cuda => "CUDA",
+            Self::Vulkan => "Vulkan",
+            Self::Cpu => "CPU",
         }
     }
 
-    /// Get the CMake flags for this acceleration type.
+    /// Get the `CMake` flags for this acceleration type.
     pub fn cmake_flags(&self) -> Vec<&str> {
         match self {
-            Acceleration::Metal => vec!["-DGGML_METAL=ON"],
-            Acceleration::Cuda => vec!["-DGGML_CUDA=ON"],
-            Acceleration::Vulkan => vec!["-DGGML_VULKAN=ON"],
-            Acceleration::Cpu => vec![],
+            Self::Metal => vec!["-DGGML_METAL=ON"],
+            Self::Cuda => vec!["-DGGML_CUDA=ON"],
+            Self::Vulkan => vec!["-DGGML_VULKAN=ON"],
+            Self::Cpu => vec![],
         }
     }
 }

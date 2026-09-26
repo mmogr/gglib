@@ -26,13 +26,13 @@ pub enum CliModelSortBy {
 }
 
 impl CliModelSortBy {
-    /// The snake_case name expected by the HTTP query parameter `sort=`.
+    /// The `snake_case` name expected by the HTTP query parameter `sort=`.
     pub fn api_value(self) -> &'static str {
         match self {
-            CliModelSortBy::Added => "added_at",
-            CliModelSortBy::Name => "name",
-            CliModelSortBy::Params => "param_count",
-            CliModelSortBy::Speed => "latest_tg_tps",
+            Self::Added => "added_at",
+            Self::Name => "name",
+            Self::Params => "param_count",
+            Self::Speed => "latest_tg_tps",
         }
     }
 }
@@ -40,10 +40,10 @@ impl CliModelSortBy {
 impl From<CliModelSortBy> for ModelSortBy {
     fn from(v: CliModelSortBy) -> Self {
         match v {
-            CliModelSortBy::Added => ModelSortBy::AddedAt,
-            CliModelSortBy::Name => ModelSortBy::Name,
-            CliModelSortBy::Params => ModelSortBy::ParamCount,
-            CliModelSortBy::Speed => ModelSortBy::LatestTgTps,
+            CliModelSortBy::Added => Self::AddedAt,
+            CliModelSortBy::Name => Self::Name,
+            CliModelSortBy::Params => Self::ParamCount,
+            CliModelSortBy::Speed => Self::LatestTgTps,
         }
     }
 }
@@ -62,8 +62,8 @@ impl CliSortOrder {
     /// The value expected by the HTTP query parameter `order=`.
     pub fn api_value(self) -> &'static str {
         match self {
-            CliSortOrder::Asc => "asc",
-            CliSortOrder::Desc => "desc",
+            Self::Asc => "asc",
+            Self::Desc => "desc",
         }
     }
 }
@@ -71,8 +71,8 @@ impl CliSortOrder {
 impl From<CliSortOrder> for SortOrder {
     fn from(v: CliSortOrder) -> Self {
         match v {
-            CliSortOrder::Asc => SortOrder::Asc,
-            CliSortOrder::Desc => SortOrder::Desc,
+            CliSortOrder::Asc => Self::Asc,
+            CliSortOrder::Desc => Self::Desc,
         }
     }
 }

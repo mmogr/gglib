@@ -1,7 +1,7 @@
 //! Inspect command handler.
 //!
 //! Displays full details for a single model — every stored field including
-//! raw GGUF metadata, MoE topology, HuggingFace provenance, capability flags,
+//! raw GGUF metadata, `MoE` topology, `HuggingFace` provenance, capability flags,
 //! inference defaults, and timestamps.
 //!
 //! This handler is intentionally thin:

@@ -48,7 +48,7 @@ impl From<LoopGuardModeArg> for LoopGuardMode {
 #[derive(Args)]
 pub struct SettingsSetArgs {
     /// Default context size for models (512-1000000).
-    /// Global fallback (level 3 of 5); per-model server_defaults and runtime flags take
+    /// Global fallback (level 3 of 5); per-model `server_defaults` and runtime flags take
     /// precedence, and leaving it unset lets the daemon size each launch — fitted to this
     /// machine where gglib can read the device, and the built-in floor where it cannot.
     /// Setting it pins every launch to that number. This flag cannot clear the value
@@ -74,7 +74,7 @@ pub struct SettingsSetArgs {
     /// Maximum stagnation steps before stopping agent loop
     #[arg(long)]
     pub max_stagnation_steps: Option<u32>,
-    /// Show memory fit indicators in HuggingFace browser
+    /// Show memory fit indicators in `HuggingFace` browser
     #[arg(long)]
     pub show_memory_fit_indicators: Option<bool>,
     /// Host address `gglib web` binds to (an IP, e.g. 127.0.0.1 or 0.0.0.0).
@@ -82,7 +82,7 @@ pub struct SettingsSetArgs {
     #[arg(long)]
     pub bind_host: Option<String>,
     /// Expose `gglib web` on all LAN interfaces and broadcast over mDNS.
-    /// WARNING: makes GGLib visible to every device on your network.
+    /// WARNING: makes `GGLib` visible to every device on your network.
     #[arg(long)]
     pub share_lan: Option<bool>,
     /// Bearer token the proxy requires on /v1/* and /mcp. Clients send it
@@ -91,8 +91,8 @@ pub struct SettingsSetArgs {
     /// the first time it binds a non-loopback host.
     #[arg(long)]
     pub proxy_api_key: Option<String>,
-    /// Honour a client's own sampling parameters (temperature, top_p,
-    /// top_k, presence_penalty, repeat_penalty, min_p). Defaults to
+    /// Honour a client's own sampling parameters (temperature, `top_p`,
+    /// `top_k`, `presence_penalty`, `repeat_penalty`, `min_p`). Defaults to
     /// false: most clients (e.g. VS Code Copilot) send fixed sampling
     /// values with no user-facing control behind them, so this server's
     /// own per-model and global defaults apply instead. `max_tokens` is

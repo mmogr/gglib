@@ -25,7 +25,7 @@ const BIND_TIMEOUT: Duration = Duration::from_secs(30);
 /// Generous on purpose: this covers reading tens of gigabytes of weights off
 /// disk into VRAM on a cold page cache. Concurrent requests queue behind the
 /// same startup rather than being refused, so waiting is the correct behaviour.
-const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
+const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 
 /// Wait for the endpoint, send one real request through it, then print the
 /// client configuration.

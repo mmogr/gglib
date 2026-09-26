@@ -103,7 +103,10 @@ impl ServerLogManager {
     /// Get logs for a specific server
     pub fn get_logs(&self, port: u16) -> Vec<ServerLogEntry> {
         let buffers = self.buffers.read().unwrap();
-        buffers.get(&port).map(|b| b.get_all()).unwrap_or_default()
+        buffers
+            .get(&port)
+            .map(LogBuffer::get_all)
+            .unwrap_or_default()
     }
 
     /// Get a broadcast receiver for log events
@@ -124,9 +127,9 @@ impl Default for ServerLogManager {
 
 use gglib_core::ports::ServerLogSinkPort;
 
-/// Log sink that forwards process output to the global ServerLogManager.
+/// Log sink that forwards process output to the global `ServerLogManager`.
 ///
-/// This adapter bridges the process output capture (via spawn_log_readers)
+/// This adapter bridges the process output capture (via `spawn_log_readers`)
 /// to the log broadcasting system. It's a zero-sized type since it just
 /// delegates to the global log manager singleton.
 #[derive(Debug, Clone, Default)]

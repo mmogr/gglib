@@ -67,7 +67,7 @@ fn is_our_llama_server_linux(pid: u32) -> bool {
         return false;
     };
 
-    let proc_exe = format!("/proc/{}/exe", pid);
+    let proc_exe = format!("/proc/{pid}/exe");
     let Ok(actual_path) = fs::read_link(&proc_exe) else {
         return false;
     };
@@ -90,7 +90,7 @@ pub fn pid_exists(pid: u32) -> bool {
 
     // Signal None is a special "null signal" that checks if we can signal the process
     match signal::kill(Pid::from_raw(pid as i32), None) {
-        Ok(_) => true,
+        Ok(()) => true,
         Err(nix::errno::Errno::ESRCH) => false, // No such process
         Err(_) => true,                         // Process exists but we lack permission
     }

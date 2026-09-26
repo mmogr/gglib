@@ -6,7 +6,7 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::model_catalog::{CatalogError, ModelLaunchSpec, ModelSummary};
 
 /// Catalog holding a fixed set of names, resolving by exact match — the
-/// behaviour of the real SQLite repository (`WHERE name = ?`).
+/// behaviour of the real `SQLite` repository (`WHERE name = ?`).
 #[derive(Debug)]
 struct NamedCatalog {
     names: HashSet<String>,

@@ -302,7 +302,7 @@ fn flags_decision(inputs: &NarrationInputs<'_>) -> Option<LaunchDecision> {
 /// Which tool-call dialect the proxy will normalize on the way out.
 ///
 /// Always present, including the pass-through case: "this model's tool calls
-/// arrive as OpenAI JSON already" is exactly as informative as naming a
+/// arrive as `OpenAI` JSON already" is exactly as informative as naming a
 /// parser, and its absence would read as a missing feature.
 fn dialect_decision(inputs: &NarrationInputs<'_>) -> LaunchDecision {
     if inputs

@@ -92,7 +92,10 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     } else {
         Some(inference_config)
     };
-    let prior_chars: usize = prior_messages.iter().map(|m| m.char_count()).sum();
+    let prior_chars: usize = prior_messages
+        .iter()
+        .map(gglib_core::AgentMessage::char_count)
+        .sum();
     let banner = config::BannerInfo {
         quiet: false,
         sampling: sampling.clone(),
@@ -166,7 +169,7 @@ async fn new_conversation<'a>(
 /// gglib chat other-model --continue 42 --temperature 0.9
 /// ```
 /// uses `other-model` and temperature `0.9` from the CLI, but restores
-/// everything else (system prompt, top_p, tools, etc.) from conversation 42.
+/// everything else (system prompt, `top_p`, tools, etc.) from conversation 42.
 async fn resume_conversation<'a>(
     ctx: &'a CliContext,
     args: &ChatArgs,
@@ -198,8 +201,10 @@ async fn resume_conversation<'a>(
     }
 
     // Convert persisted messages to agent messages
-    let mut prior_messages: Vec<AgentMessage> =
-        db_messages.iter().map(|m| m.to_agent_message()).collect();
+    let mut prior_messages: Vec<AgentMessage> = db_messages
+        .iter()
+        .map(gglib_core::Message::to_agent_message)
+        .collect();
 
     // The system prompt is stored on the conversation record (not as a
     // message row), so prepend it if present.

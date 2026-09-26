@@ -63,7 +63,7 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
 
     // Send a non-streaming chat completion request.
     let response = Client::new()
-        .post(format!("{}/v1/chat/completions", proxy_base))
+        .post(format!("{proxy_base}/v1/chat/completions"))
         .header("X-Gglib-Session-Id", session_id)
         .json(&json!({
             "model": "test-model",
@@ -97,8 +97,7 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     assert_eq!(
         actions,
         vec![0, 1, 2],
-        "Expected restore→generate→save order, got: {:?}",
-        actions
+        "Expected restore→generate→save order, got: {actions:?}"
     );
 
     // Regression test: llama-server's KV reuse (n_past = get_common_prefix(...)
@@ -112,8 +111,7 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     assert_eq!(
         forwarded_json["cache_prompt"],
         serde_json::json!(true),
-        "proxy must force cache_prompt=true so llama-server's reuse path isn't silently skipped, got: {}",
-        forwarded_json
+        "proxy must force cache_prompt=true so llama-server's reuse path isn't silently skipped, got: {forwarded_json}"
     );
 
     // Atomic save regression: the final `.bin` must exist post-save (the mock
@@ -129,13 +127,16 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     );
     let leftover_tmp: Vec<_> = std::fs::read_dir(&slot_dir)
         .unwrap()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("tmp"))
         .collect();
     assert!(
         leftover_tmp.is_empty(),
         "no .tmp file should remain after a successful save, found: {:?}",
-        leftover_tmp.iter().map(|e| e.path()).collect::<Vec<_>>()
+        leftover_tmp
+            .iter()
+            .map(std::fs::DirEntry::path)
+            .collect::<Vec<_>>()
     );
 
     // Cleanup.
@@ -167,7 +168,7 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
 
     // Send a non-streaming chat completion request with NO session header.
     let response = Client::new()
-        .post(format!("{}/v1/chat/completions", proxy_base))
+        .post(format!("{proxy_base}/v1/chat/completions"))
         .json(&json!({
             "model": "test-model",
             "messages": [
@@ -201,8 +202,7 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
     assert_eq!(
         actions,
         vec![1, 2],
-        "Expected generate→save order (no restore — nothing cached yet), got: {:?}",
-        actions
+        "Expected generate→save order (no restore — nothing cached yet), got: {actions:?}"
     );
 
     proxy_cancel.cancel();
@@ -230,7 +230,7 @@ async fn client_sent_cache_prompt_false_is_overridden_to_true() {
         spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
 
     let response = Client::new()
-        .post(format!("{}/v1/chat/completions", proxy_base))
+        .post(format!("{proxy_base}/v1/chat/completions"))
         .header("X-Gglib-Session-Id", "cache-prompt-test")
         .json(&json!({
             "model": "test-model",
@@ -249,8 +249,7 @@ async fn client_sent_cache_prompt_false_is_overridden_to_true() {
     assert_eq!(
         forwarded_json["cache_prompt"],
         serde_json::json!(true),
-        "proxy must override an explicit client cache_prompt=false, got: {}",
-        forwarded_json
+        "proxy must override an explicit client cache_prompt=false, got: {forwarded_json}"
     );
 
     proxy_cancel.cancel();
@@ -258,7 +257,7 @@ async fn client_sent_cache_prompt_false_is_overridden_to_true() {
     let _ = std::fs::remove_dir_all(&slot_dir);
 }
 
-/// Verify that `restore_with_retry` exhausts MAX_RETRIES (2) on transient
+/// Verify that `restore_with_retry` exhausts `MAX_RETRIES` (2) on transient
 /// failures, then succeeds on the 3rd attempt — and that backoff delays
 /// accumulate to at least 200ms.
 #[tokio::test]
@@ -318,7 +317,7 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
 
     let config = StreamConfig {
         client: Client::new(),
-        base_url: format!("http://127.0.0.1:{}", port),
+        base_url: format!("http://127.0.0.1:{port}"),
         slot_dir,
         model_id: 0,
         clear_all_pending: Arc::new(AtomicBool::new(false)),
@@ -346,8 +345,7 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
     // After 2 retries (3 total attempts), should succeed.
     assert!(
         matches!(result, SlotIoResult::Ok),
-        "Expected Ok after retries, got: {:?}",
-        result
+        "Expected Ok after retries, got: {result:?}"
     );
 
     // Exactly 3 attempts: 1 initial + 2 retries.
@@ -418,7 +416,7 @@ async fn save_retry_backoff_exhausts_max_retries_then_succeeds() {
     tokio::time::sleep(Duration::from_millis(30)).await;
 
     let client = Client::new();
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let base_url = format!("http://127.0.0.1:{port}");
     let clear_all_pending = AtomicBool::new(false);
     let per_session_cleared = DashSet::new();
 
@@ -490,7 +488,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
     std::fs::write(&bin_path, b"fake kv state").unwrap();
 
     let response = Client::new()
-        .post(format!("{}/v1/chat/completions", proxy_base))
+        .post(format!("{proxy_base}/v1/chat/completions"))
         .header("X-Gglib-Session-Id", session_id)
         .json(&json!({
             "model": "test-model",
@@ -522,12 +520,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
 
     // Only the generate call (1) should appear — no restore (0), no save (2).
     let actions = action_log.lock().await.clone();
-    assert_eq!(
-        actions,
-        vec![1],
-        "Expected generate only, got: {:?}",
-        actions
-    );
+    assert_eq!(actions, vec![1], "Expected generate only, got: {actions:?}");
 
     proxy_cancel.cancel();
     upstream_cancel.cancel();
@@ -566,7 +559,7 @@ async fn pinned_proxy_persists_kv_cache_across_the_session() {
     std::fs::write(&bin_path, b"fake kv state").unwrap();
 
     let response = Client::new()
-        .post(format!("{}/v1/chat/completions", proxy_base))
+        .post(format!("{proxy_base}/v1/chat/completions"))
         .header("X-Gglib-Session-Id", session_id)
         .json(&json!({
             "model": "test-model",
@@ -598,8 +591,7 @@ async fn pinned_proxy_persists_kv_cache_across_the_session() {
     assert_eq!(
         actions,
         vec![0, 1, 2],
-        "Expected restore→generate→save order on the pinned path, got: {:?}",
-        actions
+        "Expected restore→generate→save order on the pinned path, got: {actions:?}"
     );
 
     let final_bin = slot_bin_path(&slot_dir, 1, session_id);

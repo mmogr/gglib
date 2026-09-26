@@ -175,7 +175,7 @@ pub(crate) async fn embeddings(
         .client
         .post(&upstream_url)
         .header("content-type", "application/json");
-    for (name, value) in headers.iter() {
+    for (name, value) in &headers {
         if should_forward_header(name.as_str())
             && let Ok(value_str) = value.to_str()
         {

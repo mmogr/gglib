@@ -21,11 +21,11 @@ pub struct ModelFilesRepository {
 impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
     async fn insert(&self, file: &NewModelFile) -> anyhow::Result<()> {
         sqlx::query(
-            r#"
+            r"
             INSERT INTO model_files 
                 (model_id, file_path, file_index, expected_size, hf_oid)
             VALUES (?, ?, ?, ?, ?)
-            "#,
+            ",
         )
         .bind(file.model_id)
         .bind(&file.file_path)
@@ -64,15 +64,15 @@ impl ModelFilesRepository {
 
     /// Get all model files for a specific model.
     ///
-    /// Returns files ordered by file_index.
+    /// Returns files ordered by `file_index`.
     pub async fn get_by_model_id(&self, model_id: i64) -> Result<Vec<ModelFile>> {
         let rows = sqlx::query(
-            r#"
+            r"
             SELECT id, model_id, file_path, file_index, expected_size, hf_oid, last_verified_at
             FROM model_files
             WHERE model_id = ?
             ORDER BY file_index ASC
-            "#,
+            ",
         )
         .bind(model_id)
         .fetch_all(&self.pool)
@@ -83,14 +83,14 @@ impl ModelFilesRepository {
             .collect()
     }
 
-    /// Update the last_verified_at timestamp for a model file.
+    /// Update the `last_verified_at` timestamp for a model file.
     pub async fn update_verification_time(&self, id: i64, timestamp: DateTime<Utc>) -> Result<()> {
         sqlx::query(
-            r#"
+            r"
             UPDATE model_files
             SET last_verified_at = ?
             WHERE id = ?
-            "#,
+            ",
         )
         .bind(timestamp.to_rfc3339())
         .bind(id)
@@ -103,11 +103,11 @@ impl ModelFilesRepository {
     /// Get a specific model file by ID.
     pub async fn get_by_id(&self, id: i64) -> Result<Option<ModelFile>> {
         let row = sqlx::query(
-            r#"
+            r"
             SELECT id, model_id, file_path, file_index, expected_size, hf_oid, last_verified_at
             FROM model_files
             WHERE id = ?
-            "#,
+            ",
         )
         .bind(id)
         .fetch_optional(&self.pool)

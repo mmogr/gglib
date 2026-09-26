@@ -57,7 +57,7 @@ fn resolve_disk_budget_inner(explicit_gb: Option<u64>, env_gb: Option<String>) -
 /// Tmp files older than this are orphans from a save that timed out, failed,
 /// or was never confirmed — more than twice `slots::SAVE_TIMEOUT` so a
 /// slow-but-still-in-flight save is never mistaken for an orphan.
-const STALE_TMP_MAX_AGE: Duration = Duration::from_secs(15 * 60);
+const STALE_TMP_MAX_AGE: Duration = Duration::from_mins(15);
 
 /// Background eviction task — spawned at server startup, runs every 60s.
 /// Exits promptly on `cancel`, same shutdown contract as the other
@@ -68,7 +68,7 @@ pub fn spawn_eviction_task(
     cancel: CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let interval = Duration::from_secs(60);
+        let interval = Duration::from_mins(1);
         loop {
             tokio::select! {
                 () = cancel.cancelled() => break,

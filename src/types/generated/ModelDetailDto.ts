@@ -6,8 +6,8 @@ import type { Support } from "./Support";
 /**
  * Complete model details for the inspect view.
  *
- * Carries the domain [`Model`] in full — raw GGUF metadata, MoE topology and
- * HuggingFace provenance, none of which the list endpoint sends. It is the
+ * Carries the domain [`Model`] in full — raw GGUF metadata, `MoE` topology and
+ * `HuggingFace` provenance, none of which the list endpoint sends. It is the
  * single shared contract consumed by:
  *
  * - CLI: `gglib model inspect` (human-readable or `--json`)
@@ -50,31 +50,31 @@ quantization?: string,
  */
 contextLength?: number, 
 /**
- * Total number of experts (MoE models only).
+ * Total number of experts (`MoE` models only).
  */
 expertCount?: number, 
 /**
- * Experts activated per token (MoE models only).
+ * Experts activated per token (`MoE` models only).
  */
 expertUsedCount?: number, 
 /**
- * Shared experts that are always active (MoE models only).
+ * Shared experts that are always active (`MoE` models only).
  */
 expertSharedCount?: number, 
 /**
- * HuggingFace repository ID (e.g. `"bartowski/Llama-3.1-8B-GGUF"`).
+ * `HuggingFace` repository ID (e.g. `"bartowski/Llama-3.1-8B-GGUF"`).
  */
 hfRepoId?: string, 
 /**
- * Original filename on HuggingFace Hub.
+ * Original filename on `HuggingFace` Hub.
  */
 hfFilename?: string, 
 /**
- * Git commit SHA from HuggingFace Hub.
+ * Git commit SHA from `HuggingFace` Hub.
  */
 hfCommitSha?: string, 
 /**
- * When the model was downloaded from HuggingFace (`"%Y-%m-%d %H:%M:%S"`).
+ * When the model was downloaded from `HuggingFace` (`"%Y-%m-%d %H:%M:%S"`).
  */
 downloadDate?: string, 
 /**

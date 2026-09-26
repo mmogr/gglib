@@ -436,7 +436,7 @@ fn caveats_report_the_client_trust_setting() {
 /// This is the only place an operator is told what an untrusted client
 /// still gets, and for one release it was wrong: `reasoning_budget_tokens`
 /// joined `CLIENT_AUTHORITATIVE_KEYS` while the sentence went on saying
-/// "except max_tokens", because nothing connected the two. A prose
+/// "except `max_tokens`", because nothing connected the two. A prose
 /// description of a boundary is as much a part of the boundary as the
 /// `contains` call that enforces it.
 #[test]

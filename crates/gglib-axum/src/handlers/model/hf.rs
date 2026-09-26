@@ -1,4 +1,4 @@
-//! HuggingFace handlers - model search and metadata.
+//! `HuggingFace` handlers - model search and metadata.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -9,7 +9,7 @@ use gglib_app_services::types::{
     HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ToolSupportResponse,
 };
 
-/// Search HuggingFace for GGUF models.
+/// Search `HuggingFace` for GGUF models.
 pub(crate) async fn search(
     State(state): State<AppState>,
     Json(req): Json<HfSearchRequest>,

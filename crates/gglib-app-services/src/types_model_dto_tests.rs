@@ -172,7 +172,7 @@ mod model_detail_template_caps_tests {
 }
 
 mod gui_model_moe_tests {
-    //! The MoE topology `GET /api/models` must carry.
+    //! The `MoE` topology `GET /api/models` must carry.
     //!
     //! The library list renders *active* parameters, derived from
     //! `expertUsedCount / expertCount`. When those keys are absent the

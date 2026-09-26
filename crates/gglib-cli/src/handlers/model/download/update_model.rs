@@ -1,9 +1,9 @@
 //! Update model handler.
 //!
-//! Upgrades a locally downloaded model to the latest HuggingFace revision.
+//! Upgrades a locally downloaded model to the latest `HuggingFace` revision.
 //! The check, the download and the row rewrite all live in
 //! [`ModelOps::check_upgrade`]/[`ModelOps::apply_upgrade`], the single shared
-//! implementation consumed by this CLI, the Axum WebUI and the Tauri app.
+//! implementation consumed by this CLI, the Axum `WebUI` and the Tauri app.
 //! What stays here is what only a terminal has: the plan, the prompt and the
 //! printed result.
 //!
@@ -17,7 +17,7 @@ use crate::handlers::model::resolver;
 
 /// Execute the update-model command.
 ///
-/// Upgrades a model to the latest revision from HuggingFace. `force` skips
+/// Upgrades a model to the latest revision from `HuggingFace`. `force` skips
 /// the confirmation prompt; everything else is identical to the GUI path.
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
@@ -92,7 +92,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
 }
 
 /// First 8 characters of a commit SHA, without assuming there are 8.
-/// HuggingFace returns 40, but a truncated or empty value must not panic a
+/// `HuggingFace` returns 40, but a truncated or empty value must not panic a
 /// command whose whole job is repairing a model.
 pub(super) fn short_sha(sha: &str) -> &str {
     &sha[..sha.len().min(8)]

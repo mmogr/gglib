@@ -30,8 +30,8 @@ use gglib_proxy::StreamBounds;
 
 /// Bounds none of these tests waits out.
 const BOUNDS: StreamBounds = StreamBounds {
-    first_byte: Duration::from_secs(60),
-    idle: Duration::from_secs(60),
+    first_byte: Duration::from_mins(1),
+    idle: Duration::from_mins(1),
 };
 
 /// How soon after the client leaves the upstream must be freed: well under

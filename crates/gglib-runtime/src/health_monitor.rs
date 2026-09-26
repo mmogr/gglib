@@ -44,7 +44,7 @@ impl ServerHealthChecker {
                     }
                 } else {
                     ServerHealthStatus::Unreachable {
-                        last_error: format!("Health check failed: {}", e),
+                        last_error: format!("Health check failed: {e}"),
                     }
                 }
             }
@@ -171,7 +171,7 @@ impl ServerHealthMonitor {
                             last_status = Some(current_status);
                         }
                     }
-                    _ = cancel_token.cancelled() => {
+                    () = cancel_token.cancelled() => {
                         debug!(
                             port = handle.port,
                             model_id = handle.model_id,

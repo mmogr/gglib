@@ -58,7 +58,7 @@ pub(crate) struct UpdateArgs {
 ///
 /// # Arguments
 ///
-/// * `ctx` - The CLI context providing access to AppCore
+/// * `ctx` - The CLI context providing access to `AppCore`
 /// * `args` - The update command arguments
 ///
 /// # Returns
@@ -133,10 +133,7 @@ pub(crate) fn parse_metadata_updates(metadata_args: &[String]) -> Result<HashMap
         if let Some((key, value)) = arg.split_once('=') {
             metadata.insert(key.to_string(), value.to_string());
         } else {
-            return Err(anyhow!(
-                "Invalid metadata format '{}'. Use 'key=value'",
-                arg
-            ));
+            return Err(anyhow!("Invalid metadata format '{arg}'. Use 'key=value'"));
         }
     }
 
@@ -361,55 +358,55 @@ fn show_inference_defaults_changes(
         (None, Some(new)) => {
             println!("    + Set model-specific defaults:");
             if let Some(temp) = new.temperature {
-                println!("      Temperature: {}", temp);
+                println!("      Temperature: {temp}");
             }
             if let Some(top_p) = new.top_p {
-                println!("      Top-p: {}", top_p);
+                println!("      Top-p: {top_p}");
             }
             if let Some(top_k) = new.top_k {
-                println!("      Top-k: {}", top_k);
+                println!("      Top-k: {top_k}");
             }
             if let Some(max_tokens) = new.max_tokens {
-                println!("      Max tokens: {}", max_tokens);
+                println!("      Max tokens: {max_tokens}");
             }
             if let Some(repeat_penalty) = new.repeat_penalty {
-                println!("      Repeat penalty: {}", repeat_penalty);
+                println!("      Repeat penalty: {repeat_penalty}");
             }
             if let Some(pp) = new.presence_penalty {
-                println!("      Presence penalty: {}", pp);
+                println!("      Presence penalty: {pp}");
             }
             if let Some(mp) = new.min_p {
-                println!("      Min-P: {}", mp);
+                println!("      Min-P: {mp}");
             }
             if let Some(dm) = new.dry_multiplier {
-                println!("      DRY multiplier: {}", dm);
+                println!("      DRY multiplier: {dm}");
             }
             if let Some(db) = new.dry_base {
-                println!("      DRY base: {}", db);
+                println!("      DRY base: {db}");
             }
             if let Some(dal) = new.dry_allowed_length {
-                println!("      DRY allowed length: {}", dal);
+                println!("      DRY allowed length: {dal}");
             }
             if let Some(dpn) = new.dry_penalty_last_n {
-                println!("      DRY penalty last N: {}", dpn);
+                println!("      DRY penalty last N: {dpn}");
             }
             if let Some(dr) = new.dynatemp_range {
-                println!("      Dynatemp range: {}", dr);
+                println!("      Dynatemp range: {dr}");
             }
             if let Some(de) = new.dynatemp_exponent {
-                println!("      Dynatemp exponent: {}", de);
+                println!("      Dynatemp exponent: {de}");
             }
             if let Some(ts) = new.top_n_sigma {
-                println!("      Top-n-sigma: {}", ts);
+                println!("      Top-n-sigma: {ts}");
             }
             if let Some(fp) = new.frequency_penalty {
-                println!("      Frequency penalty: {}", fp);
+                println!("      Frequency penalty: {fp}");
             }
             if let Some(re) = new.reasoning_effort {
-                println!("      Reasoning effort: {}", re);
+                println!("      Reasoning effort: {re}");
             }
             if let Some(rb) = new.reasoning_budget_tokens {
-                println!("      Reasoning budget tokens: {}", rb);
+                println!("      Reasoning budget tokens: {rb}");
             }
         }
         (Some(old), Some(new)) => {
@@ -582,8 +579,7 @@ fn format_option(opt: &Option<String>) -> String {
 }
 
 fn format_option_u64(opt: &Option<u64>) -> String {
-    opt.map(|v| v.to_string())
-        .unwrap_or_else(|| "--".to_string())
+    opt.map_or_else(|| "--".to_string(), |v| v.to_string())
 }
 
 /// A `Copy` option rendered for the preview, `None` as `unset`.
@@ -595,18 +591,15 @@ fn format_unset<T: std::fmt::Display>(opt: Option<T>) -> String {
 }
 
 fn format_option_f32(opt: &Option<f32>) -> String {
-    opt.map(|v| v.to_string())
-        .unwrap_or_else(|| "unset".to_string())
+    opt.map_or_else(|| "unset".to_string(), |v| v.to_string())
 }
 
 fn format_option_i32(opt: &Option<i32>) -> String {
-    opt.map(|v| v.to_string())
-        .unwrap_or_else(|| "unset".to_string())
+    opt.map_or_else(|| "unset".to_string(), |v| v.to_string())
 }
 
 fn format_option_u32(opt: &Option<u32>) -> String {
-    opt.map(|v| v.to_string())
-        .unwrap_or_else(|| "unset".to_string())
+    opt.map_or_else(|| "unset".to_string(), |v| v.to_string())
 }
 
 /// Show a single field change.

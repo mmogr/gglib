@@ -97,7 +97,7 @@ pub(super) const SLACK: Duration = Duration::from_secs(1);
 /// not make these tests fail — it makes them *hang*, and a hung test takes
 /// the whole CI job's budget with it rather than naming the line that
 /// broke. The paused clock makes the wrapper free.
-pub(super) const RUNAWAY: Duration = Duration::from_secs(600);
+pub(super) const RUNAWAY: Duration = Duration::from_mins(10);
 
 /// A `follow` under test: its reports and its outcome once it ends. A test
 /// that needs to move the clock keeps its own handle to it — the point of

@@ -71,7 +71,7 @@ Context Length: 4096
 Provides table formatting utilities and helper functions.
 
 **Key Functions:**
-- `format_relative_time(datetime_str: &str)` - Renders a SQLite timestamp as "5 min ago"
+- `format_relative_time(datetime_str: &str)` - Renders a `SQLite` timestamp as "5 min ago"
 - `truncate_string(s: &str, max_len: usize)` - Safely truncates with ellipsis
 - `print_separator(width: usize)` - Prints a horizontal separator
 

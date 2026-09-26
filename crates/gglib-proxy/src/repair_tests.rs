@@ -117,7 +117,7 @@ fn an_already_required_request_is_not_reissued() {
     );
 }
 
-/// Absent `tool_choice` is `auto` per the OpenAI contract, and is what
+/// Absent `tool_choice` is `auto` per the `OpenAI` contract, and is what
 /// most clients actually send.
 #[test]
 fn an_absent_tool_choice_counts_as_auto() {

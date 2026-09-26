@@ -120,7 +120,7 @@ async fn add_column_if_missing_fails_when_the_table_does_not_exist() {
 
 /// A chat schema too old to write to must stop the boot, not be deleted.
 ///
-/// The guard this replaces DROPped both chat tables — every conversation
+/// The guard this replaces `DROPped` both chat tables — every conversation
 /// and every message the user had — on a substring match against a stored
 /// CREATE statement, with no prompt and no log line. The refusal names the
 /// file and leaves the data where it is.

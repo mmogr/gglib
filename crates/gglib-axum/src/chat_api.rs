@@ -90,15 +90,15 @@ pub(crate) struct ChatProxyRequest {
     pub max_tokens: Option<u32>,
     /// Optional temperature (inference parameter - will be resolved via hierarchy).
     pub temperature: Option<f32>,
-    /// Optional top_p (inference parameter - will be resolved via hierarchy).
+    /// Optional `top_p` (inference parameter - will be resolved via hierarchy).
     pub top_p: Option<f32>,
-    /// Optional top_k (inference parameter - will be resolved via hierarchy).
+    /// Optional `top_k` (inference parameter - will be resolved via hierarchy).
     pub top_k: Option<i32>,
-    /// Optional repeat_penalty (inference parameter - will be resolved via hierarchy).
+    /// Optional `repeat_penalty` (inference parameter - will be resolved via hierarchy).
     pub repeat_penalty: Option<f32>,
-    /// Optional presence_penalty (inference parameter - will be resolved via hierarchy).
+    /// Optional `presence_penalty` (inference parameter - will be resolved via hierarchy).
     pub presence_penalty: Option<f32>,
-    /// Optional min_p sampling threshold (inference parameter - will be resolved via hierarchy).
+    /// Optional `min_p` sampling threshold (inference parameter - will be resolved via hierarchy).
     pub min_p: Option<f32>,
     /// How hard to ask the model to think, where its chat template reads the
     /// variable (inference parameter - will be resolved via hierarchy).
@@ -138,7 +138,7 @@ pub(crate) struct ChatProxyRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ChatMessage {
     pub role: String,
-    /// Content is optional when tool_calls are present (OpenAI API spec)
+    /// Content is optional when `tool_calls` are present (`OpenAI` API spec)
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
@@ -277,7 +277,7 @@ pub(crate) async fn get_conversation(
         .chat_history()
         .get_conversation(id)
         .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Conversation not found: {}", id)))?;
+        .ok_or_else(|| HttpError::NotFound(format!("Conversation not found: {id}")))?;
     Ok(Json(conversation))
 }
 
@@ -381,7 +381,7 @@ pub(crate) async fn delete_message(
 
 use crate::handlers::port_utils::validate_port;
 
-/// Inject tools and tool_choice into the forwarded request body, gated on
+/// Inject tools and `tool_choice` into the forwarded request body, gated on
 /// whether the model advertises `SUPPORTS_TOOL_CALLS`.
 ///
 /// Takes `tools` and `tool_choice` as individual field references rather than
@@ -389,7 +389,7 @@ use crate::handlers::port_utils::validate_port;
 /// in `proxy_chat` via `into_iter()`, leaving the struct partially moved.
 ///
 /// When the capability flag is absent **and** the request actually contained
-/// tools or a tool_choice, a debug trace is emitted so operators can verify
+/// tools or a `tool_choice`, a debug trace is emitted so operators can verify
 /// the strip behaviour without flooding logs on ordinary non-tool requests.
 fn apply_tools_to_body(
     body: &mut serde_json::Value,
@@ -628,7 +628,7 @@ pub(crate) async fn proxy_chat(
         .into_iter()
         .map(|mut m| ChatMessage {
             role: m.role,
-            content: m.content.map(|c| c.into_string()),
+            content: m.content.map(gglib_core::MessageContent::into_string),
             tool_calls: m.tool_calls.and_then(|v| {
                 if let serde_json::Value::Array(arr) = v {
                     Some(arr)
@@ -695,8 +695,7 @@ pub(crate) async fn proxy_chat(
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
         return Err(HttpError::Internal(format!(
-            "llama-server returned {}: {}",
-            status, error_text
+            "llama-server returned {status}: {error_text}"
         )));
     }
 
@@ -719,7 +718,7 @@ pub(crate) async fn proxy_chat(
     } else {
         // Non-streaming mode: parse and return JSON
         let completion: ChatCompletionResponse = response.json().await.map_err(|e| {
-            HttpError::Internal(format!("Failed to parse llama-server response: {}", e))
+            HttpError::Internal(format!("Failed to parse llama-server response: {e}"))
         })?;
 
         Ok(Json(completion).into_response())

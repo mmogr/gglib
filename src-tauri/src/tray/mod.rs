@@ -7,6 +7,10 @@ mod icon;
 mod ids;
 mod items;
 #[cfg(target_os = "linux")]
+#[allow(
+    unsafe_code,
+    reason = "dlopen of gtk-layer-shell; the FFI is the module"
+)]
 mod layer_shell;
 #[cfg(target_os = "linux")]
 mod linux;

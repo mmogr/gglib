@@ -26,10 +26,10 @@ pub(crate) fn get_embedded_api_info() -> ApiInfo {
 
 /// Open a URL in the system's default browser.
 ///
-/// Used by the frontend to open external links (e.g., HuggingFace model pages).
+/// Used by the frontend to open external links (e.g., `HuggingFace` model pages).
 #[tauri::command]
 pub(crate) async fn open_url(url: String) -> Result<(), String> {
-    open::that(&url).map_err(|e| format!("Failed to open URL: {}", e))
+    open::that(&url).map_err(|e| format!("Failed to open URL: {e}"))
 }
 
 /// Set the currently selected model ID and sync menu state.

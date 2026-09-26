@@ -47,8 +47,7 @@ pub(super) async fn build_tool_index(mcp: &McpService) -> ToolIndex {
     let entries = flat.into_iter().map(|(server_id, tool)| {
         let server_name = server_names
             .get(&server_id)
-            .map(String::as_str)
-            .unwrap_or("unknown");
+            .map_or("unknown", String::as_str);
         let qualified_id = format!("{server_name}__{}", tool.name);
         (qualified_id, tool)
     });

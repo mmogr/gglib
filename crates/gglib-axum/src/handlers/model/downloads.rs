@@ -19,7 +19,7 @@ pub(crate) struct QueueDownloadRequest {
     pub quant: Option<String>,
 }
 
-/// Response from queue_download.
+/// Response from `queue_download`.
 /// Canonical shape returned to all clients - never a tuple.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
