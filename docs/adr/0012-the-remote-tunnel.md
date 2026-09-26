@@ -1,10 +1,12 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
 - **Status:** Accepted
-- **Date:** 2026-09-05 (**amended 2026-09-13 — the `409 … already being enabled` at a daemon start, recorded with the fifth reading, is fixed: see the dated note there (#1037)**; fifth reading 2026-09-12 — the relay, a migration on one connection, and a key revoked; **amended 2026-09-12 — dated notes under decisions 1, 2, 3, 4 and 7, under Consequences, under kill criterion 2 and under Out of scope say what has changed since the text around them was written**; fourth reading 2026-09-09 — a phone on cellular, direct; **amended 2026-09-11 — decision 2: one credential becomes one per device, with the five consequences listed there, and decision 5's note that a leaked token is now one of several; then the verbs those keys needed: `invite`, `list`, `forget`, and `connect` renamed `join`, a redeemed marker on the roster row, and unspent invites listed rather than swept**; **amended 2026-09-10 — decision 4 reversed: the identity always lasts, `--keep-identity` removed, `remote_enabled` added**; amended 2026-09-09 — `--keep-identity` under decision 4 and both notes under Costs; amended 2026-09-07 — see the dated notes under decisions 2 and 3, the note on how authentication is turned back off, the second reading, the third reading, and Out of scope)
+- **Date:** 2026-09-05 (changed in place before ADRs froze: decision 4 on
+  2026-09-09 and reversed 2026-09-10, decision 2 on 2026-09-11)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
+- **Log:** [log-0012](log-0012.md)
 
 ## Context
 
@@ -494,11 +496,12 @@ case-insensitively.
 > makes remote access a switch the daemon honours at startup. There is no
 > flag, because there is no longer a choice to offer.
 >
-> The 2026-09-09 amendment above offered the trade rather than making it, and
+> The 2026-09-09 amendment above offered the trade rather than making it, ~~and
 > a fortnight of using it settled the question it left open: nobody chose the
 > default. Every machine that mattered ran `--keep-identity`, because every
 > machine that mattered had a phone or a laptop pointed at it. A default
-> nobody keeps is not a default, it is a step.
+> nobody keeps is not a default, it is a step.~~
+> Retracted 2026-09-26: [log-0012](log-0012.md#2026-09-26-decision-4s-reversal-is-retracted-where-it-cites-a-fortnight-of-use).
 >
 > But the reversal does not rest on that. It rests on what became true
 > underneath it.
@@ -550,9 +553,11 @@ case-insensitively.
 > level up would be untracked in a working tree rather than ignored by it.
 
 > **Amended 2026-09-12 — deleting `remote_identity` revokes no key.** Since
-> 2026-09-11 a device is admitted by its own key, and every key in
+> 2026-09-11 a device is admitted by its own key, and ~~every key in
 > `data/remote_devices` is put back on the listener whatever identity it
-> binds with. Deleting the identity retires the address from the next arm and
+> binds with~~.
+> Retracted 2026-09-15: [log-0012](log-0012.md#2026-09-15-what-the-move-supersedes-in-adr-0012-and-the-decisions-taken-with-it).
+> Deleting the identity retires the address from the next arm and
 > leaves every key admitted, so the revocation this amendment names is
 > `gglib remote forget`, one device at a time. A client that learns the new
 > ticket and still holds its key is let in; `gglib remote join` asks for a
@@ -680,8 +685,9 @@ it that is only available to the right person.
   > lasts as long as `data/remote_identity` does. Deleting that file retires
   > every ticket the next time the listener binds — a daemon restart, or
   > `disable` then `enable` — because modelpipe reads it only then. It
-  > retires no device key: every key in `data/remote_devices` is put back on
-  > the new listener, so a device is still cut off with `gglib remote forget`.
+  > retires no device key: ~~every key in `data/remote_devices` is put back on
+  > the new listener~~, so a device is still cut off with `gglib remote forget`.
+  > Retracted 2026-09-15: [log-0012](log-0012.md#2026-09-15-what-the-move-supersedes-in-adr-0012-and-the-decisions-taken-with-it).
   > A ticket alone is still useless: under `TokenPolicy::Named` the listener
   > admits only a device's key or a live code.
 - The GUI gets a Remote toggle for free, because the logic is daemon-side.
@@ -792,8 +798,9 @@ it that is only available to the right person.
   nobody uses and it goes, taking the `modelpipe` dependency and both sides
   with it. `gglib remote status` **on the serving machine** — the one that ran
   `gglib remote enable` — is where it and `last_tunnelled_ms` are read. The
-  counter ticks in the proxy that *receives* tunnel-marked requests, so the
-  serving side is the only side that has one: it prints
+  counter is `RemoteGateway`'s in gglib-app-services; the proxy that receives
+  tunnel-marked requests ticks it through
+  `RemoteGatewayPort::note_tunnelled_request`. The serving side prints
   `Requests:  N served through the tunnel` while serving is on, and a
   `Last one:` line once one has arrived. The connecting machine prints neither,
   only a pointer to where the number lives, because a zero taken there says
@@ -803,453 +810,23 @@ it that is only available to the right person.
 
 ### First reading, 2026-09-06
 
-The first evaluation of these three criteria, and it has one scope note that
-outweighs every number under it: **the tunnel has never carried traffic
-between two machines.** No two-machine test has been run and none exists in
-the suite — `modelpipe::serve` and `modelpipe::connect` are called only from
-`gglib-app-services` (`remote/mod.rs` and `remote/connect.rs`), and every test
-that exercises a tunnelled request synthesizes the markers `via: 1.1
-modelpipe` and `x-modelpipe-peer` against a proxy bound in-process.
-
-So the lines below record **not yet run**, not zero.
-[ADR 0010](0010-the-loop-guard-reads-what-came-back.md)'s first reading drew
-this distinction for a criterion nobody had exercised — "a zero here is the
-absence of the test, not its result" — and the same applies to all three here,
-more strongly: writing 0 would make a feature nobody has finished testing look
-like a feature nobody wants.
-
-> **Amended 2026-09-06 — the tunnel has since carried traffic between two
-> machines.** A macOS host served and a Linux machine connected the same day
-> this note was written, and the session is recorded under *Second reading*
-> below. It supersedes the third line only: `tunnelled_requests` now has a
-> session behind it and no longer reads *not yet run*. The first two are
-> unaffected — neither reading was taken that evening either, so both stay
-> unread rather than clean.
-
-- **If a dependency ships a first-party remote transport** — **not evaluated,
-  and the reading has had no occasion to be taken.** `PINNED_LLAMA_RELEASE` is
-  `b10327`, the value it held when this landed; the pin has not moved since.
-  **OPEN, and unread rather than clean.**
-- **If the trust model itself proves unsound** — **not evaluated.** The query
-  above has not been run for this note, so there is no count here, clean or
-  otherwise. Recorded as unread rather than reported as zero, because a zero
-  taken from a query nobody ran is the failure this ADR's kill criteria exist
-  to avoid. **OPEN.**
-- **If `tunnelled_requests` stays at zero** — **not yet run.** Every daemon
-  that has run this code reports `tunnelled_requests` 0 and `last_tunnelled_ms`
-  `None`, and every one of them was a daemon no second machine ever dialled.
-  This is the criterion a zero most easily misleads, and here it does not even
-  reach the ambiguity: "nobody uses the tunnel" and "nobody has yet paired two
-  machines" produce the same 0, and only the first would license deleting
-  anything. Not actionable until a two-machine session exists to count.
-  **OPEN.**
-
-**All three remain OPEN, and none has been read against traffic.** What this
-note establishes is the state the feature shipped in — reasoned through,
-guarded, and never once run end to end — so that the first person to pair two
-machines knows there is somewhere to put the number.
+Readings: [log-0012, 2026-09-06](log-0012.md#first-reading-2026-09-06)
 
 ### Second reading, 2026-09-06 — the first two-machine session
 
-The first time `modelpipe::serve` and `modelpipe::connect` have been on
-opposite sides of a network. Everything above was written against a feature
-that had never carried a byte between two machines; this note retires that
-sentence and changes nothing else in the reading it amends.
-
-**Scope.** One evening, one session, one paired peer. A macOS host served —
-`Matts-MacBook-Pro`, ticket `de371f8d0f7f` — and a Linux machine connected,
-peer `387480a0854e`, which is also the first time the two sides have run on
-different operating systems. Every subcommand was exercised: `enable`,
-`connect`, `status`, `q --remote`, `disconnect`, `kill`, and a second pairing
-on a fresh ticket.
-
-**It cannot be re-run.** `tunnelled_requests` and `last_tunnelled_ms` count
-from daemon start, as the criterion itself says, and both daemons have since
-stopped. Nothing stored the numbers, so this note is their only durable
-record — the same provenance gap
-[ADR 0009](0009-fit-the-context-to-the-machine.md)'s first reading names for
-the ledger's counters, named here rather than dressed up.
-
-**The answer came from the other machine, and that is shown rather than
-assumed.** `gglib model list` on the connecting machine printed `No models
-found` — an empty catalog with nothing local to serve — and `gglib q --remote`
-answered anyway. The prompts carried words nothing could have had ready,
-`bananaramarama` and `kumquat`, and the replies used them, which rules out a
-canned answer as well as a local one.
-
-**The counter read 0, then 1, then 4, and the 1 is the part worth writing
-down.** `gglib remote status` on the serving machine reported `Requests:  0
-through the tunnel` before the connect, `1` immediately after `connect`
-returned and **before any prompt had been sent**, and `4` after the inference
-requests. That first increment is the pairing POST itself: `POST
-/v1/remote/pair` sits outside the bearer group but inside `remote_marker`,
-which runs on every route, so the request that fetches the key counts like any
-other tunnelled one. What shows inference crossed is the increment past 1, not
-the number being non-zero. Recorded because the next person to read this
-counter will otherwise be one ahead of the prompts they remember sending.
-
-> **Amended 2026-09-07 — the quoted line has since changed wording, and the
-> quote above is right.** [#986](https://github.com/mmogr/gglib/pull/986)
-> landed later the same evening and made it read
-> `Requests:  N served through the tunnel`, printed only on the serving
-> machine; the third kill criterion above was rewritten with it, which is why
-> the two strings differ in one document. `Requests:  0 through the tunnel` is
-> what the build this session ran actually printed, and it is left exactly as
-> it was read.
-
-**Both transport paths were exercised, so the relay is a path traffic has
-taken rather than one the design merely provides for.** On the home network
-both sides reported `Path:      direct`: the hole punch held and no relay was
-involved. A second pairing was then made with the connecting machine on a
-phone hotspot — ticket `dc82a49cf02c`, connect side on port 36073, the
-connecting machine appearing under a new fingerprint — and the serving machine
-logged `peer{peer=d702c7dca654 path="relayed"}` followed by `POST
-/v1/chat/completions status=200 outcome="forwarded"`.
-
-> **Amended 2026-09-07 — weakened, because the instrument cannot carry this
-> sentence.** In the `modelpipe` version this ran against — 0.2, the pin —
-> `peer::path_of` reads `Connection::paths()` once and is never asked again
-> for the life of a connection. The serve side samples it at accept and hands
-> the answer to the peer registry, which has no per-peer path mutator; the
-> connect side samples it at dial and re-samples only on a re-dial. `path_of`
-> also folds "no selected path yet" into `Relayed` deliberately, as the
-> conservative reading of an unfinished handshake.
->
-> The two halves are therefore not equally strong. `Path: direct` on the home
-> network is a positive reading: a selected non-relay path existed at the
-> moment it was taken, and nothing else prints `direct`. `path="relayed"` on
-> the hotspot was taken at accept, before the punch had had time to succeed or
-> fail, and a session that hole-punches a moment later goes on reporting
-> `relayed` for the rest of its life. The `status=200` that followed it is
-> real; which path carried it is not something this build could see. So the
-> line says *the relay was not ruled out*, not *the relay carried it*.
->
-> What the session establishes is the direct path, exercised and observed.
-> Whether traffic ever crossed a relay is a question the evening could not
-> answer with the instrument it had, and the claim that "the relay is a path
-> traffic has taken" is withdrawn until one can. The fix is in flight
-> upstream — [modelpipe#50](https://github.com/mmogr/modelpipe/pull/50), a
-> watcher following `PathEvent::Selected` instead of sampling once. A re-run
-> against a version carrying it is what would settle the sentence; nothing in
-> this note does.
->
-> **Still not readable at the 0.3 pin, 2026-09-07.** modelpipe cut `v0.3.0`
-> at `4cf01ee`, and #50 merged after it — the published tarball has neither
-> `path_watch.rs` nor `network.rs`, and its `peer::path_of` is the
-> sample-once form quoted above, unchanged. So taking 0.3 moves the pin and
-> not this sentence. The re-run waits on a modelpipe release cut from a
-> commit that contains #50.
-
-**The credential moved as decision 3 describes.** The six-digit code was
-redeemed over the encrypted hop, once, and the connecting machine reports
-`has_remote_key: true` with the key persisted, so a later `connect` needs the
-ticket alone. That is decision 4's trade taken in the direction it was argued
-for.
-
-**The kill switch works from the far side.** `gglib remote kill` produced
-`remote shutdown requested by an authenticated client; stopping the daemon`
-and `POST /v1/proxy/shutdown status=202`, and the daemon stopped. The one-way
-door in decision 7 opens.
-
-- **If a dependency ships a first-party remote transport** — **still not
-  evaluated.** `PINNED_LLAMA_RELEASE` is still `b10327` and the pin has not
-  moved, so the survey has still had no occasion to be taken. **OPEN, and
-  unread rather than clean.**
-- **If the trust model itself proves unsound** — **still not evaluated.** The
-  issue query was not run for this note either, and a session in which the
-  feature worked is not evidence about the premise in any case. **OPEN.**
-- **If `tunnelled_requests` stays at zero** — **4 through the tunnel in one
-  daemon run, 2026-09-06**: one pairing POST and three inference requests, one
-  peer, one evening. The criterion has moved from unreadable to readable
-  rather than from open to settled. A zero taken after this can be read as a
-  zero, where every zero before it was the absence of the test. Four requests
-  in one session says the tunnel works; it says nothing about whether anyone
-  uses it, which is what the criterion asks. **OPEN.**
-
-**All three remain OPEN**, and only the third moved at all. What the session
-settles is that the feature does what the Decision section says it does:
-across two operating systems, ~~on both transport paths~~ (struck 2026-09-07:
-on the direct path, with the relay neither observed nor ruled out — see the
-amendment above — the strike stands, and the fifth reading, 2026-09-12, is
-the session that saw both paths on one connection), with the key moving
-once and the kill switch reachable from outside. What it does not settle is
-use — one evening and one peer cannot distinguish a tunnel people want from a
-tunnel that merely works. Two gaps are worth naming rather than leaving to be
-inferred. The only client on the connecting side was gglib's own CLI, so
-decision 7's third-party arrangement — an OpenAI-compatible client pointed at
-the connect listener with the key as its API key — is still untried. And a
-single evening says nothing about a tunnel left up for days, which is the
-shape the rotation poller and the per-session identity were designed against.
+Readings: [log-0012, 2026-09-06](log-0012.md#second-reading-2026-09-06--the-first-two-machine-session)
 
 ### Third reading, 2026-09-07 — the trust-model query, run
 
-Both earlier readings recorded the second criterion as unread, on the grounds
-that a zero from a query nobody ran is the failure these criteria exist to
-avoid. The query has now been run, and this note exists for that one line.
-
-The other two are **not** re-read here and stay where the second reading left
-them: `PINNED_LLAMA_RELEASE` is still `b10327` and the pin has not moved, so
-the survey still has had no occasion to be taken; and `tunnelled_requests` has
-not been re-read, which by this criterion's own terms is all that can be said —
-it counts from daemon start and the daemons that produced the second reading
-have stopped, so there is no surface that could report on the interval.
-
-- **If the trust model itself proves unsound** — **0, and the zero is 0 of 0.**
-  `gh issue list -R mmogr/gglib --label "priority: critical" --label
-  "component: proxy"` returns nothing, and the same query with `component: gui`
-  returns nothing. The denominator is the part that matters and it is not 14:
-  fourteen issues are open, and **not one of them carries `priority: critical`
-  at all**. The label exists — `gh label list` shows it, "Blocking issues,
-  security, data loss" — and the bucket is empty repo-wide. So this reading
-  cannot distinguish "no critical trust-model issue has been filed" from "this
-  repo does not triage with that label", and the two license very different
-  conclusions. Answered rather than clean. **OPEN.**
-
-One thing not to fix. The criterion names the missing `component: remote`
-label and argues for naming that gap rather than pretending to a label that
-does not exist; nothing in this reading overturns that argument. Adding
-`component: remote` to the issue form would narrow a query this ADR widened on
-purpose — a change of mind about how the criterion is read, not housekeeping.
-The reading that would actually make this line clean is a `priority: critical`
-label somebody uses.
+Readings: [log-0012, 2026-09-07](log-0012.md#third-reading-2026-09-07--the-trust-model-query-run)
 
 ### Fourth reading, 2026-09-09 — a phone, on cellular, direct
 
-The session the first three readings were waiting for. A native iOS client on
-a phone with wifi off reached this machine's proxy and held a conversation
-with the model on it.
-
-- **Serving:** this Mac, gglib 0.17.0 (`06c6737b`), modelpipe **0.4**.
-- **Connecting:** an iPhone on cellular, wifi off, running ggchat 0.2.0 in its
-  Release configuration — which is the build that dials, the DEBUG one mocks.
-- **Model:** Qwen3.5-4B (Q8_0), loaded on demand.
-
-```
-14:18:13  Path: direct   Peer: 3d808fece3d9 (direct)   Requests: 1
-          Last one: 18s ago, from 68e9b9bbbe94
-14:19:20  Path: direct   Peer: 107de8f76fd4 (direct)   Requests: 4
-          Last one: 29s ago, from 107de8f76fd4
-```
-
-**The connect side is no longer only gglib.** The second reading named this
-gap and it is now half closed, which is worth stating precisely rather than
-generously. What that reading asked for was decision 7's arrangement — a
-third-party OpenAI-compatible client pointed at *gglib's own connect
-listener*, with the key as its API key. That is still untried. What happened
-instead is one layer in: ggchat embeds modelpipe itself through a Swift
-binding and points an ordinary OpenAI-compatible provider at the loopback URL
-**modelpipe** bound, with the redeemed key as the API key. Same shape, a
-different listener. The half that is closed is that something other than
-gglib's CLI has now driven this feature end to end; the half that is not is
-that gglib's connect listener has still only ever been talked to by gglib.
-
-**Direct, from a phone, through carrier-grade NAT.** The hole punch beat the
-carrier without a relay carrying a byte. Three peer fingerprints appear across
-two minutes because pairing dials twice by design — `68e9b9bbbe94` was the
-pairing pipe, hung up as soon as the code was redeemed, and the others are the
-session that replaced it and its successor after a background.
-
-**And the relay is still not exercised**, so the sentence struck on 2026-09-07
-stays struck. The status read `direct` at the first look and never moved: no
-migration was observed, only its outcome. Reading against the 0.4 pin was
-supposed to make a migration legible where the 0.3 pin could not, and it may
-well have — but a path that was direct before anyone looked cannot demonstrate
-a watcher that follows one. That is the same instrument limitation the second
-reading recorded, arrived at from the other direction, and it will take a
-network hostile enough to start relayed to settle.
-
-**What the session cost, and it is the most useful thing in this note.**
-The first attempt failed and burned a pairing code. ggchat sent the redeem the
-instant `connect` returned — and `connect` returns when the *local port is
-bound*, not when the peer answers. The tunnel's own edge answers `502` in that
-gap because there is nothing to forward to, and decision 3's code, which dies
-on use, died on that 502.
-
-This is worth recording here rather than only in the app's tracker, because it
-is a property of the decision and not of the client. A one-time code plus a
-dial that returns early is a sharp edge that *every* connecting implementation
-has to know about. gglib's own connect side has guarded it from the start and
-says so in `first_contact.rs`. A second implementation, written against a seam
-document that states the early return as behaviour 2, walked into it anyway —
-on a LAN often enough to look like a wrong code, and on cellular every time,
-because the hole punch takes about two seconds and the redeem takes
-microseconds. The design is sound and the trap is real; what this reading adds
-is that the trap is not discoverable from the outside without a phone.
-
-- **If a dependency ships a first-party remote transport** — **still not
-  evaluated.** `PINNED_LLAMA_RELEASE` has not moved, so the survey still has
-  had no occasion to be taken. **OPEN, and unread rather than clean.**
-- **If the trust model itself proves unsound** — **not re-run.** The third
-  reading's answer stands, including its caveat that the bucket is empty
-  repo-wide. A session in which the feature worked is not evidence about the
-  premise. **OPEN.**
-- **If `tunnelled_requests` stays at zero** — **4 in one daemon run**: one
-  pairing POST and three requests behind a single prompt and its reply. The
-  same arithmetic as the second reading and from a different kind of machine,
-  which is the point: the counter is now readable from a phone, where before
-  it had only ever been read between two desktops. It still says nothing about
-  use. **OPEN.**
-
-**All three remain OPEN.** What this reading settles is the thing #963 was
-opened to get: the models are on the phone, anywhere, with no VPN, no account
-and nobody in the path. What it does not settle is a tunnel left up for days,
-the relay path, or whether anyone reaches for it tomorrow — and the last of
-those is the only one that decides whether this feature was worth building.
+Readings: [log-0012, 2026-09-09](log-0012.md#fourth-reading-2026-09-09--a-phone-on-cellular-direct)
 
 ### Fifth reading, 2026-09-12 — the relay, a migration on one connection, and a key revoked
 
-The reading the fourth said would take "a network hostile enough to start
-relayed" to settle, taken instead by moving the network under a live
-connection. It is the first reading under one key per device (decision 2,
-amended 2026-09-11), the first of a revocation, and the first of a mixed
-pair of modelpipe versions. The session ran past midnight; the times below
-are local, and the last two fall on the 13th.
-
-- **Serving:** this Mac, macOS 27.0, gglib 0.18.0 (`70e7e8d6a52b`), modelpipe
-  **0.5.0**. One daemon run, 21:07:54 to 00:06:38, its tunnel disabled at
-  00:06:23, started with `--verbose` so that the edge's per-exchange line was
-  in the log.
-- **Connecting:** an iPhone on iOS 27.0 running ggchat 0.2.2 in its Release
-  configuration, which embeds modelpipe **0.4.0** through modelpipe-ffi 0.1.2.
-  Before the phone, the same build on an iOS 27 simulator, driven by a UI
-  walk, paired and chatted through the same tunnel — a control that showed
-  the serving side pairing and answering before the phone was looked at.
-- **Model:** Qwen3.8-27B (Q8_0), loaded on demand: 13 s to healthy on the
-  first request.
-
-The serving side's log. Every exchange a device key admitted names that
-device, which is what the 2026-09-11 amendment bought; the pairing POST is
-grant-admitted and names none, so `→ dev-…` on that line is the device it
-created. The path in the last column is read from the migration lines, since
-an exchange line carries the path its connection opened on:
-
-```
-23:50:56  d042914174e0  POST /v1/remote/pair               200   → dev-bd905f7d
-23:51:01  c644061e1ee9  GET /v1/proxy/status, GET /v1/models   200   dev-bd905f7d   direct
-23:51:29  4d3b1d5e2484  POST /v1/chat/completions          200   dev-bd905f7d   direct  (wifi)
-23:52:57  4d3b1d5e2484  direct → relayed, rtt 259 ms                            (wifi off, from Control Center)
-23:53:19  4d3b1d5e2484  POST /v1/chat/completions          200   dev-bd905f7d   relayed (cellular)
-23:55:23  4d3b1d5e2484  relayed → direct, rtt 13 ms                             (wifi on)
-23:56:55  efa859d4c521  POST /v1/chat/completions          200   dev-bd905f7d   direct
-23:58:24  efa859d4c521  direct → relayed, rtt 181 ms                            (wifi off)
-23:58:36  efa859d4c521  POST /v1/chat/completions          200   dev-bd905f7d   relayed
-23:59:18  gglib remote forget dev-bd905f7d
-23:59:40  efa859d4c521  POST /v1/chat/completions          401   no device named, 0 ms
-00:02:42  35c480fa9d06  POST /v1/chat/completions          401   after a force-quit and relaunch
-```
-
-**The relay is exercised, and what the sentence struck on 2026-09-07 claimed
-is now true of a session that could see it.** The strike stands, because the
-2026-09-06 evening still cannot support it. Three times on the phone's two
-session connections a path changed under a connection that did not close —
-twice on `4d3b1d5e2484` and once on `efa859d4c521`, at 23:52:57, 23:55:23
-and 23:58:24 above; the fingerprint changed only where the app had gone to
-the background and dialled again, which is how ggchat treats every background
-— and on other connections the same evening besides: the pairing dial's own
-punch to direct at 23:50:56, the Simulator's move to the relay at 21:51:20,
-and twice in earlier sessions that carried no request across the move
-(`b94f776587f0` at 19:29:39 and `fc3bcb92a8ab` at 21:01:42, read from
-`gglib remote status` polled every two seconds). That is the thing
-the second reading could not see and the fourth had no migration to show: a
-move on one connection rather than a redial, with a request carried on each
-side of it in this session. The phone's own pill followed each move — Direct
-on wifi, Relayed on cellular — which is the watcher the fourth reading hoped
-for, seen at last, and seen at both ends: modelpipe 0.4's on the phone and
-0.5.0's on the serving side, each watching its own path. The relay path is
-slower by the width of the relay, 181–259 ms against 13–18 ms on the phone's
-session connections, and on
-this evening's cellular stretches nothing hole-punched back to direct, which
-is the fourth reading's result reversed: that day the punch beat the carrier
-and this day it did not, and both are what the Context section promises —
-direct when the punch lands, the relay when it does not.
-
-**One key per device, read for the first time.** Each device redeemed its own
-code for the key minted when it was invited; the device list, read at the
-time rather than logged, showed the one that had been given a name at
-pairing ("Simulator" — the phone's two earlier
-pairings carried none, and whether its third did was not recorded before the
-key was forgotten); and every exchange a key admitted is attributed to its
-device id. The mixed pair — a 0.4 client against a 0.5 edge — needed nothing
-from either side: the ALPN is the same and the key still travels as a bearer.
-Observed, not guaranteed; nothing pins the two crates to each other.
-
-**Revocation, read for the first time.** `gglib remote forget dev-bd905f7d`
-at 23:59:18, and the phone's next request, 22 seconds later, was refused at
-the edge in 0 ms with modelpipe's `invalid_api_key` body — before the proxy
-saw it, which is `exchange.rs`'s order: the credential is checked before a
-backend connection exists, the promise `refusal.rs` makes for its 401 and its
-400. The exchange line names no device, because there is no longer one to
-name. Two things decision 2's amendment of 2026-09-11 predicts were seen, and
-one thing no decision predicts. The connection stayed up: `remove_token`
-gates admission, not delivery, so the phone's pill went on reading Relayed
-over a key that no longer opened anything. Nothing is checked at connect —
-the credential is per exchange — so a force-quit and relaunch dialled and
-connected in the ordinary way, and only its first request learned otherwise.
-And the phone showed nothing at all — the question sat on screen with no
-reply, no sentence and no alert; in the user's words, "it just didnt
-respond". The last of those is ggchat's to fix and not this ADR's: 0.2.2
-draws no error that arrives before the first token, so its own answer for
-this code — "Look at the machine that is serving the model", drawn only under
-a partial reply — had nowhere to appear, and it says less than gglib's own
-remote path does for the same code: pair again with a fresh `gglib remote
-invite` there. It is recorded here for the reason the fourth reading recorded
-the early return: a revocation the revoked device cannot see is a property
-every client of this decision has to know about.
-
-**What the session cost.** Two earlier pairings the same evening, at 19:29
-and 21:01, paired and connected but carried nothing past the pairing POST:
-in each the phone's one further request — a model list, in the 21:01 case
-made about six seconds after wifi was switched off and the connection had
-moved to the relay — never reached the edge, and the phone said "Could not
-reach the server: cancelled". A third pairing, after the app was reinstalled,
-worked from its first request. The two failures are recorded here
-unexplained rather than explained away; the phone's own log for that window
-was not collected. Separately, `gglib remote enable --invite` was refused
-three times with `409 … already being enabled`, because the daemon the CLI
-had just started was itself resuming the saved `remote_enabled` switch and
-held the serve slot; a `disable` against the running daemon cleared it, and
-the daemon log's trace of the episode runs from 20:51:57 to that `disable`
-at 20:53:12. That is gglib's defect, not the tunnel's. **Fixed 2026-09-13
-(#1037):** the resume now says it is working from its first line to its last,
-and `enable` and `invite` wait for it, for up to twenty seconds, instead of
-being refused, then answer from the session it brought up, or arm their own
-if it brought none. A `disable` during the resume now stops it, and a
-`disable` with no daemon running switches remote access off in settings, so
-the next start does not resume. And one more note for
-modelpipe: a client closing its
-own status stream is logged as `WARN exchange failed … sending stopped by
-peer: error 0`, which is a warning about nothing.
-
-- **If a dependency ships a first-party remote transport** — **still not
-  evaluated.** `PINNED_LLAMA_RELEASE` is still `b10327` and the file has not
-  changed since the fourth reading. **OPEN, and unread rather than clean.**
-- **If the trust model itself proves unsound** — **re-run 2026-09-13; the
-  same answer with the same caveat.** Both queries return nothing open. The
-  only issue the proxy query has ever matched, open or closed, is #621,
-  closed 2026-07-22, from before the tunnel existed. No open issue carries
-  `priority: critical` at all — seven closed ones have, none about the
-  tunnel — so this is still answered rather than clean. A revocation
-  the edge enforced in 0 ms is evidence about the implementation, not the
-  premise. **OPEN.**
-- **If `tunnelled_requests` stays at zero** — **12 in one daemon run**, from
-  two devices: two pairing POSTs, two model lists with their status reads,
-  five prompts with their replies, and one status stream. The two refusals
-  are not among them — the counter ticks in the proxy, and a request refused
-  at the edge never reaches it — which matters when the number is read after
-  a `forget`: a revoked device's attempts are invisible here. Still a number
-  about one evening. **OPEN.**
-
-**All three remain OPEN.** After the reading the serving side was turned off
-(`gglib remote disable`, 00:06), every device key was forgotten, and the
-identity was kept: the ticket, `b5b340c4885f`, was the same after the 21:07
-restart as before it, which is decision 4 as reversed on 2026-09-10 doing
-what it says. The connect side is still ggchat and gglib's own CLI, so
-decision 7's third-party arrangement is still untried. What this reading
-settles is the relay, the move, and that a key can be withdrawn from one
-device at the edge from its next request on; that the other rows are
-untouched is `forget`'s contract rather than something this evening read
-back. What it does not settle is what no reading so far has: a tunnel left up
-for days, and whether anyone reaches for it.
+Readings: [log-0012, 2026-09-12](log-0012.md#fifth-reading-2026-09-12--the-relay-a-migration-on-one-connection-and-a-key-revoked)
 
 ## Out of scope
 
@@ -1274,11 +851,8 @@ Named here so that their absence reads as a decision rather than an oversight.
   > kind of sentence that gets read as *we looked and it cannot be done*.
 
   > **Amended 2026-09-12 — built, as its own product, which is what this
-  > bullet said it would have to be.** [ggchat](https://github.com/mmogr/ggchat)
-  > is a native iOS and macOS client that embeds modelpipe through a Swift
-  > binding, and the fourth reading records it reaching this machine from a
-  > phone on cellular. gglib carries no phone code, and a phone client stays
-  > out of scope here.
+  > bullet said it would have to be.** Readings:
+  > [log-0012, 2026-09-12](log-0012.md#amended-2026-09-12--built-as-its-own-product-which-is-what-this-bullet-said-it-would-have-to-be)
 - **LAN and mDNS pairing.** gglib already carries `mdns-sd` in the CLI, so
   discovering a desktop on the same network without moving a ticket is
   plausible. It is a different trust model — presence on a network as
