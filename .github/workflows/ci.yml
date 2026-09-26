@@ -117,6 +117,9 @@ jobs:
       - name: Check the TypeScript file-size ratchet
         run: ./scripts/check_file_complexity.sh
 
+      - name: Check every crate inherits the workspace lints
+        run: ./scripts/check_lint_inheritance.sh
+
       # Here rather than beside `make bindings-check`, which cannot substitute
       # for it: a field missing `ts(optional)` or a numeric override
       # regenerates *consistently*, so the diff stays clean and that step goes

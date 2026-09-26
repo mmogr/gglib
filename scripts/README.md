@@ -11,6 +11,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check-tauri-commands.sh](#check-tauri-commandssh) | Enforce HTTP-first Tauri policy | CI |
 | [check_file_complexity.sh](#check_file_complexitysh) | TypeScript/CSS file-size ratchet | CI |
 | [check_rust_complexity.sh](#check_rust_complexitysh) | Rust file-size ratchet | CI |
+| [check_lint_inheritance.sh](#check_lint_inheritancesh) | Every crate inherits the workspace lints; allowed lints may not grow | CI |
 | [check_param_source_exhaustive.sh](#check_param_source_exhaustivesh) | No catch-all arm over `ParamSource` | CI |
 | [check_workflow_yaml.sh](#check_workflow_yamlsh) | Workflow sanity: duplicate YAML keys, and badges.yml module paths | CI |
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
@@ -113,6 +114,45 @@ growth is the point: the diff then shows the number going up.
 ```bash
 ./scripts/check_file_complexity.sh [--update]   # src/**/*.{ts,tsx,css}
 ./scripts/check_rust_complexity.sh [--update]   # crates/ and src-tauri/
+```
+
+### `check_lint_inheritance.sh`
+
+Two rules over the workspace members the root `Cargo.toml` lists:
+
+1. a member's manifest has one lints table, `[lints]`, and its only key is
+   `workspace = true`. Cargo will not combine that key with a crate's own lint
+   keys, so a crate that declares any is held to none of the workspace's;
+2. every lint named inside an `allow(...)` or `expect(...)` attribute in a
+   member's `.rs` files is counted, `cfg_attr` forms included and whole-line
+   `//` comments not, against `lint-allow-baseline.txt`. Each member has two
+   numbers there, and neither may grow: every lint so named, and the lints in
+   an attribute with no `reason = "…"`. The `.rs` files that no member
+   directory holds, such as `crates/build_common.rs`, are counted in a row of
+   their own, `(outside-members)`, and a failure there names them.
+
+The files are the ones git lists in the working tree: tracked, or untracked
+and not ignored. An ignored file, such as build output or a worktree nested in
+the checkout, is not counted.
+
+`--update` rewrites the baseline to the counts. It raises the first number but
+refuses to raise the second. A count that failed, a baseline row listed twice
+and a baseline row whose second or third field is not a number each fail the
+check, and `--update` then writes nothing. The self-test runs before every
+check: five manifests that must fail rule 1 and a member without one,
+tried together and then the missing one and a bad one each alone; files whose
+counts are known (in `src/`, `tests/`, a build script and outside every member,
+and none in ignored, deleted or non-`.rs` files); baselines that each count
+must fail against; an `--update` that must raise the first number; a counter
+that exits 1 without printing a count, a row listed twice and a count field
+that is not a number, the row listed twice also under an `--update` that must
+leave the baseline as it was; a baseline row naming no member; and a tree in
+which git lists no `.rs` file. Each fixture that must fail must also make the
+check exit non-zero. Its fixture repository reads no global or system git
+config. `--self-test` runs it alone.
+
+```bash
+./scripts/check_lint_inheritance.sh [--update | --self-test]
 ```
 
 ### `check_param_source_exhaustive.sh`
@@ -347,7 +387,7 @@ The main CI workflows that use these scripts:
 | Workflow | Job | Scripts Used |
 |----------|-----|--------------|
 | `ci.yml` | `boundaries` | `check_boundaries.sh` |
-| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_adrs.py` |
+| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_lint_inheritance.sh`, `check_adrs.py` |
 | `ci.yml` | `quality` | `check_workflow_yaml.sh` |
 | `check-issue-form.yml` | — | `check_issue_form_mapping.mjs` |
 | `bump-version.yml` | — | `sync_versions.py` |

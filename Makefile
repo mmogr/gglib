@@ -272,6 +272,7 @@ enforce: ## Run the architecture enforcement checks
 	@# a hard 300-LOC threshold cannot be switched on when 24 files are already
 	@# over it. Same ratchet, same escape hatch.
 	@./scripts/check_file_complexity.sh
+	@./scripts/check_lint_inheritance.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.
