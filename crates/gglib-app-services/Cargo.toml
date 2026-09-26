@@ -36,7 +36,7 @@ gglib-agent = { path = "../gglib-agent" }
 # The p2p tunnel behind `gglib remote` (ADR 0012). This crate owns every
 # `*Ops` type, so it is where the tunnel's lifecycle lives; the CLI and the
 # GUI drive it over the daemon API and never see an iroh type.
-modelpipe = "0.7.0"
+modelpipe = "0.8.1"
 
 # Shared deps
 anyhow = { workspace = true }
