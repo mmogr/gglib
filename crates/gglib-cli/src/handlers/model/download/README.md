@@ -49,6 +49,7 @@ This module handles all download-related commands that interact with HuggingFace
    - Second press → calls `cancel_all()`, which signals cancel tokens
      and waits up to 5 s for in-flight Python helpers to actually
      finalize before returning.
+
    The `[a]/[q]` hint bar is created eagerly and registered as the emitter's
    *footer* (`CliDownloadEventEmitter::set_footer`); every download bar is
    inserted above it via `MultiProgress::insert_before`, so it stays pinned

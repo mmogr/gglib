@@ -8,79 +8,82 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                            ADAPTER LAYER                                   │
-│       ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │
-│       │  gglib-cli   │  │ gglib-axum   │  │ gglib-tauri  │                 │
-│       │  CLI tool    │  │  REST API    │  │Tauri backend │                 │
-│       └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                 │
-└──────────────┼─────────────────┼─────────────────┼─────────────────────────┘
-               └─────────────────┼─────────────────┘
-                                 │
+│                               ADAPTER LAYER                                │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
+│  │  gglib-cli   │   │  gglib-axum  │   │  src-tauri   │   │ gglib-tauri  │ │
+│  │   CLI tool   │   │   REST API   │   │ desktop app  │   │ Tauri events │ │
+│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
+└──────────────────────────────────────┬─────────────────────────────────────┘
+                                       ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                            FACADE LAYER                                    │
-│                        ┌──────────────┐                                    │
-│                        │  gglib-app-services   │                                    │
-│                        │Shared UI core│                                    │
-│                        └──────┬───────┘                                    │
-└───────────────────────────────┼────────────────────────────────────────────┘
-                                │
+│                                FACADE LAYER                                │
+│          ┌──────────────────────┐        ┌──────────────────────┐          │
+│          │  gglib-app-services  │        │   gglib-bootstrap    │          │
+│          │    shared backend    │        │   composition root   │          │
+│          └──────────────────────┘        └──────────────────────┘          │
+└──────────────────────────────────────┬─────────────────────────────────────┘
+                                       ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                             CORE LAYER                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │                        gglib-core                                    │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐   │  │
-│  │  │  domain/   │  │  ports/    │  │ services/  │  │  events/   │   │  │
-│  │  │Pure types  │  │  Traits    │  │ Use cases  │  │  Events    │   │  │
-│  │  └────────────┘  └────────────┘  └────────────┘  └────────────┘   │  │
-│  └─────────────────────────────────────────────────────────────────────┘  │
+│                            INFRASTRUCTURE LAYER                            │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
+│  │   gglib-db   │   │  gglib-gguf  │   │   gglib-hf   │   │  gglib-mcp   │ │
+│  │    SQLite    │   │ GGUF parsing │   │ HuggingFace  │   │   MCP SDK    │ │
+│  │ repositories │   │              │   │    client    │   │              │ │
+│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐                    │
+│  │gglib-runtime │   │gglib-download│   │ gglib-proxy  │                    │
+│  │  llama.cpp   │   │   download   │   │ OpenAI proxy │                    │
+│  │  management  │   │   manager    │   │              │                    │
+│  └──────────────┘   └──────────────┘   └──────────────┘                    │
+└──────────────────────────────────────┬─────────────────────────────────────┘
+                                       ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                             APPLICATION LAYER                              │
+│                          ┌──────────────────────┐                          │
+│                          │     gglib-agent      │                          │
+│                          │     agentic loop     │                          │
+│                          │   (port-injected)    │                          │
+│                          └──────────────────────┘                          │
+└──────────────────────────────────────┬─────────────────────────────────────┘
+                                       ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                       CORE LAYER AND UTILITY CRATES                        │
+│  ┌────────────────────────────────────────────┐    ┌────────────────────┐  │
+│  │                 gglib-core                 │    │  gglib-build-info  │  │
+│  │    domain/  ports/  services/  events/     │    │     gglib-sse      │  │
+│  │       paths/  normalize/  sse/  ...        │    │   utility crates   │  │
+│  └────────────────────────────────────────────┘    └────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
-                                   │
-┌────────────────────────────────────────────────────────────────────────────┐
-│                          APPLICATION LAYER                                 │
-│                        ┌──────────────────┐                                │
-│                        │   gglib-agent    │                                │
-│                        │  Agentic loop    │                                │
-│                        │ (pure domain,    │                                │
-│                        │  port-injected)  │                                │
-│                        └────────┬─────────┘                                │
-└─────────────────────────────────┼──────────────────────────────────────────┘
-                                   │
-                  ┌────────────────┼────────────────┐
-                  │                │                │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        INFRASTRUCTURE LAYER                                 │
-│                                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │
-│  │  gglib-db   │  │ gglib-gguf  │  │  gglib-hf   │  │ gglib-mcp   │      │
-│  │  SQLite     │  │GGUF parsing │  │HuggingFace  │  │   MCP SDK   │      │
-│  │repositories │  │             │  │   client    │  │             │      │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘      │
-│                                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │gglib-runtime│  │gglib-download│  │gglib-proxy  │             │
-│  │llama.cpp    │  │   Download   │  │OpenAI proxy │             │
-│  │ management  │  │   manager    │  │             │             │
-│  └─────────────┘  └─────────────┘  └─────────────┘             │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+An arrow means "depends on", and a crate may depend on any layer below its own,
+not only the next: `gglib-cli` uses several infrastructure crates directly, and
+`gglib-app-services` uses `gglib-agent`. Inside a layer, `gglib-cli` and
+`src-tauri` depend on `gglib-axum`, which both use to host the daemon;
+`src-tauri` depends on `gglib-tauri`; `gglib-download` depends on `gglib-hf`;
+`gglib-proxy` depends on `gglib-mcp`; and `gglib-runtime` depends on `gglib-mcp`
+and `gglib-proxy`. `gglib-build-info` and `gglib-sse` depend on no gglib crate.
+`src-tauri` is the desktop app and lives outside `crates/`;
+`gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
 
 ## Dependency Flow
 
 ```text
-Adapter Layer
+Adapter layer          gglib-cli, gglib-axum, src-tauri, gglib-tauri
     ↓
-Facade Layer (gglib-app-services)
+Facade layer           gglib-app-services, gglib-bootstrap
     ↓
-Core Layer (gglib-core)    Core Layer (gglib-core)
-    ↓                              ↓
-Application Layer          Infrastructure Layer
-(gglib-agent)
+Infrastructure layer   gglib-db, gglib-gguf, gglib-hf, gglib-mcp,
+    ↓                  gglib-runtime, gglib-download, gglib-proxy
+Application layer      gglib-agent
+    ↓
+Core layer             gglib-core; utility crates gglib-build-info, gglib-sse
 ```
 
-**Key Principle**: Both the Application layer and the Infrastructure layer depend on
-`gglib-core` (via port traits), never the reverse. Adapters wire them together at
-the composition root.
+**Key Principle**: no crate depends on a layer above its own, and `gglib-core`
+depends on no other gglib crate. Infrastructure crates such as `gglib-db`
+implement its port traits, and `gglib-cli` and `gglib-axum` wire them together
+through `gglib-bootstrap`.
 
 ## Crate Catalog
 
@@ -88,7 +91,7 @@ the composition root.
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
-| **[gglib-core](gglib-core/)** | Pure domain types, port traits, and application services. No infrastructure dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) |
+| **[gglib-core](gglib-core/)** | Domain types, port traits and application services. Depends on no other gglib crate and on no database, HTTP or UI crate; it does local file I/O. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) |
 
 ### Application Layer
 
@@ -112,7 +115,8 @@ the composition root.
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
-| **[gglib-app-services](gglib-app-services/)** | Shared business logic for GUI applications (ensures feature parity). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) |
+| **[gglib-app-services](gglib-app-services/)** | Backend facade shared by `gglib-axum`, `gglib-cli` and `src-tauri` (ensures feature parity). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) |
+| **[gglib-bootstrap](gglib-bootstrap/)** | Composition root: `CoreBootstrap::build` wires the database, the download manager, the HuggingFace client and the GGUF parser once, for `gglib-cli` and `gglib-axum`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-loc.json) |
 
 ### Adapter Layer
 
@@ -120,7 +124,7 @@ the composition root.
 |-------|---------|---------------|
 | **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
 | **[gglib-axum](gglib-axum/)** | REST API server built with Axum for web/GUI clients. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
-| **[gglib-tauri](gglib-tauri/)** | Tauri backend for desktop application. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
+| **[gglib-tauri](gglib-tauri/)** | Tauri event-emission helpers for the desktop app in `src-tauri`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
 
 ### Utility Crates
 
@@ -138,13 +142,13 @@ the composition root.
 - Port trait definitions (interfaces for infrastructure)
 - Application services (business logic orchestration)
 - Event types for cross-layer communication
+- Local file I/O: data directories, the `.env` overrides file, device keys
+- The helpers other crates build child-process commands with
 
 **What it DOES NOT contain:**
 - Database code
-- HTTP clients
-- File I/O
-- Process management
-- Any infrastructure concerns
+- HTTP clients or servers
+- CLI, web or desktop UI frameworks
 
 **Why this matters:**
 - Keeps business logic pure and testable
@@ -176,10 +180,10 @@ the composition root.
 
 #### gglib-db
 Implements port traits for data persistence:
-- `ModelRepository` → `SqlxModelRepository`
-- `McpRepository` → `SqlxMcpRepository`
-- `ChatHistoryRepository` → `SqlxChatHistoryRepository`
-- `SettingsRepository` → `SqlxSettingsRepository`
+- `ModelRepository` → `SqliteModelRepository`
+- `McpServerRepository` → `SqliteMcpRepository`
+- `ChatHistoryRepository` → `SqliteChatHistoryRepository`
+- `SettingsRepository` → `SqliteSettingsRepository`
 
 #### gglib-runtime
 Manages llama.cpp lifecycle:
@@ -206,7 +210,7 @@ OpenAI-compatible HTTP proxy:
 - Streaming support
 
 #### gglib-gguf
-PParses GGUF files to extract:
+Parses GGUF files to extract:
 - Model architecture
 - Quantization method
 - Context size
@@ -237,26 +241,23 @@ Command-line interface:
 - `gglib config` - Configuration management
 
 #### gglib-axum
-REST API endpoints:
-- `POST /api/models` - Add model
-- `GET /api/models` - List models
-- `POST /api/serve/:id` - Start server
-- `POST /api/chat/completions` - Chat endpoint
-- `GET /api/events` - SSE event stream
+The daemon's HTTP API. The router is built in
+[`src/routes.rs`](gglib-axum/src/routes.rs), which serves `/health` and nests
+the API under `/api`. The daemon paths the CLI calls are named in
+`gglib_core::contracts::http::daemon`, and
+`gglib-axum/tests/daemon_route_contract.rs` fails when the daemon stops serving
+one of them.
 
 #### gglib-app-services
-Shared GUI logic:
+Backend facade shared by `gglib-axum`, `gglib-cli` and `src-tauri`:
 - Backend service orchestration
 - State management
 - Event handling
 - Business logic for UI operations
 
 #### gglib-tauri
-Desktop application backend:
-- Tauri command handlers
-- Window management
-- Native OS integration
-- IPC with frontend
+Event-emission helpers (`emit_or_log` and the event names) for the desktop
+app. The Tauri commands, tray and menus live in `src-tauri` itself.
 
 ## Development Guidelines
 
@@ -276,7 +277,7 @@ Desktop application backend:
 
 ### Adding Dependencies
 
-- **Core crate**: Only standard library + serde + async-trait
+- **Core crate**: No other gglib crate, and no database, HTTP or UI crate; `scripts/check_boundaries.sh` holds the names it rejects
 - **Infrastructure crates**: Can depend on external services/libraries
 - **Presentation crates**: Can depend on UI frameworks
 

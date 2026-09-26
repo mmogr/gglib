@@ -1,8 +1,4 @@
 #![doc = include_str!("README.md")]
-//!
-//! This module defines commands for managing application settings,
-//! models directory, llama.cpp toolchain, system
-//! dependency checks, and resolved path inspection.
 
 use clap::Subcommand;
 

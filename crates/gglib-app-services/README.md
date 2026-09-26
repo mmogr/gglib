@@ -5,7 +5,8 @@
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-complexity.json)
 
-Shared GUI backend facade for gglib adapters (Tauri desktop, Axum web).
+Backend facade for gglib's surfaces: `gglib-axum` builds the daemon's API on
+it, and `gglib-cli` and the desktop app in `src-tauri` depend on it as well.
 
 One implementation behind both GUIs, so the desktop app and the web UI cannot
 drift apart: a capability added here appears on both at once, and both drive the
@@ -18,23 +19,23 @@ This crate is a **Shared Facade** — sitting between adapters and infrastructur
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                 Adapter Layer                                       │
-│            ┌────────────────────┐         ┌────────────────────┐                    │
-│            │    gglib-tauri     │         │     gglib-axum     │                    │
-│            │  (Desktop IPC)     │         │    (HTTP API)      │                    │
-│            └─────────┬──────────┘         └─────────┬──────────┘                    │
-│                      │                              │                               │
-│                      └──────────────┬───────────────┘                               │
+│      ┌────────────────┐    ┌────────────────┐    ┌────────────────┐                 │
+│      │   gglib-axum   │    │   gglib-cli    │    │   src-tauri    │                 │
+│      │   (HTTP API)   │    │     (CLI)      │    │ (desktop app)  │                 │
+│      └────────┬───────┘    └────────┬───────┘    └────────┬───────┘                 │
+│               │                     │                     │                         │
+│               └─────────────────────┼─────────────────────┘                         │
 │                                     ▼                                               │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                         ►►► gglib-app-services ◄◄◄                                   │   │
+│   │                          ►►► gglib-app-services ◄◄◄                         │   │
 │   │         Platform-agnostic GUI orchestration (ensures feature parity)        │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                     │                                               │
 └─────────────────────────────────────┼───────────────────────────────────────────────┘
                                       ▼
               ┌───────────────────────────────────────────────────────┐
-              │     gglib-core, gglib-db, gglib-runtime, etc.         │
-              │              (Infrastructure crates)                   │
+              │  gglib-core, gglib-runtime, gglib-proxy, gglib-agent, │
+              │          gglib-download, gglib-hf, gglib-mcp          │
               └───────────────────────────────────────────────────────┘
 ```
 

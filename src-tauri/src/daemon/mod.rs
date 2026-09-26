@@ -1,7 +1,4 @@
 #![doc = include_str!("README.md")]
-//!
-//! Everything the app needs from the backend goes through the daemon's HTTP
-//! API; this module is the one place that knows the base URL.
 
 mod launch;
 mod snapshot;
