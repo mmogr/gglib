@@ -1,0 +1,183 @@
+{
+ "gglib-1": {
+  "repo": "mmogr/gglib",
+  "number": 1118,
+  "url": "https://github.com/mmogr/gglib/issues/1118",
+  "kind": "issue",
+  "title": "A page on another site can drive the daemon's and the proxy's POST routes that do not require a JSON Content-Type"
+ },
+ "gglib-7": {
+  "repo": "mmogr/gglib",
+  "number": 1119,
+  "url": "https://github.com/mmogr/gglib/issues/1119",
+  "kind": "issue",
+  "title": "gglib has no machine-readable list of the error codes its proxy writes, so clients hand-copy it"
+ },
+ "ffi-19": {
+  "repo": "mmogr/modelpipe-ffi",
+  "number": 36,
+  "url": "https://github.com/mmogr/modelpipe-ffi/issues/36",
+  "kind": "issue",
+  "title": "actions/upload-artifact is the one action in the release workflow not pinned to a commit"
+ },
+ "ffi-20": {
+  "repo": "mmogr/modelpipe-ffi",
+  "number": 37,
+  "url": "https://github.com/mmogr/modelpipe-ffi/issues/37",
+  "kind": "issue",
+  "title": "A build tag with a prerelease suffix publishes a full release"
+ },
+ "ffi-21": {
+  "repo": "mmogr/modelpipe-ffi",
+  "number": 38,
+  "url": "https://github.com/mmogr/modelpipe-ffi/issues/38",
+  "kind": "issue",
+  "title": "The file-size gate counts comment and blank lines"
+ },
+ "ggchat-22": {
+  "repo": "mmogr/ggchat",
+  "number": 136,
+  "url": "https://github.com/mmogr/ggchat/issues/136",
+  "kind": "issue",
+  "title": "A reply in flight is cut when the phone locks or the app goes to the background"
+ },
+ "ggchat-23": {
+  "repo": "mmogr/ggchat",
+  "number": 137,
+  "url": "https://github.com/mmogr/ggchat/issues/137",
+  "kind": "issue",
+  "title": "The app cannot use tools: requests carry role and content only"
+ },
+ "ggchat-24": {
+  "repo": "mmogr/ggchat",
+  "number": 138,
+  "url": "https://github.com/mmogr/ggchat/issues/138",
+  "kind": "issue",
+  "title": "The app cannot send images"
+ },
+ "ggchat-26": {
+  "repo": "mmogr/ggchat",
+  "number": 139,
+  "url": "https://github.com/mmogr/ggchat/issues/139",
+  "kind": "issue",
+  "title": "Saving a conversation assigns every field of every stored message row, changed or not"
+ },
+ "ggchat-27": {
+  "repo": "mmogr/ggchat",
+  "number": 140,
+  "url": "https://github.com/mmogr/ggchat/issues/140",
+  "kind": "issue",
+  "title": "The file-size gate counts comment and blank lines"
+ },
+ "modelpipe-14": {
+  "repo": "mmogr/modelpipe",
+  "number": 129,
+  "url": "https://github.com/mmogr/modelpipe/issues/129",
+  "kind": "issue",
+  "title": "The connect side holds its in-flight guard across the whole copy_bidirectional, so a local client that keeps its socket open holds shutdown"
+ },
+ "modelpipe-15": {
+  "repo": "mmogr/modelpipe",
+  "number": 130,
+  "url": "https://github.com/mmogr/modelpipe/issues/130",
+  "kind": "issue",
+  "title": "The private-file checks look at mode bits only, so a file owned by another user passes"
+ },
+ "modelpipe-16": {
+  "repo": "mmogr/modelpipe",
+  "number": 131,
+  "url": "https://github.com/mmogr/modelpipe/issues/131",
+  "kind": "issue",
+  "title": "A chunk extension is forwarded verbatim with any control character in it"
+ },
+ "modelpipe-17": {
+  "repo": "mmogr/modelpipe",
+  "number": 132,
+  "url": "https://github.com/mmogr/modelpipe/issues/132",
+  "kind": "issue",
+  "title": "eprintln! and println! panic the CLI when a write to stderr or stdout fails"
+ },
+ "modelpipe-18": {
+  "repo": "mmogr/modelpipe",
+  "number": 133,
+  "url": "https://github.com/mmogr/modelpipe/issues/133",
+  "kind": "issue",
+  "title": "Several library files were split off to fit a 300-line gate that counts every comment line"
+ },
+ "gglib-3": {
+  "repo": "mmogr/gglib",
+  "number": 1120,
+  "url": "https://github.com/mmogr/gglib/issues/1120",
+  "kind": "issue",
+  "title": "RemoteOps::status() creates or tightens the data directory on every read"
+ },
+ "gglib-4": {
+  "repo": "mmogr/gglib",
+  "number": 1121,
+  "url": "https://github.com/mmogr/gglib/issues/1121",
+  "kind": "issue",
+  "title": "The delimited parser's deletion criterion needs a release cycle with the parser bypassed, and nothing can bypass it"
+ },
+ "gglib-5": {
+  "repo": "mmogr/gglib",
+  "number": 1122,
+  "url": "https://github.com/mmogr/gglib/issues/1122",
+  "kind": "issue",
+  "title": "gglib-tauri, gglib-bootstrap and gglib-sse are thin crates, and gglib-sse's name collides with gglib_core::sse"
+ },
+ "gglib-6": {
+  "repo": "mmogr/gglib",
+  "number": 1123,
+  "url": "https://github.com/mmogr/gglib/issues/1123",
+  "kind": "issue",
+  "title": "The proxy parses and re-serialises the chat request body at each stage between receipt and the upstream send"
+ },
+ "gglib-8": {
+  "repo": "mmogr/gglib",
+  "number": 1124,
+  "url": "https://github.com/mmogr/gglib/issues/1124",
+  "kind": "issue",
+  "title": "The Rust file-size ratchet counts comment and blank lines"
+ },
+ "gglib-9": {
+  "repo": "mmogr/gglib",
+  "number": 1125,
+  "url": "https://github.com/mmogr/gglib/issues/1125",
+  "kind": "issue",
+  "title": "Once llama-server's headers arrive the proxy waits on it and on the client with no timer, and a non-streaming request has no bound at all"
+ },
+ "gglib-10": {
+  "repo": "mmogr/gglib",
+  "number": 1126,
+  "url": "https://github.com/mmogr/gglib/issues/1126",
+  "kind": "issue",
+  "title": "gglib-core holds platform code (file and process I/O, telemetry, paths) beside the domain"
+ },
+ "gglib-11": {
+  "repo": "mmogr/gglib",
+  "number": 1127,
+  "url": "https://github.com/mmogr/gglib/issues/1127",
+  "kind": "issue",
+  "title": "The desktop app's pairing reveal names no device"
+ },
+ "gglib-12": {
+  "repo": "mmogr/gglib",
+  "number": 1128,
+  "url": "https://github.com/mmogr/gglib/issues/1128",
+  "kind": "issue",
+  "title": "No gglib surface shows the device key that docs/remote.md tells a person to give a third-party client"
+ },
+ "gglib-2": {
+  "repo": "mmogr/gglib",
+  "number": 1039,
+  "url": "https://github.com/mmogr/gglib/issues/1039#issuecomment-5832315935",
+  "kind": "comment"
+ },
+ "ggchat-25": {
+  "repo": "mmogr/ggchat",
+  "number": 141,
+  "url": "https://github.com/mmogr/ggchat/issues/141",
+  "kind": "issue",
+  "title": "gglib's error codes are hand-typed here, while modelpipe's are vendored and digest-pinned"
+ }
+}
