@@ -4,8 +4,8 @@
 //! HTTP with a request whose replayed `messages[]` history is the signal under
 //! test, and asserts a clean 400 with `loop_detected` / `stagnation_detected`
 //! before any model work, or an untouched 200 round-trip for benign traffic.
-//! Since #1052 that 400 is no longer what an external agentic client sees by
-//! default — the default forwards with a note, which is
+//! That 400 is not what an external agentic client sees by default — the
+//! default forwards with a note, which is
 //! `integration_loop_guard_note.rs` — so every case here that expects a
 //! refusal asks for one.
 //!

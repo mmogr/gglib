@@ -141,8 +141,8 @@ fn identical_prose_spread_beyond_the_window_is_not_stagnation() {
 /// for. A → B → A → B trips within 12 turns at the default threshold, well
 /// inside the 20 it allows.
 ///
-/// The sibling of `oscillation_is_counted_session_wide`, kept because that
-/// test's name now describes a mechanism this detector no longer uses.
+/// The sibling of `oscillation_is_counted_session_wide`, whose name describes
+/// a mechanism this detector does not use.
 #[test]
 fn oscillating_prose_still_trips_inside_the_window() {
     let msgs: Vec<Value> = (0..12)

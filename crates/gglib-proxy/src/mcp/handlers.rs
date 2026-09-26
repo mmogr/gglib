@@ -10,7 +10,7 @@
 //!
 //! # Progressive Disclosure
 //!
-//! `tools/list` no longer exposes raw tool schemas. Instead it returns
+//! `tools/list` does not expose raw tool schemas. It returns
 //! exactly **three meta-tools** (`search_tools`, `get_tool_schema`,
 //! `invoke_tool`). External clients discover capabilities incrementally
 //! rather than receiving every schema up-front, reducing context-window

@@ -72,9 +72,7 @@ pub(crate) struct AppState {
     pub(crate) device_memory_readable: bool,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
-    /// pushes snapshots to `GET /v1/proxy/status/stream`. Replaces what were
-    /// previously three separate `AppState` fields (`metrics`, `connections`,
-    /// `slots`) — see `dashboard` module docs for the consolidation rationale.
+    /// pushes snapshots to `GET /v1/proxy/status/stream`.
     pub(crate) dashboard: Arc<DashboardState>,
     /// Application settings, snapshotted so the per-request read does not hit
     /// the database every time. See `settings_cache` module docs.
@@ -223,9 +221,8 @@ pub async fn serve(
     // reason as `agent_metrics`. See `ProxyObservers`.
     observers: crate::ProxyObservers,
     // Who may reach this endpoint: the CORS policy, the optional bearer token,
-    // and the Host allowlist. Carries the `CorsConfig` it replaced rather than
-    // sitting beside it — `serve` was already at fifteen parameters, and access
-    // decisions belong together anyway.
+    // and the Host allowlist. Carries the `CorsConfig` rather than sitting
+    // beside it: access decisions belong together.
     access: &ProxyAccessConfig,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
@@ -391,8 +388,6 @@ pub(crate) async fn health_check() -> impl IntoResponse {
 /// llama.cpp `/slots` state, and recent request metrics.
 ///
 /// This is the shared data contract for the CLI TUI and web dashboard.
-/// Fully replaces the old `{snapshots, total_requests}` shape — see the
-/// `dashboard` module docs for why no backwards-compatible shim is kept.
 pub(crate) async fn handle_proxy_status(State(state): State<AppState>) -> impl IntoResponse {
     Json(state.dashboard.snapshot())
 }
@@ -429,8 +424,8 @@ pub(crate) async fn chat_completions(
 
     // Canonicalize the system prompt and tool order once, up front, and
     // reuse the result for both the content-hash session id fallback below
-    // and the forwarded request (forward_chat_completion no longer
-    // re-canonicalizes) — avoids paying the parse/regex/serialize cost on
+    // and the forwarded request (forward_chat_completion does not
+    // re-canonicalize) — avoids paying the parse/regex/serialize cost on
     // this ~150KB+ body twice per request.
     let body = crate::canonicalization::canonicalize_system_prompt(body);
     let body = crate::canonicalization::canonicalize_tool_order(body);
@@ -460,17 +455,16 @@ pub(crate) async fn chat_completions(
         // still works without any client cooperation.
         //
         // Derived unconditionally — not gated on `state.cache_enabled` — because
-        // this id now also keys `TokenCalibration`'s per-session budget
+        // this id also keys `TokenCalibration`'s per-session budget
         // snapshot (see `forward_chat_completion`'s `calibration_session_id`),
         // which must work even when disk KV-slot caching is off. That's
         // exactly the case for hybrid/sliding-window-attention models, where
         // disk restore can't resume the prompt and is disabled by design (see
         // `slot_restore` in `gglib_runtime::llama::args`) — but the host-RAM
-        // prompt cache this budget-stability fix protects still applies. The
+        // prompt cache the frozen budget protects still applies. The
         // actual disk save/restore activation stays independently gated on
-        // `state.cache_enabled` at its own call site below, so widening where
-        // this id is *derived* doesn't turn on disk caching when the feature
-        // is off.
+        // `state.cache_enabled` at its own call site below, so deriving the
+        // id here doesn't turn on disk caching when the feature is off.
         crate::canonicalization::derive_fallback_session_id(&body)
     };
 
@@ -849,7 +843,7 @@ pub(crate) async fn chat_completions(
             // llama-server was dead after admission returned a stale port.
             // Strategy:
             //   1. Clear stale state via stop_current().
-            //   2. Re-admit — the queue does the waiting now, so one request
+            //   2. Re-admit — the queue does the waiting, so one request
             //      drives the restart and concurrent requests are batched
             //      behind it rather than surfacing a 503 to the client (the VS
             //      Code LLM Gateway treats 503 as a terminal error).
@@ -863,7 +857,7 @@ pub(crate) async fn chat_completions(
             // AdmissionTimeout is deliberately not retried here: it means the
             // GPU is oversubscribed rather than that this model is still
             // loading, so it falls through to a 503 + Retry-After and the
-            // client controls its own backoff. (PR #587)
+            // client controls its own backoff.
             let retry_admission = match admit().await {
                 Ok(admission) => admission,
                 Err(e) => return handle_runtime_error(e),
@@ -948,7 +942,7 @@ pub(crate) async fn chat_completions(
                 // this is a second attempt at the same client request: the
                 // ledger counts one intervention per request the guard acted
                 // on, not one per attempt. (`requests` is counted per attempt
-                // on this path, as it already was.) The retry does carry the
+                // on this path.) The retry does carry the
                 // note, which is in `body_for_retry`.
                 loop_guard_trip: None,
             };

@@ -17,17 +17,17 @@
 //! | `{model}:{profile}` routing | Profiles only carry sampling parameters |
 //! | Transparent restart-and-retry | That exists because the VS Code LLM Gateway treats 503 as terminal; an embeddings client has no such constraint, and a retry that re-embeds is the caller's to decide |
 //!
-//! ## Why this endpoint drove M9
+//! ## Why admission matters here
 //!
 //! llama-server reads `--embeddings` as *restrict to only the embedding use
 //! case*. gglib passes it for exactly the models tagged `embedding`, so an
 //! embeddings server cannot answer chat completions and vice versa. With one
-//! VRAM slot, a client doing both alternately paid for a full model swap on
-//! every single request — the worst case admission control was built to fix.
+//! VRAM slot, a client doing both alternately would pay for a full model swap
+//! on every single request.
 //!
-//! It is fixed from two directions, neither of them here: requests for the same
-//! model are batched so one swap serves a burst, and an embedding model small
-//! enough to co-reside takes the second slot and stops swapping altogether. See
+//! Admission handles that from two directions, neither of them here: requests
+//! for the same model are batched so one swap serves a burst, and an embedding
+//! model small enough to co-reside takes the second slot and does not swap. See
 //! `gglib_runtime::process::admission` for both.
 
 use axum::Json;
@@ -124,8 +124,8 @@ pub(crate) async fn embeddings(
     //
     // This is the endpoint the second resident slot exists for. An embedding
     // model small enough to co-reside is admitted here without displacing the
-    // chat model at all, so the alternating traffic that used to cost a swap
-    // per request now costs none.
+    // chat model at all, so traffic alternating between the two costs no
+    // swap.
     let admission = match state
         .runtime_port
         .admit(

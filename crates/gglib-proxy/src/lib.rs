@@ -10,8 +10,8 @@ mod admin;
 pub(crate) mod audit_records;
 // Crate-internal. The seven that stay `pub` below are the ones other crates
 // name by path: dashboard, loopback, models, props, repair, slot_eviction, slots.
-// `server` goes internal too — the root re-exports `serve`, which is all
-// anyone wanted from it.
+// `server` is internal too — the root re-exports `serve`, which is all
+// anyone needs from it.
 // Without `test-support` the re-export below is absent, which is the point of
 // gating it — but that also leaves `StreamConfig`, `restore_with_retry` and
 // `LastLoadedSession` (a public field type of the first, so it rides along) with

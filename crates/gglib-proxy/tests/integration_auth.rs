@@ -76,9 +76,8 @@ async fn a_correct_bearer_token_is_accepted() {
 }
 
 /// RFC 9110 §11.1 makes the auth scheme case-insensitive, so these are the
-/// same request as the one above. They used to be answered with a 401 saying
-/// the key was invalid, which was both wrong and unactionable — and the tunnel
-/// in front of this endpoint accepts them, so the two doors disagreed about
+/// same request as the one above. The tunnel in front of this endpoint
+/// accepts them too, so a 401 here would have the two doors disagree about
 /// one credential.
 #[tokio::test]
 async fn the_scheme_is_matched_case_insensitively() {

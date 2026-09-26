@@ -6,12 +6,11 @@
 //!
 //! # Why this exists
 //!
-//! [ADR 0003] deletes six of the seven values gglib force-wrote into every
-//! request, because all six were measured to be exactly llama.cpp's own
-//! defaults on the pinned build. That deferral is safe **only while the
-//! build is pinned**: if a bump moves an upstream default gglib now defers
-//! to, nothing else in the system is in a position to notice. This is what
-//! notices.
+//! [ADR 0003] defers six sampler values to llama.cpp, because all six were
+//! measured to be exactly llama.cpp's own defaults on the pinned build. That
+//! deferral is safe **only while the build is pinned**: if a bump moves an
+//! upstream default gglib now defers to, nothing else in the system is in a
+//! position to notice. This is what notices.
 //!
 //! Secondarily it catches transmission faults — a value resolved but lost to
 //! serialization or overwritten downstream — and a client's own unmodelled
@@ -19,30 +18,23 @@
 //!
 //! # What it does *not* catch
 //!
-//! Stated up front because an earlier version of this doc claimed the
-//! opposite, and the claim survived into an accepted ADR.
+//! **It cannot see a resolution bug.** A value resolved from the wrong layer,
+//! or left at `0.0` after a coupling rule discarded `0.8`, is sent as
+//! resolved: intent and wire agree perfectly, and comparing them reports
+//! nothing. gglib decided the wrong thing and transmitted it faithfully
+//! ([#745] is one such bug).
 //!
-//! **It cannot see a resolution bug.** #621 resolved `presence_penalty: 1.5`
-//! from the wrong layer and sent 1.5; #745 resolved `dry_multiplier: 0.0`
-//! after the coupling rule discarded 0.8, and sent 0.0. In both, intent and
-//! wire agreed perfectly. Comparing them reports nothing. gglib decided the
-//! wrong thing and transmitted it faithfully.
+//! Catching those needs an instrument that asks "is what we resolved what the
+//! user asked for?". [ADR 0004] names one, a `Displaced` provenance variant
+//! and property tests over the fold, and neither exists in the tree. This asks
+//! "is what we resolved what the server got?". Complementary questions;
+//! neither substitutes for the other.
 //!
-//! Those belong to the other half of the arc — the `Displaced` provenance
-//! variant and property tests over the fold, which ask "is what we resolved
-//! what the user asked for?". This asks "is what we resolved what the server
-//! got?". Complementary questions; neither instrument substitutes for the
-//! other, and conflating them is how this module's purpose got overstated in
-//! the first place.
+//! As [ADR 0001] puts it, Tier C "is what makes the other two tiers honest.
+//! Without it, 'is this compensation still needed?' is answered by argument."
 //!
-//! [ADR 0001]'s point still stands, though: Tier C "is what makes the other
-//! two tiers honest. Without it, 'is this compensation still needed?' is
-//! answered by argument." Sampling had no Tier C at all, and produced
-//! roughly a dozen fixes and one outright reversal in two months.
-//!
-//! The instrument was nearly built already. `slots_poller` has polled
-//! `GET /slots` every second for other reasons since #536, and `slots.rs`
-//! deliberately discarded the one field that answers this question.
+//! It reads the `params` field of the `GET /slots` response that
+//! `slots_poller` already fetches every second for other reasons.
 //!
 //! # Coverage, and the two limits on it
 //!
@@ -142,18 +134,19 @@
 //!   `server-schema.cpp:383` names the key, but that is the request-*parse*
 //!   table, not an echo.
 //!
-//! Measured on the pinned build — [ADR 0007] finding 7a, which corrects that
-//! ADR's own earlier claim that the budget was observable. So **adding either
+//! Measured on the pinned build — [ADR 0007] finding 7a. So **adding either
 //! field to [`SlotParams`] would create a column that can only ever be `None`**,
 //! and a permanently-`None` observation read as agreement is the exact failure
-//! the section below is about. `no_reasoning_field_may_join_the_readback` fails
-//! the build if one is added.
+//! "Blind is not agreement" above is about.
+//! `no_reasoning_field_may_join_the_readback` fails the build if one is added.
 //!
 //! What replaces the comparison is [`crate::audit_records`]: gglib's own record
 //! of what it resolved, carried with the reason nothing corroborates it.
 //!
+//! [#745]: https://github.com/mmogr/gglib/issues/745
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
 //! [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
 
 use std::collections::VecDeque;
@@ -227,8 +220,7 @@ pub struct SlotParams {
     ///
     /// Not compared against anything — gglib never sets `--samplers`, so
     /// there is no intent to diverge from. Captured because the order is
-    /// load-bearing for four simultaneously-sent truncation samplers and was
-    /// unstated anywhere in the tree until it was measured.
+    /// load-bearing for four simultaneously-sent truncation samplers.
     #[serde(default)]
     pub samplers: Option<Vec<String>>,
 }
@@ -381,8 +373,7 @@ pub(crate) fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<D
     // render time, and `task_params::to_json` serialises no
     // `reasoning_budget_*` field in either branch — measured against the
     // pinned build, 49 slot params captured mid-generation, neither present
-    // (ADR 0007 finding 7a, which corrects that ADR's own earlier claim that
-    // the budget was observable; the request-*parse* table at
+    // (ADR 0007 finding 7a; the request-*parse* table at
     // `server-schema.cpp:383` is not an echo). Both are permanently Blind, and
     // their `FieldSources` entries are the only account of the decision.
     let mut check =
@@ -634,11 +625,10 @@ impl SamplingAuditStore {
     /// the suppression marker. [`SuppressedEffort`] exists precisely because
     /// those are unrecoverable from the decision alone.
     ///
-    /// Passing it explicitly also closes the hole this parameter was added to
-    /// fix: the proxy built [`PipelineReport::effort_suppressed`] on every
-    /// request and dropped it on the floor at both shaping sites, so the level
-    /// and the rung were computed, logged once at `debug!`, and then lost. A
-    /// caller can no longer forget it without the compiler saying so.
+    /// Passing it explicitly also means a caller cannot drop
+    /// [`PipelineReport::effort_suppressed`] without the compiler saying so;
+    /// dropped, the level and the rung are computed, logged once at `debug!`,
+    /// and lost.
     ///
     /// [`PipelineReport::effort_suppressed`]: gglib_core::request_pipeline::PipelineReport::effort_suppressed
     pub fn record_intent(

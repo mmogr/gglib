@@ -1,21 +1,18 @@
 //! A tunnelled request the edge did not name a device for reaches nothing.
 //!
-//! This is decision 2's second door, put back for tunnelled traffic. The
-//! first door is the tunnel edge, which admits a request bearing a device's
-//! own token; the proxy's `bearer_guard` used to be the second, and
-//! `ServeOptions::backend_auth` took that away — the edge now replaces the
-//! client's `Authorization` with the backend's own bearer on every admitted
-//! request, so `bearer_guard` validates a header modelpipe wrote microseconds
-//! earlier and can no longer refuse anything that crossed the tunnel.
+//! This is decision 2's second door for tunnelled traffic. The first door is
+//! the tunnel edge, which admits a request bearing a device's own token. The
+//! proxy's `bearer_guard` cannot be the second: under
+//! `ServeOptions::backend_auth` the edge replaces the client's
+//! `Authorization` with the backend's own bearer on every admitted request, so
+//! `bearer_guard` validates a header modelpipe wrote microseconds earlier and
+//! cannot refuse anything that crossed the tunnel.
 //!
-//! That mattered more when it was written. While gglib paired through a
-//! one-time grant, modelpipe rewrote the header on the request a grant
-//! admitted too, and a grant was one request at any path the guesser liked;
-//! this gate was what kept a guessed code from reaching
-//! `POST /v1/proxy/shutdown`. modelpipe 0.6 answers pairing at the edge and
-//! forwards nothing for it, so every request it admits under
-//! `TokenPolicy::Named` names a device. The gate stays as the one check left
-//! that could refuse a credential a later edge admits without a name.
+//! modelpipe answers pairing at the edge and forwards nothing for it, so
+//! every request it admits under `TokenPolicy::Named` names a device. This
+//! gate is the one check that could refuse a credential an edge admits
+//! without a name — a one-time pairing grant forwarded at any path, say,
+//! which would let a guessed code reach `POST /v1/proxy/shutdown`.
 //!
 //! The discriminator is the device header, which the edge writes when a
 //! *named* token admitted, so under `Named` every legitimate tunnelled

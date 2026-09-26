@@ -1,9 +1,8 @@
 //! The proxy's router: which routes exist, and which guards wrap which.
 //!
-//! Split from `server.rs`, which is the composition root and was at its
-//! file-size ceiling, when the remote tunnel's routes arrived. Everything
-//! about *layer order* lives here and is the whole of what this file
-//! decides; the handlers live where their subject does.
+//! Everything about *layer order* lives here and is the whole of what this
+//! file decides; `server.rs` is the composition root, and the handlers live
+//! where their subject does.
 //!
 //! ```text
 //! CorsLayer                outermost — answers OPTIONS preflight itself

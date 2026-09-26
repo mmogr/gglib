@@ -7,47 +7,25 @@
 //! turn and no role, which is what makes it the one delivery every chat
 //! template accepts.
 //!
-//! The obvious alternative — a trailing `system` message — was the first
-//! choice and does not survive contact with real templates. Rendering the
-//! chat templates llama.cpp bundles (at `e5a8d439`; 65 of the 69 compile in
-//! minijinja) through the same minijinja
-//! environment `gglib_gguf`'s template probe uses, against the two tails a
-//! tripped request actually has, a trailing `system` message lands where it
-//! was put in 63 of the 101 pairs that render at all. In the rest it
-//! **raises** in 7 (Qwen3.5-4B: "System message must be at the beginning.";
-//! `Ministral-3` and `Mistral-Nemo` on the Mistral side; `Apertus-8B`, which
-//! is neither), is **hoisted to token 0** in 19 (the DeepSeek family, which
-//! concatenates every system message into a prompt prefix — breaking the
-//! cached prefix on every tripped turn, the exact failure `canonicalization`
-//! exists to prevent — plus `tencent-Hy3`, `Solar-Open-100B` and rwkv-world's
-//! chat tail), or is **silently dropped** in 10 (gpt-oss, `SmolLM3`,
-//! `MiniMax-M1`, Nemotron-Nano-v2, Bielik). The remaining 2 are the
-//! no-`tool`-branch pair below, where the whole history is lost and the note
-//! survives. A raise is an HTTP 500 from llama-server where the guard used to
-//! return a clean 400.
-//! gglib's two capability flags identify none of these: llama.cpp probes
-//! `supports_system_role` with the message at index 0, so Qwen3.5 and DeepSeek
-//! both report that they support it.
+//! A trailing `system` message does not survive every real template: on some
+//! it **raises** (an HTTP 500 from llama-server; Qwen3.5-4B: "System message
+//! must be at the beginning."), on some it is **hoisted to token 0** (the
+//! DeepSeek family, breaking the cached prefix `canonicalization` exists to
+//! keep), and on some it is **silently dropped**. gglib's two capability
+//! flags identify none of these: llama.cpp probes `supports_system_role` with
+//! the message at index 0, so Qwen3.5 and DeepSeek both report that they
+//! support it.
 //!
-//! In-content delivery lands in place in 99 of the same 101. Its two failures
-//! are templates with no branch for the `tool` role at all — Phi-3.5-mini and
-//! rwkv-world — which drop the whole last message on an agentic tail, and the
-//! note with it. That is a real limit, not an artefact: **a note inside the
-//! last message shares that message's fate**, and `tool` is the role templates
-//! most often omit. What bounds the damage is that a model behind such a
-//! template never sees a tool *result* either, so it cannot run a tool loop
-//! meaningfully with or without the note; and on a chat tail, where stagnation
-//! trips, both templates render the note in place.
-//!
-//! The evidence is minijinja over llama.cpp's bundled templates, not
-//! llama-server's own engine, and nothing here was run against a model. Of
-//! the 69 templates, 4 do not compile in minijinja at all, so 65 were
-//! rendered against 2 tails each — 130 pairs, of which 101 render on the
-//! baseline. `loop_guard_note_templates_tests.rs` in `gglib-gguf` keeps the
-//! four templates that broke the alternatives honest, with Phi-3.5-mini
-//! pinned as the known drop; **the full table is not re-derivable from this
-//! tree** — the harness that produced it was a throwaway, and the five
-//! vendored templates are what survives of it.
+//! **A note inside the last message shares that message's fate.** A template
+//! with no branch for the `tool` role (Phi-3.5-mini, rwkv-world) drops the
+//! whole last message on an agentic tail, and the note with it. A model behind
+//! such a template never sees a tool *result* either, so it cannot run a tool
+//! loop meaningfully with or without the note; on a chat tail, where
+//! stagnation trips, both render the note in place.
+//! `loop_guard_note_templates_tests.rs` in `gglib-gguf` keeps the four
+//! templates that broke the alternatives, with Phi-3.5-mini pinned as the
+//! known drop. The template survey behind this section, and its limits, is in
+//! [#1094].
 //!
 //! # Where it goes in the pipeline
 //!
@@ -60,7 +38,7 @@
 //! `context_length_exceeded` inside the forward. The note is built and
 //! appended first — this runs before `shape_request_body` — so what fails is
 //! the sending, not the rendering. That is by construction the shape most
-//! likely to trip the guard, and it is where the new default buys nothing.
+//! likely to trip the guard, and it is where the default, `note`, buys nothing.
 //!
 //! It also means the note's own characters are inside the payload the budget
 //! is measured against: 245–486 for a loop, about 206 for stagnation. A
@@ -90,6 +68,8 @@
 //! the note is unchanged, because every template reads `role` and `content` by
 //! name, but the *bytes* are not, so tests assert `Value`-equality rather than
 //! byte-identity.
+//!
+//! [#1094]: https://github.com/mmogr/gglib/pull/1094
 
 use bytes::Bytes;
 use serde_json::{Value, json};
@@ -140,11 +120,10 @@ impl LoopGuardNote {
     /// and the threshold, all of which the verdict already carries. No message
     /// content and nothing a person typed reaches the model through here.
     ///
-    /// The signature is **not** free of client input, and that matters more
-    /// here than it did for the 400 body this replaces. It is
+    /// The signature is **not** free of client input. It is
     /// `name:hash|name:hash…`: the arguments are hashed, but each tool *name*
     /// is verbatim off the wire, unbounded and unescaped. Under `refuse` it
-    /// went into an error body the client reads back; under `note` it goes
+    /// goes into an error body the client reads back; under `note` it goes
     /// into the prompt. The client already owns the prompt, so this is not an
     /// escalation — but an unbounded echo inside gglib's own marked sentence
     /// is worth bounding, so the interpolated signature is truncated to

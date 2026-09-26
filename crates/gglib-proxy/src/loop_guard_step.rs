@@ -5,10 +5,9 @@
 //! dashboard, what the loop guard's log records, and whether the request is
 //! forwarded or refused.
 //!
-//! The two were one block inside `chat_completions`. Separating them gives the
-//! decision a return type a caller cannot ignore ([`GuardStep`]) and a seam a
-//! test can reach without a running server — and leaves `server.rs`, which is
-//! frozen at its size by the complexity ratchet, room to grow.
+//! A module of its own gives the decision its own return type
+//! ([`GuardStep`]), which `chat_completions` matches on, and a seam a test
+//! can reach without a running server.
 
 use axum::Json;
 use axum::http::StatusCode;

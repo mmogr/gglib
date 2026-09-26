@@ -396,8 +396,8 @@ pub struct ErrorDetail {
     pub message: String,
     /// Defaulted because modelpipe omits it. Without that, a modelpipe refusal
     /// fails to deserialize at all and the agent's retry classifier drops to
-    /// reading the body as raw text — which is how "the far machine is being
-    /// re-dialled" reached the user as a JSON blob and was never retried. An
+    /// reading the body as raw text, so "the far machine is being re-dialled"
+    /// would reach the user as a JSON blob and never be retried. An
     /// absent key parses as empty, which is not a retryable discriminant, so a
     /// body that names no type still asserts nothing about retrying.
     #[serde(default)]

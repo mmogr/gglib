@@ -27,9 +27,8 @@ use crate::server::AppState;
 ///   clear API of its own — recycling the process is the only way to drop it.
 ///
 /// A global clear therefore also recycles the model. Without that, the common
-/// configuration (RAM cache on, disk layer off) had no way to clear the only
-/// cache it actually had: the endpoint reported `cache not enabled` and did
-/// nothing, which is the least useful answer available.
+/// configuration (RAM cache on, disk layer off) would have no way to clear
+/// the only cache it has.
 ///
 /// A session-scoped clear is deliberately disk-only. Recycling the process to
 /// service one session would discard every other session's cached prefix too.

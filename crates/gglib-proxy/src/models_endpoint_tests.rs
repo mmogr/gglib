@@ -1,7 +1,7 @@
 //! What `/v1/models` advertises when nothing is configured.
 //!
 //! The interesting cases are all about the *unconfigured* chain, which is the
-//! ordinary state since #926 stopped `Settings::with_defaults` writing a floor.
+//! ordinary state: `Settings::with_defaults` writes no floor.
 
 use crate::models::ModelsResponse;
 use gglib_core::domain::ModelCapabilities;

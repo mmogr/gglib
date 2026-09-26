@@ -1,11 +1,10 @@
 //! `POST /v1/models/{name}/load`: have a model resident before a turn needs it.
 //!
-//! The one route the *use* side of ADR 0013 needed that the proxy did not
-//! already have. A turn loads its model on the way in, so a client that only
-//! ever asks questions never wanted this; `gglib serve --remote` does — the
-//! reason to run it is that the first turn should not wait — and the tunnel
-//! carries only this proxy, so the daemon's own start endpoint is not
-//! somewhere a paired machine can go.
+//! The route the *use* side of ADR 0013 adds to the proxy. A turn loads its
+//! model on the way in, so a client that only ever asks questions has no use
+//! for this; `gglib serve --remote` does — the reason to run it is that the
+//! first turn should not wait — and the tunnel carries only this proxy, so
+//! the daemon's own start endpoint is not somewhere a paired machine can go.
 //!
 //! It admits exactly the way a chat completion does — the same queue, the
 //! same batching, the same context rules — and then drops the lease at once,

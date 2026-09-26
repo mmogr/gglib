@@ -369,10 +369,9 @@ async fn qwen_function_xml_tool_call_is_normalized() {
     );
 }
 
-/// A NON-Qwen model tagged `format:hermes` — the tag detection has emitted
-/// since it existed, previously wired to nothing — must now normalize its
-/// `<tool_call>` markup exactly like a qwen-tagged model.  This pins the
-/// gap fix: before the dialect-spec work this markup reached clients raw.
+/// A NON-Qwen model tagged `format:hermes` must normalize its `<tool_call>`
+/// markup exactly like a qwen-tagged model, rather than pass it to clients
+/// raw.
 #[tokio::test]
 async fn hermes_tagged_model_tool_call_is_normalized() {
     let body = round_trip(

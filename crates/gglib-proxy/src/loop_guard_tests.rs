@@ -229,12 +229,10 @@ fn a_user_interjection_between_identical_batches_breaks_the_run() {
 
 #[test]
 fn a_thrice_read_file_does_not_trip_the_loop_guard() {
-    // This case used to be `third_identical_batch_trips_loop`, asserting
-    // the opposite. Reading the same file three times — read, edit,
-    // re-read to verify — is the ordinary shape of an agentic coding
-    // turn, and rejecting it killed the conversation permanently: the
-    // client replays the same history every turn, so the 400 repeats
-    // forever and its body tells a non-technical user to run a CLI flag.
+    // Reading the same file three times — read, edit, re-read to verify —
+    // is the ordinary shape of an agentic coding turn, and rejecting it
+    // would kill the conversation permanently: the client replays the same
+    // history every turn, so the 400 would repeat forever.
     //
     // `read_file` is an observation tool, so the ceiling is 15, not 2.
     let msgs = vec![

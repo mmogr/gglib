@@ -42,19 +42,19 @@ pub(crate) const STRIKE_THRESHOLD: u32 = 2;
 /// What one streamed turn revealed about the upstream's health.
 ///
 /// Deliberately more than a bool. The two states a bool collapses are the ones
-/// that made the watchdog read the world backwards:
+/// that would make the watchdog read the world backwards:
 ///
 /// * [`Self::UpstreamError`] — the turn *died upstream*. Under a bool this
-///   arrived as "healthy", because the error frame is renderable and the drain
-///   loop marks renderable frames as visible output. A server dying mid-stream
-///   on every single request therefore reset the streak every time and the
-///   recycle watchdog could never fire — the failure most deserving of a
-///   recycle was the one that guaranteed none.
-/// * [`Self::ClientAborted`] — the person hung up. Under a bool this arrived as
-///   "empty", because no visible output was produced. Nothing was learned about
-///   the upstream, but a strike was recorded anyway; with
-///   [`STRIKE_THRESHOLD`] at two, cancelling two generations in a row was
-///   enough to recycle a perfectly healthy model server.
+///   would arrive as "healthy", because the error frame is renderable and the
+///   drain loop marks renderable frames as visible output. A server dying
+///   mid-stream on every single request would reset the streak every time and
+///   the recycle watchdog could never fire — the failure most deserving of a
+///   recycle would be the one that guaranteed none.
+/// * [`Self::ClientAborted`] — the person hung up. Under a bool this would
+///   arrive as "empty", because no visible output was produced. Nothing is
+///   learned about the upstream, but a strike would be recorded anyway; with
+///   [`STRIKE_THRESHOLD`] at two, cancelling two generations in a row would
+///   recycle a perfectly healthy model server.
 ///
 /// A verdict is about the *upstream*, never about the client. When the client's
 /// behaviour is what ended the turn, the right answer is to abstain.
@@ -64,8 +64,8 @@ pub enum StreamVerdict {
     /// producing; the streak resets.
     Healthy,
     /// The turn produced nothing a client can render — no content, no tool
-    /// call, not even recovered normalization text. The original degradation
-    /// this watchdog was built for.
+    /// call, not even recovered normalization text. The degradation this
+    /// watchdog exists for.
     Empty,
     /// The turn died upstream mid-generation: the model server emitted an
     /// error event, or the byte stream itself broke. Strictly stronger

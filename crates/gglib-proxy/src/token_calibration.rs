@@ -151,7 +151,7 @@ impl TokenCalibration {
     ///
     /// This is what keeps two turns of one conversation from computing two
     /// different truncation budgets purely from the EWMA settling in the
-    /// background: [`Self::record`] still updates on every request as before,
+    /// background: [`Self::record`] updates on every request,
     /// but a session that's already snapshotted doesn't see that drift again
     /// until its snapshot expires or is explicitly cleared.
     #[must_use]
