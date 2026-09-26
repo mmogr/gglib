@@ -7,7 +7,7 @@ import { useToastContext } from '../contexts/ToastContext';
 import { Icon } from './ui/Icon';
 import { Button } from './ui/Button';
 import { cn } from '../utils/cn';
-import { ConnectSection, DevicesSection, ServeSection } from './remote';
+import { DevicesSection, JoinSection, ServeSection } from './remote';
 
 interface RemoteControlProps {
   buttonClassName?: string;
@@ -94,7 +94,7 @@ const RemoteControl: FC<RemoteControlProps> = ({
               <div className="my-base border-t border-border-light" />
               <DevicesSection onNotice={notice} />
               <div className="my-base border-t border-border-light" />
-              <ConnectSection onNotice={notice} />
+              <JoinSection onNotice={notice} />
             </>
           )}
 

@@ -1,7 +1,7 @@
 //! The three device routes: invite one, list them, retire one.
 //!
 //! Their DTOs live here beside them rather than in `wire.rs`, along a
-//! subject: `wire.rs` is what the tunnel is asked — enable, connect, kill —
+//! subject: `wire.rs` is what the tunnel is asked — enable, join, kill —
 //! `status.rs` is what it says, and this is who may use it.
 //!
 //! `invite` has no DTO of its own. `RemoteOps::invite` answers with the same

@@ -25,7 +25,7 @@ use super::{Settings, SettingsError, SettingsUpdate};
 /// disagreement unrepresentable rather than merely wrong, and gives the
 /// stale-key question — *whose* key is this? — an answer.
 ///
-/// What it holds comes from `connect`, which `gglib remote join` and the
+/// What it holds comes from `join`, which `gglib remote join` and the
 /// GUI's pairing-string field both reach, and from a `--remote` turn, which
 /// sets `default_model` and no other field. `gglib config settings set` has
 /// no flag for it and the settings form no field, and `gglib config settings
@@ -75,7 +75,7 @@ pub struct RemotePairing {
     /// against stays the address.
     ///
     /// Stable rather than fixed: a port can be taken by something else
-    /// between two sessions, and `connect` then binds the next free one,
+    /// between two sessions, and `join` then binds the next free one,
     /// says so, and remembers *that*. `--port` pins it, and is remembered
     /// the same way. `#[serde(default)]` for the reason the field above
     /// gives.
@@ -251,7 +251,7 @@ impl Settings {
 /// The remote half of [`validate_settings`](super::validate_settings).
 ///
 /// The connect side's stored pairing, same rule on each half: a blank is
-/// neither a key nor an address, and `connect` reading one would dial
+/// neither a key nor an address, and `join` reading one would dial
 /// nothing with nothing rather than say the pairing is gone. Clearing the
 /// record is how a pairing is forgotten.
 pub(super) fn validate_remote(settings: &Settings) -> Result<(), SettingsError> {

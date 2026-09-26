@@ -201,7 +201,7 @@ pub enum AppEvent {
 
     /// This machine's connect side is up: a local port that is the remote
     /// proxy.
-    RemoteConnected {
+    RemoteJoined {
         /// The loopback port the tunnel is bound to on this machine.
         port: u16,
     },
@@ -254,7 +254,7 @@ impl AppEvent {
             Self::RemoteEnabled { .. } => "remote:enabled",
             Self::RemoteDisabled => "remote:disabled",
             Self::RemotePaired { .. } => "remote:paired",
-            Self::RemoteConnected { .. } => "remote:connected",
+            Self::RemoteJoined { .. } => "remote:joined",
             Self::RemoteDisconnected => "remote:disconnected",
             Self::RemoteAway { .. } => "remote:away",
             Self::RemoteBack { .. } => "remote:back",

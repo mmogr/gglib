@@ -1,13 +1,13 @@
 //! The one-at-a-time slot each side of the tunnel occupies.
 //!
-//! `enable` and `connect` are the same shape: there may be exactly one, and
+//! `enable` and `join` are the same shape: there may be exactly one, and
 //! building it is slow — a dial that waits out an unreachable peer, or a
 //! listener that waits ten seconds for a relay. Both held their mutex across
 //! that, and `status` reads both. `tokio::sync::Mutex` is FIFO-fair, so a
 //! reader arriving during the slow part waits for all of it: `gglib remote
 //! status` gives the daemon five seconds and a dial can hold the lock for
 //! far longer, and `gglib remote disconnect` — the one command that exists
-//! to end a hanging connect — queued behind the connect it was cancelling.
+//! to end a hanging join — queued behind the join it was cancelling.
 //!
 //! So the lock is held for the transitions and nothing else. A caller
 //! reserves the slot, drops the lock, does the slow work, and comes back to
@@ -65,7 +65,7 @@ impl<T> Slot<T> {
     /// What holds the slot, if anything.
     ///
     /// For the cheap refusal a caller makes *before* doing any work, so
-    /// `connect` while connected still says "already connected" rather than
+    /// `join` while connected still says "already connected" rather than
     /// reporting the first thing it happens to find wrong with the
     /// arguments. Not a reservation: the lock is gone the moment this
     /// returns, and two callers can both pass it. [`Self::reserve`] is

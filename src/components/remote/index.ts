@@ -1,4 +1,4 @@
 export { PairingReveal } from './PairingReveal';
 export { ServeSection } from './ServeSection';
-export { ConnectSection } from './ConnectSection';
+export { JoinSection } from './JoinSection';
 export { DevicesSection } from './DevicesSection';

@@ -55,7 +55,7 @@ pub struct SettingsUpdate {
     pub start_at_login: Option<Option<bool>>,
     /// See [`Settings::remote_pairing`](super::Settings::remote_pairing).
     /// Sets, clears or leaves the whole record: there is no field here for
-    /// half of it. The pairing's own writers, `connect` and a `--remote`
+    /// half of it. The pairing's own writers, `join` and a `--remote`
     /// turn, do not come through here; they change the record inside
     /// [`SettingsRepository::modify`](crate::ports::SettingsRepository::modify),
     /// as it stands when the write lands.

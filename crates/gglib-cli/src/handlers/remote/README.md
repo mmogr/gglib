@@ -24,8 +24,7 @@ remote/
   pairing_tui.rs  — the pairing screen: QR + code in the alternate buffer,
                     gone the moment a device pairs, the code expires, or
                     the invite is withdrawn
-  connect.rs      — `join` (and `connect`, its old name): this machine as
-                    the laptop, plus `disconnect`
+  join.rs         — `join`: this machine as the laptop, plus `disconnect`
   key.rs          — `gglib remote key`: this device's key, printed on
                     stdout alone under `--show`, for a client that is not
                     gglib
@@ -47,9 +46,7 @@ remains, because a first run should not be two commands.
 
 # The other side
 
-`join` takes the string `invite` showed on the other machine. `connect` is
-the name it had and still reaches the same handler for one release, printing
-a `note:` that says so. With the
+`join` takes the string `invite` showed on the other machine. With the
 `-<code>` suffix it is a first pairing: the daemon dials the ticket, redeems
 the code through the tunnel for that machine's API key, and stores both the
 key and the ticket. Without it the stored key is used; with no argument at

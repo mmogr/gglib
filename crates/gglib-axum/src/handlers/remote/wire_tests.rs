@@ -59,8 +59,8 @@ fn discovery_off_is_carried_through() {
 }
 
 #[test]
-fn an_empty_connect_body_reuses_the_last_ticket_on_a_free_port() {
-    let req = RemoteConnectBody::default().into_request();
+fn an_empty_join_body_reuses_the_last_ticket_on_a_free_port() {
+    let req = RemoteJoinBody::default().into_request();
     assert!(req.pairing.is_none());
     assert!(req.port.is_none());
     assert!(req.discovery);

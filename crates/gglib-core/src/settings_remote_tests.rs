@@ -18,7 +18,7 @@ fn pairing() -> RemotePairing {
 /// Each half of the stored pairing follows the proxy key's rule: a blank is
 /// refused, and clearing the whole record is how the pairing is forgotten.
 ///
-/// Blank is worth refusing on the ticket too, not only on the key. `connect`
+/// Blank is worth refusing on the ticket too, not only on the key. `join`
 /// reads the ticket as the address to dial and the name of the machine whose
 /// key it holds, so a blank one would dial nothing while still claiming this
 /// machine is paired with something.
@@ -63,7 +63,7 @@ fn a_blank_half_of_a_pairing_is_refused_and_a_cleared_record_is_fine() {
     assert!(validate_settings(&settings).is_ok());
 }
 
-/// A pairing written by `connect` survives the round trip through the
+/// A pairing written by `join` survives the round trip through the
 /// key-value store's JSON as one row, and a database that has never paired
 /// loads as "never paired".
 #[test]

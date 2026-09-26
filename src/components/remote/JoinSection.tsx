@@ -22,7 +22,7 @@ function awayFor(secs: number): string {
   return `${Math.floor(secs / 3600)}h`;
 }
 
-interface ConnectSectionProps {
+interface JoinSectionProps {
   onNotice: (message: string, kind: 'success' | 'error' | 'info') => void;
 }
 
@@ -48,7 +48,7 @@ interface ConnectSectionProps {
  * should go and then have nowhere to type them. The button turns the
  * preference on as it opens, because opening it is the same decision.
  */
-export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
+export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
   const { status, useForChat, chatModel } = useRemoteState();
   const { confirm } = useConfirmContext();
   const [pairing, setPairing] = useState('');
@@ -59,21 +59,21 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
   const hasKey = status?.has_remote_key ?? false;
   const canReuse = storedFingerprint !== null && hasKey;
 
-  const handleConnect = async () => {
+  const handleJoin = async () => {
     setBusy(true);
     try {
       const trimmed = pairing.trim();
-      const answer = await getTransport().connectRemote(trimmed ? { pairing: trimmed } : {});
+      const answer = await getTransport().joinRemote(trimmed ? { pairing: trimmed } : {});
       setPairing('');
       refreshRemoteStatus();
       onNotice(
         answer.paired
           ? `Paired with ${answer.ticket_fingerprint}. Its key is stored here.`
-          : `Connected to ${answer.ticket_fingerprint}.`,
+          : `Joined ${answer.ticket_fingerprint}.`,
         'success',
       );
     } catch (err) {
-      onNotice(`Could not connect: ${formatError(err)}`, 'error');
+      onNotice(`Could not join: ${formatError(err)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -121,9 +121,9 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
   };
 
   return (
-    <section aria-labelledby="remote-connect-heading">
+    <section aria-labelledby="remote-join-heading">
       <div className="flex justify-between items-center mb-sm">
-        <h4 id="remote-connect-heading" className="m-0 text-sm font-semibold text-text">
+        <h4 id="remote-join-heading" className="m-0 text-sm font-semibold text-text">
           Another machine
         </h4>
         <ProxyStatusPill running={connected !== null} />
@@ -132,7 +132,7 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
       {connected ? (
         <Stack gap="sm">
           {/*
-            The fingerprint is empty until the status read lands — the connect
+            The fingerprint is empty until the status read lands — the join
             event carries a port and nothing else. Naming nobody is the honest
             reading of that; "Connected to  (idle)." reads as a bug.
           */}
@@ -213,10 +213,10 @@ export const ConnectSection: FC<ConnectSectionProps> = ({ onNotice }) => {
           <Button
             variant="primary"
             className="w-full"
-            onClick={handleConnect}
+            onClick={handleJoin}
             disabled={busy || (!pairing.trim() && !canReuse)}
           >
-            {busy ? 'Reaching it…' : 'Connect'}
+            {busy ? 'Reaching it…' : 'Join'}
           </Button>
           {storedFingerprint && !hasKey && (
             <Label size="xs" muted>

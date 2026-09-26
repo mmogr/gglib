@@ -39,7 +39,7 @@ impl SettingsRepository for Unwritable {
     }
 }
 
-/// Machine A's pairing as `connect` read it before the dial: no model
+/// Machine A's pairing as `join` read it before the dial: no model
 /// remembered yet, and no port.
 fn held_for_a() -> RemotePairing {
     RemotePairing {
@@ -200,7 +200,7 @@ async fn a_record_without_a_port_learns_the_port_this_dial_bound() {
 
 /// A model remembered while a redial was under way survives the redial.
 ///
-/// `held` is the record as `connect` read it before the dial, with no model
+/// `held` is the record as `join` read it before the dial, with no model
 /// in it; the model is remembered on the stored record after that read, the
 /// way a `--remote` turn in a terminal would. The redial writes the ticket
 /// and the port it used and leaves the rest of the record as it now is.

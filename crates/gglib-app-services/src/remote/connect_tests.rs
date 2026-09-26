@@ -1,7 +1,7 @@
 //! Tests for the connect side — this machine as the laptop.
 //!
 //! Everything here stops short of `modelpipe::connect`, which wants an iroh
-//! endpoint and a peer that answers: what `connect` refuses before it dials.
+//! endpoint and a peer that answers: what `join` refuses before it dials.
 //! What it owes settings once the dial has come up is on the far side of
 //! that call, so it is driven through `settle` in `stored_pairing_tests.rs`
 //! instead. The one test that does dial is `#[ignore]`d and lives in
@@ -24,7 +24,7 @@ async fn a_first_connect_with_no_argument_asks_for_the_pairing_string() {
     let (_, ops, events) = test_remote_ops().await;
 
     let err = ops
-        .connect(ConnectRequest::default())
+        .join(JoinRequest::default())
         .await
         .expect_err("nothing is stored, so there is nothing to dial");
     let GuiError::ValidationFailed(message) = err else {
@@ -45,9 +45,9 @@ async fn a_bare_ticket_with_no_stored_key_is_refused_before_anything_is_dialled(
     let (_, ops, _) = test_remote_ops().await;
 
     let err = ops
-        .connect(ConnectRequest {
+        .join(JoinRequest {
             pairing: Some(TICKET_A.to_owned()),
-            ..ConnectRequest::default()
+            ..JoinRequest::default()
         })
         .await
         .expect_err("no key is stored for that machine");
@@ -65,9 +65,9 @@ async fn a_pairing_string_that_does_not_parse_is_reported_as_the_typo_it_is() {
     let (_, ops, _) = test_remote_ops().await;
 
     let err = ops
-        .connect(ConnectRequest {
+        .join(JoinRequest {
             pairing: Some("not-a-ticket-483920".to_owned()),
-            ..ConnectRequest::default()
+            ..JoinRequest::default()
         })
         .await
         .expect_err("that is not a ticket");
@@ -130,9 +130,9 @@ async fn the_stored_key_and_the_stored_ticket_describe_one_machine() {
         .expect("machine A's pairing is stored");
 
     let err = ops
-        .connect(ConnectRequest {
+        .join(JoinRequest {
             pairing: Some(TICKET_B.to_owned()),
-            ..ConnectRequest::default()
+            ..JoinRequest::default()
         })
         .await
         .expect_err("machine B never handed this machine a key");

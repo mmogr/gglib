@@ -78,9 +78,9 @@ pub struct OfferedPairing {
     pub device: String,
 }
 
-/// What `connect` is asked for.
+/// What `join` is asked for.
 #[derive(Debug, Clone, Default)]
-pub struct ConnectRequest {
+pub struct JoinRequest {
     /// `<ticket>-<code>` for a first pairing, a bare ticket afterwards, or
     /// `None` to dial the ticket this machine last connected to.
     pub pairing: Option<String>,
@@ -94,9 +94,9 @@ pub struct ConnectRequest {
     pub discovery: bool,
 }
 
-/// What `connect` hands back.
+/// What `join` hands back.
 #[derive(Debug, Clone)]
-pub struct Connected {
+pub struct Joined {
     /// The loopback port that is now the far machine.
     pub port: u16,
     /// `http://127.0.0.1:<port>/v1`, ready to paste into a client.
@@ -159,7 +159,7 @@ pub struct RemoteStatusSnapshot {
     pub last_peer: Option<String>,
     /// The connect side, when this machine is reaching another.
     pub connected: Option<ConnectSnapshot>,
-    /// Fingerprint of the machine a bare `connect` would dial, from the
+    /// Fingerprint of the machine a bare `join` would dial, from the
     /// stored pairing — and, because that pairing is one record, the machine
     /// the stored key belongs to. `None` when nothing is stored, or when the
     /// ticket is from a format this build cannot read.

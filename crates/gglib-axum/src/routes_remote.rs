@@ -7,7 +7,7 @@
 //! line where six routes were.
 //!
 //! Two sides, as the tunnel has: `enable`/`disable`/`status` and the device
-//! routes are this machine serving, `connect`/`disconnect`/`kill` are this
+//! routes are this machine serving, `join`/`disconnect`/`kill` are this
 //! machine reaching another one.
 
 use axum::Router;
@@ -35,7 +35,7 @@ pub(crate) fn remote_routes() -> Router<AppState> {
         .route("/devices/{device}", delete(handlers::remote::forget))
         // This machine as the laptop: a loopback port here that is another
         // machine's proxy.
-        .route("/connect", post(handlers::remote::connect))
+        .route("/join", post(handlers::remote::join))
         .route("/disconnect", post(handlers::remote::disconnect))
         .route("/kill", post(handlers::remote::kill))
 }

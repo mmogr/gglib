@@ -26,7 +26,7 @@ mod types;
 
 pub use gateway::RemoteGateway;
 pub use types::{
-    ConnectRequest, ConnectSnapshot, Connected, DeviceView, EnableRequest, Enabled, OfferedPairing,
+    ConnectSnapshot, DeviceView, EnableRequest, Enabled, JoinRequest, Joined, OfferedPairing,
     RemoteStatusSnapshot,
 };
 
@@ -104,7 +104,7 @@ pub struct RemoteOps {
     /// Shared with the task that watches the connection, which is why it is
     /// an `Arc` where `live` is not.
     live_connect: Arc<Mutex<Slot<LiveConnect>>>,
-    /// Names each `connect`, so a teardown that took the slot from one is
+    /// Names each `join`, so a teardown that took the slot from one is
     /// something that dial can see when it comes back, and a watcher that
     /// outlived its connection cannot clear the next one.
     connect_generation: AtomicU64,
@@ -120,7 +120,7 @@ pub struct RemoteOps {
     /// is slow and `invite` must not hold the serve slot across it.
     ///
     /// It covers the roster's own writers and nothing else, and needs to: any
-    /// other settings write — `disable`, `connect`, the settings form, a proxy
+    /// other settings write — `disable`, `join`, the settings form, a proxy
     /// minting its key, `gglib config settings set` or `reset` in another
     /// process — goes through `SettingsRepository::modify`, one transaction
     /// that rewrites only the fields it changed.

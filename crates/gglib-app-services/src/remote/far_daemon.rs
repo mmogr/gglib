@@ -22,7 +22,7 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 ///
 /// `fingerprint` names the machine being stopped, for the one answer where
 /// which machine it was is the whole point: a refused key. It is the paired
-/// ticket's fingerprint, the name `gglib remote status` and the connect
+/// ticket's fingerprint, the name `gglib remote status` and the join
 /// confirmation already print.
 ///
 /// # Errors
@@ -46,7 +46,7 @@ pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Re
             info!("the remote daemon accepted the shutdown");
             Ok(())
         }
-        // Deliberately not "its API key has changed": `connect` will dial a
+        // Deliberately not "its API key has changed": `join` will dial a
         // bare ticket for a different machine while leaving an earlier
         // pairing's key in place, so the key can be refused by a machine
         // whose own key never moved. The narrower claim is true in both, and

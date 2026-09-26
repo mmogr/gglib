@@ -4,7 +4,7 @@
 //! spent has to say, and — in [`settle`] — which of those a dial that has
 //! come up owes. A sibling rather than more of `connect.rs`, which sits a
 //! handful of lines under the file-size budget — and because `mod.rs`'s
-//! status surface asks the same question of the same record as `connect`
+//! status surface asks the same question of the same record as `join`
 //! does, and asking it in two places is how the two drift.
 
 use gglib_core::services::AppCore;
@@ -99,7 +99,7 @@ pub(super) async fn settle(
 
 /// Change the stored pairing as it stands when the write lands.
 ///
-/// Not as `connect` read it before the dial. A `--remote` turn in a terminal
+/// Not as `join` read it before the dial. A `--remote` turn in a terminal
 /// remembers its model on the same record while a dial is under way, and the
 /// record can be cleared meanwhile; one rebuilt from the earlier read would
 /// undo either. So `change` is handed the record inside one
@@ -182,7 +182,7 @@ pub(super) async fn store_redeemed(
 /// Worth its own sentence because the ordinary reading of "could not store"
 /// is "try again", and trying again cannot work: `modelpipe::pair` spent the
 /// code at the far machine's tunnel edge, which answers each code once, so
-/// the next `connect` meets a
+/// the next `join` meets a
 /// refusal it reports as a refused pairing code. The only way forward
 /// is a fresh `gglib remote invite` there, and saying so is the difference between
 /// walking to the other machine once and doing it after an hour of retries.

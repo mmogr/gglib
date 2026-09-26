@@ -126,22 +126,22 @@ pub(crate) struct RemoteEnableDto {
     pub already_up: bool,
 }
 
-/// `POST /api/remote/connect` request body. Mirrors
-/// `gglib_axum::handlers::remote::RemoteConnectBody`.
+/// `POST /api/remote/join` request body. Mirrors
+/// `gglib_axum::handlers::remote::RemoteJoinBody`.
 #[derive(Debug, Clone, Default, Serialize)]
-pub(crate) struct RemoteConnectBody {
+pub(crate) struct RemoteJoinBody {
     pub pairing: Option<String>,
     pub port: Option<u16>,
     pub relay: Option<String>,
     pub discovery: Option<bool>,
 }
 
-/// `POST /api/remote/connect` response.
+/// `POST /api/remote/join` response.
 ///
-/// A narrowing of `gglib_axum::handlers::remote::RemoteConnectResponse`,
+/// A narrowing of `gglib_axum::handlers::remote::RemoteJoinResponse`,
 /// which also carries the bare `port`; the CLI prints the URL, which has it.
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct RemoteConnectDto {
+pub(crate) struct RemoteJoinDto {
     pub base_url: String,
     pub ticket_fingerprint: String,
     pub paired: bool,
@@ -151,7 +151,7 @@ pub(crate) struct RemoteConnectDto {
 }
 
 /// The connect side in a remote status, while it is up. Narrowed like
-/// `RemoteConnectDto`: the URL carries the port.
+/// `RemoteJoinDto`: the URL carries the port.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RemoteConnectionDto {
     pub base_url: String,

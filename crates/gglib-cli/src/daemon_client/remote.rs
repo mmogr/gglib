@@ -5,8 +5,8 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::wire::{
-    RemoteConnectBody, RemoteConnectDto, RemoteDeviceDto, RemoteEnableBody, RemoteEnableDto,
-    RemoteForgottenDto, RemoteStatusDto,
+    RemoteDeviceDto, RemoteEnableBody, RemoteEnableDto, RemoteForgottenDto, RemoteJoinBody,
+    RemoteJoinDto, RemoteStatusDto,
 };
 use super::{DaemonHandle, paths};
 
@@ -93,12 +93,9 @@ impl DaemonHandle {
     ///
     /// Long timeout: dialling may wait for a hole punch, and a first pairing
     /// makes one more request through the tunnel before answering.
-    pub(crate) async fn remote_connect(
-        &self,
-        body: &RemoteConnectBody,
-    ) -> Result<RemoteConnectDto> {
+    pub(crate) async fn remote_join(&self, body: &RemoteJoinBody) -> Result<RemoteJoinDto> {
         let response = self
-            .post(paths::REMOTE_CONNECT_PATH)
+            .post(paths::REMOTE_JOIN_PATH)
             .json(body)
             .timeout(Duration::from_secs(60))
             .send()

@@ -222,22 +222,6 @@ pub enum RemoteCommand {
         #[arg(long)]
         no_discovery: bool,
     },
-    /// The old name for `join`, kept for one release
-    #[command(hide = true)]
-    Connect {
-        /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
-        pairing: Option<String>,
-        /// Loopback port to bind here (default: a free one)
-        #[arg(long)]
-        port: Option<u16>,
-        /// Self-hosted relay URL for this side (default: iroh's public relays)
-        #[arg(long)]
-        relay: Option<String>,
-        /// Do not resolve through n0's discovery service; dial only the
-        /// paths the ticket carries
-        #[arg(long)]
-        no_discovery: bool,
-    },
     /// Close the local port; the far machine and the stored pairing stay
     Disconnect,
     /// Print this device's key, for a client that is not gglib

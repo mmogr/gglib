@@ -4,7 +4,7 @@
 
 Handlers for the remote tunnel ([ADR 0012](../../../../../docs/adr/0012-the-remote-tunnel.md)):
 enable, disable, status on the serve side; invite, the device list and forget
-for who may use it; connect, disconnect, kill on the connect side. Thin: each
+for who may use it; join, disconnect, kill on the connect side. Thin: each
 maps one `RemoteOps` call onto the wire.
 
 Two decisions live here rather than in `RemoteOps`:
@@ -17,7 +17,7 @@ Two decisions live here rather than in `RemoteOps`:
 - **Disable is.** A tunnel that is already down is the outcome asked for, so
   the handler answers with the status rather than a conflict.
 
-- **Connect is not idempotent either**, turned around: a second `connect`
+- **Join is not idempotent either**, turned around: a second `join`
   while connected is a `409` rather than a silent reuse, because the second
   call may name a different machine. **Disconnect is.**
 - **Kill asks for the word.** `{"confirm":"shutdown"}` or a `400` that changes
@@ -36,7 +36,7 @@ one — so the route reuses the enable response and a client needs no second
 shape to decode.
 
 The shapes are split the way the calls are: `wire` is what the tunnel is
-*asked* — the enable, connect and kill bodies, and the enable and connect
+*asked* — the enable, join and kill bodies, and the enable and join
 responses, of which only `enable`'s (reused by `invite`) carries a ticket —
 and `status` is what it *says*. `devices` keeps its own beside its handlers.
 

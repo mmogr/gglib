@@ -1,4 +1,4 @@
-//! The span of `connect` in which the slot is reserved and the lock is not.
+//! The span of `join` in which the slot is reserved and the lock is not.
 //!
 //! A second `impl` block carved off `connect.rs` because that file is at
 //! its size budget — the same answer `settings_validate.rs` and
@@ -18,7 +18,7 @@ use tracing::info;
 use super::super::RemoteOps;
 use super::super::connect_watch::watch;
 use super::super::stored_pairing::settle;
-use super::super::types::{ConnectRequest, Connected};
+use super::super::types::{JoinRequest, Joined};
 use super::{DRAIN, LiveConnect, cancelled};
 use crate::error::GuiError;
 
@@ -41,10 +41,10 @@ impl RemoteOps {
         &self,
         pairing: &PairingString,
         held: Option<RemotePairing>,
-        request: &ConnectRequest,
+        request: &JoinRequest,
         generation: u64,
         cancel: &CancellationToken,
-    ) -> Result<Connected, GuiError> {
+    ) -> Result<Joined, GuiError> {
         let ticket = pairing.ticket();
         let wanted = wanted_port(request.port, held.as_ref());
         let (opened, moved_from) = match open(pairing, request, Some(wanted), cancel).await {
@@ -115,8 +115,8 @@ impl RemoteOps {
             port,
         ));
         info!(ticket = %ticket_fingerprint, port, paired, ?moved_from, "connected to a remote");
-        self.emitter.emit(AppEvent::remote_connected(port));
-        Ok(Connected {
+        self.emitter.emit(AppEvent::remote_joined(port));
+        Ok(Joined {
             port,
             base_url,
             ticket_fingerprint,
@@ -217,7 +217,7 @@ mod tests {
             panic!("an overtaken join is a conflict either way");
         };
         assert!(
-            unpaired.contains("cancelled by `gglib remote disconnect`"),
+            unpaired.contains("the join was cancelled by `gglib remote disconnect`"),
             "{unpaired}"
         );
     }

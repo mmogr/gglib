@@ -48,7 +48,7 @@ pub const REMOTE_DISABLE_PATH: &str = "/api/remote/disable";
 pub const REMOTE_STATUS_PATH: &str = "/api/remote/status";
 
 /// Reach another machine's proxy over the tunnel: bind a loopback port here.
-pub const REMOTE_CONNECT_PATH: &str = "/api/remote/connect";
+pub const REMOTE_JOIN_PATH: &str = "/api/remote/join";
 
 /// Close that loopback port.
 pub const REMOTE_DISCONNECT_PATH: &str = "/api/remote/disconnect";
@@ -113,7 +113,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], REMOTE_ENABLE_PATH),
     (&["POST"], REMOTE_DISABLE_PATH),
     (&["GET"], REMOTE_STATUS_PATH),
-    (&["POST"], REMOTE_CONNECT_PATH),
+    (&["POST"], REMOTE_JOIN_PATH),
     (&["POST"], REMOTE_DISCONNECT_PATH),
     (&["POST"], REMOTE_KILL_PATH),
     (&["POST"], REMOTE_INVITE_PATH),

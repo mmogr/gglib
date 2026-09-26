@@ -133,7 +133,7 @@ ticketFingerprint: string, } | { "type": "remote_disabled" } | { "type": "remote
 /**
  * The tunnel edge's fingerprint for that device, when it sent one.
  */
-peer: string | null, } | { "type": "remote_connected", 
+peer: string | null, } | { "type": "remote_joined", 
 /**
  * The loopback port the tunnel is bound to on this machine.
  */

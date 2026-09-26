@@ -90,8 +90,8 @@ describe('remoteRegistry', () => {
     });
   });
 
-  it('remote_connected writes a placeholder connection the status read replaces', () => {
-    ingestRemoteEvent({ type: 'remote_connected', port: 41234 });
+  it('remote_joined writes a placeholder connection the status read replaces', () => {
+    ingestRemoteEvent({ type: 'remote_joined', port: 41234 });
     expect(getRemoteState().status?.connected).toMatchObject({
       port: 41234,
       base_url: 'http://127.0.0.1:41234/v1',
@@ -131,7 +131,7 @@ describe('remoteRegistry', () => {
   it('the name survives the whole reconnection, event by event', () => {
     // The same promise as above, walked the way production walks it: every
     // event is followed by a status read, and the dial back raises
-    // `remote_connected` in between. That arm clears the routing choice, and
+    // `remote_joined` in between. That arm clears the routing choice, and
     // the name has to be visibly exempt — clearing it there would empty the
     // field on every ordinary reconnection with the suite still green.
     applyRemoteStatus({ ...IDLE_STATUS, connected });
@@ -139,7 +139,7 @@ describe('remoteRegistry', () => {
 
     ingestRemoteEvent({ type: 'remote_disconnected' });
     applyRemoteStatus(IDLE_STATUS);
-    ingestRemoteEvent({ type: 'remote_connected', port: 41234 });
+    ingestRemoteEvent({ type: 'remote_joined', port: 41234 });
     expect(getRemoteState().chatModel).toBe('qwen3');
 
     applyRemoteStatus({ ...IDLE_STATUS, connected });
@@ -190,7 +190,7 @@ describe('remoteRegistry', () => {
     // screen before any status read has said who answered.
     applyRemoteStatus({ ...IDLE_STATUS, connected, stored_ticket_fingerprint: '3ca82708b995' });
     ingestRemoteEvent({ type: 'remote_disconnected' });
-    ingestRemoteEvent({ type: 'remote_connected', port: 41235 });
+    ingestRemoteEvent({ type: 'remote_joined', port: 41235 });
     expect(getRemoteState().status?.connected?.ticket_fingerprint).toBe('');
 
     // Typed for the machine being dialled, which is not the one whose ticket
@@ -227,10 +227,10 @@ describe('remoteRegistry', () => {
     requestRemoteChat();
 
     // The other half of the SSE gap, and the likelier one: the disconnect is
-    // lost and the connect survives. `remote_connected` is only ever emitted
+    // lost and the join survives. `remote_joined` is only ever emitted
     // by a fresh dial, so anything armed before it was armed for the machine
     // that dial is replacing — including a chat screen still on its way up.
-    ingestRemoteEvent({ type: 'remote_connected', port: 41235 });
+    ingestRemoteEvent({ type: 'remote_joined', port: 41235 });
     expect(getRemoteState()).toMatchObject({ useForChat: false, chatRequestedAt: null });
 
     applyRemoteStatus({ ...IDLE_STATUS, connected: otherMachine });
@@ -251,7 +251,7 @@ describe('remoteRegistry', () => {
   it('the status read that replaces the placeholder keeps what was aimed at it', () => {
     // The mirror of the case above: placeholder to real peer is the same
     // connection learning its name, not a swap, so nothing is dropped.
-    ingestRemoteEvent({ type: 'remote_connected', port: 41234 });
+    ingestRemoteEvent({ type: 'remote_joined', port: 41234 });
     setUseRemoteForChat(true);
     requestRemoteChat();
 
@@ -269,7 +269,7 @@ describe('remoteRegistry', () => {
     applyRemoteStatus({ ...IDLE_STATUS, connected });
     setRemoteChatModel('qwen3');
 
-    ingestRemoteEvent({ type: 'remote_connected', port: 41235 });
+    ingestRemoteEvent({ type: 'remote_joined', port: 41235 });
     setUseRemoteForChat(true);
     requestRemoteChat();
 

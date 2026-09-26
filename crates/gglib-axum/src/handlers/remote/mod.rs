@@ -1,12 +1,12 @@
 #![doc = include_str!("README.md")]
 
-mod connect;
 mod devices;
+mod join;
 mod status;
 mod wire;
 
-pub(crate) use connect::{connect, disconnect, kill};
 pub(crate) use devices::{forget, invite, list};
+pub(crate) use join::{disconnect, join, kill};
 pub(crate) use status::RemoteStatus;
 pub(crate) use wire::{RemoteEnableBody, RemoteEnableResponse};
 

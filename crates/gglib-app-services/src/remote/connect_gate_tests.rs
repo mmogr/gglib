@@ -79,11 +79,11 @@ async fn a_dial_with_a_code_is_not_abandoned_part_way_through_pairing() {
     let dialling = Arc::clone(&ops);
     let dial = tokio::spawn(async move {
         dialling
-            .connect(ConnectRequest {
+            .join(JoinRequest {
                 pairing: Some(format!("{TICKET_UNREACHABLE}-483920")),
                 port: Some(port),
                 discovery: false,
-                ..ConnectRequest::default()
+                ..JoinRequest::default()
             })
             .await
     });
@@ -150,11 +150,11 @@ async fn a_codeless_dial_waits_for_the_far_machine_too() {
     let dialling = Arc::clone(&ops);
     let dial = tokio::spawn(async move {
         dialling
-            .connect(ConnectRequest {
+            .join(JoinRequest {
                 pairing: Some(TICKET_UNREACHABLE.to_owned()),
                 port: Some(port),
                 discovery: false,
-                ..ConnectRequest::default()
+                ..JoinRequest::default()
             })
             .await
     });
