@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use super::super::RemoteOps;
 use super::super::serve_watch_tests::{offline, ops_with_key};
-use super::super::types::{DeviceView, EnableRequest};
+use super::super::types::EnableRequest;
+use super::super::wire::RemoteDevice;
 
 /// The row `list` holds for `device` once `done` says it has settled, or
 /// `None` after two seconds.
@@ -22,8 +23,8 @@ use super::super::types::{DeviceView, EnableRequest};
 async fn settled(
     ops: &RemoteOps,
     device: &str,
-    done: impl Fn(&DeviceView) -> bool,
-) -> Option<DeviceView> {
+    done: impl Fn(&RemoteDevice) -> bool,
+) -> Option<RemoteDevice> {
     for _ in 0..100 {
         let seen = ops
             .list()

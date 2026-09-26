@@ -3,11 +3,12 @@
 use std::io::IsTerminal as _;
 
 use anyhow::Result;
+use gglib_app_services::RemoteEnableResponse;
 
 use super::enable::{Arming, print_notice};
 use super::pairing_tui::{self, Outcome};
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, RemoteEnableDto};
+use crate::daemon_client;
 
 /// Execute `gglib remote invite`.
 ///
@@ -73,7 +74,7 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
 
 /// The pairing as plain text: for scripts, pipes, and terminals that cannot
 /// draw. Everything printed here is a credential for two minutes.
-fn print_plain(offered: &RemoteEnableDto) {
+fn print_plain(offered: &RemoteEnableResponse) {
     let (Some(pairing), Some(code), Some(expires)) = (
         offered.pairing.as_deref(),
         offered.code.as_deref(),

@@ -207,7 +207,4 @@ mod calls;
 mod remote;
 pub(crate) mod wire;
 
-pub(crate) use wire::{
-    QueueDownloadBody, RemoteDeviceDto, RemoteEnableBody, RemoteEnableDto, RemoteJoinBody,
-    RemoteStatusDto, StartProxyBody,
-};
+pub(crate) use wire::{QueueDownloadBody, StartProxyBody};

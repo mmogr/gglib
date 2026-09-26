@@ -1,11 +1,10 @@
 //! `gglib remote list` and `forget`: who may use this machine's tunnel.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use anyhow::Result;
+use gglib_app_services::RemoteDevice;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, RemoteDeviceDto};
+use crate::daemon_client;
 use crate::presentation::style;
 
 /// Execute `gglib remote list`.
@@ -31,7 +30,7 @@ pub(crate) async fn list(ctx: &CliContext) -> Result<()> {
     let width = devices.iter().map(|d| d.id.len()).max().unwrap_or(2).max(2);
     eprintln!("  {:<width$}  DEVICE", "ID", width = width);
     for d in &devices {
-        eprintln!("  {:<width$}  {}", d.id, describe(d), width = width);
+        eprintln!("  {:<width$}  {}", d.id, line(d), width = width);
     }
     eprintln!();
     eprintln!("  Retire one:  gglib remote forget <id>");
@@ -81,57 +80,15 @@ pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
     Ok(())
 }
 
-/// One device as a line a person reads.
-///
-/// **A row is only called never-joined when both timestamps are empty.**
-/// `redeemed_at` is written by a background task and can be lost, so a
-/// device that has plainly made requests must not be described as one that
-/// never arrived — `last_seen` is the second opinion that prevents it.
-fn describe(d: &RemoteDeviceDto) -> String {
+/// A row as `list` prints it after the id: the name, then the daemon's own
+/// description of the row, word for word. A daemon that sends no description
+/// leaves the name alone.
+fn line(d: &RemoteDevice) -> String {
     let name = d.label.as_deref().unwrap_or("\u{2014}");
-    // A key this machine holds that no roster row lists (#1034): its id,
-    // printed beside this, and whether the edge admits it are all that is
-    // known. Said first, because every description below reads a roster row.
-    if d.recorded == Some(false) {
-        let admitted = match d.admitted {
-            Some(true) => "; admitted",
-            Some(false) => "; not admitted",
-            None => "",
-        };
-        return format!("{name}  (key held, no record{admitted})");
-    }
-    if d.redeemed_at.is_none() && d.last_seen.is_none() {
-        // An invite the edge has stopped honouring is still one nobody took,
-        // and worth saying twice: an unwind that failed part-way, or an arm
-        // that refused the id, leaves exactly this row, and "never joined"
-        // alone reads as a harmless unspent code. With the tunnel down there
-        // is nothing to add, because no row is admitted then.
-        let refused = if d.admitted == Some(false) {
-            "; not admitted"
-        } else {
-            ""
-        };
-        return format!(
-            "{name}  (invited {}, never joined{refused})",
-            ago(d.joined_at)
-        );
-    }
-    let mut seen = match d.last_seen {
-        Some(at) => format!("last seen {}", ago(at)),
-        None => "no requests yet".to_owned(),
-    };
-    // Where the invite was redeemed from, when that was recorded (#1041),
-    // after either arm, which is where the GUI's `describe` puts it too.
-    if let Some(peer) = &d.peer {
-        seen.push_str("; paired from ");
-        seen.push_str(peer);
-    }
-    match d.admitted {
-        Some(true) => format!("{name}  ({seen})"),
-        Some(false) => format!("{name}  ({seen}; not admitted)"),
-        // The tunnel is down, so nothing is admitted and this row is not
-        // special for it.
-        None => format!("{name}  ({seen}; tunnel down)"),
+    if d.description.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{name}  ({})", d.description)
     }
 }
 
@@ -161,33 +118,6 @@ fn is_device_id(device: &str) -> bool {
         // `..` — both of which pass the charset above, and both of which
         // are the whole of the problem. It also covers the empty string.
         && device.bytes().any(|b| b.is_ascii_alphanumeric())
-}
-
-/// A coarse "how long ago", for a column a person scans rather than measures.
-fn ago(at_ms: i64) -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|d| i64::try_from(d.as_millis()).ok())
-        .unwrap_or(0);
-    let secs = (now - at_ms) / 1000;
-    // A clock that really did move backwards. "In the future" is a wrong
-    // answer a person can act on; a silent negative is not.
-    //
-    // A minute of slack, which cannot be needed here — this reads a stamp
-    // written by the daemon on this machine — but the GUI renders the same
-    // rows against a browser clock that is not in step with it, and two
-    // surfaces describing one roster by two rules is the bug this whole
-    // column exists to avoid.
-    if secs < -60 {
-        return "at an unknown time".to_owned();
-    }
-    match secs {
-        s if s < 60 => "just now".to_owned(),
-        s if s < 3600 => format!("{}m ago", s / 60),
-        s if s < 86_400 => format!("{}h ago", s / 3600),
-        s => format!("{}d ago", s / 86_400),
-    }
 }
 
 #[cfg(test)]

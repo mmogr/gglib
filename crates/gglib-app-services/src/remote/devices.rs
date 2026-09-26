@@ -30,7 +30,8 @@ use super::pairing::Offer;
 use super::resume_wait::Waited;
 use super::roster::read_roster;
 use super::slot::Busy;
-use super::types::{DeviceView, Enabled};
+use super::types::Enabled;
+use super::wire::RemoteDevice;
 use crate::error::GuiError;
 
 impl RemoteOps {
@@ -202,7 +203,7 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Internal` when the roster cannot be read.
-    pub async fn list(&self) -> Result<Vec<DeviceView>, GuiError> {
+    pub async fn list(&self) -> Result<Vec<RemoteDevice>, GuiError> {
         // Settings and the key file first and the serve slot second, the
         // order `status` reads them in. Taken the other way round, a row read
         // mid-`forget` could come back "admitted" for a key the edge had
@@ -218,7 +219,12 @@ impl RemoteOps {
             let live = self.live.lock().await;
             live.full().map(|l| l.handle.token_names())
         };
-        Ok(viewed(roster, &held, admitting.as_deref()))
+        Ok(viewed(
+            roster,
+            &held,
+            admitting.as_deref(),
+            super::connect_watch::unix_ms(),
+        ))
     }
 }
 

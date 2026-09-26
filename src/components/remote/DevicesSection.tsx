@@ -127,7 +127,9 @@ export const DevicesSection: FC<DevicesSectionProps> = ({ onNotice }) => {
                     whole job is telling them apart. The CLI prints an ID
                     column for the same reason. */}
                 <div className="text-xs text-text-muted font-mono truncate">{device.id}</div>
-                <div className="text-xs text-text-muted">{describe(device)}</div>
+                {/* The daemon's words for the row, printed as they came:
+                    `gglib remote list` prints the same string. */}
+                <div className="text-xs text-text-muted">{device.description}</div>
               </div>
               <Button
                 type="button"
@@ -152,64 +154,3 @@ export const DevicesSection: FC<DevicesSectionProps> = ({ onNotice }) => {
     </section>
   );
 };
-
-/**
- * The second line of a row: what is known about this device.
- *
- * **A row is only called never-joined when both timestamps are empty.**
- * `redeemed_at` is written by a background task and can be lost, and builds
- * of main between #1027 and #1028 wrote roster rows without it — so a device
- * that has plainly made requests must not be described as one that never
- * arrived. `last_seen` is the second opinion that prevents it.
- */
-function describe(device: RemoteDevice): string {
-  // `=== false`, not a falsy test: a daemon older than this field sends none,
-  // and every row it sends is a roster row. The CLI reads it the same way.
-  if (device.recorded === false) {
-    // A key this machine holds that no roster row lists (#1034): the id above
-    // and whether the edge admits it are all that is known, and Forget
-    // retires the key. The CLI's `describe` says the same of it.
-    const admitted =
-      device.admitted === null ? '' : device.admitted ? ' · admitted' : ' · not admitted';
-    return `key held, no record${admitted}`;
-  }
-  if (device.redeemed_at === null && device.last_seen === null) {
-    // An invite the edge has stopped honouring is still one nobody took, and
-    // worth saying twice: a half-unwound invite leaves exactly this row. The
-    // CLI's `describe` says the same of it.
-    const invited = `invited ${ago(device.joined_at)}, never joined`;
-    return device.admitted === false ? `${invited} · not admitted` : invited;
-  }
-  // Where the invite was redeemed from, when that was recorded (#1041). A
-  // truthy test, not `!== null`: a daemon older than the field sends none. The
-  // CLI's `describe` puts it in the same place.
-  const from = device.peer ? ` · paired from ${device.peer}` : '';
-  const seen =
-    (device.last_seen === null ? 'no requests yet' : `last seen ${ago(device.last_seen)}`) + from;
-  if (device.admitted === null) return `${seen} · tunnel down`;
-  return device.admitted ? seen : `${seen} · not admitted`;
-}
-
-/**
- * A coarse "how long ago", for a line a person scans rather than measures.
- *
- * `trunc`, not `floor`, and a minute of slack: a browser on another host is
- * not in step with the daemon's clock, and a stamp a little ahead is skew,
- * not a clock that moved. Rounding down turned a just-minted invite into
- * "invited at an unknown time".
- *
- * The CLI's `ago` follows the same two rules, so the one roster reads the
- * same on both surfaces. It cannot need the slack — it reads a stamp its own
- * machine wrote — but one rule in two places beats two rules that agree
- * until they do not.
- */
-function ago(atMs: number): string {
-  const secs = Math.trunc((Date.now() - atMs) / 1000);
-  // A clock that really did move backwards. "In the future" is a wrong answer
-  // someone can act on; a silent negative is not.
-  if (secs < -60) return 'at an unknown time';
-  if (secs < 60) return 'just now';
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86_400) return `${Math.floor(secs / 3600)}h ago`;
-  return `${Math.floor(secs / 86_400)}d ago`;
-}

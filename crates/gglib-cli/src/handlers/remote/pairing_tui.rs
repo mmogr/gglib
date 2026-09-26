@@ -12,8 +12,9 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use crossterm::{cursor, execute, terminal};
+use gglib_app_services::{RemoteEnableResponse, RemoteStatus};
 
-use crate::daemon_client::{DaemonHandle, RemoteEnableDto, RemoteStatusDto};
+use crate::daemon_client::DaemonHandle;
 
 /// How the screen ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,7 +101,7 @@ pub(super) fn code_is_for(device: &str) -> String {
 
 /// Show the pairing until a device pairs, the code expires or is withdrawn,
 /// or Ctrl-C.
-pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableDto) -> Result<Outcome> {
+pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableResponse) -> Result<Outcome> {
     // Only reached when `enable` offered a code; the caller guards on it.
     let ttl = Duration::from_secs(enabled.expires_in_s.unwrap_or_default());
     let started = Instant::now();
@@ -156,7 +157,7 @@ impl Watch {
     /// whichever endpoint sent the last tunnelled request, which can be
     /// another device's by the time the screen reads it, and neither `list`
     /// nor `forget` takes a fingerprint.
-    fn for_offer(enabled: &RemoteEnableDto) -> Self {
+    fn for_offer(enabled: &RemoteEnableResponse) -> Self {
         Self {
             gone: false,
             device: enabled.device.clone(),
@@ -178,7 +179,7 @@ impl Watch {
     /// the code and records the pairing in two steps, and a read between them
     /// sees neither. And one that goes inside [`LAPSE_GRACE`] is left for the
     /// countdown to call expired.
-    fn read(&mut self, status: RemoteStatusDto, left: Duration) -> Option<Outcome> {
+    fn read(&mut self, status: RemoteStatus, left: Duration) -> Option<Outcome> {
         if status.paired {
             return Some(Outcome::Paired {
                 device: self.device.clone(),
@@ -202,7 +203,7 @@ impl Drop for Restore {
 
 fn draw(
     out: &mut std::io::Stdout,
-    enabled: &RemoteEnableDto,
+    enabled: &RemoteEnableResponse,
     qr: Option<&str>,
     left: Duration,
 ) -> Result<()> {

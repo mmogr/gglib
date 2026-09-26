@@ -3,11 +3,11 @@
 use std::time::Duration;
 
 use anyhow::Result;
-
-use super::wire::{
-    RemoteDeviceDto, RemoteEnableBody, RemoteEnableDto, RemoteForgottenDto, RemoteJoinBody,
-    RemoteJoinDto, RemoteStatusDto,
+use gglib_app_services::{
+    RemoteDevice, RemoteEnableBody, RemoteEnableResponse, RemoteForgotten, RemoteJoinBody,
+    RemoteJoinResponse, RemoteStatus,
 };
+
 use super::{DaemonHandle, paths};
 
 impl DaemonHandle {
@@ -17,7 +17,10 @@ impl DaemonHandle {
     /// Long timeout: the daemon waits for the endpoint to find a relay before
     /// minting the ticket, and may wait one settings-cache window for a
     /// freshly minted key to take effect on the local proxy.
-    pub(crate) async fn remote_enable(&self, body: &RemoteEnableBody) -> Result<RemoteEnableDto> {
+    pub(crate) async fn remote_enable(
+        &self,
+        body: &RemoteEnableBody,
+    ) -> Result<RemoteEnableResponse> {
         let response = self
             .post(paths::REMOTE_ENABLE_PATH)
             .json(body)
@@ -28,7 +31,7 @@ impl DaemonHandle {
     }
 
     /// Take the tunnel down (idempotent on the daemon side).
-    pub(crate) async fn remote_disable(&self) -> Result<RemoteStatusDto> {
+    pub(crate) async fn remote_disable(&self) -> Result<RemoteStatus> {
         let response = self
             .post(paths::REMOTE_DISABLE_PATH)
             .json(&serde_json::json!({}))
@@ -48,7 +51,7 @@ impl DaemonHandle {
     /// that is still putting its tunnel back after a start waits for it, for
     /// up to twenty seconds, and only then are two stores written and the
     /// edge told.
-    pub(crate) async fn remote_invite(&self) -> Result<RemoteEnableDto> {
+    pub(crate) async fn remote_invite(&self) -> Result<RemoteEnableResponse> {
         let response = self
             .post(paths::REMOTE_INVITE_PATH)
             .json(&serde_json::json!({}))
@@ -59,7 +62,7 @@ impl DaemonHandle {
     }
 
     /// Every device this machine has issued a key to.
-    pub(crate) async fn remote_devices(&self) -> Result<Vec<RemoteDeviceDto>> {
+    pub(crate) async fn remote_devices(&self) -> Result<Vec<RemoteDevice>> {
         let response = self
             .get(paths::REMOTE_DEVICES_PATH)
             .timeout(Duration::from_secs(5))
@@ -70,7 +73,7 @@ impl DaemonHandle {
 
     /// Stop admitting one device. `forgotten` is false when this machine
     /// held nothing under that name, which is an answer rather than an error.
-    pub(crate) async fn remote_forget(&self, device: &str) -> Result<RemoteForgottenDto> {
+    pub(crate) async fn remote_forget(&self, device: &str) -> Result<RemoteForgotten> {
         let response = self
             .delete(&paths::remote_forget_path(device))
             .timeout(Duration::from_secs(15))
@@ -80,7 +83,7 @@ impl DaemonHandle {
     }
 
     /// The tunnel's status.
-    pub(crate) async fn remote_status(&self) -> Result<RemoteStatusDto> {
+    pub(crate) async fn remote_status(&self) -> Result<RemoteStatus> {
         let response = self
             .get(paths::REMOTE_STATUS_PATH)
             .timeout(Duration::from_secs(5))
@@ -93,7 +96,7 @@ impl DaemonHandle {
     ///
     /// Long timeout: dialling may wait for a hole punch, and a first pairing
     /// makes one more request through the tunnel before answering.
-    pub(crate) async fn remote_join(&self, body: &RemoteJoinBody) -> Result<RemoteJoinDto> {
+    pub(crate) async fn remote_join(&self, body: &RemoteJoinBody) -> Result<RemoteJoinResponse> {
         let response = self
             .post(paths::REMOTE_JOIN_PATH)
             .json(body)
@@ -104,7 +107,7 @@ impl DaemonHandle {
     }
 
     /// Close the loopback port (idempotent on the daemon side).
-    pub(crate) async fn remote_disconnect(&self) -> Result<RemoteStatusDto> {
+    pub(crate) async fn remote_disconnect(&self) -> Result<RemoteStatus> {
         let response = self
             .post(paths::REMOTE_DISCONNECT_PATH)
             .json(&serde_json::json!({}))
@@ -117,7 +120,7 @@ impl DaemonHandle {
     /// Stop the far daemon through the tunnel, then disconnect. The
     /// confirmation word is the daemon route's contract, not this client's
     /// idea: the CLI has already asked the person.
-    pub(crate) async fn remote_kill(&self) -> Result<RemoteStatusDto> {
+    pub(crate) async fn remote_kill(&self) -> Result<RemoteStatus> {
         let response = self
             .post(paths::REMOTE_KILL_PATH)
             .json(&serde_json::json!({ "confirm": "shutdown" }))

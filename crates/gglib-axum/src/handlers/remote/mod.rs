@@ -2,15 +2,12 @@
 
 mod devices;
 mod join;
-mod status;
-mod wire;
 
 pub(crate) use devices::{forget, invite, list};
 pub(crate) use join::{disconnect, join, kill};
-pub(crate) use status::RemoteStatus;
-pub(crate) use wire::{RemoteEnableBody, RemoteEnableResponse};
 
 use axum::{Json, extract::State};
+use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse, RemoteStatus};
 
 use crate::{error::HttpError, state::AppState};
 
@@ -46,10 +43,10 @@ pub(crate) async fn disable(
         Ok(()) | Err(gglib_app_services::GuiError::Conflict(_)) => {}
         Err(e) => return Err(e.into()),
     }
-    Ok(Json(RemoteStatus::from(state.remote.status().await)))
+    Ok(Json(state.remote.status().await))
 }
 
 /// `GET /api/remote/status` — the tunnel as the surfaces render it.
 pub(crate) async fn status(State(state): State<AppState>) -> Json<RemoteStatus> {
-    Json(RemoteStatus::from(state.remote.status().await))
+    Json(state.remote.status().await)
 }

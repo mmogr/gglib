@@ -1,18 +1,21 @@
-//! What the remote tunnel is asked, and what those calls answer.
+//! The enable and join exchanges of the daemon API: what `POST
+//! /api/remote/enable` and `POST /api/remote/join` are asked, and what they
+//! answer. `invite` answers with the enable response.
 //!
-//! Split from the handlers the way `proxy/wire.rs` is, and for one more
-//! reason: what is *not* in these shapes is the point. The ticket appears in
-//! exactly one response shape — `enable`'s, which `invite` reuses — and the
-//! pairing code likewise; the status carries a fingerprint and never the
-//! ticket, because `GET` is the verb anything can call twice.
+//! Beside [`wire`](super::wire), which has what the tunnel reports. The CLI
+//! sends the two bodies and the daemon reads them, the daemon sends the two
+//! answers and the CLI reads them, `ts-rs` exports all four, and every field
+//! is `#[serde(default)]`.
 
-use gglib_app_services::{EnableRequest, Enabled, JoinRequest, Joined};
+use serde::{Deserialize, Serialize};
+
+use super::types::{EnableRequest, Enabled, JoinRequest, Joined};
 
 /// Body for `POST /api/remote/enable`. Every field optional; an empty body
 /// is the default: no `/mcp`, public relays, discovery on.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteEnableBody {
+pub struct RemoteEnableBody {
     /// Let tunnelled requests reach `/mcp`. Off unless asked for.
     #[serde(default)]
     pub allow_mcp: bool,
@@ -42,7 +45,9 @@ pub(crate) struct RemoteEnableBody {
 }
 
 impl RemoteEnableBody {
-    pub(crate) fn into_request(self) -> EnableRequest {
+    /// What [`RemoteOps::enable`](super::RemoteOps::enable) is asked for.
+    #[must_use]
+    pub fn into_request(self) -> EnableRequest {
         EnableRequest {
             allow_mcp: self.allow_mcp,
             relay: self.relay,
@@ -52,12 +57,14 @@ impl RemoteEnableBody {
     }
 }
 
-/// What `POST /api/remote/enable` answers, once. The ticket and the code are
-/// shown to a person now and are not retrievable afterwards.
-#[derive(Debug, Clone, serde::Serialize)]
+/// What `POST /api/remote/enable` and `POST /api/remote/invite` answer,
+/// once. The ticket and the code are shown to a person now and are not
+/// retrievable afterwards.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteEnableResponse {
+pub struct RemoteEnableResponse {
     /// The ticket, canonical lowercase form.
+    #[serde(default)]
     pub ticket: String,
     /// The six-digit pairing code, when one was asked for.
     ///
@@ -65,26 +72,28 @@ pub(crate) struct RemoteEnableResponse {
     /// paired. A surface must render the absence as "no code", not as an
     /// expired one: an empty string here would read as a pairing that had
     /// already run out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
     /// `<ticket>-<code>`, the one string a laptop pastes, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pairing: Option<String>,
     /// Seconds the code lives unused, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional, type = "number"))]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_in_s: Option<u64>,
-    /// The device the code will issue a key to, when there is one.
+    /// The device the code will issue a key to, when there is one: the id
+    /// `gglib remote list` shows and `forget` takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
     /// Whether tunnelled requests may reach `/mcp` on the session this call
     /// ended up talking about — which is not always the one the caller asked
     /// for. An `--invite` against a tunnel that is already up leaves the
     /// flags alone, so a surface that echoed the request back would state a
     /// grant the daemon did not make.
+    #[serde(default)]
     pub mcp_allowed: bool,
     /// Whether the tunnel was already up and this answered from that session
     /// rather than arming one — true for every `invite`, for an `enable` with
@@ -93,6 +102,7 @@ pub(crate) struct RemoteEnableResponse {
     /// unless `invite` was set. The request's other flags were ignored on
     /// that path, and a surface cannot infer it: only "asked for `/mcp`, told
     /// no" shows in the rest of the answer.
+    #[serde(default)]
     pub already_up: bool,
 }
 
@@ -113,9 +123,9 @@ impl From<Enabled> for RemoteEnableResponse {
 
 /// Body for `POST /api/remote/join`. An empty body dials the ticket this
 /// machine last connected to.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteJoinBody {
+pub struct RemoteJoinBody {
     /// `<ticket>-<code>` for a first pairing, a bare ticket afterwards,
     /// omitted to reuse the last one.
     #[serde(default)]
@@ -132,7 +142,9 @@ pub(crate) struct RemoteJoinBody {
 }
 
 impl RemoteJoinBody {
-    pub(crate) fn into_request(self) -> JoinRequest {
+    /// What [`RemoteOps::join`](super::RemoteOps::join) is asked for.
+    #[must_use]
+    pub fn into_request(self) -> JoinRequest {
         JoinRequest {
             pairing: self.pairing,
             port: self.port,
@@ -143,45 +155,39 @@ impl RemoteJoinBody {
 }
 
 /// What `POST /api/remote/join` answers.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteJoinResponse {
+pub struct RemoteJoinResponse {
     /// The loopback port that is now the far machine.
+    #[serde(default)]
     pub port: u16,
     /// `http://127.0.0.1:<port>/v1`, ready for a client.
+    #[serde(default)]
     pub base_url: String,
     /// Fingerprint of the ticket dialled.
+    #[serde(default)]
     pub ticket_fingerprint: String,
     /// Whether this call redeemed a pairing code and stored the key.
+    #[serde(default)]
     pub paired: bool,
     /// The port this machine wanted and could not have, when it had to take
     /// another; `None` when the address stayed put.
+    #[serde(default)]
     pub moved_from: Option<u16>,
 }
 
 impl From<Joined> for RemoteJoinResponse {
-    fn from(c: Joined) -> Self {
+    fn from(j: Joined) -> Self {
         Self {
-            moved_from: c.moved_from,
-            port: c.port,
-            base_url: c.base_url,
-            ticket_fingerprint: c.ticket_fingerprint,
-            paired: c.paired,
+            port: j.port,
+            base_url: j.base_url,
+            ticket_fingerprint: j.ticket_fingerprint,
+            paired: j.paired,
+            moved_from: j.moved_from,
         }
     }
 }
 
-/// Body for `POST /api/remote/kill`. The word is required, as it is on the
-/// proxy route this forwards to: a one-way door is not opened by an empty
-/// `POST`.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RemoteKillBody {
-    /// Must be the literal `"shutdown"`.
-    #[serde(default)]
-    pub confirm: Option<String>,
-}
-
 #[cfg(test)]
-#[path = "wire_tests.rs"]
-mod wire_tests;
+#[path = "wire_exchange_tests.rs"]
+mod wire_exchange_tests;

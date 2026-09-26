@@ -57,7 +57,15 @@ remote/
                       one that holds no key so the daemon can arm
   teardown.rs       — ending a session: cancel, drain, and only then reset
   rotation.rs       — following a key rotation into the running listener
-  types.rs          — what the ops are asked for and what they report
+  types.rs          — what the ops are asked for, and what enable, invite
+                      and join hand back
+  wire.rs           — the daemon API's status, its device rows and what a
+                      forget did: the shapes the daemon answers with, the
+                      CLI reads and ts-rs exports
+  wire_exchange.rs  — the enable and join bodies the CLI sends, and the
+                      answers the daemon gives
+  device_line.rs    — the words a device row is described by, on the
+                      daemon's clock
 ```
 
 # Two keys, two doors

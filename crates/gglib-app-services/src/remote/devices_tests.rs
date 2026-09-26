@@ -1,5 +1,6 @@
-//! Tests for what `invite` says when there is no tunnel to invite onto, and
-//! for the order `forget` does its work in.
+//! Tests for the rows `list` and the status give, for what `invite` says
+//! when there is no tunnel to invite onto, and for the order `forget` does
+//! its work in.
 //!
 //! A `#[path]` sibling of `devices.rs` rather than more of the serve side's
 //! own test files, which are at their size budget.
@@ -77,6 +78,49 @@ async fn an_unreadable_key_file_still_lists_the_roster() {
         };
         assert_eq!(device.id, "dev-11112222", "{surface}");
         assert!(device.recorded, "{surface}: a roster row");
+    }
+}
+
+/// `list` and the status describe each row as of the daemon's clock when it
+/// answers: an invite minted an hour and a half ago, and never taken, reads
+/// as one from an hour ago on both. With the tunnel down there is nothing to
+/// add to it.
+#[tokio::test]
+async fn list_and_status_describe_each_row_as_of_now() {
+    let (_, ops, _) = test_remote_ops().await;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("a clock after 1970")
+        .as_millis();
+    let joined_at = i64::try_from(now_ms).expect("milliseconds fit an i64") - 90 * 60_000;
+    ops.core
+        .settings()
+        .update(SettingsUpdate {
+            remote_devices: Some(Some(vec![gglib_core::Device {
+                id: "dev-11112222".to_owned(),
+                label: None,
+                joined_at,
+                redeemed_at: None,
+                last_seen: None,
+                peer: None,
+            }])),
+            ..SettingsUpdate::default()
+        })
+        .await
+        .expect("a roster row");
+
+    let listed = ops.list().await.expect("list");
+    let status = ops.status().await;
+
+    for (surface, rows) in [("list", &listed), ("status", &status.devices)] {
+        let [device] = rows.as_slice() else {
+            panic!("{surface}: the one roster row: {rows:?}");
+        };
+        assert_eq!(
+            device.description, "invited 1h ago, never joined",
+            "{surface}"
+        );
+        assert!(!device.joined, "{surface}: nobody took the invite");
     }
 }
 

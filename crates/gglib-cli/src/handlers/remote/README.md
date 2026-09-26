@@ -33,11 +33,12 @@ remote/
 # Who may use it
 
 Every device that pairs gets a key of its own, so `forget` retires one and
-leaves the rest connected. The list has to distinguish two rows that look
-alike: a device that paired and has not made a request yet, and an invite
-nobody ever redeemed. **A row is called never-joined only when it has neither
-`redeemed_at` nor `last_seen`** — both are written by background tasks and
-either can be lost, so one alone would eventually libel a real device.
+leaves the rest connected. `list` prints each row's id, its name, and the
+daemon's description of it word for word. The rules that description follows
+are the daemon's, in `gglib-app-services`' `remote/device_line.rs`: among
+them, a row is called never-joined only when it has neither `redeemed_at` nor
+`last_seen`, because both are written by background tasks and either can be
+lost.
 
 `invite` needs the tunnel up, and waits for one the daemon is putting back
 after a start. It leaves it untouched: the flags it was enabled with, the

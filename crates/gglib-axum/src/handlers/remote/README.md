@@ -29,23 +29,23 @@ Two decisions live here rather than in `RemoteOps`:
   does not. The body says `{"forgotten": false}` so a surface that wants to
   tell the difference can, and one that only wants the device gone need not.
 
-`devices` holds its own shapes rather than putting them in `wire`. `invite`
-has none: `RemoteOps::invite` answers with the same `Enabled` an
-`enable --invite` does — the ticket belongs in it, and a pairing view needs
-one — so the route reuses the enable response and a client needs no second
-shape to decode.
+`invite` has no shape of its own: `RemoteOps::invite` answers with the same
+`Enabled` an `enable --invite` does — the ticket belongs in it, and a pairing
+view needs one — so the route reuses the enable response and a client needs
+no second shape to decode.
 
-The shapes are split the way the calls are: `wire` is what the tunnel is
-*asked* — the enable, join and kill bodies, and the enable and join
-responses, of which only `enable`'s (reused by `invite`) carries a ticket —
-and `status` is what it *says*. `devices` keeps its own beside its handlers.
+The shapes are not here. They are `gglib-app-services`' (`remote/wire.rs` and
+`remote/wire_exchange.rs`): the daemon reads the enable and join bodies and
+answers with the rest, the CLI sends those bodies and reads the answers, and
+`ts-rs` exports them for the Remote panel. Only the kill body is this crate's,
+beside its handler in `join`.
 
-That split is not only size. The status is the response anything on this
-machine can ask for twice, so what it leaves out is as much the contract as
-what it carries: the ticket's fingerprint and never the ticket, peers by
-fingerprint, the connect side's port and path, what settings remember of the
-last pairing (again by fingerprint), the counters the tunnel's owner keeps,
-and device rows with no field a key could live in. `ts-rs` exports them all
-for the Remote panel.
+The status is the response anything on this machine can ask for twice, so
+what it leaves out is as much the contract as what it carries: the ticket's
+fingerprint and never the ticket, peers by fingerprint, the connect side's
+port and path, what settings remember of the last pairing (again by
+fingerprint), the counters the tunnel's owner keeps, and device rows with no
+field a key could live in. Each row carries the daemon's own description of
+it, for a surface to print.
 
 <!-- module-docs:end -->

@@ -53,15 +53,13 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   // has rows in it. An invite nobody took leaves a row behind, so counting
   // rows would call a machine "paired" on the strength of a code that
   // expired — and then neither offer a pairing on enable nor admit that it
-  // had not.
+  // had not. `joined` is the daemon's answer for each row.
   //
   // `?? []`, not only `status?.`: a daemon from before this build answers
   // status with no `devices` at all, and the app adopts whatever daemon is
   // already running. An unguarded `.some` there is a TypeError that takes
   // the whole window down; `DevicesSection` reads the list the same way.
-  const anyJoined = (status?.devices ?? []).some(
-    (d) => d.redeemed_at !== null || d.last_seen !== null,
-  );
+  const anyJoined = (status?.devices ?? []).some((d) => d.joined);
 
   // The reveal leaves the moment a device pairs, when the tunnel goes down
   // under it (a `gglib remote disable` in a terminal), or when the daemon

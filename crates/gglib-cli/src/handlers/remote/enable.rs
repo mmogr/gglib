@@ -3,10 +3,11 @@
 use std::io::IsTerminal as _;
 
 use anyhow::Result;
+use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse};
 
 use super::pairing_tui::{self, Outcome};
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, RemoteEnableBody, RemoteEnableDto};
+use crate::daemon_client;
 
 /// What `gglib remote enable` was asked for.
 #[derive(Debug, Clone, Default)]
@@ -39,6 +40,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             relay: args.relay,
             discovery: Some(!args.no_discovery),
             invite: args.invite,
+            ..RemoteEnableBody::default()
         })
         .await?;
 
@@ -153,7 +155,7 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
 
 /// The pairing as plain text: for scripts, pipes, and terminals that cannot
 /// draw. Everything printed here is a credential for two minutes.
-fn print_plain(enabled: &RemoteEnableDto) {
+fn print_plain(enabled: &RemoteEnableResponse) {
     let (Some(pairing), Some(code), Some(expires)) = (
         enabled.pairing.as_deref(),
         enabled.code.as_deref(),
@@ -174,7 +176,7 @@ fn print_plain(enabled: &RemoteEnableDto) {
 }
 
 /// The tunnel is up and no device is being paired right now.
-fn print_up(enabled: &RemoteEnableDto) {
+fn print_up(enabled: &RemoteEnableResponse) {
     eprintln!("  Remote access is on, and stays on across restarts.");
     eprintln!("  Ticket:  {}", enabled.ticket);
     eprintln!("  No device is being paired. `gglib remote invite` offers a code.");
