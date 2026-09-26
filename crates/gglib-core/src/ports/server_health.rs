@@ -34,7 +34,7 @@ pub enum ServerHealthStatus {
 
     /// Server process has died unexpectedly.
     ///
-    /// Detected via PID check (process no longer exists).
+    /// Detected via PID check (the process does not exist).
     ProcessDied,
 }
 

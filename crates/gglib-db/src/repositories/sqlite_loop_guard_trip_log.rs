@@ -118,7 +118,7 @@ pub(crate) async fn write_batch(
     Ok(())
 }
 
-/// Drop what the log no longer keeps.
+/// Drop what the log does not keep.
 ///
 /// Every day before the last `retention_days`, from both tables. Then, if the
 /// trips outnumber `row_cap`, **whole days**, oldest first, from both tables:

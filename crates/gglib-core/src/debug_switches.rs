@@ -60,10 +60,8 @@ pub const ALL: &[&str] = &[
 
 /// Whether an environment value reads as "on".
 ///
-/// The spelling every switch in the tree already accepts, gathered here so a
-/// ninth one cannot quietly accept a different set. That claim used to be
-/// false: five sites had their own copy of this `matches!`, two of them in
-/// this very crate, and this one had no callers outside its own module.
+/// The spelling every switch in the tree accepts, gathered here so a new
+/// one cannot quietly accept a different set.
 #[must_use]
 pub fn is_truthy(value: &str) -> bool {
     matches!(

@@ -14,7 +14,7 @@ use crate::settings::{Settings, SettingsError};
 ///
 /// A named alias rather than the type written out at each use, because a
 /// `&mut Settings` elided inside `#[async_trait]` is given a named lifetime,
-/// and the closure then no longer accepts a borrow of any lifetime.
+/// and the closure then does not accept a borrow of any lifetime.
 pub type SettingsChange<'a> = dyn Fn(&mut Settings) -> Result<(), SettingsError> + Send + Sync + 'a;
 
 /// Repository for application settings persistence.

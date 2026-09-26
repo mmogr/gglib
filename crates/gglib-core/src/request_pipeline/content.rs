@@ -4,10 +4,8 @@
 //! the text parts carry a `text` field beside parts that are not text
 //! (`image_url`, …). VS Code's LLM gateway sends the array form on every
 //! message. Each stage that reads or rewrites message text has to handle
-//! both, and until now each walked them inline where it needed them:
-//! canonicalisation rewrote each shape's text in place, and truncation
-//! measured the string and skipped the array. The walk lives here so a stage
-//! that handles one shape handles the other.
+//! both; the walk lives here so a stage that handles one shape handles the
+//! other.
 //!
 //! Everything here works on a raw [`serde_json::Value`], never on a typed
 //! message, because the callers forward the body they were given: a round

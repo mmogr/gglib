@@ -86,7 +86,7 @@ async fn fail_loop<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, A
 /// that check would not fire on at all.
 ///
 /// A warning rather than an error: the model looping is not a gglib fault, and
-/// this used to surface as "internal agent error" with zero tokens and zero
+/// an error would surface as "internal agent error" with zero tokens and zero
 /// iterations, which reads as one.
 async fn report_tool_call_truncation(response: &CollectedResponse, tx: &mpsc::Sender<AgentEvent>) {
     if response.tool_calls_truncated == 0 {

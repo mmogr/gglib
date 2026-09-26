@@ -22,7 +22,7 @@ pub struct TuneConfig {
     /// table (e.g. Qwen coding-mode defaults).
     #[serde(default = "SweepSpec::default_true")]
     pub seed_from_family_presets: bool,
-    /// Weights used to combine per-candidate metrics into a composite score.
+    /// Weights that combine per-candidate metrics into a composite score.
     ///
     /// `None` means "the server decides", and is what a client sends when the
     /// user named no weights. It is not the same as sending the defaults: a
@@ -108,7 +108,7 @@ impl SweepSpec {
     }
 }
 
-/// Weights used to combine per-candidate metrics into one composite score.
+/// Weights that combine per-candidate metrics into one composite score.
 ///
 /// Each weight should be non-negative; the service normalizes the weighted
 /// sum by the total weight, so the three values do not need to sum to `1.0`.

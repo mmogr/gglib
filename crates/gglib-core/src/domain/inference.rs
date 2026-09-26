@@ -131,10 +131,9 @@ pub struct InferenceConfig {
     ///
     /// Penalizes tokens in proportion to how *often* they have already
     /// appeared, where `presence_penalty` is a flat once-seen offset. An
-    /// OpenAI-standard field that llama.cpp supports; until it was modelled
-    /// here it passed through the proxy ungoverned, so an untrusted client
-    /// could steer sampling with it while every modelled twin was gated
-    /// (ADR 0003's `frequency_penalty` follow-up).
+    /// OpenAI-standard field that llama.cpp supports, modelled here so the
+    /// trust gate governs it like its twins (ADR 0003's `frequency_penalty`
+    /// follow-up).
     /// - 0.0: No penalty (llama.cpp's default)
     /// - Negative values *encourage* reuse; valid upstream, rarely wanted
     ///
@@ -211,13 +210,12 @@ pub struct InferenceConfig {
     /// - 0.0: Disabled (llama.cpp's default, and the floor here)
     /// - 0.8: A common starting point for long agentic sessions
     ///
-    /// Left alone on agentic turns, deliberately. An earlier version forced
-    /// this to `0` whenever a request carried tools, reasoning that structured
-    /// output legitimately repeats tokens. Both halves were wrong: llama.cpp's
-    /// sequence breakers already default to `\n`, `:`, `"`, `*` — two of which
-    /// are pervasive in JSON — and agentic clients send `tools` on *every*
-    /// request, so the pin would have disabled DRY for whole sessions, which
-    /// is the workload it exists for.
+    /// Left alone on agentic turns, deliberately, although structured output
+    /// legitimately repeats tokens: llama.cpp's sequence breakers already
+    /// default to `\n`, `:`, `"`, `*` — two of which are pervasive in JSON —
+    /// and agentic clients send `tools` on *every* request, so pinning this to
+    /// `0` there would disable DRY for whole sessions, which is the workload
+    /// it exists for.
     ///
     /// llama.cpp's fifth DRY parameter, `--dry-sequence-breaker`, is not
     /// modelled: it is a list of strings, and every layer of this hierarchy —
@@ -519,9 +517,8 @@ impl std::str::FromStr for DefaultsOrigin {
 /// Bundled rather than passed as separate parameters because both
 /// [`InferenceConfig::resolve_with_profile`] and
 /// [`crate::request_pipeline::sampling::resolve_sampling`] need the same two
-/// facts about the same model, and the list has already grown once (see
-/// #685) — a named struct reads at call sites instead of two easily
-/// transposed booleans.
+/// facts about the same model — a named struct reads at call sites instead
+/// of two easily transposed booleans.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ModelSamplingContext {
     /// Whether the model carries gglib's `reasoning` capability tag. Selects
@@ -576,8 +573,7 @@ fn camel_to_snake(s: &str) -> String {
 ///
 /// Carried out of [`InferenceConfig::extract_client_sampling`] so the caller
 /// can log or count it. A value gglib declines to use is a fact about a
-/// client worth surfacing — before this existed, the entire client sampling
-/// layer could vanish over one key with nothing recording that it had.
+/// client worth surfacing.
 ///
 /// # An issue is a report, not by itself an instruction to the body
 ///
@@ -870,12 +866,12 @@ pub(crate) const REASONING_BUDGET_TOKENS_KEY: &str = "reasoning_budget_tokens";
 /// erased from every forwarded body by `request_pipeline::sampling` whatever
 /// the trust setting says.
 ///
-/// Both halves are load-bearing. Not reading it left an untrusted client's
-/// `thinking_budget_tokens: 100000` riding the body past a gate that governs
-/// the canonical spelling — the #779 shape, ungoverned and unrecorded. Not
-/// erasing it would leave two keys upstream reads as one, with gglib's own
-/// resolved value in only the first: llama-server's own parse order, not
-/// gglib's ladder, would decide the budget.
+/// Both halves are load-bearing. Not reading it would leave an untrusted
+/// client's `thinking_budget_tokens: 100000` riding the body past a gate that
+/// governs the canonical spelling — the #779 shape, ungoverned and
+/// unrecorded. Not erasing it would leave two keys upstream reads as one,
+/// with gglib's own resolved value in only the first: llama-server's own
+/// parse order, not gglib's ladder, would decide the budget.
 pub(crate) const THINKING_BUDGET_TOKENS_KEY: &str = "thinking_budget_tokens";
 
 /// Read the `reasoning_effort` field.
@@ -956,10 +952,10 @@ fn read_reasoning_effort(
 ///
 /// llama-server accepts [`THINKING_BUDGET_TOKENS_KEY`] as a second spelling of
 /// the same parameter ([ADR 0007] finding 7c). A reader that knew only the
-/// canonical name left the alias ungoverned: it entered no layer, appeared in
-/// no discard record, was overwritten by no force-insert, and so an untrusted
-/// client's `thinking_budget_tokens` outranked the operator's resolved budget
-/// silently — the #779 shape this arc exists to close.
+/// canonical name would leave the alias ungoverned: in no layer, in no
+/// discard record, overwritten by no force-insert, so an untrusted client's
+/// `thinking_budget_tokens` would silently outrank the operator's resolved
+/// budget — the #779 shape.
 ///
 /// Whichever name arrives, the value becomes
 /// [`InferenceConfig::reasoning_budget_tokens`] and is governed like any other
@@ -1171,10 +1167,9 @@ impl InferenceConfig {
     ///
     /// Values and provenance come from one pass over one ladder and so cannot
     /// disagree — a second function that re-derived the rules would eventually
-    /// explain a decision the resolution did not take, which is exactly what
-    /// the `describe_provenance` helper this replaced had already started
-    /// doing. See [`FieldSources`] for how to read the second half of the
-    /// return; callers wanting only the values take `.0`.
+    /// explain a decision the resolution did not take. See [`FieldSources`]
+    /// for how to read the second half of the return; callers wanting only
+    /// the values take `.0`.
     ///
     /// # Uncoupled parameters
     ///
@@ -1202,20 +1197,20 @@ impl InferenceConfig {
     ///
     /// # Why DRY is *not* coupled
     ///
-    /// It was, briefly, on the symmetry argument that a repetition penalty is
-    /// a repetition penalty. Verification showed the symmetry is false and the
-    /// cost is real. `presence_penalty` and `repeat_penalty` are flat logit
-    /// offsets competing directly with temperature's sharpening; DRY's
-    /// strength is governed by its own `dry_base` and `dry_allowed_length`,
-    /// and it targets verbatim sequence repetition — a failure mode that is
-    /// *worse* at low temperature, not milder.
+    /// The symmetry argument — a repetition penalty is a repetition penalty —
+    /// is false, and coupling has a real cost. `presence_penalty` and
+    /// `repeat_penalty` are flat logit offsets competing directly with
+    /// temperature's sharpening; DRY's strength is governed by its own
+    /// `dry_base` and `dry_allowed_length`, and it targets verbatim sequence
+    /// repetition — a failure mode that is *worse* at low temperature, not
+    /// milder.
     ///
-    /// Coupling it meant a layer naming a DRY value but no temperature lost
-    /// that value silently whenever any lower layer named one, which is the
-    /// default state of every `reasoning`-tagged model. Since no shipped
-    /// profile and not [`reasoning_profile`] itself pairs a temperature with
-    /// DRY values, the coupling protected nothing and cost the most natural
-    /// way to switch DRY on. See #745.
+    /// Coupled, a layer naming a DRY value but no temperature would lose that
+    /// value silently whenever any lower layer named one, which is the
+    /// default state of every `reasoning`-tagged model. No shipped profile,
+    /// [`reasoning_profile`] included, pairs a temperature with DRY values, so
+    /// coupling would protect nothing and cost the most natural way to switch
+    /// DRY on. See #745.
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
     /// [`reasoning_profile`]: Self::reasoning_profile
@@ -1297,9 +1292,9 @@ impl InferenceConfig {
         // layer named it and the coupling rule passed it over, that is a
         // different and more interesting fact, and it stays true whether or
         // not the floor then had a value to offer. Testing `!has_floor` first
-        // was harmless while the floor filled all seven, and became a silent
-        // loss of provenance the moment ADR 0003 emptied six of them — the
-        // coupled trio would have reported as a plain absence.
+        // would report a passed-over coupled field as a plain absence wherever
+        // the floor names nothing, which the neutral floor does for the whole
+        // trio (ADR 0003).
         let coupled = temperature.is_some();
         let source = |won: Option<usize>, has_floor: bool, is_coupled: bool| match won {
             Some(i) => ParamSource::Layer(i),
@@ -1373,33 +1368,27 @@ impl InferenceConfig {
     ///
     /// Restating a value that is already the answer is not a decision, it is
     /// a redundant assertion — and a costly one, because it silently overrides
-    /// whatever upstream chooses next. #739 was exactly that failure: a floor
-    /// of `min_p: 0.0` disabled the tail cut on every untuned request, and
-    /// nothing in the system was positioned to notice. Six such overrides are
-    /// now impossible.
+    /// whatever upstream chooses next (#739: a floor of `min_p: 0.0` disabled
+    /// the tail cut on every untuned request).
     ///
     /// The six are **deferred**, not disabled. Nothing is emitted for them, so
-    /// llama.cpp applies its own default — which on this build is the same
-    /// number that used to be written here. Provenance reports them as
-    /// [`ParamSource::Unset`], which is
+    /// llama.cpp applies its own default — on this build, the upstream column
+    /// above. Provenance reports them as [`ParamSource::Unset`], which is
     /// precisely what deferral is: gglib names no value.
     ///
     /// # `temperature: 0.7` stays, and upstream's is 0.8
     ///
-    /// The one genuine policy choice in the set, and stated here because an
-    /// undocumented divergence is how the other six became invisible in the
-    /// first place. gglib decodes slightly more conservatively than
-    /// llama.cpp's default for agentic work.
+    /// The one genuine policy choice in the set, stated here because an
+    /// undocumented divergence is invisible. gglib decodes slightly more
+    /// conservatively than llama.cpp's default for agentic work.
     ///
-    /// # The floor is no longer uniform
+    /// # The floor differs by model class
     ///
-    /// [`reasoning_floor`] still asserts `presence_penalty: 1.0` and
-    /// `min_p: 0.0` for `reasoning`-tagged models, which are class-aware
-    /// policy llama.cpp has no notion of. So after this change `min_p` is
-    /// asserted for reasoning models and deferred for every other model.
-    /// That is the correct shape and it needs saying out loud, because it is
-    /// the first time the floor has differed by model class in what it
-    /// *names* rather than only in what it names it as.
+    /// [`reasoning_floor`] asserts `presence_penalty: 1.0` and `min_p: 0.0`
+    /// for `reasoning`-tagged models, which are class-aware policy llama.cpp
+    /// has no notion of. So `min_p` is asserted for reasoning models and
+    /// deferred for every other model: the floor differs by class in what it
+    /// *names*, not only in what it names it as.
     ///
     /// # Deferral is safe only while the build is pinned
     ///
@@ -1431,18 +1420,14 @@ impl InferenceConfig {
     /// Explicit per-request, per-profile, and per-model values are unaffected —
     /// [`reasoning_profile`] still sets its own ceiling.
     ///
-    /// # A note on `min_p`, because it moved twice
+    /// # Why `min_p` is deferred rather than restated
     ///
-    /// #739 changed it from `0.0` to `0.05`, correctly: `0.0` reads like an
-    /// absence but was not one — [`to_openai_json_patch`] drops only `None`,
-    /// so the floor was *explicitly disabling* the tail cut on every untuned
-    /// request. The fix was right, and the mechanism it used was the problem.
-    /// #739 restated upstream's value to keep it "visible as `min_p=floor` in
-    /// sampling provenance instead of reporting as unset", which bought
-    /// visibility at the price of a permanent silent override. Deferral is the
-    /// better answer to the same objection: it reports as unset *because it is
-    /// unset*, and [ADR 0004]'s readback names llama.cpp's own number instead
-    /// of gglib restating it.
+    /// `0.0` reads like an absence but is not one — [`to_openai_json_patch`]
+    /// drops only `None`, so a floor of `0.0` *explicitly disables* the tail
+    /// cut on every untuned request (#739). Restating upstream's `0.05` keeps
+    /// it visible in provenance at the price of a permanent silent override.
+    /// Deferral reports as unset *because it is unset*, and [ADR 0004]'s
+    /// readback names llama.cpp's own number instead of gglib restating it.
     ///
     /// [`reasoning_profile`]: Self::reasoning_profile
     /// [`to_openai_json_patch`]: Self::to_openai_json_patch
@@ -1479,13 +1464,13 @@ impl InferenceConfig {
             dynatemp_range: None,
             dynatemp_exponent: None,
             top_n_sigma: None,
-            // DRY stays off, and now says so by silence rather than by
+            // DRY stays off, and says so by silence rather than by
             // asserting the zero llama.cpp already defaults to. Enabling it
             // fleet-wide is a tuning decision for a per-model or per-profile
             // layer with sweep data behind it, not for the floor every untuned
             // model lands on.
             dry_multiplier: None,
-            // Never had a floor: with the multiplier off they have no effect,
+            // No floor: with the multiplier off they have no effect,
             // and asserting values would claim a recipe nobody has measured.
             dry_base: None,
             dry_allowed_length: None,
@@ -1523,20 +1508,16 @@ impl InferenceConfig {
     /// published guidance is to disable min-p on these models, which
     /// [`reasoning_profile`] already encodes.
     ///
-    /// # These two are now the only class-specific *assertions*
+    /// # These two are the only class-specific *assertions*
     ///
-    /// The neutral floor used to name `min_p: 0.05` and `presence_penalty:
-    /// 0.0`, so this function read as "the same seven values, two of them
-    /// different". [ADR 0003] deferred both of those to llama.cpp, so it now
-    /// reads as "two values the neutral floor does not name at all".
-    ///
-    /// The consequence is worth stating because it makes the floor non-uniform
-    /// in a way it never was: **`min_p` is asserted for reasoning models and
-    /// deferred for everything else.** A reasoning model gets `min_p: 0.0` on
-    /// the wire; every other model gets no `min_p` key and llama.cpp's own
-    /// 0.05. That asymmetry is deliberate — one is a measured divergence from
-    /// upstream, the other is agreement with it — but it will look like a bug
-    /// to anyone diffing two requests without this paragraph.
+    /// [ADR 0003] defers both `min_p` and `presence_penalty` to llama.cpp, so
+    /// this function reads as "two values the neutral floor does not name at
+    /// all": **`min_p` is asserted for reasoning models and deferred for
+    /// everything else.** A reasoning model gets `min_p: 0.0` on the wire;
+    /// every other model gets no `min_p` key and llama.cpp's own 0.05. That
+    /// asymmetry is deliberate — one is a measured divergence from upstream,
+    /// the other is agreement with it — but it will look like a bug to anyone
+    /// diffing two requests without this paragraph.
     ///
     /// `presence_penalty: 1.0` is the same shape: asserted here, deferred
     /// elsewhere.
@@ -1568,40 +1549,27 @@ impl InferenceConfig {
     /// A `reasoning` model does not decode its tool call in isolation: the
     /// `<think>` block and the call are one completion under one sampler
     /// configuration, so a cap imposed for the sake of structured output lands
-    /// on the reasoning phase too. This shipped as a `0.6` cap (inside the
-    /// Qwen3 / DeepSeek-R1 recommended band), and [ADR 0004]'s addendum named
-    /// the evidence that would justify changing it. That experiment ran on
-    /// 2026-08-10 (tune runs #12–#32, `Qwen3.5-4B` `Q8_0`, 20 paired runs of
-    /// the full agentic suite per arm):
-    ///
-    /// - Recipe temperature `1.0` uncapped beat the `0.6` cap on the paired
-    ///   composite 11W–4L–5T, mean +0.067, Wilcoxon one-sided p = 0.0099,
-    ///   bootstrap 95% CI [+0.017, +0.116].
-    /// - The cost the cap existed to prevent never materialised: tool-call
-    ///   formatting tasks passed 100% at `1.0` versus 98.6% at `0.6`.
-    /// - The failure the cap was risking did: loop/stagnation triggers were
-    ///   *more* frequent under the cap (29/126 vs 22/117) — cooling a
-    ///   thinking model manufactures the repetition its own vendors warn
-    ///   about, which the proxy's loop guard then acts on.
+    /// on the reasoning phase too. Measured on `Qwen3.5-4B` (2026-08-10, tune
+    /// runs #12–#32; [ADR 0004]'s postscript), the recipe's uncapped `1.0` beat
+    /// a `0.6` cap on the paired composite at no cost in tool-call formatting,
+    /// and the cap drew *more* loop/stagnation triggers: cooling a thinking
+    /// model manufactures the repetition its own vendors warn about.
     ///
     /// So a reasoning model's resolved temperature stands on agentic turns,
     /// which in the shipped default means its auto-detected recipe's `1.0`.
     ///
-    /// # `0.3` for everything else — unmeasured, unchanged
+    /// # `0.3` for everything else — unmeasured
     ///
-    /// The non-reasoning cap predates that experiment and no non-reasoning
-    /// model has been measured against it. It keeps its old rationale (steady
-    /// structured output without being greedy) and its old value until it
-    /// earns the same treatment: evidence, not argument.
+    /// No non-reasoning model has been measured against this cap. Its
+    /// rationale is steady structured output without being greedy, and it
+    /// stays until it earns the same treatment: evidence, not argument.
     ///
     /// # Why a ceiling and not a floor
     ///
-    /// The floor this replaced could never fire on the models that most needed
-    /// it. A `reasoning`-tagged model carries an auto-detected recipe naming
-    /// `temperature: 1.0`, and any layer outranks a floor — so the adjustment
-    /// was inert on precisely the models used for agentic coding. A ceiling
-    /// gated on provenance fires there and stays out of the way everywhere a
-    /// person actually made a choice.
+    /// Any layer outranks a floor, so a floor never fires on a model whose
+    /// auto-detected recipe names a temperature. A ceiling gated on provenance
+    /// does, and stays out of the way everywhere a person actually made a
+    /// choice.
     ///
     /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
     #[must_use]
@@ -1748,8 +1716,8 @@ impl InferenceConfig {
     /// model tagged `reasoning`. Those deserve different authority. A
     /// deliberate per-model choice should keep outranking the operator's
     /// global defaults — that is what "per-model" means. A guess nobody
-    /// reviewed should not: it silently shadowed the user's own configured
-    /// global settings, which is how #685 happened. `model_ctx.defaults_origin`
+    /// reviewed should not: above global, it silently shadows the user's own
+    /// configured global settings (#685). `model_ctx.defaults_origin`
     /// decides which rung `model` occupies for this call — never both at
     /// once, since only one of rungs 3 and 5 is ever populated for a given
     /// model.
@@ -1855,15 +1823,10 @@ impl InferenceConfig {
     ///
     /// # One bad field must not cost the other ten
     ///
-    /// This read used to camel-case the whole body and hand it to
-    /// `serde_json::from_value(..).unwrap_or_default()`. Serde parses an
-    /// object as a unit, so a single wrongly-typed key failed the whole
-    /// deserialise and `unwrap_or_default()` returned an all-`None` config —
-    /// silently discarding every sampling value the client sent, with no log
-    /// and no test covering the failure path.
-    ///
-    /// Reading field by field means a bad `max_tokens` costs `max_tokens` and
-    /// nothing else.
+    /// Serde parses an object as a unit, so deserialising the whole body fails
+    /// on a single wrongly-typed key and, behind `unwrap_or_default()`,
+    /// silently discards every sampling value the client sent. Reading field
+    /// by field means a bad `max_tokens` costs `max_tokens` and nothing else.
     ///
     /// # The coercion policy is upstream's, not ours
     ///
@@ -1878,8 +1841,7 @@ impl InferenceConfig {
     ///
     /// The principle is to accept what upstream accepts and reject what
     /// upstream rejects, so gglib never becomes the stricter of the two on a
-    /// value that would have worked. Before this change it was: llama.cpp
-    /// takes `max_tokens: -1` and gglib threw away the entire layer over it.
+    /// value that would have worked.
     ///
     /// # One field departs from it, and says so
     ///

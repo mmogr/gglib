@@ -101,9 +101,9 @@ impl FromStr for DownloadId {
 /// the exact same bit-depth suffix. These are modeled as distinct variants
 /// (`Q6K` vs `UdQ6K`) so they are never conflated: without this distinction, a
 /// naive filename match would treat `Q6_K/model.gguf` and `UD-Q6_K/model.gguf`
-/// as the same quantization, which previously caused both to be downloaded
-/// together as if they were shards of one request. See [`from_filename`] for
-/// how the "UD-" modifier is detected.
+/// as the same quantization and download both together as if they were
+/// shards of one request. See [`from_filename`] for how the "UD-" modifier is
+/// detected.
 ///
 /// [`from_filename`]: Self::from_filename
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -304,7 +304,7 @@ const UD_VARIANT_MAP: &[(Quantization, Quantization)] = &[
 ///
 /// This boundary requirement avoids false positives against unrelated
 /// alphanumeric substrings inside a model name (e.g. a hypothetical segment
-/// like `"Q6King"` no longer falsely matches the `"Q6_K"` pattern). Operates
+/// like `"Q6King"` does not match the `"Q6_K"` pattern). Operates
 /// directly on byte slices with no heap allocation and no regex, since this
 /// runs on every file encountered while scanning a repository's file listing.
 fn find_boundary_match(haystack: &[u8], pattern: &[u8]) -> Option<usize> {
@@ -702,7 +702,7 @@ mod tests {
 
     #[test]
     fn test_quantization_ud_only_variants_previously_unknown() {
-        // These previously had no pattern at all and silently mapped to Unknown.
+        // UD-only variants have patterns of their own, not Unknown.
         assert_eq!(
             Quantization::from_filename("Qwen3-Coder-Next-UD-IQ1_S.gguf"),
             Quantization::UdIq1S

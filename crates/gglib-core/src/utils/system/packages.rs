@@ -1,12 +1,8 @@
 //! Linux distribution identity and the package names that follow from it.
 //!
-//! The same knowledge — "what is this distro, and what is this dependency
-//! called on it" — was previously spelled out in five places: an `/etc/os-release`
-//! substring match in the CLI, another in the llama.cpp build checker, four
-//! near-identical `match` blocks turning dependency names into apt/dnf/pacman/
-//! zypper packages, and twenty hardcoded `apt install` install hints that were
-//! simply wrong anywhere else. Keeping five copies in step by hand is what let
-//! them drift.
+//! The one place that knows "what is this distro, and what is this dependency
+//! called on it", so its callers answer from one table rather than from
+//! copies that drift.
 //!
 //! Everything here is pure. [`parse_os_release`] takes the file's *contents*
 //! rather than reading them, so this stays in the domain layer with no I/O, and
@@ -203,8 +199,7 @@ const PACKAGES: &[(&str, PackageNames)] = &[
     (
         // Ayatana rather than the older libappindicator on every family:
         // `check_libappindicator` probes `ayatana-appindicator3-0.1` first, and
-        // on Arch the non-Ayatana package left the repositories, so the name
-        // this table used to give could not be installed at all.
+        // on Arch the non-Ayatana package is not in the repositories at all.
         "libappindicator-gtk3",
         PackageNames {
             debian: "libayatana-appindicator3-dev",
@@ -434,9 +429,9 @@ HOME_URL=\"https://cachyos.org/\"
         assert_eq!(parse_os_release(os_release), LinuxDistro::Fedora);
     }
 
-    /// The bug that made this a parser rather than a substring search:
-    /// "research" contains "arch". A machine like this used to be handed
-    /// `pacman` commands.
+    /// Why this is a parser rather than a substring search: "research"
+    /// contains "arch", and a substring search hands this machine `pacman`
+    /// commands.
     #[test]
     fn a_url_containing_arch_does_not_make_it_arch() {
         let os_release = "\

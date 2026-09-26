@@ -2,8 +2,8 @@
 //!
 //! `gglib remote enable` writes here every time, and the tunnel reuses what it
 //! finds: the endpoint key lasts, so a device pairs once instead of at every
-//! restart (ADR 0012, decision 4, reversed — see the amendment dated
-//! 2026-09-10). Deleting this file retires this machine's address and revokes
+//! restart (ADR 0012: decision 4 and the amendment under it that reverses
+//! it). Deleting this file retires this machine's address and revokes
 //! no device: the tunnel mints a new key the next time it comes up, and still
 //! admits every device key kept beside this one that the roster lists.
 //! `gglib remote status` prints the path.

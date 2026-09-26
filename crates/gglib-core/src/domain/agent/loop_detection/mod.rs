@@ -229,15 +229,15 @@ impl LoopDetector {
         if count > effective_max || (!exempt && total > ceiling) {
             return Err(AgentError::LoopDetected { signature: sig });
         }
-        // Reported against `total`, the count that no answer resets, because
-        // that is what the verdict used before it could read answers at all. A
-        // turn where `total` has passed the threshold and `count` has not is
-        // precisely a turn the old rule refused and this one does not.
+        // Reported against `total`, the count that no answer resets: a turn
+        // where `total` has passed the threshold and `count` has not is
+        // precisely a turn an answer-blind rule would refuse and this one does
+        // not.
         //
         // Not derived from `record_results` returning `AnswerChanged`: that
         // fires on the *first* repeat with a new answer, which is one the guard
-        // would have allowed regardless, so it counted turns that were never at
-        // risk and inflated the ratio ADR 0010's kill criteria read.
+        // allows regardless, so counting it would count turns never at risk and
+        // inflate the ratio ADR 0010's kill criteria read.
         Ok(BatchRecord {
             signature: sig,
             rescued: total > effective_max,

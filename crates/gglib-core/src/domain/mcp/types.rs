@@ -113,7 +113,7 @@ pub struct McpServerConfig {
 
     /// Cached resolved absolute path to the executable.
     /// Populated by the path resolver when command is successfully resolved.
-    /// Used to avoid repeated PATH searches.
+    /// Saves repeated PATH searches.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_path_cache: Option<String>,
 

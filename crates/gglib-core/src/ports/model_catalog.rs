@@ -118,7 +118,7 @@ pub struct ModelLaunchSpec {
     /// Total on-disk size of the model weights in bytes, summed across all
     /// shards for multi-part GGUFs.
     ///
-    /// Used to budget host memory at launch (see
+    /// Read at launch to budget host memory (see
     /// [`crate::server_config::compute_auto_cache_ram_mb`]). `0` when the
     /// size could not be determined — callers must treat that as "unknown"
     /// rather than "free".

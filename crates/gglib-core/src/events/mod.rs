@@ -92,7 +92,7 @@ pub enum AppEvent {
         model: ModelSummary,
     },
 
-    /// A model was removed from the library.
+    /// A model left the library.
     ModelRemoved {
         /// ID of the removed model.
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]

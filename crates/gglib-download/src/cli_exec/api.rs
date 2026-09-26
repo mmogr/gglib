@@ -155,7 +155,7 @@ mod tests {
         assert!(candidates.contains(&"llama-3-8b-Q4_K_M.gguf".to_string()));
         assert!(candidates.contains(&"llama-3-8b-F16.gguf".to_string()));
         assert!(candidates.contains(&"q4_k_m.gguf".to_string()));
-        // Previously missing from the old 9-pattern hardcoded list.
+        // IQ and Q6_K quantizations are candidates too.
         assert!(candidates.contains(&"llama-3-8b-IQ4_XS.gguf".to_string()));
         assert!(candidates.contains(&"llama-3-8b-Q6_K.gguf".to_string()));
     }

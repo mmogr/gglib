@@ -23,11 +23,10 @@
 //! # Failure behaviour
 //!
 //! A failed load never fails the request. The last good snapshot is served if
-//! there is one, and [`Settings::default`] otherwise — matching the previous
-//! `.ok().and_then(...)` behaviour at the call sites. A failure does not
+//! there is one, and [`Settings::default`] otherwise. A failure does not
 //! refresh the expiry, so the next request retries rather than serving a stale
 //! value for a whole TTL window; during a sustained outage that means one
-//! attempt per request, which is what the code did before this cache existed.
+//! attempt per request.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

@@ -113,11 +113,11 @@ mod tests {
     #[test]
     fn display_format_is_parseable() {
         // Under the same lock as every test that sets GGLIB_DATA_DIR: without
-        // it this test resolved whatever root a neighbour had pointed the
-        // variable at, and once found that root being removed under it
-        // (#1082). Its own temporary data root keeps it off the real data
-        // directory as well, since resolve() creates what it names. (The
-        // resource root is still the checkout's in a debug build.)
+        // it this test resolves whatever root a neighbour has pointed the
+        // variable at, which can be removed under it (#1082). Its own
+        // temporary data root keeps it off the real data directory as well,
+        // since resolve() creates what it names. (The resource root is still
+        // the checkout's in a debug build.)
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempdir().unwrap();
         let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());

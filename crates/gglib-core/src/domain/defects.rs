@@ -8,11 +8,10 @@
 //!
 //! Counters are cumulative and process-lifetime (they live on the proxy
 //! supervisor, like the agent cache metrics, so a proxy restart does not
-//! zero them). There is no windowing here, and no `delta` helper: that pair
-//! existed for the tune scheduler, which kept per-model baselines and rated
-//! the difference. Since ADR 0006 nothing acts on these automatically, and the
-//! one reader left — `gglib proxy dashboard` — shows the run's totals, which
-//! is the honest shape for a counter that resets with the process.
+//! zero them). There is no windowing here, and no `delta` helper: nothing acts
+//! on these automatically (ADR 0006), and the one reader —
+//! `gglib proxy dashboard` — shows the run's totals, which is the honest shape
+//! for a counter that resets with the process.
 //!
 //! They are diagnosis: what actually fails, per model, for a person to read
 //! and act on.
@@ -20,32 +19,19 @@
 //! Deliberately not persisted: a defect rate is a claim about recent traffic
 //! on this build of everything, and yesterday's rate answering today's
 //! question is exactly the staleness ADR 0001 warns about. The loop reacts
-//! to what is happening, not to what once happened.
+//! to what is happening, not to what once happened. Persisting them would
+//! take decay by wall-clock age and scoping by llama.cpp release to answer
+//! that objection, for no reader that acts on them (#805).
 //!
-//! That was tried the other way and reverted, so it does not need trying
-//! again. Persistence — a `defect_windows` table, exponential decay by
-//! wall-clock age, and outright discard of evidence recorded against a
-//! different llama.cpp release — was built to let the idle-time tune
-//! scheduler carry evidence across restarts. Decay and build scoping existed
-//! *only* to answer the staleness objection above; they were the price of
-//! persisting at all, not features in their own right.
-//!
-//! With the scheduler removed, nothing acts on these counts automatically,
-//! and sampling defaults now come from the model's own metadata rather than
-//! from measured rates. Nobody was left who needed yesterday's numbers, so
-//! the whole apparatus went rather than sit dormant. These counters are
-//! diagnostic, per-process, and reset on restart — which is the correct
-//! lifetime for a claim about what is happening now.
-//!
-//! One reading has since needed yesterday's numbers: ADR 0011's kill
-//! criterion asks whether the guard's trips reach zero across more traffic
-//! than one run sees. So the loop guard's decisions — not these counters — are
-//! also written to a log that outlives the process,
-//! [`super::loop_guard_log`]. It answers the objection above in part: every
-//! row is dated, so a person chooses the window; nothing automatic reads it;
-//! and every row carries the gglib version and the guard's mode. It records
-//! neither the llama.cpp build nor the model file, which `defect_windows`
-//! scoped by, so a reading that spans either has to be split by date.
+//! One reading does need yesterday's numbers: ADR 0011's kill criterion asks
+//! whether the guard's trips reach zero across more traffic than one run
+//! sees. So the loop guard's decisions — not these counters — are also
+//! written to a log that outlives the process, [`super::loop_guard_log`]. It
+//! answers the objection above in part: every row is dated, so a person
+//! chooses the window; nothing automatic reads it; and every row carries the
+//! gglib version and the guard's mode. It records neither the llama.cpp build
+//! nor the model file, so a reading that spans either has to be split by
+//! date.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -76,7 +62,7 @@ impl ModelDefectLedger {
     /// Count one loop-guard intervention for `model`, under the detector that
     /// raised it.
     ///
-    /// Since #1052 an intervention is a note *or* a refusal — the default
+    /// An intervention is a note *or* a refusal (#1052) — the default
     /// forwards the request with a note rather than rejecting it.
     ///
     /// Bumps the detector's own count and `loop_guard_trips`, which stays the

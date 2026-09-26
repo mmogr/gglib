@@ -2,9 +2,9 @@
 //!
 //! These live here, in shared vocabulary, rather than inside the CLI, so the
 //! daemon's own test suite can walk them and fail when it stops serving one.
-//! #834 deleted a route the CLI's download poller was calling and the whole
-//! suite stayed green, because nothing tied the client's paths to the router's.
-//! `gglib-axum/tests/daemon_route_contract.rs` is what ties them now.
+//! `gglib-axum/tests/daemon_route_contract.rs` is what ties the client's paths
+//! to the router's; without it, deleting a route the CLI still calls leaves
+//! the whole suite green (#834).
 
 /// Daemon identity probe.
 pub const HEALTH_PATH: &str = "/health";

@@ -36,8 +36,8 @@ mod tests {
     fn test_database_path_ends_with_gglib_db() {
         // `database_path()` creates `<data root>/data`, so it runs under the
         // lock every test that points GGLIB_DATA_DIR at a temporary root holds,
-        // and in a root of its own (#1082). Without the lock it once resolved
-        // into a neighbour's root as that root was being removed.
+        // and in a root of its own (#1082). Without the lock it can resolve
+        // into a neighbour's root as that root is being removed.
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempdir().unwrap();
         let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());

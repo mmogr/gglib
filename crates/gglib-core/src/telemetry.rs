@@ -44,7 +44,7 @@ pub fn set_console_hook(hook: ConsoleHook) {
     *CONSOLE_HOOK.write().unwrap() = Some(hook);
 }
 
-/// Remove a previously installed hook, reverting to plain stderr.
+/// Remove the installed hook, reverting to plain stderr.
 ///
 /// No production caller: the CLI installs a hook for the life of the process
 /// and exits without clearing it. Kept, and gated, because `CONSOLE_HOOK` is
@@ -99,15 +99,11 @@ impl Drop for ConsoleWriter {
 }
 
 fn resolve_log_dir() -> PathBuf {
-    // The data root decides in every build. Debug builds used to hardcode
-    // `./logs` — CWD-relative, blind to `GGLIB_DATA_DIR` — so a test daemon
-    // pointed at an isolated data dir still interleaved its lines into the
-    // real installation's log file. `data_root()` already prefers
-    // `GGLIB_DATA_DIR`, then the local repo in debug builds, so the debug
-    // default is unchanged when run from the repo — it just stops being an
-    // accident of the working directory. (The old release fallback joined
-    // "logs" onto "./logs" and produced `./logs/logs`; the fallback root is
-    // now the working directory itself.)
+    // The data root decides in every build, so a test daemon pointed at an
+    // isolated `GGLIB_DATA_DIR` never interleaves its lines into the real
+    // installation's log file. `data_root()` prefers `GGLIB_DATA_DIR`, then
+    // the local repo in debug builds; if it fails, the fallback root is the
+    // working directory itself.
     let dir = data_root()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("logs");
@@ -189,7 +185,7 @@ mod tests {
 
         assert_eq!(captured.lock().unwrap().as_slice(), ["hello from the hook"]);
 
-        // After clearing, console_println must not still reach the old hook.
+        // After clearing, console_println must not reach the cleared hook.
         console_println("after clear");
         assert_eq!(captured.lock().unwrap().len(), 1);
     }

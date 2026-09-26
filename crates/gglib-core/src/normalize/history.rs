@@ -78,7 +78,7 @@ pub fn strip_thinking_debt(messages: &mut [Value]) -> usize {
 
 /// Remove every `<think>...</think>` block from `s`.
 ///
-/// Returns `Some(new_string)` when at least one block was removed,
+/// Returns `Some(new_string)` when it removed at least one block,
 /// otherwise `None` so the caller can avoid a needless allocation.
 /// Matching is case-sensitive: each `<think>` is paired with the next
 /// `</think>` that follows it. An unclosed `<think>` is left intact (the

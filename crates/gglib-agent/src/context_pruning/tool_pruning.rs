@@ -3,7 +3,7 @@
 //!
 //! Keeps the most recent [`AgentConfig::prune_keep_tool_messages`] `Tool`
 //! messages and strips any `Assistant` messages whose every tool-call reference
-//! was removed.  `Assistant` messages that still have at least one surviving
+//! is dropped.  `Assistant` messages that still have at least one surviving
 //! call are retained with only those surviving calls listed.
 
 use std::collections::HashSet;

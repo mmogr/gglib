@@ -7,7 +7,7 @@
 //!
 //! *Deletion criterion:* llama.cpp's `peg-native` parser handles the
 //! delimited dialects gglib tags, for every tagged model, **and** the
-//! failure modes this parser was hardened against no longer reproduce —
+//! failure modes this parser is hardened against stop reproducing —
 //! specifically a parameter value containing a literal `</parameter>`
 //! ([#24807]) and a reasoning model emitting prose before the open marker
 //! ([#20260]). Evidence is the drift alarm ([`crate::normalize::residue`])
@@ -791,10 +791,9 @@ mod tests {
 
     /// A value that happens to contain the literal text `</parameter>` must
     /// not truncate the value early — the true close is the last occurrence
-    /// before the next sibling tag, not the first occurrence anywhere. This
-    /// is the naive-`find` bug: the old implementation would have stopped at
-    /// "Use ", left `to close a param` dangling as unparsed cursor bytes, and
-    /// failed the whole block.
+    /// before the next sibling tag, not the first occurrence anywhere. A
+    /// naive `find` stops at "Use ", leaves `to close a param` dangling as
+    /// unparsed cursor bytes, and fails the whole block.
     #[test]
     fn a_parameter_value_containing_the_literal_close_marker_does_not_truncate() {
         let mut p = qwen();

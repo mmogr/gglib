@@ -36,13 +36,12 @@ const ENV_NAME: &str = "gglib-hf-xet";
 /// Parent directory of the managed environment, under the data root.
 const ENV_PARENT_DIR: &str = ".python";
 
-/// Where the environment used to live.
+/// Where an existing install may already hold the environment.
 ///
-/// It was never a conda environment — [`PythonEnvironment::create_env`] has
-/// always built a plain venv — but it shipped under `.conda/`, which reads as a
-/// promise the code does not make. Existing installs have several hundred
-/// megabytes sitting at the old path, so [`resolve_env_directory`] keeps using
-/// it when it is there rather than silently rebuilding under the new name.
+/// A plain venv despite the name: [`PythonEnvironment::create_env`] builds no
+/// conda environment. An install that has one here holds several hundred
+/// megabytes at this path, so [`resolve_env_directory`] keeps using it when it
+/// is there rather than silently rebuilding under [`ENV_PARENT_DIR`].
 const LEGACY_ENV_PARENT_DIR: &str = ".conda";
 
 const PY_REQUIREMENTS: &[&str] = &["huggingface_hub>=1.1.5", "hf_xet>=0.6.0"];
@@ -51,8 +50,8 @@ const PY_REQUIREMENTS: &[&str] = &["huggingface_hub>=1.1.5", "hf_xet>=0.6.0"];
 ///
 /// The versioned names matter more than they look: pyenv and asdf install
 /// shims named `python3.12`, and several distros ship no unversioned `python3`
-/// at all. Trying only `python3`/`python` is why a machine with a perfectly
-/// good interpreter could not enable the accelerator.
+/// at all. Trying only `python3`/`python` leaves a machine with a perfectly
+/// good interpreter unable to enable the accelerator.
 #[cfg(target_os = "windows")]
 const PYTHON_CANDIDATES: &[&str] = &[
     "python",
@@ -1201,8 +1200,8 @@ mod tests {
         );
     }
 
-    /// An install that predates the rename keeps its environment. Rebuilding
-    /// it under the new name would re-download several hundred megabytes of
+    /// An install with its environment under `.conda/` keeps it. Rebuilding
+    /// it under `.python/` would re-download several hundred megabytes of
     /// wheels to end up in exactly the same place.
     #[test]
     fn resolve_env_directory_keeps_a_legacy_environment() {

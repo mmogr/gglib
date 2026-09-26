@@ -19,11 +19,9 @@
 //! [`FieldSources`] is produced by
 //! [`resolve_layers_with_sources`](crate::domain::InferenceConfig::resolve_layers_with_sources),
 //! the same pass that decides the values — never by a second function that
-//! re-derives the rules. That is deliberate: this provenance previously lived
-//! in a separate `describe_provenance` helper in the request pipeline, and the
-//! two implementations had already drifted. A ladder where `cli` supplied a
-//! `presence_penalty` and a lower layer claimed the `temperature` resolved the
-//! penalty from the claiming layer while the log named `cli`.
+//! re-derives the rules. That is deliberate: two implementations of one rule
+//! drift, and provenance that names a rung the resolution did not use is
+//! wrong without anything failing.
 //!
 //! The same `(value, source)` shape
 //! [`resolve_context_size_with_source`](crate::server_config::resolve_context_size_with_source)
@@ -86,9 +84,8 @@ pub enum ParamSource {
     /// is sent and llama.cpp's own default applies. Which fields those are is
     /// whatever
     /// [`InferenceConfig::with_hardcoded_defaults`](crate::domain::InferenceConfig::with_hardcoded_defaults)
-    /// leaves unset — deliberately not restated here, because the last
-    /// restatement said "`max_tokens` is the only one" and stayed that way
-    /// through #741 adding three floorless DRY fields.
+    /// leaves unset — deliberately not restated here, where a list would go
+    /// stale as fields are added.
     Unset,
 }
 
@@ -102,13 +99,12 @@ impl ParamSource {
     ///
     /// # Why this is a method and not a `matches!` at the call site
     ///
-    /// It was a `matches!` in `request_pipeline::sampling`, listing the
-    /// variants that count as *unchosen*. That shape fails open in the worst
-    /// direction: a new `ParamSource` variant is not in the list, so it reads
-    /// as "deliberately chosen", and the agentic temperature ceiling silently
-    /// stops firing for it. No compile error, no test failure, and the
-    /// symptom is a ceiling that quietly does nothing — which is exactly how
-    /// #741's floor and #744's ceiling both shipped inert.
+    /// A `matches!` at the call site listing the variants that count as
+    /// *unchosen* fails open in the worst direction: a new `ParamSource`
+    /// variant is not in the list, so it reads as "deliberately chosen", and
+    /// the agentic temperature ceiling silently stops firing for it. No
+    /// compile error, no test failure, and the symptom is a ceiling that
+    /// quietly does nothing.
     ///
     /// Here the `match` is exhaustive and the arms are the *positive* case,
     /// so a new variant breaks the build at the one place that defines what

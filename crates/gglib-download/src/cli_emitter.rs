@@ -499,7 +499,7 @@ mod tests {
         drop(emitter);
 
         // The hook is still installed (nothing clears it), but its `Weak`
-        // can no longer upgrade — this must fall back to `eprintln!`
+        // cannot upgrade — this must fall back to `eprintln!`
         // without panicking.
         gglib_core::telemetry::console_println("after drop");
     }

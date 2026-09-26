@@ -154,12 +154,11 @@ mod tests {
         assert_eq!(got, 76 * 1024);
     }
 
-    /// A large machine where the old 25% cap would have bound (128 GiB) no
-    /// longer loses that headroom — the full remainder is claimed.
+    /// A large machine keeps its headroom — the full remainder is claimed,
+    /// with no fractional cap (25% would bind at 128 GiB here).
     #[test]
     fn auto_budget_uncapped_on_a_large_machine() {
         // reserved = 27 + 9 + 16 = 52; usable = 512 - 52 = 460 GiB.
-        // The old 25% cap (128 GiB) would have bound here; it no longer does.
         let got = compute_auto_cache_ram_mb(512 * GIB, 27 * GIB, 9 * GIB);
         assert_eq!(got, 460 * 1024);
     }

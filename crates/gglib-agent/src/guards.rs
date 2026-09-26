@@ -16,8 +16,7 @@ use crate::util::emit_error_event;
 /// What the guard decided about one turn.
 ///
 /// Separated from acting on the decision so that every outcome passes one
-/// recording point. The alternative — reporting at each of the four exits
-/// `check` used to have — is how a counter ends up describing three of them.
+/// recording point, rather than one per exit.
 enum Decision {
     /// The guard is off for this run: both thresholds are `None`, so no
     /// detector could fire and this turn is not part of any denominator.
@@ -50,7 +49,7 @@ impl Guards {
     /// a turn that called a tool is doing work, and the loop detector judges it.
     ///
     /// Loop detection is only checked when tool calls are present, since an
-    /// empty batch would produce a degenerate signature — and, now that the
+    /// empty batch would produce a degenerate signature — and, since the
     /// detector counts back-to-back repeats, skipping is also what stops a
     /// text-only iteration from breaking a run. See `loop_detection`.
     ///

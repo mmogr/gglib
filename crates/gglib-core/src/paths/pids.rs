@@ -12,7 +12,7 @@ use super::platform::data_root;
 ///
 /// Location: `~/.gglib/pids/` (or equivalent data root)
 ///
-/// This directory is used to track running llama-server processes across
+/// This directory tracks running llama-server processes across
 /// application restarts, enabling cleanup of orphaned processes.
 pub fn pids_dir() -> Result<PathBuf, PathError> {
     Ok(data_root()?.join("pids"))

@@ -13,22 +13,20 @@
 
 /// Which of the loop guard's two detectors raised a trip.
 ///
-/// The guard is two detectors behind one verdict, and until this existed their
-/// trips went into one number, so nobody could ask whether *stagnation* trips
-/// had become rare, which is the question that decides whether the proxy
-/// keeps `StagnationDetector` in its guard (ADR 0011's first kill criterion,
-/// #947; retiring the detector itself also needs the agent path's reading,
-/// #1091).
-/// Since #1052 a trip is an intervention rather than a rejection: the default
-/// forwards the request with a note.
+/// The guard is two detectors behind one verdict. Counting their trips apart
+/// answers whether *stagnation* trips have become rare, which decides whether
+/// the proxy keeps `StagnationDetector` in its guard (ADR 0011's first kill
+/// criterion, #947; retiring the detector itself also needs the agent path's
+/// reading, #1091). A trip is an intervention rather than a rejection
+/// (#1052): the default forwards the request with a note.
 ///
 /// It says which detector, and nothing about which path. Both paths record
-/// one now — the proxy's pre-dispatch scan into `loop_guard_trips` and its
-/// two parts, the agent loop into the `agent_guard_*` four (#1091) — and the
+/// one — the proxy's pre-dispatch scan into `loop_guard_trips` and its two
+/// parts, the agent loop into the `agent_guard_*` four (#1091) — and the
 /// field a count lands in is what says which path it came from.
 ///
 /// The loop guard's *log*, which outlives the process and is what ADR 0011's
-/// kill criterion reads, still records the proxy's scan alone.
+/// kill criterion reads, records the proxy's scan alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -69,7 +67,7 @@ pub struct ModelDefectCounts {
     pub requests: u64,
     /// Requests the loop/stagnation guard acted on.
     ///
-    /// Since #1052 that is *not* the same as rejected: the guard's default
+    /// That is *not* the same as rejected (#1052): the guard's default
     /// forwards a tripped request with a note, and only
     /// `--loop-guard-mode refuse` rejects it before dispatch. Both count
     /// here, so this number is a count of **interventions** — per process,
@@ -131,7 +129,7 @@ pub struct ModelDefectCounts {
     /// Of those, the decisions that ended the run.
     ///
     /// Not the same event as [`Self::loop_guard_trips`], which is why it is
-    /// not the same field. Since #1052 a proxy trip is an *intervention*: the
+    /// not the same field. A proxy trip is an *intervention* (#1052): the
     /// default forwards the tripped request with a note and the conversation
     /// goes on. An agent-path trip emits `AgentEvent::Error` and returns
     /// `Err`, which ends the run. Summing the two would add an intervention to
@@ -213,9 +211,9 @@ pub struct ModelDefectCounts {
     /// had an opinion to act on.
     ///
     /// The blind spot this makes visible: a client whose tools all use
-    /// `anyOf` gets zero repair coverage *and*, until now, zero evidence of
-    /// that fact. A high rate here means the repair rate below it is
-    /// measuring a much smaller slice of traffic than it appears to.
+    /// `anyOf` gets zero repair coverage, and without this count zero
+    /// evidence of that fact. A high rate here means the repair rate below it
+    /// is measuring a much smaller slice of traffic than it appears to.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub unvalidatable_schemas: u64,
     /// Turns whose normalization discarded a malformed dialect tool call and

@@ -96,9 +96,9 @@ pub enum AgentMessage {
 
     /// A response from the assistant model.
     ///
-    /// `content` always carries either text, tool calls, or both — the
-    /// vacuous all-`None` state of the previous `Option<String>` +
-    /// `Option<Vec<ToolCall>>` representation is impossible to construct.
+    /// `content` always carries either text, tool calls, or both — a vacuous
+    /// all-`None` state, which an `Option<String>` + `Option<Vec<ToolCall>>`
+    /// pair would allow, is impossible to construct.
     Assistant {
         /// Content of the assistant turn.
         #[serde(flatten)]

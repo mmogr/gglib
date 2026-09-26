@@ -35,20 +35,17 @@ pub enum CandidateSource {
 ///
 /// # Why this exists
 ///
-/// Until this struct, the eval counted output and threw it away: 7 of the 9
-/// `AgentEvent` variants — `TextDelta` and `ReasoningDelta` among them — fell
-/// through the benchmark's event loop untouched. A run was therefore knowable
-/// only as a token total and a wall time.
+/// A token total and a wall time are not enough to read a run. A run can
+/// generate far more than the same task needs without the pipeline and still
+/// **pass** ([#961]), and those two numbers cannot say whether that is a small
+/// reasoning model thinking at length or a generation fault, which call for
+/// opposite responses. This struct is the difference between those two
+/// readings.
 ///
-/// That is not enough to read a run. On 2026-08-29 five runs generated ~32,900
-/// completion tokens apiece against ~510 for the same task without the
-/// pipeline, took ~950s, and **passed**. Nothing recorded anywhere could say
-/// whether that was a small reasoning model thinking at length or a generation
-/// fault, and the two call for opposite responses. This struct is the
-/// difference between those two readings.
-///
-/// Every field is taken from events the loop already emitted, so nothing here
+/// Every field is taken from events the loop already emits, so nothing here
 /// changes what the eval sends, executes or scores.
+///
+/// [#961]: https://github.com/mmogr/gglib/pull/961
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct GeneratedOutput {
@@ -105,20 +102,20 @@ pub struct GeneratedOutput {
     /// The collector drops tool-call fragments past `MAX_TOOL_CALL_INDEX` (64),
     /// so this is a *floor*, and a reading of exactly 64 means "at least 64" —
     /// the true batch went into `CollectedResponse::tool_calls_truncated` and
-    /// from there into a `SystemWarning` message this eval keeps no text of.
-    /// Measured 2026-08-29: a reading of 64 was `kept=64 dropped=542` — **606
-    /// calls in one response**, for a task whose expected output is one call.
-    /// An earlier run logged `dropped=1237`. Read a 64 as "consult the daemon
+    /// from there into a `SystemWarning` message this eval keeps no text of. A
+    /// 64 has stood for hundreds of calls in one response, for a task whose
+    /// expected output is one call ([#961]). Read a 64 as "consult the daemon
     /// log", never as a batch size.
+    ///
+    /// [#961]: https://github.com/mmogr/gglib/pull/961
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub max_tool_calls_in_batch: usize,
     /// How many recoverable conditions the loop reported during this run.
     ///
     /// Counts `AgentEvent::SystemWarning`, whose main source is the loop
     /// recovering from a model that requested more parallel tool calls than the
-    /// configured limit. That recovery costs a whole extra request and was
-    /// previously invisible to the eval: the warning was emitted, discarded, and
-    /// the run reported as though nothing had happened.
+    /// configured limit. That recovery costs a whole extra request, and this
+    /// count is how the eval sees it.
     ///
     /// **Warnings, not incidents.** One over-wide batch raises two — the
     /// collector's slot limit and then the parallel-tool limit — so this

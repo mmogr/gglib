@@ -33,8 +33,8 @@ fn total_chars(messages: &[AgentMessage]) -> usize {
 /// **front** regardless of their original positions, followed by the retained
 /// non-system tail.  Most LLM APIs expect system prompts at the head of the
 /// context, so this is intentional — but callers should be aware that
-/// interleaved system prompts will no longer appear at their original
-/// positions within the non-system flow after Pass 2 runs.
+/// interleaved system prompts do not keep their original positions within
+/// the non-system flow after Pass 2 runs.
 pub(crate) fn prune_for_budget(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,

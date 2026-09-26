@@ -53,7 +53,7 @@ pub(crate) fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> &str {
 
 /// [`truncate_at_char_boundary`], with an `…` marking what was cut.
 ///
-/// Borrows when nothing was removed, so the common case of a string that
+/// Borrows when nothing is cut, so the common case of a string that
 /// already fits allocates nothing. The ellipsis is appended only on an actual
 /// truncation — a caller can therefore tell "this is the whole value" from
 /// "there was more" by looking at the output, which is the point of printing it.

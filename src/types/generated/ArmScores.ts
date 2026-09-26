@@ -62,12 +62,7 @@ total_wall_ms: number,
 /**
  * Wall-clock milliseconds across the runs that reached the model.
  *
- * The comparable figure, and the one every ratio is taken from. It shares
- * its population with [`Self::tg_tps`] and
- * [`Self::mean_time_to_first_tool_call_ms`], which already filtered this
- * way — the efficiency table used to print those beside an unfiltered
- * wall time, so two of its rows described different sets of runs while
- * looking like one table.
+ * The comparable figure, and the one every ratio is taken from.
  */
 measured_wall_ms: number, 
 /**
@@ -75,11 +70,13 @@ measured_wall_ms: number,
  * when no task in the arm called a tool.
  *
  * **Read this beside [`Self::median_time_to_first_tool_call_ms`], never
- * alone.** The population is not unimodal. On 2026-08-29 one arm reached
- * its first call in about a second on most tasks and after roughly 950
- * *seconds* on five of them; the mean of that is ~94s, which describes
- * neither group and no individual run. The mean is kept because a large
- * gap between it and the median is itself the finding.
+ * alone.** The population is not unimodal: a handful of runs that generate
+ * for many minutes before their first call pull the mean to a value that
+ * describes neither group and no individual run ([#961]). The mean is
+ * kept because a large gap between it and the median is itself the
+ * finding.
+ *
+ * [#961]: https://github.com/mmogr/gglib/pull/961
  */
 mean_time_to_first_tool_call_ms: number | null, 
 /**
@@ -87,9 +84,9 @@ mean_time_to_first_tool_call_ms: number | null,
  *
  * The typical run, which the mean stops describing the moment a handful of
  * runs generate for a quarter of an hour. Reported alongside rather than
- * instead of the mean: the median alone would have hidden those five runs
- * as effectively as the mean misrepresented them, and the pair is what
- * makes the spread visible.
+ * instead of the mean: the median alone hides those runs as effectively
+ * as the mean misrepresents them, and the pair is what makes the spread
+ * visible.
  */
 median_time_to_first_tool_call_ms: number | null, 
 /**

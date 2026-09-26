@@ -1,6 +1,6 @@
 //! Pattern constants for capability detection.
 //!
-//! These patterns are used to identify model capabilities from
+//! These patterns identify model capabilities from
 //! chat templates and model names.
 
 /// Known thinking/reasoning tag patterns used by various models.

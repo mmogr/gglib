@@ -101,7 +101,7 @@ pub struct SuppressedEffort {
 }
 
 /// Remove a resolved `reasoning_effort` the observed template cannot read, and
-/// return what was removed.
+/// return what it removed.
 ///
 /// Returns `None` — leaving `body` and `decision` untouched — for every model
 /// that is not a positive "this template does not read it": unresolved
@@ -115,8 +115,7 @@ pub struct SuppressedEffort {
 ///
 /// 1. deletes the top-level key from `body`;
 /// 2. clears `decision.resolved.reasoning_effort`, because that field is
-///    documented as *the values written into the body* and this one no longer
-///    is;
+///    documented as *the values written into the body* and this one is not;
 /// 3. rewrites `decision.sources.reasoning_effort` to
 ///    [`ParamSource::SuppressedByTemplate`], so every provenance surface
 ///    reports the suppression instead of naming the rung whose value did not

@@ -237,15 +237,12 @@ impl ModelService {
         // unchecked, refreshing from shard 2 would land on that row and
         // `file_path = excluded.file_path` would repoint it at the shard-2
         // file — which llama.cpp cannot open a split GGUF from, so the model
-        // would stop launching. Appending a stray row (the old behaviour) was
-        // survivable; destroying the good row is not.
+        // would stop launching.
         //
         // Both sides are resolved before comparing. Comparing the stored
-        // column directly would make this guard assume the column is already
-        // canonical — the very assumption that produced the bug this change
-        // exists to fix. A row still holding an unresolved path would then
-        // refuse a refresh of its *own* first shard, and say so by printing
-        // the same path twice.
+        // column directly would assume the column is already canonical, and a
+        // row still holding an unresolved path would then refuse a refresh of
+        // its *own* first shard, and say so by printing the same path twice.
         if let Some(existing) = &existing {
             let existing_primary = crate::paths::canonical_model_path_string(&existing.file_path);
             if existing_primary != resolved.to_string_lossy() {
@@ -284,7 +281,7 @@ impl ModelService {
         );
 
         // 5. Store and key the row by the resolved path, whatever spelling
-        //    was used to reach it.
+        //    reached it.
         new_model.file_path = resolved;
 
         // 6. A refresh has to land on the row it is refreshing.
@@ -294,8 +291,7 @@ impl ModelService {
         //    `local:<hash>`. A downloaded model is keyed `hf:<repo>@<sha>#<file>`.
         //    Nothing would conflict, `file_path` carries no unique index, and
         //    `--reimport` on a downloaded model would append a *second* row for
-        //    one file — the precise outcome this whole change exists to
-        //    prevent, reintroduced by the flag added to serve it.
+        //    one file.
         //
         //    Carrying the stored provenance forward keeps the computed key
         //    equal to the existing row's, so the upsert updates it.
@@ -546,13 +542,12 @@ impl ModelService {
     ///
     /// `full = false` (default) is **additive**: any newly-detected tag that
     /// isn't already present is appended; nothing is ever removed. This is
-    /// the safe path for backfilling `format:*` tags on models imported
-    /// before format-tag detection landed.
+    /// the safe path for backfilling `format:*` tags on models that lack them.
     ///
-    /// `full = true` performs a full rebuild: every previously auto-generated
-    /// tag (the predefined capability tag namespace plus every existing
-    /// `format:*` tag) is dropped and the freshly-detected set is added in
-    /// its place. User-curated tags outside that namespace are preserved.
+    /// `full = true` performs a full rebuild: every auto-generated tag (the
+    /// predefined capability tag namespace plus every existing `format:*`
+    /// tag) is dropped and the freshly-detected set is added in its place.
+    /// User-curated tags outside that namespace are preserved.
     ///
     /// Returns `None` when the tag set is unchanged (no write occurred) and
     /// `Some(diff)` when the model was updated, carrying the full added/removed
@@ -580,7 +575,7 @@ impl ModelService {
 
         // Spec semantics mirror the tag semantics: additive mode only fills
         // a missing spec, `--full` re-derives unconditionally — including
-        // clearing a spec that is no longer derivable.
+        // clearing a spec that detection does not derive.
         let new_spec = caps.dialect;
         let spec_changed = if full {
             let changed = model.dialect_spec != new_spec;
@@ -599,7 +594,7 @@ impl ModelService {
             // Drop every tag in the auto-generated namespace, then re-add.
             // The list lives with the constants that produce it: a tag missing
             // from it survives a refresh forever, silently keeping a
-            // capability the model no longer has.
+            // capability the model does not have.
             model.tags.retain(|t| {
                 !crate::domain::capability_tags::ALL.contains(&t.as_str())
                     && !crate::domain::is_system_tag(t)
@@ -788,12 +783,9 @@ mod tests {
         assert_eq!(model.hf_repo_id, None);
     }
 
-    /// **The 409 this was written for.** Adding a file already in the library
-    /// used to succeed: `insert` upserts on the model key, so the second add
-    /// overwrote the first row and returned it, and the caller was told the
-    /// model had been added. `AlreadyExists` was never constructed anywhere in
-    /// the workspace, so `models.rs`'s Conflict arm and the
-    /// `AlreadyExists -> HttpError::Conflict` mapping both sat unreachable.
+    /// Adding a file already in the library is a conflict. `insert` upserts on
+    /// the model key, so without the lookup the second add would overwrite the
+    /// first row and tell the caller the model had been added.
     #[tokio::test]
     async fn importing_the_same_file_twice_is_a_conflict() {
         let repo = Arc::new(MockRepo::new());
@@ -1392,7 +1384,7 @@ mod tests {
         new_model.tags = vec!["mtp".to_string()]; // stale auto capability
         let created = service.add(new_model).await.unwrap();
 
-        // Detection no longer reports MTP support.
+        // Detection reports no MTP support.
         let parser = StubCapsParser {
             tags: Vec::new(),
             spec: None,
@@ -1474,7 +1466,7 @@ mod tests {
         new_model.dialect_spec = Some(crate::domain::DialectSpec::qwen_xml());
         let created = service.add(new_model).await.unwrap();
 
-        // Detection no longer derives a spec — full mode must clear it.
+        // Detection derives no spec — full mode must clear it.
         let parser = StubCapsParser {
             tags: Vec::new(),
             spec: None,

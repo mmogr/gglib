@@ -8,8 +8,8 @@
 //!
 //! # Why gglib has to know about these
 //!
-//! llama.cpp PR #17120 (merged 2025-11-25, and in the pinned build) added
-//! `common_init_sampler_from_model`, which overwrites `params.sampling` from
+//! In the pinned build (llama.cpp's #17120 and later),
+//! `common_init_sampler_from_model` overwrites `params.sampling` from
 //! the model's own `general.sampling.*` keys **for every field no CLI flag
 //! set** — and `GET /props` renders `default_generation_settings` from that
 //! same struct.

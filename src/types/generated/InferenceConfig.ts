@@ -95,10 +95,9 @@ presencePenalty: number | null,
  *
  * Penalizes tokens in proportion to how *often* they have already
  * appeared, where `presence_penalty` is a flat once-seen offset. An
- * OpenAI-standard field that llama.cpp supports; until it was modelled
- * here it passed through the proxy ungoverned, so an untrusted client
- * could steer sampling with it while every modelled twin was gated
- * (ADR 0003's `frequency_penalty` follow-up).
+ * OpenAI-standard field that llama.cpp supports, modelled here so the
+ * trust gate governs it like its twins (ADR 0003's `frequency_penalty`
+ * follow-up).
  * - 0.0: No penalty (llama.cpp's default)
  * - Negative values *encourage* reuse; valid upstream, rarely wanted
  *
@@ -180,13 +179,12 @@ topNSigma: number | null,
  * - 0.0: Disabled (llama.cpp's default, and the floor here)
  * - 0.8: A common starting point for long agentic sessions
  *
- * Left alone on agentic turns, deliberately. An earlier version forced
- * this to `0` whenever a request carried tools, reasoning that structured
- * output legitimately repeats tokens. Both halves were wrong: llama.cpp's
- * sequence breakers already default to `\n`, `:`, `"`, `*` — two of which
- * are pervasive in JSON — and agentic clients send `tools` on *every*
- * request, so the pin would have disabled DRY for whole sessions, which
- * is the workload it exists for.
+ * Left alone on agentic turns, deliberately, although structured output
+ * legitimately repeats tokens: llama.cpp's sequence breakers already
+ * default to `\n`, `:`, `"`, `*` — two of which are pervasive in JSON —
+ * and agentic clients send `tools` on *every* request, so pinning this to
+ * `0` there would disable DRY for whole sessions, which is the workload
+ * it exists for.
  *
  * llama.cpp's fifth DRY parameter, `--dry-sequence-breaker`, is not
  * modelled: it is a list of strings, and every layer of this hierarchy —

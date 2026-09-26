@@ -32,12 +32,13 @@ task_completion: number | null,
  * Each arm's own [`ArmScores::composite`] is renormalized over whichever
  * axes that arm measured, so two arms can carry composites on different
  * scales — an arm with no loop-eligible run divides by 0.6 where an arm
- * with one divides by 0.9. Subtracting those directly measures the scale.
- * The 2026-08-28 eval did exactly that: the raw arm's free `1.0` on an
- * axis the gglib arm could not be scored on was worth about half the
- * reported gap.
+ * with one divides by 0.9. Subtracting those directly measures the scale,
+ * crediting one arm a free `1.0` on an axis the other was never scored on
+ * ([#959]).
  *
  * `None` when [`Self::withheld`] is set.
+ *
+ * [#959]: https://github.com/mmogr/gglib/pull/959
  */
 composite: number | null, 
 /**
@@ -56,10 +57,10 @@ withheld: DeltaWithheld | null,
  *
  * Taken **per measured run** on both sides. Summed totals put the two arms
  * on different denominators the moment either loses a run, and a run lost
- * to a timeout contributes the timeout rather than nothing: the
- * 2026-08-28 eval reported `0.2×` — 84% of which was five stalled runs
- * waiting out a ten-minute deadline — for an arm that was in fact about
- * 1.2× faster on the work it actually did.
+ * to a timeout contributes the timeout rather than nothing, which can
+ * turn a faster arm into a slower one ([#959]).
+ *
+ * [#959]: https://github.com/mmogr/gglib/pull/959
  */
 wall_time_speedup: number | null, 
 /**
@@ -67,8 +68,7 @@ wall_time_speedup: number | null,
  * reached the same outcome on fewer generated tokens. `None` when either
  * arm generated nothing measurable.
  *
- * Per measured run for the same reason as [`Self::wall_time_speedup`]: the
- * summed form divided one arm's 63-run total by the other's 58-run total
- * and reported `1.48×` where the per-run figure is `1.36×`.
+ * Per measured run for the same reason as [`Self::wall_time_speedup`]: a
+ * summed form divides totals taken over different numbers of runs.
  */
 completion_token_ratio: number | null, };

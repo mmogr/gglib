@@ -50,10 +50,6 @@ pub trait ModelRepository: Send + Sync {
     /// "already there" *is* an error — an explicit "add this file to my
     /// library" rather than a registration — must ask [`Self::find_by_path`]
     /// first. `ModelService::import_from_file` does.
-    ///
-    /// This doc used to promise `Err(RepositoryError::AlreadyExists)` on a
-    /// duplicate file path. No implementation ever did that, and the promise
-    /// is what made the silent overwrite hard to see.
     async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError>;
 
     /// Find the model registered under `path`, if there is one.

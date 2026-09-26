@@ -1,17 +1,12 @@
 //! The two value types a model-server launch is described and tracked by.
 //!
 //! [`ServerConfig`] is what a caller asks for; [`ProcessHandle`] is what it
-//! gets back. The `ProcessRunner` trait this file is named after is gone, and
-//! `ModelRuntimePort` is the port that actually carries launches. The file
-//! keeps its name only because these two types are reached as
-//! `ports::{ServerConfig, ProcessHandle}` regardless.
+//! gets back. `ModelRuntimePort` is the port that carries launches. The file
+//! is named after the `ProcessRunner` trait [#849] removed, and keeps the name
+//! because these two types are reached as `ports::{ServerConfig,
+//! ProcessHandle}` regardless.
 //!
-//! It had implementors, contrary to what this comment said until now: four at
-//! `4a6fcf4b^`, including the production `LlamaServerRunner` in
-//! `gglib-runtime/src/runner.rs`. That runner went in #708 and the other three
-//! were test doubles, which is what left the trait with nothing implementing
-//! it by the time #849 removed it — a different and much less interesting
-//! claim than "nothing ever did".
+//! [#849]: https://github.com/mmogr/gglib/pull/849
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -25,8 +20,8 @@ use crate::domain::InferenceConfig;
 /// `common/arg.cpp:1394-1399` flips it off only for the completion and mtmd
 /// examples — never for the server. So "gglib emits no flag" and "gglib turns
 /// jinja off" are two different launches, and a bool could only ever name one
-/// of them. It named the wrong one: `false` meant *emit nothing*, so a user who
-/// explicitly disabled Jinja got a server running with it anyway, silently.
+/// of them. If `false` meant *emit nothing*, a user who explicitly disabled
+/// Jinja would get a server running with it anyway, silently.
 ///
 /// The distinction is in the type rather than in a convention because both
 /// falsy cases are reachable and they must not be conflated — see
@@ -94,9 +89,8 @@ pub struct ServerConfig {
     pub spec_draft_p_min: Option<f32>,
     /// Inference sampling parameters (temperature, `top_p`, etc.).
     ///
-    /// **Nothing reads this.** ADR 0003 deleted `to_cli_args` and its one
-    /// caller, so no sampler value becomes a command-line argument any more,
-    /// and the launch narration reports sampling from
+    /// **Nothing reads this.** No sampler value becomes a command-line
+    /// argument (ADR 0003), and the launch narration reports sampling from
     /// `llama::args::sampling`'s constants rather than from here. The field is
     /// written by `build_server_config` and read by nobody.
     ///
