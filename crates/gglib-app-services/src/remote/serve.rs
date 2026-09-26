@@ -1,14 +1,12 @@
 //! The serve side of ADR 0012: this machine answering another.
 //!
-//! Carved off `mod.rs`, which is at its size budget, and along the seam the
-//! connect side already has: `connect.rs` is the laptop, this is the
-//! desktop, and `mod.rs` keeps the type, the slots and the status surface
-//! that reads both.
+//! `connect.rs` is the laptop, this is the desktop, and `mod.rs` keeps the
+//! type, the slots and the status surface that reads both.
 //!
 //! Arming is slow — up to a five-second settings-cache window and then ten
-//! seconds waiting for a relay — and `enable` used to hold the serve slot's
-//! mutex for all of it, which is a quarter of a minute in which
-//! `gglib remote status` could not answer. It gives the CLI five seconds.
+//! seconds waiting for a relay — and `gglib remote status` gives the daemon
+//! five seconds, so `enable` reserves the serve slot rather than holding its
+//! mutex for the arm (see `slot.rs`).
 
 use std::sync::atomic::Ordering;
 

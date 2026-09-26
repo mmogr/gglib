@@ -1,8 +1,8 @@
 //! The stored endpoint key: where it lives, and clearing one that holds no
 //! key so the daemon can arm.
 //!
-//! Split from `key.rs`, which is about the credential the *proxy* enforces.
-//! Both are called keys and are otherwise unrelated: this one is modelpipe's
+//! Not `key.rs`, which is about the credential the *proxy* enforces. Both
+//! are called keys and are otherwise unrelated: this one is modelpipe's
 //! endpoint identity, the file every paired device knows this machine by,
 //! and nothing here reads settings or the proxy.
 
@@ -12,20 +12,17 @@ use crate::error::GuiError;
 
 /// Where this machine's endpoint key lives.
 ///
-/// Always the same file now (ADR 0012, decision 4, reversed — see the
-/// amendment dated 2026-09-10). A ticket names a machine; it is not a
-/// credential, and reaching anything behind it still takes a key this side
-/// issued. Minting a new one every session made the address change for a
-/// reason nobody outside this process could see, so every paired device
-/// paired again after a reboot — paying a real cost daily to buy a
-/// rotation nobody was reaching for.
+/// Always the same file (ADR 0012, decision 4, as reversed). A ticket names
+/// a machine; it is not a credential, and reaching anything behind it still
+/// takes a key this side issued. A key minted every session would change the
+/// address for a reason nobody outside this process could see, and every
+/// paired device would pair again after a reboot.
 ///
-/// What made that trade defensible was the arithmetic in decision 3: six
-/// digits and two minutes are enough only while a guesser has to find the
-/// listener first. A lasting ticket removes that step, so the counting had
-/// to move to where the guesses arrive: the tunnel edge, which answers the
-/// code itself and counts wrong codes per endpoint. Retiring the
-/// address is now deleting this file, a thing a person does deliberately
+/// Decision 3's arithmetic — six digits and two minutes are enough only while
+/// a guesser has to find the listener first — does not hold for a lasting
+/// ticket, so the guesses are counted where they arrive: the tunnel edge
+/// answers the code itself and counts wrong codes per endpoint. Retiring the
+/// address is deleting this file, a thing a person does deliberately
 /// rather than a side effect of a restart. It revokes no device: `arm` seeds
 /// every device key the roster lists onto the listener at the new address,
 /// so cutting a device off is [`RemoteOps::forget`](super::RemoteOps::forget).
@@ -44,15 +41,14 @@ pub(super) fn identity_path() -> Result<Option<std::path::PathBuf>, GuiError> {
 /// modelpipe refuses an empty identity file rather than minting over it, and
 /// the refusal is permanent and deliberate: a file that exists may be a key
 /// devices are already paired against, and replacing it would unpair them
-/// silently. modelpipe 0.7 can no longer *produce* an empty one — its writes
-/// go through a temporary — but every gglib shipped so far has run a
-/// modelpipe that wrote in place, where a crash between the open and the
-/// bytes leaves exactly this.
+/// silently. modelpipe 0.7 does not *produce* an empty one — its writes go
+/// through a temporary — but a modelpipe before 0.7 wrote in place, where a
+/// crash between the open and the bytes leaves exactly this, and the file
+/// outlives the upgrade.
 ///
-/// Before this function nothing in gglib removed that file, so without the
-/// heal an affected desktop could never arm again, and the remedy would
-/// reach its operator only as a sentence inside a failure they have no
-/// reason to go looking for.
+/// Without the heal an affected desktop could never arm again, and the
+/// remedy would reach its operator only as a sentence inside a failure they
+/// have no reason to go looking for.
 ///
 /// **The predicate is modelpipe's, not "zero bytes".** Over there the test
 /// is `trim().is_empty()`, so a file holding only a newline gets the same
@@ -87,8 +83,7 @@ pub(super) fn identity_path() -> Result<Option<std::path::PathBuf>, GuiError> {
 ///
 /// The `is_file` guard is redundant with the read and kept for what it says:
 /// dropping it on its own changes nothing, because reading a directory fails
-/// and falls through the same way. Measured — that mutation kills no test,
-/// while dropping it *and* treating an unreadable file as empty kills two.
+/// and falls through the same way.
 pub(super) fn discard_empty_identity(path: &std::path::Path) -> Result<(), GuiError> {
     let Ok(meta) = std::fs::metadata(path) else {
         return Ok(());

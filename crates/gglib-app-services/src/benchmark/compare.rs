@@ -51,9 +51,10 @@ pub(crate) async fn run_compare(
 ) -> Result<()> {
     // ── Load settings once per run (mirrors the proxy's per-request read) ──
     let settings = deps.settings_repo.load().await.ok();
-    // Passed through, not resolved. `.unwrap_or(DEFAULT_CONTEXT_SIZE)` turned
-    // "the user set nothing" into "the user set 4096" and sent it as `num_ctx`
-    // — the explicit rung — so the fit was discarded on every launch.
+    // Passed through, not resolved. `.unwrap_or(DEFAULT_CONTEXT_SIZE)` here
+    // would turn "the user set nothing" into "the user set 4096" and send it
+    // as `num_ctx` — the explicit rung — so the fit would be discarded on
+    // every launch.
     let default_ctx = settings.as_ref().and_then(|s| s.default_context_size);
     let global_inf = settings.and_then(|s| s.inference_defaults);
     let config_json = serde_json::to_string(&config).ok();
@@ -341,11 +342,10 @@ fn build_messages(config: &CompareConfig) -> serde_json::Value {
 /// This mirrors the resolution the proxy performs for every routed request.
 ///
 /// Serialization goes through [`InferenceConfig::to_openai_json_patch`] — the
-/// workspace's one sampling serializer — rather than a field-by-field copy.
-/// The copy that used to live here was complete, but it was the same shape that
-/// silently dropped `presence_penalty` and `min_p` from the LLM adapter when
-/// those fields were added (#611): a benchmark comparing sampling parameters
-/// while quietly omitting one of them is worse than useless.
+/// workspace's one sampling serializer — rather than a field-by-field copy,
+/// which drops a field added later without a compile error (#611): a
+/// benchmark comparing sampling parameters while quietly omitting one of them
+/// is worse than useless.
 fn build_compare_request_body(
     config: &CompareConfig,
     model: &gglib_core::domain::Model,

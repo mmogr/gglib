@@ -1,7 +1,7 @@
 //! The two HTTP clients the benchmarks stream over, and why they differ.
 //!
-//! Split out of `benchmark/mod.rs` because the reasoning below is longer than
-//! the code it guards, and because getting it wrong is not a small bug: the
+//! A file of its own because the reasoning below is longer than the code it
+//! guards, and because getting it wrong is not a small bug: the
 //! wrong timeout shape here does not fail the request, it deletes runs out of
 //! one arm of a comparison and reports the survivors as a finding.
 
@@ -14,8 +14,7 @@ use super::BenchmarkDeps;
 /// How long an agentic-eval stream may produce **no bytes at all** before it
 /// is abandoned. This is an idle timeout, not a cap on the whole request.
 ///
-/// 90s is far above the worst time-to-first-byte observed on this suite and
-/// far below the ten minutes a stalled run used to cost.
+/// 90s is far above the worst time-to-first-byte observed on this suite.
 const AGENTIC_STREAM_IDLE_TIMEOUT_SECS: u64 = 90;
 
 /// Connect timeout for the agentic eval. llama-server is on loopback, so a
@@ -56,19 +55,17 @@ impl BenchmarkDeps {
     /// every body error — the deadline included — through `error::decode`, so
     /// it surfaces as the uninformative `error decoding response body`.
     ///
-    /// The 2026-08-28 eval lost five runs to exactly that: each sat for
-    /// 600.00s and then died with a message that named neither the timeout nor
-    /// the stall behind it, and the arm they landed in was scored as though the
-    /// model had answered wrongly. `crates/gglib-proxy/src/server.rs` avoids
-    /// the identical trap and says so in a comment; this client had not learned
-    /// it yet.
+    /// A run severed that way sits out the whole deadline and dies with a
+    /// message that names neither the timeout nor the stall behind it (#957).
+    /// `crates/gglib-proxy/src/server.rs` avoids the identical trap and says so
+    /// in a comment.
     ///
     /// An **idle** timeout is the right shape. `build_chat_body` always sets
     /// `return_progress: true`, so llama-server emits `prompt_progress` frames
     /// throughout prefill — a stream that has gone quiet for
     /// [`AGENTIC_STREAM_IDLE_TIMEOUT_SECS`] has stalled, not merely taken its
     /// time. Compare mode does **not** set `return_progress`, which is why it
-    /// keeps the old client rather than sharing this one; making the two agree
+    /// keeps its own client rather than sharing this one; making the two agree
     /// means teaching compare to ask for progress frames first.
     ///
     /// # Errors
@@ -175,10 +172,9 @@ mod client_tests {
     /// **The regression this file exists to prevent.**
     ///
     /// A stream that keeps producing must survive past any fixed total
-    /// deadline. The 2026-08-28 eval lost five runs because the benchmark
-    /// client carried `.timeout(600s)`, which reqwest applies until the
-    /// *response body finishes* — so a long agentic stream was severed
-    /// mid-body and reported as a decode failure.
+    /// deadline. reqwest applies `.timeout(..)` until the *response body
+    /// finishes*, so a client carrying one severs a long agentic stream
+    /// mid-body and reports it as a decode failure (#957).
     ///
     /// This test fails if a total-request deadline is ever reintroduced: the
     /// stub keeps sending for ~1.2s, well past the 300ms idle timeout, and only

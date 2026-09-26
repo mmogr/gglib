@@ -1,10 +1,4 @@
 //! Where an agent loop in this process reports what its guard decided.
-//!
-//! One accessor, in a file of its own rather than beside [`ProxyOps`]'s
-//! others in `proxy.rs`, because that file is at exactly its entry in
-//! `scripts/rust-complexity-baseline.txt` and a budget there can be
-//! approached but never retreated from. `proxy_port.rs` split off the same
-//! way and for the same reason.
 
 use std::sync::Arc;
 

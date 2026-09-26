@@ -77,9 +77,8 @@ mod tests {
         assert!(json.get("total_ram_bytes").is_none());
         assert!(json.get("gpu_memory_bytes").is_none());
 
-        // The field was `isAppleSilicon` until integrated GPUs started
-        // reporting a budget too. It answers "does the GPU share host memory",
-        // which is what every consumer was already asking it.
+        // Not `isAppleSilicon`: integrated GPUs report a budget too, and the
+        // field answers "does the GPU share host memory" (#953).
         assert!(json.get("isAppleSilicon").is_none());
     }
 

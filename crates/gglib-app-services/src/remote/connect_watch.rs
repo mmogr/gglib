@@ -6,20 +6,19 @@
 //! backoff, for as long as the pipe is held; [`PipeStatus::Closed`] is a
 //! local decision — this side shut the pipe, or its own listener died —
 //! and never the far machine's absence. So there is no policy for giving up
-//! here. There was one — ninety seconds of `Idle` and the port was torn
-//! down — and it was the thing that turned a closed laptop lid into a dead
-//! port, and a different port the next morning. The port stays bound now,
-//! whatever the far machine is doing, and answers `502` until it is back.
+//! here: the port stays bound whatever the far machine is doing, and answers
+//! `502` until it is back. Tearing it down after a spell of `Idle` would turn
+//! a closed laptop lid into a dead port, and a different port the next
+//! morning.
 //!
 //! What this file decides instead is what to *tell* people. A peer away
 //! past [`AWAY_AFTER`] is announced as away — so `gglib remote status` and
 //! the popover stop saying "connected" over nothing — and announced back
-//! when it answers. That is the whole policy here now: the nudge that used
-//! to live beside it is modelpipe's, and the clock it ran on is
-//! [`ConnectHandle::idle_for`], read afresh on every turn rather than kept
-//! here.
+//! when it answers. That is the whole policy here: the nudge is modelpipe's,
+//! and the clock is [`ConnectHandle::idle_for`], read afresh on every turn
+//! rather than kept here.
 //!
-//! [`follow`] still takes the statuses and the clock through closures
+//! [`follow`] takes the statuses and the clock through closures
 //! rather than reading a handle. A `ConnectHandle` needs an iroh endpoint
 //! and a peer to take away, so a policy that reached for one would be
 //! exercisable only from a two-machine run — a comment with a timer
@@ -179,9 +178,9 @@ where
     loop {
         // One deadline at a time: what is left of the grace while the pipe
         // is idle and not yet called away, and nothing otherwise — once the
-        // peer is away there is no timer here at all, because the nudge
-        // that used to keep one is modelpipe's now. `pending()` is the arm
-        // that says "no deadline right now" without a timer to cancel.
+        // peer is away there is no timer here at all, because the nudge is
+        // modelpipe's. `pending()` is the arm that says "no deadline right
+        // now" without a timer to cancel.
         //
         // `saturating_sub` because the grace can already be spent when this
         // is reached — `Duration`'s `Sub` panics on underflow — in which

@@ -204,12 +204,10 @@ impl RemoteGateway {
             Some(InviteOutcome::Redeemed { peer, label, .. }) => {
                 let peer = peer.fingerprint();
                 info!(device = %device, peer = %peer, "a device redeemed its invite");
-                // The pairing request crossed the tunnel like any other, and
-                // while the proxy answered it `status` counted it and named its
-                // endpoint. The edge answers it now, so it is counted here,
-                // before `paired` flips, for a status that reads `paired` to
-                // count the request that paired and name its endpoint as the
-                // last peer.
+                // The edge answers the pairing request, so the proxy never
+                // counts it. It is counted here, before `paired` flips, for a
+                // status that reads `paired` to count the request that paired
+                // and name its endpoint as the last peer.
                 self.note_tunnelled_request(Some(&peer), None);
                 self.paired.store(true, Ordering::Relaxed);
                 self.note(Note::Joined {

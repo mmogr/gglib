@@ -34,13 +34,8 @@ pub(crate) fn check_llama_status() -> Result<LlamaStatus, String> {
 ///
 /// The WebView receives [`LlamaProgressEvent`] verbatim on
 /// `llama-install-progress` — byte for byte the payload the SSE route streams,
-/// so both transports render from one type.
-///
-/// This command used to run its own `RateEstimator` and `ProgressThrottle`
-/// behind an `Arc<Mutex<_>>`, derive a percentage, and invent a four-value
-/// status vocabulary, all because the callback it was handed carried nothing
-/// but two byte counts. The pipeline now says which phase it is in and how
-/// fast it is going, and this is a forwarder.
+/// so both transports render from one type. The pipeline says which phase it
+/// is in and how fast it is going, so this command only forwards.
 #[tauri::command]
 pub(crate) async fn install_llama(app: AppHandle) -> Result<String, String> {
     if let PrebuiltAvailability::NotAvailable { reason } = check_prebuilt_availability() {

@@ -2,7 +2,7 @@
 //!
 //! With `close_to_tray` on, closing the window leaves gglib running as a proxy
 //! host. Keeping a Dock icon for it makes it read as an open app you happen to
-//! have hidden, rather than the background service it now is — so the icon goes
+//! have hidden, rather than the background service it is — so the icon goes
 //! away with the window and comes back with it.
 //!
 //! macOS ties this to the application's *activation policy*, and an `Accessory`

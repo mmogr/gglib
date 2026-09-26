@@ -239,10 +239,8 @@ fn model_routes() -> Router<AppState> {
         .route(
             // Two clients, not one: the dashboard polls this, and so does the
             // CLI's download monitor via
-            // `gglib_cli::daemon_client::paths::DOWNLOADS_QUEUE`. #834 retired
-            // a second mount of this same handler after an audit that checked
-            // only the frontend, and `gglib model download` broke. That crate's
-            // `daemon_route_contract` test now fails if this route moves.
+            // `gglib_core::contracts::http::daemon::DOWNLOADS_QUEUE_PATH`.
+            // `tests/daemon_route_contract.rs` fails if this route moves.
             "/downloads/queue",
             get(handlers::model::downloads::list).post(handlers::model::downloads::queue),
         )

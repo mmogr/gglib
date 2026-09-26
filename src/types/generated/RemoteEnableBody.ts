@@ -20,11 +20,8 @@ discovery: boolean | null,
 /**
  * Accepted and ignored.
  *
- * The identity is always kept now, so this asks for what it already
- * gets. Kept on the wire for one release so a desktop app or script
- * built against the old shape still posts a body this deserialises
- * rather than getting a 422 for a field that no longer means anything;
- * removing it is a follow-up, not a surprise.
+ * The identity is always kept, so this asks for what it already gets.
+ * Its removal is #1043.
  */
 keep_identity: boolean, 
 /**

@@ -1,8 +1,7 @@
 //! Where the llama-server base port comes from.
 //!
-//! Split from `proxy.rs` for the file-size gate when the tunnel plumbing
-//! arrived there; the precedence rule is the one both adapters honour, and
-//! `service_graph` resolves it once so they cannot drift.
+//! Resolved once, in `service_graph`, and handed to the one `ProcessManager`
+//! it builds.
 
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use tracing::info;

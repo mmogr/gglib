@@ -1,11 +1,5 @@
 //! The remote tunnel's routes, nested under `/api/remote` (ADR 0012).
 //!
-//! A module of its own rather than more of `routes.rs`, which is at the size
-//! `scripts/check_rust_complexity.sh` recorded for it and may not grow. The
-//! `model_routes`/`config_routes` precedent extracts *within* that file,
-//! which does not help; a sibling does, and leaves `api_routes` one `.nest`
-//! line where six routes were.
-//!
 //! Two sides, as the tunnel has: `enable`/`disable`/`status` and the device
 //! routes are this machine serving, `join`/`disconnect`/`kill` are this
 //! machine reaching another one.

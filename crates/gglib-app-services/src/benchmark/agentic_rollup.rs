@@ -1,8 +1,7 @@
 //! How one arm's per-task, per-seed results roll up into its [`ArmScores`].
 //!
-//! Split from `agentic.rs` so the eval's orchestration stays inside the
-//! complexity ratchet's budget. Everything here is a pure function of the
-//! results it is handed: no model, no network, no report assembly.
+//! Everything here is a pure function of the results it is handed: no model,
+//! no network, no report assembly.
 
 use gglib_core::domain::benchmark::agentic::ArmScores;
 use gglib_core::domain::benchmark::tune::config::ScoreWeights;

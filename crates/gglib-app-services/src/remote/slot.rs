@@ -2,12 +2,12 @@
 //!
 //! `enable` and `join` are the same shape: there may be exactly one, and
 //! building it is slow — a dial that waits out an unreachable peer, or a
-//! listener that waits ten seconds for a relay. Both held their mutex across
-//! that, and `status` reads both. `tokio::sync::Mutex` is FIFO-fair, so a
-//! reader arriving during the slow part waits for all of it: `gglib remote
-//! status` gives the daemon five seconds and a dial can hold the lock for
-//! far longer, and `gglib remote disconnect` — the one command that exists
-//! to end a hanging join — queued behind the join it was cancelling.
+//! listener that waits ten seconds for a relay. `status` reads both, and
+//! `tokio::sync::Mutex` is FIFO-fair, so with the mutex held across the slow
+//! part a reader arriving during it would wait for all of it: `gglib remote
+//! status` gives the daemon five seconds and a dial can take far longer, and
+//! `gglib remote disconnect` — the one command that exists to end a hanging
+//! join — would queue behind the join it was cancelling.
 //!
 //! So the lock is held for the transitions and nothing else. A caller
 //! reserves the slot, drops the lock, does the slow work, and comes back to

@@ -119,8 +119,8 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
     // =========================================================================
     // These start disabled until a model is selected
     // "Endpoint" matches the web/Tauri inspector's "Start Endpoint" /
-    // "Stop Endpoint" button — this menu previously said "Server", one of
-    // three different names (menu, inspector, `gglib serve`) for one action.
+    // "Stop Endpoint" button, so the menu and the inspector name one action
+    // the same way.
     let start_server_item = MenuItem::with_id(
         app,
         ids::START_SERVER,

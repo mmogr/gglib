@@ -58,7 +58,7 @@ pub(crate) async fn start_pinned(
         // it. It cannot ride the pinned model's launch options: gglib emits
         // no sampler flags to llama-server at all (ADR 0003/0004), so the
         // field those options write to is read by nobody. Hardcoding `None`
-        // here was why a GUI pinned start discarded its own sampling.
+        // here would make a GUI pinned start discard its own sampling.
         inference_override: proxy_config.inference_override,
         ..body.proxy
     };
@@ -137,8 +137,8 @@ pub(crate) async fn start(
             // somebody else's process on the port, and it leaves nothing
             // running. Only the first is success, so ask which one happened
             // rather than assuming — treating a bind failure as success
-            // answered 200 with `running: false` and discarded the one message
-            // that named the port and what to do about it.
+            // would answer 200 with `running: false` and discard the one
+            // message that names the port and what to do about it.
             if !fetch_status(&state).await.running {
                 return Err(http);
             }
@@ -147,7 +147,7 @@ pub(crate) async fn start(
             // fixed for the life of the run — `AppState` reads both once at
             // startup. Asking for *different* ones would print the operator's
             // flags back at them and apply none of them, which is the precise
-            // failure the override was wired up to fix.
+            // failure the override exists to prevent.
             //
             // Compared rather than merely detected, because "the same request
             // again" is legitimate and common: re-running the identical

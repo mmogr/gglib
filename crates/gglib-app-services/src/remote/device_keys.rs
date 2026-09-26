@@ -1,10 +1,9 @@
 //! The `0600` file that says which key admits which device.
 //!
 //! The secret half of the two stores `devices.rs` describes — the readable
-//! half is the roster in settings, which `roster.rs` owns. Split out because
-//! the file is also what a freshly armed listener is seeded from, which is
-//! `serve.rs`'s business and not the invite path's, and because `devices.rs`
-//! is at its size budget without it.
+//! half is the roster in settings, which `roster.rs` owns. A module of its
+//! own because the file is also what a freshly armed listener is seeded
+//! from, which is `serve_arm.rs`'s business and not the invite path's.
 //!
 //! A thin layer over [`gglib_core::access`]: that module owns the format, the
 //! mode and the atomic replace; this one owns where the errors go and what

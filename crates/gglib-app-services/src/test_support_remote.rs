@@ -175,7 +175,7 @@ pub(crate) fn scratch_device_keys() -> PathBuf {
 /// One of the vectors above as the `Ticket` the code under test takes.
 ///
 /// Here rather than in either test module because both halves of `settle`
-/// are tested in their own file now, and a second `parse().expect()` is a
+/// are tested in their own file, and a second `parse().expect()` is a
 /// second place for the panic message to be wrong.
 pub(crate) fn ticket(s: &str) -> modelpipe::Ticket {
     s.parse().expect("a normative ticket vector parses")

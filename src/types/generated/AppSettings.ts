@@ -26,8 +26,8 @@ inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | nul
 toolCallRepair: boolean | null, 
 /**
  * Whether structured-output turns get their temperature capped when no
- * human chose one. Absent means on (see `gglib_core::Settings`). Was
- * write-only until the GUI grew a toggle — a toggle that saves but
- * cannot read back silently resets on every reopen.
+ * human chose one. Absent means on (see `gglib_core::Settings`). Read
+ * back here for the GUI's toggle: a toggle that saves but cannot read
+ * back silently resets on every reopen.
  */
 agenticSampling: boolean | null, proxyAutostart: boolean | null, closeToTray: boolean | null, startAtLogin: boolean | null, };

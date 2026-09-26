@@ -7,9 +7,9 @@ use serde_json::Value;
 
 /// A point-in-time reading of the daemon.
 ///
-/// One struct behind one lock. Proxy state used to be two separate `RwLock`s
-/// that `sync_all_state` took one at a time, so a reader could observe a
-/// running proxy with no port; a single snapshot cannot tear that way.
+/// One struct behind one lock, so a reader cannot observe a running proxy
+/// with no port: a single snapshot cannot tear the way two locks taken one at
+/// a time can.
 ///
 /// `PartialEq` is load-bearing rather than a convenience. A repaint re-decodes
 /// the icon PNG on macOS and makes `ksni` rebuild the entire menu over D-Bus on

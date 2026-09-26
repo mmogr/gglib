@@ -3,10 +3,10 @@
 //! At startup the daemon spawns `resume` just before its API starts
 //! answering, and the resume can hold the serve side for fifteen seconds: it
 //! starts the proxy, reserves the slot, then waits for a relay. A person who
-//! typed `gglib remote enable --invite` at that daemon, most often one the
-//! CLI had just started for them, met it and was refused with "already being
-//! enabled", and neither call offered a code ([#1037]). Now `enable` and
-//! `invite` wait for the resume and answer from what it brought up.
+//! types `gglib remote enable --invite` at that daemon, most often one the
+//! CLI has just started for them, meets it, so `enable` and `invite` wait for
+//! the resume and answer from what it brought up rather than refusing with
+//! "already being enabled" and offering no code ([#1037]).
 //!
 //! The resume says it is working for its whole span, not only while it holds
 //! the reservation. `turn_on` starts the proxy *before* it reserves, so a

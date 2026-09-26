@@ -33,9 +33,8 @@ pub mod tune;
 /// # HTTP client timeouts
 ///
 /// `http_client` carries a **total-request** deadline, which is only safe
-/// because compare mode's streams are short. Do **not** reuse the
-/// short-timeout client from `AxumContext` or `TauriContext`, and do **not**
-/// give this client to the agentic eval — see
+/// because compare mode's streams are short. Do **not** give this client to
+/// the agentic eval — see
 /// [`BenchmarkDeps::build_agentic_http_client`] for why a total deadline is
 /// the wrong shape for a long agentic stream and what it cost.
 #[derive(Clone)]

@@ -1,6 +1,6 @@
 //! What the Axum adapter is given: [`ServerConfig`].
 //!
-//! Split from `bootstrap.rs`, the composition root, along the line
+//! Separate from `bootstrap.rs`, the composition root, along the line
 //! `gglib-bootstrap` draws between its own `config.rs` and `builder.rs`: this
 //! is a value a caller builds and hands over, and `bootstrap` is what is done
 //! with it.

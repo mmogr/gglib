@@ -193,8 +193,8 @@ mod tests {
         assert_eq!(visual.status, "gglib — proxy on :8080");
     }
 
-    /// The case the proxy-only tray was blind to: VRAM held with nothing
-    /// listening. The icon has to be lit, because the machine is in use.
+    /// VRAM held with nothing listening. The icon has to be lit, because the
+    /// machine is in use.
     #[test]
     fn a_resident_model_lights_the_icon_with_the_proxy_off() {
         let visual = derive(&snapshot(

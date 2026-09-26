@@ -186,7 +186,7 @@ impl RemoteOps {
         // Every settings answer below — the switch, the stored pairing and
         // the roster — comes off one record, which is what makes them agree:
         // a key is held *for* the machine the fingerprint names, and there is
-        // no longer a shape in which they can describe two.
+        // no shape in which they can describe two.
         //
         // Swallowed because `status` is what someone runs *because* something
         // is wrong and must not itself fail — but logged, because the
