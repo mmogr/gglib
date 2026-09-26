@@ -169,7 +169,7 @@ async fn serve_here(
     style::print_info_banner("Info", "\u{2139}\u{fe0f}");
     eprintln!("  Using model: {} (ID: {})", model.name, model.id);
     eprintln!("  File: {}", model.file_path.display());
-    eprintln!("  Context size: {} (resolved)", effective_ctx);
+    eprintln!("  Context size: {effective_ctx} (resolved)");
     log_mlock_info(context.mlock);
     if let Some(ref stated) = stated_sampling {
         log_inference_info(stated);

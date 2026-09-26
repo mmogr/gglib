@@ -188,6 +188,6 @@ async fn a_guard_does_not_stop_a_replacement_process() {
 /// error nondeterministic and truncating the liveness check.
 #[test]
 fn the_launch_budget_adds_headroom_to_the_health_deadline() {
-    let deadline = std::time::Duration::from_secs(600);
+    let deadline = std::time::Duration::from_mins(10);
     assert!(crate::process::admission::launch_timeout(deadline) > deadline);
 }

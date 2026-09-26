@@ -21,7 +21,7 @@ use gglib_core::utils::validation;
 ///
 /// # Arguments
 ///
-/// * `ctx` - The CLI context providing access to AppCore and parser
+/// * `ctx` - The CLI context providing access to `AppCore` and parser
 /// * `file_path` - Path to the GGUF file to add
 /// * `reimport` - Re-import a file already in the library, overwriting its row
 ///

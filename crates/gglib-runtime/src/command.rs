@@ -134,7 +134,7 @@ pub(crate) fn build_and_spawn(
                     )
                 }
                 LlamaServerError::PathResolution(msg) => {
-                    anyhow::anyhow!("Failed to resolve llama-server path: {}", msg)
+                    anyhow::anyhow!("Failed to resolve llama-server path: {msg}")
                 }
             }
         })?;
@@ -159,7 +159,7 @@ pub(crate) fn build_and_spawn(
 
     let child = cmd
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn llama-server: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to spawn llama-server: {e}"))?;
 
     Ok(child)
 }
@@ -627,7 +627,7 @@ mod tests {
         let _ = result;
     }
 
-    /// Test that build_and_spawn prefers the injected path when present.
+    /// Test that `build_and_spawn` prefers the injected path when present.
     #[tokio::test]
     #[cfg(unix)]
     async fn test_build_and_spawn_prefers_bootstrap_path() {

@@ -45,28 +45,24 @@ fn status() -> Result<()> {
     let status = fast_helper_status().context("Failed to inspect the download accelerator")?;
 
     if status.provisioned {
-        println!("{}✓ Fast downloads are enabled{}", SUCCESS, RESET);
+        println!("{SUCCESS}✓ Fast downloads are enabled{RESET}");
         println!("  environment  {}", status.env_dir.display());
         if let Some(builder) = &status.builder {
             println!("  built with   {builder}");
         }
         if status.legacy_path {
             println!(
-                "  {}note{}         at the pre-0.13 location; it keeps working, and \
-                 re-enabling after `disable` moves it",
-                WARNING, RESET
+                "  {WARNING}note{RESET}         at the pre-0.13 location; it keeps working, and \
+                 re-enabling after `disable` moves it"
             );
         }
     } else {
-        println!("{}○ Fast downloads are not enabled{}", INFO, RESET);
+        println!("{INFO}○ Fast downloads are not enabled{RESET}");
         println!("  downloads run natively over HTTP, which always works");
         println!("  would install to  {}", status.env_dir.display());
         println!("  would build with  {}", status.available_builder);
         println!();
-        println!(
-            "{}Enable with:{} gglib config fast-downloads enable",
-            BOLD, RESET
-        );
+        println!("{BOLD}Enable with:{RESET} gglib config fast-downloads enable");
     }
 
     Ok(())
@@ -74,13 +70,13 @@ fn status() -> Result<()> {
 
 /// Build the environment.
 async fn enable(python: Option<&str>) -> Result<()> {
-    println!("{}Provisioning the download accelerator...{}", BOLD, RESET);
+    println!("{BOLD}Provisioning the download accelerator...{RESET}");
 
     ensure_fast_helper_ready_with_python(python.map(Path::new))
         .await
         .context("Failed to set up the download accelerator")?;
 
-    println!("{}✓ Fast downloads are enabled{}", SUCCESS, RESET);
+    println!("{SUCCESS}✓ Fast downloads are enabled{RESET}");
     Ok(())
 }
 
@@ -89,10 +85,10 @@ fn disable() -> Result<()> {
     let removed = remove_fast_helper().context("Failed to remove the download accelerator")?;
 
     if removed {
-        println!("{}✓ Fast downloads are disabled{}", SUCCESS, RESET);
+        println!("{SUCCESS}✓ Fast downloads are disabled{RESET}");
         println!("  downloads now run natively over HTTP");
     } else {
-        println!("{}○ Fast downloads were already disabled{}", INFO, RESET);
+        println!("{INFO}○ Fast downloads were already disabled{RESET}");
     }
 
     Ok(())
@@ -107,17 +103,14 @@ async fn prompt() -> Result<()> {
     let status = fast_helper_status().context("Failed to inspect the download accelerator")?;
 
     if status.provisioned {
-        println!("{}✓ Fast downloads are already enabled{}", SUCCESS, RESET);
+        println!("{SUCCESS}✓ Fast downloads are already enabled{RESET}");
         return Ok(());
     }
 
     match preseed() {
         Some(true) => return provision_or_explain().await,
         Some(false) => {
-            println!(
-                "{}Skipping the download accelerator ({PRESEED_ENV}).{}",
-                INFO, RESET
-            );
+            println!("{INFO}Skipping the download accelerator ({PRESEED_ENV}).{RESET}");
             return Ok(());
         }
         None => {}
@@ -127,9 +120,8 @@ async fn prompt() -> Result<()> {
         // No terminal is not an answer. Say what did not happen and how to do
         // it later, rather than assuming either way on the user's behalf.
         println!(
-            "{}Downloads run natively over HTTP. For the faster hf_xet path, run:{} \
-             gglib config fast-downloads enable",
-            INFO, RESET
+            "{INFO}Downloads run natively over HTTP. For the faster hf_xet path, run:{RESET} \
+             gglib config fast-downloads enable"
         );
         return Ok(());
     }
@@ -138,10 +130,7 @@ async fn prompt() -> Result<()> {
     // we cannot act on, and "no Python" is a fact worth telling the user
     // plainly rather than surfacing as a failed install.
     if let Err(e) = preflight_fast_helper().await {
-        println!(
-            "{}○ Skipping the optional download accelerator.{}",
-            INFO, RESET
-        );
+        println!("{INFO}○ Skipping the optional download accelerator.{RESET}");
         println!("  {e}");
         println!("  Downloads will run natively over HTTP, which always works.");
         println!("  Install Python 3.9+ and run `gglib config fast-downloads enable` to add it.");
@@ -153,17 +142,14 @@ async fn prompt() -> Result<()> {
     match prompt_confirmation_default_yes("Enable fast downloads?") {
         Ok(true) => provision_or_explain().await,
         Ok(false) => {
-            println!(
-                "{}Skipped. Downloads will run natively over HTTP.{}",
-                INFO, RESET
-            );
+            println!("{INFO}Skipped. Downloads will run natively over HTTP.{RESET}");
             println!("  Change your mind with `gglib config fast-downloads enable`.");
             Ok(())
         }
         Err(e) => {
             // A failed read is not a "no", but there is nothing else to do
             // with it here, and setup must continue.
-            println!("{}Could not read a reply ({e}); skipping.{}", INFO, RESET);
+            println!("{INFO}Could not read a reply ({e}); skipping.{RESET}");
             Ok(())
         }
     }
@@ -173,9 +159,8 @@ async fn prompt() -> Result<()> {
 fn describe(status: &FastHelperStatus) {
     println!();
     println!(
-        "{}Fast downloads{} — HuggingFace's hf_xet transfer, noticeably quicker \
-         than plain HTTP for large GGUFs.",
-        BOLD, RESET
+        "{BOLD}Fast downloads{RESET} — HuggingFace's hf_xet transfer, noticeably quicker \
+         than plain HTTP for large GGUFs."
     );
     println!(
         "  gglib builds its own Python environment for this, using {}.",
@@ -195,17 +180,14 @@ fn describe(status: &FastHelperStatus) {
 /// The accelerator is optional by construction, so a failure to build it is
 /// worth reporting but is not worth failing the surrounding command over.
 async fn provision_or_explain() -> Result<()> {
-    println!("{}Provisioning the download accelerator...{}", BOLD, RESET);
+    println!("{BOLD}Provisioning the download accelerator...{RESET}");
 
     match ensure_fast_helper_ready().await {
         Ok(()) => {
-            println!("{}✓ Fast downloads are enabled{}", SUCCESS, RESET);
+            println!("{SUCCESS}✓ Fast downloads are enabled{RESET}");
         }
         Err(e) => {
-            println!(
-                "{}○ Could not set up the download accelerator:{} {e}",
-                WARNING, RESET
-            );
+            println!("{WARNING}○ Could not set up the download accelerator:{RESET} {e}");
             println!("  Downloads will run natively over HTTP, which always works.");
             println!("  Retry with `gglib config fast-downloads enable`.");
         }

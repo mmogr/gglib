@@ -110,7 +110,7 @@ The main window is nonetheless declared **visible**, and
 `autostart::apply_initial_visibility` *hides* it for the login case rather than
 showing it for every other one. That is the opposite of the obvious design and
 it is load-bearing: a window created hidden and shown later never gets a correct
-`xdg_surface` configure round-trip from KWin, leaving its server-side titlebar
+`xdg_surface` configure round-trip from `KWin`, leaving its server-side titlebar
 buttons dead until a resize forces one. Declaring it hidden made every ordinary
 launch look broken in order to tidy up the rare automatic one.
 
@@ -155,7 +155,7 @@ What must not diverge is shared outright rather than by convention:
 - **`handlers::dispatch(app, id)`** performs the action. `muda` adapts its
   `MenuEvent` to it in `build`; `ksni` calls it straight from an item callback.
   Either way the tray reaches `proxy_actions` and `lifecycle::request_shutdown`
-  by the same path as the WebUI and the CLI.
+  by the same path as the `WebUI` and the CLI.
 - **`icon::derive`** produces one status string for the tooltip and the menu
   header, so they cannot disagree.
 

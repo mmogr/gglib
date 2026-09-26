@@ -1,5 +1,9 @@
 #![doc = include_str!("README.md")]
 #[cfg(target_os = "macos")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod build;
 
 #[cfg(target_os = "macos")]
@@ -41,6 +45,10 @@ pub(crate) struct AppMenu {
 /// State used to synchronize menu item enabled/checked status
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) struct MenuState {
     pub llama_installed: bool,
     pub proxy_running: bool,

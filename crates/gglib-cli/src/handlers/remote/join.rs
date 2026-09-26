@@ -82,6 +82,10 @@ pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
 }
 
 /// Execute `gglib remote disconnect`.
+#[allow(
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
     let client = gglib_proxy::loopback::client();
     match daemon_client::probe(&client).await {

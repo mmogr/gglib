@@ -46,6 +46,11 @@ pub async fn kill_pid(pid: u32) -> io::Result<()> {
 }
 
 #[cfg(unix)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     let nix_pid = Pid::from_raw(pid as i32);
 
@@ -65,7 +70,7 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
         // Check if process still exists using kill with null signal (works on Linux/macOS)
         // On nix 0.29, we can't use Signal::from_c_int, but we can check process existence via errno
         match signal::kill(nix_pid, None) {
-            Ok(_) => {
+            Ok(()) => {
                 // Still alive, continue polling
             }
             Err(Errno::ESRCH) => {
@@ -91,7 +96,7 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
         sleep(Duration::from_millis(100)).await;
 
         match signal::kill(nix_pid, None) {
-            Ok(_) => {
+            Ok(()) => {
                 // Still alive (very unusual after SIGKILL)
             }
             Err(Errno::ESRCH) => {
@@ -106,7 +111,7 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     // If we get here, process didn't exit even after SIGKILL (rare)
     Err(io::Error::new(
         io::ErrorKind::TimedOut,
-        format!("process {} did not exit after SIGKILL", pid),
+        format!("process {pid} did not exit after SIGKILL"),
     ))
 }
 
@@ -165,6 +170,10 @@ mod tests {
     use tokio::process::Command;
 
     #[tokio::test]
+    #[allow(
+        clippy::unreadable_literal,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     async fn kill_pid_handles_already_gone() {
         // Use a PID that's very unlikely to exist
         let result = kill_pid(999999).await;
@@ -184,7 +193,7 @@ mod tests {
         // Kill it by PID (won't reap since we don't own the Child in kill_pid)
         let result = kill_pid(pid).await;
         if let Err(ref e) = result {
-            eprintln!("kill_pid failed: {}", e);
+            eprintln!("kill_pid failed: {e}");
         }
 
         // Reap the child to clean up zombie

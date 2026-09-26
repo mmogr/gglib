@@ -63,6 +63,10 @@ pub(crate) fn prepare(_panel: &WebviewWindow) -> bool {
 /// On Linux the anchoring was already applied by [`prepare`] and the panel is
 /// pinned beside the tray, so there is nothing per-toggle to do. Elsewhere a
 /// known rectangle is used to drop the panel directly beneath the icon.
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn place(panel: &WebviewWindow, anchor: Anchor) -> tauri::Result<()> {
     match anchor {
         #[cfg(not(target_os = "linux"))]

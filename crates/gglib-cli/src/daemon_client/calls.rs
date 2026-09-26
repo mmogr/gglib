@@ -16,6 +16,10 @@ use super::{DaemonHandle, auth, base_url, paths};
 
 impl DaemonHandle {
     /// One absolute URL on the daemon.
+    #[allow(
+        clippy::unused_self,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub(super) fn url(&self, path: &str) -> String {
         format!("{}{path}", base_url())
     }
@@ -115,7 +119,7 @@ impl DaemonHandle {
         let response = self
             .post(paths::SERVERS_START_PATH)
             .json(&serde_json::json!({ "id": model_id, "context_length": context_length }))
-            .timeout(Duration::from_secs(180))
+            .timeout(Duration::from_mins(3))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
@@ -124,7 +128,7 @@ impl DaemonHandle {
     /// Queue a model download on the daemon.
     ///
     /// Long timeout: the daemon resolves the repo and its shard list against
-    /// HuggingFace before answering.
+    /// `HuggingFace` before answering.
     /// The response body carries a queue position and shard count. Nothing
     /// reads them — the caller goes straight to watching the queue — so this
     /// checks the status and discards the body rather than deserializing a

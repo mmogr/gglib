@@ -9,6 +9,10 @@ use gglib_core::domain::{DialectSpec, ModelCapabilities};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use serde_json::json;
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn request(tool_choice: Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "model": "m",
@@ -117,7 +121,7 @@ fn an_already_required_request_is_not_reissued() {
     );
 }
 
-/// Absent `tool_choice` is `auto` per the OpenAI contract, and is what
+/// Absent `tool_choice` is `auto` per the `OpenAI` contract, and is what
 /// most clients actually send.
 #[test]
 fn an_absent_tool_choice_counts_as_auto() {

@@ -52,8 +52,7 @@ pub(super) fn format_duration_secs(seconds: u64) -> String {
 pub(super) fn format_elapsed_secs(started_at_secs: u64) -> String {
     let now_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(started_at_secs);
+        .map_or(started_at_secs, |d| d.as_secs());
     format_duration_secs(now_secs.saturating_sub(started_at_secs))
 }
 
@@ -234,7 +233,7 @@ pub(super) fn visual_row_count(frame: &str, term_width: u16) -> u16 {
             let width = line.chars().count() as u16;
             width.div_ceil(cols).max(1)
         })
-        .fold(0u16, |acc, rows| acc.saturating_add(rows))
+        .fold(0u16, u16::saturating_add)
 }
 
 /// Render the reuse rows shared by the proxied and agent-path cache sections.

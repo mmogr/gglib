@@ -20,12 +20,18 @@ const SIGKILL_REAP_TIMEOUT_SECS: u64 = 2;
 ///
 /// Used after SIGKILL to reap the child process. If the process is stuck in
 /// D-state (e.g., CUDA driver ioctl blocked in kernel), this prevents an
-/// indefinite hang by returning after `secs` with a TimedOut error.
+/// indefinite hang by returning after `secs` with a `TimedOut` error.
 ///
 /// Note: when this function returns due to timeout, the Tokio `Child` struct
 /// is dropped by the caller. Tokio spawns a background reaper task to await
 /// the zombie process asynchronously — the reap is not lost, just detached
 /// from the blocking shutdown path.
+#[allow(
+    clippy::option_if_let_else,
+    clippy::or_fun_call,
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn bounded_wait<F>(fut: F, secs: u64, pid: Option<u32>) -> io::Result<ExitStatus>
 where
     F: Future<Output = io::Result<ExitStatus>>,
@@ -84,6 +90,12 @@ pub async fn shutdown_child(mut child: Child) -> io::Result<ExitStatus> {
 }
 
 #[cfg(unix)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::items_after_statements,
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
     let pid = child
         .id()

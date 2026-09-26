@@ -106,6 +106,10 @@ pub(crate) async fn trips(
 }
 
 /// Start the proxy (idempotent).
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn start(
     State(state): State<AppState>,
     Json(cfg): Json<Option<StartProxyConfig>>,

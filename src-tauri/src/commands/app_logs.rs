@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 /// Frontend log entry structure.
 ///
-/// Matches the LogEntry interface in TypeScript.
+/// Matches the `LogEntry` interface in TypeScript.
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)] // timestamp is required for deserialization but not used in logging
 pub(crate) struct FrontendLogEntry {
@@ -22,16 +22,16 @@ pub(crate) struct FrontendLogEntry {
 ///
 /// This command receives log entries from the TypeScript frontend via Tauri IPC
 /// and re-emits them as tracing events. The logs are:
-/// - Written to stdout via tracing_subscriber
+/// - Written to stdout via `tracing_subscriber`
 /// - Written to files via tracing-appender
-/// - Filtered by RUST_LOG environment variable
+/// - Filtered by `RUST_LOG` environment variable
 ///
 /// # Target Naming
 ///
 /// All frontend logs use the static target `gglib_frontend` to satisfy tracing's
 /// compile-time constant requirement. The category is included as a structured field.
 ///
-/// # Example RUST_LOG filters
+/// # Example `RUST_LOG` filters
 ///
 /// ```bash
 /// # Show all frontend logs
@@ -41,6 +41,14 @@ pub(crate) struct FrontendLogEntry {
 /// RUST_LOG=gglib=debug,gglib_frontend=debug
 /// ```
 #[tauri::command]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "a Tauri command takes its arguments by value"
+)]
 pub(crate) fn log_from_frontend(entry: FrontendLogEntry) -> Result<(), String> {
     let message = &entry.message;
     let category = &entry.category;
@@ -49,30 +57,30 @@ pub(crate) fn log_from_frontend(entry: FrontendLogEntry) -> Result<(), String> {
     if let Some(data) = &entry.data {
         match entry.level.as_str() {
             "debug" => {
-                tracing::debug!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+                tracing::debug!(target: "gglib_frontend", category = %category, data = %data, "{}", message);
             }
             "info" => {
-                tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+                tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message);
             }
             "warn" => {
-                tracing::warn!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+                tracing::warn!(target: "gglib_frontend", category = %category, data = %data, "{}", message);
             }
             "error" => {
-                tracing::error!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+                tracing::error!(target: "gglib_frontend", category = %category, data = %data, "{}", message);
             }
             _ => {
-                tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+                tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message);
             }
         }
     } else {
         match entry.level.as_str() {
             "debug" => {
-                tracing::debug!(target: "gglib_frontend", category = %category, "{}", message)
+                tracing::debug!(target: "gglib_frontend", category = %category, "{}", message);
             }
             "info" => tracing::info!(target: "gglib_frontend", category = %category, "{}", message),
             "warn" => tracing::warn!(target: "gglib_frontend", category = %category, "{}", message),
             "error" => {
-                tracing::error!(target: "gglib_frontend", category = %category, "{}", message)
+                tracing::error!(target: "gglib_frontend", category = %category, "{}", message);
             }
             _ => tracing::info!(target: "gglib_frontend", category = %category, "{}", message),
         }

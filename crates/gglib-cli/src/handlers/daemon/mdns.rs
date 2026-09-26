@@ -22,7 +22,7 @@ fn is_wildcard(host: &str) -> bool {
     )
 }
 
-/// DNS-SD service type for GGLib web servers.
+/// DNS-SD service type for `GGLib` web servers.
 const SERVICE_TYPE: &str = "_gglib._tcp.local.";
 
 /// Instance name, and the label of the advertised hostname.

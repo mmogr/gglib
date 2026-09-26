@@ -10,11 +10,15 @@ use crate::error::GuiError;
 
 /// Resolve the llama-server base port from override, saved settings, or default.
 ///
-/// Precedence: override → settings.llama_base_port → DEFAULT_LLAMA_BASE_PORT
+/// Precedence: override → `settings.llama_base_port` → `DEFAULT_LLAMA_BASE_PORT`
 ///
 /// Validates that the port is in the valid range (1024-65535).
 ///
-/// Returns (port, source_description) for logging.
+/// Returns (port, `source_description`) for logging.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn resolve_llama_base_port(
     override_port: Option<u16>,
     settings: &Settings,
@@ -30,8 +34,7 @@ pub(crate) fn resolve_llama_base_port(
     // Validate port range
     if !(1024..=65535).contains(&port) {
         return Err(GuiError::Internal(format!(
-            "Invalid llama-server base port {}: must be in range 1024-65535",
-            port
+            "Invalid llama-server base port {port}: must be in range 1024-65535"
         )));
     }
 

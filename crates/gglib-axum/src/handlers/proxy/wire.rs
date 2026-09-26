@@ -79,7 +79,7 @@ pub(crate) struct StartProxyConfig {
 /// The GUI names a model and its overrides; the daemon runs the same
 /// cascade as `gglib serve` (`gglib_app_services::launch_options`) so the
 /// two surfaces cannot drift. `options` uses the camelCase wire form of the
-/// bare `/api/servers/start` body; `proxy` the snake_case form of
+/// bare `/api/servers/start` body; `proxy` the `snake_case` form of
 /// `/api/proxy/start`.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -93,6 +93,10 @@ pub(crate) struct StartPinnedBody {
 }
 
 /// Convert runtime `ProxyStatus` to API `ProxyStatus`.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>) -> ProxyStatus {
     match s {
         RuntimeProxyStatus::Running { address } => ProxyStatus {

@@ -6,6 +6,10 @@ use tauri::AppHandle;
 use tracing::debug;
 
 /// Handle menu item click events.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Tauri hands a menu event to its handler by value"
+)]
 pub(crate) fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     let id = event.id().as_ref();
 

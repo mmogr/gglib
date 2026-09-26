@@ -1,7 +1,7 @@
-//! ModelRuntimePort implementation using ProcessManager.
+//! `ModelRuntimePort` implementation using `ProcessManager`.
 //!
-//! This adapter wraps the ProcessManager — an admission queue over a bounded
-//! resident set — to implement the ModelRuntimePort interface from gglib-core.
+//! This adapter wraps the `ProcessManager` — an admission queue over a bounded
+//! resident set — to implement the `ModelRuntimePort` interface from gglib-core.
 
 use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
@@ -14,12 +14,12 @@ use std::sync::Arc;
 
 use crate::process::ProcessManager;
 
-/// Implementation of ModelRuntimePort using ProcessManager.
+/// Implementation of `ModelRuntimePort` using `ProcessManager`.
 ///
 /// # Note
 ///
-/// The ProcessManager is wrapped in Arc because it uses internal
-/// synchronization (a mutex over the admission queue, an RwLock over the
+/// The `ProcessManager` is wrapped in Arc because it uses internal
+/// synchronization (a mutex over the admission queue, an `RwLock` over the
 /// process table). This avoids "copied state" bugs and keeps everything honest.
 pub struct RuntimePortImpl {
     /// The underlying process manager.
@@ -31,7 +31,7 @@ pub struct RuntimePortImpl {
 }
 
 impl RuntimePortImpl {
-    /// Create a new RuntimePortImpl.
+    /// Create a new `RuntimePortImpl`.
     ///
     /// # Arguments
     ///

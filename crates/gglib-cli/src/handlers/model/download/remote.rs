@@ -40,6 +40,10 @@ pub(super) async fn monitor(handle: &DaemonHandle) -> Result<()> {
     }
 }
 
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
     let multi = MultiProgress::new();
     // No `{bytes_per_sec}`: that's indicatif's own estimate, derived from our

@@ -69,7 +69,7 @@ fn main() {
             emit_or_log(app.handle(), names::DOWNLOAD_SYSTEM_READY, true);
 
             // Continue with rest of setup
-            setup_app(app)?;
+            setup_app(app);
 
             // After the tray exists, so the report arrives alongside the
             // Start gglib Service entry that acts on it.
@@ -202,7 +202,7 @@ async fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
 }
 
 /// Application setup hook.
-fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+fn setup_app(app: &tauri::App) {
     let handle = app.handle().clone();
 
     // Build the tray before the menu: on Linux and Windows it is the only
@@ -298,6 +298,4 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
-    Ok(())
 }

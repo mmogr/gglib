@@ -2,7 +2,7 @@
 //!
 //! An exclusive advisory file lock on `<dir>/daemon.lock`. The lock is held
 //! for the owning process's lifetime and released by the kernel on any exit
-//! — clean, crashed, or SIGKILLed — so there is no stale state to recover
+//! — clean, crashed, or `SIGKILLed` — so there is no stale state to recover
 //! from. The file's *contents* (`{"pid":…,"port":…}`) are advisory metadata
 //! for the refusal message and for `gglib daemon status`; the lock itself is
 //! what enforces exclusivity.
@@ -36,6 +36,11 @@ pub enum LockError {
     Io(#[from] std::io::Error),
 }
 
+#[allow(
+    clippy::option_if_let_else,
+    clippy::ref_option,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn holder_suffix(holder: &Option<LockInfo>) -> String {
     match holder {
         Some(info) => format!(" (pid {}) at http://127.0.0.1:{}", info.pid, info.port),
@@ -132,6 +137,10 @@ mod tests {
     /// The core singleton guarantee: a second acquire in the same directory
     /// fails while the first lock is held, and reports the holder.
     #[test]
+    #[allow(
+        clippy::match_wildcard_for_single_variants,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn second_acquire_fails_while_first_is_held() {
         let dir = tempfile::tempdir().unwrap();
 

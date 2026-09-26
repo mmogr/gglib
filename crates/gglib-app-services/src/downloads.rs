@@ -13,14 +13,14 @@ use crate::types::{
     HfSortField, ToolSupportResponse,
 };
 
-/// Dependencies for download and HuggingFace operations.
+/// Dependencies for download and `HuggingFace` operations.
 pub struct DownloadDeps {
     pub downloads: Arc<dyn DownloadManagerPort>,
     pub hf: Arc<dyn HfClientPort>,
     pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
 }
 
-/// Download and HuggingFace operations handler.
+/// Download and `HuggingFace` operations handler.
 pub struct DownloadOps {
     downloads: Arc<dyn DownloadManagerPort>,
     hf_client: Arc<dyn HfClientPort>,
@@ -40,7 +40,7 @@ impl DownloadOps {
     // Download Queue Operations
     // =========================================================================
 
-    /// Queue a model download from HuggingFace Hub.
+    /// Queue a model download from `HuggingFace` Hub.
     ///
     /// Uses smart quantization selection:
     /// - If quantization is provided, validates it exists
@@ -144,7 +144,7 @@ impl DownloadOps {
     // HuggingFace Browser Operations
     // =========================================================================
 
-    /// Search HuggingFace for GGUF text-generation models.
+    /// Search `HuggingFace` for GGUF text-generation models.
     pub async fn search_hf_models(
         &self,
         request: HfSearchRequest,
@@ -193,7 +193,7 @@ impl DownloadOps {
         })
     }
 
-    /// Get available quantizations for a HuggingFace model.
+    /// Get available quantizations for a `HuggingFace` model.
     pub async fn get_model_quantizations(
         &self,
         model_id: &str,
@@ -224,7 +224,7 @@ impl DownloadOps {
         })
     }
 
-    /// Check if a HuggingFace model supports tool/function calling.
+    /// Check if a `HuggingFace` model supports tool/function calling.
     pub async fn get_hf_tool_support(
         &self,
         model_id: &str,
@@ -251,7 +251,7 @@ impl DownloadOps {
 
     /// Get model summary by exact repo ID (direct API lookup).
     ///
-    /// Unlike search, this fetches model info directly from the HuggingFace API
+    /// Unlike search, this fetches model info directly from the `HuggingFace` API
     /// using the exact repo ID (e.g., `unsloth/medgemma-4b-it-GGUF`).
     ///
     /// Returns an error if the model doesn't exist or has no GGUF files.

@@ -89,6 +89,10 @@ pub fn client_for(host: &str) -> reqwest::Client {
 /// spelling, without resolving a name; the dotted-quad shorthand `127.1` is
 /// not one of the spellings, so type the address out.
 #[must_use]
+#[allow(
+    clippy::too_long_first_doc_paragraph,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub fn is_this_machine(host: &str) -> bool {
     let bare = host
         .trim_start_matches('[')

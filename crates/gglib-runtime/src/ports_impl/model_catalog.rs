@@ -1,6 +1,6 @@
-//! ModelCatalogPort implementation using ModelRepository.
+//! `ModelCatalogPort` implementation using `ModelRepository`.
 //!
-//! This adapter wraps the ModelRepository to implement the ModelCatalogPort
+//! This adapter wraps the `ModelRepository` to implement the `ModelCatalogPort`
 //! interface from gglib-core. It queries the database for model information
 //! and maps the results to domain types.
 //!
@@ -22,16 +22,21 @@ use super::model_shards::total_model_bytes;
 /// Format param count (in billions) as a human-readable string.
 fn format_param_count(param_b: f64) -> String {
     if param_b >= 1.0 {
-        format!("{:.0}B", param_b)
+        format!("{param_b:.0}B")
     } else {
-        format!("{:.1}B", param_b)
+        format!("{param_b:.1}B")
     }
 }
 
-/// Helper to convert Model to ModelSummary (for listing).
+/// Helper to convert Model to `ModelSummary` (for listing).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn model_to_summary(m: &Model) -> ModelSummary {
     // Get file size from disk if possible, otherwise 0
-    let file_size = m.file_path.metadata().map(|md| md.len()).unwrap_or(0);
+    let file_size = m.file_path.metadata().map_or(0, |md| md.len());
 
     ModelSummary {
         dialect: m.dialect_spec.clone(),
@@ -52,7 +57,12 @@ fn model_to_summary(m: &Model) -> ModelSummary {
     }
 }
 
-/// Helper to convert Model to ModelLaunchSpec (for launching).
+/// Helper to convert Model to `ModelLaunchSpec` (for launching).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = total_model_bytes(&m.file_path);
     let kv_elems_per_token =
@@ -79,16 +89,16 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     }
 }
 
-/// Implementation of ModelCatalogPort using ModelRepository.
+/// Implementation of `ModelCatalogPort` using `ModelRepository`.
 ///
-/// Wraps the ModelRepository to provide catalog access for the proxy.
+/// Wraps the `ModelRepository` to provide catalog access for the proxy.
 pub struct CatalogPortImpl {
     /// The underlying model repository.
     repo: Arc<dyn ModelRepository>,
 }
 
 impl CatalogPortImpl {
-    /// Create a new CatalogPortImpl.
+    /// Create a new `CatalogPortImpl`.
     ///
     /// # Arguments
     ///

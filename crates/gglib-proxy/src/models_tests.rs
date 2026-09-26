@@ -175,7 +175,7 @@ fn from_internal_error() {
     assert!(err.error.code.is_none());
 }
 
-/// Wire-format contract: AdmissionTimeout and ModelLoading must share the same
+/// Wire-format contract: `AdmissionTimeout` and `ModelLoading` must share the same
 /// `service_unavailable` type so clients treat both as retryable with identical
 /// backoff behavior.
 #[test]
@@ -816,7 +816,7 @@ fn routing_envelope_accepts_array_form_content() {
     assert_eq!(env.model, "gpt-4o");
 }
 
-/// Regression test for #438: stop as a bare string (valid per OpenAI spec)
+/// Regression test for #438: stop as a bare string (valid per `OpenAI` spec)
 /// must not cause a 400.
 #[test]
 fn routing_envelope_accepts_stop_as_bare_string() {

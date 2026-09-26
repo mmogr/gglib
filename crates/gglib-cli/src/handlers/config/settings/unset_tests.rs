@@ -38,6 +38,10 @@ fn the_wire_type_is_its_own_manifest() {
 /// existed a stored 4096 outranked the fitted rung with no way back short of
 /// resetting everything.
 #[test]
+#[allow(
+    clippy::iter_on_single_items,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn a_null_for_a_known_key_reads_as_clear_not_as_absent() {
     let body = Value::Object(
         [("defaultContextSize".to_string(), Value::Null)]

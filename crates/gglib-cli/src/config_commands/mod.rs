@@ -41,7 +41,7 @@ pub enum ConfigCommand {
     },
     /// Check system dependencies required for gglib
     CheckDeps {
-        /// Provision the hf_xet accelerator; `gglib config fast-downloads
+        /// Provision the `hf_xet` accelerator; `gglib config fast-downloads
         /// enable` is the command to use.
         ///
         /// Hidden, and kept working because older docs and release notes tell
@@ -49,7 +49,7 @@ pub enum ConfigCommand {
         #[arg(long, hide = true)]
         setup_fast_downloads: bool,
     },
-    /// Enable or inspect the optional hf_xet download accelerator
+    /// Enable or inspect the optional `hf_xet` download accelerator
     FastDownloads {
         #[command(subcommand)]
         command: Option<FastDownloadsCommand>,

@@ -8,7 +8,7 @@
 //! |-------------|---------------|---------------------------------------------------------------------|
 //! | CLI         | `gglib-cli`   | `indicatif` progress bar via `consume_install_events_cli`            |
 //! | Axum        | `gglib-axum`  | SSE stream at `POST /api/config/system/install-llama`               |
-//! | Tauri       | `gglib-tauri` | `llama-install-progress` event to the WebView                       |
+//! | Tauri       | `gglib-tauri` | `llama-install-progress` event to the `WebView`                       |
 //!
 //! The sender end is a `tokio::sync::mpsc::Sender<LlamaProgressEvent>` with
 //! capacity 64. When the sender is dropped the consumer loop terminates
@@ -85,7 +85,7 @@ impl InstallPhase {
 ///
 /// Every notable state change produces exactly one variant. Consumers decide
 /// how to render them: the CLI drives an `indicatif` bar; Axum serialises to
-/// `data: <json>\n\n` frames; Tauri emits them to the WebView.
+/// `data: <json>\n\n` frames; Tauri emits them to the `WebView`.
 ///
 /// # Serde tag
 ///

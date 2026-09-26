@@ -35,7 +35,7 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
     raw_ctx.saturating_mul(100 - CONTEXT_WINDOW_SAFETY_MARGIN_PCT) / 100
 }
 
-/// List all models from the catalog in OpenAI format.
+/// List all models from the catalog in `OpenAI` format.
 ///
 /// Every model advertises the context it would actually be served with —
 /// clients like the GitHub Copilot LLM Gateway extension read this endpoint

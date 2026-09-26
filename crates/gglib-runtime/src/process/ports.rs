@@ -6,6 +6,10 @@ use tracing::debug;
 
 /// Check if a port is available by attempting to bind to it.
 /// This method binds and immediately drops the listener, which releases the port.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn is_port_available(port: u16) -> bool {
     match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => {
@@ -40,9 +44,8 @@ pub(super) fn allocate_port(base_port: u16, used_ports: &[u16]) -> Result<u16> {
                 std::thread::sleep(std::time::Duration::from_millis(10));
                 if is_port_available(port) {
                     return Ok(port);
-                } else {
-                    debug!(port = %port, "Port became unavailable, retrying");
                 }
+                debug!(port = %port, "Port became unavailable, retrying");
             } else {
                 debug!(port = %port, "Port unavailable on system, skipping");
             }

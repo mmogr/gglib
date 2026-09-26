@@ -50,6 +50,10 @@ pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
 }
 
 /// The table, as text, so it can be checked without a machine.
+#[allow(
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn render(models: &[FarModel]) -> String {
     let width = models.iter().map(|m| m.id.len()).max().unwrap_or(4).max(4);
     let mut out = format!("{:<width$}  {:>9}\n", "NAME", "CONTEXT");
@@ -87,7 +91,7 @@ mod tests {
         assert!(table.contains("qwen3:coding          -"), "{table}");
     }
 
-    /// The far side speaks the OpenAI shape and may say more than this
+    /// The far side speaks the `OpenAI` shape and may say more than this
     /// listing reads; what it says extra must not break the listing.
     #[test]
     fn a_published_list_with_fields_this_build_does_not_know_still_reads() {

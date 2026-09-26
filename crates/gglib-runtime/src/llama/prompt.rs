@@ -79,11 +79,11 @@ impl InstallPrompt for AutoConfirmPrompt {
     }
 
     fn info(&self, message: &str) {
-        println!("{}", message);
+        println!("{message}");
     }
 
     fn warn(&self, message: &str) {
-        eprintln!("Warning: {}", message);
+        eprintln!("Warning: {message}");
     }
 }
 
@@ -92,6 +92,10 @@ impl InstallPrompt for AutoConfirmPrompt {
 /// This is only available with the `cli` feature flag.
 #[cfg(feature = "cli")]
 pub mod cli_prompt {
+    #[allow(
+        clippy::wildcard_imports,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     use super::*;
     use std::io::{self, BufRead, Write};
 
@@ -109,7 +113,7 @@ pub mod cli_prompt {
     impl InstallPrompt for CliPrompt {
         fn confirm(&self, message: &str, default: bool) -> LlamaResult<bool> {
             let prompt_suffix = if default { "[Y/n]" } else { "[y/N]" };
-            print!("{} {}: ", message, prompt_suffix);
+            print!("{message} {prompt_suffix}: ");
             io::stdout().flush()?;
 
             let stdin = io::stdin();
@@ -130,11 +134,11 @@ pub mod cli_prompt {
         }
 
         fn info(&self, message: &str) {
-            println!("{}", message);
+            println!("{message}");
         }
 
         fn warn(&self, message: &str) {
-            eprintln!("⚠️  {}", message);
+            eprintln!("⚠️  {message}");
         }
     }
 }

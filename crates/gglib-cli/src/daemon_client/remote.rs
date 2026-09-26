@@ -100,7 +100,7 @@ impl DaemonHandle {
         let response = self
             .post(paths::REMOTE_JOIN_PATH)
             .json(body)
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_mins(1))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)

@@ -1,6 +1,6 @@
 <!-- module-docs:start -->
 
-Native application menu for GGLib GUI.
+Native application menu for `GGLib` GUI.
 
 Provides a cross-platform menu bar with stateful items that reflect
 the current application state (llama.cpp installation, proxy status,

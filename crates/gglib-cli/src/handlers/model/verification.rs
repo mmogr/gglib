@@ -12,12 +12,18 @@ use crate::bootstrap::CliContext;
 /// Execute the verify command.
 ///
 /// Verifies model integrity by computing SHA256 hashes and comparing against
-/// stored OIDs from HuggingFace.
+/// stored OIDs from `HuggingFace`.
 ///
 /// `per_shard` prints a line per shard as it is hashed. It is deliberately not
 /// spelled `--verbose`: that id belongs to the global logging flag, and a
 /// local one by the same name stops the global from ever reaching this
 /// command.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::match_same_arms,
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute_verify(
     ctx: &CliContext,
     identifier: &str,
@@ -41,7 +47,7 @@ pub(crate) async fn execute_verify(
     let (mut progress_rx, handle) = verification
         .verify_model_integrity(model.id)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to start verification: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to start verification: {e}"))?;
 
     // Process progress updates
     while let Some(progress) = progress_rx.recv().await {
@@ -99,7 +105,7 @@ pub(crate) async fn execute_verify(
     // Wait for completion and get report
     let report = handle
         .await
-        .map_err(|e| anyhow::anyhow!("Verification task failed: {}", e))??;
+        .map_err(|e| anyhow::anyhow!("Verification task failed: {e}"))??;
 
     let elapsed = start.elapsed();
 
@@ -129,8 +135,8 @@ pub(crate) async fn execute_verify(
         println!("  {} Shard {}: {}", status, shard.index, shard.file_path);
 
         if let ShardHealth::Corrupt { expected, actual } = &shard.health {
-            println!("      Expected: {}", expected);
-            println!("      Actual:   {}", actual);
+            println!("      Expected: {expected}");
+            println!("      Actual:   {actual}");
         }
     }
 
@@ -155,6 +161,10 @@ pub(crate) async fn execute_verify(
 /// Execute the repair command.
 ///
 /// Repairs a corrupt model by deleting failed shards and re-downloading them.
+#[allow(
+    clippy::items_after_statements,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn execute_repair(
     ctx: &CliContext,
     identifier: &str,
@@ -211,7 +221,7 @@ pub(crate) async fn execute_repair(
     verification
         .repair_model(model.id, shard_indices)
         .await
-        .map_err(|e| anyhow::anyhow!("Repair failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Repair failed: {e}"))?;
 
     println!("✓ Repair completed successfully");
     println!();

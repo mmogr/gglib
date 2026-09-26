@@ -54,7 +54,7 @@ pub async fn cleanup_orphaned_servers() -> io::Result<()> {
             );
 
             match kill_pid(data.pid).await {
-                Ok(_) => {
+                Ok(()) => {
                     killed += 1;
                     delete_pidfile(model_id)?;
                 }

@@ -61,8 +61,7 @@ async fn models_endpoint_returns_json() {
     let body_str = std::str::from_utf8(&body).unwrap();
     assert!(
         body_str.starts_with('[') && body_str.ends_with(']'),
-        "Expected JSON array, got: {}",
-        body_str
+        "Expected JSON array, got: {body_str}"
     );
 }
 
@@ -132,8 +131,7 @@ async fn events_endpoint_returns_sse_stream() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").starts_with("text/event-stream"))
-            .unwrap_or(false)
+            .is_some_and(|v| v.to_str().unwrap_or("").starts_with("text/event-stream"))
     );
 }
 
@@ -178,13 +176,11 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
     let content_type = response
         .headers()
         .get("content-type")
-        .map(|v| v.to_str().unwrap_or(""))
-        .unwrap_or("");
+        .map_or("", |v| v.to_str().unwrap_or(""));
 
     assert!(
         content_type.starts_with("text/event-stream"),
-        "SSE endpoint should return text/event-stream, not HTML. Got: {}",
-        content_type
+        "SSE endpoint should return text/event-stream, not HTML. Got: {content_type}"
     );
 
     // Double-check: should NOT be HTML
@@ -251,8 +247,7 @@ async fn spa_fallback_returns_index_html() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").contains("text/html"))
-            .unwrap_or(false)
+            .is_some_and(|v| v.to_str().unwrap_or("").contains("text/html"))
     );
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
@@ -322,7 +317,7 @@ async fn settings_endpoint_accepts_put() {
     let app = test_app(CorsConfig::AllowAll).await;
 
     // Empty update request (no changes)
-    let request_body = r#"{}"#;
+    let request_body = r"{}";
 
     let response = app
         .oneshot(
@@ -350,7 +345,7 @@ async fn settings_endpoint_accepts_patch() {
     let app = test_app(CorsConfig::AllowAll).await;
 
     // Empty update request (no changes)
-    let request_body = r#"{}"#;
+    let request_body = r"{}";
 
     let response = app
         .oneshot(
@@ -382,7 +377,7 @@ async fn servers_start_collection_route_accepts_post() {
     let app = test_app(CorsConfig::AllowAll).await;
 
     // Request with model_id in body (matches frontend transport contract)
-    let request_body = format!(r#"{{"model_id": 999, "port": {}}}"#, TEST_MODEL_PORT);
+    let request_body = format!(r#"{{"model_id": 999, "port": {TEST_MODEL_PORT}}}"#);
 
     let response = app
         .oneshot(
@@ -409,8 +404,7 @@ async fn servers_start_collection_route_accepts_post() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").starts_with("application/json"))
-            .unwrap_or(false),
+            .is_some_and(|v| v.to_str().unwrap_or("").starts_with("application/json")),
         "Should return application/json content-type"
     );
 }
@@ -447,8 +441,7 @@ async fn servers_stop_collection_route_accepts_post() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").starts_with("application/json"))
-            .unwrap_or(false),
+            .is_some_and(|v| v.to_str().unwrap_or("").starts_with("application/json")),
         "Should return application/json content-type"
     );
 }
@@ -478,8 +471,7 @@ async fn proxy_status_returns_stopped_when_not_running() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").starts_with("application/json"))
-            .unwrap_or(false),
+            .is_some_and(|v| v.to_str().unwrap_or("").starts_with("application/json")),
         "Should return application/json content-type"
     );
 
@@ -488,8 +480,7 @@ async fn proxy_status_returns_stopped_when_not_running() {
     let body_str = std::str::from_utf8(&body).unwrap();
     assert!(
         body_str.contains("\"running\":false"),
-        "Proxy should report running:false when stopped, got: {}",
-        body_str
+        "Proxy should report running:false when stopped, got: {body_str}"
     );
 }
 
@@ -497,7 +488,7 @@ async fn proxy_status_returns_stopped_when_not_running() {
 async fn proxy_start_accepts_json_config() {
     let app = test_app(CorsConfig::AllowAll).await;
 
-    let request_body = r#"null"#;
+    let request_body = r"null";
 
     let response = app
         .oneshot(
@@ -518,8 +509,7 @@ async fn proxy_start_accepts_json_config() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").starts_with("application/json"))
-            .unwrap_or(false),
+            .is_some_and(|v| v.to_str().unwrap_or("").starts_with("application/json")),
         "Should return application/json content-type"
     );
 }
@@ -546,8 +536,7 @@ async fn proxy_stop_is_idempotent() {
         response
             .headers()
             .get("content-type")
-            .map(|v| v.to_str().unwrap_or("").starts_with("application/json"))
-            .unwrap_or(false),
+            .is_some_and(|v| v.to_str().unwrap_or("").starts_with("application/json")),
         "Should return application/json content-type"
     );
 }
@@ -624,8 +613,7 @@ async fn model_get_by_id_returns_json_not_html() {
     let content_type = response
         .headers()
         .get("content-type")
-        .map(|v| v.to_str().unwrap_or(""))
-        .unwrap_or("");
+        .map_or("", |v| v.to_str().unwrap_or(""));
 
     assert!(
         !content_type.contains("text/html"),
@@ -668,8 +656,7 @@ async fn model_tags_by_id_returns_json_not_html() {
     let content_type = response
         .headers()
         .get("content-type")
-        .map(|v| v.to_str().unwrap_or(""))
-        .unwrap_or("");
+        .map_or("", |v| v.to_str().unwrap_or(""));
 
     assert!(
         !content_type.contains("text/html"),
@@ -712,8 +699,7 @@ async fn a_path_param_route_returns_json_not_html() {
     let content_type = response
         .headers()
         .get("content-type")
-        .map(|v| v.to_str().unwrap_or(""))
-        .unwrap_or("");
+        .map_or("", |v| v.to_str().unwrap_or(""));
 
     assert!(
         !content_type.contains("text/html"),
@@ -752,7 +738,7 @@ async fn model_tags_accepts_post_with_body() {
     );
 }
 
-/// Proxy start should use the settings default_context_size when the frontend
+/// Proxy start should use the settings `default_context_size` when the frontend
 /// sends no explicit override (body is `null`).
 #[tokio::test]
 async fn proxy_start_uses_settings_default_context_when_not_overridden() {
@@ -787,7 +773,7 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
                 .method("POST")
                 .uri("/api/proxy/start")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"null"#))
+                .body(Body::from(r"null"))
                 .unwrap(),
         )
         .await
@@ -841,7 +827,7 @@ async fn proxy_start_accepts_a_request_that_configures_no_context() {
                 .method("POST")
                 .uri("/api/proxy/start")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{}"#))
+                .body(Body::from(r"{}"))
                 .unwrap(),
         )
         .await
@@ -858,7 +844,7 @@ async fn proxy_start_accepts_a_request_that_configures_no_context() {
 
 /// The pinned-start route must run the serve cascade server-side: a full-shape
 /// body with a stale model id proves the route is wired, both nested bodies
-/// deserialize (camelCase options + snake_case proxy), and resolution fails as
+/// deserialize (camelCase options + `snake_case` proxy), and resolution fails as
 /// a 404 — the GUI's stale-list race — rather than a serde 400/422.
 #[tokio::test]
 async fn proxy_start_pinned_resolves_the_model_or_404s() {

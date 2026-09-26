@@ -13,11 +13,11 @@ use super::row_mappers::{
 
 /// Compute a canonical model key for deduplication.
 ///
-/// For HuggingFace models: `hf:<repo_id>@<commit_sha>#<base_filename>`
+/// For `HuggingFace` models: `hf:<repo_id>@<commit_sha>#<base_filename>`
 /// For local models: `local:<file_path_hash>`
 ///
 /// The filename is normalized to remove shard suffixes, ensuring all shards
-/// in a group compute the same model_key for proper UPSERT deduplication.
+/// in a group compute the same `model_key` for proper UPSERT deduplication.
 ///
 /// The local key hashes the *canonical* path — the very value bound to the
 /// `file_path` column a few lines below — rather than the raw path it was
@@ -50,7 +50,7 @@ fn compute_model_key(model: &NewModel, canonical_path: &str) -> String {
     match (&model.hf_repo_id, &model.hf_commit_sha, &model.hf_filename) {
         (Some(repo), Some(sha), Some(filename)) => {
             let base = base_shard_filename(filename);
-            format!("hf:{}@{}#{}", repo, sha, base)
+            format!("hf:{repo}@{sha}#{base}")
         }
         _ => local_model_key_for(canonical_path),
     }
@@ -96,10 +96,9 @@ impl ModelRepository for SqliteModelRepository {
         // Include benchmark summary via LEFT JOIN so model cards can show
         // speed badges without a separate round-trip.
         let query = format!(
-            "SELECT {}, {} FROM models \
+            "SELECT {MODEL_SELECT_COLUMNS}, {BENCHMARK_SUMMARY_COLUMNS} FROM models \
              LEFT JOIN model_benchmark_summaries s ON s.model_id = models.id \
-             ORDER BY models.added_at DESC",
-            MODEL_SELECT_COLUMNS, BENCHMARK_SUMMARY_COLUMNS
+             ORDER BY models.added_at DESC"
         );
 
         let rows = sqlx::query(&query)
@@ -111,7 +110,7 @@ impl ModelRepository for SqliteModelRepository {
     }
 
     async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
-        let query = format!("SELECT {} FROM models WHERE id = ?", MODEL_SELECT_COLUMNS);
+        let query = format!("SELECT {MODEL_SELECT_COLUMNS} FROM models WHERE id = ?");
 
         let row = sqlx::query(&query)
             .bind(id)
@@ -128,8 +127,7 @@ impl ModelRepository for SqliteModelRepository {
         // name (e.g. two quants of the same repo, or two repos that declare
         // the same general.name) instead of depending on SQLite storage order.
         let query = format!(
-            "SELECT {} FROM models WHERE name = ? ORDER BY models.id LIMIT 1",
-            MODEL_SELECT_COLUMNS
+            "SELECT {MODEL_SELECT_COLUMNS} FROM models WHERE name = ? ORDER BY models.id LIMIT 1"
         );
 
         let row = sqlx::query(&query)
@@ -155,14 +153,13 @@ impl ModelRepository for SqliteModelRepository {
         // serialisation existed, since `json_each` errors on malformed input
         // rather than returning no rows.
         let query = format!(
-            "SELECT {} FROM models \
+            "SELECT {MODEL_SELECT_COLUMNS} FROM models \
              WHERE models.file_path = ?1 \
                 OR (models.file_paths_json IS NOT NULL \
                     AND json_valid(models.file_paths_json) \
                     AND EXISTS (SELECT 1 FROM json_each(models.file_paths_json) \
                                 WHERE json_each.value = ?1)) \
-             ORDER BY models.id LIMIT 1",
-            MODEL_SELECT_COLUMNS
+             ORDER BY models.id LIMIT 1"
         );
 
         let row = sqlx::query(&query)
@@ -221,7 +218,7 @@ impl ModelRepository for SqliteModelRepository {
 
         // Use UPSERT to make registration idempotent
         let _result = sqlx::query(
-            r#"INSERT INTO models (
+            r"INSERT INTO models (
                 name, file_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha,
@@ -252,7 +249,7 @@ impl ModelRepository for SqliteModelRepository {
                 dialect_spec = excluded.dialect_spec,
                 inference_defaults = COALESCE(models.inference_defaults, excluded.inference_defaults),
                 defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
-            "#,
+            ",
         )
         .bind(&model.name)
         .bind(&file_path_string)
@@ -268,8 +265,8 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&model.hf_repo_id)
         .bind(&model.hf_commit_sha)
         .bind(&model.hf_filename)
-        .bind(model.download_date.as_ref().map(|d| d.to_string()))
-        .bind(model.last_update_check.as_ref().map(|d| d.to_string()))
+        .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
+        .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
         .bind(&tags_json)
         .bind(&model_key)
         .bind(&file_paths_json)
@@ -284,8 +281,7 @@ impl ModelRepository for SqliteModelRepository {
 
         // Get the model by model_key (works for both insert and update)
         let row = sqlx::query(&format!(
-            "SELECT {} FROM models WHERE model_key = ? LIMIT 1",
-            MODEL_SELECT_COLUMNS
+            "SELECT {MODEL_SELECT_COLUMNS} FROM models WHERE model_key = ? LIMIT 1"
         ))
         .bind(&model_key)
         .fetch_one(&self.pool)
@@ -346,8 +342,8 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&model.hf_repo_id)
             .bind(&model.hf_commit_sha)
             .bind(&model.hf_filename)
-            .bind(model.download_date.as_ref().map(|dt| dt.to_string()))
-            .bind(model.last_update_check.as_ref().map(|dt| dt.to_string()))
+            .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
+            .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
             .bind(&tags_json)
             .bind(model.capabilities.bits() as i64)
             .bind(&inference_defaults_json)

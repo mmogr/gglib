@@ -56,6 +56,10 @@ use super::ports::TEST_BASE_PORT;
 /// (Cargo runs this crate's test binaries one at a time; it is the tests
 /// *within* a binary that share a process. The binary name is in the path
 /// for legibility, not for exclusion.)
+#[allow(
+    clippy::unnecessary_debug_formatting,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let exe = std::env::current_exe().expect("locate the test executable");
     let mut name = exe
@@ -85,7 +89,7 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 /// A database and a device key file of its own for each context.
 ///
 /// Per test rather than per binary: tests in one binary run concurrently, so
-/// a shared file both deadlocks on SQLite's write lock and lets one test see
+/// a shared file both deadlocks on `SQLite`'s write lock and lets one test see
 /// another's rows. The key file is the same argument for the devices a test
 /// invites or lists, and left unnamed it would be the checkout's own.
 fn isolated_paths() -> (PathBuf, PathBuf) {

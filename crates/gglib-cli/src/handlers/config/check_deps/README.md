@@ -64,7 +64,7 @@ This module handles the `check-deps` command, which verifies that all required s
 - **CUDA toolkit** - For NVIDIA GPU support
 - **Metal** - For Apple Silicon GPU support (built-in)
 - **Vulkan SDK** - For cross-platform GPU support
-- **ROCm** - For AMD GPU support
+- **`ROCm`** - For AMD GPU support
 
 ## Output Format
 

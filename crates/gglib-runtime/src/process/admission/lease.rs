@@ -56,7 +56,9 @@ impl AdmissionQueue {
     /// refusing to serve any of them because one unrelated section unwound is
     /// strictly worse than continuing with the state as it was left.
     fn lock(&self) -> MutexGuard<'_, QueueState> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Wake every requester currently waiting, so each can re-evaluate.

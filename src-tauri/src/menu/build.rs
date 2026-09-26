@@ -8,7 +8,7 @@ use tauri::{
 
 /// Build the complete application menu.
 ///
-/// Returns both the Menu to attach to the app and the AppMenu struct
+/// Returns both the Menu to attach to the app and the `AppMenu` struct
 /// containing references to stateful items for later updates.
 pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Error> {
     // =========================================================================

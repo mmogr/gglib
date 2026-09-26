@@ -87,7 +87,7 @@ fn cache_true_carries_the_explicit_slot_dir() {
 
 /// `cache: true` with no directory must fall back to the same default the
 /// CLI uses, not `None` — the Axum proxy path errors requests with
-/// "slot_dir not configured" when cache is on and slot_dir is absent, so
+/// "`slot_dir` not configured" when cache is on and `slot_dir` is absent, so
 /// leaving it `None` here would make `cache: true` alone insufficient.
 #[test]
 fn cache_true_without_slot_dir_uses_the_default_directory() {

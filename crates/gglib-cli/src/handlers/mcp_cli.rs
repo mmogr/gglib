@@ -276,5 +276,5 @@ async fn resolve_server(ctx: &CliContext, identifier: &str) -> Result<gglib_core
     ctx.mcp
         .get_server_by_name(identifier)
         .await
-        .map_err(|e| anyhow!("Server '{}' not found: {e}", identifier))
+        .map_err(|e| anyhow!("Server '{identifier}' not found: {e}"))
 }

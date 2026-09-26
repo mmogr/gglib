@@ -24,7 +24,7 @@ pub use lock::DaemonLock;
 
 /// CORS origins the daemon always allows.
 ///
-/// The desktop WebView origins plus the Vite dev server — the browser-facing
+/// The desktop `WebView` origins plus the Vite dev server — the browser-facing
 /// clients that reach the daemon cross-origin. Same-origin requests (the SPA
 /// the daemon itself serves) need no CORS at all.
 pub(crate) fn daemon_cors_origins() -> Vec<String> {
@@ -85,7 +85,7 @@ impl Default for DaemonOptions {
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
 ///    non-loopback binds — then bind `{host}:{DAEMON_PORT}` and serve the
 ///    management API (+ SPA when a frontend build is found).
-/// 5. Honour `proxy_autostart` so the OpenAI endpoint comes up with the
+/// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
 ///    machine told once to be reachable is reachable again after a reboot.
 /// 6. On SIGINT/SIGTERM/shutdown-route: drain the proxy, stop every child,

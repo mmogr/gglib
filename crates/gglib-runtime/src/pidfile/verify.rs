@@ -67,7 +67,7 @@ fn is_our_llama_server_linux(pid: u32) -> bool {
         return false;
     };
 
-    let proc_exe = format!("/proc/{}/exe", pid);
+    let proc_exe = format!("/proc/{pid}/exe");
     let Ok(actual_path) = fs::read_link(&proc_exe) else {
         return false;
     };
@@ -84,13 +84,18 @@ fn is_our_llama_server_linux(pid: u32) -> bool {
 /// On Unix, uses `kill` with null signal which doesn't send a signal but
 /// checks existence.
 #[cfg(unix)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub fn pid_exists(pid: u32) -> bool {
     use nix::sys::signal;
     use nix::unistd::Pid;
 
     // Signal None is a special "null signal" that checks if we can signal the process
     match signal::kill(Pid::from_raw(pid as i32), None) {
-        Ok(_) => true,
+        Ok(()) => true,
         Err(nix::errno::Errno::ESRCH) => false, // No such process
         Err(_) => true,                         // Process exists but we lack permission
     }
@@ -126,6 +131,10 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[allow(
+        clippy::unreadable_literal,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn pid_exists_false_for_impossible_pid() {
         assert!(!pid_exists(999999));
     }

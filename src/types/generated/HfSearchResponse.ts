@@ -2,6 +2,6 @@
 import type { HfModelSummary } from "./HfModelSummary";
 
 /**
- * Response from HuggingFace model search.
+ * Response from `HuggingFace` model search.
  */
 export type HfSearchResponse = { models: Array<HfModelSummary>, has_more: boolean, page: number, total_count: number | null, };

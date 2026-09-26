@@ -120,10 +120,10 @@ fn print_common_linux_instructions(missing: &[&Dependency]) {
 /// vendor driver stacks with their own repositories and setup steps, not
 /// single packages a dependency name maps onto.
 fn print_gpu_notes(distro: LinuxDistro) {
-    println!("\n{}GPU Support:{}", BOLD, RESET);
+    println!("\n{BOLD}GPU Support:{RESET}");
 
     println!();
-    println!("  {}NVIDIA GPU:{}", BOLD, RESET);
+    println!("  {BOLD}NVIDIA GPU:{RESET}");
 
     match distro {
         LinuxDistro::Debian => {
@@ -149,7 +149,7 @@ fn print_gpu_notes(distro: LinuxDistro) {
     }
 
     println!();
-    println!("  {}AMD GPU:{}", BOLD, RESET);
+    println!("  {BOLD}AMD GPU:{RESET}");
     println!("  Install Vulkan drivers for GPU acceleration:");
 
     // The same Vulkan row the dependency check hints with, so the two cannot

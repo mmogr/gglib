@@ -49,7 +49,7 @@ const OFF_BOX: &str = "http://health-check.invalid/health";
 ///
 /// Generous on purpose. The child's own work is three requests under a
 /// two-second timeout, so this bounds a hang; it does not measure the machine.
-const CHILD_BUDGET: Duration = Duration::from_secs(120);
+const CHILD_BUDGET: Duration = Duration::from_mins(2);
 
 /// How long the parent waits, after the child has exited, for its pipes to
 /// reach end of file.

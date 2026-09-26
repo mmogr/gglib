@@ -137,7 +137,7 @@ impl ModelOps {
     /// Get full details for a model by ID, for the inspect view.
     ///
     /// Returns a [`ModelDetailDto`] — a superset of [`GuiModel`] that
-    /// includes raw GGUF metadata, MoE topology, and full HuggingFace
+    /// includes raw GGUF metadata, `MoE` topology, and full `HuggingFace`
     /// provenance.  This is the shared data source for the CLI
     /// `model inspect` command and the `GET /api/models/:id/detail` route.
     pub async fn get_detail(&self, id: i64) -> Result<ModelDetailDto, GuiError> {
@@ -371,7 +371,7 @@ impl ModelOps {
     /// [`GuiModel`].
     ///
     /// This is the **single shared implementation** called by the CLI, the
-    /// Axum WebUI, and the Tauri app.  No business logic lives in the surface
+    /// Axum `WebUI`, and the Tauri app.  No business logic lives in the surface
     /// crates.
     pub async fn set_capabilities(
         &self,
@@ -465,7 +465,7 @@ impl ModelOps {
         Ok((repo, quant))
     }
 
-    /// Whether a newer HuggingFace revision exists — the commit-SHA check
+    /// Whether a newer `HuggingFace` revision exists — the commit-SHA check
     /// `gglib model upgrade` runs before downloading, distinct from the
     /// shard-level diff on `/{id}/updates`.
     ///
@@ -492,7 +492,7 @@ impl ModelOps {
         })
     }
 
-    /// Re-download the model at the latest HuggingFace revision and rewrite
+    /// Re-download the model at the latest `HuggingFace` revision and rewrite
     /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
     ///
     /// Checks first and returns `updated: false` without downloading when the

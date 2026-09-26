@@ -40,6 +40,10 @@ pub(crate) async fn sync_all_state(
 /// Gathers the model and llama.cpp state the menu needs but the tray does not,
 /// so those reads do not happen on platforms with no menu to show them in.
 #[cfg(target_os = "macos")]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn sync_app_menu(
     state: &tauri::State<'_, AppState>,
     snapshot: &DaemonSnapshot,

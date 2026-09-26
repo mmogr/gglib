@@ -39,7 +39,7 @@ impl BenchmarkDeps {
     /// only fails on TLS initialisation errors).
     pub fn build_http_client() -> Result<reqwest::Client> {
         gglib_proxy::loopback::client_builder()
-            .timeout(Duration::from_secs(600))
+            .timeout(Duration::from_mins(10))
             .build()
             .map_err(|e| anyhow::anyhow!("failed to build benchmark HTTP client: {e}"))
     }
@@ -126,7 +126,7 @@ mod client_tests {
             }
             // Go quiet without closing. A client that only knows about total
             // deadlines cannot distinguish this from the loop above.
-            tokio::time::sleep(Duration::from_secs(3600)).await;
+            tokio::time::sleep(Duration::from_hours(1)).await;
         });
         format!("http://{addr}/")
     }

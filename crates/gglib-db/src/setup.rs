@@ -14,7 +14,7 @@ use std::time::Duration;
 
 /// `PRAGMA user_version` once the canonical-path backfills have run.
 ///
-/// Databases predating this carry `0`, SQLite's default. The first version
+/// Databases predating this carry `0`, `SQLite`'s default. The first version
 /// this project has assigned; anything later must take a higher number and
 /// leave this one meaning what it means now.
 const CANONICAL_PATH_SCHEMA_VERSION: i64 = 1;
@@ -178,7 +178,7 @@ pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
 async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Create the models table
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS models (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
@@ -207,7 +207,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             dialect_spec TEXT,
             template_caps TEXT
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
@@ -282,7 +282,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     // Create model_files junction table for per-shard OID tracking
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS model_files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             model_id INTEGER NOT NULL,
@@ -294,7 +294,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
             UNIQUE (model_id, file_path)
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
@@ -306,13 +306,13 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     // Create settings table
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS settings_kv (
             key TEXT PRIMARY KEY NOT NULL,
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
@@ -342,7 +342,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     // Create chat conversations table
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS chat_conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -352,14 +352,14 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE SET NULL
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
 
     // Create chat messages table
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS chat_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER NOT NULL,
@@ -369,7 +369,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
@@ -389,7 +389,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     // Create MCP servers table
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS mcp_servers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -407,14 +407,14 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             is_valid INTEGER NOT NULL DEFAULT 0,
             last_error TEXT
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;
 
     // Create MCP server environment variables table
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS mcp_server_env (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             server_id INTEGER NOT NULL,
@@ -423,7 +423,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
             UNIQUE(server_id, key)
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;

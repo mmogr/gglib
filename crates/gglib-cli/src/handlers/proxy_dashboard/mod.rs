@@ -14,6 +14,13 @@ const BAR_WIDTH: usize = 20;
 /// default terminal width so output still looks reasonable when piped.
 const DEFAULT_TERM_WIDTH: u16 = 80;
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::format_push_string,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod render;
 /// The per-model signals, whose rules are about what not to print.
 mod render_defects;
@@ -152,8 +159,7 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
                     // terminal resize is picked up rather than rendering
                     // against a stale width.
                     let term_width = terminal::size()
-                        .map(|(cols, _rows)| cols)
-                        .unwrap_or(DEFAULT_TERM_WIDTH);
+                        .map_or(DEFAULT_TERM_WIDTH, |(cols, _rows)| cols);
                     let frame = render_frame(&url, &snapshot, term_width);
                     if is_tty {
                         let mut out = stdout();

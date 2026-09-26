@@ -3,6 +3,6 @@
 /**
  * Response for tool/function calling support detection.
  *
- * Used for both HuggingFace model metadata and local running server queries.
+ * Used for both `HuggingFace` model metadata and local running server queries.
  */
 export type ToolSupportResponse = { supports_tool_calls: boolean, confidence: number, detected_format: string | null, };

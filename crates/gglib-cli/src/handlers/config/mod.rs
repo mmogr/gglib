@@ -3,6 +3,12 @@ pub(crate) mod check_deps;
 pub(crate) mod fast_downloads;
 pub(crate) mod llama;
 pub(crate) mod llama_detect;
+#[allow(
+    clippy::fn_params_excessive_bools,
+    clippy::literal_string_with_formatting_args,
+    clippy::trivially_copy_pass_by_ref,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) mod llama_install;
 pub(crate) mod llama_prebuilt;
 pub(crate) mod paths;

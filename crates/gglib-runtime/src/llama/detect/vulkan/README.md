@@ -11,7 +11,7 @@ hardware across Linux and Windows. Building llama.cpp with
 1. **Vulkan loader** — `libvulkan.so.1` (Linux) or `vulkan-1.dll`
    (Windows), confirmed by `vulkaninfo --summary`.
 2. **Vulkan development headers** — `vulkan/vulkan.h`, needed by
-   CMake's `FindVulkan.cmake` to set `Vulkan_INCLUDE_DIR`.
+   `CMake`'s `FindVulkan.cmake` to set `Vulkan_INCLUDE_DIR`.
 3. **SPIR-V shader compiler** — `glslc`, used to compile Vulkan
    compute shaders at build time.
 
@@ -31,14 +31,14 @@ and Vulkan is not applicable on this platform.
 Many Linux distributions ship Vulkan *runtime* libraries by default
 (Mesa drivers, libvulkan), but **not** the development headers or
 shader compiler. A system that passes `vulkaninfo --summary` can
-still fail CMake's `FindVulkan` with:
+still fail `CMake`'s `FindVulkan` with:
 
 ```text
 Could NOT find Vulkan (missing: Vulkan_INCLUDE_DIR)
 ```
 
 This module's [`vulkan_status`] function detects the gap *before*
-invoking CMake, allowing the CLI and GUI to surface distro-specific
+invoking `CMake`, allowing the CLI and GUI to surface distro-specific
 install instructions.
 
 <!-- module-docs:end -->

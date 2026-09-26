@@ -397,7 +397,7 @@ const fn floor_name(ctx: ExplainContext<'_>) -> &'static str {
 ///
 /// The untrusted note names [`CLIENT_AUTHORITATIVE_KEYS`] rather than
 /// spelling the carve-out out, because the two drifted the moment the list
-/// stopped being one key long: the sentence said "except max_tokens" for a
+/// stopped being one key long: the sentence said "except `max_tokens`" for a
 /// gate that had also gone client-authoritative on `reasoning_budget_tokens`,
 /// and nothing failed. Deriving it means the description of the trust
 /// boundary cannot be wrong about the boundary again.

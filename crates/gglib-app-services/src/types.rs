@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 // HuggingFace Browser Types
 // ============================================================================
 
-/// Summary of a HuggingFace model from the search API.
+/// Summary of a `HuggingFace` model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfModelSummary {
@@ -20,7 +20,7 @@ pub struct HfModelSummary {
     pub id: String,
     /// Human-readable model name (derived from id)
     pub name: String,
-    /// Author/organization (e.g., "TheBloke")
+    /// Author/organization (e.g., "`TheBloke`")
     pub author: Option<String>,
     /// Total download count
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
@@ -39,7 +39,7 @@ pub struct HfModelSummary {
     pub tags: Vec<String>,
 }
 
-/// Sort field options for HuggingFace model search.
+/// Sort field options for `HuggingFace` model search.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
@@ -53,7 +53,7 @@ pub enum HfSortField {
     Alphabetical,
 }
 
-/// Request for searching HuggingFace models.
+/// Request for searching `HuggingFace` models.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfSearchRequest {
@@ -82,7 +82,7 @@ impl Default for HfSearchRequest {
     }
 }
 
-/// Response from HuggingFace model search.
+/// Response from `HuggingFace` model search.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfSearchResponse {
@@ -116,7 +116,7 @@ pub struct HfQuantizationsResponse {
 
 /// Response for tool/function calling support detection.
 ///
-/// Used for both HuggingFace model metadata and local running server queries.
+/// Used for both `HuggingFace` model metadata and local running server queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ToolSupportResponse {
@@ -157,15 +157,15 @@ pub struct GuiModel {
     // The list view renders *active* parameters from these, the same way the
     // inspector does off [`ModelDetailDto`]; without them it silently shows the
     // total instead.
-    /// Total number of experts (MoE models only).
+    /// Total number of experts (`MoE` models only).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_count: Option<u32>,
-    /// Experts activated per token (MoE models only).
+    /// Experts activated per token (`MoE` models only).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_used_count: Option<u32>,
-    /// Shared experts that are always active (MoE models only).
+    /// Shared experts that are always active (`MoE` models only).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
@@ -211,7 +211,7 @@ pub struct GuiModel {
 }
 
 impl GuiModel {
-    /// Convert a domain Model to GuiModel format.
+    /// Convert a domain Model to `GuiModel` format.
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         Self {
             id: model.id,
@@ -255,8 +255,8 @@ impl From<Model> for GuiModel {
 
 /// Complete model details for the inspect view.
 ///
-/// Carries the domain [`Model`] in full — raw GGUF metadata, MoE topology and
-/// HuggingFace provenance, none of which the list endpoint sends. It is the
+/// Carries the domain [`Model`] in full — raw GGUF metadata, `MoE` topology and
+/// `HuggingFace` provenance, none of which the list endpoint sends. It is the
 /// single shared contract consumed by:
 ///
 /// - CLI: `gglib model inspect` (human-readable or `--json`)
@@ -295,32 +295,32 @@ pub struct ModelDetailDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<u64>,
     // ── MoE topology (omitted for non-MoE models) ─────────────────────────────
-    /// Total number of experts (MoE models only).
+    /// Total number of experts (`MoE` models only).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_count: Option<u32>,
-    /// Experts activated per token (MoE models only).
+    /// Experts activated per token (`MoE` models only).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_used_count: Option<u32>,
-    /// Shared experts that are always active (MoE models only).
+    /// Shared experts that are always active (`MoE` models only).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expert_shared_count: Option<u32>,
     // ── HuggingFace provenance ────────────────────────────────────────────────
-    /// HuggingFace repository ID (e.g. `"bartowski/Llama-3.1-8B-GGUF"`).
+    /// `HuggingFace` repository ID (e.g. `"bartowski/Llama-3.1-8B-GGUF"`).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_repo_id: Option<String>,
-    /// Original filename on HuggingFace Hub.
+    /// Original filename on `HuggingFace` Hub.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_filename: Option<String>,
-    /// Git commit SHA from HuggingFace Hub.
+    /// Git commit SHA from `HuggingFace` Hub.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_commit_sha: Option<String>,
-    /// When the model was downloaded from HuggingFace (`"%Y-%m-%d %H:%M:%S"`).
+    /// When the model was downloaded from `HuggingFace` (`"%Y-%m-%d %H:%M:%S"`).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub download_date: Option<String>,
@@ -504,7 +504,7 @@ pub struct ServerInfo {
 }
 
 impl ServerInfo {
-    /// Create from a ProcessHandle.
+    /// Create from a `ProcessHandle`.
     pub fn from_handle(handle: &ProcessHandle) -> Self {
         Self {
             model_id: handle.model_id,
@@ -605,7 +605,7 @@ pub struct RetagResponse {
     pub spec_changed: bool,
 }
 
-/// Whether a newer HuggingFace revision exists for a model.
+/// Whether a newer `HuggingFace` revision exists for a model.
 ///
 /// `currentSha` is `None` when the model was imported without a recorded
 /// revision. The check treats that as "an update exists" (there is no

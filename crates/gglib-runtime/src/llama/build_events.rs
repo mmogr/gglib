@@ -53,7 +53,7 @@ pub enum BuildPhase {
 /// Events are the unit of SSE emission for the build pipeline. Every notable
 /// state change produces exactly one variant. Consumers decide how to render
 /// them: the CLI produces `indicatif` progress bars; Axum serialises to
-/// `data: <json>\n\n` frames; Tauri emits them to the WebView.
+/// `data: <json>\n\n` frames; Tauri emits them to the `WebView`.
 ///
 /// # Serde tag
 ///

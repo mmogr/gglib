@@ -173,7 +173,7 @@ async fn a_proxy_exit_that_publishes_nothing_is_still_noticed() {
     tokio::time::pause();
 
     let gone = tokio::time::timeout(
-        Duration::from_secs(60),
+        Duration::from_mins(1),
         until_gone(&proxy, &mut exit, &cancel, &backend),
     )
     .await

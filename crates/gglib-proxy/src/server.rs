@@ -1,7 +1,7 @@
 //! Axum HTTP server for the OpenAI-compatible proxy.
 //!
 //! This module provides the `serve()` function that runs the proxy server
-//! using a pre-bound TcpListener (from the supervisor).
+//! using a pre-bound `TcpListener` (from the supervisor).
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -112,7 +112,7 @@ pub(crate) struct AppState {
     default_profile_missing_logged: Arc<AtomicBool>,
     /// Whether KV cache persistence is enabled (opt-in via --cache).
     pub(crate) cache_enabled: bool,
-    /// Resolved slot directory path (Some only when cache_enabled).
+    /// Resolved slot directory path (Some only when `cache_enabled`).
     pub(crate) slot_dir: Option<PathBuf>,
     /// Semaphore gating restore→forward→save cycles to prevent interleaving.
     slot_gate: Arc<Semaphore>,
@@ -124,7 +124,7 @@ pub(crate) struct AppState {
     /// Updated on each restart detection. Used by mtime guard to skip stale slots.
     server_start_time: Arc<AtomicU64>,
     /// Last session successfully loaded into RAM (hot in KV cache).
-    /// Composite key (model_id + session_id) used to bypass disk restore
+    /// Composite key (`model_id` + `session_id`) used to bypass disk restore
     /// when the same model+session is already hot.
     last_loaded_session:
         Arc<tokio::sync::RwLock<Option<crate::cache_lifecycle::LastLoadedSession>>>,
@@ -443,7 +443,7 @@ pub(crate) async fn chat_completions(
                 tracing::warn!("Invalid session ID in header: {}", e);
                 return Response::builder()
                     .status(axum::http::StatusCode::BAD_REQUEST)
-                    .body(axum::body::Body::from(format!("Invalid session ID: {}", e)))
+                    .body(axum::body::Body::from(format!("Invalid session ID: {e}")))
                     .unwrap();
             }
         }
@@ -815,7 +815,12 @@ pub(crate) async fn chat_completions(
     // cache enabled with both all fall into the same "no triple" arm below.
     let response = match (&sanitized_session_id, &stream_config) {
         (Some(sid), Some(cfg)) => {
-            if !is_streaming {
+            if is_streaming {
+                // Streaming with cache: use prepare_streaming_cycle + sse_stream::spawn_and_return
+                let (permit, cfg, sid) =
+                    resolve_cache_triple(cfg, state.slot_gate.clone(), sid).await;
+                req.send(permit, cfg, sid).await
+            } else {
                 // Non-streaming with cache: wrap in run_with_cache (fail-open internally)
                 let (resp, _restore_result) =
                     run_with_cache(cfg, &state.slot_gate, sid, || req.send(None, None, None))
@@ -824,11 +829,6 @@ pub(crate) async fn chat_completions(
                         "run_with_cache only returns Err on sanitization failure, which is already checked",
                     );
                 resp
-            } else {
-                // Streaming with cache: use prepare_streaming_cycle + sse_stream::spawn_and_return
-                let (permit, cfg, sid) =
-                    resolve_cache_triple(cfg, state.slot_gate.clone(), sid).await;
-                req.send(permit, cfg, sid).await
             }
         }
         // Cache disabled, or cache enabled but no session id/config: direct call
@@ -1002,7 +1002,7 @@ const RETRY_REASON_HEADER: &str = "x-gglib-retry-reason";
 /// out.
 const RETRY_REASON_ADMISSION: &str = "admission";
 
-/// Convert ModelRuntimeError to HTTP response with appropriate status code.
+/// Convert `ModelRuntimeError` to HTTP response with appropriate status code.
 pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let status = StatusCode::from_u16(err.suggested_status_code())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);

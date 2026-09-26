@@ -9,15 +9,15 @@ import type { ServerConfig } from "./ServerConfig";
  */
 export type GuiModel = { id: number, name: string, filePath: string, paramCountB: number, architecture: string | null, quantization: string | null, contextLength: number | null, 
 /**
- * Total number of experts (MoE models only).
+ * Total number of experts (`MoE` models only).
  */
 expertCount?: number, 
 /**
- * Experts activated per token (MoE models only).
+ * Experts activated per token (`MoE` models only).
  */
 expertUsedCount?: number, 
 /**
- * Shared experts that are always active (MoE models only).
+ * Shared experts that are always active (`MoE` models only).
  */
 expertSharedCount?: number, addedAt: string, hfRepoId: string | null, tags: Array<string>, isServing: boolean, port?: number, inferenceDefaults?: InferenceConfig, 
 /**

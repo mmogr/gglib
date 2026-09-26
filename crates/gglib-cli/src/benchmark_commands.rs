@@ -259,9 +259,10 @@ fn parse_seed(raw: &str) -> Result<Option<u32>, String> {
 /// empty rather than falling back to the default — that fallback is exactly
 /// what would silently turn a requested 2-run smoke test back into 6 runs.
 pub(crate) fn resolve_seeds(parsed: Option<Vec<Option<u32>>>) -> Vec<u32> {
-    parsed
-        .map(|seeds| seeds.into_iter().flatten().collect())
-        .unwrap_or_else(|| DEFAULT_SEEDS.to_vec())
+    parsed.map_or_else(
+        || DEFAULT_SEEDS.to_vec(),
+        |seeds| seeds.into_iter().flatten().collect(),
+    )
 }
 
 #[cfg(test)]

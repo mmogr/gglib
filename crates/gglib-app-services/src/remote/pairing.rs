@@ -16,7 +16,7 @@ use std::time::Duration;
 use modelpipe::InviteOutcome;
 
 /// How long a code lives unused.
-pub(crate) const PAIRING_TTL: Duration = Duration::from_secs(120);
+pub(crate) const PAIRING_TTL: Duration = Duration::from_mins(2);
 
 /// How many wrong codes one endpoint may present before the edge locks it out
 /// of the invite.

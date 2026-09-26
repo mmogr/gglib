@@ -11,7 +11,7 @@ use gglib_core::utils::system::SystemMemoryInfo;
 use crate::error::GuiError;
 use crate::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
 
-/// Format ModelsDirSource for display.
+/// Format `ModelsDirSource` for display.
 fn format_source(source: ModelsDirSource) -> &'static str {
     match source {
         ModelsDirSource::Explicit => "explicit",
@@ -43,16 +43,16 @@ impl SettingsOps {
             .map_err(|e| GuiError::Internal(format!("Failed to resolve models dir: {e}")))?;
 
         let default_path = dirs::data_dir()
-            .map(|p| p.join("gglib").join("models"))
-            .unwrap_or_else(|| std::path::PathBuf::from("models"))
+            .map_or_else(
+                || std::path::PathBuf::from("models"),
+                |p| p.join("gglib").join("models"),
+            )
             .to_string_lossy()
             .to_string();
 
         let exists = resolution.path.exists();
         let writable = exists
-            && std::fs::metadata(&resolution.path)
-                .map(|m| !m.permissions().readonly())
-                .unwrap_or(false);
+            && std::fs::metadata(&resolution.path).is_ok_and(|m| !m.permissions().readonly());
 
         Ok(ModelsDirectoryInfo {
             path: resolution.path.to_string_lossy().to_string(),
@@ -64,6 +64,10 @@ impl SettingsOps {
     }
 
     /// Update the models directory.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn update_models_directory(
         &self,
         new_path: String,
@@ -79,8 +83,10 @@ impl SettingsOps {
             .map_err(|e| GuiError::Internal(format!("Failed to resolve models dir: {e}")))?;
 
         let default_path = dirs::data_dir()
-            .map(|p| p.join("gglib").join("models"))
-            .unwrap_or_else(|| std::path::PathBuf::from("models"))
+            .map_or_else(
+                || std::path::PathBuf::from("models"),
+                |p| p.join("gglib").join("models"),
+            )
             .to_string_lossy()
             .to_string();
 
@@ -128,6 +134,10 @@ impl SettingsOps {
     /// Get system memory information.
     ///
     /// Returns None if memory information is unavailable (probe failed, too small, etc.).
+    #[allow(
+        clippy::items_after_statements,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn get_system_memory(&self) -> Result<Option<SystemMemoryInfo>, GuiError> {
         let mem_info = self.deps.system_probe.get_system_memory_info();
 

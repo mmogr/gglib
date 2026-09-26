@@ -1,6 +1,6 @@
-//! OpenAI API data models for request/response handling.
+//! `OpenAI` API data models for request/response handling.
 //!
-//! This module contains types that match the OpenAI API specification.
+//! This module contains types that match the `OpenAI` API specification.
 //! Domain types live in `gglib-core`; this module handles the API layer mapping.
 
 use gglib_core::ports::{ModelRuntimeError, ModelSummary};
@@ -94,7 +94,7 @@ pub struct ToolCallFunctionDelta {
 /// verbatim as raw bytes and is llama-server's responsibility to validate.
 ///
 /// By deserialising into this narrow struct instead of the full
-/// [`ChatCompletionRequest`], the proxy is immune to any OpenAI field whose
+/// [`ChatCompletionRequest`], the proxy is immune to any `OpenAI` field whose
 /// type doesn't match our local Rust types: `content` as an array of content
 /// parts, `stop` as a bare string, future extensions like `reasoning_effort`,
 /// audio inputs, etc.
@@ -115,7 +115,7 @@ pub(crate) struct ChatRoutingEnvelope {
 /// The one field the proxy reads out of a `/v1/embeddings` request body.
 ///
 /// Same principle as [`ChatRoutingEnvelope`]: `input` is deliberately not
-/// declared. Both OpenAI shapes (a bare string and an array of strings), plus
+/// declared. Both `OpenAI` shapes (a bare string and an array of strings), plus
 /// `encoding_format`, `dimensions` and anything llama-server grows later, ride
 /// through as raw bytes because nothing here ever looks at them.
 #[derive(Debug, Deserialize)]
@@ -132,7 +132,7 @@ pub(crate) struct EmbeddingsRoutingEnvelope {
 ///
 /// # Note on `content`
 ///
-/// `ChatMessage.content` is typed as `Option<String>` here. The OpenAI API
+/// `ChatMessage.content` is typed as `Option<String>` here. The `OpenAI` API
 /// also allows an array of content parts; callers constructing this type
 /// should use `content: None` plus `tool_calls` for tool-only messages.
 /// Inbound array-form content is never deserialised into this struct; the
@@ -177,7 +177,7 @@ pub struct ChatCompletionRequest {
 pub struct ChatMessage {
     /// Role: "system", "user", "assistant", or "tool".
     pub role: String,
-    /// Message content (optional when tool_calls present).
+    /// Message content (optional when `tool_calls` present).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     /// Tool calls made by assistant (role="assistant" only).
@@ -261,7 +261,7 @@ pub struct ModelsResponse {
 }
 
 impl ModelsResponse {
-    /// Create a new ModelsResponse from a list of model summaries.
+    /// Create a new `ModelsResponse` from a list of model summaries.
     ///
     /// Each model's `context_window` is the GGUF's trained ceiling, capped by
     /// anything a person actually configured — a per-model server default or a
@@ -334,7 +334,7 @@ fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
         .then(|| vec!["embeddings".to_string()])
 }
 
-/// Information about a single model (OpenAI format).
+/// Information about a single model (`OpenAI` format).
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelInfo {
     pub id: String,
@@ -374,7 +374,7 @@ pub struct ModelInfo {
 // Error Response Types
 // =============================================================================
 
-/// Error response matching OpenAI format.
+/// Error response matching `OpenAI` format.
 ///
 /// `Deserialize` is derived so in-process clients — the agent path's LLM
 /// completion adapter, which talks to this proxy over loopback HTTP — can

@@ -64,6 +64,10 @@ fn camel_to_kebab(s: &str) -> String {
     out
 }
 
+#[allow(
+    clippy::iter_on_single_items,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) async fn handle_unset(ctx: &CliContext, key: &str) -> Result<()> {
     let camel = kebab_to_camel(key);
     let known = known_keys();

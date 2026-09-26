@@ -1,14 +1,14 @@
 //! Proxy supervisor for managing the OpenAI-compatible proxy lifecycle.
 //!
-//! The ProxySupervisor owns the proxy state internally, using tokio::sync::Mutex
+//! The `ProxySupervisor` owns the proxy state internally, using `tokio::sync::Mutex`
 //! for async-safe access. Adapters (Tauri, Axum, CLI) call methods on the
 //! supervisor without storing handles themselves.
 //!
 //! Key design decisions:
-//! - **Bind-then-report**: TcpListener binds FIRST, then reports real address
-//! - **Crash detection**: status() uses cancellation token to distinguish clean stop vs crash
+//! - **Bind-then-report**: `TcpListener` binds FIRST, then reports real address
+//! - **Crash detection**: `status()` uses cancellation token to distinguish clean stop vs crash
 //! - **Internal state ownership**: No distributed state across adapters
-//! - **Ports passed to start()**: Allows different port implementations per start
+//! - **Ports passed to `start()`**: Allows different port implementations per start
 
 use std::fmt;
 use std::net::SocketAddr;
@@ -71,9 +71,9 @@ pub enum ProxyStatus {
 impl fmt::Display for ProxyStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProxyStatus::Stopped => write!(f, "Stopped"),
-            ProxyStatus::Running { address } => write!(f, "Running on {address}"),
-            ProxyStatus::Crashed => write!(f, "Crashed"),
+            Self::Stopped => write!(f, "Stopped"),
+            Self::Running { address } => write!(f, "Running on {address}"),
+            Self::Crashed => write!(f, "Crashed"),
         }
     }
 }
@@ -188,7 +188,7 @@ pub struct ProxyBind {
 /// Supervisor for managing the OpenAI-compatible proxy.
 ///
 /// Owns the proxy state internally and provides a clean API for
-/// starting, stopping, and querying the proxy. Uses tokio::sync::Mutex
+/// starting, stopping, and querying the proxy. Uses `tokio::sync::Mutex`
 /// for async-safe access.
 ///
 /// # Example
@@ -223,7 +223,7 @@ impl Default for ProxySupervisor {
 }
 
 impl ProxySupervisor {
-    /// Create a new ProxySupervisor.
+    /// Create a new `ProxySupervisor`.
     #[must_use]
     pub fn new() -> Self {
         Self::with_observers(gglib_proxy::ProxyObservers::default())
@@ -292,7 +292,7 @@ impl ProxySupervisor {
     ///
     /// # Arguments
     ///
-    /// * `config` - Proxy configuration (host, port, default_context)
+    /// * `config` - Proxy configuration (host, port, `default_context`)
     /// * `runtime_port` - Port for managing model runtime
     /// * `catalog_port` - Port for listing and resolving models
     /// * `mcp` - MCP service for tool gateway

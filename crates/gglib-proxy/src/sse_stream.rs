@@ -22,7 +22,7 @@ use gglib_core::domain::DialectSpec;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
 /// (TCP send / first-byte-deadline wait) before falling back to an inline
-/// error frame. Total attempts = 1 (initial) + MAX_RETRIES = 3.
+/// error frame. Total attempts = 1 (initial) + `MAX_RETRIES` = 3.
 const MAX_RETRIES: u32 = 2;
 
 /// Backoff between pre-generation retry attempts (100ms).

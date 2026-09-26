@@ -29,13 +29,13 @@ impl SqliteSettingsRepository {
     /// Call this during initialization to set up the schema.
     pub async fn ensure_table(&self) -> Result<(), RepositoryError> {
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS settings_kv (
                 key TEXT PRIMARY KEY NOT NULL,
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            "#,
+            ",
         )
         .execute(&self.pool)
         .await
@@ -133,6 +133,10 @@ async fn read(conn: &mut SqliteConnection) -> Result<Settings, RepositoryError> 
 }
 
 /// Store `value` as `key`'s row, or remove the row when there is no value.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn write_row(
     conn: &mut SqliteConnection,
     key: &str,

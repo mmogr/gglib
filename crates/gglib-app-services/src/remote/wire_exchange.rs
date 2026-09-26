@@ -13,8 +13,12 @@ use super::types::{EnableRequest, Enabled, JoinRequest, Joined};
 
 /// Body for `POST /api/remote/enable`. Every field optional; an empty body
 /// is the default: no `/mcp`, public relays, discovery on.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[allow(
+    clippy::pub_underscore_fields,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct RemoteEnableBody {
     /// Let tunnelled requests reach `/mcp`. Off unless asked for.
     #[serde(default)]
@@ -57,7 +61,7 @@ impl RemoteEnableBody {
 /// What `POST /api/remote/enable` and `POST /api/remote/invite` answer,
 /// once. The ticket and the code are shown to a person now and are not
 /// retrievable afterwards.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteEnableResponse {
     /// The ticket, canonical lowercase form.
@@ -120,7 +124,7 @@ impl From<Enabled> for RemoteEnableResponse {
 
 /// Body for `POST /api/remote/join`. An empty body dials the ticket this
 /// machine last connected to.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteJoinBody {
     /// `<ticket>-<code>` for a first pairing, a bare ticket afterwards,
@@ -152,7 +156,7 @@ impl RemoteJoinBody {
 }
 
 /// What `POST /api/remote/join` answers.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteJoinResponse {
     /// The loopback port that is now the far machine.

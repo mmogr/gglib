@@ -10,25 +10,25 @@ pub(super) fn print_dependency(dep: &Dependency) {
     let status_str = match &dep.status {
         DependencyStatus::Present { version } => {
             if version.is_empty() {
-                format!("{}✓ installed{}", SUCCESS, RESET)
+                format!("{SUCCESS}✓ installed{RESET}")
             } else {
-                format!("{}✓ v{}{}", SUCCESS, version, RESET)
+                format!("{SUCCESS}✓ v{version}{RESET}")
             }
         }
         DependencyStatus::Missing => {
             if dep.required {
-                format!("{}✗ missing{}", DANGER, RESET)
+                format!("{DANGER}✗ missing{RESET}")
             } else {
-                format!("{}○ missing{}", WARNING, RESET)
+                format!("{WARNING}○ missing{RESET}")
             }
         }
         DependencyStatus::Optional => {
-            format!("{}○ optional{}", WARNING, RESET)
+            format!("{WARNING}○ optional{RESET}")
         }
     };
 
     let req_indicator = if dep.required {
-        format!("{}*{}", DANGER, RESET)
+        format!("{DANGER}*{RESET}")
     } else {
         " ".to_string()
     };
@@ -43,29 +43,25 @@ pub(super) fn print_dependency(dep: &Dependency) {
 pub(super) fn print_gpu_status(probe: &dyn SystemProbePort) {
     let gpu_info = probe.detect_gpu_info();
 
-    println!("\n{}GPU Detection:{}", BOLD, RESET);
+    println!("\n{BOLD}GPU Detection:{RESET}");
     println!("{}", "-".repeat(40));
 
     if gpu_info.has_nvidia_gpu {
-        println!("  {}✓ NVIDIA GPU detected{}", SUCCESS, RESET);
+        println!("  {SUCCESS}✓ NVIDIA GPU detected{RESET}");
         if let Some(ref cuda_ver) = gpu_info.cuda_version {
-            println!("  {}✓ CUDA available (v{}){}", SUCCESS, cuda_ver, RESET);
+            println!("  {SUCCESS}✓ CUDA available (v{cuda_ver}){RESET}");
         } else {
             println!(
-                "  {}! CUDA not found - install CUDA toolkit for GPU acceleration{}",
-                WARNING, RESET
+                "  {WARNING}! CUDA not found - install CUDA toolkit for GPU acceleration{RESET}"
             );
         }
     } else if gpu_info.has_metal {
-        println!("  {}✓ Metal GPU detected (Apple Silicon){}", SUCCESS, RESET);
-        println!("  {}✓ GPU acceleration available{}", SUCCESS, RESET);
+        println!("  {SUCCESS}✓ Metal GPU detected (Apple Silicon){RESET}");
+        println!("  {SUCCESS}✓ GPU acceleration available{RESET}");
     } else if gpu_info.has_vulkan {
-        println!("  {}✓ Vulkan GPU detected{}", SUCCESS, RESET);
+        println!("  {SUCCESS}✓ Vulkan GPU detected{RESET}");
         if gpu_info.vulkan_headers && gpu_info.vulkan_glslc && gpu_info.vulkan_spirv_headers {
-            println!(
-                "  {}✓ GPU acceleration available via Vulkan{}",
-                SUCCESS, RESET
-            );
+            println!("  {SUCCESS}✓ GPU acceleration available via Vulkan{RESET}");
         } else {
             let mut missing: Vec<&str> = Vec::new();
             if !gpu_info.vulkan_headers {
@@ -84,20 +80,15 @@ pub(super) fn print_gpu_status(probe: &dyn SystemProbePort) {
                 RESET
             );
             println!(
-                "  {}  Install the missing components above to enable GPU acceleration.{}",
-                DANGER, RESET
+                "  {DANGER}  Install the missing components above to enable GPU acceleration.{RESET}"
             );
             println!(
-                "  {}  Run `gglib config llama detect` for per-distro install hints.{}",
-                DANGER, RESET
+                "  {DANGER}  Run `gglib config llama detect` for per-distro install hints.{RESET}"
             );
         }
     } else {
-        println!(
-            "  {}✗ No supported GPU detected (Metal/CUDA/Vulkan required){}",
-            DANGER, RESET
-        );
-        println!("  {}  CPU-only inference is not supported{}", DANGER, RESET);
+        println!("  {DANGER}✗ No supported GPU detected (Metal/CUDA/Vulkan required){RESET}");
+        println!("  {DANGER}  CPU-only inference is not supported{RESET}");
     }
 }
 

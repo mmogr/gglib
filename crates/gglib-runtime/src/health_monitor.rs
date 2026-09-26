@@ -44,7 +44,7 @@ impl ServerHealthChecker {
                     }
                 } else {
                     ServerHealthStatus::Unreachable {
-                        last_error: format!("Health check failed: {}", e),
+                        last_error: format!("Health check failed: {e}"),
                     }
                 }
             }
@@ -54,6 +54,10 @@ impl ServerHealthChecker {
     /// Check if process is still alive via PID.
     ///
     /// Returns `ProcessDied` status if the process no longer exists.
+    #[allow(
+        clippy::option_if_let_else,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn check_process(handle: &ProcessHandle) -> ServerHealthStatus {
         if let Some(pid) = handle.pid {
             if Self::is_process_alive(pid) {
@@ -171,7 +175,7 @@ impl ServerHealthMonitor {
                             last_status = Some(current_status);
                         }
                     }
-                    _ = cancel_token.cancelled() => {
+                    () = cancel_token.cancelled() => {
                         debug!(
                             port = handle.port,
                             model_id = handle.model_id,

@@ -61,7 +61,7 @@ impl GuiProcessCore {
         let model_id = config.model_id as u32;
 
         if self.processes.contains_key(&model_id) {
-            return Err(anyhow!("Model {} is already running", model_id));
+            return Err(anyhow!("Model {model_id} is already running"));
         }
 
         if !config.model_path.exists() {
@@ -117,12 +117,10 @@ impl GuiProcessCore {
     fn resolve_port(&self, requested: Option<u16>) -> Result<u16> {
         match requested {
             Some(p) if p < 1024 => Err(anyhow!(
-                "Port {} is a privileged port. Please use a port >= 1024.",
-                p
+                "Port {p} is a privileged port. Please use a port >= 1024."
             )),
             Some(p) if !is_port_available(p) => Err(anyhow!(
-                "Port {} is already in use. Please choose a different port.",
-                p
+                "Port {p} is already in use. Please choose a different port."
             )),
             Some(p) => Ok(p),
             None => {
@@ -137,7 +135,7 @@ impl GuiProcessCore {
         let running = self
             .processes
             .remove(&model_id)
-            .ok_or_else(|| anyhow!("Model {} is not running", model_id))?;
+            .ok_or_else(|| anyhow!("Model {model_id} is not running"))?;
 
         let pid = running.info.pid;
         debug!(model_id = %model_id, pid = %pid, port = %running.info.port, "Stopping process");
@@ -220,7 +218,7 @@ impl GuiProcessCore {
         debug!(process_count = %self.processes.len(), "cleanup_dead called");
         let mut dead = Vec::new();
 
-        for (id, running) in self.processes.iter_mut() {
+        for (id, running) in &mut self.processes {
             match running.child.try_wait() {
                 Ok(Some(status)) => {
                     debug!(id = %id, status = ?status, "Process exited");

@@ -154,6 +154,11 @@ impl Shared {
 
 #[async_trait]
 impl SettingsRepository for Shared {
+    #[allow(
+        clippy::significant_drop_in_scrutinee,
+        clippy::significant_drop_tightening,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     async fn load(&self) -> Result<Settings, RepositoryError> {
         let mut stored = self.stored.lock().unwrap();
         let read = stored.clone();
@@ -169,6 +174,10 @@ impl SettingsRepository for Shared {
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn pairing(ticket: &str, api_key: &str) -> Option<RemotePairing> {
     Some(RemotePairing {
         ticket: ticket.to_owned(),

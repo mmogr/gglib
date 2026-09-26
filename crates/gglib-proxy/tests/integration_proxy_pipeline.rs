@@ -12,7 +12,7 @@
 //! 4. Collects the proxy's response bytes and parses every `data:` frame as
 //!    JSON.
 //! 5. Asserts the **post-normalization** wire format — the bytes external
-//!    clients (OpenWebUI, OpenAI SDKs) would actually see.
+//!    clients (`OpenWebUI`, `OpenAI` SDKs) would actually see.
 //!
 //! No `gglib_core::sse::*` types are used in the assertions; the tests speak
 //! pure HTTP + JSON, exactly like an external consumer.
@@ -163,7 +163,7 @@ async fn basic_text_round_trip() {
     assert!(
         stop["choices"][0]["delta"]
             .as_object()
-            .is_some_and(|o| o.is_empty()),
+            .is_some_and(serde_json::Map::is_empty),
         "stop chunk should have empty delta, got {stop}"
     );
 }
@@ -225,7 +225,7 @@ async fn reasoning_only_response_is_promoted_to_content() {
     );
 }
 
-/// Qwen XML tool calls must be rewritten into strict OpenAI `tool_calls`
+/// Qwen XML tool calls must be rewritten into strict `OpenAI` `tool_calls`
 /// deltas — the `<tool_call>…</tool_call>` markers must NOT appear in the
 /// rebuilt content stream.
 #[tokio::test]
@@ -293,14 +293,14 @@ async fn qwen_xml_tool_call_is_normalized() {
     assert!(
         stop["choices"][0]["delta"]
             .as_object()
-            .is_some_and(|o| o.is_empty())
+            .is_some_and(serde_json::Map::is_empty)
     );
 }
 
 /// The second `format:qwen-xml` body shape — Qwen3 + `--jinja`'s
 /// `<function=NAME><parameter=KEY>VALUE</parameter></function>` dialect,
 /// rather than [`qwen_xml_tool_call_is_normalized`]'s JSON body — must be
-/// rewritten into the same strict OpenAI `tool_calls` deltas, through the
+/// rewritten into the same strict `OpenAI` `tool_calls` deltas, through the
 /// full proxy pipeline rather than just the parser's own unit tests.
 #[tokio::test]
 async fn qwen_function_xml_tool_call_is_normalized() {
@@ -365,7 +365,7 @@ async fn qwen_function_xml_tool_call_is_normalized() {
     assert!(
         stop["choices"][0]["delta"]
             .as_object()
-            .is_some_and(|o| o.is_empty())
+            .is_some_and(serde_json::Map::is_empty)
     );
 }
 
@@ -556,7 +556,7 @@ async fn clean_dialect_stream_does_not_trip_the_alarm() {
     );
 }
 
-/// A standard OpenAI tool-call stream (no dialect) must round-trip through
+/// A standard `OpenAI` tool-call stream (no dialect) must round-trip through
 /// the identity parser preserving id, type, name, and arguments.
 #[tokio::test]
 async fn standard_openai_tool_call_passthrough() {

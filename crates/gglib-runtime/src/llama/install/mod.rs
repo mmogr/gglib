@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{}", e))
+    r.map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// Core streaming build pipeline for llama.cpp from source.
@@ -191,10 +191,10 @@ pub(super) fn install_binary(
     let binary_src_root = llama_dir.join("build");
 
     #[cfg(target_os = "windows")]
-    let relative_binary = format!("bin\\Release\\{}.exe", binary_name);
+    let relative_binary = format!("bin\\Release\\{binary_name}.exe");
 
     #[cfg(not(target_os = "windows"))]
-    let relative_binary = format!("bin/{}", binary_name);
+    let relative_binary = format!("bin/{binary_name}");
 
     let binary_src = binary_src_root.join(relative_binary);
 

@@ -1,7 +1,7 @@
 //! Route definitions and router construction.
 //!
 //! This module defines the HTTP routes and creates the main router.
-//! Handlers delegate to the shared GuiBackend facade.
+//! Handlers delegate to the shared `GuiBackend` facade.
 
 use axum::Json;
 use axum::Router;
@@ -48,7 +48,7 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 /// will be nested under `/api` by the caller.
 ///
 /// Routes are organized into domain groups:
-/// - `/models/*`  — CRUD, tags, verification, downloads, HuggingFace discovery
+/// - `/models/*`  — CRUD, tags, verification, downloads, `HuggingFace` discovery
 /// - `/config/*`  — settings, system setup
 /// - `/remote/*`  — the tunnel and the devices it admits (ADR 0012)
 pub(crate) fn api_routes() -> Router<AppState> {
@@ -159,7 +159,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .merge(chat_routes_no_prefix())
 }
 
-/// Model domain routes: CRUD, tags, verification, downloads, HuggingFace.
+/// Model domain routes: CRUD, tags, verification, downloads, `HuggingFace`.
 ///
 /// Nested under `/api/models` by the caller.
 fn model_routes() -> Router<AppState> {

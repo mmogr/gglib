@@ -222,7 +222,7 @@ fn test_confirm_no() {
 
 ## Dependencies
 
-- **std::io** - Terminal I/O operations
+- **`std::io`** - Terminal I/O operations
 - **anyhow** - Error handling
 
 ## Future Considerations
@@ -230,7 +230,7 @@ fn test_confirm_no() {
 - Colorized prompts (green for defaults, yellow for warnings)
 - Multi-line input support
 - Password input with hidden echo
-- Arrow key navigation for select_from_list
+- Arrow key navigation for `select_from_list`
 - History and autocomplete for repeated prompts
 
 <!-- module-docs:end -->

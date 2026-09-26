@@ -3,6 +3,15 @@
 // voice, but the launch it narrates happens in `process::swap_state`.
 mod api_key;
 pub(crate) mod banner;
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "a guard's scope is its critical section, so this lint is never applied \
+              in admission, residency or proxy lock code"
+)]
+#[allow(
+    clippy::manual_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod supervisor;
 
 // Re-export supervisor types

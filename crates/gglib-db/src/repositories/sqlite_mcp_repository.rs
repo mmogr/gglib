@@ -65,8 +65,7 @@ struct EnvRow {
 fn parse_datetime(s: &str) -> DateTime<Utc> {
     // `SQLite` stores datetime as "YYYY-MM-DD HH:MM:SS" format
     chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-        .map(|dt| Utc.from_utc_datetime(&dt))
-        .unwrap_or_else(|_| Utc::now())
+        .map_or_else(|_| Utc::now(), |dt| Utc.from_utc_datetime(&dt))
 }
 
 /// Convert a `McpServerRow` (with env) to domain `McpServer`.
@@ -147,10 +146,10 @@ impl McpServerRepository for SqliteMcpRepository {
 
         // Insert the server
         let result = sqlx::query(
-            r#"
+            r"
             INSERT INTO mcp_servers (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
+            ",
         )
         .bind(&server.name)
         .bind(server_type)
@@ -189,11 +188,11 @@ impl McpServerRepository for SqliteMcpRepository {
 
     async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
         let row = sqlx::query_as::<_, McpServerRow>(
-            r#"
+            r"
             SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
                    created_at, last_connected_at, is_valid, last_error
             FROM mcp_servers WHERE id = ?
-            "#,
+            ",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -209,11 +208,11 @@ impl McpServerRepository for SqliteMcpRepository {
 
     async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
         let row = sqlx::query_as::<_, McpServerRow>(
-            r#"
+            r"
             SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
                    created_at, last_connected_at, is_valid, last_error
             FROM mcp_servers WHERE name = ?
-            "#,
+            ",
         )
         .bind(name)
         .fetch_optional(&self.pool)
@@ -229,11 +228,11 @@ impl McpServerRepository for SqliteMcpRepository {
 
     async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
         let rows = sqlx::query_as::<_, McpServerRow>(
-            r#"
+            r"
             SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
                    created_at, last_connected_at, is_valid, last_error
             FROM mcp_servers ORDER BY name
-            "#,
+            ",
         )
         .fetch_all(&self.pool)
         .await
@@ -265,11 +264,11 @@ impl McpServerRepository for SqliteMcpRepository {
 
         // Update the server
         sqlx::query(
-            r#"
+            r"
             UPDATE mcp_servers 
             SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ?
             WHERE id = ?
-            "#,
+            ",
         )
         .bind(&server.name)
         .bind(server_type)
@@ -374,7 +373,7 @@ mod tests {
 
         // Create the mcp_servers table
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS mcp_servers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
@@ -392,7 +391,7 @@ mod tests {
                 is_valid INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT
             )
-            "#,
+            ",
         )
         .execute(&pool)
         .await
@@ -400,7 +399,7 @@ mod tests {
 
         // Create the mcp_server_env table
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS mcp_server_env (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 server_id INTEGER NOT NULL,
@@ -409,7 +408,7 @@ mod tests {
                 FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
                 UNIQUE(server_id, key)
             )
-            "#,
+            ",
         )
         .execute(&pool)
         .await

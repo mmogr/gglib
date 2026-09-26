@@ -204,7 +204,7 @@ pub(crate) async fn check_upgrade(
     Ok(Json(state.models.check_upgrade(id).await?))
 }
 
-/// Re-download at the latest HuggingFace revision and rewrite the row —
+/// Re-download at the latest `HuggingFace` revision and rewrite the row —
 /// `gglib model upgrade`. Blocking for the download's duration, like the CLI.
 pub(crate) async fn apply_upgrade(
     State(state): State<AppState>,
@@ -225,7 +225,7 @@ pub(crate) async fn set_capabilities(
 ///
 /// Returns a [`ModelDetailDto`] containing every stored field — a superset of
 /// the [`GuiModel`] returned by `GET /api/models/{id}`.  Includes raw GGUF
-/// metadata, MoE topology, full HuggingFace provenance, capability flags,
+/// metadata, `MoE` topology, full `HuggingFace` provenance, capability flags,
 /// inference defaults, and timestamps.
 pub(crate) async fn detail(
     State(state): State<AppState>,

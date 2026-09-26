@@ -49,7 +49,7 @@ fn find_repo_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
     let appimage_dir = repo_root.join("target/release/bundle/appimage");
     if let Ok(read_dir) = std::fs::read_dir(&appimage_dir) {
         let mut candidates: Vec<std::path::PathBuf> = read_dir
-            .filter_map(|entry| entry.ok())
+            .filter_map(std::result::Result::ok)
             .map(|entry| entry.path())
             .filter(|path| {
                 path.is_file()
@@ -81,13 +81,17 @@ fn find_repo_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
 
 /// Launch the GUI from a prebuilt standalone binary.
 ///
-/// Looks for the `.app` bundle (macOS), an AppImage or `gglib-app` (Linux), or
+/// Looks for the `.app` bundle (macOS), an `AppImage` or `gglib-app` (Linux), or
 /// `gglib-app.exe` (Windows) next to the running executable.
+#[allow(
+    clippy::manual_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn launch_prebuilt() -> Result<()> {
     let exe_dir = std::env::current_exe()
         .and_then(|p| p.canonicalize())
         .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
 
     let exe_dir = match exe_dir {
         Some(d) => d,

@@ -89,6 +89,10 @@ async fn chat(upstream: Arc<Upstream>) -> Response<Body> {
 
 /// A save writes the file the proxy names, as llama-server does, so the
 /// proxy's rename after it finds something.
+#[allow(
+    clippy::unused_async,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn slot_action(
     upstream: Arc<Upstream>,
     slot_dir: PathBuf,

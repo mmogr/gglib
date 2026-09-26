@@ -17,7 +17,7 @@ use super::*;
 use crate::upstream_read::upstream_events;
 
 /// An idle bound none of the tests that use it waits out.
-const LONG_IDLE: Duration = Duration::from_secs(60);
+const LONG_IDLE: Duration = Duration::from_mins(1);
 
 /// How long the client stays after its last frame before it leaves.
 const LINGER: Duration = Duration::from_millis(200);

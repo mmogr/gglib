@@ -27,7 +27,7 @@ pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> 
 /// loop consumes, optionally tapping the response's token usage into `sink`.
 ///
 /// `dialect` selects the response parser — `None` selects the
-/// identity-passthrough parser, so models that already emit strict OpenAI tool
+/// identity-passthrough parser, so models that already emit strict `OpenAI` tool
 /// calls are unaffected.
 pub(super) fn normalized_event_stream(
     response: reqwest::Response,

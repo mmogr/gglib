@@ -11,7 +11,7 @@ use super::update_model::short_sha;
 
 /// Execute the check-updates command.
 ///
-/// Checks if locally downloaded models have updates available on HuggingFace.
+/// Checks if locally downloaded models have updates available on `HuggingFace`.
 pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: bool) -> Result<()> {
     if all {
         println!("Checking updates for all models...");
@@ -78,7 +78,7 @@ async fn check_model_update(model: &gglib_core::domain::Model, hf_repo: &str) ->
             }
         }
         Err(e) => {
-            println!("  ✗ Failed to check repository: {}", e);
+            println!("  ✗ Failed to check repository: {e}");
         }
     }
 

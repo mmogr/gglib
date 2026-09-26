@@ -231,7 +231,7 @@ async fn run_tty_monitor(
                         // Tell reader to resume reading keys.
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
-                    Some(Key::Char('q')) | Some(Key::Escape) => {
+                    Some(Key::Char('q') | Key::Escape) => {
                         if quitting {
                             // Second press → force quit.
                             downloads.cancel_all().await.ok();

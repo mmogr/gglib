@@ -17,6 +17,10 @@ use anyhow::{Result, anyhow};
 /// `show_prompt` (`--show-prompt`) echoes the assembled message to stderr. It
 /// is not a local `--verbose`: that arg id would collide with the global one
 /// and leave `gglib q` with no way to turn on debug logging.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn build_user_message(
     question: &str,
     file: Option<&str>,
@@ -27,7 +31,7 @@ pub(crate) fn build_user_message(
     // --file takes precedence over piped stdin.
     let context = if let Some(path) = file {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| anyhow!("failed to read file '{}': {e}", path))?;
+            .map_err(|e| anyhow!("failed to read file '{path}': {e}"))?;
         if content.is_empty() {
             None
         } else {
@@ -35,7 +39,9 @@ pub(crate) fn build_user_message(
         }
     } else {
         let stdin = io::stdin();
-        if !stdin.is_terminal() {
+        if stdin.is_terminal() {
+            None
+        } else {
             let mut buffer = String::new();
             stdin
                 .lock()
@@ -46,8 +52,6 @@ pub(crate) fn build_user_message(
             } else {
                 Some(buffer)
             }
-        } else {
-            None
         }
     };
 

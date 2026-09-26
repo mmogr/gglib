@@ -59,6 +59,10 @@ impl Far {
     /// # Errors
     ///
     /// As [`get_json`](Self::get_json).
+    #[allow(
+        clippy::future_not_send,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub(crate) async fn post_json<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,

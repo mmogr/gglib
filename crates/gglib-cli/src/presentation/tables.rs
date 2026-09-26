@@ -2,7 +2,7 @@
 
 use chrono::{NaiveDateTime, Utc};
 
-/// Format a SQLite datetime string as a human-readable relative time.
+/// Format a `SQLite` datetime string as a human-readable relative time.
 ///
 /// Returns strings like "just now", "5 min ago", "3 hours ago", "2 days ago",
 /// or the original date if more than 30 days old.

@@ -370,7 +370,7 @@ async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
     } else {
         style::WARNING
     };
-    println!("{colour}{}{RESET}", outcome.verdict, RESET = style::RESET,);
+    println!("{colour}{}{RESET}", outcome.verdict, RESET = style::RESET);
     println!("  {}", outcome.verdict.rationale());
     if let ApplyVerdict::Apply {
         paired: Some(p), ..
@@ -1104,7 +1104,7 @@ fn fmt_tps(scores: &ArmScores) -> String {
 fn fmt_axis(value: Option<f64>, width: usize) -> String {
     value.map_or_else(
         || format!("{:>width$}", "—", width = width),
-        |v| format!("{v:>width$.3}", width = width),
+        |v| format!("{v:>width$.3}"),
     )
 }
 

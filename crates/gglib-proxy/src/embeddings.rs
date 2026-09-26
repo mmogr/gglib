@@ -52,6 +52,10 @@ use crate::unary_body::forward_non_streaming_response;
 pub(crate) const EMBEDDING_TAG: &str = "embedding";
 
 /// Handle an embeddings request — ensure the model is running, then proxy.
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn embeddings(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -175,7 +179,7 @@ pub(crate) async fn embeddings(
         .client
         .post(&upstream_url)
         .header("content-type", "application/json");
-    for (name, value) in headers.iter() {
+    for (name, value) in &headers {
         if should_forward_header(name.as_str())
             && let Ok(value_str) = value.to_str()
         {

@@ -48,7 +48,7 @@ impl CliConfig {
 /// Fully composed application context for CLI commands.
 ///
 /// This struct owns all the infrastructure and provides access to
-/// the AppCore for command handlers.
+/// the `AppCore` for command handlers.
 pub struct CliContext {
     /// The core application facade.
     pub app: Arc<AppCore>,

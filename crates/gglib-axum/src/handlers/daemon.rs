@@ -16,6 +16,10 @@ use crate::state::AppState;
 /// shutdown, pidfile audit) runs after the HTTP server stops accepting.
 /// `409 Conflict` when this server is not hosted by `run_daemon` — an
 /// embedded or test instance has no daemon lifecycle to end.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn shutdown(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     match &state.daemon_shutdown {
         Some(token) => {

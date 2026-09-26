@@ -323,7 +323,7 @@ pub(crate) const FIRST_BYTE_DEADLINE_SECS: u64 = 300;
 /// under a grammar, and non-streaming — not a fresh full turn. On
 /// expiry the turn falls open to the original frames, exactly as every other
 /// repair failure path already does.
-pub(crate) const REPAIR_REISSUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+pub(crate) const REPAIR_REISSUE_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(1);
 
 /// How often to push an SSE comment while a re-issue is in flight.
 ///
@@ -791,7 +791,7 @@ pub(crate) async fn forward_chat_completion(
         .header("content-type", "application/json");
 
     // Forward allowed headers
-    for (name, value) in headers.iter() {
+    for (name, value) in headers {
         if should_forward_header(name.as_str())
             && let Ok(value_str) = value.to_str()
         {
@@ -910,14 +910,16 @@ fn host_port_from_url(url: &str) -> String {
     url.find("://")
         .and_then(|i| url[i + 3..].split('/').next())
         .filter(|s| !s.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| {
-            warn!(
-                url,
-                "could not parse host:port from upstream URL; TCP probe will fail safely"
-            );
-            "127.0.0.1:0".to_owned()
-        })
+        .map_or_else(
+            || {
+                warn!(
+                    url,
+                    "could not parse host:port from upstream URL; TCP probe will fail safely"
+                );
+                "127.0.0.1:0".to_owned()
+            },
+            str::to_owned,
+        )
 }
 
 /// Build a single SSE `chat.completion.chunk` frame carrying visible assistant
@@ -932,8 +934,7 @@ fn host_port_from_url(url: &str) -> String {
 pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let value = serde_json::json!({
         "id": id,
@@ -1023,8 +1024,7 @@ pub(crate) async fn drain_events(
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let encoder = SseEncoder::new(id, model_name, created);
 
     // Set once a generated token comes from the upstream, seen here because

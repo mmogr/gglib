@@ -43,6 +43,10 @@ pub(crate) fn drain_events(buffer: &mut String) -> Vec<String> {
 /// field and holds a bare client, so it inherits nothing.
 ///
 /// [`DaemonHandle`]: super::DaemonHandle
+#[allow(
+    clippy::future_not_send,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn stream_json<T, B>(
     client: &reqwest::Client,
     url: &str,

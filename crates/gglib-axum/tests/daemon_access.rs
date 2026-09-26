@@ -130,6 +130,10 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
 /// listener without a restart. Tracking is right here and wrong above; the
 /// difference is whether a token was in force at bind.
 #[tokio::test]
+#[allow(
+    clippy::similar_names,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn a_bound_key_still_follows_a_rotation() {
     let (state, app) = test_state_and_app_with_access(
         CorsConfig::AllowAll,

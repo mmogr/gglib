@@ -33,6 +33,10 @@ pub struct ServerLogEntry {
 
 impl ServerLogEntry {
     /// Create a new log entry with current timestamp
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn new(line: String, port: u16) -> Self {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -86,6 +90,10 @@ impl ServerLogManager {
     }
 
     /// Add a log line for a server (sync - can be called from std threads)
+    #[allow(
+        clippy::significant_drop_tightening,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     pub fn add_log(&self, port: u16, line: &str) {
         let entry = ServerLogEntry::new(line.to_string(), port);
 
@@ -103,7 +111,10 @@ impl ServerLogManager {
     /// Get logs for a specific server
     pub fn get_logs(&self, port: u16) -> Vec<ServerLogEntry> {
         let buffers = self.buffers.read().unwrap();
-        buffers.get(&port).map(|b| b.get_all()).unwrap_or_default()
+        buffers
+            .get(&port)
+            .map(LogBuffer::get_all)
+            .unwrap_or_default()
     }
 
     /// Get a broadcast receiver for log events
@@ -124,9 +135,9 @@ impl Default for ServerLogManager {
 
 use gglib_core::ports::ServerLogSinkPort;
 
-/// Log sink that forwards process output to the global ServerLogManager.
+/// Log sink that forwards process output to the global `ServerLogManager`.
 ///
-/// This adapter bridges the process output capture (via spawn_log_readers)
+/// This adapter bridges the process output capture (via `spawn_log_readers`)
 /// to the log broadcasting system. It's a zero-sized type since it just
 /// delegates to the global log manager singleton.
 #[derive(Debug, Clone, Default)]

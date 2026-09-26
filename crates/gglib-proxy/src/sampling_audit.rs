@@ -283,7 +283,7 @@ pub struct Divergence {
 /// What the audit has actually been able to observe.
 ///
 /// Deliberately not a bare count — see the module docs on `Blind`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum AuditState {
@@ -927,7 +927,7 @@ pub struct SuppressedEffortRecord {
 /// proxy that has served no request at all — three states with different
 /// meanings. A surface rendering this must say what it is beside, not present
 /// the count alone.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct EffortSuppressions {
     /// Requests on which a resolved level was deleted before sending.

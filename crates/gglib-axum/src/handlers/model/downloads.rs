@@ -19,7 +19,7 @@ pub(crate) struct QueueDownloadRequest {
     pub quant: Option<String>,
 }
 
-/// Response from queue_download.
+/// Response from `queue_download`.
 /// Canonical shape returned to all clients - never a tuple.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -90,6 +90,10 @@ pub(crate) async fn remove(
 /// This endpoint is idempotent: returns 204 No Content whether or not
 /// the download exists. This prevents client-side errors during race
 /// conditions (e.g., SSE removes download while cancel is in-flight).
+#[allow(
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn cancel(
     State(state): State<AppState>,
     Path(id): Path<String>,

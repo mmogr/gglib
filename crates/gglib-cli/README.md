@@ -87,7 +87,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata) |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `remove <id\|name>` | Remove a model from the library |
-| `serve <id\|name>` | Start llama-server for a model (respects per-model server_defaults from DB, overridable with `--ctx-size`) |
+| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
 | `chat <id\|name>` | Start interactive llama-cli chat |
 | `chat <id\|name> --continue <N>` | Resume a previous conversation by ID |
 | `question <text>` | Ask a question (with optional piped context) |
@@ -96,8 +96,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
-| `download <repo>` | Download a model from HuggingFace |
-| `search <query>` | Search HuggingFace Hub for models |
+| `download <repo>` | Download a model from `HuggingFace` |
+| `search <query>` | Search `HuggingFace` Hub for models |
 | `config settings show` | Show current configuration |
 | `config default <id\|name>` | Set/show/clear the default model |
 | `config profile list` | List named sampling profiles |

@@ -1,7 +1,7 @@
 //! Semantic error types for GUI operations.
 //!
 //! These errors are domain-focused, not HTTP-focused. Adapters map
-//! `GuiError` to their specific error types (TauriError, HttpError).
+//! `GuiError` to their specific error types (`TauriError`, `HttpError`).
 
 use std::fmt;
 
@@ -37,7 +37,7 @@ pub enum GuiError {
         expected_path: String,
         /// Suggested command to fix the issue
         suggested_command: String,
-        /// Reason for the failure (NotFound, NotExecutable, PermissionDenied)
+        /// Reason for the failure (`NotFound`, `NotExecutable`, `PermissionDenied`)
         reason: String,
     },
 
@@ -59,8 +59,7 @@ impl fmt::Display for GuiError {
             } => {
                 write!(
                     f,
-                    "llama-server not installed: {} at {}\nRun: {}",
-                    reason, expected_path, suggested_command
+                    "llama-server not installed: {reason} at {expected_path}\nRun: {suggested_command}"
                 )
             }
             Self::Internal(msg) => write!(f, "internal error: {msg}"),

@@ -32,7 +32,7 @@ fn parse_shard_name(file_name: &str) -> Option<(&str, u32)> {
 /// auto-sizing (e.g. `gglib-app-services`' direct model-serve path) don't
 /// have to reimplement multi-shard summing.
 pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
-    let single = || file_path.metadata().map(|md| md.len()).unwrap_or(0);
+    let single = || file_path.metadata().map_or(0, |md| md.len());
 
     let (Some(dir), Some(file_name)) = (
         file_path.parent(),
@@ -47,7 +47,7 @@ pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
     (1..=total)
         .map(|i| {
             let shard = dir.join(format!("{prefix}-{i:05}-of-{total:05}.gguf"));
-            shard.metadata().map(|md| md.len()).unwrap_or(0)
+            shard.metadata().map_or(0, |md| md.len())
         })
         .sum()
 }

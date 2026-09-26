@@ -1,0 +1,21 @@
+# <member> <lints allowed> <of those, without a reason>
+# Written by scripts/check_lint_inheritance.sh --update.
+crates/gglib-core 76 75
+crates/gglib-db 9 0
+crates/gglib-download 10 10
+crates/gglib-gguf 8 8
+crates/gglib-bootstrap 1 1
+crates/gglib-app-services 52 16
+crates/gglib-hf 3 3
+crates/gglib-build-info 0 0
+crates/gglib-mcp 9 9
+crates/gglib-proxy 77 9
+crates/gglib-runtime 90 17
+crates/gglib-agent 5 5
+crates/gglib-sse 0 0
+crates/gglib-cli 101 12
+crates/gglib-axum 28 8
+crates/gglib-tauri 0 0
+crates/gglib-integration-tests 5 5
+src-tauri 22 4
+(outside-members) 0 0

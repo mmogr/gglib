@@ -159,13 +159,12 @@ pub(crate) fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u
             let version_str = get_specific_gcc_version(&cc)?;
             let version = parse_version_tuple(&version_str);
             return Ok((cc, version));
-        } else {
-            warn!(
-                compiler = %cc,
-                "CC is set to a non-standard compiler, version validation will be skipped"
-            );
-            return Ok((cc, None));
         }
+        warn!(
+            compiler = %cc,
+            "CC is set to a non-standard compiler, version validation will be skipped"
+        );
+        return Ok((cc, None));
     }
 
     // Prefer clang (best CUDA compatibility, skip validation)
@@ -197,7 +196,7 @@ fn get_specific_gcc_version(gcc_cmd: &str) -> Result<String> {
         .lines()
         .next()
         .and_then(|line| line.split_whitespace().last())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .ok_or_else(|| anyhow::anyhow!("Failed to parse {gcc_cmd} version"))
 }
 

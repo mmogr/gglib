@@ -1,6 +1,6 @@
-//! Search handler for HuggingFace Hub.
+//! Search handler for `HuggingFace` Hub.
 //!
-//! This command doesn't require AppCore - it's pure HF API calls.
+//! This command doesn't require `AppCore` - it's pure HF API calls.
 
 use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
@@ -8,7 +8,7 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 
 /// Execute the search command.
 ///
-/// Searches HuggingFace Hub for models matching the query.
+/// Searches `HuggingFace` Hub for models matching the query.
 /// No database access required.
 pub(crate) async fn execute(
     query: String,
@@ -16,7 +16,7 @@ pub(crate) async fn execute(
     sort: String,
     gguf_only: bool,
 ) -> Result<()> {
-    println!("🔍 Searching HuggingFace Hub for: '{}'...", query);
+    println!("🔍 Searching HuggingFace Hub for: '{query}'...");
 
     let client = DefaultHfClient::new(&HfClientConfig::default());
 
@@ -38,7 +38,7 @@ pub(crate) async fn execute(
     let response = client
         .search(&options)
         .await
-        .map_err(|e| anyhow!("Search failed: {}", e))?;
+        .map_err(|e| anyhow!("Search failed: {e}"))?;
 
     let mut filtered_models = Vec::new();
 
@@ -78,12 +78,12 @@ pub(crate) async fn execute(
 
     if filtered_models.is_empty() {
         if filter_gguf {
-            println!("No GGUF models found for query: '{}'", query);
+            println!("No GGUF models found for query: '{query}'");
             println!(
                 "💡 Try using a more general search term like 'gguf', 'llama-gguf', or specific model names"
             );
         } else {
-            println!("No models found for query: '{}'", query);
+            println!("No models found for query: '{query}'");
         }
         return Ok(());
     }
@@ -112,9 +112,9 @@ pub(crate) async fn execute(
             let short_desc = if desc.len() > 80 {
                 format!("{}...", &desc[..77])
             } else {
-                desc.to_string()
+                desc.clone()
             };
-            println!("    {}", short_desc);
+            println!("    {short_desc}");
         }
 
         println!();
@@ -127,6 +127,10 @@ pub(crate) async fn execute(
 }
 
 /// Format large numbers with K/M suffixes.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn format_number(n: u64) -> String {
     if n >= 1_000_000 {
         format!("{:.1}M", n as f64 / 1_000_000.0)

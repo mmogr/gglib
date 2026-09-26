@@ -25,7 +25,7 @@ const BIND_TIMEOUT: Duration = Duration::from_secs(30);
 /// Generous on purpose: this covers reading tens of gigabytes of weights off
 /// disk into VRAM on a cold page cache. Concurrent requests queue behind the
 /// same startup rather than being refused, so waiting is the correct behaviour.
-const LOAD_TIMEOUT: Duration = Duration::from_secs(600);
+const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 
 /// Wait for the endpoint, send one real request through it, then print the
 /// client configuration.
@@ -146,6 +146,10 @@ async fn warm_request(
 /// through `/v1/models`, which is precisely what `gglib serve` exists for.
 /// Sending someone there with the unpinned base URL would fail in a way that
 /// looks like gglib being broken.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn render_client_config(
     addr: SocketAddr,
     model: &str,

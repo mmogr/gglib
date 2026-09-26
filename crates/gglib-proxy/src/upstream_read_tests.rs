@@ -18,6 +18,10 @@ fn content_frame(text: &str) -> Bytes {
 
 /// The events [`upstream_events`] yields for `chunks`, and how many chunks it
 /// read to get them.
+#[allow(
+    clippy::future_not_send,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn read_all(
     chunks: Vec<Result<Bytes, std::io::Error>>,
 ) -> (Vec<anyhow::Result<LlmStreamEvent>>, usize) {
@@ -259,7 +263,7 @@ async fn a_stall_before_any_generated_token_says_so() {
 /// only when there will be one, and the error frame, byte for byte.
 #[test]
 fn a_stall_is_told_as_a_notice_and_an_upstream_timeout_frame() {
-    let after = Duration::from_secs(300);
+    let after = Duration::from_mins(5);
     let mid = UpstreamStalled {
         after,
         after_first_token: true,

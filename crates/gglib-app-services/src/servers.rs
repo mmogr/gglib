@@ -95,7 +95,7 @@ impl ServerMonitorRegistry {
         );
     }
 
-    /// Find monitor by model_id (for stop operations).
+    /// Find monitor by `model_id` (for stop operations).
     fn find_by_model_id(&self, model_id: i64) -> Option<i64> {
         self.monitors
             .iter()
@@ -118,7 +118,7 @@ impl ServerMonitorRegistry {
                 }
                 Ok(Err(e)) => {
                     warn!(server_id, error = %e, "Monitor task panicked");
-                    Err(GuiError::Internal(format!("Monitor task panicked: {}", e)))
+                    Err(GuiError::Internal(format!("Monitor task panicked: {e}")))
                 }
                 Err(_) => {
                     warn!(server_id, "Monitor task cancellation timed out");
@@ -221,7 +221,7 @@ impl ServerOps {
             .settings()
             .get()
             .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
+            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
 
         // The proxy must be up before the model: it owns the runtime the model
         // will run under, and its dashboard and cache lifecycle are the reason
@@ -250,7 +250,7 @@ impl ServerOps {
             .map(gglib_core::ports::Admission::into_target)
             .map_err(|e| {
                 let error_summary = ServerSummary {
-                    id: format!("server-{}", id),
+                    id: format!("server-{id}"),
                     model_id: id.to_string(),
                     model_name: model.name.clone(),
                     port: 0, // No port on failure
@@ -262,7 +262,7 @@ impl ServerOps {
         debug!(model_id = %id, port = %target.port, "Server started successfully");
 
         let summary = ServerSummary {
-            id: format!("server-{}", id),
+            id: format!("server-{id}"),
             model_id: id.to_string(),
             model_name: model.name.clone(),
             port: target.port,
@@ -359,7 +359,7 @@ impl ServerOps {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         let summary = ServerSummary {
-            id: format!("server-{}", id),
+            id: format!("server-{id}"),
             model_id: id.to_string(),
             model_name: model.name.clone(),
             port: running.port,
@@ -389,7 +389,7 @@ impl ServerOps {
 
         self.deps.server_events.stopped(&summary);
 
-        Ok(format!("Server for model {} stopped", id))
+        Ok(format!("Server for model {id} stopped"))
     }
 
     /// Stop all running servers.
@@ -484,7 +484,7 @@ impl ServerOps {
     }
 
     /// Subscribe to real-time log events.
-    /// Returns a broadcast receiver for ServerLogEntry events.
+    /// Returns a broadcast receiver for `ServerLogEntry` events.
     pub fn subscribe_logs(&self) -> tokio::sync::broadcast::Receiver<crate::types::ServerLogEntry> {
         gglib_runtime::get_log_manager().subscribe()
     }
@@ -536,8 +536,7 @@ impl ServerOps {
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Classify a spawn failure as a llama-server availability problem.
@@ -597,7 +596,7 @@ mod tests {
     use super::*;
     use tokio::time::{Duration, timeout};
 
-    /// Helper to check if registry contains a server_id
+    /// Helper to check if registry contains a `server_id`
     impl ServerMonitorRegistry {
         #[cfg(test)]
         fn contains(&self, server_id: i64) -> bool {
@@ -730,7 +729,7 @@ mod tests {
     use gglib_core::events::{ServerEvents, ServerSummary};
     use std::sync::Mutex;
 
-    /// Recording implementation of ServerEvents for testing.
+    /// Recording implementation of `ServerEvents` for testing.
     ///
     /// Records all event calls in a vector for later assertion.
     #[derive(Default)]
@@ -843,7 +842,7 @@ mod tests {
     }
 
     /// With nothing running, the proxy runtime reports no current model, so a
-    /// stop must surface as NotFound rather than a generic failure.
+    /// stop must surface as `NotFound` rather than a generic failure.
     #[tokio::test]
     async fn stop_nonexistent_model_returns_not_found() {
         let ops = make_server_ops().await;

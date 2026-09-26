@@ -47,6 +47,10 @@ pub(crate) struct LoadResponse {
 /// every refusal is [`handle_runtime_error`]'s, worded exactly as the same
 /// condition is worded on a chat request, so a person who has seen one has
 /// seen both.
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn load_model(
     State(state): State<AppState>,
     Path(name): Path<String>,

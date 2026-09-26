@@ -29,8 +29,7 @@ pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
     cmd(program)
         .args(args)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Run a command and return its stdout as a trimmed `String` on success.
@@ -68,7 +67,7 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = version_str.split('.').collect();
     if parts.len() >= 2 {
         let parse_numeric = |part: &str| -> Option<u32> {
-            let numeric_str: String = part.chars().take_while(|c| c.is_ascii_digit()).collect();
+            let numeric_str: String = part.chars().take_while(char::is_ascii_digit).collect();
             numeric_str.parse::<u32>().ok()
         };
         let major = parse_numeric(parts[0])?;
@@ -85,6 +84,11 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 
 /// Check if git is installed, returning its version string on success.
 #[cfg(any(feature = "cli", test))]
+#[allow(
+    clippy::option_if_let_else,
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn has_git() -> Result<Option<String>> {
     match command_stdout("git", &["--version"]) {
         Some(v) => {
@@ -97,6 +101,11 @@ pub(crate) fn has_git() -> Result<Option<String>> {
 
 /// Check if cmake is installed, returning its version string on success.
 #[cfg(any(feature = "cli", test))]
+#[allow(
+    clippy::option_if_let_else,
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn has_cmake() -> Result<Option<String>> {
     match command_stdout("cmake", &["--version"]) {
         Some(v) => {
@@ -119,6 +128,10 @@ pub(crate) fn has_cmake() -> Result<Option<String>> {
 /// - **macOS**: `clang++`, `g++`
 /// - **Linux**: `g++`, `clang++`
 #[cfg(any(feature = "cli", test))]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) fn has_cpp_compiler() -> Result<Option<String>> {
     let compilers = if cfg!(target_os = "windows") {
         vec!["cl", "g++", "clang++"]

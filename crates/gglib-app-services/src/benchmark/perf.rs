@@ -72,12 +72,12 @@ pub(crate) async fn run_perf(
         // ── Cooperative cancellation check ───────────────────────────────
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => {
+            () = cancel.cancelled() => {
                 deps.bench_repo.fail_run(run_id, "Aborted by user").await.ok();
                 deps.runtime.stop_current().await.ok();
                 return Ok(());
             }
-            _ = std::future::ready(()) => {}
+            () = std::future::ready(()) => {}
         }
 
         let model = match deps.model_repo.get_by_id(model_id).await {
@@ -157,6 +157,10 @@ pub(crate) async fn run_perf(
 }
 
 /// Spawn `llama-bench` for one model, capture output, and build a result.
+#[allow(
+    clippy::or_fun_call,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn run_single_perf(
     _deps: &BenchmarkDeps,
     model_id: i64,
@@ -188,7 +192,7 @@ async fn run_single_perf(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         warn!("llama-bench failed for model '{}': {}", model.name, stderr);
-        anyhow::bail!("{}", stderr);
+        anyhow::bail!("{stderr}");
     }
 
     let parsed = parse_perf_output(&output.stdout).ok_or_else(|| {

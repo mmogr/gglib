@@ -10,10 +10,10 @@
 //! A trailing `system` message does not survive every real template: on some
 //! it **raises** (an HTTP 500 from llama-server; Qwen3.5-4B: "System message
 //! must be at the beginning."), on some it is **hoisted to token 0** (the
-//! DeepSeek family, breaking the cached prefix `canonicalization` exists to
+//! `DeepSeek` family, breaking the cached prefix `canonicalization` exists to
 //! keep), and on some it is **silently dropped**. gglib's two capability
 //! flags identify none of these: llama.cpp probes `supports_system_role` with
-//! the message at index 0, so Qwen3.5 and DeepSeek both report that they
+//! the message at index 0, so Qwen3.5 and `DeepSeek` both report that they
 //! support it.
 //!
 //! **A note inside the last message shares that message's fate.** A template

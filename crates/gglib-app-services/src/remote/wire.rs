@@ -17,8 +17,12 @@ use serde::{Deserialize, Serialize};
 
 /// `GET /api/remote/status`, and the answer to `disable`, `disconnect` and
 /// `kill`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct RemoteStatus {
     /// Whether the serve side is up.
     pub enabled: bool,
@@ -85,7 +89,7 @@ pub struct RemoteStatus {
 }
 
 /// One connected peer, by fingerprint.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemotePeer {
     /// Twelve hex characters — the same name the daemon log uses.
@@ -97,7 +101,7 @@ pub struct RemotePeer {
 }
 
 /// The connect side, while it is up.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteConnection {
     /// The loopback port bound here.
@@ -121,7 +125,7 @@ pub struct RemoteConnection {
 
 /// One device this machine has issued a key to: a row of the roster, or a
 /// key the key file holds with no row.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteDevice {
     /// The name the tunnel edge holds this device's key under, and the value
@@ -181,7 +185,7 @@ const fn a_roster_row() -> bool {
 }
 
 /// What `DELETE /api/remote/devices/{device}` did.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteForgotten {
     /// Whether this machine held anything under that name.

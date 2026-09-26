@@ -1,6 +1,6 @@
 //! Proxy operations for GUI backend.
 //!
-//! Wraps the ProxySupervisor to provide start/stop/status operations
+//! Wraps the `ProxySupervisor` to provide start/stop/status operations
 //! for the OpenAI-compatible proxy.
 //!
 //! The `ModelRuntimePort` (wrapping the shared `ProcessManager`) is injected
@@ -225,7 +225,7 @@ impl ProxyOps {
     fn map_start_error(e: SupervisorError) -> GuiError {
         match e {
             SupervisorError::AlreadyRunning(addr) => {
-                GuiError::Conflict(format!("Proxy already running at {}", addr))
+                GuiError::Conflict(format!("Proxy already running at {addr}"))
             }
             SupervisorError::BindFailed { address, reason } => GuiError::Conflict(format!(
                 "Port {address} is already in use ({reason}) — likely another `gglib serve` \
@@ -322,10 +322,10 @@ impl ProxyOps {
         self.supervisor.stop().await.map_err(|e| match e {
             SupervisorError::NotRunning => GuiError::Conflict("Proxy is not running".to_string()),
             SupervisorError::AlreadyRunning(addr) => {
-                GuiError::Internal(format!("Proxy unexpectedly running at {}", addr))
+                GuiError::Internal(format!("Proxy unexpectedly running at {addr}"))
             }
             SupervisorError::BindFailed { address, reason } => {
-                GuiError::Internal(format!("Unexpected bind error at {}: {}", address, reason))
+                GuiError::Internal(format!("Unexpected bind error at {address}: {reason}"))
             }
             SupervisorError::Internal(msg) => GuiError::Internal(msg),
         })

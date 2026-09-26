@@ -57,18 +57,22 @@ fn resolve_disk_budget_inner(explicit_gb: Option<u64>, env_gb: Option<String>) -
 /// Tmp files older than this are orphans from a save that timed out, failed,
 /// or was never confirmed — more than twice `slots::SAVE_TIMEOUT` so a
 /// slow-but-still-in-flight save is never mistaken for an orphan.
-const STALE_TMP_MAX_AGE: Duration = Duration::from_secs(15 * 60);
+const STALE_TMP_MAX_AGE: Duration = Duration::from_mins(15);
 
 /// Background eviction task — spawned at server startup, runs every 60s.
 /// Exits promptly on `cancel`, same shutdown contract as the other
 /// background tasks (`spawn_slots_poller`, `spawn_dashboard_publisher`).
+#[allow(
+    clippy::too_long_first_doc_paragraph,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub fn spawn_eviction_task(
     slot_dir: PathBuf,
     budget: DiskBudget,
     cancel: CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let interval = Duration::from_secs(60);
+        let interval = Duration::from_mins(1);
         loop {
             tokio::select! {
                 () = cancel.cancelled() => break,
@@ -147,6 +151,10 @@ pub async fn evict_over_budget(slot_dir: &Path, budget: DiskBudget) -> std::io::
 
 /// Remove orphaned `*.tmp` files older than [`STALE_TMP_MAX_AGE`] — leftovers
 /// from a save that never completed its rename to the final `.bin` name.
+#[allow(
+    clippy::manual_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn reap_stale_tmp_files(slot_dir: &Path) -> std::io::Result<()> {
     let mut entries = match tokio::fs::read_dir(slot_dir).await {
         Ok(e) => e,

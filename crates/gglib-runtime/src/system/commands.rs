@@ -10,8 +10,7 @@ fn command_exists(program: &str) -> bool {
     cmd("which")
         .arg(program)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Get the version of a command by running it with --version.
@@ -40,14 +39,20 @@ pub(super) fn get_command_version(program: &str, version_flag: &str) -> Option<S
 pub(super) fn get_cargo_version() -> Option<String> {
     let output = get_command_version("cargo", "--version")?;
     // "cargo 1.75.0 (1d8b05cdd 2023-11-20)" -> "1.75.0"
-    output.split_whitespace().nth(1).map(|s| s.to_string())
+    output
+        .split_whitespace()
+        .nth(1)
+        .map(std::string::ToString::to_string)
 }
 
 /// Get rustc version.
 pub(super) fn get_rustc_version() -> Option<String> {
     let output = get_command_version("rustc", "--version")?;
     // "rustc 1.75.0 (82e1608df 2023-12-21)" -> "1.75.0"
-    output.split_whitespace().nth(1).map(|s| s.to_string())
+    output
+        .split_whitespace()
+        .nth(1)
+        .map(std::string::ToString::to_string)
 }
 
 /// Get node version.
@@ -68,21 +73,30 @@ pub(super) fn get_npm_version() -> Option<String> {
 pub(super) fn get_git_version() -> Option<String> {
     let output = get_command_version("git", "--version")?;
     // "git version 2.43.0" -> "2.43.0"
-    output.split_whitespace().nth(2).map(|s| s.to_string())
+    output
+        .split_whitespace()
+        .nth(2)
+        .map(std::string::ToString::to_string)
 }
 
 /// Get cmake version.
 pub(super) fn get_cmake_version() -> Option<String> {
     let output = get_command_version("cmake", "--version")?;
     // "cmake version 3.28.1" -> "3.28.1"
-    output.split_whitespace().nth(2).map(|s| s.to_string())
+    output
+        .split_whitespace()
+        .nth(2)
+        .map(std::string::ToString::to_string)
 }
 
 /// Get make version.
 pub(super) fn get_make_version() -> Option<String> {
     let output = get_command_version("make", "--version")?;
     // "GNU Make 4.4.1" or "make: unknown option -- version" on BSD
-    output.split_whitespace().nth(2).map(|s| s.to_string())
+    output
+        .split_whitespace()
+        .nth(2)
+        .map(std::string::ToString::to_string)
 }
 
 /// Get gcc version.
@@ -107,7 +121,7 @@ pub(super) fn get_gcc_version() -> Option<String> {
             .nth(1)?
             .split_whitespace()
             .next()
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
     }
 
     None
@@ -130,7 +144,7 @@ pub(super) fn get_gxx_version() -> Option<String> {
             .nth(1)?
             .split_whitespace()
             .next()
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
     }
 
     None
@@ -168,7 +182,10 @@ pub(super) fn get_python3_version() -> Option<String> {
 pub(super) fn get_patchelf_version() -> Option<String> {
     let output = get_command_version("patchelf", "--version")?;
     // "patchelf 0.18.0" -> "0.18.0"
-    output.split_whitespace().nth(1).map(|s| s.to_string())
+    output
+        .split_whitespace()
+        .nth(1)
+        .map(std::string::ToString::to_string)
 }
 
 /// Parse a version string into (major, minor) tuple.

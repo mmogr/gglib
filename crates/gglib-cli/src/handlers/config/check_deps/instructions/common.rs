@@ -6,19 +6,16 @@ pub(super) use crate::presentation::style::{BOLD, INFO, RESET};
 
 /// Print a section header for installation instructions.
 pub(super) fn print_header(title: &str) {
-    println!(
-        "\n{}{}Installation Instructions ({}):{}",
-        BOLD, INFO, title, RESET
-    );
+    println!("\n{BOLD}{INFO}Installation Instructions ({title}):{RESET}");
     println!("{}", "=".repeat(60));
 }
 
 /// Print a command with proper formatting.
 pub(super) fn print_command(cmd: &str) {
-    println!("  {}$ {}{}", INFO, cmd, RESET);
+    println!("  {INFO}$ {cmd}{RESET}");
 }
 
 /// Print a subsection header.
 pub(super) fn print_subsection(title: &str) {
-    println!("\n{}{}:{}", BOLD, title, RESET);
+    println!("\n{BOLD}{title}:{RESET}");
 }

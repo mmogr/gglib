@@ -44,7 +44,7 @@ fn watch() -> Watch {
 }
 
 /// Well inside the countdown.
-const EARLY: Duration = Duration::from_secs(60);
+const EARLY: Duration = Duration::from_mins(1);
 
 /// A ticket from modelpipe's format vectors plus a code, as `enable`
 /// would print it, fits a QR and round-trips through uppercasing.

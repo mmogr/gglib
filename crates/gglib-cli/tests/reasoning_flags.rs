@@ -20,6 +20,10 @@ mod flag_surface;
 use flag_surface::{long_flags_at, sampling_flags};
 
 /// The sampling args a full command line resolved to.
+#[allow(
+    clippy::match_same_arms,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn sampling_of(argv: &[&str]) -> SamplingArgs {
     let cli = Cli::try_parse_from(argv).unwrap_or_else(|e| panic!("{argv:?} should parse: {e}"));
     match cli.command {

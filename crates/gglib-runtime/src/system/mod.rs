@@ -165,8 +165,7 @@ pub(crate) fn is_truthy_flag(v: &str) -> bool {
 #[must_use]
 pub fn detect_linux_distro() -> LinuxDistro {
     std::fs::read_to_string("/etc/os-release")
-        .map(|contents| parse_os_release(&contents))
-        .unwrap_or(LinuxDistro::Unknown)
+        .map_or(LinuxDistro::Unknown, |contents| parse_os_release(&contents))
 }
 
 /// The install hint for a dependency on this machine.

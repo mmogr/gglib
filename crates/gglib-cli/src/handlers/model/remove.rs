@@ -18,7 +18,7 @@ use crate::utils::input;
 ///
 /// # Arguments
 ///
-/// * `ctx` - The CLI context providing access to AppCore
+/// * `ctx` - The CLI context providing access to `AppCore`
 /// * `identifier` - The name or ID of the model to remove
 /// * `force` - If true, skips confirmation prompt
 ///

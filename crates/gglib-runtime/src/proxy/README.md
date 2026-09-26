@@ -10,7 +10,7 @@ proxy server lifecycle. The actual HTTP server implementation lives in
 
 # Architecture
 
-- **ProxySupervisor**: Owns proxy state internally, provides start/stop/status
+- **`ProxySupervisor`**: Owns proxy state internally, provides start/stop/status
 - **gglib-proxy**: HTTP server with OpenAI-compatible endpoints
 - Adapters (Tauri, Axum, CLI) call supervisor methods without storing handles
 

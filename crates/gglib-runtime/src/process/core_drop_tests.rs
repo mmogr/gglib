@@ -69,6 +69,10 @@ async fn stops(pid: u32) -> bool {
 /// Leave nothing behind: `Drop` keeps the pidfile, and a failing run can
 /// leave the child running. Only a child that did not stop is signalled, so a
 /// passing run sends nothing to a pid the OS may since have handed on.
+#[allow(
+    clippy::cast_possible_wrap,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn clean_up(model_id: i64, pid: u32, stopped: bool) {
     if !stopped {
         let _ = kill(Pid::from_raw(pid as i32), Signal::SIGKILL);

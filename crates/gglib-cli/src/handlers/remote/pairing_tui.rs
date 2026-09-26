@@ -86,6 +86,10 @@ pub(super) fn withdrawn_notice(tunnel_up: bool) -> [&'static str; 2] {
 /// The line that says a device paired, naming the one its code was for.
 ///
 /// One copy for `enable` and `invite`, as [`withdrawn_notice`] is.
+#[allow(
+    clippy::option_if_let_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn paired_line(device: Option<&str>) -> String {
     match device {
         Some(device) => format!("  \u{2705} Paired {device}. `gglib remote list` shows it."),
@@ -179,6 +183,10 @@ impl Watch {
     /// the code and records the pairing in two steps, and a read between them
     /// sees neither. And one that goes inside [`LAPSE_GRACE`] is left for the
     /// countdown to call expired.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     fn read(&mut self, status: RemoteStatus, left: Duration) -> Option<Outcome> {
         if status.paired {
             return Some(Outcome::Paired {

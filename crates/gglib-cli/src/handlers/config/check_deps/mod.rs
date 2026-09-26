@@ -34,7 +34,7 @@ use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
 /// Returns `Ok(())` if all required dependencies are present.
 /// Returns an error if any required dependencies are missing.
 pub(crate) async fn execute(probe: &dyn SystemProbePort, setup_fast_downloads: bool) -> Result<()> {
-    println!("{}{}Checking system dependencies...{}\n", BOLD, INFO, RESET);
+    println!("{BOLD}{INFO}Checking system dependencies...{RESET}\n");
 
     let dependencies = probe.check_all_dependencies();
 
@@ -64,30 +64,25 @@ pub(crate) async fn execute(probe: &dyn SystemProbePort, setup_fast_downloads: b
     println!("{}", "=".repeat(85));
     if missing_required.is_empty() {
         println!(
-            "{}✓ All required dependencies are installed!{} ({}/{})",
-            SUCCESS, RESET, present_required, total_required
+            "{SUCCESS}✓ All required dependencies are installed!{RESET} ({present_required}/{total_required})"
         );
 
         if setup_fast_downloads {
-            println!(
-                "{}Provisioning the hf_xet download accelerator...{}",
-                BOLD, RESET
-            );
+            println!("{BOLD}Provisioning the hf_xet download accelerator...{RESET}");
             ensure_fast_helper_ready()
                 .await
                 .context("Failed to set up the hf_xet download accelerator")?;
-            println!("{}✓ Download accelerator ready{}", SUCCESS, RESET);
+            println!("{SUCCESS}✓ Download accelerator ready{RESET}");
         } else if !fast_helper_provisioned() {
             println!(
-                "{}Downloads run natively over HTTP. To enable the optional hf_xet \
-                 accelerator, run:{} gglib config fast-downloads enable",
-                INFO, RESET
+                "{INFO}Downloads run natively over HTTP. To enable the optional hf_xet \
+                 accelerator, run:{RESET} gglib config fast-downloads enable"
             );
         }
 
         print_gpu_status(probe);
 
-        println!("\n{}You can now run: {}make setup{}", BOLD, INFO, RESET);
+        println!("\n{BOLD}You can now run: {INFO}make setup{RESET}");
         Ok(())
     } else {
         println!(

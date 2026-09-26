@@ -8,7 +8,7 @@
 //! All fixtures terminate with `data: [DONE]\n\n` exactly as `llama-server`
 //! emits.
 
-/// Standard OpenAI streaming: three text-content deltas followed by a
+/// Standard `OpenAI` streaming: three text-content deltas followed by a
 /// terminator.  No reasoning, no tool calls.
 pub(crate) const BASIC_TEXT: &[u8] = b"\
 data: {\"id\":\"u-1\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n\
@@ -17,7 +17,7 @@ data: {\"id\":\"u-1\",\"object\":\"chat.completion.chunk\",\"created\":172900000
 data: {\"id\":\"u-1\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n";
 
-/// Reasoning model emitting `reasoning_content` (DeepSeek R1 / QwQ style)
+/// Reasoning model emitting `reasoning_content` (`DeepSeek` R1 / `QwQ` style)
 /// followed by answer text.  The pipeline must surface both as separate
 /// `reasoning_content` and `content` deltas in the re-emitted frames.
 pub(crate) const REASONING_DEEPSEEK: &[u8] = b"\
@@ -39,7 +39,7 @@ data: [DONE]\n\n";
 
 /// Qwen-family model emitting an XML-wrapped tool call inside the text
 /// channel.  With `format:qwen-xml` tags the pipeline must rewrite this into
-/// strict OpenAI `tool_calls` deltas — the external client should never see
+/// strict `OpenAI` `tool_calls` deltas — the external client should never see
 /// the `<tool_call>` markers.
 pub(crate) const QWEN_XML_TOOL_CALL: &[u8] = b"\
 data: {\"id\":\"u-3\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Looking it up. \"},\"finish_reason\":null}]}\n\n\
@@ -80,7 +80,7 @@ data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":17290000
 data: {\"id\":\"u-12\",\"object\":\"chat.completion.chunk\",\"created\":1729000000,\"model\":\"upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n";
 
-/// Standard OpenAI tool call (already strict / no dialect rewriting).  The
+/// Standard `OpenAI` tool call (already strict / no dialect rewriting).  The
 /// proxy must round-trip this preserving `id`, `type:"function"`, `name`,
 /// `arguments`, and the `index`.
 pub(crate) const STANDARD_OPENAI_TOOL_CALL: &[u8] = b"\

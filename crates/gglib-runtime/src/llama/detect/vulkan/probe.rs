@@ -48,7 +48,7 @@ fn pkg_config_includedir(pkg: &str) -> Option<PathBuf> {
     }
 }
 
-/// Return the LunarG Vulkan SDK install root from the `VULKAN_SDK` env var.
+/// Return the `LunarG` Vulkan SDK install root from the `VULKAN_SDK` env var.
 ///
 /// Wrapping the env read in a function makes it trivial to swap with a
 /// stub in tests so that a developer's local SDK never leaks into CI.
@@ -145,7 +145,7 @@ fn check_vulkan_headers() -> bool {
 /// (with `<spirv-headers/spirv.hpp>` as an `__has_include` fallback).
 /// This is provided by the **separate** SPIRV-Headers package — distinct
 /// from `vulkan-headers` on every Linux distribution. On Windows it ships
-/// inside the LunarG Vulkan SDK.
+/// inside the `LunarG` Vulkan SDK.
 ///
 /// Probe order (uniform across platforms):
 /// 1. `pkg-config --variable=includedir SPIRV-Headers`.

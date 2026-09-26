@@ -31,12 +31,12 @@ pub fn write_pidfile(model_id: i64, pid: u32, port: u16) -> io::Result<PathBuf> 
     let dir = pids_dir().map_err(io::Error::other)?;
     fs::create_dir_all(&dir)?;
 
-    let filename = format!("{}.pid", model_id);
+    let filename = format!("{model_id}.pid");
     let final_path = dir.join(&filename);
-    let temp_path = dir.join(format!("{}.tmp", filename));
+    let temp_path = dir.join(format!("{filename}.tmp"));
 
     // Write to temp file
-    let content = format!("{}\n{}\n", pid, port);
+    let content = format!("{pid}\n{port}\n");
     fs::write(&temp_path, content)?;
 
     // Atomic rename
@@ -48,7 +48,7 @@ pub fn write_pidfile(model_id: i64, pid: u32, port: u16) -> io::Result<PathBuf> 
 /// Read PID file content.
 pub fn read_pidfile(model_id: i64) -> io::Result<PidFileData> {
     let dir = pids_dir().map_err(io::Error::other)?;
-    let path = dir.join(format!("{}.pid", model_id));
+    let path = dir.join(format!("{model_id}.pid"));
     let content = fs::read_to_string(&path)?;
 
     parse_pidfile_content(&content)
@@ -57,9 +57,9 @@ pub fn read_pidfile(model_id: i64) -> io::Result<PidFileData> {
 /// Delete PID file (idempotent - no error if missing).
 pub fn delete_pidfile(model_id: i64) -> io::Result<()> {
     let dir = pids_dir().map_err(io::Error::other)?;
-    let path = dir.join(format!("{}.pid", model_id));
+    let path = dir.join(format!("{model_id}.pid"));
     match fs::remove_file(&path) {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
     }

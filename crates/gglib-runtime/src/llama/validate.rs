@@ -35,7 +35,7 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
     let output = cmd(path)
         .arg("--version")
         .output()
-        .with_context(|| format!("Failed to execute {}", binary_name))?;
+        .with_context(|| format!("Failed to execute {binary_name}"))?;
 
     if !output.status.success() {
         bail!(
@@ -68,7 +68,7 @@ pub async fn handle_status() -> Result<()> {
     match &status.health_error {
         None => println!("Health: ✓ Functional"),
         Some(e) => {
-            println!("Health: ✗ Error - {}", e);
+            println!("Health: ✗ Error - {e}");
             return Ok(());
         }
     }
@@ -94,7 +94,7 @@ pub async fn handle_status() -> Result<()> {
         }
         (None, Some(e)) => {
             println!();
-            println!("Warning: Could not load build config: {}", e);
+            println!("Warning: Could not load build config: {e}");
         }
         (None, None) => {
             println!();

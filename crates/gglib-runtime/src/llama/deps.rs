@@ -56,6 +56,10 @@ pub fn check_dependencies() -> Result<DependencyStatus> {
 /// Fields prefixed with _ as struct is returned but fields not currently read.
 #[cfg(feature = "cli")]
 #[derive(Debug)]
+#[allow(
+    clippy::pub_underscore_fields,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub struct DependencyStatus {
     pub _git: String,
     pub _cmake: String,
@@ -117,7 +121,7 @@ pub fn check_disk_space(_required_mb: u64) -> Result<bool> {
     use gglib_core::paths::data_root;
     use std::fs;
 
-    let gglib_dir = data_root().map_err(|e| anyhow::anyhow!("{}", e))?;
+    let gglib_dir = data_root().map_err(|e| anyhow::anyhow!("{e}"))?;
 
     // Create directory if it doesn't exist
     if !gglib_dir.exists() {

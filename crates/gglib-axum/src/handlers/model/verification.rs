@@ -61,7 +61,7 @@ pub(crate) async fn verify(
         .models()
         .get_by_id(id)
         .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {} not found", id)))?;
+        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -74,7 +74,7 @@ pub(crate) async fn verify(
     let (mut progress_rx, handle) = verification
         .verify_model_integrity(id)
         .await
-        .map_err(|e| HttpError::Internal(format!("Failed to start verification: {}", e)))?;
+        .map_err(|e| HttpError::Internal(format!("Failed to start verification: {e}")))?;
 
     // Stream progress via SSE
     while let Some(progress) = progress_rx.recv().await {
@@ -116,8 +116,8 @@ pub(crate) async fn verify(
     // Wait for verification to complete
     let report = handle
         .await
-        .map_err(|e| HttpError::Internal(format!("Verification task failed: {}", e)))?
-        .map_err(|e| HttpError::Internal(format!("Verification failed: {}", e)))?;
+        .map_err(|e| HttpError::Internal(format!("Verification task failed: {e}")))?
+        .map_err(|e| HttpError::Internal(format!("Verification failed: {e}")))?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -138,7 +138,7 @@ pub(crate) async fn verify(
     Ok(Json(VerifyResponse { report }))
 }
 
-/// Check for model updates on HuggingFace.
+/// Check for model updates on `HuggingFace`.
 ///
 /// GET /api/models/{id}/updates
 pub(crate) async fn check_updates(
@@ -157,7 +157,7 @@ pub(crate) async fn check_updates(
         .models()
         .get_by_id(id)
         .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {} not found", id)))?;
+        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -170,18 +170,11 @@ pub(crate) async fn check_updates(
     let result = verification
         .check_for_updates(id)
         .await
-        .map_err(|e| HttpError::Internal(format!("Failed to check for updates: {}", e)))?;
+        .map_err(|e| HttpError::Internal(format!("Failed to check for updates: {e}")))?;
 
     let message = if result.update_available {
-        let changed_shards = result
-            .details
-            .as_ref()
-            .map(|d| d.changed_shards)
-            .unwrap_or(0);
-        format!(
-            "Updates available: {} shards can be updated",
-            changed_shards
-        )
+        let changed_shards = result.details.as_ref().map_or(0, |d| d.changed_shards);
+        format!("Updates available: {changed_shards} shards can be updated")
     } else {
         "Model is up to date".to_string()
     };
@@ -216,7 +209,7 @@ pub(crate) async fn repair(
         .models()
         .get_by_id(id)
         .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {} not found", id)))?;
+        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -230,7 +223,7 @@ pub(crate) async fn repair(
     let message = verification
         .repair_model(id, req.shards)
         .await
-        .map_err(|e| HttpError::Internal(format!("Failed to repair model: {}", e)))?;
+        .map_err(|e| HttpError::Internal(format!("Failed to repair model: {e}")))?;
 
     tracing::info!(
         target: "gglib.verification",

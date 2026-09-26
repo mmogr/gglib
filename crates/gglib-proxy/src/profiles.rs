@@ -87,7 +87,7 @@ mod tests {
     use gglib_core::ports::model_catalog::{CatalogError, ModelLaunchSpec, ModelSummary};
     use gglib_core::request_pipeline::{ModelRoute, resolve_route};
 
-    /// behaviour of the real SQLite repository (`WHERE name = ?`).
+    /// behaviour of the real `SQLite` repository (`WHERE name = ?`).
     #[derive(Debug)]
     struct NamedCatalog {
         names: HashSet<String>,

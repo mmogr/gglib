@@ -1,7 +1,7 @@
 //! Axum-specific error types and mappings.
 //!
 //! This module provides error types for the Axum adapter and mappings
-//! from CoreError and GuiError to HTTP status codes and response bodies.
+//! from `CoreError` and `GuiError` to HTTP status codes and response bodies.
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -70,13 +70,13 @@ struct ErrorBody {
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
         let (status, message, error_type, metadata) = match &self {
-            HttpError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone(), None, None),
-            HttpError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone(), None, None),
-            HttpError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone(), None, None),
-            HttpError::ServiceUnavailable(msg) => {
+            Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone(), None, None),
+            Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone(), None, None),
+            Self::Conflict(msg) => (StatusCode::CONFLICT, msg.clone(), None, None),
+            Self::ServiceUnavailable(msg) => {
                 (StatusCode::SERVICE_UNAVAILABLE, msg.clone(), None, None)
             }
-            HttpError::LlamaServerNotInstalled {
+            Self::LlamaServerNotInstalled {
                 message,
                 expected_path,
                 suggested_command,
@@ -94,12 +94,8 @@ impl IntoResponse for HttpError {
                     Some(metadata_json),
                 )
             }
-            HttpError::TooManyRequests(msg) => {
-                (StatusCode::TOO_MANY_REQUESTS, msg.clone(), None, None)
-            }
-            HttpError::Internal(msg) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg.clone(), None, None)
-            }
+            Self::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone(), None, None),
+            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone(), None, None),
         };
 
         let body = ErrorBody {
@@ -117,8 +113,8 @@ impl From<CoreError> for HttpError {
     fn from(err: CoreError) -> Self {
         match err {
             CoreError::Repository(repo_err) => repo_err.into(),
-            CoreError::Settings(settings_err) => HttpError::BadRequest(settings_err.to_string()),
-            CoreError::Validation(msg) => HttpError::BadRequest(msg),
+            CoreError::Settings(settings_err) => Self::BadRequest(settings_err.to_string()),
+            CoreError::Validation(msg) => Self::BadRequest(msg),
         }
     }
 }
@@ -126,13 +122,11 @@ impl From<CoreError> for HttpError {
 impl From<RepositoryError> for HttpError {
     fn from(err: RepositoryError) -> Self {
         match err {
-            RepositoryError::NotFound(msg) => HttpError::NotFound(msg),
-            RepositoryError::AlreadyExists(msg) => HttpError::Conflict(msg),
-            RepositoryError::Storage(msg) => HttpError::Internal(format!("Storage: {}", msg)),
-            RepositoryError::Serialization(msg) => {
-                HttpError::Internal(format!("Serialization: {}", msg))
-            }
-            RepositoryError::Constraint(msg) => HttpError::BadRequest(msg),
+            RepositoryError::NotFound(msg) => Self::NotFound(msg),
+            RepositoryError::AlreadyExists(msg) => Self::Conflict(msg),
+            RepositoryError::Storage(msg) => Self::Internal(format!("Storage: {msg}")),
+            RepositoryError::Serialization(msg) => Self::Internal(format!("Serialization: {msg}")),
+            RepositoryError::Constraint(msg) => Self::BadRequest(msg),
         }
     }
 }
@@ -142,25 +136,22 @@ impl From<GuiError> for HttpError {
         // Coarse mapping - refine later as needed
         match e {
             GuiError::NotFound { entity, id } => {
-                HttpError::NotFound(format!("{} with id {} not found", entity, id))
+                Self::NotFound(format!("{entity} with id {id} not found"))
             }
-            GuiError::ValidationFailed(msg) => HttpError::BadRequest(msg),
-            GuiError::Conflict(msg) => HttpError::Conflict(msg),
-            GuiError::Unavailable(msg) => HttpError::ServiceUnavailable(msg),
+            GuiError::ValidationFailed(msg) => Self::BadRequest(msg),
+            GuiError::Conflict(msg) => Self::Conflict(msg),
+            GuiError::Unavailable(msg) => Self::ServiceUnavailable(msg),
             GuiError::LlamaServerNotInstalled {
                 expected_path,
                 suggested_command,
                 reason,
-            } => HttpError::LlamaServerNotInstalled {
-                message: format!(
-                    "llama-server not installed ({}). Run: {}",
-                    reason, suggested_command
-                ),
+            } => Self::LlamaServerNotInstalled {
+                message: format!("llama-server not installed ({reason}). Run: {suggested_command}"),
                 expected_path,
                 suggested_command,
                 reason,
             },
-            GuiError::Internal(msg) => HttpError::Internal(msg),
+            GuiError::Internal(msg) => Self::Internal(msg),
         }
     }
 }
@@ -169,17 +160,15 @@ impl From<ChatHistoryError> for HttpError {
     fn from(err: ChatHistoryError) -> Self {
         match err {
             ChatHistoryError::ConversationNotFound(id) => {
-                HttpError::NotFound(format!("Conversation not found: {}", id))
+                Self::NotFound(format!("Conversation not found: {id}"))
             }
             ChatHistoryError::MessageNotFound(id) => {
-                HttpError::NotFound(format!("Message not found: {}", id))
+                Self::NotFound(format!("Message not found: {id}"))
             }
             ChatHistoryError::InvalidRole(role) => {
-                HttpError::BadRequest(format!("Invalid message role: {}", role))
+                Self::BadRequest(format!("Invalid message role: {role}"))
             }
-            ChatHistoryError::Database(msg) => {
-                HttpError::Internal(format!("Database error: {}", msg))
-            }
+            ChatHistoryError::Database(msg) => Self::Internal(format!("Database error: {msg}")),
         }
     }
 }

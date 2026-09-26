@@ -1,12 +1,35 @@
 #![doc = include_str!("README.md")]
 pub mod admission;
 mod broadcaster;
+#[allow(
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::unused_async,
+    clippy::unused_self,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod core;
 mod events;
 mod health;
 mod logs;
+#[allow(
+    clippy::doc_link_code,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 mod manager;
 mod ports;
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "a guard's scope is its critical section, so this lint is never applied \
+              in admission, residency or proxy lock code"
+)]
+#[allow(
+    clippy::option_if_let_else,
+    clippy::single_match_else,
+    clippy::unused_self,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub mod residency;
 pub mod shutdown;
 mod stream;

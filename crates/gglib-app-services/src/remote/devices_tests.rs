@@ -16,6 +16,10 @@ use crate::test_support_remote::test_remote_ops;
 /// #1034 through both surfaces: a key the ops' file holds with no roster row
 /// is listed, by `list` and by the status, as a device with no record.
 #[tokio::test]
+#[allow(
+    clippy::iter_on_single_items,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn a_key_no_roster_row_lists_is_listed_with_no_record() {
     let (_, ops, _) = test_remote_ops().await;
     write_keys(

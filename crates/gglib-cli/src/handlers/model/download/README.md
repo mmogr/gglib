@@ -7,11 +7,11 @@
 
 <!-- module-docs:start -->
 
-HuggingFace Hub download command handlers for the CLI.
+`HuggingFace` Hub download command handlers for the CLI.
 
 ## Purpose
 
-This module handles all download-related commands that interact with HuggingFace Hub, including searching for models, browsing popular models, downloading GGUF files with interactive queue management, checking for updates, and updating existing models.
+This module handles all download-related commands that interact with `HuggingFace` Hub, including searching for models, browsing popular models, downloading GGUF files with interactive queue management, checking for updates, and updating existing models.
 
 ## Architecture
 
@@ -77,7 +77,7 @@ This module handles all download-related commands that interact with HuggingFace
 ## Commands
 
 ### `search`
-Search HuggingFace Hub for GGUF models.
+Search `HuggingFace` Hub for GGUF models.
 
 **Module:** `search.rs`
 
@@ -112,14 +112,14 @@ gglib model browse recent --size 7B
 ```
 
 ### `download` (exec + interactive)
-Download a model from HuggingFace Hub with interactive queue support.
+Download a model from `HuggingFace` Hub with interactive queue support.
 
 **Module:** `exec.rs` (orchestrator), `interactive.rs` (TUI monitor)
 
 **Options:**
-- `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "Q4_K_M")
+- `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "`Q4_K_M`")
 - `--list-quants` - List available quantizations (uses `--token` if provided)
-- `--token <TOKEN>` - HuggingFace token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
+- `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
 - `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
 
 **Interactive mode (TTY):**
@@ -147,7 +147,7 @@ HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
 ```
 
 ### `check-updates`
-Check if downloaded models have updates on HuggingFace Hub. Sends `HF_TOKEN` to
+Check if downloaded models have updates on `HuggingFace` Hub. Sends `HF_TOKEN` to
 the Hub when it is set.
 
 **Module:** `check_updates.rs`
@@ -163,7 +163,7 @@ gglib model check-updates --model-id 1
 ```
 
 ### `update-model`
-Update a model to the latest version from HuggingFace Hub.
+Update a model to the latest version from `HuggingFace` Hub.
 
 **Module:** `update_model.rs`
 
@@ -171,7 +171,7 @@ Update a model to the latest version from HuggingFace Hub.
 - `--force` - Skip confirmation prompt
 
 **Flow:**
-1. Check if model has HuggingFace source
+1. Check if model has `HuggingFace` source
 2. Query Hub for latest version
 3. Download new version
 4. Replace old file
@@ -202,7 +202,7 @@ After successful download:
 
 ### Error Handling
 Handlers convert download errors to user-friendly messages:
-- Network errors → "Failed to connect to HuggingFace Hub"
+- Network errors → "Failed to connect to `HuggingFace` Hub"
 - Invalid repo → "Repository not found or private"
 - Parse errors → "Invalid GGUF file downloaded"
 - Database errors → "Failed to register model"
@@ -210,7 +210,7 @@ Handlers convert download errors to user-friendly messages:
 ## Dependencies
 
 - **gglib-download** - Core download functionality via `cli_exec`
-- **gglib-hf** - HuggingFace Hub client
+- **gglib-hf** - `HuggingFace` Hub client
 - **gglib-db** - Model database operations
 - **gglib-gguf** - GGUF metadata parsing
 - **gglib-core** - Domain types and ports

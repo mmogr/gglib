@@ -107,6 +107,11 @@ fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
 ///
 /// `default-model-id` is substituted with the pre-resolved `model_display`
 /// string (or `"None"`) to avoid a DB round-trip inside this pure function.
+#[allow(
+    clippy::manual_let_else,
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) fn settings_display_rows(
     settings: &Settings,
     model_display: Option<String>,

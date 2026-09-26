@@ -17,7 +17,7 @@ use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_ser
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/// Start the proxy on a random port and return (base_url, cancel_token).
+/// Start the proxy on a random port and return (`base_url`, `cancel_token`).
 async fn start_proxy() -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

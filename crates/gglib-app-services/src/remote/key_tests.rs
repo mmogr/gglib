@@ -51,6 +51,10 @@ fn a_stored_key_is_used_when_the_proxy_has_none_yet() {
 }
 
 #[test]
+#[allow(
+    clippy::match_wildcard_for_single_variants,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn nothing_anywhere_mints_a_fresh_key() {
     for stored in [None, Some(""), Some("   ")] {
         match decide(None, stored) {

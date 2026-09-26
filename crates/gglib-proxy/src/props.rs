@@ -394,7 +394,7 @@ fn verdict_for(
 /// Orthogonal to whether anything drifted. [`Complete`](Self::Complete) says
 /// every field was compared, not that every field agreed, so surfaces check
 /// [`BaselineReport::drifted`] first and coverage second.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "coverage", rename_all = "snake_case")]
 pub enum BaselineCoverage {

@@ -1,4 +1,4 @@
-//! Verifies the proxy's LocalOnly CORS layer.
+//! Verifies the proxy's `LocalOnly` CORS layer.
 //!
 //! The proxy binds to 127.0.0.1 and accepts only local origins:
 //! `localhost`, `127.0.0.1`, `::1`, `tauri.localhost`, and Tauri custom
@@ -138,7 +138,7 @@ async fn preflight_request_to_sse_endpoint_is_allowed() {
 }
 
 /// A request from a plain `http://localhost:5173` (Vite dev server) origin
-/// works identically — the LocalOnly layer accepts any localhost origin
+/// works identically — the `LocalOnly` layer accepts any localhost origin
 /// and reflects it back.
 #[tokio::test]
 async fn get_request_from_vite_dev_origin_receives_cors_header() {
@@ -164,7 +164,7 @@ async fn get_request_from_vite_dev_origin_receives_cors_header() {
 }
 
 /// A request from `http://tauri.localhost` (Tauri dev server on Windows)
-/// is accepted and reflected back by the LocalOnly CORS policy.
+/// is accepted and reflected back by the `LocalOnly` CORS policy.
 #[tokio::test]
 async fn get_request_from_tauri_localhost_origin_receives_cors_header() {
     let (base_url, cancel) = spawn_proxy().await;
@@ -209,8 +209,7 @@ async fn get_request_from_external_origin_is_rejected() {
     let allow_origin = resp.headers().get("access-control-allow-origin");
     assert!(
         allow_origin.is_none(),
-        "Remote origin should be rejected (no access-control-allow-origin header), got: {:?}",
-        allow_origin
+        "Remote origin should be rejected (no access-control-allow-origin header), got: {allow_origin:?}"
     );
 
     cancel.cancel();

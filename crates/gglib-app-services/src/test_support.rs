@@ -237,7 +237,7 @@ impl SystemProbePort for MockSystemProbePort {
 // AppCore test helper
 // ---------------------------------------------------------------------------
 
-/// Build an `AppCore` backed by an in-memory SQLite database.
+/// Build an `AppCore` backed by an in-memory `SQLite` database.
 ///
 /// Uses the `test-utils` feature gate from `gglib-db`.
 pub(crate) async fn test_core() -> Arc<AppCore> {

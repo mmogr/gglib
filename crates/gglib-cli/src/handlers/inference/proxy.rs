@@ -142,6 +142,10 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
+#[allow(
+    clippy::single_match_else,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
     let client = gglib_proxy::loopback::client();
     match daemon_client::probe(&client).await {

@@ -19,6 +19,10 @@ use crate::bootstrap::CliContext;
 use crate::config_commands::SettingsSetArgs;
 
 /// Apply the flags a person passed, then print only what changed.
+#[allow(
+    clippy::too_many_lines,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Result<()> {
     // Collect the kebab-case keys of every flag that was provided.
     let mut changed: BTreeSet<&str> = BTreeSet::new();

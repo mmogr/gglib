@@ -17,6 +17,10 @@ use crate::presentation::style::{BOLD, RESET, SUCCESS};
 use crate::utils::input;
 
 /// Resolve the model `up` will serve, downloading it if it isn't here yet.
+#[allow(
+    clippy::ref_option,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 pub(super) async fn run(
     ctx: &CliContext,
     memory: &Option<SystemMemoryInfo>,
@@ -55,6 +59,10 @@ async fn most_recent(ctx: &CliContext) -> Result<Option<Model>> {
 }
 
 /// Nothing installed: recommend, explain, confirm, download.
+#[allow(
+    clippy::ref_option,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 async fn download_recommended(
     ctx: &CliContext,
     memory: &Option<SystemMemoryInfo>,

@@ -41,10 +41,10 @@ const DEFAULT_SEND_TIMEOUT_SECS: u64 = 600;
 ///
 /// Implements [`LlmCompletionPort`] so the pure-domain `gglib-agent` crate can
 /// call an LLM without knowing anything about HTTP, SSE framing, or the
-/// OpenAI wire format.
+/// `OpenAI` wire format.
 pub struct LlmCompletionAdapter {
     url: String,
-    /// Forwarded verbatim as the `model` field in the OpenAI request body.
+    /// Forwarded verbatim as the `model` field in the `OpenAI` request body.
     ///
     /// llama-server ignores this field when serving a single model.  Set it
     /// when the server is serving multiple GGUF files by name (e.g. via

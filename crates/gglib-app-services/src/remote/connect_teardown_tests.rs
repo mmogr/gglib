@@ -48,6 +48,10 @@ const ANNOUNCED: &str = "announced";
 
 impl Steps {
     /// The `shutdown` closure `conclude` is handed.
+    #[allow(
+        clippy::unused_async,
+        reason = "grandfathered at lint inheritance, #1157"
+    )]
     async fn run(&self) {
         self.note(SHUTDOWN);
     }

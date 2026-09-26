@@ -101,20 +101,7 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
 
 /// The status, one line per fact.
 fn print_status(status: &RemoteStatus) {
-    if !status.enabled {
-        // The switch being on with nothing bound is worth its own sentence:
-        // it is a machine that failed to arm at boot, or is still arming,
-        // and "off" alone would send someone to `enable` for a thing that
-        // is already enabled.
-        if status.remote_enabled {
-            eprintln!(
-                "  Serving:   switched on, but nothing is bound \u{2014} still arming, or it \
-                 could not reach a relay"
-            );
-        } else {
-            eprintln!("  Serving:   off \u{2014} `gglib remote enable` to broadcast this machine");
-        }
-    } else {
+    if status.enabled {
         eprintln!(
             "  Serving:   on   (ticket {})",
             status.ticket_fingerprint.as_deref().unwrap_or("?")
@@ -157,6 +144,19 @@ fn print_status(status: &RemoteStatus) {
                 "not reachable through the tunnel"
             }
         );
+    } else {
+        // The switch being on with nothing bound is worth its own sentence:
+        // it is a machine that failed to arm at boot, or is still arming,
+        // and "off" alone would send someone to `enable` for a thing that
+        // is already enabled.
+        if status.remote_enabled {
+            eprintln!(
+                "  Serving:   switched on, but nothing is bound \u{2014} still arming, or it \
+                 could not reach a relay"
+            );
+        } else {
+            eprintln!("  Serving:   off \u{2014} `gglib remote enable` to broadcast this machine");
+        }
     }
     join::print_connection(status);
     print_traffic(status);

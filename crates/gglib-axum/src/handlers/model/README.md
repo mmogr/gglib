@@ -7,6 +7,6 @@
 
 Model domain handlers.
 
-CRUD, verification, downloads, and HuggingFace discovery.
+CRUD, verification, downloads, and `HuggingFace` discovery.
 
 <!-- module-docs:end -->

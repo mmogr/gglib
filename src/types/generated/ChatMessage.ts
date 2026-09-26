@@ -5,7 +5,7 @@
  */
 export type ChatMessage = { role: string, 
 /**
- * Content is optional when tool_calls are present (OpenAI API spec)
+ * Content is optional when `tool_calls` are present (`OpenAI` API spec)
  */
 content?: string, 
 /**

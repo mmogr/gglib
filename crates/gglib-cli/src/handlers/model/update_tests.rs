@@ -129,6 +129,7 @@ fn apply(existing: &Model, args: &UpdateArgs) -> Model {
 }
 
 #[test]
+#[allow(clippy::float_cmp, reason = "grandfathered at lint inheritance, #1157")]
 fn test_create_updated_model() {
     let updated = apply(
         &create_test_model(),

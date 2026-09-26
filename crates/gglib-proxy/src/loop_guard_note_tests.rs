@@ -17,6 +17,10 @@ fn loop_note() -> LoopGuardNote {
     .expect("a tripped verdict has a note")
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
 fn body(messages: Value) -> Bytes {
     Bytes::from(
         json!({
