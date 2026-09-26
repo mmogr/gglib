@@ -16,19 +16,17 @@ use super::wire::ModelDefectCounts;
 /// Render the per-model signals section — what failed, what merely went in
 /// circles, and for which model.
 ///
-/// These are the diagnostic counters ADR 0006 kept when the tuning scheduler
-/// went. Nothing acts on them automatically, which is exactly why they need
-/// somewhere to be read: until now they were on `/v1/proxy/status` and in no
-/// human-facing surface at all, so the only way to see them was `curl | jq`.
+/// These are the diagnostic counters ADR 0006 keeps. Nothing acts on them
+/// automatically, which is exactly why they need somewhere to be read:
+/// `/v1/proxy/status` carries them, and this section is where a person reads
+/// them.
 ///
 /// Only models with something to report get a line, and listing every clean
 /// model would bury the one that is not.
 ///
 /// Loop-guard trips print as their sum and then, indented beneath it, by the
 /// detector that raised them, since whether *stagnation* trips have become
-/// rare is a question ADR 0011 asks and the sum alone cannot answer. Since
-/// #1052 a trip is an intervention rather than a rejection: the default
-/// forwards the request with a note.
+/// rare is a question ADR 0011 asks and the sum alone cannot answer.
 ///
 /// The agent path's trips print in a row of their own, and carry their
 /// denominator with them (#1091). Two reasons they are not folded in with the

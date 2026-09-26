@@ -71,17 +71,10 @@ impl ServerHealthChecker {
     /// Check if a process is alive by PID.
     ///
     /// Delegates to [`crate::pidfile::pid_exists`], which asks the kernel with a
-    /// null signal instead of reading `/proc`. This function used to do the
-    /// latter under `cfg(unix)` — but macOS is `cfg(unix)` and has no `/proc`, so
-    /// on macOS every live `llama-server` *would* have read as dead, and
-    /// [`Self::check_combined`] would have returned `ProcessDied` without ever
+    /// null signal rather than reading `/proc`: macOS is `cfg(unix)` and has no
+    /// `/proc`, so a `/proc` check would read every live `llama-server` there as
+    /// dead, and [`Self::check_combined`] would return `ProcessDied` without
     /// attempting the HTTP check.
-    ///
-    /// The bug was latent rather than observed: the only production caller of
-    /// [`ServerHealthMonitor`] builds its `ProcessHandle` with `pid: None`
-    /// (`gglib-app-services/src/servers.rs`), and [`Self::check_process`] returns
-    /// `Healthy` on that branch without consulting this function at all. Supplying
-    /// a real PID — which the public API permits — was all it would have taken.
     #[cfg(unix)]
     fn is_process_alive(pid: u32) -> bool {
         crate::pidfile::pid_exists(pid)

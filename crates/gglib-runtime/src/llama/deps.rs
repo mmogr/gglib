@@ -79,8 +79,8 @@ fn print_installation_instructions() {
     {
         // The build needs a compiler, cmake and git; the shared package table
         // knows what each is called here. Naming them through it rather than
-        // inline is what keeps this in step with `gglib config check-deps`,
-        // which used to print different package names for the same thing.
+        // inline keeps this in step with `gglib config check-deps`, which
+        // reads the same table.
         let distro = crate::system::detect_linux_distro();
         println!("{}:", distro.label());
 

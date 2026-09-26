@@ -74,7 +74,7 @@ pub async fn ensure_llama_initialized(prompt: &dyn InstallPrompt) -> Result<()> 
 
 /// Installation flow for users running from source repository.
 ///
-/// This preserves the existing behavior: prompt user and build from source.
+/// Prompts the user and builds from source.
 async fn ensure_for_source_build(prompt: &dyn InstallPrompt) -> Result<()> {
     println!("Running from source repository - will build llama.cpp from source.");
     print_build_duration_warning();

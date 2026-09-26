@@ -1,9 +1,9 @@
 //! Where `gglib proxy` binds, as a flag group.
 //!
-//! Three flags that used to sit inline on `Commands::Proxy`. They moved when
-//! `gglib remote` joined the top-level enum, which is on the file-size
-//! ratchet — the same reason `subcommands.rs` exists — and a bind is a group
-//! of its own the way `SamplingArgs` and `CacheArgs` already are.
+//! Three flags of `Commands::Proxy`, grouped here because the top-level enum
+//! is on the file-size ratchet — the same reason `subcommands.rs` exists —
+//! and a bind is a group of its own the way `SamplingArgs` and `CacheArgs`
+//! are.
 
 use clap::Args;
 

@@ -4,13 +4,10 @@
 //! (built once by `build_service_graph`), which is what makes "gglib owns every
 //! llama-server on this machine" an invariant rather than a hope.
 //!
-//! What that manager guarantees changed with M9. It used to be *one* model at a
-//! time, enforced by killing whatever was loaded before spawning anything else.
-//! It is now a bounded resident set — see
+//! It keeps a bounded resident set — see
 //! [`admission`](crate::process::admission) for how many, and why — with a
-//! queue deciding who occupies it. The dispatch here is unchanged in shape:
-//! this type routes, and [`ResidentSet`] owns both the state and the launch
-//! sequence that mutates it.
+//! queue deciding who occupies it. This type routes, and [`ResidentSet`] owns
+//! both the state and the launch sequence that mutates it.
 
 use super::core::GuiProcessCore;
 use anyhow::Result;

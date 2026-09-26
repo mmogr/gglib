@@ -329,8 +329,8 @@ async fn launch(
     // Raced against the child's own exit, not just run to the deadline. A
     // server that dies on startup — bad arguments, OOM, a missing GPU library
     // — never answers `/health`, and polling a dead port until a budget sized
-    // for a large model runs out would make the failure this commit exists to
-    // clean up take minutes to report.
+    // for a large model runs out would make a failed launch take minutes to
+    // report.
     let health = wait_for_http_health(port, deadline_secs);
     tokio::pin!(health);
     loop {
@@ -505,9 +505,9 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 
-    /// Regression: model `1`'s purge prefix (`1__`) must not delete model
-    /// `11`'s files (`11__…`) — the `__` delimiter is what prevents this.
-    /// With two models resident at once this matters more than it used to.
+    /// Model `1`'s purge prefix (`1__`) must not delete model `11`'s files
+    /// (`11__…`), which may belong to the other resident — the `__` delimiter
+    /// is what prevents this.
     #[tokio::test]
     async fn purge_prefix_does_not_match_longer_model_id() {
         let dir = temp_dir("purge-prefix-test");

@@ -97,7 +97,7 @@ const UNIFIED_MEMORY_GPU_SHARE: f64 = 0.75;
 /// with the primary model already loaded, not the card's nominal capacity.
 ///
 /// `None` is a real answer, not a failure: it means gglib will keep exactly one
-/// model resident, which is the pre-M9 behaviour and always safe.
+/// model resident, which is always safe.
 ///
 /// Cached for [`FREE_VRAM_TTL`], so a burst of admissions costs one probe.
 #[must_use]

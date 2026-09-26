@@ -45,29 +45,25 @@ pub fn check_llama_installed() -> bool {
 ///
 /// # Why a pin rather than `latest`
 ///
-/// Installs used to resolve `releases/latest`, so the inference engine
-/// underneath gglib changed whenever upstream cut a release — silently, and
-/// differently for two users who installed a day apart. Every compensation
-/// gglib applies (dialect normalization, grammar origination, capability
-/// detection) is a bet about what that engine does, and an unpinned engine
-/// makes those bets unfalsifiable: when behaviour changes, there is no way to
-/// tell a gglib regression from an upstream one.
+/// Resolving `releases/latest` would change the inference engine underneath
+/// gglib whenever upstream cut a release — silently, and differently for two
+/// users who installed a day apart. Every compensation gglib applies (dialect
+/// normalization, grammar origination, capability detection) is a bet about
+/// what that engine does, and an unpinned engine makes those bets
+/// unfalsifiable: when behaviour changes, there is no way to tell a gglib
+/// regression from an upstream one.
 ///
 /// Pinning does not stop gglib tracking upstream. It makes tracking a
 /// deliberate, reviewable event: bump this constant, run the suite, ship the
 /// bump as its own commit with the observed differences in the message.
-///
-/// The initial value is the release that was `latest` when the pin landed, so
-/// introducing it changed nothing for anyone installing that day — it only
-/// stops the drift from here on.
 #[cfg(feature = "prebuilt")]
 pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
 ///
 /// Accepts a release tag (`b10500`) to install that release, or the literal
-/// `latest` to restore the old float-with-upstream behaviour. Unset — the
-/// default — installs [`PINNED_LLAMA_RELEASE`].
+/// `latest` to follow upstream's newest release. Unset — the default —
+/// installs [`PINNED_LLAMA_RELEASE`].
 ///
 /// Provided because a user debugging against an upstream fix should not have
 /// to rebuild gglib to get it, and because it is how the pin bump itself is

@@ -13,16 +13,15 @@
 //!
 //! # Why `console`, not `crossterm` raw mode
 //!
-//! Earlier iterations enabled `crossterm::terminal::enable_raw_mode()` to read
-//! single keypresses without Enter. That permanently disables the termios
-//! `OPOST` (output post-processing) flag for the duration of raw mode, which
-//! means newline characters (`\n`) are no longer translated to `\r\n` on
-//! output. `indicatif` emits a bare `\n` between each managed bar to separate
-//! them; without `OPOST` the cursor never returns to column 0, so every redraw
-//! drifts one column to the right and old frames remain on screen — bars
-//! appear to "scroll" instead of redrawing in place. The `crossterm` docs
-//! confirm this: *"New line character will not be processed therefore
-//! `println!` can't be used"* in raw mode.
+//! `crossterm::terminal::enable_raw_mode()` would read single keypresses
+//! without Enter, but it disables the termios `OPOST` (output
+//! post-processing) flag for the duration of raw mode, so newline characters
+//! (`\n`) are not translated to `\r\n` on output. `indicatif` emits a bare
+//! `\n` between each managed bar to separate them; without `OPOST` the cursor
+//! never returns to column 0, so every redraw drifts one column to the right
+//! and old frames remain on screen — bars appear to "scroll" instead of
+//! redrawing in place. The `crossterm` docs confirm this: *"New line character
+//! will not be processed therefore `println!` can't be used"* in raw mode.
 //!
 //! The `console` crate (same authors as `indicatif`, designed for exactly
 //! this scenario) provides `Term::read_key()` which briefly enters cbreak

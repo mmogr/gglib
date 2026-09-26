@@ -101,27 +101,25 @@ mod tests {
     /// *every* pidfile there, and `is_our_llama_server` matches on the canonical
     /// exe path, which a real `<repo>/.llama/bin/llama-server` satisfies exactly.
     /// Running this with a model resident therefore SIGTERMs it and deletes its
-    /// pidfile: observed on 2026-08-28, where a `cargo test --workspace` killed a
-    /// live 27B server and the suite passed while doing it.
+    /// pidfile.
     ///
     /// Its sibling `list_pidfiles_filters_non_pid_files` in `io.rs` is `#[ignore]`d
     /// for a related reason — it deletes every `.pid` in the real directory
     /// before writing its own.
     ///
-    /// Isolating properly wants `GGLIB_DATA_DIR`. Setting an env var needs
-    /// `unsafe`, which the workspace denies — but it does **not** foreclose the
-    /// route: `gglib_core::paths::test_utils` already carries an `EnvVarGuard`
-    /// behind `#[allow(unsafe_code)]`, serialized by its own lock and in use
-    /// today. It is `pub(super)`, so reaching it from here means exporting it
-    /// behind a `test-utils` feature, the shape `gglib-db` is already consumed
-    /// with. That is the fix; this is only the stop. Tracked as #955.
+    /// Isolating it wants `GGLIB_DATA_DIR`. Setting an env var needs `unsafe`,
+    /// which the workspace denies, but `gglib_core::paths::test_utils` carries an
+    /// `EnvVarGuard` behind `#[allow(unsafe_code)]`, serialized by its own lock.
+    /// It is `pub(super)`, so reaching it from here means exporting it behind a
+    /// `test-utils` feature, the shape `gglib-db` is consumed with. That is the
+    /// fix (#955); the `#[ignore]` is only the stop.
     /// A model id no real catalog hands out, and one no sibling test uses.
     ///
     /// Both matter. `pids_dir()` is shared with the developer's own daemon, so a
     /// plausible id would collide with a real model's pidfile — the reason
     /// `process::residency::launch_tests` reaches for the `999_00x` range. And
-    /// `io.rs`'s ignored sibling used `99999` too, so under `--ignored` the two
-    /// raced on one file and the run failed 3/3.
+    /// a sibling on the same id would race this test on one file under
+    /// `--ignored`.
     const SWEEP_ID: i64 = 999_010;
 
     #[tokio::test]

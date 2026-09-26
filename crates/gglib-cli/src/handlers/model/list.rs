@@ -118,8 +118,8 @@ async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Resu
         None => request,
     };
     let response = request.send().await?;
-    // Checked rather than assumed: this call used to go straight to `.json()`,
-    // so a 401 arrived as a deserialization error about unexpected input.
+    // Checked rather than assumed: straight to `.json()`, a 401 would arrive
+    // as a deserialization error about unexpected input.
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         anyhow::bail!(
             "listing models answered 401: {}",

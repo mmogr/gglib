@@ -2,9 +2,8 @@
 //!
 //! Mutating subcommands (compare, perf, tune) run on the gglib daemon — the
 //! one process that owns llama-server — via its `/api/benchmark/…` SSE
-//! routes; this handler streams the events back and renders them exactly as
-//! the old in-process channel consumer did. Read-only subcommands (list,
-//! show, model) stay local: they are DB reads.
+//! routes; this handler streams the events back and renders them. Read-only
+//! subcommands (list, show, model) stay local: they are DB reads.
 
 use anyhow::{Context as _, Result, anyhow};
 
@@ -127,8 +126,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
 ///
 /// Dropping the stream (Ctrl-C aborts the future) disconnects the request,
 /// which is the daemon's cancellation signal — the run stops at the next
-/// model boundary and VRAM is freed, exactly as the old in-process
-/// `CancellationToken` did.
+/// model boundary and VRAM is freed.
 async fn run_on_daemon(
     ctx: &CliContext,
     path: &str,
@@ -778,11 +776,9 @@ fn render_generation_block(report: &AgenticEvalReport) {
 /// Why the delta column is empty, when it is.
 ///
 /// Printed directly under the axis table rather than further down with the
-/// other caveats. The 2026-08-28 report carried the warning *and* the number:
-/// it said those arms were floors rather than measurements, and then printed
-/// `-0.058` as the headline anyway. Both statements were on the same screen and
-/// only one of them was read, which is the argument for withholding the figure
-/// rather than annotating it.
+/// other caveats. The figure is withheld rather than annotated, because a
+/// warning printed beside the number it warns about can be skipped while the
+/// number is read.
 fn render_withheld_block(report: &AgenticEvalReport) {
     let Some(DeltaWithheld::ContaminatedByUnmeasuredRuns { raw, gglib }) = report.delta.withheld
     else {

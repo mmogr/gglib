@@ -15,23 +15,21 @@ use gglib_core::settings::CONTEXT_SIZE_RANGE;
 
 /// The context the daemon should serve when a client names none.
 ///
-/// Passed through, not resolved. Resolving the chain here turned "the user set
-/// nothing" into "the user set 4096" and sent it as an explicit value, so the
-/// daemon's own `BuiltInDefault -> None` filter could not see that nobody had
-/// chosen it, and the launch never reached the rung that fits the context to
-/// the machine. `up` and `serve` already pass the setting through; this was the
-/// last *serving* path that did not. The benchmark harness still resolves the
-/// floor before the sweep (`benchmark/{agentic,compare,tune}`), which is
-/// recorded in ADR 0009 rather than fixed here.
+/// Passed through, not resolved. Resolving the chain here would turn "the user
+/// set nothing" into "the user set 4096" and send it as an explicit value, so
+/// the daemon's own `BuiltInDefault -> None` filter could not see that nobody
+/// had chosen it, and the launch would never reach the rung that fits the
+/// context to the machine. `up`, `serve` and the benchmark harness
+/// (`benchmark/{agentic,compare,tune}` in gglib-app-services) pass the setting
+/// through too, and `scripts/check_context_floor.sh` fails on an
+/// `.unwrap_or(DEFAULT_CONTEXT_SIZE)` in any of them.
 ///
-/// The flag is validated rather than silently discarded. It used to parse with
-/// `.ok()`, so a typo served something else and said nothing — and with the
-/// pass-through above it would have served something else again, just a
-/// different something. `CtxSizeArg::parse` is deliberately *not* reused: it
-/// advertises "a positive number or 'max'", and `max` has no meaning for a
-/// proxy that serves every model and therefore has no single trained context in
-/// scope. Pointing the user at a value this command rejects one line later is
-/// worse than the silence it replaces.
+/// The flag is validated rather than silently discarded: a typo is an error,
+/// not a different context served without a word. `CtxSizeArg::parse` is
+/// deliberately *not* reused: it advertises "a positive number or 'max'", and
+/// `max` has no meaning for a proxy that serves every model and therefore has
+/// no single trained context in scope. Pointing the user at a value this
+/// command rejects one line later would be worse than no hint.
 fn resolve_default_context(
     flag: Option<&str>,
     settings: &gglib_core::Settings,
@@ -54,8 +52,7 @@ fn resolve_default_context(
     // Bounded here rather than left to the daemon. This is the same value
     // `validate_settings` holds to 512..=1_000_000 and the same one
     // `--default-context-size` documents with that range, so accepting `1` on
-    // this surface alone would make three descriptions of one number disagree
-    // — the thing this commit is otherwise about.
+    // this surface alone would make three descriptions of one number disagree.
     if !CONTEXT_SIZE_RANGE.contains(&parsed) {
         anyhow::bail!(invalid());
     }
@@ -171,12 +168,11 @@ mod tests {
     use super::resolve_default_context;
     use gglib_core::Settings;
 
-    /// The regression this command already shipped once.
+    /// With nothing configured, the daemon is told nothing. A chain resolved
+    /// to a bare `u64` here would tell it the user had chosen 4096, and the
+    /// fitted rung ([#925]) would never be reached.
     ///
-    /// #925 made the launch fit the context to the machine, and this handler
-    /// kept resolving the chain to a bare `u64` first — so the daemon was told
-    /// the user had chosen 4096 and the fitted rung was never reached. Nothing
-    /// was red when that happened. This is what turns red if it recurs.
+    /// [#925]: https://github.com/mmogr/gglib/pull/925
     #[test]
     fn nothing_configured_sends_nothing() {
         let settings = Settings::default();
@@ -207,7 +203,8 @@ mod tests {
         );
     }
 
-    /// It used to parse with `.ok()`, so this served 4096 and said nothing.
+    /// A flag parsed with `.ok()` would drop `8k` here without a word, and the
+    /// daemon would size the context as though no flag had been passed.
     #[test]
     fn a_malformed_flag_is_an_error_not_a_shrug() {
         let err = resolve_default_context(Some("8k"), &Settings::default())

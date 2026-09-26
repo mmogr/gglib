@@ -13,8 +13,8 @@ const HIDDEN_KEYS: &[&str] = &["setup-completed"];
 /// Keys whose value is shown as set-or-unset rather than printed.
 ///
 /// Matched on the full dotted key, so a leaf inside a nested value can be
-/// masked while its siblings print — which is what the stored pairing needs
-/// now that its key and its ticket are one record.
+/// masked while its siblings print — which is what the stored pairing needs,
+/// since its key and its ticket are one record.
 ///
 /// Only the pairing's key, and deliberately not `proxy-api-key`: the two are
 /// credentials with opposite recovery stories. The proxy generates its own key

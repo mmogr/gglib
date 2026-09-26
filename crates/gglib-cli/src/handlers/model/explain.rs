@@ -89,10 +89,9 @@ pub(crate) async fn execute(
 /// The two constants behind a fitted context — `BUDGET_UTILISATION` and the
 /// co-resident reservation — are judgement calls, and ADR 0009 says so. The
 /// only way they stop being guesses is if the numbers they produce are visible
-/// when somebody looks, and until now the only record was a `debug!` line
-/// inside `admit`, written after a launch and read by nothing. Its first kill
-/// criterion needs exactly this reading across a catalog: if the chosen rung is
-/// routinely far below `unsnapped`, the ladder is too coarse.
+/// when somebody looks, and this is where they are. ADR 0009's first kill
+/// criterion needs exactly this reading across a catalog: if the chosen rung
+/// is routinely far below `unsnapped`, the ladder is too coarse.
 ///
 /// Every value comes from [`gglib_runtime::process::residency::explain::explain_fit`]
 /// and [`resolve_context_size_with_source`] — the same calls a launch makes —

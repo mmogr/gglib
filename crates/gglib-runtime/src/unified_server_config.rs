@@ -200,8 +200,7 @@ impl UnifiedServerConfig {
             port: self.globals.proxy_port,
             // Only a value somebody actually chose. Falling through to the
             // built-in floor here would hand the proxy `Some(4096)` and make
-            // the fitted rung unreachable in pinned mode — the same laundering
-            // this change removes from the ordinary path.
+            // the fitted rung unreachable in pinned mode.
             default_context: match resolve_context_size_with_source(&self.resolved_options()) {
                 (_, ContextSizeSource::BuiltInDefault) => None,
                 (ctx, _) => Some(ctx),

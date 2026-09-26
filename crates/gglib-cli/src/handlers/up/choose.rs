@@ -256,12 +256,12 @@ mod tests {
         assert_eq!(budget_of(&mem(None, false)), 32 * GB);
     }
 
-    /// The banner used to annotate `needs` with "at 32768 context", which reads
-    /// as the context the launch will serve. It is not. That number is the bar
-    /// the model had to clear to be shortlisted, tested against a different
-    /// budget from the one `fit_context` uses — and `up` sends `None`, so the
-    /// daemon decides. ADR 0009 opens by condemning exactly this surface for
-    /// showing a number unrelated to the one served.
+    /// Annotating `needs` with "at 32768 context" would read as the context
+    /// the launch will serve. It is not. That number is the bar the model had
+    /// to clear to be shortlisted, tested against a different budget from the
+    /// one `fit_context` uses — and `up` sends `None`, so the daemon decides.
+    /// ADR 0009 opens by condemning exactly this surface for showing a number
+    /// unrelated to the one served.
     #[test]
     fn the_needs_note_does_not_promise_a_served_context() {
         let note = needs_note(32_768);

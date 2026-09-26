@@ -21,10 +21,9 @@ use gglib_core::domain::{FieldSources, InferenceConfig};
 /// `gglib model explain <id>` prints the outcome of this resolution for any
 /// model, naming the layer each parameter came from.
 ///
-/// Returns the provenance alongside the values. Nothing in this crate could
-/// previously say *why* a parameter ended up where it did — only `gglib model
-/// explain` could, on a different code path — so a flag the coupling rule
-/// discarded looked identical to one that was never passed.
+/// Returns the provenance alongside the values, so a caller can say *why* a
+/// parameter ended up where it did: without it, a flag the coupling rule
+/// discarded looks identical to one that was never passed.
 pub(crate) async fn resolve_inference_config(
     ctx: &CliContext,
     config: InferenceConfig,

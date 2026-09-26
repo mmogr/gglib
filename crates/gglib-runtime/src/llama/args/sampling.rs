@@ -9,34 +9,26 @@
 //!
 //! # Why nothing is emitted
 //!
-//! [ADR 0003] measured what the flags actually did, and the answer was
-//! nothing, twice over:
+//! A launch flag loses to the request body ([ADR 0003] measured it), and
+//! gglib writes a body value on every request that goes through the pipeline.
+//! A flag gglib's own requests override would configure only someone
+//! bypassing gglib and curling llama-server directly — not a population
+//! gglib's launch path exists to configure — at the cost of a process command
+//! line that misreports what the server samples with.
 //!
-//! - Six of the seven set a value that was already llama.cpp's default on the
-//!   pinned build, so they moved nothing.
-//! - The seventh loses anyway. Launched with `--temp 0.7` and sent a body
-//!   carrying `temperature: 1.5`, the slot reports **1.5**. The body wins, and
-//!   gglib writes a body value on every request that goes through the
-//!   pipeline.
-//!
-//! So the flags changed the behaviour of exactly one population: someone
-//! bypassing gglib and curling llama-server directly. That is not a population
-//! gglib's launch path exists to configure, and serving it cost a process
-//! command line that misreported what the server would actually sample with —
-//! which is the surface that made #739 hard to see.
-//!
-//! # And they were actively harmful to observation
+//! # And a flag would blind observation
 //!
 //! [ADR 0004] finding 1: every sampler launch flag overwrites the field it
-//! names in `GET /props`'s `default_generation_settings`. Since gglib set them
-//! to values chosen to equal upstream's, the baseline check that guards ADR
-//! 0003's deferral would have compared gglib's floor against gglib's own flag
-//! and reported an agreement it could never have failed to report.
+//! names in `GET /props`'s `default_generation_settings`, so the baseline
+//! check that guards ADR 0003's deferral would compare gglib's floor against
+//! gglib's own flag and report an agreement it could never fail to report.
 //!
-//! Removing them is therefore what makes `/props` a clean read of llama.cpp's
-//! own defaults, and turns ADR 0003's one-off probe into a standing
-//! instrument. See [`crate::llama::args::sampling::SAMPLING_SOURCE`] for what
-//! the launch banner says about it.
+//! With no flags, nothing gglib launches with masks `/props`, and ADR 0003's
+//! probe is a standing instrument. A model's own `general.sampling.*` keys
+//! can still move it ([ADR 0004] finding 7); `gglib_proxy::props` says how
+//! the check allows for them. See
+//! [`crate::llama::args::sampling::SAMPLING_SOURCE`] for what the launch
+//! banner says about it.
 //!
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 //! [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
@@ -56,10 +48,10 @@ pub const SAMPLING_SOURCE: &str = "request body, no launch flags";
 /// that the launch path has one named place to look, and so the guard test
 /// below has something to assert against.
 ///
-/// Adding a flag here would re-blind [`crate::llama::args::sampling`]'s
-/// `/props` reader — see the module docs, and
-/// `gglib_proxy::props::SAMPLER_LAUNCH_FLAGS_PASSED`, which must be flipped
-/// back to `true` in the same change.
+/// Adding a flag here would blind the `/props` baseline check in
+/// `gglib_proxy::props` (see the module docs), and
+/// `gglib_proxy::props::SAMPLER_LAUNCH_FLAGS_PASSED` must be set to `true` in
+/// the same change.
 #[must_use]
 pub const fn sampler_flags() -> &'static [&'static str] {
     &[]

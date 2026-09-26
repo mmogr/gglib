@@ -134,10 +134,9 @@ pub(super) fn build_chat_body(
     // shared pipeline can read them back and resolve the rest beneath them.
     //
     // Applied through the same serde-driven helper the proxy uses, so the two
-    // request paths cannot drift.  A hand-rolled field-by-field copy here is
-    // what silently dropped `presence_penalty` and `min_p` when they were added
-    // to InferenceConfig.  `to_openai_json_patch` emits only `Some` fields,
-    // already snake_cased.
+    // request paths cannot drift: a field added to InferenceConfig reaches
+    // both. `to_openai_json_patch` emits only `Some` fields, already
+    // snake_cased.
     if let Some(s) = sampling
         && let Some(obj) = body.as_object_mut()
     {
@@ -186,13 +185,10 @@ mod tests {
         }]
     }
 
-    /// Regression guard for #611.
+    /// Every sampling key the proxy sends reaches this body too: both go
+    /// through [`InferenceConfig::to_openai_json_patch`] ([#611]).
     ///
-    /// `presence_penalty` and `min_p` were added to [`InferenceConfig`] after
-    /// this adapter was written, and the hand-rolled serialization that used to
-    /// live here silently dropped them while the proxy sent them.  Sampling is
-    /// now applied via [`InferenceConfig::to_openai_json_patch`] — the proxy's
-    /// own helper — so the two cannot diverge again.
+    /// [#611]: https://github.com/mmogr/gglib/issues/611
     #[test]
     fn sampling_emits_every_openai_key() {
         let config = full_config();

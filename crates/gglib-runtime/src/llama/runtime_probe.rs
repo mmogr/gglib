@@ -92,9 +92,9 @@ fn probe_uncached(binary: &Path) -> RuntimeCapabilities {
         return RuntimeCapabilities::unknown(format!("probe exited with status {}", output.status));
     }
 
-    // llama.cpp writes its version banner to stderr and has historically moved
-    // between the two, so both are read. stderr first: when a build prints to
-    // both, the banner is the one on stderr and stdout carries help text.
+    // Which stream carries llama.cpp's version banner varies by build, so both
+    // are read. stderr first: when a build prints to both, the banner is the
+    // one on stderr and stdout carries help text.
     let stderr = String::from_utf8_lossy(&output.stderr);
     let caps = RuntimeCapabilities::from_version_output(&stderr);
     if caps.is_identified() {

@@ -199,7 +199,7 @@ const SAMPLING_PREFIX: &str = "general.sampling.";
 /// # Why these are not left to `--metadata`
 ///
 /// Every other key in that dump describes the model. These *change what the
-/// server does*: since llama.cpp PR #17120, `common_init_sampler_from_model`
+/// server does*: `common_init_sampler_from_model` (llama.cpp #17120)
 /// overwrites `params.sampling` from them for every field no CLI flag sets, and
 /// gglib passes no sampler flags at all ([ADR 0003]). A key here is therefore
 /// the effective default for any parameter gglib leaves unset — which is most

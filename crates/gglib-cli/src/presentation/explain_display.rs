@@ -17,19 +17,11 @@ use super::tables::print_separator;
 /// Width of the parameter-name column.
 ///
 /// The longest name is `reasoning_budget_tokens` at 23 characters, so the
-/// column is 24 to keep one space before the value.
-///
-/// It was 17, on a comment claiming `presence_penalty` at 16 was the longest —
-/// true when it was written, and false since the four DRY parameters landed;
-/// then 19 for those. `{:<19}` does not truncate, it just stops padding, so an
-/// over-long name renders its value hard against it
-/// (`dry_penalty_last_n—`) rather than misaligning visibly enough to be
-/// noticed. `every_name_fits_its_column` fails if a longer name is added.
-///
-/// This width is the whole of what kept the two reasoning rows out of the
-/// table: they were listed as deferred with a note that rendering
-/// `reasoning_budget_tokens` needed four more characters here. It needed five,
-/// and a wider separator to match, and nothing else.
+/// column is 24 to keep one space before the value. `{:<N}` does not
+/// truncate, it just stops padding, so an over-long name would render its
+/// value hard against it (`dry_penalty_last_n—`) rather than misaligning
+/// visibly enough to be noticed. `every_name_fits_its_column` fails if a
+/// longer name is added.
 const NAME_WIDTH: usize = 24;
 
 /// Width of the value column, wide enough for `-0.0000` style floats without
@@ -94,9 +86,9 @@ pub(crate) struct ExplainContext<'a> {
     /// What this model's own GGUF publishes, so a row can say whether gglib is
     /// displacing the model author's recommendation.
     ///
-    /// Since llama.cpp PR #17120 a `general.sampling.*` key becomes the
-    /// server's default for every field gglib does not name, so the provenance
-    /// column alone is no longer the whole story: `unset by design` means *the
+    /// llama.cpp makes a `general.sampling.*` key the server's default for
+    /// every field gglib does not name (llama.cpp #17120), so the provenance
+    /// column alone is not the whole story: `unset by design` means *the
     /// model's own number applies* on a model that published one, and means
     /// *the build's default applies* on a model that did not. Without this the
     /// two render identically.
@@ -151,20 +143,16 @@ pub(crate) fn print_explanation(
 /// Split from the printing so it can be asserted on directly — this is the
 /// part with the logic in it.
 ///
-/// # Every provenance row is rendered, and that is now checked
+/// # Every provenance row is rendered, and that is checked
 ///
 /// [`FieldSources::iter`] is the single display order every provenance surface
 /// reads, and this function pairs it with a value column using `zip`, which
-/// **truncates**. A field that gains provenance and no value row disappears
-/// from `gglib model explain` with no compile error, no failing count, and no
-/// visible symptom — the same shape as the [`NAME_WIDTH`] mis-sizing above,
-/// which rendered wrongly for months without misaligning enough to be noticed.
-///
-/// The two reasoning controls used to be a listed exception here, waiting on
-/// exactly the column width the constant above now has. The list is gone with
-/// them: `every_provenance_row_is_rendered` and the assertion below say that a
-/// row without a value column is a fault, with no register of approved
-/// omissions to add the next one to.
+/// **truncates**. A field that gains provenance and no value row would
+/// disappear from `gglib model explain` with no compile error, no failing
+/// count, and no visible symptom — the same shape as a [`NAME_WIDTH`] too
+/// narrow for its longest name. `every_provenance_row_is_rendered` and the
+/// assertion below say that a row without a value column is a fault, with no
+/// register of approved omissions.
 #[must_use]
 pub(crate) fn explanation_lines(
     resolved: &InferenceConfig,

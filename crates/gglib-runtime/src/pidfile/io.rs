@@ -127,9 +127,9 @@ mod tests {
     use std::fs;
 
     /// Uses an implausible id for the reason `launch_tests` documents: this
-    /// writes into the real `pids_dir()`, and `12345` is a rowid a catalog can
-    /// genuinely hand out — deleting that pidfile would leave a live server the
-    /// startup sweep can no longer reap.
+    /// writes into the real `pids_dir()`, and a plausible id is a rowid a
+    /// catalog can genuinely hand out — deleting that pidfile would leave a
+    /// live server the startup sweep cannot reap.
     #[test]
     fn roundtrip_pidfile() {
         let model_id = 999_011;

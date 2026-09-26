@@ -26,8 +26,8 @@ pub enum CacheRamSource {
     Auto,
     /// Auto-sizing was requested but suppressed via
     /// `GGLIB_DISABLE_CACHE_AUTOSIZE` — no flag emitted, so llama-server's
-    /// built-in default (8192 MiB) applies. The only way to reach "no flag"
-    /// now that callers can't request it directly (see [`CacheRamSetting`]).
+    /// built-in default (8192 MiB) applies. The only way to reach "no flag":
+    /// callers cannot request it directly (see [`CacheRamSetting`]).
     AutoSuppressedByEnv,
 }
 
@@ -59,8 +59,8 @@ pub struct CacheRamResolution {
 /// suppressed, falling back to llama-server's own default.
 ///
 /// Same `GGLIB_DISABLE_<FEATURE>` convention as `GGLIB_DISABLE_MTP` and
-/// `GGLIB_DISABLE_CACHE_REUSE`; exists so a user can restore exactly the
-/// pre-auto-sizing launch without editing config.
+/// `GGLIB_DISABLE_CACHE_REUSE`; exists so a user can launch with
+/// llama-server's own `--cache-ram` default without editing config.
 fn autosize_disabled_via_env() -> bool {
     std::env::var("GGLIB_DISABLE_CACHE_AUTOSIZE")
         .ok()

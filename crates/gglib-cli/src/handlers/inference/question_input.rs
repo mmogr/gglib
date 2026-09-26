@@ -14,9 +14,9 @@ use anyhow::{Result, anyhow};
 
 /// Build the user message, incorporating piped stdin or `--file` content.
 ///
-/// `show_prompt` echoes the assembled message to stderr. It used to be the
-/// local `--verbose`, whose arg id collided with the global one and so left
-/// `gglib q` with no way to turn on debug logging at all.
+/// `show_prompt` (`--show-prompt`) echoes the assembled message to stderr. It
+/// is not a local `--verbose`: that arg id would collide with the global one
+/// and leave `gglib q` with no way to turn on debug logging.
 pub(crate) fn build_user_message(
     question: &str,
     file: Option<&str>,

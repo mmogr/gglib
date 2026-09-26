@@ -1,15 +1,9 @@
 //! Error type for the llama.cpp install prompt.
 //!
-//! This was once "a unified error type for all llama-related operations", with
-//! variant groups for installation, download and build. That design lost to
-//! `anyhow`: every orchestration module in this directory — `download`,
-//! `build`, `install`, `deps`, `detect`, `update`, `uninstall`, `validate`,
-//! `status`, `config`, `ensure` — returns `anyhow::Result`, and had for long
-//! enough that thirteen of the fifteen variants were never constructed once.
-//!
-//! What is left is the one place that wants a *typed* error: [`InstallPrompt`]
-//! is a trait, and a trait in a library should not make its implementors
-//! depend on `anyhow`.
+//! `LlamaError` is the error [`InstallPrompt`] returns: the prompt is a trait,
+//! and a trait in a library should not make its implementors depend on
+//! `anyhow`. The install, build, download and update orchestration here
+//! returns `anyhow::Result`.
 //!
 //! [`InstallPrompt`]: super::prompt::InstallPrompt
 

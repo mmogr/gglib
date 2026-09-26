@@ -1,10 +1,9 @@
 //! What is installed, as data.
 //!
-//! `gglib config llama status` used to compute and print in one pass, which
-//! left the GUI with only `llama_installed: bool` from the setup status. This
-//! module answers the same question as a value; [`super::handle_status`] is
-//! now a printer over it and the Axum `system/llama-status` route serialises
-//! it directly, so the two surfaces cannot drift.
+//! This module answers "what is installed" as a value:
+//! [`super::handle_status`] prints it for `gglib config llama status`, and the
+//! Axum `system/llama-status` route serialises it directly, so the two
+//! surfaces cannot drift.
 
 use super::config::BuildConfig;
 use gglib_core::domain::RuntimeCapabilities;

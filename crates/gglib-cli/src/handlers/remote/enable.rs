@@ -48,11 +48,10 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     // was already up, or that the daemon's own resume brought back while this
     // waited, keeps the paths it was minted with whatever was passed here.
     if args.no_discovery && !enabled.already_up {
-        // Worth two lines now rather than one. The ticket used to die at the
-        // next restart, so "stops working" meant "until you enable again".
-        // It lasts now, and a ticket minted without discovery keeps only the
-        // paths it had — so this is the flag that can leave a device holding
-        // an address that will never resolve again.
+        // Worth two lines. The ticket lasts across restarts, and a ticket
+        // minted without discovery keeps only the paths it had — so this is
+        // the flag that can leave a device holding an address that will never
+        // resolve again.
         eprintln!(
             "  note: --no-discovery means this ticket carries only the paths it was minted with."
         );

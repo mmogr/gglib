@@ -19,24 +19,20 @@ use std::time::Duration;
 
 /// Shared client for health polling.
 ///
-/// Built once and reused. `reqwest::Client` construction is not cheap — it
-/// initializes a TLS backend, and see [`loopback_client`] for the proxy
-/// lookup it used to do as well — and health checks are the most frequently
-/// repeated request in the process (`ServerHealthMonitor` polls on an
-/// interval, and `wait_for_http_health` polls in a loop during every model
-/// start). Constructing one per call discarded the connection pool each time
-/// and, under load, could take longer than the request it was built for.
+/// Built once and reused: health checks are the most frequently repeated
+/// request in the process (`ServerHealthMonitor` polls on an interval, and
+/// `wait_for_http_health` polls in a loop during every model start), and a
+/// client per call would initialize a TLS backend and throw the connection
+/// pool away on every poll.
 static HEALTH_CLIENT: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
 
 /// A client for asking a server on this machine's loopback address how it is.
 ///
 /// [`gglib_proxy::loopback::client_builder`] with a two-second timeout: that
-/// builder is what makes this a loopback client rather than a general one, and
-/// its docs carry the story of where a health check went with a proxy in the
-/// environment (#1085) and what the system-proxy lookup cost a first check on
-/// macOS (#1084). `health_proxy_tests` runs the two single-shot checks with a
-/// proxy in the environment and watches where they land;
-/// `wait_for_http_health` is covered by sharing this constructor.
+/// builder never routes through a proxy, and [`gglib_proxy::loopback`] says
+/// why. `health_proxy_tests` runs the two single-shot checks with a proxy in
+/// the environment and watches where they land; `wait_for_http_health` is
+/// covered by sharing this constructor.
 pub(crate) fn loopback_client() -> reqwest::Result<Client> {
     gglib_proxy::loopback::client_builder()
         .timeout(Duration::from_secs(2))

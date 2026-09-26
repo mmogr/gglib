@@ -170,12 +170,11 @@ mod tests {
         assert!(got.client_field_names.is_none());
     }
 
-    /// The skew case that matters, and the one a `#[serde(default)]` non-`Option`
-    /// got wrong: `sampling_audit` ships in builds that predate
-    /// `client_field_names`, so the tally is absent while the audit around it is
-    /// present. Absent must stay absent — defaulting it to an empty tally is
-    /// what let the renderer state that nothing had been dropped by a proxy
-    /// that was in fact dropping every client sampler.
+    /// The skew case that matters: `sampling_audit` ships in builds that
+    /// predate `client_field_names`, so the tally is absent while the audit
+    /// around it is present. Absent must stay absent — a `#[serde(default)]`
+    /// empty tally would let the renderer state that nothing had been dropped
+    /// by a proxy that was in fact dropping every client sampler.
     #[test]
     fn an_audit_without_the_tally_reports_no_tally_rather_than_an_empty_one() {
         let got: SamplingAudit =

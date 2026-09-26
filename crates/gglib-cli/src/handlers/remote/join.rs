@@ -1,7 +1,7 @@
 //! `gglib remote join` and `disconnect`: this machine as the laptop.
 //!
-//! Stopping the far machine used to live here as `kill`; it is
-//! `gglib daemon stop --remote` now (ADR 0013), beside the local stop.
+//! Stopping the far machine is not here: it is `gglib daemon stop --remote`
+//! (ADR 0013), beside the local stop.
 
 use anyhow::Result;
 use gglib_app_services::{RemoteJoinBody, RemoteStatus};

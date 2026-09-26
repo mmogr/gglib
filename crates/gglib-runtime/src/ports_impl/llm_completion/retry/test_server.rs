@@ -154,12 +154,11 @@ fn with_headers(
 // ─── The bodies the two real upstreams write ────────────────────────────────
 //
 // Each has exactly one home. The modelpipe literals are copied verbatim from
-// version 0.2.0's `refusal.rs`, the version `gglib-app-services` pins: the
-// interesting failures in this area were never about the logic, they were
-// about a wire shape that did not look the way the struct said it did, and a
-// paraphrase would have gone green against the bug. They live here rather
-// than beside one test because two files now read them, and a modelpipe bump
-// must have a single place to update.
+// `refusal.rs` in the modelpipe release `gglib-app-services` pins: the
+// failures worth catching here are a wire shape that does not look the way
+// the struct says it does, and a paraphrase would go green against one. They
+// live here rather than beside one test because two files read them, and a
+// modelpipe bump must have a single place to update.
 
 /// The proxy's error body for an admission timeout — the real wire shape.
 pub(super) fn admission_timeout_body() -> String {

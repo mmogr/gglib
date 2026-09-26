@@ -13,13 +13,13 @@
 //! lock released.
 //!
 //! Just as load-bearing: **no caller-supplied code runs while the lock is
-//! held**. Every method takes plain data in and hands plain data out. This is
-//! not an aesthetic preference — [`AdmissionQueue::poll`] originally took a
-//! `secondary_fits` callback and invoked it inside the critical section, and
-//! the production callback called back into the queue, re-locking this
-//! non-reentrant mutex and wedging the whole daemon (issue #721). A method
-//! that wants a caller's judgement must receive it as a value computed before
-//! the lock is taken.
+//! held**. Every method takes plain data in and hands plain data out. Caller
+//! code run under the lock can call back into the queue, re-lock this
+//! non-reentrant mutex and wedge the whole daemon ([#721]). A method that
+//! wants a caller's judgement must receive it as a value computed before the
+//! lock is taken.
+//!
+//! [#721]: https://github.com/mmogr/gglib/issues/721
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::time::Instant;
@@ -88,14 +88,14 @@ impl AdmissionQueue {
     ///
     /// `secondary` is the caller's verdict on whether this request's model may
     /// co-reside in the second slot, computed against a free-VRAM reading taken
-    /// just before this call. A value rather than a callback, deliberately: an
-    /// earlier callback version ran caller code inside the critical section,
-    /// and that code re-entered the queue and deadlocked the daemon (#721).
-    /// The price is a verdict up to one poll tick stale, which is well inside
-    /// the staleness the probe's own cache already allows. It is consulted only
-    /// when a secondary slot is empty or evictable and a co-load is the
-    /// alternative to a swap; callers re-poll on every tick, so the reading
-    /// never outlives the wait the way an enqueue-time reading would.
+    /// just before this call. A value rather than a callback, deliberately: a
+    /// callback would run caller code inside the critical section, which the
+    /// module docs rule out. The price is a verdict up to one poll tick stale,
+    /// which is well inside the staleness the probe's own cache already
+    /// allows. It is consulted only when a secondary slot is empty or evictable
+    /// and a co-load is the alternative to a swap; callers re-poll on every
+    /// tick, so the reading never outlives the wait the way an enqueue-time
+    /// reading would.
     pub fn poll(&self, ticket: &Ticket, secondary: SecondarySlotDecision) -> AdmissionDecision {
         self.lock().poll(ticket, Instant::now(), secondary)
     }

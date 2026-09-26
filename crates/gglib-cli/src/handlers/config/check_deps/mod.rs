@@ -25,9 +25,9 @@ use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
 /// * `probe` - System probe implementation for dependency detection
 /// * `setup_fast_downloads` - Provision the optional `hf_xet` accelerator.
 ///   Reporting is side-effect free; this is the only thing that installs
-///   anything, and it is off unless the user asks for it. Superseded by
-///   `gglib config fast-downloads enable`, and kept because the older docs
-///   name it.
+///   anything, and it is off unless the user asks for it. `gglib config
+///   fast-downloads enable` is the command to use; this is kept because
+///   older docs name it.
 ///
 /// # Returns
 ///

@@ -21,11 +21,9 @@ pub(super) fn detect_os() -> Os {
 
 /// Detect the Linux distribution family.
 ///
-/// Re-exported from `gglib_runtime` rather than reimplemented. This module
-/// used to carry its own copy that searched the whole of `/etc/os-release` for
-/// distribution names — which meant a `HOME_URL` containing "research" was read
-/// as Arch Linux, and the CLI could recommend different packages than the
-/// dependency check did on the very same machine.
+/// Re-exported from `gglib_runtime` rather than reimplemented, so this check
+/// and the llama.cpp build's dependency hint name the same distribution on
+/// the same machine.
 pub(super) use gglib_runtime::system::detect_linux_distro;
 
 #[cfg(test)]

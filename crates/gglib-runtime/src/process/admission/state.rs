@@ -59,9 +59,9 @@ pub(crate) const LAUNCH_OVERHEAD: Duration = Duration::from_secs(40);
 ///
 /// Derived per launch rather than fixed, because the health wait it contains
 /// is itself sized to the model — see `process::health::launch_deadline_secs`.
-/// A flat budget silently capped that wait: any model whose deadline exceeded
-/// the constant had its future dropped by this timeout first, which skipped
-/// the cleanup inside it and leaked the very process the deadline was extended
+/// A flat budget would silently cap that wait: a model whose deadline exceeded
+/// it would have its future dropped by this timeout first, skipping the
+/// cleanup inside it and leaking the very process the deadline was extended
 /// for.
 #[must_use]
 pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
@@ -71,16 +71,10 @@ pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
 /// How long a request may wait **with no queue progress** before giving up
 /// with a 503.
 ///
-/// A *stall* deadline, not a wall clock. It used to run from enqueue
-/// regardless of what the queue was doing, which made two very different
-/// situations expire identically: a genuinely wedged queue, and a first
-/// request on a cold daemon waiting out a model load that was proceeding
-/// normally — the second being a real failure observed three times in one
-/// day of benchmarking (a retry immediately succeeded each time, because the
-/// load the timeout had abandoned was in fact landing).
-///
-/// So the clock now measures time since the queue last did anything on
-/// anyone's behalf, and two things hold it back:
+/// A *stall* deadline, not a wall clock: the clock measures time since the
+/// queue last did anything on anyone's behalf, so a first request on a cold
+/// daemon waiting out a model load that is proceeding normally does not expire
+/// the way a wedged queue does. Two things hold it back:
 ///
 /// - **A launch in flight pauses every waiter's clock.** A loading slot is
 ///   the opposite of a stall, and it is bounded on its own: [`launch_timeout`]
@@ -88,18 +82,16 @@ pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
 ///   clock runs again. Waiting out a load can therefore extend a wait by at
 ///   most one launch budget at a time, never indefinitely.
 ///
-///   That budget is no longer a single number: [`launch_timeout`] scales with
-///   the model, from 160 s to 640 s. So a large model loading can pause every
-///   other waiter's clock for well past this deadline. That is consistent with
-///   what the clock measures — a load in flight is progress, not a stall — but
-///   whether a waiter behind a ten-minute load should have its clock paused
-///   outright rather than merely extended is a question this constant does not
-///   answer, and did not have to while the budget was flat.
+///   That budget scales with the model: [`launch_timeout`] runs from 160 s to
+///   640 s. So a large model loading can pause every other waiter's clock for
+///   well past this deadline. That is consistent with what the clock measures
+///   — a load in flight is progress, not a stall — but whether a waiter behind
+///   a ten-minute load should have its clock paused outright rather than
+///   merely extended is a question this constant does not answer.
 /// - **Progress resets the clock.** A lease released (a generation finished),
 ///   a launch landing or failing, a slot evicted — each proves the queue is
 ///   moving, so a waiter behind it is queued, not stuck.
 ///
-/// What still expires is exactly what this deadline always existed for.
 /// [`DRAIN_QUANTUM`] bounds how long a *turn* lasts, but a turn cannot end
 /// while the outgoing model still has requests in flight — no swap may preempt
 /// a live generation. A single generation is indivisible, so the rival behind
@@ -107,20 +99,18 @@ pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
 /// release for this long is a hog or a wedge, and the waiter behind it gets
 /// its 503.
 ///
-/// It used to cover a great deal more. A model under *overlapping* load could
-/// hold its slot indefinitely, because nothing capped how many requests were in
-/// flight at once and a client that always kept one outstanding meant the count
-/// never reached zero. `SERVER_PARALLEL` and `owes_slot_to_rival` close that
-/// off, so reaching this deadline is now the exception it was meant to be
-/// rather than the ordinary outcome of two clients sharing an endpoint.
+/// A model under *overlapping* load cannot hold its slot indefinitely:
+/// `SERVER_PARALLEL` caps how many requests are in flight at once, and
+/// `owes_slot_to_rival` makes an idle slot stand aside for a waiting rival. So
+/// reaching this deadline is the exception, not the ordinary outcome of two
+/// clients sharing an endpoint.
 pub const ADMISSION_DEADLINE: Duration = Duration::from_secs(180);
 
 /// A model loaded in VRAM, and everything the fast path needs to know about it.
 ///
-/// This carries what `CurrentModelState` used to, plus the in-flight count that
-/// makes eviction decisions safe. The launch metadata is cached here for the
-/// same reason it always was: the resolutions only exist at spawn, so a later
-/// request has no way to recover them.
+/// Carries the launch metadata and the in-flight count that makes eviction
+/// decisions safe. The metadata is cached here because the resolutions only
+/// exist at spawn, so a later request has no way to recover them.
 #[derive(Debug, Clone)]
 pub struct Resident {
     /// Database ID of the resident model.
@@ -449,14 +439,14 @@ impl QueueState {
     fn is_expired(&mut self, ticket: &Ticket, now: Instant) -> bool {
         // A launch in flight is the opposite of a stall: it is bounded by
         // its launch timeout, and both outcomes change the queue. This is
-        // the cold-start case that motivated stall semantics — the first
+        // the cold-start case stall semantics exist for — the first
         // request on a fresh daemon must wait out the model load, not time
         // out in the queue while the load it needs is landing.
         let loading = self.is_loading();
         let epoch = self.progress_epoch;
         let Some(waiter) = self.waiter_mut(ticket) else {
             // Not in the queue — the ticket was already granted or forgotten,
-            // so nothing should be asking. Answer with the old absolute rule
+            // so nothing should be asking. Answer by time since enqueue
             // rather than guessing.
             return now.duration_since(ticket.created_at) >= ADMISSION_DEADLINE;
         };

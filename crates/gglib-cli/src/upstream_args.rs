@@ -6,7 +6,7 @@ use clap::Args;
 /// A llama-server already running on this machine.
 ///
 /// Nothing set asks the daemon to start the model here; `--port` reuses
-/// one. Which *machine* a turn runs on is no longer this struct's question:
+/// one. Which *machine* a turn runs on is not this struct's question:
 /// that is the global `--remote`, declared once on the root parser and
 /// carried as a [`Target`](crate::target::Target) (ADR 0013). The two still
 /// exclude each other, because a port here and a machine there name
