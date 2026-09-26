@@ -25,10 +25,6 @@
 //!     None => Arc::new(CombinedToolExecutor::new(mcp)),
 //! };
 //! ```
-//!
-//! The previous version of this note named `gglib-axum` and `gglib-cli` as the
-//! constructing crates. Neither names this type; the crate-root re-export of it
-//! had no consumer to lose.
 
 use std::collections::HashMap;
 use std::sync::Arc;

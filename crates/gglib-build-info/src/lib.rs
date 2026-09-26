@@ -17,9 +17,8 @@ pub const SHA_LEN: usize = 12;
 ///
 /// The macOS About panel takes this as its `short_version`, which Cocoa
 /// renders as `Version {version} ({short_version})` — so the commit belongs in
-/// that slot and [`SEMVER`] in the other. Pass it only when [`HAS_GIT_SHA`]:
-/// the constant that used to sit there fell back to [`SEMVER`], which printed
-/// the version twice rather than omitting the parenthesis.
+/// that slot and [`SEMVER`] in the other. Pass it only when [`HAS_GIT_SHA`],
+/// so a build without a commit omits the parenthesis.
 pub const GIT_SHA: &str = env!("GGLIB_GIT_SHA");
 
 /// True if [`GIT_SHA`] is a commit id rather than the unavailable fallback.
@@ -28,11 +27,10 @@ pub const HAS_GIT_SHA: bool = is_abbreviated_sha(GIT_SHA);
 /// The commit this binary was built from, with a `-dirty` marker when the tree
 /// was unclean, or `"unknown"` outside a checkout.
 ///
-/// Exists because `SemVer` cannot tell two dev builds apart: a CLI carrying new
-/// daemon routes once silently used a same-version installed daemon and got an
-/// opaque 405, where "the daemon is a different build — restart it" was the
-/// real story. The daemon reports this from `/health`; the CLI compares it
-/// against its own.
+/// Exists because `SemVer` cannot tell two dev builds apart: a CLI talking to
+/// a same-version daemon of another build should say "the daemon is a
+/// different build — restart it", not surface an opaque 405. The daemon
+/// reports this from `/health`; the CLI compares it against its own.
 ///
 /// The `-dirty` marker is best-effort. A build script reruns when the commit
 /// moves, not when a source file is edited, so a tree dirtied after the last
@@ -59,17 +57,12 @@ const VERSION_WITH_SHA: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GG
 ///
 /// # Why this does not check a fixed length
 ///
-/// It used to demand exactly seven characters, and that is where the commit in
-/// `gglib --version` went. The SHA then came from gix's `short_id()`, which
-/// abbreviates the way git does — from the size of the object database — so
-/// the prefix widened to eight once this repository passed 16384 packed
-/// objects. Every build from a full clone then failed the length test and
-/// printed a bare `SemVer`, which is the signal reserved for "there was no git
-/// here at all". Nothing had been removed; the repository had simply grown.
-///
-/// `build.rs` now fixes the width, so nothing downstream needs to police it.
-/// What is left for this check is telling a commit id from `"unknown"`, and
-/// "not hex" does that on its own — no marker this crate emits is hex.
+/// `build.rs` fixes the width, so nothing downstream needs to police it, and a
+/// length test here would turn a commit id of another width into a bare
+/// `SemVer` in `gglib --version`, the signal reserved for "there was no git
+/// here at all". What is left for this check is telling a commit id from
+/// `"unknown"`, and "not hex" does that on its own — no marker this crate
+/// emits is hex.
 const fn is_abbreviated_sha(value: &str) -> bool {
     let bytes = value.as_bytes();
     if bytes.is_empty() {
@@ -94,8 +87,8 @@ mod tests {
 
     #[test]
     fn a_commit_id_is_recognised_at_any_width() {
-        // The regression, pinned. Seven passed before; eight is what gix
-        // started emitting, and twelve is what this crate emits now.
+        // Seven and eight are git's abbreviations, twelve is `SHA_LEN`,
+        // forty is a full id.
         assert!(is_abbreviated_sha("a1b2c3d"));
         assert!(is_abbreviated_sha("3b4349aa"));
         assert!(is_abbreviated_sha("3b4349aa95a9"));

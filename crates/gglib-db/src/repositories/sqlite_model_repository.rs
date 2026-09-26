@@ -21,35 +21,31 @@ use super::row_mappers::{
 ///
 /// The local key hashes the *canonical* path — the very value bound to the
 /// `file_path` column a few lines below — rather than the raw path it was
-/// handed. Hashing the raw path made the key disagree with the column:
-/// `gglib model add model.gguf`, run in two different directories over two
-/// genuinely different files, produced one key and two stored paths. The
-/// `ON CONFLICT(model_key)` clause then merged them, and because `name`,
-/// `param_count_b` and `architecture` are absent from its `DO UPDATE SET`
-/// list while `file_path` is present, the surviving row wore the first
-/// model's identity over the second model's file.
+/// handed. A key over the raw path disagrees with the column:
+/// `gglib model add model.gguf`, run in two directories over two different
+/// files, gives one key and two stored paths, and `ON CONFLICT(model_key)`
+/// merges them under the first model's `name`, `param_count_b` and
+/// `architecture`.
 ///
 /// It hashes a [`Path`], not the `String`, and that is load-bearing rather
 /// than stylistic. `Path`'s `Hash` is defined over components while `str`'s
 /// is defined over bytes, so the two disagree for a path they both consider
-/// identical. Hashing the string would therefore have moved the key of *every*
-/// local row already in a user's library, rather than only the rows this rule
-/// genuinely re-keys — the ones registered under a spelling that was not
-/// already canonical.
+/// identical. Hashing the string would move the key of *every* local row
+/// already in a user's library.
 ///
-/// Those rows do move, and they are migrated rather than stranded:
-/// `setup::backfill_local_model_keys` recomputes each `local:` key from the
-/// stored `file_path` column on open. That column has been canonical on every
-/// build that ever wrote it, so it is a sound source. The migration matters
-/// most on Windows, where `canonicalize` returns an extended-length `\\?\`
-/// path that no pre-change caller ever produced — so *no* Windows row was
-/// "already canonical" and every one of them needs re-keying.
+/// A row registered under a non-canonical spelling before [#850] does move:
+/// `setup::backfill_local_model_keys` re-keys it from its resolved
+/// `file_path` on open. On Windows, where `canonicalize` returns an
+/// extended-length `\\?\` path, every local row registered before [#850] is
+/// one.
 ///
 /// `canonical_path` is the already-resolved string the caller is about to bind
 /// to `file_path`, passed in rather than recomputed. Resolving is a blocking
 /// syscall and this runs inside an async `insert`; taking it as an argument
 /// also makes it impossible for the key and the column to be derived from two
 /// different resolutions of the same path.
+///
+/// [#850]: https://github.com/mmogr/gglib/pull/850
 fn compute_model_key(model: &NewModel, canonical_path: &str) -> String {
     match (&model.hf_repo_id, &model.hf_commit_sha, &model.hf_filename) {
         (Some(repo), Some(sha), Some(filename)) => {
@@ -149,10 +145,8 @@ impl ModelRepository for SqliteModelRepository {
     async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
         // `path` arrives already resolved, and `file_path` was normalised
         // through the same function on write, so this is a plain equality
-        // test rather than a scan that re-resolves every row. That matters
-        // twice over: it keeps a blocking `canonicalize` syscall per library
-        // row out of an async fn, and it removes the fallback that used to
-        // turn an unresolvable path into "no duplicate found".
+        // test rather than a scan that re-resolves every row, which keeps a
+        // blocking `canonicalize` syscall per library row out of an async fn.
         //
         // The `json_each` arm catches sharded models: shard 2 of a group
         // already registered is the same duplicate as shard 1, but only
@@ -430,9 +424,8 @@ mod tests {
     }
 
     /// `insert` upserts on the model key: a second registration of the same
-    /// model is not an error, it returns the same row. Recorded as a test
-    /// because the port doc used to claim the opposite, and the paths that
-    /// register a model after a download depend on this being retry-safe.
+    /// model is not an error, it returns the same row. The paths that register
+    /// a model after a download depend on this being retry-safe.
     #[tokio::test]
     async fn inserting_the_same_model_twice_upserts_rather_than_failing() {
         let repo = repo().await;
@@ -504,17 +497,16 @@ mod tests {
     /// **Upgrade safety.** The key a previous build computed for an
     /// already-canonical path must not move.
     ///
-    /// Nothing backfills `model_key` — it appears in `setup.rs` only as a
-    /// column and a unique index. If this value shifts, every local row in
-    /// every existing library becomes unreachable by `ON CONFLICT(model_key)`
-    /// and the next registration of that file silently appends a second row,
-    /// which is the exact failure this PR exists to prevent.
+    /// Nothing re-keys a library whose `user_version` is stamped. If this
+    /// value shifts, every local row in such a library becomes unreachable by
+    /// `ON CONFLICT(model_key)` and the next registration of that file
+    /// silently appends a second row.
     ///
-    /// The expectation is recomputed the old way rather than hardcoded,
-    /// because `DefaultHasher`'s output is explicitly not guaranteed stable
-    /// across Rust releases. What is pinned is the relationship: hashing the
-    /// canonical path must agree with hashing the `PathBuf` a previous build
-    /// hashed.
+    /// The expectation is recomputed by hashing the `PathBuf` rather than
+    /// hardcoded, because `DefaultHasher`'s output is explicitly not
+    /// guaranteed stable across Rust releases. What is pinned is the
+    /// relationship: hashing the canonical path must agree with hashing the
+    /// `PathBuf` a previous build hashed.
     #[test]
     fn the_local_key_for_a_canonical_path_survives_the_upgrade() {
         use std::collections::hash_map::DefaultHasher;
@@ -550,23 +542,18 @@ mod tests {
         );
     }
 
-    /// **The asymmetry this follow-up exists for.** One file is one model,
-    /// however its path was spelled on the way in.
+    /// One file is one model, however its path was spelled on the way in.
     ///
-    /// The local `model_key` hashes the path. While it hashed the *raw* path
-    /// and the `file_path` column stored the *resolved* one, the two
-    /// disagreed about identity: two spellings of a single file produced two
-    /// keys and therefore two rows for one model on disk, and — the
-    /// destructive direction — one raw spelling reaching two different files
-    /// produced a single key, so `ON CONFLICT(model_key)` merged them. Because
-    /// `name`, `param_count_b` and `architecture` are absent from the
-    /// `DO UPDATE SET` list while `file_path` is present, that survivor wore
-    /// the first model's identity over the second model's file.
+    /// The local `model_key` hashes the stored, resolved path. A key over the
+    /// *raw* path would make two spellings of one file two rows, and one raw
+    /// spelling reaching two different files one row: `ON CONFLICT(model_key)`
+    /// merges them, and because `name`, `param_count_b` and `architecture` are
+    /// absent from the `DO UPDATE SET` list while `file_path` is present, the
+    /// survivor wears the first model's identity over the second model's file.
     ///
-    /// Hashing the stored string closes both directions at once. This test
-    /// pins the spelling direction, which is the one reachable without
-    /// changing the process working directory; it fails if the key goes back
-    /// to hashing the path it was handed.
+    /// This test pins the spelling direction, the one reachable without
+    /// changing the process working directory; it fails if the key hashes the
+    /// path it was handed.
     ///
     /// The respelling uses `..` deliberately. `Path`'s `Eq` and `Hash` are
     /// defined over *components*, so a `.` or a doubled separator is already
@@ -662,11 +649,12 @@ mod tests {
 
     /// A refresh must not erase what only a download knows.
     ///
-    /// `file_paths_json`, `download_date` and `last_update_check` were plain
-    /// assignments in `DO UPDATE SET`, and a local re-import populates none of
-    /// them — so `--reimport` on a downloaded model wiped its shard list (taking
-    /// the sibling lookup with it) and made it read as never-downloaded and
-    /// never-update-checked, which the update-check workflow keys on.
+    /// A local re-import populates none of `file_paths_json`, `download_date`
+    /// and `last_update_check`, so a plain assignment of them in
+    /// `DO UPDATE SET` would make `--reimport` wipe a downloaded model's shard
+    /// list (taking the sibling lookup with it) and make it read as
+    /// never-downloaded and never-update-checked, which the update-check
+    /// workflow keys on.
     #[tokio::test]
     async fn a_refresh_keeps_the_shard_list_and_download_provenance() {
         let repo = repo().await;

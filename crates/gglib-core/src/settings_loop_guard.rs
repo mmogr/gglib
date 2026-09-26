@@ -39,9 +39,8 @@ pub enum LoopGuardMode {
     /// Refuse the request with HTTP 400, before any catalog, admission or
     /// model-swap cost.
     ///
-    /// What the guard did by default until #1052. Still the right answer for
-    /// an operator who would rather a stuck session fail loudly than burn a
-    /// shared GPU.
+    /// The right answer for an operator who would rather a stuck session fail
+    /// loudly than burn a shared GPU.
     Refuse,
 }
 

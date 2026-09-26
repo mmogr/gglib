@@ -1,21 +1,16 @@
 //! How large a context this machine can actually serve.
 //!
-//! `gglib up` already does this arithmetic: it picks a model by asking what
-//! fits in VRAM at 32k and prints the answer as the number that earns the
-//! user's trust. The launch path then resolved its context from a chain whose
-//! lowest reachable rung was a flat 4096 and served that instead — so the
-//! number shown and the number used were unrelated.
+//! `gglib up` picks a model by asking what fits in VRAM at 32k; this is the
+//! launch-time half of that arithmetic, so the context a launch serves comes
+//! from the machine too.
 //!
-//! This is the launch-time half of that arithmetic. `up`'s shortlist still
-//! asks a different question — "does this model fit *at* 32k?" — so the two
-//! are not one calculation and cannot be made one cheaply: they are answered
-//! against different budgets, and the shortlist runs before the model is
-//! downloaded, when its real KV geometry is not yet readable.
-//!
-//! What changed is that the banner no longer implies otherwise. It reports 32k
-//! as the bar the model had to clear, and says the served context is sized at
-//! launch, which is true and knowable. Naming a rung there would have been the
-//! same error in the other direction.
+//! `up`'s shortlist asks a different question — "does this model fit *at*
+//! 32k?" — so the two are not one calculation and cannot be made one cheaply:
+//! they are answered against different budgets, and the shortlist runs before
+//! the model is downloaded, when its real KV geometry is not yet readable. So
+//! `up`'s banner reports 32k as the bar the model had to clear, and says the
+//! served context is sized at launch, which is true and knowable; naming a
+//! rung there would claim a number the launch has not computed.
 //!
 //! ## Why it snaps to rungs
 //!

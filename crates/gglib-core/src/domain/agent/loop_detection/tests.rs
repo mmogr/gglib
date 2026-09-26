@@ -34,12 +34,9 @@ fn loop_detected_on_third_identical_batch_with_max_strikes_2() {
 
 #[test]
 fn interleaved_batches_never_trigger_a_loop() {
-    // This test used to assert the opposite: that A and B kept independent
-    // session-wide tallies, and that A was rejected on its 11th occurrence
-    // however much work happened in between. That is the wall this change
-    // removes. An agent alternating between two pieces of real work is doing
-    // exactly what it should, and no number of alternations is evidence of a
-    // loop — only repetition with nothing in between is.
+    // An agent alternating between two pieces of real work is doing exactly
+    // what it should, and no number of alternations is evidence of a loop —
+    // only repetition with nothing in between is.
     let mut det = LoopDetector::default();
     let a = vec![ToolCall {
         id: "c1".into(),
@@ -51,8 +48,7 @@ fn interleaved_batches_never_trigger_a_loop() {
         name: "b".into(),
         arguments: json!({}),
     }];
-    // Well past the old session-wide ceiling of 10, and past the tightest
-    // threshold the guard ever applies.
+    // Far past the tightest threshold the guard ever applies.
     for i in 0..50 {
         assert!(
             det.check(&a, 2, &[], None).is_ok(),
@@ -86,7 +82,7 @@ fn a_run_broken_and_resumed_starts_over() {
     assert!(det.check(&a, 2, &[], None).is_ok());
     // `b` breaks the run.
     assert!(det.check(&b, 2, &[], None).is_ok());
-    // `a` again is occurrence 1 of a new run, not 3 of the old one.
+    // `a` again is occurrence 1 of a new run, not 3 of the run before `b`.
     assert!(
         det.check(&a, 2, &[], None).is_ok(),
         "a resumed run must start at 1, not continue from 2"
@@ -252,11 +248,11 @@ fn is_observation_batch_mixed_returns_false() {
 
 #[test]
 fn coding_agent_reads_are_observation_tools_by_default() {
-    // The regression this arc exists for: a VS Code Copilot / Cline session
-    // that reads a file, edits it, then re-reads it to verify was classified
-    // as a non-observation repeat and rejected at `max_repeated_batch_steps`
-    // (2) instead of `max_observation_steps` (15), because the default
-    // pattern list held only browser tool names.
+    // A VS Code Copilot / Cline session that reads a file, edits it, then
+    // re-reads it to verify is observing, so it is held to
+    // `max_observation_steps` (15) rather than `max_repeated_batch_steps` (2).
+    // The default pattern list names coding agents' read tools, not only
+    // browser tools.
     let defaults = AgentConfig::default().observation_tools;
     for name in [
         // MCP filesystem server.

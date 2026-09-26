@@ -28,11 +28,9 @@ fn process_readme_for_rustdoc(crate_dir: &str) {
     println!("cargo:rerun-if-changed=README.md");
     println!("cargo:rerun-if-changed=../../Cargo.toml");
     // This file is `include!`d into every crate's build.rs, so editing it
-    // changes what they all emit — but nothing told cargo that, and a stale
-    // build-script binary goes on applying the previous transformation with no
-    // sign that it has. Measuring a change to this file is what turned that
-    // up, the measurement having been taken against crates that had not
-    // rebuilt.
+    // changes what they all emit. Without this line cargo does not know that,
+    // and a stale build-script binary goes on applying the previous
+    // transformation with no sign that it has.
     println!("cargo:rerun-if-changed=../build_common.rs");
 
     let readme_path = Path::new(crate_dir).join("README.md");

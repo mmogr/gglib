@@ -235,13 +235,13 @@ const MAX_GRAMMAR_TOOL_CALLS_ENV: &str = "GGLIB_MAX_GRAMMAR_TOOL_CALLS";
 ///
 /// # Why bound it at all
 ///
-/// The rule was `root ::= sp call (sp call)* sp`. Nothing in `*` says stop,
-/// and nothing else did either: `tool_choice` must be `"none"` beside a custom
-/// grammar (llama-server accepts no other combination), so the model's own
-/// trained stop behaviour is not in play, and a request carrying no
-/// `max_tokens` has no ceiling below the context window. Measured 2026-08-29:
-/// 606 calls in one response for a task expecting one, 853s against 6s
-/// unconstrained, scored 1.0 either way because extra calls cost nothing.
+/// In `root ::= sp call (sp call)* sp` nothing says stop: `tool_choice` must
+/// be `"none"` beside a custom grammar (llama-server accepts no other
+/// combination), so the model's own trained stop behaviour is not in play,
+/// and a request carrying no `max_tokens` has no ceiling below the context
+/// window. Unbounded, a model has emitted hundreds of calls in one response
+/// for a task expecting one, and scored 1.0 because extra calls cost nothing
+/// ([#961]).
 ///
 /// # Why the ceiling
 ///
@@ -255,6 +255,8 @@ const MAX_GRAMMAR_TOOL_CALLS_ENV: &str = "GGLIB_MAX_GRAMMAR_TOOL_CALLS";
 /// facts, not agent settings. Threading the live setting through would tighten
 /// this further and is the natural follow-up. The env override exists so the
 /// bound can be tested against a real model without a rebuild.
+///
+/// [#961]: https://github.com/mmogr/gglib/pull/961
 fn grammar_call_limit() -> usize {
     std::env::var(MAX_GRAMMAR_TOOL_CALLS_ENV)
         .ok()
@@ -282,9 +284,8 @@ fn tool_call_grammar(spec: &DialectSpec, names: &[String], limit: usize) -> Opti
         .collect::<Vec<_>>()
         .join(" | ");
 
-    // `(sp call)*` — unbounded — is what let a 4B model emit 606 calls for a
-    // one-call task on 2026-08-29, stopping only when it exhausted a 32,768
-    // context, while the same model unconstrained emitted one call in 6s.
+    // Bounded rather than `(sp call)*`, which lets a model emit calls until it
+    // exhausts the context; see `grammar_call_limit`.
     // Expanded as explicit optionals rather than `{{0,n}}`, which older GBNF
     // parsers do not accept; the grammar is built once per request.
     let repeats = " (sp call)?".repeat(limit.saturating_sub(1));

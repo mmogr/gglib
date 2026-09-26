@@ -77,13 +77,11 @@ pub fn bearer_matches(presented: Option<&str>, expected_key: &str) -> bool {
 ///
 /// # Why this is not just a string
 ///
-/// The expected token used to be resolved once, at bind, and baked into the
-/// middleware — so a key rotated afterwards was never honoured and a key set
-/// afterwards was never enforced. Worse, the guard was only *installed* when a
-/// token existed at bind, so an endpoint that started open could not be closed
-/// without a restart.
+/// A token resolved once, at bind, and baked into the middleware would never
+/// honour a key rotated afterwards nor enforce a key set afterwards, and an
+/// endpoint that started open could not be closed without a restart.
 ///
-/// The fix cannot be an in-process notification. `gglib config settings set`
+/// Nor can it be an in-process notification. `gglib config settings set`
 /// writes the database from a **separate process**, so nothing the daemon
 /// subscribes to would ever see it — the same reasoning
 /// [`SettingsCache`] already records for every
@@ -92,8 +90,8 @@ pub fn bearer_matches(presented: Option<&str>, expected_key: &str) -> bool {
 ///
 /// **The staleness is bounded, not zero.** A revoked key keeps working for up
 /// to [`SETTINGS_CACHE_TTL`](crate::services::SETTINGS_CACHE_TTL). That is the
-/// accepted trade, and it is strictly better than what it replaces, where a
-/// rotation performed through the CLI never took effect at all.
+/// accepted trade for a rotation performed through the CLI taking effect at
+/// all.
 #[derive(Clone)]
 pub struct BearerPolicy {
     /// A token supplied by flag or environment. It does not live in settings,

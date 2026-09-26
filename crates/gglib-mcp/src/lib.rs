@@ -4,15 +4,11 @@
 // No consumer names a module of this crate — every use outside it goes through
 // the re-exports below.
 //
-// The items inside are `pub(crate)` too, as of the visibility sweep. This
-// comment used to say they stayed `pub` because the two lints "cannot both be
-// satisfied". That much is true — for an item in a private module they demand
-// opposite spellings, and no spelling satisfies both — but it is not a reason
-// to keep `pub`: `redundant_pub_crate` is `allow` in `[workspace.lints.clippy]`
-// and was before this sweep, so it is the one that need not be satisfied. The
-// same comment also claimed crate-internal modules are "what lets `dead_code`
-// audit their contents" — see the note on `unreachable_pub` in the workspace
-// manifest for why that is not how `dead_code` works either.
+// The items inside are `pub(crate)` too. For an item in a private module,
+// `unreachable_pub` and `redundant_pub_crate` demand opposite spellings;
+// `redundant_pub_crate` is `allow` in `[workspace.lints.clippy]`, so it is the
+// one that need not be satisfied. The note on `unreachable_pub` in the
+// workspace manifest says what `dead_code` does and does not see.
 pub(crate) mod builtin;
 pub(crate) mod client;
 pub(crate) mod combined;

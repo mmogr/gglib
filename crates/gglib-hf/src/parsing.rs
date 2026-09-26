@@ -264,9 +264,9 @@ mod tests {
 
     #[test]
     fn test_aggregate_quantizations_distinguishes_ud_dynamic_quants() {
-        // Regression for the real unsloth/Qwen3-Coder-Next-GGUF collision: a
-        // plain Q6_K/ directory and a UD-Q6_K/ (Unsloth Dynamic) directory
-        // previously collapsed into a single merged HfQuantization group.
+        // The real unsloth/Qwen3-Coder-Next-GGUF layout: a plain Q6_K/
+        // directory and a UD-Q6_K/ (Unsloth Dynamic) directory are two
+        // HfQuantization groups, not one merged group.
         let files = vec![
             gguf_file("Q6_K/model-Q6_K.gguf", 6_000_000_000),
             gguf_file("UD-Q6_K/model-UD-Q6_K.gguf", 6_500_000_000),

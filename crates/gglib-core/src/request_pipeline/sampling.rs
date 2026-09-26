@@ -48,9 +48,9 @@ pub struct SamplingLayers {
     ///
     /// Above the client deliberately: this is the person running the server
     /// stating what the server does, which cannot be true if any client can
-    /// silently outrank it. These previously merged into [`Self::global`],
-    /// which sits below the per-model layer — so on any model with stored
-    /// `inference_defaults` the flags did nothing at all.
+    /// silently outrank it. Merged into [`Self::global`] instead, the flags
+    /// would lose every field a user-set per-model layer names, since that
+    /// rung sits above global.
     pub cli_override: Option<InferenceConfig>,
     /// The profile the request selected via `{model}:{profile}`, if any.
     /// Sparse — see [`crate::domain::inference_profile`].
@@ -105,20 +105,12 @@ impl FloorClass {
 ///
 /// # Why this is returned rather than logged
 ///
-/// It used to be neither: `resolve_sampling` computed `sources` and consumed
-/// them only inside a `debug!`. Three consequences, all of which cost real
-/// defects:
-///
-/// - **No test could assert on the pipeline's own provenance.** The tests
-///   that look like they do build a ladder by hand and call
-///   `resolve_layers_with_sources` directly, bypassing this function
-///   entirely — and did so five rungs wide against a six-rung ladder.
-/// - **The agentic ceiling's provenance interaction is invisible.** Six tests
-///   assert the resulting temperature; none could assert what provenance
-///   reports when the ceiling bites, because nothing was reachable.
-/// - **There is no intent side to compare a readback against.** Verifying
-///   that what gglib resolved is what llama-server applied needs both halves,
-///   and this is the half that did not exist outside a log line.
+/// - **A test can assert on the pipeline's own provenance**, through this
+///   function rather than a hand-built ladder, including what provenance
+///   reports when the agentic ceiling bites.
+/// - **A readback has an intent side to compare against.** Verifying that
+///   what gglib resolved is what llama-server applied needs both halves, and
+///   this is the resolved half.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SamplingDecision {
     /// The values written into the body.
@@ -159,9 +151,8 @@ pub struct SamplingDecision {
 /// Rungs in the pipeline's ladder: `cli`, `client`, `profile`, `model`,
 /// `global`, `model (auto-detected)`.
 ///
-/// Named because three separate doc comments drifted to three different
-/// numbers while the ladder stayed six wide, and because the provenance test
-/// helper was built five wide against it and so never checked the mapping.
+/// Named so [`SamplingDecision::layer_names`] and the tests that check the
+/// ladder's width or index its last rung share one number.
 pub const LADDER_RUNGS: usize = 6;
 
 /// Environment kill switch for the agentic-turn adjustments.
@@ -183,7 +174,7 @@ fn agentic_sampling_disabled_via_env() -> bool {
 /// Returns the layer to fold, what could not be read, and what the gate
 /// dropped. Both lists are reported rather than swallowed: between them they
 /// are every way a value the client actually sent can fail to reach
-/// llama-server from this stage, and until recently neither was visible.
+/// llama-server from this stage.
 fn read_client_layer(
     body: &Value,
     trust_client_sampling: bool,
@@ -193,9 +184,8 @@ fn read_client_layer(
         // Not `warn!`: a client sending a field gglib cannot read is a fact
         // about that client, not a fault in this server, and on the busiest
         // path in the system a warning per request would be noise. It is
-        // recorded rather than swallowed because until now it was neither —
-        // one unreadable field discarded the client's whole sampling layer
-        // with nothing said.
+        // recorded rather than swallowed, and one unreadable field does not
+        // discard the rest of the client's sampling layer.
         debug!(
             issues = %issues.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "),
             "client sampling: some fields were not usable as sent"
@@ -278,15 +268,12 @@ fn read_client_layer(
 ///
 /// `gglib model explain` and the GUI's sampling inspector both print a caveat
 /// naming what survives an untrusted request, because the client rung is a
-/// real rung neither table can show. That sentence read "except `max_tokens`"
-/// for as long as this list was one key long, and nothing would have failed
-/// had it stayed that way after `reasoning_budget_tokens` joined — a
-/// user-facing description of the trust boundary, silently false. Exporting
-/// the list lets `caveats_name_every_client_authoritative_key` in
-/// `gglib-cli`'s `explain_display` assert the sentence against it, so the
-/// next key added here fails a test instead of shipping a wrong caveat. The
-/// TypeScript half cannot read a Rust constant; it carries its own copy,
-/// named and pinned, with a pointer back here.
+/// real rung neither table can show. Exporting the list lets
+/// `caveats_name_every_client_authoritative_key` in `gglib-cli`'s
+/// `explain_display` assert the sentence against it, so a key added here
+/// fails a test instead of shipping a wrong caveat. The TypeScript half
+/// cannot read a Rust constant; it carries its own copy, named and pinned,
+/// with a pointer back here.
 ///
 /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
 pub const CLIENT_AUTHORITATIVE_KEYS: &[&str] = &["max_tokens", REASONING_BUDGET_TOKENS_KEY];
@@ -296,11 +283,11 @@ pub const CLIENT_AUTHORITATIVE_KEYS: &[&str] = &["max_tokens", REASONING_BUDGET_
 /// [`strip_unmodelled_sampler_keys`].
 ///
 /// The trust gate discards the client's sampling *layer*, but the resolved
-/// patch is only ever **inserted** into the body — nothing removed the keys
-/// the ladder has no field for. So every key here was a way for an untrusted
-/// client to steer sampling past the gate: gglib's own values arrived intact,
-/// the readback saw no divergence (`/slots.params` echoes what was parsed,
-/// not what the chain did — ADR 0003 finding 7), and the applied chain was
+/// patch is only ever **inserted** into the body, which leaves the keys the
+/// ladder has no field for. Unstripped, every key here lets an untrusted
+/// client steer sampling past the gate: gglib's own values arrive intact,
+/// the readback sees no divergence (`/slots.params` echoes what was parsed,
+/// not what the chain did — ADR 0003 finding 7), and the applied chain is
 /// something nobody configured. `mirostat` alone replaces the entire
 /// truncation stack.
 ///
@@ -314,8 +301,7 @@ pub const CLIENT_AUTHORITATIVE_KEYS: &[&str] = &["max_tokens", REASONING_BUDGET_
 /// A modelled key must never appear here — the gate already governs those,
 /// and stripping one would delete the client's value *before* the trusted
 /// path could read it. `no_modelled_key_is_listed_as_unmodelled` pins this,
-/// so modelling a new parameter (as `frequency_penalty` just was) forces its
-/// removal from this list.
+/// so modelling a new parameter forces its removal from this list.
 const UNMODELLED_SAMPLER_KEYS: &[&str] = &[
     "typical_p",
     "xtc_probability",
@@ -329,8 +315,8 @@ const UNMODELLED_SAMPLER_KEYS: &[&str] = &[
     "min_keep",
 ];
 
-/// Remove [`UNMODELLED_SAMPLER_KEYS`] from an untrusted body, returning what
-/// was removed so it joins the discard record.
+/// Remove [`UNMODELLED_SAMPLER_KEYS`] from an untrusted body, returning the
+/// removed keys so they join the discard record.
 ///
 /// A no-op when the client is trusted — trusted means trusted, unmodelled
 /// keys included — and on a body that is not a JSON object, which the rest of
@@ -365,13 +351,12 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
 ///
 /// # `discarded` — what the trust gate binned
 ///
-/// The resolved patch is only ever *inserted*, and since ADR 0003 six modelled
-/// fields resolve to nothing by design, so a gated key the ladder then stays
-/// silent on rides the body to llama-server exactly like an unmodelled one.
-/// Found live, not by review: an untrusted client's `frequency_penalty: 0.9`
-/// reached `/slots` intact, because no layer names that field and nothing
-/// overwrote it. Before the deferral this could not happen — the floor emitted
-/// every modelled key — which is why the gate never needed this until then.
+/// The resolved patch is only ever *inserted*, and the class floor leaves
+/// modelled fields unset by design (ADR 0003), so a gated key the ladder then
+/// stays silent on would ride the body to llama-server exactly like an
+/// unmodelled one: an untrusted client's `frequency_penalty: 0.9` would reach
+/// `/slots` intact, because no layer names that field and nothing overwrites
+/// it.
 ///
 /// Empty when the client is trusted.
 ///
@@ -441,10 +426,9 @@ fn erase_unadopted_client_keys(body: &mut Value, discarded: &[String], issues: &
 /// A catch-all here would rank any future unreviewed origin above global
 /// settings, which is precisely backwards.
 ///
-/// The name was the static `"model (auto-detected)"`, which lied in the
-/// debug line and the audit's provenance strings whenever the occupant was a
-/// published recipe — and would have credited gglib's guess for a tune
-/// sweep's winner the same way.
+/// The name follows the origin: a static `"model (auto-detected)"` would
+/// credit gglib's guess, in the debug line and the audit's provenance
+/// strings, for a published recipe or a tune sweep's winner.
 const fn model_rung(
     ctx: &ModelContext,
 ) -> (
@@ -474,11 +458,6 @@ const fn model_rung(
 
 /// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
 ///
-/// This doc block used to sit above `read_client_layer`, where a split left
-/// it fused to that function's own first line — so the entry point of the
-/// whole stage was undocumented while a private helper carried a description
-/// of something else. Restored here; `read_client_layer` keeps its own.
-///
 /// # Force-insert, not `or_insert`
 ///
 /// The client's own parameters are extracted from `body` first, folded
@@ -496,7 +475,7 @@ const fn model_rung(
 /// enter that layer at all. When `false` (the default — see
 /// `Settings::trust_client_sampling`), only [`CLIENT_AUTHORITATIVE_KEYS`]
 /// survive; the rest of `body`'s sampling keys are read but discarded before
-/// the fold, so a client with a hardcoded `temperature` can no longer outrank
+/// the fold, so a client with a hardcoded `temperature` cannot outrank
 /// this server's own configuration, and every field it left unset still
 /// gap-fills from below exactly as if it had never sent that key.
 ///
@@ -521,16 +500,17 @@ const fn model_rung(
 ///   spellings of one parameter in one body is a disagreement waiting to be
 ///   resolved by somebody else's parse order.
 /// - **A refused `reasoning_effort`** — on *both* sides of the gate, and it
-///   is the only field an `issues` entry removes. Every other refused value
-///   is forwarded exactly as before this PR, because upstream 400s on it and
-///   that 400 is a better answer to the client than gglib quietly rewriting
-///   the request. `reasoning_effort` is the exception because upstream
-///   validates it not at all: a refused `"banana"` left in the body is not
-///   rejected downstream, it is rendered into the prompt.
+///   is the only field an `issues` entry removes. Every other refusal leaves
+///   the body alone, because upstream 400s on the refused value and that 400
+///   is a better answer to the client than gglib quietly rewriting the
+///   request.
+///   `reasoning_effort` is the exception because upstream validates it not
+///   at all: a refused `"banana"` left in the body is not rejected
+///   downstream, it is rendered into the prompt.
 ///
-/// So a client's `top_k: "5"` still reaches llama-server and still earns its
-/// HTTP 400, unchanged by the reasoning work. The helper carries the full
-/// argument and ADR 0007's finding behind it.
+/// So a client's `top_k: "5"`, when no layer resolves `top_k`, reaches
+/// llama-server and earns its HTTP 400. The helper carries the full argument
+/// and ADR 0007's finding behind it.
 ///
 /// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(
@@ -628,7 +608,7 @@ pub fn resolve_sampling(
     //
     // Reasoning models have no ceiling at all — that is a measured decision,
     // not an omission; see `agentic_temperature_ceiling` for the experiment
-    // that removed it (tune runs #12–#32) and ADR 0004's postscript.
+    // behind that (tune runs #12–#32) and ADR 0004's postscript.
     let auto_detected_rung = ordered.len() - 1;
     // A measured recipe is the one below-global origin the ceiling defers
     // to. The tune sweep resolved its candidates against this model's real
@@ -654,7 +634,7 @@ pub fn resolve_sampling(
     // Nothing is logged here. The whole decision is rendered once, by
     // `super::sampling_log`, after stage 5b — which can still delete a resolved
     // `reasoning_effort` and would leave this line stating that gglib sent one.
-    // See that module for why a second, correcting line was not good enough.
+    // See that module for why a second, correcting line is not enough.
     let layer_names: [&'static str; LADDER_RUNGS] = ordered.map(|(name, _)| name);
     let decision = |applied| SamplingDecision {
         resolved: resolved.clone(),

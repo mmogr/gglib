@@ -409,13 +409,12 @@ mod tests {
         );
         assert_eq!(extract_quantization_from_filename("model-f16.gguf"), "F16");
         assert_eq!(extract_quantization_from_filename("model.gguf"), "Unknown");
-        // Previously missed by the old 14-pattern hardcoded list, which had
-        // no Unsloth "UD-" dynamic-quant handling at all.
+        // Unsloth "UD-" dynamic quants keep their prefix.
         assert_eq!(
             extract_quantization_from_filename("model-UD-Q4_K_M.gguf"),
             "UD-Q4_K_M"
         );
-        // Also previously missed: any IQ-family pattern.
+        // IQ-family quants are recognised.
         assert_eq!(
             extract_quantization_from_filename("model-IQ4_XS.gguf"),
             "IQ4_XS"

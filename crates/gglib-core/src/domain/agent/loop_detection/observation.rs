@@ -103,7 +103,7 @@ const COSTLY_OBSERVATION_TOOLS: &[&str] = &["navigate", "click", "fetch_webpage"
 /// segment still catches read-only names built from the same word —
 /// `navigate_to_definition`, `get_click_count`, `ad_click_report`,
 /// `click_house_query`. Those are bounded at 15 rather than refused outright,
-/// which is the pre-#928 behaviour and the cheaper of the two errors.
+/// which is the cheaper of the two errors.
 ///
 /// **camelCase is missed.** `browserNavigate` and `clickElement` carry no
 /// separator, so they split to one segment and are *not* recognised as costly

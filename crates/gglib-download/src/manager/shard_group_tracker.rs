@@ -125,8 +125,8 @@ impl ShardGroupTracker {
     ///
     /// # Panics (debug builds only)
     ///
-    /// In debug builds, panics if metadata for this group doesn't match previously recorded
-    /// metadata. This catches bugs where shards compute different identities.
+    /// In debug builds, panics if metadata for this group doesn't match the metadata
+    /// already recorded. This catches bugs where shards compute different identities.
     pub(crate) fn on_shard_done(
         &mut self,
         group_id: &ShardGroupId,

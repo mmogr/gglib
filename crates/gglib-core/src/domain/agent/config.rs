@@ -57,7 +57,7 @@ pub const DEFAULT_MAX_ITERATIONS: usize = 25;
 /// Set to 25 to comfortably accommodate modern reasoning models (Qwen3-MoE,
 /// DeepSeek-R1, etc.) that routinely request 6–10 parallel tool calls per
 /// turn during exploration-heavy tasks (e.g. codebase reviews).  An overflow
-/// is no longer fatal — the loop now soft-recovers by injecting a synthetic
+/// is not fatal — the loop soft-recovers by injecting a synthetic
 /// tool error and asking the model to retry with a smaller batch — but a
 /// generous default avoids triggering that recovery path under normal load.
 ///
@@ -102,11 +102,10 @@ pub const DEFAULT_MAX_OBSERVATION_STEPS: usize = 15;
 
 /// Configuration that governs a single agentic loop run.
 ///
-/// All fields have sensible defaults via [`Default`]. These used to mirror
-/// TypeScript constants in the frontend's own agent loop; that loop is
-/// backend-driven now, and `streamAgentChat.ts` records these fields as
+/// All fields have sensible defaults via [`Default`]. The frontend's agent
+/// loop is backend-driven, and `streamAgentChat.ts` records these fields as
 /// deliberately absent from it, so nothing in the frontend's loop competes with
-/// the values here. What the settings UI still carries are the *ceilings and
+/// the values here. What the settings UI carries are the *ceilings and
 /// floors* it clamps user input to (`MAX_PARALLEL_TOOLS_CEILING`,
 /// `TOOL_TIMEOUT_MS_FLOOR` and friends), and its own copies of the two defaults
 /// a person can edit — `MAX_TOOL_ITERATIONS`, pinned against this file by
@@ -214,7 +213,7 @@ pub struct AgentConfig {
     // exploratory tool, preventing false-positive loop aborts during ReAct
     // observation and navigation cycles while still catching an agent that
     // repeats one of them back to back without pause.
-    /// Substring patterns used to classify tools as **exploratory**.
+    /// Substring patterns that classify tools as **exploratory**.
     ///
     /// "Exploratory" tools are those that drive progress by repeatedly
     /// querying or traversing a stateful source — page snapshots, navigation,

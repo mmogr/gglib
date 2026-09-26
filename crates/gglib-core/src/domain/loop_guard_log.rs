@@ -21,9 +21,8 @@
 //!
 //! That meets the objection only in part. The version is the workspace's, so
 //! development builds between two releases share it. Nothing here records the
-//! llama.cpp build or the model file, and the removed `defect_windows` scoped
-//! evidence by the first of those. A reading that spans a llama.cpp upgrade or
-//! a re-downloaded model has to be split by date, by hand.
+//! llama.cpp build or the model file, so a reading that spans a llama.cpp
+//! upgrade or a re-downloaded model has to be split by date, by hand.
 //!
 //! # What a trip row is, and is not
 //!
@@ -49,7 +48,7 @@
 //! warnings are absent.
 //!
 //! Only the proxy's pre-dispatch scan writes here. The agent loop runs the
-//! same two detectors and, since #1091, counts its own decisions — but into
+//! same two detectors and counts its own decisions (#1091) — but into
 //! the per-process ledger's `agent_guard_*` fields, not into this log. So
 //! anything read here is a reading of the proxy path alone, including the
 //! criterion above. Giving this log a path of its own is #1091's second half.

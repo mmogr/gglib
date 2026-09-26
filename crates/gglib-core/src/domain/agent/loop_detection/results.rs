@@ -93,9 +93,9 @@ pub fn hash_result_content(content: &Value) -> u64 {
 /// refused at all — which inverts the depth cap's own safety argument, that a
 /// collision can only ever make the guard *stricter*.
 ///
-/// It also removes a dependence the previous rendering carried on
-/// `serde_json::Value` being a `BTreeMap`: `stable_repr` sorts keys itself, so
-/// enabling `preserve_order` cannot make this join quietly under-report.
+/// It also does not depend on `serde_json::Value` being a `BTreeMap`:
+/// `stable_repr` sorts keys itself, so enabling `preserve_order` cannot make
+/// this join quietly under-report.
 #[must_use]
 pub fn batch_results_hash(calls: &[ToolCall], answers: &[Option<u64>]) -> Option<u64> {
     if answers.len() != calls.len() {
@@ -103,11 +103,10 @@ pub fn batch_results_hash(calls: &[ToolCall], answers: &[Option<u64>]) -> Option
     }
     // `collection_is_never_read` does not count `Hash::hash` as a read, and
     // `keyed` is read by exactly that, two lines below. The lint is a nursery
-    // one and this crate inherits the workspace's nursery set while
-    // `gglib-proxy`, where this code used to live, does not — so the same
-    // lines passed there and fail here. Reproducing `Vec::hash` by hand to
-    // satisfy it would mean relying on `write_length_prefix`'s default being
-    // `write_usize`, which is a subtler equivalence than the one it buys.
+    // one, and this crate inherits the workspace's nursery set. Reproducing
+    // `Vec::hash` by hand to satisfy it would mean relying on
+    // `write_length_prefix`'s default being `write_usize`, which is a subtler
+    // equivalence than the one it buys.
     #[allow(clippy::collection_is_never_read)]
     let mut keyed: Vec<(String, u64)> = calls
         .iter()

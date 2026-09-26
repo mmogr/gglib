@@ -124,7 +124,7 @@ pub struct TuneTask {
     pub user_prompt: String,
     /// Tools advertised to the model for this task (OpenAI-format schema).
     pub tools: Vec<ToolDefinition>,
-    /// Expected outcome used to score the recorded tool calls.
+    /// Expected outcome the recorded tool calls are scored against.
     pub expected: ExpectedOutcome,
 }
 

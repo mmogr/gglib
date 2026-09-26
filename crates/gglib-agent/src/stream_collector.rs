@@ -56,13 +56,12 @@ use crate::util::emit_error_event;
 /// # Reaching it truncates; it does not fail the turn
 ///
 /// Deltas at or beyond this index are dropped and counted in
-/// [`CollectedResponse::tool_calls_truncated`]. That is a deliberate change
-/// from the original behaviour, which aborted the whole stream: a model that
-/// ran away emitting tool calls produced "internal agent error", zero tokens
-/// and zero iterations after minutes of real work, with the failure
-/// misattributed to gglib rather than to the model. The allocation this guard
-/// exists to bound is a 64-element Vec; destroying the turn to avoid it was
-/// the more expensive outcome by a wide margin.
+/// [`CollectedResponse::tool_calls_truncated`]. Aborting the stream instead
+/// would turn a model that runs away emitting tool calls into "internal agent
+/// error", zero tokens and zero iterations after minutes of real work, with
+/// the failure misattributed to gglib rather than to the model. The
+/// allocation this guard exists to bound is a 64-element Vec; destroying the
+/// turn to avoid it is the more expensive outcome by a wide margin.
 pub const MAX_TOOL_CALL_INDEX: usize = 64;
 
 // =============================================================================
@@ -153,10 +152,10 @@ struct PartialToolCall {
 ///
 /// - Infrastructure errors (an `Err` item in the stream) are returned immediately.
 /// - A tool-call index ≥ [`MAX_TOOL_CALL_INDEX`] is **dropped, not fatal** —
-///   see [`CollectedResponse::tool_calls_truncated`]. The guard still bounds
-///   the `partials` Vec, which is all it was ever for; it no longer destroys
-///   the turn to do it. Tool-call *concurrency* remains a separate concern —
-///   the caller (agent loop) enforces
+///   see [`CollectedResponse::tool_calls_truncated`]. The guard bounds the
+///   `partials` Vec, which is all it is for, without failing the turn.
+///   Tool-call *concurrency* remains a separate concern — the caller (agent
+///   loop) enforces
 ///   [`AgentConfig::max_parallel_tools`](gglib_core::AgentConfig::max_parallel_tools)
 ///   after this function returns, and already recovers from an oversized
 ///   batch by telling the model to retry with a smaller one.
@@ -175,7 +174,7 @@ pub async fn collect_stream(
     // fatal — see `upsert_tool_call_delta`.
     let mut tool_calls_truncated: usize = 0;
     // Tracks whether at least one event was received before the stream ended.
-    // Used to distinguish a hard connectivity failure (zero events) from a
+    // Distinguishes a hard connectivity failure (zero events) from a
     // mid-response truncation (some events, no Done frame).
     let mut got_any_event = false;
     // Set at `Done`; the loop keeps draining afterwards because the OpenAI
@@ -283,22 +282,16 @@ pub async fn collect_stream(
 ///
 /// Bounds the index against [`MAX_TOOL_CALL_INDEX`] (a malformed stream must
 /// not drive a huge allocation), grows the vec on demand, and logs when a
-/// delta overwrites an already-seen `id`/`name` — a should-never-happen the
-/// old inline code also surfaced.
+/// delta overwrites an already-seen `id`/`name`, which should never happen.
 ///
 /// # Returns `true` when the delta was dropped
 ///
-/// It used to `bail!`, which lost the whole turn: `collect_stream` returned
-/// `Err`, the agent loop reported "internal agent error", and the caller saw
-/// zero tokens and zero iterations after two minutes of real work. Measured on
-/// Qwen3.5-4B, that fired on 2 of 2 agentic eval runs and scored the affected
-/// task 0 — a guard doing more damage than the unbounded allocation it exists
-/// to prevent, and misreporting a model behaviour as a gglib fault.
-///
-/// A runaway tool-call stream already has correct handling one layer up:
-/// `agent_loop` compares `tool_calls.len()` against `max_parallel_tools` and
-/// recovers by feeding the model a synthetic tool error asking it to retry
-/// with a smaller batch. Bailing here preempted that with a worse outcome.
+/// Dropping rather than failing keeps the turn: an `Err` here makes the agent
+/// loop report "internal agent error" with zero tokens and zero iterations,
+/// misreporting a model behaviour as a gglib fault. A runaway tool-call stream
+/// has its handling one layer up: `agent_loop` compares `tool_calls.len()`
+/// against `max_parallel_tools` and recovers by feeding the model a synthetic
+/// tool error asking it to retry with a smaller batch.
 fn upsert_tool_call_delta(
     partials: &mut Vec<PartialToolCall>,
     index: usize,
@@ -434,7 +427,7 @@ async fn assemble_tool_calls(
 /// Emit an [`AgentEvent::Error`] on `tx` and bail with the same message.
 ///
 /// Mirrors `bail_internal` in the agent loop, but returns `anyhow::Result<T>`
-/// rather than `Result<_, AgentError>`. Used to consolidate the repeated
+/// rather than `Result<_, AgentError>`. Consolidates the repeated
 /// "emit error event + bail" pattern in the [`LlmStreamEvent::Done`] assembly
 /// code so error handling logic lives in exactly one place.
 async fn bail_stream<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T> {

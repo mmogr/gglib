@@ -124,7 +124,7 @@ mod tests {
     /// the half that a unit test on the gate cannot see. If `ModelSummary`
     /// ever stops carrying the caps, or `From<&ModelSummary>` stops copying
     /// them, the gate silently degrades to "nobody knows" on every request
-    /// and every other test in this arc still passes.
+    /// and every other test still passes.
     #[tokio::test]
     async fn observed_caps_reach_the_pipeline_through_the_catalog() {
         let catalog = SpyCatalog {

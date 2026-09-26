@@ -22,7 +22,7 @@ impl DownloadDestination {
     /// # Arguments
     ///
     /// * `models_directory` - Base directory for all models
-    /// * `id` - Download ID used to derive the subdirectory name
+    /// * `id` - Download ID the subdirectory name derives from
     /// * `files` - List of files to download
     pub(crate) fn plan(models_directory: &Path, id: &DownloadId, files: Vec<String>) -> Self {
         // Convert repo ID to a safe directory name (replace / with _)

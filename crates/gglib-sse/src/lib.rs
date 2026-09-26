@@ -102,12 +102,9 @@ where
 
     /// Subscribe to live events, ending the stream when `shutdown` resolves.
     ///
-    /// This is the only live-stream entry point. An unbounded `subscribe` used to
-    /// sit beside it, delegating here with `std::future::pending()`; it was
-    /// removed once its last caller moved across, because a door whose own
-    /// documentation says "prefer the other one" is a trap rather than an API.
-    /// A caller that genuinely has no shutdown signal can still pass
-    /// `std::future::pending()` — and should be able to say why.
+    /// This is the only live-stream entry point. A caller that genuinely has no
+    /// shutdown signal can pass `std::future::pending()` — and should be able
+    /// to say why.
     ///
     /// An SSE stream is a connection that never closes by itself, so a server
     /// using `with_graceful_shutdown` cannot finish shutting down while one is

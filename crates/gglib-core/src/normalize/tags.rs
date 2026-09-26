@@ -1,4 +1,4 @@
-//! Format-tag constants used to select a normalization parser.
+//! Format-tag constants that select a normalization parser.
 //!
 //! These tags are stored on a [`crate::domain::Model`] and consulted by
 //! [`super::registry::dialect_for_tags`] to map legacy catalog rows — and

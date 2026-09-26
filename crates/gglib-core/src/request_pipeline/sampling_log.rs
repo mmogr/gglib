@@ -2,29 +2,28 @@
 //!
 //! # Why it is not inside [`resolve_sampling`](super::sampling::resolve_sampling)
 //!
-//! It was, and that made it wrong on exactly the model this arc exists for.
 //! `resolve_sampling` is stage 4; [`effort_gate`](super::effort_gate) is stage
 //! 5b, and it *deletes* a resolved `reasoning_effort` when the model's observed
-//! template does not read the variable. A line rendered inside stage 4 therefore
-//! printed
+//! template does not read the variable. A line rendered inside stage 4 would
+//! print
 //!
 //! ```text
 //! reasoning_effort=Some(High) … from=… reasoning_effort=profile …
 //! ```
 //!
-//! for a value that stage 5b was about to throw away — and since neither
+//! for a value that stage 5b is about to throw away — and since neither
 //! reasoning control is echoed by any readback ([ADR 0007] finding 7a), that log
 //! line **is** the record. An operator grepping `sampling resolved` on a
-//! suppressing model would have found gglib stating, in its only surviving
-//! account of the request, that it sent a level it did not send.
+//! suppressing model would find gglib stating, in its only surviving account of
+//! the request, that it sent a level it did not send.
 //!
-//! The alternative was to leave the stage-4 line alone and make stage 5b's own
-//! line loud enough to correct it. That was rejected: the misleading line fires
-//! on *every* request while the correction fires only on a suppression, so the
-//! reader has to know to go looking for a second line before they can trust the
-//! first. A record that is only true when read alongside another record is not a
-//! record. Rendering once, after every stage that can still change the answer,
-//! costs one function call and makes the common line honest by construction.
+//! A stage-5b line loud enough to correct it would not do: the misleading line
+//! would fire on *every* request and the correction only on a suppression, so
+//! the reader would have to know to go looking for a second line before they
+//! could trust the first. A record that is only true when read alongside
+//! another record is not a record. Rendering once, after every stage that can
+//! still change the answer, costs one function call and makes the common line
+//! honest by construction.
 //!
 //! Stage 5b keeps its own `debug!` for what this line structurally cannot say:
 //! after suppression `resolved.reasoning_effort` is `None` and its provenance

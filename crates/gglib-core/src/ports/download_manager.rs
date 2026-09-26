@@ -154,7 +154,7 @@ use std::sync::Arc;
 pub trait DownloadManagerPort: Send + Sync {
     /// Queue a new download.
     ///
-    /// Returns the download ID which can be used to track or cancel the download.
+    /// Returns the download's ID, for tracking or cancelling it.
     /// The download will be processed according to the manager's concurrency settings.
     async fn queue_download(&self, request: DownloadRequest) -> Result<DownloadId, DownloadError>;
 

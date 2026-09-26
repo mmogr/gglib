@@ -26,7 +26,7 @@ requests: number,
 /**
  * Requests the loop/stagnation guard acted on.
  *
- * Since #1052 that is *not* the same as rejected: the guard's default
+ * That is *not* the same as rejected (#1052): the guard's default
  * forwards a tripped request with a note, and only
  * `--loop-guard-mode refuse` rejects it before dispatch. Both count
  * here, so this number is a count of **interventions** — per process,
@@ -92,7 +92,7 @@ agent_guard_scanned: number,
  * Of those, the decisions that ended the run.
  *
  * Not the same event as [`Self::loop_guard_trips`], which is why it is
- * not the same field. Since #1052 a proxy trip is an *intervention*: the
+ * not the same field. A proxy trip is an *intervention* (#1052): the
  * default forwards the tripped request with a note and the conversation
  * goes on. An agent-path trip emits `AgentEvent::Error` and returns
  * `Err`, which ends the run. Summing the two would add an intervention to
@@ -184,9 +184,9 @@ dialect_residue: number,
  * had an opinion to act on.
  *
  * The blind spot this makes visible: a client whose tools all use
- * `anyOf` gets zero repair coverage *and*, until now, zero evidence of
- * that fact. A high rate here means the repair rate below it is
- * measuring a much smaller slice of traffic than it appears to.
+ * `anyOf` gets zero repair coverage, and without this count zero
+ * evidence of that fact. A high rate here means the repair rate below it
+ * is measuring a much smaller slice of traffic than it appears to.
  */
 unvalidatable_schemas: number, 
 /**

@@ -66,14 +66,15 @@
 //! preserves them by construction. The adapter builds its body with `json!` and
 //! already holds a `Value`, so this is also the cheaper side for it.
 //!
-//! # One pipeline, two callers, no second route
+//! # One pipeline, two callers
 //!
-//! Every request path calls [`apply`]. The proxy used to run the stages by hand
-//! with its own truncation pass spliced between them, because truncation gated
-//! on the payload's size in **wire bytes** and could reject the request with an
-//! `axum` response — neither of which fits here. Measuring the serialized
-//! `Value` and returning a domain error removed both obstacles, so there is now
-//! exactly one implementation of the order above and nothing to keep in sync.
+//! Outside tests, two paths call [`apply`]: the proxy's forwarding path
+//! (`gglib-proxy`'s `forward.rs`) and the runtime's completion adapter
+//! (`gglib-runtime`'s `llm_completion`). Neither runs these stages in an order
+//! of its own. `/api/chat` in `gglib-axum` does not call it; see the note in
+//! its handler, `proxy_chat` in `chat_api.rs`. Truncation measures the
+//! serialized `Value` and returns a domain error rather than an `axum`
+//! response, so the proxy needs no truncation pass of its own.
 
 use serde_json::Value;
 
@@ -87,10 +88,7 @@ use super::{
 
 /// What the pipeline did, for the caller that has to report or verify it.
 ///
-/// Both halves were previously unavailable in different ways: truncation was
-/// returned bare, and sampling was not returned at all — it went into a
-/// `debug!` and nowhere else. Bundling them keeps one return value as stages
-/// gain things worth saying.
+/// Bundled so there is one return value as stages gain things worth saying.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PipelineReport {
     /// Stage 3. Zeroed when `budget_chars` was `None` — the request was
@@ -159,21 +157,14 @@ pub fn apply(
     sampling_log::log_resolution(&sampling);
 
     // Stage 6 runs unconditionally, because there is only one kind of trip
-    // through this pipeline.
-    //
-    // A `PipelinePass` parameter used to exist so this stage could stand down
-    // on a tool-call repair: `constrain` fires on `tool_choice: "required"`
+    // through this pipeline: the repair path does not call `apply`, it
+    // mutates the already-resolved body and sends it. It must keep bypassing
+    // this pipeline, because `constrain` fires on `tool_choice: "required"`
     // for dialect models, installs gglib's own grammar and rewrites
     // `tool_choice` to `"none"` (llama-server rejects a custom grammar
     // alongside `tools`), which on a repair would silently convert the
-    // re-issue into a request for no tool call at all.
-    //
-    // That guard was never reachable. The repair path does not call `apply`
-    // at all — it mutates the already-resolved body and sends it — so every
-    // caller here passed `Initial` and the alternative branch was dead. The
-    // reasoning still matters, but it belongs where the risk actually lives:
-    // see `gglib_proxy::repair::repair_body`, which must keep bypassing this
-    // pipeline for exactly the reason above.
+    // re-issue into a request for no tool call at all. See
+    // `gglib_proxy::repair::repair_body`.
     constrain::constrain_tool_calls(body, ctx);
     Ok(PipelineReport {
         truncation,

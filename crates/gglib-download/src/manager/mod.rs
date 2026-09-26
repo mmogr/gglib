@@ -55,7 +55,7 @@ const fn app_event(event: DownloadEvent) -> AppEvent {
 
 /// Lease ID for tracking active downloads.
 ///
-/// Used to prevent stale finalize commits when a download is cancelled
+/// Prevents stale finalize commits when a download is cancelled
 /// or replaced while running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct LeaseId(u64);
@@ -230,7 +230,7 @@ pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl 
 /// Concrete implementation of the download manager.
 ///
 /// Produced by [`build_download_manager`] and consumed as
-/// `Arc<dyn DownloadManagerPort>`; it is no longer nameable outside this crate.
+/// `Arc<dyn DownloadManagerPort>`; it is not nameable outside this crate.
 pub struct DownloadManagerImpl {
     /// Model registrar for completed downloads.
     model_registrar: Arc<dyn ModelRegistrarPort>,

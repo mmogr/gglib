@@ -12,7 +12,7 @@
 //! the restore path clears the slot's checkpoint list. On a full-attention
 //! model that's fine (the KV state alone is sufficient to resume). On a
 //! partial-memory model, resuming from position `n_past` requires history the
-//! SWA/recurrent layers no longer hold, which llama-server bridges with
+//! SWA/recurrent layers have discarded, which llama-server bridges with
 //! context checkpoints; with the checkpoint list empty after a disk restore,
 //! it falls back to `n_past = 0` and reprocesses the *entire* prompt. A disk
 //! "restore" on such a model therefore costs a full re-prefill — worse than

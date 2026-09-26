@@ -80,7 +80,7 @@ use serde_json::Value;
 /// before it is eligible for replacement with [`TRUNCATION_PLACEHOLDER`].
 pub(crate) const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
 
-/// Character-to-token conversion factor used to translate a model's **token**
+/// Character-to-token conversion factor that translates a model's **token**
 /// context size into the **character** budget [`truncate_history`] measures.
 ///
 /// This is not an attempt at precise real-world tokenization — it deliberately

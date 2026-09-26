@@ -45,7 +45,7 @@ const STALE_AFTER: Duration = Duration::from_secs(1);
 pub(crate) struct XetPoller {
     /// Last time a real Python `Progress` event was observed.
     last_real_event_at: Arc<Mutex<Instant>>,
-    /// Last synthetic byte count we reported. Used to suppress no-change emits.
+    /// Last synthetic byte count we reported, so an unchanged count is not re-emitted.
     last_synthetic_bytes: Arc<AtomicU64>,
     /// Handle to the polling task; aborted on [`XetPoller::shutdown`].
     handle: JoinHandle<()>,

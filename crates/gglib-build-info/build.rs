@@ -46,9 +46,9 @@ fn main() {
                 return;
             }
             None => {
-                // The old code discarded a malformed override in silence and
-                // fell through to git probing, so a packager who mistyped it
-                // got a build that looked fine and reported the wrong commit.
+                // Said aloud before falling through to git probing: in silence,
+                // a packager who mistyped the override gets a build that looks
+                // fine and reports the wrong commit.
                 println!(
                     "cargo:warning=gglib-build-info: ignoring GGLIB_BUILD_SHA_SHORT={raw:?}; \
                      expected at least {SHA_LEN} hex characters of a commit id"
@@ -68,14 +68,11 @@ fn main() {
 
     // `sha(false)` asks for the *full* commit id rather than gix's abbreviated
     // one. gix abbreviates the way git does — from the size of the object
-    // database — so its width grows with the repository, and this crate spent
-    // a release printing no commit at all because a hard-coded seven-character
-    // check stopped matching an eight-character SHA. Taking the full id and
-    // cutting it ourselves makes the width a property of this file instead of
-    // a property of whoever's clone did the build.
+    // database — so its width grows with the repository. Taking the full id
+    // and cutting it ourselves makes the width a property of this file instead
+    // of a property of whoever's clone did the build.
     //
-    // `dirty(false)` excludes untracked files, matching the
-    // `--untracked-files=no` of the fingerprint this replaces.
+    // `dirty(false)` leaves untracked files out of the dirty check.
     let git = match GixBuilder::default()
         .repo_path(Some(repo_root))
         .sha(false)
@@ -173,9 +170,8 @@ fn emit_build_identity(sha: Option<&str>, dirty: bool) {
 /// Cut a commit id down to [`SHA_LEN`], or reject it.
 ///
 /// Used for both the id vergen probes and the one a packager supplies, so the
-/// two cannot disagree about width. A shorter value used to be accepted and
-/// silently produced a narrower SHA than every other build of the same commit,
-/// which is the inconsistency this crate is being changed to remove.
+/// two cannot disagree about width. A shorter value is rejected rather than
+/// accepted as a narrower SHA than every other build of the same commit.
 ///
 /// Anything that is not a hex id is rejected rather than truncated into
 /// something that looks like a commit — vergen substitutes the literal

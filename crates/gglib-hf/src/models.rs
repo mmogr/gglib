@@ -156,9 +156,7 @@ pub(crate) struct HfQuantization {
 /// and gglib-app-services has a second struct also called `HfQuantization`,
 /// with an `is_sharded` field — so a hit tells you nothing about *this* method
 /// until you have resolved the receiver's type. Resolving the type is the
-/// point; counting the surfaces is not. An earlier version of this comment
-/// attributed other crates' behaviour to this method, and the version after it
-/// closed the accounting at a number that was wrong.
+/// point; counting the surfaces is not.
 #[cfg(test)]
 impl HfQuantization {
     /// Check if this quantization is sharded (multiple files).

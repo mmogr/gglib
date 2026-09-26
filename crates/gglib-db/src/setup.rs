@@ -21,9 +21,9 @@ const CANONICAL_PATH_SCHEMA_VERSION: i64 = 1;
 
 /// Whether a `SQLite` error is a unique-index violation.
 ///
-/// Used to tell the one failure the path backfill deliberately tolerates —
-/// two rows resolving onto one key — apart from a locked or full database,
-/// which must surface rather than be counted as a tidy skip.
+/// Tells the one failure the path backfill deliberately tolerates — two rows
+/// resolving onto one key — apart from a locked or full database, which must
+/// surface rather than be counted as a tidy skip.
 fn is_unique_violation(error: &sqlx::Error) -> bool {
     matches!(
         error,
@@ -34,39 +34,22 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
 
 /// Adds `column` to `table`, unless the table already has it.
 ///
-/// Every migration below used to be a `let _ = sqlx::query("ALTER TABLE …")`
-/// under a comment reading "ignore error if column already exists". That
-/// discard is unconditional: `duplicate column name` — the one outcome it was
-/// meant to absorb — reads identically to `no such table`, a locked database
-/// and a full disk.
+/// Idempotent because it asks the database its shape (`PRAGMA table_info`),
+/// not because it discards the ALTER's error: `duplicate column name` reads
+/// identically to `no such table`, a locked database and a full disk. A column
+/// already present is a skip; anything else the ALTER hits fails the boot
+/// ([#921]).
 ///
-/// #796 is what that cost. The `benchmark_runs.applied_json` ALTER sat above
-/// the CREATE that makes the table, so on a fresh database it failed with `no
-/// such table`, the error went into `_`, and the CREATE that ran afterwards
-/// carried no such column. Every fresh install was unable to store an apply
-/// record until a second boot re-ran the migration, and nothing anywhere said
-/// so.
-///
-/// So the idempotence is bought by asking the database what shape it is —
-/// `PRAGMA table_info`, the same introspection this module's own tests use —
-/// and the ALTER itself runs with `?`. A column already present is a skip; a
-/// missing table is an error, which is #796 arriving at boot rather than in a
-/// bug report.
-///
-/// **Deliberately not a `PRAGMA user_version` ladder**, and that is worth
-/// writing down so the next reader does not redo the analysis. The
-/// `template_caps` ALTER (#862, 2026-08-17) landed *after* the `user_version
-/// = 1` stamp (#850, 2026-08-15), so a field database stamped `1` may or may
-/// not carry that column depending on which build last opened it — a
-/// version-gated ALTER that propagates errors would abort startup with
-/// `duplicate column name` on real installs. `CANONICAL_PATH_SCHEMA_VERSION`
-/// also gates the path backfill, which its own comment describes as a
-/// blocking syscall per row, so bumping it re-runs that for every user. A real
-/// version ladder can be layered on after v1 at no cost, precisely because
-/// `PRAGMA table_info` keeps the shape introspectable either way.
+/// **Deliberately not a `PRAGMA user_version` ladder.** A field database
+/// stamped `1` may or may not carry `template_caps`, depending on which build
+/// last opened it, so a version-gated ALTER that propagates errors would abort
+/// startup with `duplicate column name`. `CANONICAL_PATH_SCHEMA_VERSION` also
+/// gates the per-row path backfill, so bumping it re-runs that for every user.
 ///
 /// The identifiers are interpolated rather than bound: `SQLite` accepts no
 /// parameters in DDL. Every caller passes a literal.
+///
+/// [#921]: https://github.com/mmogr/gglib/pull/921
 async fn add_column_if_missing(
     pool: &SqlitePool,
     table: &str,
@@ -145,7 +128,7 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
     // Initialize settings table
     init_settings_table(&pool).await?;
 
-    // The idle-time auto-tune scheduler was removed; reclaim its settings row.
+    // No setting has the key `auto_tune`; reclaim that row.
     //
     // `Settings` is `#[serde(default)]` and nothing validates the key set, so
     // a stale row is silently dropped at load and would never break anything —
@@ -256,7 +239,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // value would collapse it into an answer nobody measured.
     add_column_if_missing(pool, "models", "template_caps", "TEXT").await?;
 
-    // Index on file path for lookups (no longer unique)
+    // Index on file path for lookups (not unique)
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
         .execute(pool)
         .await?;
@@ -273,8 +256,8 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // the cost is paid once per library.
     //
     // The gate makes the repair one-shot, which is a real trade and not merely
-    // an optimisation: once stamped, a row written under the old key rule
-    // afterwards is never repaired. That needs an older binary writing to an
+    // an optimisation: once stamped, a non-canonical row written afterwards
+    // is never repaired. That needs an older binary writing to an
     // already-migrated database — mixed-version writers are out of scope, the
     // usual bargain for a version-stamped migration. The passes themselves
     // stay idempotent, so a crash before the stamp simply re-runs them.
@@ -335,17 +318,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .await?;
 
     // A `chat_messages` table predating the 'tool' role cannot store a
-    // tool-role message: its CHECK constraint rejects the insert. This used to
-    // DROP both chat tables and let the CREATEs below rebuild them — deleting
-    // the user's entire chat history, silently, at boot, on the strength of a
-    // substring match against a stored CREATE statement.
-    //
-    // The role has been in that CREATE since #362 (2026-04-03), so the branch
-    // is dead for any database a build from the last four months has opened.
-    // Dead is not the same as harmless: what it did when it fired was destroy
-    // data with no prompt, no backup and no log line, and that is not a thing
-    // to carry into a schema freeze. It refuses now, naming the file, and the
-    // user decides what happens to their own history.
+    // tool-role message: its CHECK constraint rejects the insert. Startup
+    // refuses such a database, naming the file, rather than dropping the
+    // user's chat history; the user decides what happens to it. The CREATE
+    // below carries the role (#362), so only a database older than that
+    // reaches this branch.
     let chat_messages_sql: Option<String> = sqlx::query_scalar(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='chat_messages'",
     )
@@ -462,7 +439,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
-    // The council/orchestrator feature was removed; reclaim its tables.
+    // Nothing reads the council/orchestrator tables; reclaim them.
     // Events first — it holds the ON DELETE CASCADE foreign key into runs.
     // Backwards compatibility is deliberately not preserved: any stored run
     // history is dropped rather than migrated.
@@ -501,14 +478,9 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // model reports can always be traced back to the gate numbers that
     // licensed it. NULL on every run that was never applied.
     //
-    // This ALTER must run *after* the CREATE above: it originally sat in
-    // the models migration block, before benchmark_runs existed on a fresh
-    // database — where "no such table" was silently swallowed and the CREATE
-    // (which then lacked the column) left every fresh install unable to
-    // store an apply record until a second boot re-ran the migration. That
-    // ordering is still load-bearing, but it is no longer the only thing
-    // standing between this line and #796: the ALTER propagates now, so the
-    // same mistake fails the boot it is made on.
+    // This ALTER must run *after* the CREATE above: on a fresh database the
+    // table does not exist before it, and the ALTER's error propagates, so a
+    // misplaced ALTER fails the boot it is made on (#796).
     add_column_if_missing(pool, "benchmark_runs", "applied_json", "TEXT").await?;
 
     // Per-model compare results: real inference quality + real-world timing.
@@ -695,27 +667,20 @@ async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
 
 /// Migration: put local models' paths and keys onto the canonical rule.
 ///
-/// A `local:` key is a hash of the model's path. Until recently the hash was
-/// taken over the path *as the caller spelled it* — `gglib model add
-/// ./model.gguf` hashed `./model.gguf` — while `file_path` was normalised on
-/// insert. Rows added through a relative path, a symlinked models directory,
-/// or a macOS temp path (`/var` → `/private/var`) therefore carry a key no
-/// current build will ever recompute.
+/// A `local:` key is a hash of the model's canonical path. A row written
+/// before [#850] may carry a key hashed over the path *as the caller spelled
+/// it* (a relative path, a symlinked models directory, `/var` for
+/// `/private/var`), which no current build recomputes: `ON CONFLICT(model_key)`
+/// misses the row, `file_path` carries no unique index, and re-registering
+/// that file appends a second one.
 ///
-/// The consequence is silent and bad: `ON CONFLICT(model_key)` misses the row,
-/// `file_path` carries no unique index, and re-registering that file appends a
-/// second one — which is exactly the duplicate this whole area exists to
-/// prevent, arriving by way of the upgrade rather than by way of a bug.
-///
-/// **The stored column cannot simply be trusted.** `insert` normalised it, but
-/// `update` did not until this change, so any row that went through
-/// `PATCH /api/models/{id}` holds whatever spelling the caller sent; and
-/// `insert`'s normalisation falls back to the literal path when the file is
-/// missing. Re-keying from the column verbatim would therefore compute a key
-/// from a non-canonical string, leaving the row exactly as unreachable as
-/// before while reporting success. So each path is resolved here first, the
-/// column rewritten when it moves, and the key derived from the resolved form
-/// — the same value `insert` would compute for that file today.
+/// **The stored column cannot simply be trusted.** Such a row's `file_path`
+/// may hold whatever spelling a `PATCH /api/models/{id}` sent, and `insert`'s
+/// normalisation falls back to the literal path when the file is missing.
+/// Re-keying from the column verbatim would compute a key from a
+/// non-canonical string and report success. So each path is resolved here
+/// first, the column rewritten when it moves, and the key derived from the
+/// resolved form — the value `insert` computes for that file.
 ///
 /// Idempotent: once a row is normalised the recomputed values equal the stored
 /// ones and no write happens. A row whose new key would collide with another
@@ -723,6 +688,8 @@ async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
 /// means two rows genuinely name one file, which is a merge a startup
 /// migration has no business performing silently. Any other database error is
 /// propagated rather than counted as a skip.
+///
+/// [#850]: https://github.com/mmogr/gglib/pull/850
 async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
     use crate::repositories::sqlite_model_repository::local_model_key_for;
     use gglib_core::paths::canonical_model_path_string;
@@ -775,9 +742,9 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
 /// Migration: canonicalise the stored shard path lists.
 ///
 /// Companion to [`backfill_local_model_keys`], and needed for the same reason:
-/// `file_paths_json` used to be written exactly as the download handed it over
-/// — absolute, but never symlink-resolved — while the duplicate lookup
-/// compares those entries against a resolved path.
+/// an older row's `file_paths_json` may hold each shard exactly as the
+/// download handed it over — absolute, but never symlink-resolved — while the
+/// duplicate lookup compares those entries against a resolved path.
 ///
 /// Left alone, `gglib model add <shard-2>` against a sharded model already in
 /// the library matches nothing, so the add proceeds and appends a second row
@@ -785,8 +752,8 @@ async fn backfill_local_model_keys(pool: &SqlitePool) -> Result<()> {
 /// `--reimport` to reach: it is the plain add path.
 ///
 /// Applies to every row with a shard list, not only `local:` ones — a
-/// downloaded sharded model keeps its `hf:` key but had its paths written the
-/// same raw way. Idempotent: once resolved, re-resolving is the identity.
+/// downloaded sharded model keeps its `hf:` key but may hold the same raw
+/// paths. Idempotent: once resolved, re-resolving is the identity.
 async fn backfill_shard_path_lists(pool: &SqlitePool) -> Result<()> {
     use gglib_core::paths::canonical_model_path_string;
     use sqlx::Row;

@@ -124,10 +124,8 @@ pub struct AgenticEvalConfig {
     /// # Why this is not the full seed set
     ///
     /// Because the control is the most expensive arm in the eval by an order
-    /// of magnitude, and it does not need the precision. Measured on
-    /// Qwen3.5-4B: broken sampling makes the model ramble, so the control took
-    /// **161 of one run's 174 wall-clock minutes** and generated 5× the tokens
-    /// of the two real arms combined.
+    /// of magnitude — broken sampling makes the model ramble ([#756]) — and it
+    /// does not need the precision.
     ///
     /// It can afford to be imprecise because of what it is asked. The two real
     /// arms are being compared to each other and need every seed they can get;
@@ -135,6 +133,8 @@ pub struct AgenticEvalConfig {
     /// it actually opens is an order of magnitude above that threshold. Paying
     /// five seeds to resolve a 0.5 gap more precisely buys nothing the report
     /// reads.
+    ///
+    /// [#756]: https://github.com/mmogr/gglib/pull/756
     #[serde(default = "default_control_seeds")]
     pub control_seeds: usize,
     /// Whether to run the proxy arm and its raw-auto baseline. See
@@ -238,15 +238,12 @@ pub const CONTROL_MIN_P: f32 = 0.0;
 
 /// The sampling the control arm applies, on top of a request's seed.
 ///
-/// # Why the temperature alone was not enough
+/// # Why the temperature alone is not enough
 ///
-/// The first version of this control set only [`CONTROL_TEMPERATURE`], and it
-/// **failed to degrade anything** — measured on Qwen3.5-4B, it scored *above*
-/// both real arms. The reason is the sampler chain's order, which [ADR 0003]
-/// finding 5 measured: llama.cpp applies the truncation samplers *before*
-/// temperature. With a `reasoning` recipe's `top_k: 20` and `top_p: 0.95`
-/// already in force, temperature 2.0 was only flattening a distribution over
-/// twenty surviving tokens — a much tamer change than the number suggests.
+/// llama.cpp applies the truncation samplers *before* temperature ([ADR 0003]
+/// finding 5). With a `reasoning` recipe's `top_k: 20` and `top_p: 0.95`
+/// already in force, temperature 2.0 only flattens a distribution over twenty
+/// surviving tokens — a much tamer change than the number suggests.
 ///
 /// So the control disables every truncation sampler as well. A temperature
 /// that cannot be absorbed by a `top_k` running ahead of it is the only kind
@@ -254,12 +251,11 @@ pub const CONTROL_MIN_P: f32 = 0.0;
 ///
 /// # It differs from the gglib arm in more than one value, and that is fine
 ///
-/// An earlier comment here claimed the control differed in exactly the
-/// temperature, so a gap could only be that. That was already untrue: naming a
-/// temperature claims the coupled trio, so the control's `presence_penalty`
-/// and `repeat_penalty` fall to the class floor rather than matching the
-/// model's recipe. Isolating one variable is a job for an ablation; this
-/// arm's job is to be *large and known-bad*, and breadth serves that.
+/// Naming a temperature claims the coupled trio, so the control's
+/// `presence_penalty` and `repeat_penalty` fall to the class floor rather than
+/// matching the model's recipe. Isolating one variable is a job for an
+/// ablation; this arm's job is to be *large and known-bad*, and breadth serves
+/// that.
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 #[must_use]
@@ -393,12 +389,7 @@ pub struct ArmScores {
     pub total_wall_ms: u64,
     /// Wall-clock milliseconds across the runs that reached the model.
     ///
-    /// The comparable figure, and the one every ratio is taken from. It shares
-    /// its population with [`Self::tg_tps`] and
-    /// [`Self::mean_time_to_first_tool_call_ms`], which already filtered this
-    /// way — the efficiency table used to print those beside an unfiltered
-    /// wall time, so two of its rows described different sets of runs while
-    /// looking like one table.
+    /// The comparable figure, and the one every ratio is taken from.
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub measured_wall_ms: u64,
@@ -406,20 +397,22 @@ pub struct ArmScores {
     /// when no task in the arm called a tool.
     ///
     /// **Read this beside [`Self::median_time_to_first_tool_call_ms`], never
-    /// alone.** The population is not unimodal. On 2026-08-29 one arm reached
-    /// its first call in about a second on most tasks and after roughly 950
-    /// *seconds* on five of them; the mean of that is ~94s, which describes
-    /// neither group and no individual run. The mean is kept because a large
-    /// gap between it and the median is itself the finding.
+    /// alone.** The population is not unimodal: a handful of runs that generate
+    /// for many minutes before their first call pull the mean to a value that
+    /// describes neither group and no individual run ([#961]). The mean is
+    /// kept because a large gap between it and the median is itself the
+    /// finding.
+    ///
+    /// [#961]: https://github.com/mmogr/gglib/pull/961
     #[serde(default)]
     pub mean_time_to_first_tool_call_ms: Option<f64>,
     /// Median time to the first tool call, over the tasks that made one.
     ///
     /// The typical run, which the mean stops describing the moment a handful of
     /// runs generate for a quarter of an hour. Reported alongside rather than
-    /// instead of the mean: the median alone would have hidden those five runs
-    /// as effectively as the mean misrepresented them, and the pair is what
-    /// makes the spread visible.
+    /// instead of the mean: the median alone hides those runs as effectively
+    /// as the mean misrepresents them, and the pair is what makes the spread
+    /// visible.
     #[serde(default)]
     pub median_time_to_first_tool_call_ms: Option<f64>,
     /// How many seeds every task was repeated under.
@@ -491,11 +484,10 @@ pub enum DeltaWithheld {
     /// One or both arms carry runs that never reached the model, so every mean
     /// on them is pulled toward zero by scores that measure nothing.
     ///
-    /// Measured: five such runs in the 2026-08-28 eval moved the gglib arm's
-    /// tool accuracy from 0.966 to 0.889 and its wall time from 553s to 3553s,
-    /// and the report printed the resulting −0.058 composite as its headline
-    /// under a warning saying those arms were floors rather than measurements.
-    /// Both statements were on the same screen; only one of them was read.
+    /// Withheld rather than printed under a warning, because a reader takes
+    /// the headline and not the warning beside it ([#959]).
+    ///
+    /// [#959]: https://github.com/mmogr/gglib/pull/959
     ContaminatedByUnmeasuredRuns {
         /// Unmeasured runs in the raw arm.
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
@@ -533,12 +525,13 @@ pub struct ArmDelta {
     /// Each arm's own [`ArmScores::composite`] is renormalized over whichever
     /// axes that arm measured, so two arms can carry composites on different
     /// scales — an arm with no loop-eligible run divides by 0.6 where an arm
-    /// with one divides by 0.9. Subtracting those directly measures the scale.
-    /// The 2026-08-28 eval did exactly that: the raw arm's free `1.0` on an
-    /// axis the gglib arm could not be scored on was worth about half the
-    /// reported gap.
+    /// with one divides by 0.9. Subtracting those directly measures the scale,
+    /// crediting one arm a free `1.0` on an axis the other was never scored on
+    /// ([#959]).
     ///
     /// `None` when [`Self::withheld`] is set.
+    ///
+    /// [#959]: https://github.com/mmogr/gglib/pull/959
     #[serde(default)]
     pub composite: Option<f64>,
     /// Why the axis differences above are absent, when they are.
@@ -555,19 +548,18 @@ pub struct ArmDelta {
     ///
     /// Taken **per measured run** on both sides. Summed totals put the two arms
     /// on different denominators the moment either loses a run, and a run lost
-    /// to a timeout contributes the timeout rather than nothing: the
-    /// 2026-08-28 eval reported `0.2×` — 84% of which was five stalled runs
-    /// waiting out a ten-minute deadline — for an arm that was in fact about
-    /// 1.2× faster on the work it actually did.
+    /// to a timeout contributes the timeout rather than nothing, which can
+    /// turn a faster arm into a slower one ([#959]).
+    ///
+    /// [#959]: https://github.com/mmogr/gglib/pull/959
     #[serde(default)]
     pub wall_time_speedup: Option<f64>,
     /// Per-run completion-token ratio, `raw ÷ gglib`. Above `1.0` means gglib
     /// reached the same outcome on fewer generated tokens. `None` when either
     /// arm generated nothing measurable.
     ///
-    /// Per measured run for the same reason as [`Self::wall_time_speedup`]: the
-    /// summed form divided one arm's 63-run total by the other's 58-run total
-    /// and reported `1.48×` where the per-run figure is `1.36×`.
+    /// Per measured run for the same reason as [`Self::wall_time_speedup`]: a
+    /// summed form divides totals taken over different numbers of runs.
     #[serde(default)]
     pub completion_token_ratio: Option<f64>,
 }
@@ -734,8 +726,8 @@ pub enum ControlVerdict {
     /// Not a weak signal — a contradicted premise. The change was chosen to be
     /// bad, so a control that wins says the degradation is not degrading, and
     /// the control itself needs fixing before any delta in the report means
-    /// anything. Measured once already: temperature 2.0 without disabling
-    /// `top_k` is absorbed by the truncation samplers that run ahead of it.
+    /// anything. Temperature 2.0 without disabling `top_k`, for one, is
+    /// absorbed by the truncation samplers that run ahead of it.
     WrongDirection {
         /// How far *above* the gglib arm the control scored, positive.
         gap: f64,
@@ -907,7 +899,7 @@ impl AgenticEvalReport {
     /// The eval's own drift: the mean pairwise composite gap over every run
     /// of the identical raw configuration — the primary plus each A/A pair.
     ///
-    /// With one A/A pair this is exactly the old single-gap number. With `K`
+    /// With one A/A pair this is the one gap between the two runs. With `K`
     /// pairs it averages the `C(K+1, 2)` pairwise gaps among `K + 1` runs of
     /// the same arm, which estimates the same quantity from more than one
     /// degree of freedom. A mean absolute gap, not a standard deviation:

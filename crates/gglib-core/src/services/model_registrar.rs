@@ -38,13 +38,12 @@ pub struct ModelRegistrar {
     gguf_parser: Arc<dyn GgufParserPort>,
     /// Repository for persisting model file metadata.
     model_files_repo: Option<Arc<dyn ModelFilesRepositoryPort>>,
-    /// Used to look up the model author's published sampling recipe.
+    /// Looks up the model author's published sampling recipe.
     ///
     /// Optional, and absent means "do not look" rather than "cannot register".
-    /// A registrar without one behaves exactly as it did before this existed:
-    /// the `reasoning` tag guess applies. That keeps the feature off in tests
-    /// and in any embedding that has no HF client, without either having to
-    /// know it exists.
+    /// A registrar without one applies the `reasoning` tag guess. That keeps
+    /// the feature off in tests and in any embedding that has no HF client,
+    /// without either having to know it exists.
     hf_client: Option<Arc<dyn HfClientPort>>,
 }
 
@@ -71,9 +70,9 @@ impl ModelRegistrar {
 
     /// Look up published sampling recipes at import, using `client`.
     ///
-    /// A builder method rather than a fourth constructor parameter: every
-    /// existing call site wants the previous behaviour, and only the
-    /// application wiring has an HF client to give.
+    /// A builder method rather than a fourth constructor parameter: only the
+    /// application wiring has an HF client to give, and every other call site
+    /// wants no lookup.
     #[must_use]
     pub fn with_hf_client(mut self, client: Arc<dyn HfClientPort>) -> Self {
         self.hf_client = Some(client);

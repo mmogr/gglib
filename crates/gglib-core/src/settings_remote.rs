@@ -39,12 +39,10 @@ pub struct RemotePairing {
     /// The ticket that machine handed out, in its canonical form.
     ///
     /// An address rather than a credential — reaching the far side still
-    /// takes [`Self::api_key`]. It used to go stale every time that machine
-    /// ran `enable`, because each one minted a fresh identity; identities
-    /// last now, so a ticket stays good across the far machine's restarts
-    /// and a device pairs once. A later dial to the *same* machine at a new
-    /// address still replaces this and keeps the key, which is what makes
-    /// the ticket the mutable half.
+    /// takes [`Self::api_key`]. Identities last, so a ticket stays good
+    /// across the far machine's restarts and a device pairs once. A later
+    /// dial to the *same* machine at a new address replaces this and keeps
+    /// the key, which is what makes the ticket the mutable half.
     pub ticket: String,
 
     /// That machine's API key: its `proxy_api_key`, received by redeeming

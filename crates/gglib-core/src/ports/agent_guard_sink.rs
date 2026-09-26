@@ -1,22 +1,20 @@
 //! Outbound port for the agent loop's guard decisions.
 //!
 //! The agent loop runs the same two detectors the proxy does — `LoopDetector`
-//! and `StagnationDetector`, both from [`crate::domain::agent`] — and until
-//! #1091 its decisions reached neither the per-model ledger nor the guard's
-//! persisted log, so every number either of those gave about the loop guard
-//! described one of its two callers. A trip was not invisible — it ends the
-//! run, and the error event says so to whoever is watching. Two benchmark
-//! harnesses *record* it: the tuning and agentic evals share
+//! and `StagnationDetector`, both from [`crate::domain::agent`] — and this
+//! port is how its decisions reach the per-model ledger (#1091). A trip ends
+//! the run, and the error event says so to whoever is watching. Two
+//! benchmark harnesses *record* it: the tuning and agentic evals share
 //! `run_task_with_llm`, which turns that error into a per-task
 //! `loop_detected` flag, and each rolls those up into a `loop_avoidance`
-//! axis above it. Both score a run under test. What nothing had was a count
-//! of what the guard does in service.
+//! axis above it. Both score a run under test; this port counts what the
+//! guard does in service.
 //!
-//! This is the seam that fixes that. `gglib-agent` must not depend on the
-//! proxy, so the hand-over is a port here, the shape
-//! [`UsageSink`](super::UsageSink) already established: synchronous, holding
-//! nothing the caller waits on, and held as an `Option` by the loop so that a
-//! process with nothing to report to makes recording a no-op.
+//! `gglib-agent` must not depend on the proxy, so the hand-over is a port
+//! here, the shape [`UsageSink`](super::UsageSink) already established:
+//! synchronous, holding nothing the caller waits on, and held as an `Option`
+//! by the loop so that a process with nothing to report to makes recording a
+//! no-op.
 //!
 //! # Why not [`LoopGuardTripSink`](super::LoopGuardTripSink)
 //!

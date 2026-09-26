@@ -253,18 +253,16 @@ pub struct Settings {
     /// `None`/`Some(true)` → active (the default): a turn that may emit
     /// structured output has its temperature capped, but only over a value
     /// nobody deliberately chose — an auto-detected recipe or the floor —
-    /// and only on a model class that still has a ceiling. Since the
-    /// 2026-08-10 measurement (see `agentic_temperature_ceiling`) reasoning
-    /// models have none, so on them this setting currently gates nothing.
-    /// Anything set by a person stands. `Some(false)` disables the cap.
+    /// and only on a model class that has a ceiling. Reasoning models have
+    /// none (see `agentic_temperature_ceiling`), so on them this setting
+    /// gates nothing. Anything set by a person stands. `Some(false)` disables
+    /// the cap.
     ///
     /// Same polarity as [`Self::proxy_loop_detection`], and for the same
     /// reason: this is a correction the endpoint should not silently lose.
     ///
-    /// The `tool_call_floor` alias is the name this shipped under briefly in
-    /// #741, before verification showed the adjustment fires on every agentic
-    /// turn rather than only on tool emission. Kept so a config written in
-    /// that window still loads.
+    /// The `tool_call_floor` alias is the name #741 gave this setting; it keeps
+    /// a config that uses that name loading.
     #[serde(alias = "tool_call_floor")]
     pub agentic_sampling: Option<bool>,
 
@@ -337,11 +335,12 @@ impl Settings {
             // `None`, not the floor. This is what `gglib config settings
             // reset` writes, and a stored value is the evidence that the user
             // chose a number — the settings modal shows an empty box when
-            // unset and writes back blank. Writing 4096 here fabricated that
-            // evidence, and the global-default rung outranks the fitted one,
-            // so a reset pinned the user above the context #925 computes for
-            // their machine. The rungs below have no such problem: nothing
-            // sits under `proxy_port` or `llama_base_port` to be shadowed.
+            // unset and writes back blank. Writing 4096 here would fabricate
+            // that evidence, and the global-default rung outranks the fitted
+            // one, so a reset would pin the user above the context #925
+            // computes for their machine. The rungs below have no such
+            // problem: nothing sits under `proxy_port` or `llama_base_port` to
+            // be shadowed.
             default_context_size: None,
             proxy_port: Some(DEFAULT_PROXY_PORT),
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),

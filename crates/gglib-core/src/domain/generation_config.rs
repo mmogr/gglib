@@ -4,7 +4,7 @@
 //!
 //! [`crate::domain::model_sampling`] reads `general.sampling.*` out of a GGUF,
 //! which llama.cpp applies directly. That is the ideal source and it is almost
-//! never present: the keys landed upstream in PR #17120 (2025-11-25) and most
+//! never present: the keys arrived with llama.cpp's #17120 and most
 //! converters predate them or simply drop what they do not recognise. The
 //! author's numbers exist — they are in `generation_config.json` in the base
 //! repo, which is what every `transformers` user gets by default — they just do
