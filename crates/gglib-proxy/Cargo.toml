@@ -106,7 +106,7 @@ serde_json = "1.0"
 # Every other remote test synthesises those headers, which proves what the
 # proxy does with a request that claims to have come through a tunnel rather
 # than one that did.
-modelpipe = "0.7.0"
+modelpipe = "0.8.1"
 
 [lints.rustdoc]
 # Mirrors `[workspace.lints.rustdoc]`, which this crate cannot inherit while it
