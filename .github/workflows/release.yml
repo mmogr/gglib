@@ -329,9 +329,10 @@ jobs:
         run: |
           echo "::notice::🧪 TEST MODE - Builds will run but no release will be created"
 
+      # Pinned by SHA; ci.yml's `test` job says why.
       - name: Free Disk Space (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
           android: true
@@ -547,9 +548,10 @@ jobs:
         run: |
           echo "::notice::🧪 TEST MODE - Builds will run but no release will be created"
 
+      # Pinned by SHA; ci.yml's `test` job says why.
       - name: Free Disk Space (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
           android: true
