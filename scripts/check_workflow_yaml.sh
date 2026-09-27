@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
-# Validate .github/workflows/*.yml for duplicate mapping keys.
+# Validate every YAML file under .github/ for duplicate mapping keys: the
+# workflows, and configuration such as the issue forms.
 # Also checks that every module and coverage path named in badges.yml still
-# resolves under crates/ — see the second section below for why it lives here.
+# resolves under crates/ (its section below says why it lives here), and that
+# bump-version.yml re-locks rather than re-resolves.
 #
 # GitHub rejects a workflow file containing a duplicate key outright: the run is
 # marked "failed because of a workflow file issue" and NO jobs start. That makes
@@ -12,6 +14,11 @@
 # Most YAML parsers won't help: the spec says duplicate keys are invalid, but
 # Psych's safe_load and PyYAML both silently keep the last one. Walking the raw
 # node tree is what makes them visible.
+#
+# The files outside .github/workflows/ need it as much. Nothing reliably checks
+# them before they take effect, and a parser that keeps the last duplicate
+# would, for example, drop the first of two `ignore:` lists in a Dependabot
+# config without a word.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -23,7 +30,8 @@ fi
 
 ruby -ryaml -e '
 bad = 0
-Dir.glob(".github/workflows/*.yml").sort.each do |file|
+files = Dir.glob(".github/**/*.{yml,yaml}").sort
+files.each do |file|
   begin
     doc = YAML.parse(File.read(file))
   rescue Psych::SyntaxError => e
@@ -52,11 +60,11 @@ Dir.glob(".github/workflows/*.yml").sort.each do |file|
   walk.call(doc, "")
 end
 
-count = Dir.glob(".github/workflows/*.yml").length
+count = files.length
 if bad.zero?
-  puts "\e[32m✓\e[0m no duplicate keys in #{count} workflow file(s)"
+  puts "\e[32m✓\e[0m no duplicate keys in #{count} YAML file(s) under .github"
 else
-  puts "\e[31m#{bad} problem(s) found — GitHub would reject these and run no jobs at all\e[0m"
+  puts "\e[31m#{bad} problem(s) found — GitHub runs no jobs from a workflow like this, and nothing reliably reports one in any other file under .github\e[0m"
   exit 1
 end
 '
