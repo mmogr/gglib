@@ -6,6 +6,22 @@ on:
   pull_request:
     branches: [main]
 
+# A pull request's runs share one group, and a newer run cancels the older:
+# after a force-push or an `@dependabot rebase` the older run is testing a
+# commit nobody will merge.
+#
+# A push to main gets a group of its own, named by its SHA, so no other CI
+# run ever joins it. GitHub keeps at most one run pending in a group and
+# cancels the older pending run when a newer one arrives, whatever
+# `cancel-in-progress` says, so one group shared by main's pushes would drop
+# runs merged in quick succession, and the push run is the one that runs
+# `release`. One job inside it is still exposed: release.yml's `deploy-docs`
+# shares the `pages` group with docs.yml, where a newer deploy cancels one in
+# progress.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-main-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
