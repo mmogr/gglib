@@ -39,7 +39,7 @@ jobs:
       # Needed by the npm half of "Update lockfiles". The workflow had no Node
       # step at all while package-lock.json was untracked.
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
