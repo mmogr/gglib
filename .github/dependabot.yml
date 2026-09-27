@@ -1,0 +1,241 @@
+# Dependabot keeps gglib's third-party dependencies current through a few
+# grouped pull requests, not the default of one per dependency. Every pull
+# request here costs a serial CI run: ggRules merges only an up-to-date
+# branch, and a user-owned repository cannot have a merge queue.
+#
+# Majors are bumped by hand for now, in cargo and npm: a major is real work,
+# and it goes in a pull request that says what changed. That rule is the "*"
+# entry under each `ignore`. The entries that name one dependency are a
+# different kind. They describe a coupling, and they stay after the "*" entry
+# goes.
+#
+# Security updates skip the cooldown, the open pull request limit and every
+# `update-types` ignore; only an explicit `versions` range holds one back. So
+# a fix that needs a major, or a Tauri minor, still arrives, in the
+# *-security group, and it may need finishing by hand. Dependabot labels each
+# one `security` and puts `[security]` after the entry's commit prefix in its
+# title.
+#
+# Each entry runs every day at 06:00 in the maintainer's timezone
+# (`interval: daily` would skip weekends). When the set of updates a group
+# would carry changes, Dependabot opens a new pull request for the group and
+# closes the old one as superseded, so an open group is replaced rather than
+# topped up.
+#
+# No `target-branch` anywhere: with one set, none of these options would
+# reach security updates, which always target the default branch.
+#
+# CONTRIBUTING.md, "Dependency updates", has the routine.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    # One entry covers the whole workspace: src-tauri is a member of it, and
+    # the root Cargo.lock is the only lockfile.
+    directory: "/"
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: Australia/Brisbane
+    # Transitive crates as well as direct ones. Most of the lock's
+    # semver-compatible updates are transitive, and a fix whose advisory
+    # GitHub's database does not carry raises no security update, so this is
+    # the only thing that proposes one. With direct crates only, the rest
+    # would move only when something re-resolves the lock wholesale, and then
+    # unreviewed (#975).
+    allow:
+      - dependency-type: all
+    # A release must be three days old before it is proposed, which leaves
+    # time for a bad release to be yanked. Three days is Dependabot's default,
+    # kept visible here.
+    cooldown:
+      default-days: 3
+    # The default, kept visible. Once five are open, the rest wait for the
+    # next run. That is the backpressure a serial merge lane needs.
+    open-pull-requests-limit: 5
+    # No `versioning-strategy`: for cargo the default already raises a
+    # requirement only when it no longer admits the new version, so an
+    # in-range update changes Cargo.lock and nothing else.
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+      - automated
+      - "type: chore"
+    ignore:
+      # Majors are bumped by hand, for now. For cargo a 0.y to 0.(y+1) move
+      # counts as a major.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # `tauri build` refuses to run when the tauri crate and @tauri-apps/api,
+      # or tauri-plugin-X and @tauri-apps/plugin-X, differ in major.minor, and
+      # only release.yml's `build-gui` job runs it. A green minor on one side
+      # would break the next release, so both sides are bumped by hand,
+      # together. The pattern also covers the transitive tauri-runtime,
+      # tauri-utils and the rest, which keeps each on its current minor.
+      - dependency-name: "tauri*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # These resolve to the versions Tauri itself uses. For gtk that is a
+      # requirement: otherwise the GtkWindow types do not unify. For
+      # libloading it keeps a second copy out of the tree.
+      - dependency-name: gtk
+        update-types: ["version-update:semver-major"]
+      - dependency-name: libloading
+        update-types: ["version-update:semver-major"]
+      # libsqlite3-sys declares `links = "sqlite3"`, so the graph can hold
+      # only one copy. gglib-db pins it directly, and sqlx-sqlite wants that
+      # same version. Neither can move alone, and Dependabot cannot unlock two
+      # crates at once for cargo.
+      - dependency-name: sqlx
+        update-types: ["version-update:semver-major"]
+      - dependency-name: libsqlite3-sys
+        update-types: ["version-update:semver-major"]
+    # A dependency joins the group whose pattern names it most exactly. Apart
+    # from the catch-all, no two groups overlap, and the catch-all comes last,
+    # so reading the list top to bottom gives the same answer.
+    groups:
+      # Tauri patches get a pull request of their own. PR CI compiles them,
+      # but only release.yml bundles. Before merging, dispatch release.yml on
+      # this branch with test_run=true: its `build-gui` job runs `tauri build`.
+      tauri-crates:
+        patterns: ["tauri*"]
+      # ts-rs output is committed, and the Bindings Freshness job fails on any
+      # change to it. An update here may need `make bindings`; run it in a
+      # pull request of your own that carries the same bump. In its own group
+      # it holds up nothing else while it waits.
+      ts-rs:
+        patterns: ["ts-rs", "ts-rs-macros"]
+      cargo-compatible:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      cargo-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    # The root package.json is the only one tracked. web_ui/ is build output.
+    directory: "/"
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: Australia/Brisbane
+    # An update the range already admits changes package-lock.json only. The
+    # range moves only when it has to, the same rule as the cargo entry.
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+      - automated
+      - "type: chore"
+      - "component: frontend"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # The npm half of the Tauri rule in the cargo entry. It covers
+      # @tauri-apps/cli too, since nothing runs the CLI before a release.
+      - dependency-name: "@tauri-apps/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # typescript-eslint's peer range stops below TypeScript 6.1. This entry
+      # stays after the "*" entry goes, until typescript-eslint catches up.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Unlike cargo, npm calls 0.11 to 0.15 a minor, though a caret range on
+      # a 0.x version admits neither. These are the direct dependencies still
+      # on 0.x. A new one belongs here and in npm-zero-major. Take a name out
+      # once package.json has it at 1.0 or later.
+      - dependency-name: "@assistant-ui/react"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: lucide-react
+        update-types: ["version-update:semver-minor"]
+    groups:
+      # Patches only, since minors are ignored above. PR CI installs
+      # @tauri-apps/cli but never runs it, so dispatch release.yml on this
+      # branch with test_run=true before merging.
+      tauri-npm:
+        patterns: ["@tauri-apps/*"]
+      # Families whose members pin or peer each other. Each family moves as
+      # one pull request, and a family that fails holds up nothing else.
+      # @vitest/coverage-v8 peers one exact vitest, @tailwindcss/vite depends
+      # on one exact tailwindcss, and react-dom peers react at its own version.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      tailwind:
+        patterns: ["tailwindcss", "@tailwindcss/*"]
+      eslint:
+        patterns: ["eslint", "@eslint/*", "typescript-eslint", "eslint-plugin-*", "globals"]
+      # The 0.x packages, kept out of npm-compatible for good. Once the majors
+      # rule goes, their 0.y moves must not ride with the compatible updates.
+      npm-zero-major:
+        patterns: ["@assistant-ui/react", "lucide-react"]
+      npm-compatible:
+        patterns: ["*"]
+        exclude-patterns: ["@assistant-ui/react", "lucide-react"]
+        update-types: ["minor", "patch"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    # "/" points Dependabot at .github/workflows.
+    directory: "/"
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: Australia/Brisbane
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - dependencies
+      - automated
+      - "type: chore"
+      - "component: ci"
+    # Majors ride the group here, unlike cargo and npm. Most of these actions
+    # run in PR CI or in a test_run of release.yml, so the pull request can be
+    # tested before it merges. The ignore list holds the ones neither
+    # exercises: a test_run skips release.yml's tag, attest, upload and Pages
+    # steps, and bump-version.yml runs only when dispatched. A major of one of
+    # these would first run in a real release, so each is bumped by hand in a
+    # pull request of its own, just before a release someone watches.
+    #
+    # actions/github-script is on the list although Label Check runs it on
+    # every pull request: on a pull request Dependabot opens, Label Check's
+    # scripts stop at the bot exemption, so the deployment scripts in
+    # release.yml and docs.yml would meet a new major first in a real
+    # release. Bumped by hand, Label Check runs its whole script on the pull
+    # request.
+    #
+    # peaceiris/actions-gh-pages (badges.yml) and
+    # stefanbuck/github-issue-parser (issue-labels.yml) are not exercised
+    # either, but a failure there costs a badge or an issue label, not a
+    # release.
+    ignore:
+      - dependency-name: softprops/action-gh-release
+        update-types: ["version-update:semver-major"]
+      - dependency-name: actions/attest-build-provenance
+        update-types: ["version-update:semver-major"]
+      - dependency-name: actions/configure-pages
+        update-types: ["version-update:semver-major"]
+      - dependency-name: actions/upload-pages-artifact
+        update-types: ["version-update:semver-major"]
+      - dependency-name: actions/deploy-pages
+        update-types: ["version-update:semver-major"]
+      - dependency-name: actions/create-github-app-token
+        update-types: ["version-update:semver-major"]
+      - dependency-name: peter-evans/create-pull-request
+        update-types: ["version-update:semver-major"]
+      - dependency-name: actions/github-script
+        update-types: ["version-update:semver-major"]
+    groups:
+      actions:
+        patterns: ["*"]
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
