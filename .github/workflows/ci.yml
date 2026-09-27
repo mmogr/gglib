@@ -214,11 +214,23 @@ jobs:
       # logged `Cache not found for input keys: Windows-cargo-…, Windows-cargo-`
       # and cold-built the workspace every run. release.yml's rust-cache
       # entries are 0.55-0.80 GB for comparable graphs.
+      #
+      # Only a run on main saves. A pull request's entry is stored under
+      # refs/pull/N/merge, where only that pull request can restore it, and a
+      # pull request that moves a locked dependency misses main's exact key
+      # and would write one of its own; every Dependabot cargo pull request
+      # would.
+      # Those entries crowd main's out of the repository's cache limit, and
+      # this job builds cold when it finds none of main's to restore. A pull
+      # request still restores main's newest entry, through a restore key that
+      # leaves out the lockfile hash, so a lockfile bump rebuilds the crates it
+      # moved and what depends on them, not the whole graph.
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "ci-test"
           cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -335,6 +347,8 @@ jobs:
         with:
           shared-key: "ci-bindings"
           cache-on-failure: true
+          # Only a run on main saves; the `test` job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # No frontend build. gglib-axum compiles without `web_ui/`: the
       # `#[allow_missing = true]` in its `src/ui.rs` leaves the embedded asset
@@ -390,6 +404,8 @@ jobs:
         with:
           shared-key: "ci-rustdoc"
           cache-on-failure: true
+          # Only a run on main saves; the `test` job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # No frontend build. gglib-axum compiles without `web_ui/`: the
       # `#[allow_missing = true]` in its `src/ui.rs` leaves the embedded asset
@@ -489,6 +505,8 @@ jobs:
         with:
           shared-key: "ci-clippy"
           cache-on-failure: true
+          # Only a run on main saves; the `test` job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -509,10 +527,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'pull_request'
     # Same reason as `clippy-cross-os` below, and no longer any other: these
-    # legs take 7-13 minutes each on three runners, and there is no sense
-    # spending them on a tree ubuntu clippy has already rejected. It was never
-    # about the cache here either — the key is per-OS, so the Linux leg was the
-    # only one that could ever have shared, and it does not now.
+    # legs spend minutes on three runners, macOS and Windows among them, and
+    # there is no sense spending them on a tree ubuntu clippy has already
+    # rejected. It was never about the cache here either — the key is per-OS,
+    # so the Linux leg was the only one that could ever have shared, and it
+    # does not now.
     needs: [clippy]
     strategy:
       fail-fast: false
@@ -539,6 +558,10 @@ jobs:
         with:
           shared-key: "ci-cli-${{ matrix.target }}"
           cache-on-failure: true
+          # Only a run on main saves; the `test` job says why. This job runs
+          # only on pull requests, so nothing saves under these keys and every
+          # leg builds cold.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -598,6 +621,10 @@ jobs:
         with:
           shared-key: "ci-clippy-${{ matrix.target }}"
           cache-on-failure: true
+          # Only a run on main saves; the `test` job says why. As with
+          # `cli-cross-os`, this job runs only on pull requests, so every leg
+          # builds cold.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
