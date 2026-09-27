@@ -163,6 +163,10 @@ jobs:
         with:
           shared-key: "docs-ubuntu"
           cache-on-failure: true
+          # Only a run on main saves, as in ci.yml's `test` job: a test_run
+          # dispatched from a branch would otherwise save entries that no run
+          # on main can restore.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -363,6 +367,8 @@ jobs:
         with:
           shared-key: "release-${{ matrix.target }}"
           cache-on-failure: true
+          # Only a run on main saves; `deploy-docs` above says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -566,6 +572,8 @@ jobs:
         with:
           shared-key: "gui-${{ matrix.target }}"
           cache-on-failure: true
+          # Only a run on main saves; `deploy-docs` above says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Node.js
         uses: actions/setup-node@v6
