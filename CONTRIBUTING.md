@@ -683,7 +683,7 @@ The Cargo lockfile (`Cargo.lock`) is committed and must stay consistent. CI runs
 
 ## CI Pipeline
 
-`.github/workflows/ci.yml` runs on every pull request into `main` and every push to it. Every PR must pass the jobs below; they are not advisory. The `CI Success` job fails if any of them failed or was cancelled. They start in parallel, except the two cross-OS jobs, which wait for `clippy`.
+`.github/workflows/ci.yml` runs on every pull request into `main` and every push to it. Every PR must pass the jobs below; they are not advisory. The `CI Success` job fails if any of them failed or was cancelled. They start in parallel, except the two cross-OS jobs, which wait for `clippy`. A newer push to a pull request cancels that pull request's older run, so on a commit that is no longer the pull request's head a cancelled run, with `CI Success` failed, is expected.
 
 | Job | Runs | What it enforces |
 |---|---|---|
