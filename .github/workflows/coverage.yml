@@ -36,17 +36,11 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      - name: Cache Cargo registry and target directory
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      # No build cache, on purpose. `target` here holds cargo-llvm-cov's
+      # instrumented build, which cached whole takes most of the repository's
+      # Actions cache limit and is nearly always evicted before the next run
+      # can restore it. Only the coverage badges wait on this job, so the
+      # space goes to the entries pull-request CI restores.
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y bc libasound2-dev
 
