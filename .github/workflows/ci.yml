@@ -185,8 +185,13 @@ jobs:
       # libgl1, libglx-mesa0 and libdbusmenu-gtk3-4 — which `Install system
       # dependencies` immediately pulls back as appindicator dependencies. The
       # android/dotnet/haskell removals stay: 20 GB in 155 seconds.
+      #
+      # Pinned to the commit v2.0.0 names rather than @main: the action runs
+      # `sudo` removals across the runner, and @main is whatever that
+      # repository last pushed. Dependabot rewrites the SHA and the trailing
+      # `# v2.0.0` together, which is why nothing may follow it on the line.
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
           android: true
@@ -332,7 +337,7 @@ jobs:
     # regenerates consistently and leaves this diff clean.
     steps:
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
           android: true
@@ -389,7 +394,7 @@ jobs:
     # way in until this existed, and the workspace had drifted accordingly.
     steps:
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
           android: true
@@ -487,7 +492,7 @@ jobs:
     # use.
     steps:
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
           android: true
