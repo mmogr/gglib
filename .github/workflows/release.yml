@@ -377,12 +377,21 @@ jobs:
           path: node_modules
           key: ${{ matrix.target }}-node-${{ hashFiles('package.json') }}
 
+      # The key covers every file the bundle's code and markup come from: the
+      # frontend sources, both HTML entry points, the Vite and TypeScript
+      # configs, and the manifest and its lock. Tailwind also scans the rest
+      # of the repository for class names; that is left out on purpose, since
+      # a change there can only add or drop utilities nothing in src/ uses.
+      # Each pattern is plain because hashFiles does not expand braces, so
+      # `src/**/*.{ts,tsx}` would match nothing. A test_run of a branch that
+      # changes any of these files, a lock-only npm update included, rebuilds
+      # the bundle instead of embedding main's.
       - name: Cache Web UI
         id: webui-cache
         uses: actions/cache@v6
         with:
           path: web_ui
-          key: ${{ matrix.target }}-webui-${{ hashFiles('src/**/*.{ts,tsx}', 'index.html', 'vite.config.ts', 'package.json') }}
+          key: ${{ matrix.target }}-webui-${{ hashFiles('src/**', 'index.html', 'tray.html', 'vite.config.ts', 'tsconfig*.json', 'package.json', 'package-lock.json') }}
 
       - name: Setup Node.js
         if: steps.webui-cache.outputs.cache-hit != 'true'
