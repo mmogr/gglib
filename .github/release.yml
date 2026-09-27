@@ -1,0 +1,40 @@
+# How GitHub sorts pull requests in generated release notes. This is not the
+# release workflow, which is .github/workflows/release.yml. That workflow's
+# Create GitHub Release step asks for generated notes
+# (generate_release_notes: true, .github/workflows/release.yml:130).
+# softprops/action-gh-release v3 fetches them from the generate-notes
+# endpoint, which reads this file when it is given no other path. It takes
+# effect from the first release cut after it lands.
+#
+# Security comes first, so a security fix is never filed as routine.
+# Dependabot labels every security update it opens `security`, and a
+# security fix made by hand carries the same label. The "*" heading takes
+# only what no heading above it took, and Dependencies leaves out anything
+# labelled `security`, so such a fix is listed once.
+#
+# Dependabot labels every pull request it opens `dependencies`
+# (.github/dependabot.yml), so its version bumps collect under one heading
+# at the bottom instead of filling the list. A dependency change made by
+# hand stays with the rest unless it carries that label. Add the label when
+# the change is routine. Leave it off when the change is worth reading.
+#
+# There is no category per `type:` label. Those labels are applied by hand
+# and some pull requests carry none, so a scheme built on them would file
+# real changes under a leftover heading.
+changelog:
+  categories:
+    - title: Security
+      labels:
+        - security
+    - title: Changes
+      labels:
+        - "*"
+      exclude:
+        labels:
+          - dependencies
+    - title: Dependencies
+      labels:
+        - dependencies
+      exclude:
+        labels:
+          - security
