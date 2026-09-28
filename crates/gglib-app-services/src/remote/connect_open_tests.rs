@@ -48,6 +48,12 @@ fn a_pairing_that_did_not_pair_says_what_to_do_next() {
         refused.starts_with("the far machine refused the pairing code — it was mistyped"),
         "{refused}"
     );
+    // A machine still listed there from this endpoint is refused with the
+    // same answer as a wrong code, so the refusal names it too.
+    assert!(
+        refused.contains("forget it on that machine first"),
+        "{refused}"
+    );
     let GuiError::Unavailable(old) =
         NotOpened::Pair(PairError::UnexpectedStatus { status: 404 }).into_error(None)
     else {

@@ -39,8 +39,8 @@ use crate::error::GuiError;
 /// 3. The gateway holds the invite, which it refuses if one is already open
 ///    or the session moved under us.
 /// 4. The code armed last. The edge answers it, counts wrong codes per
-///    endpoint and expires it; `invite_watch` records the device when it
-///    pairs.
+///    endpoint and expires it; `invite_watch` pins the key to the endpoint
+///    that redeems it and records the device.
 ///
 /// Every failure after step 1 unwinds what came before it: `forget`'s
 /// `remove_token` withdraws the invite as it drops the key.
@@ -52,7 +52,7 @@ use crate::error::GuiError;
 /// cannot be written.
 pub(super) async fn offer(
     ops: &RemoteOps,
-    handle: &modelpipe::ServeHandle,
+    handle: &Arc<modelpipe::ServeHandle>,
     epoch: u64,
 ) -> Result<OfferedPairing, GuiError> {
     let mut options = modelpipe::InviteOptions::default();
@@ -95,7 +95,17 @@ pub(super) async fn offer(
     // the invite out of the gateway and withdraws it, and arming an invite
     // that has ended does nothing.
     invited.arm();
-    invite_watch::watch(Arc::clone(&ops.gateway), device.clone(), invited.handle());
+    let pin = invite_watch::Pin {
+        serving: Arc::clone(handle),
+        roster: Arc::clone(&ops.roster),
+        key: invited.api_key().to_owned(),
+    };
+    invite_watch::watch(
+        Arc::clone(&ops.gateway),
+        device.clone(),
+        invited.handle(),
+        pin,
+    );
 
     info!(device = %device, "offered a pairing code for a new device");
     Ok(OfferedPairing {

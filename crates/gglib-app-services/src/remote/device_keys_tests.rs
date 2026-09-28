@@ -12,11 +12,9 @@
 //! `arm` reads the file while failing is still free, and seeds after the
 //! point of no return.
 
-use std::collections::HashSet;
-
 use gglib_core::access::DeviceKeys;
 
-use super::seed_into;
+use super::{Recorded, seed_into};
 
 /// A listener that admits by name and reaches no network: no relay to find,
 /// no discovery service to publish to, and no request ever sent through it.
@@ -41,9 +39,14 @@ fn keys(rows: &[(&str, &str)]) -> DeviceKeys {
         .collect()
 }
 
-/// The ids a roster lists.
-fn recorded(ids: &[&str]) -> HashSet<String> {
-    ids.iter().map(|id| (*id).to_owned()).collect()
+/// A whole endpoint id, sixty-four hex characters.
+const ENDPOINT: &str = "3ca82708b9953ca82708b9953ca82708b9953ca82708b9953ca82708b9953ca8";
+
+/// The ids a roster lists, each with a stored endpoint.
+fn recorded(ids: &[&str]) -> Recorded {
+    ids.iter()
+        .map(|id| ((*id).to_owned(), Some(ENDPOINT.to_owned())))
+        .collect()
 }
 
 /// One row the edge refuses does not cost the others theirs.
@@ -83,7 +86,7 @@ async fn a_row_the_edge_refuses_is_skipped_and_the_rest_are_seeded() {
 async fn an_empty_roster_seeds_nothing() {
     let handle = listener().await;
 
-    seed_into(&handle, DeviceKeys::new(), &HashSet::new());
+    seed_into(&handle, DeviceKeys::new(), &Recorded::new());
     assert!(handle.token_names().is_empty());
 
     handle.shutdown().await;
@@ -104,6 +107,29 @@ async fn a_key_no_roster_row_lists_is_not_seeded() {
             ("dev-11112222", "sk-zzq-two"),
         ]),
         &recorded(&["dev-0a1b2c3d"]),
+    );
+
+    assert_eq!(handle.token_names(), vec!["dev-0a1b2c3d".to_owned()]);
+    handle.shutdown().await;
+}
+
+/// A row with no endpoint, or one that does not parse, is not seeded: no key
+/// is held unpinned across an arm. The rest are.
+#[tokio::test]
+async fn a_row_with_no_endpoint_to_pin_to_is_not_seeded() {
+    let handle = listener().await;
+    let mut rows = recorded(&["dev-0a1b2c3d"]);
+    rows.insert("dev-11112222".to_owned(), None);
+    rows.insert("dev-33334444".to_owned(), Some("3ca82708b995".to_owned()));
+
+    seed_into(
+        &handle,
+        keys(&[
+            ("dev-0a1b2c3d", "sk-zzq-one"),
+            ("dev-11112222", "sk-zzq-two"),
+            ("dev-33334444", "sk-zzq-three"),
+        ]),
+        &rows,
     );
 
     assert_eq!(handle.token_names(), vec!["dev-0a1b2c3d".to_owned()]);

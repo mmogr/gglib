@@ -58,9 +58,12 @@ pub(super) fn describe(d: &RemoteDevice, now_ms: i64) -> String {
         line.push_str(" · paired from ");
         line.push_str(peer);
     }
+    // `admitted` is what the edge holds, which is what this session seeded
+    // or pinned at redemption; a row whose key could not be pinned is held
+    // by neither, and pairing again is the way back.
     match d.admitted {
         Some(true) => {}
-        Some(false) => line.push_str(" · not admitted"),
+        Some(false) => line.push_str(" · not admitted — pair it again"),
         // The tunnel is down, so nothing is admitted and this row is not
         // singled out for it.
         None => line.push_str(" · tunnel down"),

@@ -5,7 +5,6 @@
 //! span in which the reservation is held while the lock is not. One function
 //! with one caller, so there is one place that gives the slot back.
 
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -101,13 +100,15 @@ impl RemoteOps {
         // itself happens under the install guard below; this read is what
         // makes an unreadable file fail while failing is still free.
         let devices = device_keys::read_keys(self)?;
-        // The ids the roster lists, read here for the key file's reason and
-        // one more: a key is seeded only if a row lists it (`seed_into` says
-        // why), and a settings read does not belong under the install guard.
-        let recorded: HashSet<String> = roster::read_roster(&self.core)
+        // The ids the roster lists, with the endpoint each redeemed from,
+        // read here for the key file's reason and one more: a key is seeded
+        // only if a row lists it and names an endpoint to pin it to
+        // (`seed_into` says why), and a settings read does not belong under
+        // the install guard.
+        let recorded: device_keys::Recorded = roster::read_roster(&self.core)
             .await?
             .into_iter()
-            .map(|device| device.id)
+            .map(|device| (device.id, device.endpoint))
             .collect();
 
         // The first and only thing this leaves on the machine, and the last
