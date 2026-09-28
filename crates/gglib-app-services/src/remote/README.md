@@ -57,8 +57,9 @@ remote/
                       gateway to record
   key.rs            — which key the tunnel enforces, and when a minted one is
                       written down
-  identity.rs       — where this machine's endpoint key lives, and clearing
-                      one that holds no key so the daemon can arm
+  identity.rs       — where this machine's endpoint keys live: the one it
+                      serves with, which is cleared when it holds no key so
+                      the daemon can arm, and one for each machine it joins
   teardown.rs       — ending a session: cancel, drain, and only then reset
   rotation.rs       — following a key rotation into the running listener
   types.rs          — what the ops are asked for, and what enable, invite
@@ -284,6 +285,23 @@ succeed holding the first machine's key — connected, `status` reporting a
 pairing, every request 401. No argument dials the stored ticket. A task
 follows the connection's status and clears it when the pipe closes, so
 `status` never shows a port that leads nowhere.
+
+Every dial is made from an endpoint key this machine keeps for the machine it
+dials, so that machine sees one endpoint each time this one joins it. The
+file is named by the far machine's fingerprint, in
+`<data root>/data/remote_join`. Before each dial, `dial` puts that directory
+through `create_private_dir`, which makes it `0700` if it is not there and
+takes group and other access away if it is, because modelpipe mints the file
+on first use and makes no directory. Both of `open`'s calls get the same
+file, and so do `pair` and `connect`. The name is the fingerprint and not the
+ticket, because `stored_pairing::follow` rewrites the ticket when the same
+machine moves; and the directory is apart from `data/remote_identity`, the
+key this machine serves with, because one key is one endpoint. A directory
+that cannot be made refuses the join before it dials. A key modelpipe cannot
+use refuses it too, worded by `identity::unusable_join_key` with the reason
+read through `chain` as the serving side's is: a file at the path is left
+for the person to fix or delete, and when there is none, because a first key
+could not be written, the sentence says so and names nothing to delete.
 
 `kill_remote` posts the confirmation word to the far proxy's shutdown route
 with the stored key, then disconnects. One-way: nothing here can start that

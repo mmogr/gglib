@@ -82,13 +82,14 @@ recognise is a revocation you should be willing to make, not merely tidying.
 
 A device that redeemed its code also says which endpoint it paired from:
 the fingerprint of the endpoint the code was redeemed from. It is a record,
-not a check, and nothing is refused on it. gglib's own `join` keeps no
-connecting endpoint key, so a laptop presents a new fingerprint every time it
-connects, and its row says only which endpoint redeemed the code. ggchat keeps
-one key per machine it pairs with from 0.3.1, so a phone that paired on 0.3.1
-or later presents the fingerprint it paired from each time it connects here,
-for as long as it keeps that key. A row whose redemption was not recorded
-shows none.
+not a check, and nothing is refused on it. gglib's own `join` keeps an
+endpoint key for each machine it joins (see
+[The laptop](#the-laptop-join-disconnect-key)), and ggchat keeps one for each
+machine it pairs with from 0.3.1, so a laptop or a phone presents the
+fingerprint it paired from each time it connects here, for as long as it keeps
+that key. A laptop that paired from a gglib that kept no such key redeemed its
+code from an endpoint it has since dropped, so its row names that endpoint
+until it pairs again. A row whose redemption was not recorded shows none.
 
 ```console
 $ gglib remote list
@@ -271,6 +272,29 @@ After thirty seconds of that, `gglib remote status` and the popover say
 **away** and for how long, rather than "connected" over nothing; when the
 desktop answers, they say so. Nothing needs typing at either end. Only
 `gglib remote disconnect`, or this daemon stopping, ends the connection.
+
+**The laptop keeps an endpoint key for each desktop it joins**, so the desktop
+sees the same endpoint each time this laptop joins it. The key is at
+`<data root>/data/remote_join/<fingerprint>`, named by the fingerprint of the
+desktop's ticket, so a desktop that moves to another address keeps its key
+here. It is a different file from `data/remote_identity`, the key this machine
+*serves* with, because a machine can serve and join at once. Before every
+dial, `join` makes the directory `0700` if it is not there, and takes group
+and other access away from it if it is; modelpipe mints the key `0600` the
+first time a dial needs it, and every later dial, after a `disconnect` or a
+daemon restart, reads it back. Windows has no modes to set, so there both
+take the permissions of the directory they are made in. A key that cannot be
+used — not a key, readable by others, or not a regular file — refuses the
+join, and is left as it is. A first key that cannot be written, on a full
+disk for example, refuses the join too, and so does a directory that cannot
+be made; the message says what stopped it (see
+[Troubleshooting](#troubleshooting)). Deleting a key makes the next `join`
+mint another, which the desktop sees as a new endpoint.
+
+A lasting key is a lasting name here too. The relay a join goes through, and
+n0's discovery service while discovery is on, see this laptop under the same
+name each time it joins that desktop, as they see the desktop.
+`--no-discovery` keeps it out of discovery.
 
 | Flag | Effect |
 |------|--------|
@@ -657,6 +681,9 @@ here is one the desktop can retire on its own.
 | `Port 8180 was taken by something else, so this is on … instead` | The port the pairing was last reachable on is in use. The new one is remembered; point any client at it, or free the old port and `--port 8180` to pin it back. |
 | `the far machine refused the pairing code` | The code was mistyped, has expired (two minutes), or was used already. A mistyped code costs only that attempt: check it and run `gglib remote join` again while the code is still on screen. Once it has gone, run `gglib remote invite` on the desktop for a new one. |
 | `this machine holds no key for that remote` | You gave a bare ticket but never paired with this desktop. Use the full `<ticket>-<code>` string once. |
+| `could not use the key this machine joins that remote with` | The laptop's endpoint key for that desktop, whose path the message names, is not a key, can be read by other accounts, or is not a regular file; the message gives the reason. It was not replaced. Do what the reason says — `chmod 600` a key others can read — or delete the file and run `gglib remote join` again: a new key is minted, and the desktop sees this laptop as a new endpoint. |
+| `could not make the key this machine joins that remote with` | The laptop had no key for that desktop, and could not write its first one at the path the message names: a full disk, a folder this user cannot write to, or a filesystem with no hard links, for example; the message gives the reason. There is no file to delete. Fix what the reason names and run `gglib remote join` again. |
+| `could not make …, where the key this machine joins with is kept` | The folder for the laptop's endpoint keys, which the message names, could not be made: a file is in its way, or this user cannot create a folder there. Move the file aside or fix the permissions, and run `gglib remote join` again. |
 | `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
