@@ -1,4 +1,4 @@
-//! Where the remote tunnel's stored endpoint key lives.
+//! Where the remote tunnel's stored endpoint keys live.
 //!
 //! `gglib remote enable` writes here every time, and the tunnel reuses what it
 //! finds: the endpoint key lasts, so a device pairs once instead of at every
@@ -7,6 +7,10 @@
 //! no device: the tunnel mints a new key the next time it comes up, and still
 //! admits every device key kept beside this one that the roster lists.
 //! `gglib remote status` prints the path.
+//!
+//! The keys this machine joins other machines with go in the directory
+//! [`remote_join_dir`] names, one for each machine it joins, so that a machine
+//! it joins can see the same endpoint each time this one connects.
 
 use std::path::PathBuf;
 
@@ -35,10 +39,26 @@ pub fn remote_identity_path() -> Result<PathBuf, PathError> {
     Ok(data_dir.join("remote_identity"))
 }
 
+/// The directory for the endpoint keys this machine joins other machines
+/// with, one file for each machine it joins: `<data root>/data/remote_join`.
+///
+/// Apart from [`remote_identity_path`], the key this machine serves with,
+/// because one key is one endpoint and a machine can serve and join at once.
+/// Each file is named for the machine it joins, which the caller supplies:
+/// this crate does not read tickets.
+///
+/// Nothing under the data root is created here, so the path can be named
+/// without touching what is kept there. A caller about to dial has to make
+/// the directory, with [`create_private_dir`], because modelpipe mints the key
+/// file and not the directory it sits in.
+pub fn remote_join_dir() -> Result<PathBuf, PathError> {
+    Ok(data_root()?.join("data").join("remote_join"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paths::test_utils::ENV_LOCK;
+    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
 
     #[test]
     fn remote_identity_is_under_the_ignored_data_directory() {
@@ -54,6 +74,30 @@ mod tests {
             identity.parent().and_then(|p| p.file_name()),
             Some(std::ffi::OsStr::new("data")),
             "the identity file must sit inside the ignored data directory"
+        );
+    }
+
+    /// The keys a joining machine keeps sit under `data/`, which `.gitignore`
+    /// covers, apart from the serving key, and naming the directory creates
+    /// nothing. The data root is a directory this test made, so nothing was
+    /// there before the call.
+    #[test]
+    fn the_join_keys_sit_under_data_apart_from_the_serving_key() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = tempfile::tempdir().expect("tempdir");
+        let _env = EnvVarGuard::set("GGLIB_DATA_DIR", root.path().to_string_lossy().as_ref());
+
+        let dir = remote_join_dir().expect("remote_join_dir");
+
+        assert_eq!(dir, root.path().join("data").join("remote_join"));
+        assert!(
+            !root.path().join("data").exists(),
+            "naming the directory made it, or made data/"
+        );
+        let serving = remote_identity_path().expect("remote_identity_path");
+        assert!(
+            !serving.starts_with(&dir),
+            "the serving key is inside the join keys' directory"
         );
     }
 }
