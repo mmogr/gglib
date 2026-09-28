@@ -1,7 +1,7 @@
 //! The serve side of ADR 0012: this machine answering another.
 //!
-//! `connect.rs` is the laptop, this is the desktop, and `mod.rs` keeps the
-//! type, the slots and the status surface that reads both.
+//! `connect.rs` is the laptop, this is the desktop, `mod.rs` keeps the type
+//! and the slots, and `status.rs` the status surface that reads both.
 //!
 //! Arming is slow — up to a five-second settings-cache window and then ten
 //! seconds waiting for a relay — and `gglib remote status` gives the daemon
