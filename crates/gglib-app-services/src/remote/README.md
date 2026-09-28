@@ -27,6 +27,8 @@ remote/
                       sentences for a serve side that is busy
   serve_arm.rs      — arming the serve side with the slot reserved: the key,
                       the bind, the install
+  serve_rearm.rs    — the daemon's follower: putting a tunnel that went down
+                      with its proxy back once the proxy runs again
   resume_wait.rs    — the daemon's own resume saying it is working, and
                       `enable` and `invite` waiting it out
   connect.rs        — RemoteOps: join / disconnect / kill_remote — this
@@ -221,6 +223,46 @@ first costs a first enable's settings wait of staleness, and everything that
 window can leave behind is visible: the watcher takes the tunnel down the
 moment the lock is free, and the key and its notice both reached the
 operator.
+
+# And comes back with it
+
+A watcher that took its tunnel down with the proxy says so on
+`lost_with_proxy`, once the drain is over. The daemon's startup resume goes
+on as a follower that reads it: every `PROXY_POLL` it looks at a tunnel that
+is owed, and when the switch is on and the proxy is running it arms from the
+switch through `turn_on` as `Caller::Rearm` — no code, the same endpoint key,
+so the same ticket, and no paired device needs pairing again.
+
+A re-arm differs from `resume` in three ways. It starts no proxy:
+`turn_on` takes its address from a running proxy or refuses, because
+`ensure_running` would bring back one a person had just stopped, and a check
+in front of that call would not stop a stop landing after the check. It
+stores no proxy key: when `key::settle` would mint, `arm` refuses before
+binding, because a proxy back up demanding no key with none stored is what
+unsetting the key and rebinding leaves, and a key minted then would lock the
+local proxy with nobody there to be told. And it does not outlive the
+daemon: the follower ends on the shutdown token, and the reservation reads
+the token too, since the daemon's teardown empties the serve slot while the
+proxy is still up.
+
+Like `resume`, it subscribes to `disables` before it reads the switch, and
+`disable` says so twice: before it writes the switch off, and again once
+that write is over. A re-arm, or a resume, that read the switch as on before
+the write landed hears the second at its reservation and turns itself away,
+or reserved before it and is in the slot for the `disable` to take.
+
+Unlike the startup resume, a re-arm does not mark itself as resuming, so a
+command does not wait for it: an `enable` in those seconds meets
+`busy_serving`'s "already being enabled", and an `invite` is told the tunnel
+is still coming up.
+
+Each look ends in a decision — armed, left down because the switch is off,
+because the proxy is not running, because arming would mint, because arming
+failed, or ended by the token — which the daemon logs, and which the tests
+assert. Only "the proxy is not running" is looked at again, at every poll,
+and a run of it is logged once; the rest are the last word on that tunnel.
+The follower restarts no proxy that crashed, and it does not retry a startup
+resume that failed.
 
 # The connect side
 

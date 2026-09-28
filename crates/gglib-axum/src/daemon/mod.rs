@@ -87,7 +87,9 @@ impl Default for DaemonOptions {
 ///    management API (+ SPA when a frontend build is found).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
-///    machine told once to be reachable is reachable again after a reboot.
+///    machine told once to be reachable is reachable again after a reboot,
+///    and, unless that would mint a proxy key, after its proxy is stopped
+///    and started again.
 /// 6. On SIGINT/SIGTERM/shutdown-route: drain the proxy, stop every child,
 ///    write what the loop guard's log still holds, audit pidfiles — under a
 ///    force-exit watchdog.
@@ -207,9 +209,14 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     //     arms the serving side; the connect side is left alone, because a
     //     stored pairing is an address this machine can dial whenever it
     //     next wants to, not a session to restore.
+    //
+    //     Then it follows the proxy, and puts back a tunnel that went down
+    //     with it once the proxy runs again, until the token is cancelled:
+    //     the teardown below empties the serve slot with the proxy still up.
     {
         let remote = Arc::clone(&state.remote);
-        tokio::spawn(async move { remote.resume().await });
+        let shutdown = shutdown_token.clone();
+        tokio::spawn(async move { remote.resume_and_follow(shutdown).await });
     }
 
     // 6. Serve until signalled, then tear down in order.

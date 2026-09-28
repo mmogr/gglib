@@ -21,6 +21,8 @@ use super::identity::{discard_empty_identity, identity_path};
 use super::key;
 use super::pairing::Offer;
 use super::rotation::rotation_poll;
+use super::serve::Caller;
+use super::serve_rearm::WOULD_MINT;
 use super::serve_switch::CANCELLED_BY_DISABLE;
 use super::types::{EnableRequest, Enabled};
 use super::{DRAIN, Live, RemoteOps, WAIT_ONLINE};
@@ -41,9 +43,18 @@ impl RemoteOps {
         generation: u64,
         cancel: &CancellationToken,
         proxy_exit: watch::Receiver<ProxyStatus>,
-        offer: Offer,
+        caller: &Caller,
     ) -> Result<Enabled, GuiError> {
         let settled = key::settle(&self.proxy, &self.core).await?;
+        // A re-arm puts back what a person switched on earlier, and nobody is
+        // there to be told that a key minted now locks the local proxy. A
+        // proxy that came back demanding none with none stored is also what
+        // the documented way to turn local authentication off leaves behind
+        // (docs/remote.md). So it refuses here, before anything is bound or
+        // written, and the follower says why.
+        if settled.minted && matches!(caller, Caller::Rearm(_)) {
+            return Err(GuiError::Conflict(WOULD_MINT.to_owned()));
+        }
 
         let backend = BackendUrl::at(*addr);
 
@@ -186,9 +197,9 @@ impl RemoteOps {
         self.emitter.emit(AppEvent::remote_enabled(fingerprint));
 
         let ticket = ticket.to_string();
-        let pairing = match offer {
-            Offer::Code => Some(enrolment::offer(self, &handle, epoch).await?),
-            Offer::Silent => None,
+        let pairing = match caller {
+            Caller::Person(Offer::Code) => Some(enrolment::offer(self, &handle, epoch).await?),
+            Caller::Person(Offer::Silent) | Caller::Resume | Caller::Rearm(_) => None,
         };
         Ok(Enabled {
             ticket,

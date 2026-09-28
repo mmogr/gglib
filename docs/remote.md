@@ -125,14 +125,36 @@ the session keeps the ones it was enabled with, and `disable` then `enable`
 changes them. If the tunnel is still not back after twenty seconds, the
 command says so and asks you to wait.
 
+The tunnel also comes back after a restart of the proxy it fronts. Stopping
+the proxy takes the tunnel down with it, because a running tunnel cannot be
+moved to a new listener. Start the proxy again and the daemon puts the
+tunnel back — it looks every five seconds — with the same flags, on the same
+ticket, and with no code: a device that was paired needs no pairing again.
+A command does not wait for this the way it waits at startup: `gglib remote
+enable` typed in the seconds it takes is refused with `remote access is
+already being enabled`, and `gglib remote invite` with `remote access is
+still coming up`; run it again once `gglib remote status` shows the ticket.
+Putting the tunnel back never starts the proxy, whether you stopped it or it
+crashed, so the tunnel comes back once the proxy is started again and not
+before. Stopping the proxy is therefore not how to switch remote access off:
+`gglib remote disable` is, and a proxy that comes back after a `disable`
+brings no tunnel back with it. The daemon also leaves the tunnel down, with
+the switch on, when arming fails with the proxy running, and when the proxy
+comes back demanding no key with none stored — which is what turning local
+authentication off leaves behind (see
+[How it stays private](#how-it-stays-private)). Its log says why, and the
+daemon does not try again while it runs: `gglib remote enable` does, and
+`gglib remote disable` switches remote access off.
+
 The key lives at `<data root>/data/remote_identity`, created `0600` and refused
 if anything else can read it. `gglib remote status` prints the path.
 
 **Deleting that file retires the address, not the keys.** It is deliberate
 rather than accidental, which is the change: this used to happen at every
 reboot, re-pairing every device as a side effect nobody asked for. It takes
-effect the next time the tunnel comes up — a restart, or `disable` then
-`enable` — and every device then needs the new ticket to find the machine.
+effect the next time the tunnel comes up — a restart of the daemon or of the
+proxy, or `disable` then `enable` — and every device then needs the new ticket
+to find the machine.
 It revokes nothing: the device keys the roster lists are put back on the new
 tunnel, so the old key still opens it for any client that presents one with
 the new ticket. `gglib remote join` asks for a fresh code instead, and pairing again
@@ -570,6 +592,15 @@ worth knowing before you unset on a machine with a shell MCP server
 configured. [ADR 0012](adr/0012-the-remote-tunnel.md), decision 2, has the
 mechanism.
 
+With remote access switched on, the `gglib proxy stop` in that procedure also
+takes the tunnel down, and starting the proxy again does not bring it back,
+as a proxy restart otherwise would. The proxy has come back demanding no key
+with none stored, so putting the tunnel back would mean minting one, which
+would lock the local proxy you have just opened, with nothing to tell you. The
+daemon leaves the tunnel down instead, with the switch still on, and says so
+in its log. `gglib remote enable` brings it back with a new key, which locks
+the local proxy again; `gglib remote disable` switches remote access off.
+
 **The proxy, and only the proxy.** The daemon's management API on
 `127.0.0.1:9887` — the door `gglib`'s own commands and the desktop app come
 through — is not affected. A daemon bound on loopback, which is the default,
@@ -633,7 +664,7 @@ here is one the desktop can retire on its own.
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
-| `remote access is already being enabled` | Another `enable` is arming the tunnel, or a daemon that has just started is still putting its own back after the twenty seconds commands wait for it. `gglib remote status` shows when the ticket is up; run the command again then, or `gglib remote disable` to give up on it. |
+| `remote access is already being enabled` | Another `enable` is arming the tunnel; a daemon that has just started is still putting its own back after the twenty seconds commands wait for it; or the daemon is putting the tunnel back after the proxy was started again, which commands do not wait for. `gglib remote status` shows when the ticket is up; run the command again then, or `gglib remote disable` to give up on it. |
 | `disable` says `Daemon is not running` | No daemon was running, so `disable` switched remote access off in settings instead, and the next start will not put the tunnel back. `gglib remote enable` turns it on again. |
 | A row in `gglib remote list` reads `key held, no record` | This machine holds a key under that id and the device list has no row for it, so the id is all that is known. Nothing should leave one. It is not put on the tunnel the next time the tunnel comes up, though a tunnel that is up now may still admit it until then. `gglib remote forget <id>` retires the key. |
 | A row in `gglib remote list` reads `invited …, never joined` | A code was offered for that device and nobody redeemed it. The key was minted but never transmitted, so nobody holds it; `gglib remote forget <id>` tidies the row away. Unspent invites are listed rather than swept on a timer, so that what the machine issued is always visible. |
