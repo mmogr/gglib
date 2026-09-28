@@ -143,6 +143,7 @@ async fn record(ops: &RemoteOps, id: &str) -> Result<(), GuiError> {
         redeemed_at: None,
         last_seen: None,
         peer: None,
+        endpoint: None,
     });
     write_roster(&ops.core, roster).await
 }

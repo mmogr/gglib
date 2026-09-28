@@ -58,6 +58,7 @@ async fn an_unreadable_key_file_still_lists_the_roster() {
                 redeemed_at: Some(2),
                 last_seen: None,
                 peer: None,
+                endpoint: None,
             }])),
             ..SettingsUpdate::default()
         })
@@ -107,6 +108,7 @@ async fn list_and_status_describe_each_row_as_of_now() {
                 redeemed_at: None,
                 last_seen: None,
                 peer: None,
+                endpoint: None,
             }])),
             ..SettingsUpdate::default()
         })

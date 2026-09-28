@@ -32,6 +32,11 @@ const MASKED_KEYS: &[&str] = &["remote-pairing.api-key"];
 /// What a masked key renders as when it holds a value.
 const MASKED_VALUE: &str = "(set, not shown)";
 
+/// Fields of each `remote-devices` row shown as set-or-unset: the whole id of
+/// the endpoint a device's key is pinned to. The row's `peer` fingerprint is
+/// the form meant for a person, and it is printed.
+const MASKED_DEVICE_FIELDS: &[&str] = &["endpoint"];
+
 /// A labeled group of display rows used by [`print_sections`].
 pub(super) struct DisplaySection {
     pub title: &'static str,
@@ -86,6 +91,20 @@ fn collect_rows(parent_key: &str, val: serde_json::Value, rows: &mut Vec<(String
     }
 }
 
+/// The roster array with [`MASKED_DEVICE_FIELDS`] rewritten, since an array
+/// is printed whole as JSON and [`MASKED_KEYS`] never reaches inside one.
+fn mask_devices(mut val: serde_json::Value) -> serde_json::Value {
+    let rows = val.as_array_mut().into_iter().flatten();
+    for row in rows.filter_map(serde_json::Value::as_object_mut) {
+        for field in MASKED_DEVICE_FIELDS {
+            if let Some(held) = row.get_mut(*field).filter(|v| !v.is_null()) {
+                *held = MASKED_VALUE.into();
+            }
+        }
+    }
+    val
+}
+
 /// A leaf as it should be shown: masked when [`MASKED_KEYS`] names it.
 ///
 /// Null still renders as "None": whether a key is held at all is the thing a
@@ -129,6 +148,11 @@ pub(super) fn settings_display_rows(
         if HIDDEN_KEYS.contains(&kebab_key.as_str()) {
             continue;
         }
+        let val = if kebab_key == "remote-devices" {
+            mask_devices(val)
+        } else {
+            val
+        };
 
         if kebab_key == "default-model-id" {
             let display = model_display.clone().unwrap_or_else(|| "None".to_owned());
@@ -239,3 +263,7 @@ mod settings_display_tests;
 #[cfg(test)]
 #[path = "settings_sections_tests.rs"]
 mod settings_sections_tests;
+
+#[cfg(test)]
+#[path = "settings_devices_tests.rs"]
+mod settings_devices_tests;

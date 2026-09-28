@@ -38,6 +38,7 @@ fn a_redeemed_invite_pairs_the_session_and_records_the_device_and_its_endpoint()
         device,
         label,
         peer: noted,
+        endpoint,
         ..
     }) = inbox.try_recv()
     else {
@@ -51,6 +52,7 @@ fn a_redeemed_invite_pairs_the_session_and_records_the_device_and_its_endpoint()
             Some(fingerprint.as_str())
         )
     );
+    assert_eq!(endpoint, Some(peer().to_string()), "and its whole id");
 }
 
 #[test]

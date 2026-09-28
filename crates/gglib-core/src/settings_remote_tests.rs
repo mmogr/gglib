@@ -166,6 +166,7 @@ fn a_remote_machine() -> Settings {
             redeemed_at: Some(2),
             last_seen: Some(3),
             peer: None,
+            endpoint: None,
         }]),
         default_download_path: Some("/models/elsewhere".to_owned()),
         default_context_size: Some(4096),

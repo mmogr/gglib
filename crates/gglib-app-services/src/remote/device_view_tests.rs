@@ -16,6 +16,7 @@ fn row(id: &str) -> Device {
         redeemed_at: Some(1_757_000_060_000),
         last_seen: None,
         peer: Some("3ca82708b995".to_owned()),
+        endpoint: None,
     }
 }
 
@@ -95,6 +96,7 @@ fn every_row_is_described_on_the_clock_it_is_given() {
         id: "dev-99887766".to_owned(),
         redeemed_at: None,
         peer: None,
+        endpoint: None,
         ..row("dev-99887766")
     };
     let held = ids(&["dev-0a1b2c3d", "dev-99887766", "dev-11112222"]);

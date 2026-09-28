@@ -22,6 +22,7 @@ fn device(id: &str) -> Device {
         redeemed_at: None,
         last_seen: None,
         peer: None,
+        endpoint: None,
     }
 }
 

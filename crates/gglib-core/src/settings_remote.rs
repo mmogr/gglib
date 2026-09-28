@@ -196,13 +196,17 @@ pub struct Device {
     /// The fingerprint of the endpoint that redeemed this device's invite, or
     /// `None` if none was recorded.
     ///
-    /// A record, not a check: nothing is refused on it. A device that does
-    /// not keep its endpoint key presents a new fingerprint every time it
-    /// connects, so this says which endpoint redeemed the invite, not where
-    /// the key is used from. Written by the roster's writer with `redeemed_at`, and
-    /// advisory in the same way.
+    /// A record for a person to read; [`endpoint`](Self::endpoint) is the
+    /// one the key is pinned to. Written by the roster's writer with
+    /// `redeemed_at`, and advisory in the same way.
     #[serde(default)]
     pub peer: Option<String>,
+
+    /// The whole id, sixty-four hex characters, of the endpoint that redeemed
+    /// this device's invite. Every arm holds the key pinned to it, so it
+    /// admits from nowhere else; a row without one is not admitted at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
 }
 
 /// `serde(default)` for a field whose absence means yes.
