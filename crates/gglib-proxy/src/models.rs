@@ -625,7 +625,7 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 "invalid_request_error",
                 "pinned_model_mismatch",
             ),
-            ModelRuntimeError::Internal(msg) => Self::new(msg, "server_error"),
+            ModelRuntimeError::Internal(msg) => Self::internal_error(&msg),
         }
     }
 }
