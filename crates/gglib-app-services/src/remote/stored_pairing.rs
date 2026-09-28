@@ -2,10 +2,9 @@
 //!
 //! Reading it, writing it, what a write that fails after the code has been
 //! spent has to say, and — in [`settle`] — which of those a dial that has
-//! come up owes. A sibling rather than more of `connect.rs`, which sits a
-//! handful of lines under the file-size budget — and because `status.rs`'s
-//! status surface asks the same question of the same record as `join`
-//! does, and asking it in two places is how the two drift.
+//! come up owes. A sibling rather than more of `connect.rs`, because
+//! `status.rs`'s status surface asks the same question of the same record
+//! as `join` does, and asking it in two places is how the two drift.
 
 use gglib_core::services::AppCore;
 use gglib_core::{RemotePairing, Settings, validate_settings};
