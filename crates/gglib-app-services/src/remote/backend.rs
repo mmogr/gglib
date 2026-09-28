@@ -103,6 +103,7 @@ pub(super) fn follow_proxy(
         Arc::clone(&ops.gateway),
         Arc::clone(&ops.emitter),
         Arc::clone(&ops.proxy),
+        ops.lost_with_proxy.clone(),
         exit,
         cancel,
         backend,
@@ -119,10 +120,14 @@ pub(super) fn follow_proxy(
 /// taken handle rather than a message — so it is what closes the case the
 /// channel leaves open. Five seconds is a lock and an `is_finished()`, and it
 /// bounds how long a released port can be fronted.
-const PROXY_POLL: Duration = Duration::from_secs(5);
+///
+/// The daemon's follower (`serve_rearm.rs`) looks on the same cadence for a
+/// proxy that has come back.
+pub(super) const PROXY_POLL: Duration = Duration::from_secs(5);
 
 /// The task [`follow_proxy`] spawns: wait until the proxy stops being the one
-/// this tunnel was built in front of, then undo `enable`.
+/// this tunnel was built in front of, then undo `enable`, and bump `lost`
+/// for the daemon's follower.
 #[expect(
     clippy::too_many_arguments,
     reason = "the pieces of `RemoteOps` this outlives, plus what it is \
@@ -135,6 +140,7 @@ async fn watch_proxy(
     gateway: Arc<RemoteGateway>,
     emitter: Arc<dyn AppEventEmitter>,
     proxy: Arc<ProxyOps>,
+    lost: watch::Sender<u64>,
     mut exit: watch::Receiver<ProxyStatus>,
     cancel: CancellationToken,
     backend: BackendUrl,
@@ -149,6 +155,9 @@ async fn watch_proxy(
     super::teardown::take_down(live, &gateway).await;
     info!("remote tunnel disabled with the proxy it fronted");
     emitter.emit(AppEvent::remote_disabled());
+    // Only here, where this watcher took its own tunnel down with the proxy,
+    // and after the drain, so the re-arm this prompts comes after it.
+    lost.send_modify(|n| *n = n.wrapping_add(1));
 }
 
 /// Wait until the proxy stops being the one this tunnel dials.

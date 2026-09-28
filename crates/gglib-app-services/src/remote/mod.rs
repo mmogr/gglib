@@ -19,6 +19,7 @@ mod roster;
 mod rotation;
 mod serve;
 mod serve_arm;
+mod serve_rearm;
 mod serve_switch;
 mod slot;
 mod status;
@@ -94,7 +95,9 @@ struct Live<H = modelpipe::ServeHandle> {
 /// Off by default, and the two sides differ in what a restart does. The
 /// serve side is a switch: `remote_enabled` is persisted and the daemon
 /// arms the tunnel again at startup with the flags it was enabled with, on
-/// the same endpoint key, so paired devices keep working. The connect side
+/// the same endpoint key, so paired devices keep working — and again once a
+/// proxy the tunnel went down with runs again, unless arming would mint a
+/// key (`serve_rearm.rs`). The connect side
 /// is not: `join` binds a loopback port for this daemon only, and the
 /// laptop dials again from the pairing it stored. The two are independent —
 /// a machine can be both the desktop for one peer and the laptop to
@@ -134,11 +137,19 @@ pub struct RemoteOps {
     /// `turn_on` starts the proxy before it reserves anything. `enable` and
     /// `invite` wait on it; `resume_wait.rs` has the rest.
     resuming: watch::Sender<bool>,
-    /// Bumped by every `disable`, before it writes the switch, so a call that
-    /// subscribed earlier can tell that the person changed their mind since:
-    /// an `enable` or `invite` waiting out a resume, or an `enable` or resume
-    /// on its way to arming.
+    /// Bumped twice by every `disable`, so a call that subscribed earlier can
+    /// tell that the person changed their mind since: an `enable` or `invite`
+    /// waiting out a resume, or an `enable`, the startup resume or the
+    /// daemon's re-arm (`serve_rearm.rs`) on its way to arming. Once before it
+    /// writes the switch off, and again once that write is over, for a call
+    /// that subscribed between the two: an arm from the switch can subscribe
+    /// then and still read the switch before the write lands.
     disables: watch::Sender<u64>,
+    /// Bumped by the watcher following the proxy each time it takes its
+    /// tunnel down because the proxy went away, and read by the daemon's
+    /// follower, which puts that tunnel back once the proxy runs again
+    /// (`serve_rearm.rs`).
+    lost_with_proxy: watch::Sender<u64>,
     /// The file the device keys are kept in, or `None` for the one beside
     /// the endpoint identity, where a daemon keeps them. A test names its
     /// own: in a debug build the default is the checkout's `data/`, which is
@@ -168,6 +179,7 @@ impl RemoteOps {
             roster: Arc::new(Mutex::new(())),
             resuming: watch::channel(false).0,
             disables: watch::channel(0).0,
+            lost_with_proxy: watch::channel(0).0,
             device_keys,
         }
     }

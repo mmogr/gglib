@@ -76,7 +76,7 @@ pub(super) struct Settled {
     /// watch.
     pub(super) pinned: bool,
     /// Whether it was minted here and is therefore not in settings yet.
-    minted: bool,
+    pub(super) minted: bool,
 }
 
 /// Settle the key the tunnel will enforce — and write nothing.

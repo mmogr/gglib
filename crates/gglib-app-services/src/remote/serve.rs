@@ -10,17 +10,21 @@
 
 use std::sync::atomic::Ordering;
 
+use gglib_runtime::proxy::ProxyStatus;
 use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 
 use super::RemoteOps;
 use super::pairing::Offer;
 use super::resume_wait::Waited;
+use super::serve_rearm::PROXY_NOT_RUNNING;
 use super::serve_switch::{CANCELLED_BY_DISABLE, busy_serving};
 use super::types::{EnableRequest, Enabled};
 use crate::error::GuiError;
 
 /// Who is turning the tunnel on, which decides whether `turn_on` writes the
-/// switch, and whether a code is offered.
+/// switch, whether it may start the proxy or mint a key, and whether a code
+/// is offered.
 pub(super) enum Caller {
     /// A person's `enable`, which writes the switch and its flags first, and
     /// offers a code when asked to.
@@ -28,6 +32,11 @@ pub(super) enum Caller {
     /// The daemon's own resume, which writes nothing: it read the switch a
     /// moment ago.
     Resume,
+    /// The daemon putting back a tunnel that went down with its proxy
+    /// (`serve_rearm.rs`). Like a resume it writes nothing to the switch;
+    /// unlike one it starts no proxy and stores no proxy key. The token is
+    /// the daemon's shutdown token.
+    Rearm(CancellationToken),
 }
 
 impl RemoteOps {
@@ -87,8 +96,8 @@ impl RemoteOps {
         self.turn_on(request, Caller::Person(offer), disables).await
     }
 
-    /// Bringing the tunnel up, with `caller` the one thing `enable` and
-    /// `resume_arm` differ in — so the rest cannot drift apart.
+    /// Bringing the tunnel up, with `caller` the one thing `enable`,
+    /// `resume_arm` and a re-arm differ in — so the rest cannot drift apart.
     ///
     /// `disables` is subscribed at the caller's first line, so every
     /// `disable` since then is one this sees. Before the reservation it found
@@ -113,7 +122,21 @@ impl RemoteOps {
         // caller's own slow step and has its own guard, and holding the
         // serve slot across it would refuse a second `enable` with the
         // wrong sentence.
-        let addr = self.proxy.ensure_running().await?;
+        //
+        // A re-arm takes the address from a proxy that is running, or
+        // refuses, and never calls `ensure_running`, which would bring back
+        // a proxy a person had just stopped. A look at the status placed in
+        // front of that call would not stop it: a stop landing between the
+        // look and the call would be undone.
+        let addr = match &caller {
+            Caller::Rearm(_) => match self.proxy.status().await {
+                ProxyStatus::Running { address } => address,
+                ProxyStatus::Stopped | ProxyStatus::Crashed => {
+                    return Err(GuiError::Conflict(PROXY_NOT_RUNNING.to_owned()));
+                }
+            },
+            Caller::Person(_) | Caller::Resume => self.proxy.ensure_running().await?,
+        };
 
         let generation = self.enable_generation.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = {
@@ -130,6 +153,17 @@ impl RemoteOps {
                 live.release(generation);
                 return Err(GuiError::Conflict(CANCELLED_BY_DISABLE.to_owned()));
             }
+            // The daemon cancels its shutdown token before its teardown
+            // empties this slot, with the proxy still up. Read under the same
+            // hold as the reservation, it turns away a re-arm that reaches the
+            // slot after the token; one that reached it before is in the slot
+            // for the teardown to take.
+            if let Caller::Rearm(shutdown) = &caller
+                && shutdown.is_cancelled()
+            {
+                live.release(generation);
+                return Err(GuiError::Conflict("the daemon is shutting down".to_owned()));
+            }
             cancel
         };
 
@@ -145,10 +179,11 @@ impl RemoteOps {
         // `disable`, gives the slot back, or it would read as an arm on its
         // way until someone ran `disable`.
         //
-        // A resume writes nothing. It read the switch and the flags a moment
-        // ago, and writing them back could only undo a `disable` that landed
-        // in between. A person's write can undo one too, which is why
-        // `remember_enabled` looks for a `disable` again once it has written.
+        // A resume writes nothing, and nor does a re-arm. Each read the switch
+        // and the flags a moment ago, and writing them back could only undo a
+        // `disable` that landed in between. A person's write can undo one too,
+        // which is why `remember_enabled` looks for a `disable` again once it
+        // has written.
         if matches!(caller, Caller::Person(_))
             && let Err(e) = self.remember_enabled(&request, &disables).await
         {

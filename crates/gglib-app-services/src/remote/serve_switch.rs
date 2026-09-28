@@ -203,13 +203,21 @@ impl RemoteOps {
         // pairings are left alone — this takes the tunnel down, it does not
         // forget anybody.
         let recorded = self.remember_disabled().await;
+        // And again once that write is over, before the slot is taken. An arm
+        // from the switch — the startup resume, or the daemon putting back a
+        // tunnel that went down with its proxy — subscribes before it reads,
+        // but it can subscribe after the line at the top and still read the
+        // switch before the write lands. Then it reserves after this line and
+        // hears it there, or it reserved before it and the take below finds it.
+        self.disables.send_modify(|n| *n = n.wrapping_add(1));
         let taken_down = self.shut_down().await;
         // Said after the tunnel is down, which it is either way: a switch
         // that could not be written off may still be on for the next start.
         if let Err(e) = recorded {
             return Err(GuiError::Internal(format!(
                 "remote access could not be recorded as off, so it may come back on at \
-                 the next start: {e} — run `gglib remote disable` again"
+                 the next start of the daemon or of the proxy: {e} — run `gglib remote \
+                 disable` again"
             )));
         }
         taken_down
