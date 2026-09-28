@@ -36,7 +36,7 @@ use super::serve_watch_tests::{arming, offline, ops_with_key};
 use super::*;
 use crate::error::GuiError;
 use crate::test_support::test_core_and_proxy_over;
-use crate::test_support_remote::{RecordingEmitter, scratch_device_keys};
+use crate::test_support_remote::{RecordingEmitter, scratch_device_keys, scratch_join_keys};
 
 /// Long enough for a call that is not going to wait to have answered.
 const ANSWERED: Duration = Duration::from_millis(500);
@@ -137,7 +137,8 @@ async fn ops_with_a_gated_switch(
         gateway,
         events,
         Some(scratch_device_keys()),
-    );
+    )
+    .with_join_keys(scratch_join_keys());
     (core, gate, Arc::new(ops), arming().await)
 }
 

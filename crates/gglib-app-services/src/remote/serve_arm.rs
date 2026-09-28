@@ -215,11 +215,12 @@ impl RemoteOps {
 /// An error and everything under it, joined into one sentence.
 ///
 /// modelpipe's `Display` for `ServeError::Identity` leaves the reason to its
-/// source, on the stated grounds that anyhow prints the chain. Nothing on
-/// this path uses anyhow, so formatting with `{e}` alone dropped the half
-/// that says what to do about it — "… is readable by others (mode 0644) —
-/// chmod 600 it" — and left the operator with a sentence naming a path and
-/// no fault.
+/// source, on the stated grounds that anyhow prints the chain, and its
+/// `Display` for `ConnectError::Identity`, which a join words with this, does
+/// the same. Nothing here uses anyhow, so formatting with `{e}` alone dropped
+/// the half that says what to do about it — "… is readable by others (mode
+/// 0644) — chmod 600 it" — and left the operator with a sentence naming a path
+/// and no fault.
 ///
 /// modelpipe names the path in that top-level sentence, and several of the
 /// sources under it name it again — `check_private`'s leads with it, the
@@ -227,7 +228,7 @@ impl RemoteOps {
 /// the file interpolate it too — so for those the joined sentence says the
 /// path twice. That is the cheaper of the two losses: a repeated path is
 /// noise, a missing remedy is an operator with nothing to do next.
-fn chain(error: &dyn std::error::Error) -> String {
+pub(super) fn chain(error: &dyn std::error::Error) -> String {
     let mut sentence = error.to_string();
     let mut source = error.source();
     while let Some(next) = source {

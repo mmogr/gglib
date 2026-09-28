@@ -73,7 +73,8 @@ impl RemoteOps {
     /// `ValidationFailed` for a pairing string that does not parse, a bare
     /// ticket for a machine this one holds no key for, or a code the far
     /// side refuses; `Unavailable` when the peer cannot be reached;
-    /// `Internal` when settings cannot be written.
+    /// `Internal` when settings cannot be written, or when the key this
+    /// machine joins with, or its directory, cannot be placed, made or used.
     pub async fn join(&self, request: JoinRequest) -> Result<Joined, GuiError> {
         // Refused before any work is done, so `join` while connected
         // still says "already connected" rather than reporting the first

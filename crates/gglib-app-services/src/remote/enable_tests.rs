@@ -65,7 +65,8 @@ pub(super) async fn ops() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recording>, Remot
         gateway,
         Arc::clone(&events) as Arc<_>,
         Some(crate::test_support_remote::scratch_device_keys()),
-    );
+    )
+    .with_join_keys(crate::test_support_remote::scratch_join_keys());
     (core, proxy, events, ops)
 }
 

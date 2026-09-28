@@ -155,6 +155,12 @@ pub struct RemoteOps {
     /// own: in a debug build the default is the checkout's `data/`, which is
     /// also the installed daemon's.
     device_keys: Option<PathBuf>,
+    /// The directory the keys this machine joins other machines with are
+    /// kept in, or `None` for `<data root>/data/remote_join`, where a daemon
+    /// keeps them. A test names its own with
+    /// [`with_join_keys`](Self::with_join_keys), for the reason it names a
+    /// device key file.
+    join_keys: Option<PathBuf>,
 }
 
 impl RemoteOps {
@@ -181,6 +187,7 @@ impl RemoteOps {
             disables: watch::channel(0).0,
             lost_with_proxy: watch::channel(0).0,
             device_keys,
+            join_keys: None,
         }
     }
 
