@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
-use modelpipe::{ConnectError, ConnectHandle, PairingString};
+use modelpipe::{ConnectHandle, PairingString};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
@@ -251,38 +251,6 @@ fn busy_dialling(busy: &Busy) -> GuiError {
 /// was simply no longer wanted by the time it finished.
 pub(super) fn cancelled() -> GuiError {
     GuiError::Conflict("the join was cancelled by `gglib remote disconnect`".to_owned())
-}
-
-/// A `ConnectError` as the person who typed `join` needs to hear it.
-fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
-    match e {
-        // One producer at modelpipe 0.7.0, and it is not a machine that is
-        // off: `transport::addr_from`, for a ticket whose endpoint id is not
-        // a curve point. A peer that is merely *absent* is not reported here
-        // at all — `connect` returns as soon as the local port is bound, and
-        // waiting for the machine is `connect_open`'s. iroh defers the curve
-        // check further still, so nothing produces this today;
-        // the arm stays because that is iroh's choice to revisit, not this
-        // repo's, and `ConnectError` is `#[non_exhaustive]`.
-        //
-        // Deliberately NOT in `docs/remote.md`'s troubleshooting table. A
-        // sentence nobody can be shown is noise there, and the cause a reader
-        // would reach for — a ticket copied wrong — produces
-        // the pairing string's parse error instead, one guard earlier.
-        ConnectError::PeerUnreachable => GuiError::ValidationFailed(
-            "that pairing string names an address nobody could be at — copy it again from \
-             `gglib remote invite` on the far machine"
-                .to_owned(),
-        ),
-        ConnectError::Bind(err) => GuiError::Conflict(format!(
-            "could not bind 127.0.0.1:{}: {err}",
-            port.map_or_else(|| "<free port>".to_owned(), |p| p.to_string())
-        )),
-        ConnectError::InvalidRelay { url } => {
-            GuiError::ValidationFailed(format!("`{url}` is not a relay URL"))
-        }
-        other => GuiError::Internal(format!("could not connect: {other}")),
-    }
 }
 
 #[cfg(test)]

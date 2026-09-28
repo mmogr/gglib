@@ -18,7 +18,9 @@ type.
 
 ```text
 remote/
-  mod.rs            — RemoteOps: the type, the two slots, and status
+  mod.rs            — RemoteOps: the type and the two slots
+  status.rs         — RemoteOps: status — both sides, the stored pairing
+                      and the roster, read for the status surface
   serve.rs          — RemoteOps: enable, and turning the tunnel on — this
                       machine as the desktop
   serve_switch.rs   — the switch: the resume at start, disable, and the
