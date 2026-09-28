@@ -66,11 +66,12 @@ pub struct RemoteStatus {
     /// Whether this machine holds a key from an earlier pairing.
     #[serde(default)]
     pub has_remote_key: bool,
-    /// Whether this machine comes back reachable after a restart: the switch
-    /// `enable` and `disable` set. It can disagree with `enabled` in either
-    /// direction: on with nothing bound is a machine still arming, or one
-    /// that failed to arm at boot; bound with the switch off cannot outlive
-    /// the process.
+    /// Whether this machine comes back reachable after a restart, of the
+    /// daemon or of its proxy: the switch `enable` and `disable` set. It can
+    /// disagree with `enabled` in either direction: on with nothing bound can
+    /// be a machine still arming, one whose proxy is not running, or one that
+    /// could not arm, at boot or behind a proxy that came back; bound with the
+    /// switch off cannot outlive the process.
     #[serde(default)]
     pub remote_enabled: bool,
     /// Where the endpoint key is kept. Deleting it retires this machine's
