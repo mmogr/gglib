@@ -22,7 +22,7 @@ use reqwest::Client;
 use super::classify::{Failure, classify};
 use super::test_server::{
     TestServer, admission_timeout_body, edge_backend_unreachable_body, edge_invalid_api_key_body,
-    edge_tunnel_unavailable_body, json,
+    edge_tunnel_unavailable_body, json, proxy_internal_error_body,
 };
 
 // modelpipe's edge writes `{"error":{"message":…,"code":…}}` — no `type` key —
@@ -182,6 +182,23 @@ async fn the_proxys_own_admission_timeout_still_classifies_on_its_type() {
         "the type outranks the code as the label: {}",
         failure.reason()
     );
+}
+
+/// The proxy's answer to an internal runtime failure is terminal.
+///
+/// Its body names a type, so the status is not consulted, and the classifier
+/// retries neither that type, `server_error`, nor its code, `internal_error`.
+/// Putting `internal_error` into `code_is_retryable` would make it retryable,
+/// the case `error_is_retryable`'s docs warn about, and this test would fail.
+#[tokio::test]
+async fn the_proxys_internal_error_is_terminal_and_carries_its_code() {
+    let failure = classify_body(500, "Internal Server Error", &proxy_internal_error_body()).await;
+
+    assert!(
+        matches!(failure, Failure::Terminal { .. }),
+        "an internal failure is not one a repeated request waits out: {failure:?}"
+    );
+    assert_eq!(failure.code(), Some("internal_error"));
 }
 
 /// A body that is not this shape at all — llama-server's own errors, an HTML

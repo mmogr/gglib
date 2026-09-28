@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use gglib_core::ports::ModelRuntimeError;
 use gglib_proxy::models::ErrorResponse;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -192,6 +193,18 @@ pub(super) fn proxy_invalid_key_body() -> String {
         "invalid_request_error",
         "invalid_api_key",
     ))
+    .expect("an ErrorResponse always serializes")
+}
+
+/// This proxy's 500 for a `ModelRuntimeError::Internal`.
+///
+/// Built through the proxy's own `From<ModelRuntimeError>`, whose output
+/// `handle_runtime_error` sends, so a change to what it writes for this
+/// variant reaches this body instead of silently leaving it behind.
+pub(super) fn proxy_internal_error_body() -> String {
+    serde_json::to_string(&ErrorResponse::from(ModelRuntimeError::Internal(
+        "db locked".to_owned(),
+    )))
     .expect("an ErrorResponse always serializes")
 }
 

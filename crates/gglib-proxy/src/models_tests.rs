@@ -172,7 +172,7 @@ fn from_internal_error() {
     let err: ErrorResponse = ModelRuntimeError::Internal("db locked".into()).into();
     assert_eq!(err.error.message, "db locked");
     assert_eq!(err.error.r#type, "server_error");
-    assert!(err.error.code.is_none());
+    assert_eq!(err.error.code.as_deref(), Some("internal_error"));
 }
 
 /// Wire-format contract: `AdmissionTimeout` and `ModelLoading` must share the same
