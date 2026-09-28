@@ -8,6 +8,7 @@
 
 use std::error::Error as _;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::Path;
 use std::time::Duration;
 
 use modelpipe::{
@@ -15,6 +16,8 @@ use modelpipe::{
 };
 use tokio_util::sync::CancellationToken;
 
+use super::super::super::identity::unusable_join_key;
+use super::super::super::serve_arm::chain;
 use super::super::super::types::JoinRequest;
 use super::super::{DRAIN, cancelled};
 use crate::error::GuiError;
@@ -171,6 +174,10 @@ fn connect_error(e: ConnectError, port: Option<u16>) -> GuiError {
         ConnectError::InvalidRelay { url } => {
             GuiError::ValidationFailed(format!("`{url}` is not a relay URL"))
         }
+        // modelpipe's sentence names the file and leaves the reason to its
+        // source, and the reason is the half that says what to do, so it is
+        // read through `chain`. Worded beside the code that places the key.
+        ConnectError::Identity { ref path, .. } => unusable_join_key(path, &chain(&e)),
         other => GuiError::Internal(format!("could not connect: {other}")),
     }
 }
@@ -213,10 +220,14 @@ fn unreached(why: Unreached) -> GuiError {
 /// Nor can the code be presented before the far machine is reached: `pair`
 /// connects, waits, and only then exchanges. That ordering is modelpipe's
 /// to keep.
+///
+/// Both ways dial from `key`, the endpoint key this machine keeps for the
+/// machine the ticket names, which modelpipe mints there on first use.
 pub(super) async fn open(
     pairing: &PairingString,
     request: &JoinRequest,
     port: Option<u16>,
+    key: &Path,
     cancel: &CancellationToken,
 ) -> Result<Opened, NotOpened> {
     let mut opts = modelpipe::ConnectOptions::default();
@@ -224,6 +235,7 @@ pub(super) async fn open(
     opts.relay = request.relay.clone();
     opts.port_mapping = false;
     opts.discovery = request.discovery;
+    opts.identity = Some(key.to_path_buf());
     if pairing.code().is_some() {
         // No label: `gglib remote join` has never sent the far side a name
         // for this machine, and the row there reads the same as it did.

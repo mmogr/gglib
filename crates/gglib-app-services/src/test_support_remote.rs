@@ -127,8 +127,21 @@ impl AppEventEmitter for RecordingEmitter {
 /// there is no stub supervisor to hand it instead. Everything `enable` sits
 /// on top of — the guards, the snapshot, the settings writes — is reachable
 /// from here, and `enable` itself is what the two-machine run covers.
+///
+/// Its join keys are kept in a directory of its own, for the reason its
+/// device keys are, and one more: two tests that dial one machine at once
+/// could both mint its key into one file, and the one that lost the race
+/// would have its join refused.
 pub(crate) async fn test_remote_ops() -> (Arc<AppCore>, Arc<crate::RemoteOps>, Arc<RecordingEmitter>)
 {
+    test_remote_ops_joining_from(scratch_join_keys()).await
+}
+
+/// [`test_remote_ops`] with its join keys kept in `join_keys`, so two of
+/// them can be one machine before and after a restart.
+pub(crate) async fn test_remote_ops_joining_from(
+    join_keys: PathBuf,
+) -> (Arc<AppCore>, Arc<crate::RemoteOps>, Arc<RecordingEmitter>) {
     let events = Arc::new(RecordingEmitter::default());
     // Annotated so the unsizing coercion happens here once, rather than at
     // each call that wants the trait object.
@@ -141,7 +154,8 @@ pub(crate) async fn test_remote_ops() -> (Arc<AppCore>, Arc<crate::RemoteOps>, A
         gateway,
         emitter,
         Some(scratch_device_keys()),
-    );
+    )
+    .with_join_keys(join_keys);
     (core, Arc::new(ops), events)
 }
 
@@ -150,10 +164,26 @@ pub(crate) async fn test_remote_ops() -> (Arc<AppCore>, Arc<crate::RemoteOps>, A
 /// Given `None`, `RemoteOps` keeps keys beside the endpoint identity, which in
 /// a debug build is the checkout's `data/remote_devices`: one file for every
 /// test in the process, and the installed daemon's own when this is the
-/// checkout it was built from. Each call names a new file under a directory
-/// keyed by the process id and emptied once per process, because a recycled
-/// pid can find files a dead run left there.
+/// checkout it was built from.
 pub(crate) fn scratch_device_keys() -> PathBuf {
+    scratch("remote_devices")
+}
+
+/// A directory for the keys a `RemoteOps` joins with that no other in this
+/// run uses, for [`RemoteOps::with_join_keys`](crate::RemoteOps::with_join_keys).
+///
+/// Without one, `RemoteOps` keeps them in `data/remote_join`, which in a debug
+/// build is the checkout's, and the installed daemon's when this is the
+/// checkout it was built from. Named and not made: a dial makes it, and
+/// whether it does is under test.
+pub(crate) fn scratch_join_keys() -> PathBuf {
+    scratch("remote_join")
+}
+
+/// A new path starting `name` in a directory keyed by the process id and
+/// emptied once per process, because a recycled pid can find files a dead
+/// run left there.
+fn scratch(name: &str) -> PathBuf {
     static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         let dir = std::env::temp_dir().join(format!("gglib-app-services-{}", std::process::id()));
         if let Err(e) = std::fs::remove_dir_all(&dir) {
@@ -166,10 +196,7 @@ pub(crate) fn scratch_device_keys() -> PathBuf {
         dir
     });
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    DIR.join(format!(
-        "remote_devices-{}",
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ))
+    DIR.join(format!("{name}-{}", NEXT.fetch_add(1, Ordering::Relaxed)))
 }
 
 /// One of the vectors above as the `Ticket` the code under test takes.
@@ -179,6 +206,22 @@ pub(crate) fn scratch_device_keys() -> PathBuf {
 /// second place for the panic message to be wrong.
 pub(crate) fn ticket(s: &str) -> modelpipe::Ticket {
     s.parse().expect("a normative ticket vector parses")
+}
+
+/// What `probe` finds, asked again until it finds something, or `None` after
+/// two seconds.
+///
+/// For what a task or the far end of a pipe writes, which leaves no handle to
+/// await. A deadline says how long "a moment" is allowed to be, and `None`
+/// rather than a panic lets the caller clean up before it judges.
+pub(crate) async fn within_a_moment<T>(mut probe: impl AsyncFnMut() -> Option<T>) -> Option<T> {
+    for _ in 0..100 {
+        if let Some(found) = probe().await {
+            return Some(found);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    None
 }
 
 /// The redemption a codeless dial must not reach.

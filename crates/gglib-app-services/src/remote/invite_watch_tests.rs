@@ -13,33 +13,26 @@ use super::super::RemoteOps;
 use super::super::serve_watch_tests::{offline, ops_with_key};
 use super::super::types::EnableRequest;
 use super::super::wire::RemoteDevice;
+use crate::test_support_remote::within_a_moment;
 
 /// The row `list` holds for `device` once `done` says it has settled, or
 /// `None` after two seconds.
 ///
-/// The roster is written by a task, so there is no handle to await. A
-/// deadline says how long "a moment" is allowed to be, and `None` rather than
-/// a panic lets the caller clean up before it judges.
+/// The roster is written by a task, so there is no handle to await.
 async fn settled(
     ops: &RemoteOps,
     device: &str,
-    done: impl Fn(&RemoteDevice) -> bool,
+    done: impl Fn(&RemoteDevice) -> bool + Sync,
 ) -> Option<RemoteDevice> {
-    for _ in 0..100 {
-        let seen = ops
-            .list()
+    within_a_moment(async || {
+        ops.list()
             .await
             .expect("list")
             .into_iter()
-            .find(|d| d.id == device);
-        if let Some(seen) = seen
-            && done(&seen)
-        {
-            return Some(seen);
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    None
+            .find(|d| d.id == device)
+            .filter(|seen| done(seen))
+    })
+    .await
 }
 
 /// A device that redeems its code is recorded: when, what it called itself,

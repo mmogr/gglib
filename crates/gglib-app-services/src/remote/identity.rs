@@ -1,13 +1,21 @@
-//! The stored endpoint key: where it lives, and clearing one that holds no
-//! key so the daemon can arm.
+//! The stored endpoint keys: where the one this machine serves with lives,
+//! clearing one that holds no key so the daemon can arm, where the ones it
+//! joins other machines with live, and what a join says when one of those
+//! cannot be used.
 //!
 //! Not `key.rs`, which is about the credential the *proxy* enforces. Both
-//! are called keys and are otherwise unrelated: this one is modelpipe's
-//! endpoint identity, the file every paired device knows this machine by,
-//! and nothing here reads settings or the proxy.
+//! are called keys and are otherwise unrelated: these are modelpipe's
+//! endpoint identities — the serving one is the file every paired device
+//! knows this machine by, and a joining one is what a machine this one joins
+//! sees it as — and nothing here reads settings or the proxy.
 
+use std::path::PathBuf;
+
+use gglib_core::paths::{create_private_dir, remote_join_dir};
+use modelpipe::Ticket;
 use tracing::info;
 
+use super::RemoteOps;
 use crate::error::GuiError;
 
 /// Where this machine's endpoint key lives.
@@ -114,6 +122,117 @@ pub(super) fn discard_empty_identity(path: &std::path::Path) -> Result<(), GuiEr
     Ok(())
 }
 
+impl RemoteOps {
+    /// Keep the keys this machine joins other machines with in `dir`, one
+    /// file for each machine joined, instead of in
+    /// `<data root>/data/remote_join`.
+    ///
+    /// For a test. [`RemoteOps::new`] leaves the default, which is what a
+    /// daemon runs with; in a debug build that default is the checkout's
+    /// `data/`, which is also the installed daemon's.
+    ///
+    /// Public although only tests call it: as `pub(crate)`, the library
+    /// build, which has no tests in it, would warn that it is never used.
+    #[must_use]
+    pub fn with_join_keys(mut self, dir: PathBuf) -> Self {
+        self.join_keys = Some(dir);
+        self
+    }
+
+    /// The file this machine keeps the endpoint key it joins `far` with in:
+    /// named by `far`'s endpoint fingerprint, in the directory
+    /// [`with_join_keys`](Self::with_join_keys) gave, or in
+    /// `<data root>/data/remote_join`. Named only: nothing under the data
+    /// root is made.
+    ///
+    /// **By the fingerprint, not by the ticket.** The stored ticket is
+    /// rewritten when the same machine turns up at another address
+    /// (`stored_pairing.rs`, `follow`), and a name taken from the ticket
+    /// would give that machine a second key, and show it a new endpoint.
+    ///
+    /// **Not the serving key**, [`identity_path`]. A machine can serve and
+    /// join at once, and modelpipe asks for the two files to be kept apart,
+    /// because one key is one endpoint.
+    pub(super) fn join_key_path(&self, far: &Ticket) -> Result<PathBuf, GuiError> {
+        let dir = match &self.join_keys {
+            Some(dir) => dir.clone(),
+            None => remote_join_dir().map_err(|e| {
+                GuiError::Internal(format!(
+                    "could not place the key this machine joins with: {e} — fix what that \
+                     names, then run `gglib remote join` again"
+                ))
+            })?,
+        };
+        Ok(dir.join(far.fingerprint()))
+    }
+
+    /// [`join_key_path`](Self::join_key_path), after its directory has gone
+    /// through `create_private_dir`: what every dial to `far` is handed. That
+    /// makes a directory that is not there `0700`, and takes group and other
+    /// access away from one that is, which keeps its owner's bits.
+    ///
+    /// Made before each dial, because modelpipe makes only the file: it mints
+    /// the key on first use by writing a temporary beside the path and
+    /// linking it into place, so a directory that is not there, or one
+    /// deleted since the last dial, fails the join. It reads the key back on
+    /// every dial after.
+    pub(super) fn join_key(&self, far: &Ticket) -> Result<PathBuf, GuiError> {
+        let path = self.join_key_path(far)?;
+        if let Some(dir) = path.parent() {
+            create_private_dir(dir).map_err(|e| {
+                GuiError::Internal(format!(
+                    "could not make {}, where the key this machine joins with is kept: {e} — \
+                     make sure this user can create that folder (move aside any file in its \
+                     way), then run `gglib remote join` again",
+                    dir.display()
+                ))
+            })?;
+        }
+        Ok(path)
+    }
+}
+
+/// What a join says when modelpipe cannot use the key at `path`, the file
+/// [`RemoteOps::join_key`] handed it: `why` is modelpipe's sentence read
+/// through `chain`, as the serving side's is, so the reason is in it.
+///
+/// Refused, and nothing is replaced: a new key is a new endpoint to the
+/// machine being joined, which is the person's to choose. What to do depends
+/// on what a look at `path`, as modelpipe names it, finds. Nothing there is
+/// what a first key that could not be written leaves — a full disk, a
+/// directory this user cannot write to, a filesystem with no hard links —
+/// and then there is no file to delete, and the reason is what to fix.
+/// Something there, or a path the look cannot see into, was left as it is,
+/// to fix or delete, and the reason says which.
+pub(super) fn unusable_join_key(path: &str, why: &str) -> GuiError {
+    let absent =
+        std::fs::symlink_metadata(path).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound);
+    GuiError::Internal(if absent {
+        format!(
+            "could not make the key this machine joins that remote with: {why} — gglib finds no \
+             file at that path: fix what the reason names, then run `gglib remote join` again"
+        )
+    } else {
+        format!(
+            "could not use the key this machine joins that remote with: {why} — it was left as \
+             it is: fix it, or delete it and run `gglib remote join` again for a new one, which \
+             that machine then sees as a new endpoint"
+        )
+    })
+}
+
 #[cfg(test)]
 #[path = "identity_tests.rs"]
 mod identity_tests;
+
+#[cfg(test)]
+#[path = "join_key_tests.rs"]
+mod join_key_tests;
+
+#[cfg(test)]
+#[path = "join_key_dir_tests.rs"]
+mod join_key_dir_tests;
+
+#[cfg(test)]
+#[path = "join_key_pipe_tests.rs"]
+mod join_key_pipe_tests;

@@ -44,11 +44,15 @@ impl RemoteOps {
         cancel: &CancellationToken,
     ) -> Result<Joined, GuiError> {
         let ticket = pairing.ticket();
+        // One key for every dial to this machine — with a code or without,
+        // on the port wanted or on a free one — so the far side sees one
+        // endpoint.
+        let key = self.join_key(ticket)?;
         let wanted = wanted_port(request.port, held.as_ref());
-        let (opened, moved_from) = match open(pairing, request, Some(wanted), cancel).await {
+        let (opened, moved_from) = match open(pairing, request, Some(wanted), &key, cancel).await {
             Ok(opened) => (opened, None),
             Err(refused) if refused.is_bind() && request.port.is_none() => {
-                let opened = open(pairing, request, None, cancel)
+                let opened = open(pairing, request, None, &key, cancel)
                     .await
                     .map_err(|refused| refused.into_error(None))?;
                 (opened, Some(wanted))

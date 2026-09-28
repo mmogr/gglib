@@ -42,8 +42,8 @@ pub use models::{
 // PID tracking
 pub use pids::pids_dir;
 
-// The remote tunnel's stored endpoint key
-pub use remote::remote_identity_path;
+// The remote tunnel's stored endpoint keys: the serving one and the joining ones
+pub use remote::{remote_identity_path, remote_join_dir};
 
 // Directories and files this user alone can read
 pub use private::{create_private_dir, create_private_file, make_private};
