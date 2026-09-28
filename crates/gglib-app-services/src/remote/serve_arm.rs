@@ -21,6 +21,7 @@ use super::identity::{discard_empty_identity, identity_path};
 use super::key;
 use super::pairing::Offer;
 use super::rotation::rotation_poll;
+use super::serve::Caller;
 use super::serve_switch::CANCELLED_BY_DISABLE;
 use super::types::{EnableRequest, Enabled};
 use super::{DRAIN, Live, RemoteOps, WAIT_ONLINE};
@@ -41,7 +42,7 @@ impl RemoteOps {
         generation: u64,
         cancel: &CancellationToken,
         proxy_exit: watch::Receiver<ProxyStatus>,
-        offer: Offer,
+        caller: &Caller,
     ) -> Result<Enabled, GuiError> {
         let settled = key::settle(&self.proxy, &self.core).await?;
 
@@ -186,9 +187,9 @@ impl RemoteOps {
         self.emitter.emit(AppEvent::remote_enabled(fingerprint));
 
         let ticket = ticket.to_string();
-        let pairing = match offer {
-            Offer::Code => Some(enrolment::offer(self, &handle, epoch).await?),
-            Offer::Silent => None,
+        let pairing = match caller {
+            Caller::Person(Offer::Code) => Some(enrolment::offer(self, &handle, epoch).await?),
+            Caller::Person(Offer::Silent) | Caller::Resume => None,
         };
         Ok(Enabled {
             ticket,

@@ -20,10 +20,11 @@ use super::types::{EnableRequest, Enabled};
 use crate::error::GuiError;
 
 /// Who is turning the tunnel on, which decides whether `turn_on` writes the
-/// switch.
+/// switch, and whether a code is offered.
 pub(super) enum Caller {
-    /// A person's `enable`, which writes the switch and its flags first.
-    Person,
+    /// A person's `enable`, which writes the switch and its flags first, and
+    /// offers a code when asked to.
+    Person(Offer),
     /// The daemon's own resume, which writes nothing: it read the switch a
     /// moment ago.
     Resume,
@@ -83,11 +84,11 @@ impl RemoteOps {
         {
             return Ok(enabled);
         }
-        self.turn_on(request, offer, Caller::Person, disables).await
+        self.turn_on(request, Caller::Person(offer), disables).await
     }
 
-    /// Bringing the tunnel up, with `offer` and `caller` the two things
-    /// `enable` and `resume_arm` differ in — so the rest cannot drift apart.
+    /// Bringing the tunnel up, with `caller` the one thing `enable` and
+    /// `resume_arm` differ in — so the rest cannot drift apart.
     ///
     /// `disables` is subscribed at the caller's first line, so every
     /// `disable` since then is one this sees. Before the reservation it found
@@ -97,7 +98,6 @@ impl RemoteOps {
     pub(super) async fn turn_on(
         &self,
         request: EnableRequest,
-        offer: Offer,
         caller: Caller,
         disables: watch::Receiver<u64>,
     ) -> Result<Enabled, GuiError> {
@@ -149,7 +149,7 @@ impl RemoteOps {
         // ago, and writing them back could only undo a `disable` that landed
         // in between. A person's write can undo one too, which is why
         // `remember_enabled` looks for a `disable` again once it has written.
-        if matches!(caller, Caller::Person)
+        if matches!(caller, Caller::Person(_))
             && let Err(e) = self.remember_enabled(&request, &disables).await
         {
             self.live.lock().await.release(generation);
@@ -157,7 +157,7 @@ impl RemoteOps {
         }
 
         let armed = self
-            .arm(request, &addr, generation, &cancel, proxy_exit, offer)
+            .arm(request, &addr, generation, &cancel, proxy_exit, &caller)
             .await;
         if armed.is_err() {
             self.live.lock().await.release(generation);

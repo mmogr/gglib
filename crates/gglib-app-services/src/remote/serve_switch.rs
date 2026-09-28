@@ -21,7 +21,6 @@ use gglib_core::events::AppEvent;
 
 use crate::error::GuiError;
 
-use super::pairing::Offer;
 use super::serve::Caller;
 use super::slot::Busy;
 use super::slot::Taken;
@@ -140,11 +139,11 @@ impl RemoteOps {
             relay: serve.relay,
             discovery: serve.discovery,
             // Never on a resume, and not reachable from here by accident:
-            // `resume_arm` passes `Offer::Silent` regardless.
+            // `resume_arm` passes `Caller::Resume`, which offers no code.
             invite: false,
         };
         // No pairing code is minted here, and `resume_arm` is what
-        // guarantees it: it passes `Offer::Silent` whatever the request
+        // guarantees it: `Caller::Resume` offers none whatever the request
         // says, so no stored flag can open a live two-minute code at boot,
         // which nobody would read, on an endpoint key a restart does not
         // change. Devices already paired hold a key and need no code; a new
@@ -171,7 +170,7 @@ impl RemoteOps {
         request: EnableRequest,
         disables: watch::Receiver<u64>,
     ) -> Result<(), GuiError> {
-        self.turn_on(request, Offer::Silent, Caller::Resume, disables)
+        self.turn_on(request, Caller::Resume, disables)
             .await
             .map(|_| ())
     }
