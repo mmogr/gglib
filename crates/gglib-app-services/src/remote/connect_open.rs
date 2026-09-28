@@ -104,7 +104,9 @@ impl NotOpened {
             Self::Pair(PairError::Refused) => GuiError::ValidationFailed(
                 "the far machine refused the pairing code — it was mistyped, has expired (two \
                  minutes), or was used already; check it and run `gglib remote join` again while \
-                 it is still on screen, or run `gglib remote invite` there once it has gone"
+                 it is still on screen, or run `gglib remote invite` there once it has gone. A \
+                 machine that paired there before and is still listed there is refused the same \
+                 way: forget it on that machine first (`gglib remote forget`)"
                     .to_owned(),
             ),
             Self::Pair(PairError::Exchange(e)) => GuiError::Unavailable(format!(

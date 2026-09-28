@@ -202,6 +202,7 @@ impl RemoteGateway {
         invitation.withdraw();
         match invitation.ended() {
             Some(InviteOutcome::Redeemed { peer, label, .. }) => {
+                let endpoint = peer.to_string();
                 let peer = peer.fingerprint();
                 info!(device = %device, peer = %peer, "a device redeemed its invite");
                 // The edge answers the pairing request, so the proxy never
@@ -214,6 +215,7 @@ impl RemoteGateway {
                     device: device.clone(),
                     label,
                     peer: Some(peer.clone()),
+                    endpoint: Some(endpoint),
                     at_ms: now_ms(),
                 });
                 self.emitter.emit(AppEvent::remote_paired(Some(peer)));

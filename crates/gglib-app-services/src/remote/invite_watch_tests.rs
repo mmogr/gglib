@@ -19,7 +19,7 @@ use crate::test_support_remote::within_a_moment;
 /// `None` after two seconds.
 ///
 /// The roster is written by a task, so there is no handle to await.
-async fn settled(
+pub(super) async fn settled(
     ops: &RemoteOps,
     device: &str,
     done: impl Fn(&RemoteDevice) -> bool + Sync,

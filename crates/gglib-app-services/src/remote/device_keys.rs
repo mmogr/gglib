@@ -9,7 +9,7 @@
 //! mode and the atomic replace; this one owns where the errors go and what
 //! they say to a person.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use gglib_core::access::{DeviceKeys, device_keys_path, load_device_keys, store_device_keys};
@@ -52,14 +52,15 @@ pub(super) fn held_ids(ops: &RemoteOps) -> Vec<String> {
 /// atomically, so falling back is a slightly staler roster rather than a
 /// wrong one — and the alternative is unwinding a tunnel that is already up.
 ///
-/// `recorded` is the ids the roster listed when `arm` read it, before the
-/// guard: a settings read does not belong under it. A key needs one of them
-/// to be seeded; [`seed_into`] says why.
+/// `recorded` is each id the roster listed when `arm` read it, before the
+/// guard, with the endpoint it redeemed from: a settings read does not
+/// belong under it. A key needs a row and an endpoint to be seeded;
+/// [`seed_into`] says why.
 pub(super) async fn seed(
     ops: &RemoteOps,
     handle: &modelpipe::ServeHandle,
     earlier: DeviceKeys,
-    recorded: &HashSet<String>,
+    recorded: &Recorded,
 ) {
     let keys = {
         let _guard = ops.roster.lock().await;
@@ -71,7 +72,11 @@ pub(super) async fn seed(
     seed_into(handle, keys, recorded);
 }
 
-/// Put every device this machine knows back on a freshly armed listener.
+/// Each roster row's id, with the whole endpoint id it redeemed from.
+pub(super) type Recorded = HashMap<String, Option<String>>;
+
+/// Put every device this machine knows back on a freshly armed listener,
+/// each key pinned to the endpoint that redeemed it.
 ///
 /// Under `TokenPolicy::Named` the listener starts closed: until this runs,
 /// nothing admits at all. That is why [`read_keys`] is called
@@ -89,22 +94,34 @@ pub(super) async fn seed(
 /// daemon that dies between the two writes `invite` makes. Seeding it would
 /// admit a device no list shows; skipped, it is listed as "key held, no
 /// record", not admitted, until `forget` retires it.
-pub(super) fn seed_into(
-    handle: &modelpipe::ServeHandle,
-    keys: DeviceKeys,
-    recorded: &HashSet<String>,
-) {
-    let (mut seeded, mut refused, mut unrecorded) = (0usize, 0usize, 0usize);
+///
+/// **Nor is a key whose row names no endpoint**, or one that does not parse.
+/// No key is ever held unpinned across an arm: a device paired before keys
+/// were pinned, or whose redemption was never written, is listed as not
+/// admitted and pairs again.
+pub(super) fn seed_into(handle: &modelpipe::ServeHandle, keys: DeviceKeys, recorded: &Recorded) {
+    let (mut seeded, mut refused, mut unrecorded, mut unpinned) = (0usize, 0usize, 0usize, 0usize);
     for (id, key) in keys {
-        if !recorded.contains(&id) {
+        let Some(endpoint) = recorded.get(&id) else {
             unrecorded += 1;
             warn!(
                 device = %id,
                 "a device key no roster row lists was not put on the tunnel; `gglib remote forget` retires it"
             );
             continue;
-        }
-        match handle.add_token(&id, key) {
+        };
+        let Some(peer) = endpoint
+            .as_deref()
+            .and_then(|e| e.parse::<modelpipe::PeerId>().ok())
+        else {
+            unpinned += 1;
+            warn!(
+                device = %id,
+                "a device with no endpoint to pin its key to was not put on the tunnel; it pairs again"
+            );
+            continue;
+        };
+        match handle.add_token_pinned(&id, key, peer) {
             Ok(()) => seeded += 1,
             Err(e) => {
                 refused += 1;
@@ -114,7 +131,7 @@ pub(super) fn seed_into(
     }
     info!(
         devices = seeded,
-        refused, unrecorded, "seeded the tunnel with stored device keys"
+        refused, unrecorded, unpinned, "seeded the tunnel with stored device keys"
     );
 }
 

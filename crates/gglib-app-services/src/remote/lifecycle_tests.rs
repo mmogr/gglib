@@ -89,6 +89,7 @@ async fn the_status_carries_the_roster_and_admits_nothing_with_the_tunnel_down()
                 redeemed_at: Some(1_757_000_060_000),
                 last_seen: None,
                 peer: None,
+                endpoint: None,
             }])),
             ..SettingsUpdate::default()
         })

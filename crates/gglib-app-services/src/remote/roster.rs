@@ -42,6 +42,8 @@ pub(crate) enum Note {
         /// The fingerprint of the endpoint that redeemed, when the request
         /// carried one.
         peer: Option<String>,
+        /// The whole id of that endpoint, which the next arm pins the key to.
+        endpoint: Option<String>,
         /// Unix milliseconds, read on the request path.
         ///
         /// Taken where the redemption happened rather than where it is
@@ -94,11 +96,13 @@ async fn roster_sync(core: Arc<AppCore>, lock: Arc<Mutex<()>>, mut notes: Unboun
                 device,
                 label,
                 peer,
+                endpoint,
                 at_ms,
             } => {
                 let write = apply(&core, &lock, &device, |d| {
                     d.label.clone_from(&label);
                     d.peer.clone_from(&peer);
+                    d.endpoint.clone_from(&endpoint);
                     d.redeemed_at = Some(at_ms);
                 })
                 .await;

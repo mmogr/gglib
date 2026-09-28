@@ -34,6 +34,7 @@ fn a_reset_keeps_the_pairing_the_device_roster_and_the_proxy_key() {
             redeemed_at: Some(2),
             last_seen: None,
             peer: None,
+            endpoint: None,
         }]);
         settings.proxy_port = Some(9191);
         settings.default_context_size = Some(4096);

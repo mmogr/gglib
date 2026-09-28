@@ -172,7 +172,10 @@ fn a_joined_device_the_edge_refuses_says_it_is_not_admitted() {
         admitted: Some(false),
         ..unredeemed()
     };
-    assert_eq!(describe(&refused, NOW), "last seen just now · not admitted");
+    assert_eq!(
+        describe(&refused, NOW),
+        "last seen just now · not admitted — pair it again"
+    );
 }
 
 /// With the tunnel down nothing is admitted, so no single row is the one

@@ -355,6 +355,16 @@ rather than working around it.
 > for one. The clear opens the local door only. Item 1 above calls these
 > paragraphs unchanged, and this is the one mechanism in them that changed.
 
+> **Amended 2026-09-28 — a device's key admits only from the endpoint that
+> redeemed it.** When a code is redeemed the key is re-held pinned to that
+> endpoint, whose whole id the roster keeps, and every arm seeds it pinned; a
+> row with no endpoint is not seeded. There is no unpinned fallback, so a
+> device paired before this, or one that loses its endpoint key, is listed as
+> not admitted and pairs again. Two windows remain in which the key admits
+> from anywhere: from the invite to its redemption, while only this machine
+> holds it, and from the redemption to the swap, which is a remove and an add
+> since modelpipe cannot pin a live key.
+
 ### 3. Pairing moves a one-time code, not the key
 
 `gglib remote invite` prints the ticket and a six-digit numeric code, as does

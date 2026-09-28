@@ -81,15 +81,17 @@ call an unspent invite a device; but it means `forget` on a row you do not
 recognise is a revocation you should be willing to make, not merely tidying.
 
 A device that redeemed its code also says which endpoint it paired from:
-the fingerprint of the endpoint the code was redeemed from. It is a record,
-not a check, and nothing is refused on it. gglib's own `join` keeps an
-endpoint key for each machine it joins (see
+the fingerprint of the endpoint the code was redeemed from. The device's key
+is pinned to that endpoint: presented from any other machine it is refused as
+a wrong key is. A device paired before keys were pinned, or one that has lost
+its endpoint key, is listed as not admitted and has to be paired again, after
+`gglib remote forget` here if it pairs from the same endpoint. gglib's own
+`join` keeps an endpoint key for each machine it joins (see
 [The laptop](#the-laptop-join-disconnect-key)), and ggchat keeps one for each
 machine it pairs with from 0.3.1, so a laptop or a phone presents the
 fingerprint it paired from each time it connects here, for as long as it keeps
-that key. A laptop that paired from a gglib that kept no such key redeemed its
-code from an endpoint it has since dropped, so its row names that endpoint
-until it pairs again. A row whose redemption was not recorded shows none.
+that key. A laptop that paired from a gglib that kept no such key has to be
+paired again. A row whose redemption was not recorded shows none.
 
 ```console
 $ gglib remote list
