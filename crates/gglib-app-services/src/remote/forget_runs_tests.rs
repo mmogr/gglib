@@ -174,3 +174,48 @@ async fn a_forget_whose_roster_write_fails_still_drops_the_runs_once_the_key_is_
     );
     assert_dropped_after_the_key(&watched, reader).await;
 }
+
+/// A forget that fails before the key is out keeps the runs: the device may
+/// still be admitted, and they are still its own.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_forget_that_fails_to_remove_the_key_keeps_the_runs() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let keys_dir = dir.path().join("keys");
+    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    let emitter: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
+    let gateway = Arc::new(crate::RemoteGateway::new(Arc::clone(&emitter)));
+    let ops = RemoteOps::new(
+        proxy,
+        core,
+        gateway,
+        emitter,
+        Some(keys_dir.join("remote_devices")),
+    );
+    let (watched, _reader) = a_device_with_a_run(&ops).await;
+    let read_only = std::fs::Permissions::from_mode(0o500);
+    std::fs::set_permissions(&keys_dir, read_only).expect("the key directory is read-only");
+
+    let refused = ops.forget(DEVICE).await;
+    std::fs::set_permissions(&keys_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(refused.is_err(), "the key write fails: {refused:?}");
+    assert!(
+        read_keys(&ops)
+            .expect("the key file reads")
+            .contains_key(DEVICE),
+        "the key is still in the file"
+    );
+    assert!(
+        watched.key_held_at_forget.lock().unwrap().is_empty(),
+        "the runs were not dropped"
+    );
+    let phone = RunScope::Device(DEVICE.to_owned());
+    assert_eq!(
+        watched.list(&phone).runs.len(),
+        1,
+        "the device's run is kept"
+    );
+}
