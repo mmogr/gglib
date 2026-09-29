@@ -111,3 +111,22 @@ async fn a_repeated_create_saves_the_users_message_once() {
         "the second loop never ran"
     );
 }
+
+/// A loop that panics mid-reply: the run ends failed, frees its slot, and
+/// saves what arrived, marked.
+#[tokio::test]
+async fn a_panicking_loop_ends_the_run_failed_and_saves_what_arrived() {
+    let (_dir, state) = state().await;
+    let id = conversation(&state).await;
+    let (p, _) = prepared(reply(), End::Panic);
+    start(&state, "a1", Some(id), p).await;
+    settled(&state).await;
+
+    let info = state.runs.get(&LOCAL, "a1").unwrap();
+    assert_eq!(info.status, RunStatus::Failed);
+    assert_eq!(info.error.map(|e| e.code).as_deref(), Some("run_panicked"));
+    assert_eq!(state.agent_semaphore.available_permits(), 1);
+    let rows = saved(&state, id).await;
+    assert_eq!(rows.first().map(|r| r.role), Some(MessageRole::User));
+    assert_eq!(meta(rows.last().unwrap(), INCOMPLETE_KEY), json!(true));
+}

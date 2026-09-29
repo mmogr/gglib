@@ -22,9 +22,11 @@ use super::registry::RunRegistry;
 /// when the run is cancelled, which is what stops it.
 pub type RunWork = BoxFuture<'static, Result<(), RunError>>;
 
-/// Called once a run has ended, whatever the end, with its final state and
-/// every frame it logged.
-pub type RunEnded = Box<dyn FnOnce(RunInfo, Vec<Arc<str>>) -> BoxFuture<'static, ()> + Send>;
+/// Called once a run has ended, whatever the end, with its state and every
+/// frame it logged. Its readers are given the end only after it returns; an
+/// `Err` makes the run `failed` with that error.
+pub type RunEnded =
+    Box<dyn FnOnce(RunInfo, Vec<Arc<str>>) -> BoxFuture<'static, Result<(), RunError>> + Send>;
 
 /// Where a reserved id stands.
 pub enum Reservation<'a> {

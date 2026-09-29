@@ -32,6 +32,7 @@ fn ended(seen: &Seen) -> RunEnded {
         Box::pin(async move {
             let frames = frames.iter().map(ToString::to_string).collect();
             *seen.lock().unwrap() = Some((info, frames));
+            Ok(())
         })
     })
 }

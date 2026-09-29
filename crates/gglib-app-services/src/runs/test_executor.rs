@@ -26,6 +26,7 @@ pub(crate) enum Cmd {
     Start,
     Frame(String),
     Finish(Result<(), RunError>),
+    Panic,
 }
 
 /// Counts drops of the future it lives in.
@@ -71,6 +72,7 @@ impl RunExecutor for Scripted {
                     }
                 }
                 Cmd::Finish(outcome) => return outcome,
+                Cmd::Panic => panic!("a scripted run panicked"),
             }
         }
         std::future::pending().await

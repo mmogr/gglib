@@ -5,15 +5,28 @@
 //! work against the run's cancellation, records the end, and then hands the
 //! ended run and its whole log to whatever asked to see its end.
 
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
-use gglib_core::domain::runs::{RunInfo, RunStatus, is_run_id};
+use futures_util::FutureExt as _;
+
+use gglib_core::domain::runs::{RunError, RunInfo, RunStatus, is_run_id};
 use gglib_core::ports::{RunScope, RunsError};
 use tokio::sync::watch;
 
 use super::cell::{RunCell, RunSpec};
 use super::local::{RunEnded, RunWork};
 use super::registry::RunRegistry;
+
+/// A run whose work, or the handling of its end, panicked.
+const PANICKED: (&str, &str) = ("run_panicked", "The run stopped on an internal error.");
+
+fn fixed((code, message): (&str, &str)) -> RunError {
+    RunError {
+        code: code.to_owned(),
+        message: message.to_owned(),
+    }
+}
 
 /// Where an id stands when a run is asked for under it.
 pub(super) enum Admitted {
@@ -103,16 +116,26 @@ impl RunRegistry {
     }
 
     async fn drive(cell: Arc<RunCell>, work: RunWork, ended: Option<RunEnded>) {
-        // Dropping `work` when cancelled is what stops its upstream.
+        // Dropping `work` when cancelled is what stops its upstream. A panic
+        // in it is caught, so the run still ends and its end is handled.
         let outcome = tokio::select! {
             () = cell.cancel.cancelled() => None,
-            outcome = work => Some(outcome),
+            outcome = AssertUnwindSafe(work).catch_unwind() => Some(outcome),
         };
         match outcome {
-            Some(Ok(())) => cell.finish(RunStatus::Completed, None),
-            Some(Err(error)) => cell.finish(RunStatus::Failed, Some(error)),
+            Some(Ok(Ok(()))) => cell.finish(RunStatus::Completed, None),
+            Some(Ok(Err(error))) => cell.finish(RunStatus::Failed, Some(error)),
+            Some(Err(_)) => {
+                tracing::warn!(run = %cell.id, "a run's work panicked");
+                cell.finish(RunStatus::Failed, Some(fixed(PANICKED)))
+            }
             None => cell.finish(RunStatus::Cancelled, None),
         };
+        let failure = match ended {
+            Some(ended) => Self::handle_end(&cell, ended).await,
+            None => None,
+        };
+        cell.settle(failure);
         let info = cell.info();
         tracing::debug!(
             run = %cell.id,
@@ -121,8 +144,18 @@ impl RunRegistry {
             bytes = cell.bytes(),
             "run ended"
         );
-        if let Some(ended) = ended {
-            ended(info, cell.frames()).await;
-        }
+    }
+
+    /// Hand the ended run to `ended`; the error that should fail it, if any.
+    async fn handle_end(cell: &RunCell, ended: RunEnded) -> Option<RunError> {
+        let handled = AssertUnwindSafe(ended(cell.info(), cell.frames()))
+            .catch_unwind()
+            .await;
+        handled
+            .unwrap_or_else(|_| {
+                tracing::warn!(run = %cell.id, "handling a run's end panicked");
+                Err(fixed(PANICKED))
+            })
+            .err()
     }
 }

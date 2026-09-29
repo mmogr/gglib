@@ -157,7 +157,9 @@ pub(super) async fn launch(
             }
             save_reply(Arc::clone(&state.core), conversation_id)
         }
-        None => Box::new(|_, _| -> BoxFuture<'static, ()> { Box::pin(async {}) }),
+        None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {
+            Box::pin(async { Ok(()) })
+        }),
     };
     let info = reserved.start(|log| Box::pin(work(prepared, permit, log)), ended);
     tracing::debug!(run = %id, saved = conversation_id.is_some(), "agent run started");
@@ -258,6 +260,7 @@ fn save_reply(core: Arc<AppCore>, conversation_id: i64) -> RunEnded {
                 tracing::debug!(run = %info.id, conversation = conversation_id, rows = total,
                     "an agent run's reply was saved");
             }
+            Ok(())
         })
     })
 }

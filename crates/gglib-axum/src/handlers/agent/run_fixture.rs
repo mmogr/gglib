@@ -23,6 +23,7 @@ pub(super) enum End {
     Finish,
     Fail,
     Hang,
+    Panic,
 }
 
 /// A loop that sends its events, then ends as told. Counts its own drops.
@@ -63,6 +64,7 @@ impl AgentLoopPort for Scripted {
                 signature: "SIGNATURE-SECRET".to_owned(),
             }),
             End::Hang => std::future::pending().await,
+            End::Panic => panic!("the scripted loop panicked"),
         }
     }
 }

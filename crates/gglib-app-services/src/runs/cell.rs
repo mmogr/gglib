@@ -56,6 +56,9 @@ struct State {
     bytes: usize,
     dropped: bool,
     read_to_end_at_ms: Option<u64>,
+    /// Whether what follows a run's end (saving its reply) is done. A
+    /// reader is given the end only then, so the end it reads is final.
+    settled: bool,
 }
 
 pub(super) struct RunCell {
@@ -95,6 +98,7 @@ impl RunCell {
                 bytes: 0,
                 dropped: false,
                 read_to_end_at_ms: None,
+                settled: false,
             }),
             changed: watch::Sender::new(0),
             clock,
@@ -127,8 +131,23 @@ impl RunCell {
         self.lock().bytes
     }
 
+    /// Ended, and its end handled: nothing about it will change.
     pub(super) fn is_ended(&self) -> bool {
-        self.lock().info.status.is_terminal()
+        let state = self.lock();
+        state.settled && state.info.status.is_terminal()
+    }
+
+    /// The end is handled; `failure`, when handling it failed, makes the
+    /// run `failed` whatever it ended as. Readers are given the end now.
+    pub(super) fn settle(&self, failure: Option<RunError>) {
+        let mut state = self.lock();
+        if let Some(error) = failure {
+            state.info.status = RunStatus::Failed;
+            state.info.error = Some(error);
+        }
+        state.settled = true;
+        drop(state);
+        self.wake();
     }
 
     /// The upstream answered: `queued` becomes `in_progress`.
@@ -213,7 +232,7 @@ impl RunCell {
             let state = self.lock();
             (state.info.finished_at_ms, state.read_to_end_at_ms)
         };
-        let Some(ended) = finished else {
+        let Some(ended) = finished.filter(|_| self.is_ended()) else {
             return false;
         };
         let read_out = read.is_some_and(|read| now >= read.saturating_add(KEEP_AFTER_READ_MS));
@@ -229,7 +248,7 @@ impl RunCell {
         if cursor < state.frames.len() {
             return Step::Frames(state.frames[cursor..].to_vec());
         }
-        if state.info.status.is_terminal() {
+        if state.settled && state.info.status.is_terminal() {
             return Step::End(state.info.clone());
         }
         Step::Wait
