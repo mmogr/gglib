@@ -13,7 +13,7 @@ import MarkdownMessageContent from './MarkdownMessageContent';
 import { MessageActionsContext } from './MessageActionsContext';
 import { TurnRow } from './TurnRow';
 import { ReplyArriving, ReplyMade, TurnWho } from './TurnMargin';
-import { arrivingPhase, replyFacts } from './turnFigures';
+import { arrivingPhase, replyFacts, replyName } from './turnFigures';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
@@ -93,7 +93,7 @@ export const AssistantMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className="group">
       <TurnRow
-        who={<TurnWho name="Assistant" at={facts.savedAt} />}
+        who={<TurnWho name={replyName(facts)} at={facts.savedAt} quantization={facts.made?.modelQuantization} />}
         made={made}
         body={
           <>

@@ -18,3 +18,4 @@ export {
   type SerializableFilePart,
   type SerializableImagePart,
 } from './contentParts';
+export { turnMadeFromMetadata, turnMadeFromUsage, type TurnMade, type TurnUsageWire } from './turnMade';

@@ -24,7 +24,7 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 | `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made"; action buttons |
 | `TurnRow.tsx` | One notebook row: margin (who, then how it was made) and body; the margin moves above the body in a narrow notebook |
 | `TurnMargin.tsx` | The margin's content: who and when, a reply's figures, a reply arriving and how far its prompt was read |
-| `turnFigures.ts` | Which figures a turn's margin shows: only those the page has for that turn, never a zero or a dash for one it lacks |
+| `turnFigures.ts` | Which figures a turn's margin shows: only those the page has for that turn (model, quantisation, thought, tool calls, tokens read and cached, time and a computed rate), never a zero or a dash for one it lacks |
 | `MarkdownMessageContent.tsx` | Parses and renders message text as Markdown (remark-gfm + rehype-highlight) |
 | `ThinkingBlock.tsx` | Collapsible reasoning section with live duration during streaming |
 | `MessageActionsContext.tsx` | React context providing edit/copy/delete callbacks to nested message components |

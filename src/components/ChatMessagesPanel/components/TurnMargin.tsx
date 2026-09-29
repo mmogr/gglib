@@ -6,14 +6,19 @@ import type { PromptReading } from '../../../types/messages';
 import { formatCount } from '../../../utils/format';
 import { madeLines, turnTime, type ArrivingPhase, type ReplyFacts } from './turnFigures';
 
-/** The margin's head: who wrote the turn, and when, when that is known. */
-export const TurnWho: FC<{ name: string; at?: Date }> = ({ name, at }) => (
+/**
+ * The margin's head: who wrote the turn, then when and, for a reply, the
+ * model's quantisation, each when known.
+ */
+export const TurnWho: FC<{ name: string; at?: Date; quantization?: string }> = ({ name, at, quantization }) => (
   <>
     <span className="text-sm font-semibold text-text-secondary">{name}</span>
-    {at && (
-      <time className="font-mono tabular-nums" dateTime={at.toISOString()}>
-        {turnTime(at)}
-      </time>
+    {(at || quantization) && (
+      <span className="font-mono tabular-nums">
+        {at && <time dateTime={at.toISOString()}>{turnTime(at)}</time>}
+        {at && quantization && ' · '}
+        {quantization}
+      </span>
     )}
   </>
 );

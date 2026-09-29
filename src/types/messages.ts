@@ -6,6 +6,7 @@
  */
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
+import type { TurnMade } from '../utils/messages/turnMade';
 
 /**
  * Gglib message type - directly uses ThreadMessageLike
@@ -74,6 +75,8 @@ export type GglibMessageCustom = {
    * not keep it.
    */
   prompt?: PromptReading;
+  /** How the turn was made, from its `turn_usage` event or its saved row. */
+  made?: TurnMade;
 };
 
 /** A `prompt_progress` event, as a turn keeps it. */

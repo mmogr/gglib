@@ -45,4 +45,15 @@ describe('buildLoadedMessage', () => {
     expect(loaded.metadata?.custom).toMatchObject({ thinkingDurationSeconds: 2.5 });
     expect((loaded.content as unknown as Array<{ type: string }>)[0]).toMatchObject({ type: 'reasoning', text: 'hmm' });
   });
+
+  it('keeps how a reply was made, only the figures saved, a saved zero as zero', () => {
+    const made = (extra: Partial<ChatMessage>) =>
+      (buildLoadedMessage(row(extra), 1).metadata as { custom: { made?: unknown } }).custom.made;
+    expect(made({ metadata: { modelName: 'qwen3', cachedTokens: 0, junk: 7 } })).toEqual({
+      modelName: 'qwen3',
+      cachedTokens: 0,
+    });
+    expect(made({ metadata: { thinking: 'x' } })).toBeUndefined();
+    expect(made({ role: 'user', metadata: { modelName: 'qwen3' } })).toBeUndefined();
+  });
 });

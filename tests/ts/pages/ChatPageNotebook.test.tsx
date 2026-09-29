@@ -136,4 +136,24 @@ describe('ChatPage, notebook', () => {
     expect(within(row).getByText('Qwen3.8-27B')).toBeInTheDocument();
     expect(await within(row).findByText('Q8_0')).toBeInTheDocument();
   });
+
+  it('names the model and says how the reply was made, in the mock-up order', async () => {
+    fixture.rows[1][1].metadata = {
+      ...fixture.rows[1][1].metadata,
+      modelName: 'Qwen3.8-27B',
+      modelQuantization: 'Q8_0',
+      promptTokens: 3180,
+      cachedTokens: 2100,
+      completionTokens: 496,
+      turnDurationMs: 41_000,
+      writingDurationMs: 40_992,
+    };
+    renderLocal();
+    const row = rowOf(await screen.findByText('It restarts the job whenever it exits.'));
+    expect(within(row).getByText('Qwen3.8-27B')).toBeInTheDocument();
+    expect(within(row).queryByText('Assistant')).not.toBeInTheDocument();
+    expect(within(row).getByText(/· Q8_0$/)).toBeInTheDocument();
+    const lines = within(row).getAllByRole('listitem').map((li) => li.textContent);
+    expect(lines).toEqual(['thought 19.0s', '1 tool call', '3,180 tok read', '2,100 from cache', '41.0s · 12 tok/s']);
+  });
 });

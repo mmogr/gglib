@@ -20,6 +20,7 @@ import {
   addToolCallPart,
   applyToolResult,
   applyPromptProgress,
+  applyTurnUsage,
   setFullText,
 } from './agentMessageState';
 
@@ -119,6 +120,12 @@ export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps
       // while the turn arrives.
       if (typeof event.processed !== 'number' || typeof event.total !== 'number') return false;
       applyPromptProgress(setMessages, state.currentId, event);
+      return false;
+    }
+
+    case 'turn_usage': {
+      // How the turn was made: the same figures its saved row will hold.
+      applyTurnUsage(setMessages, state.currentId, event);
       return false;
     }
 

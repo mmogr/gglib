@@ -7,6 +7,8 @@ import {
   arrivingPhase,
   madeLines,
   replyFacts,
+  replyName,
+  writingRate,
 } from '../../../src/components/ChatMessagesPanel/components/turnFigures';
 
 describe('madeLines', () => {
@@ -21,9 +23,32 @@ describe('madeLines', () => {
         unfinished: true,
         thinkingSeconds: 19,
         toolCalls: 2,
-        prompt: { processed: 3420, total: 3420, cached: 2100 },
+        made: {
+          modelName: 'Qwen3.8-27B',
+          modelQuantization: 'Q8_0',
+          promptTokens: 3180,
+          cachedTokens: 2100,
+          completionTokens: 496,
+          turnDurationMs: 41_000,
+          writingDurationMs: 40_992,
+        },
       }),
-    ).toEqual(['unfinished', 'thought 19.0s', '2 tool calls', '3,420 tok read', '2,100 from cache']);
+    ).toEqual(['unfinished', 'thought 19.0s', '2 tool calls', '3,180 tok read', '2,100 from cache', '41.0s · 12 tok/s']);
+  });
+
+  it('leaves out each figure the turn lacks, and the rate without both of its parts', () => {
+    expect(madeLines({ toolCalls: 0, unfinished: false, made: { turnDurationMs: 900 } })).toEqual(['0.9s']);
+    expect(madeLines({ toolCalls: 0, unfinished: false, made: { completionTokens: 5 } })).toEqual([]);
+    expect(
+      madeLines({ toolCalls: 0, unfinished: false, made: { completionTokens: 5, writingDurationMs: 0 } }),
+    ).toEqual([]);
+    expect(madeLines({ toolCalls: 0, unfinished: false, made: { cachedTokens: 0 } })).toEqual(['0 from cache']);
+  });
+
+  it('says nothing of the prompt reading once the turn has arrived', () => {
+    expect(
+      madeLines({ toolCalls: 0, unfinished: false, prompt: { processed: 10, total: 10, cached: 4 } }),
+    ).toEqual([]);
   });
 
   it('says how long it thought as the reasoning block does, not rounded up', () => {
@@ -68,5 +93,17 @@ describe('arrivingPhase', () => {
     expect(arrivingPhase({ ...none, hasReasoning: true })).toBe('Thinking');
     expect(arrivingPhase({ ...none, hasReasoning: true, hasText: true })).toBe('Writing');
     expect(arrivingPhase({ ...none, hasText: true, toolCallsRunning: true })).toBe('Calling tools');
+  });
+});
+
+describe('replyName and writingRate', () => {
+  it('names the model when known, and the assistant when not', () => {
+    expect(replyName({ toolCalls: 0, unfinished: false, made: { modelName: 'qwen3' } })).toBe('qwen3');
+    expect(replyName({ toolCalls: 0, unfinished: false })).toBe('Assistant');
+  });
+
+  it('is tokens written over seconds writing', () => {
+    expect(writingRate({ completionTokens: 50, writingDurationMs: 4000 })).toBe(12.5);
+    expect(writingRate({ completionTokens: 50 })).toBeNull();
   });
 });

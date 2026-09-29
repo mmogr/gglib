@@ -2,18 +2,20 @@
  * What a turn's margin says about it: only what the page has for that turn.
  *
  * A figure the page does not have is left out, never drawn as zero, a dash
- * or a guess. Saved rows carry their time, how long the turn thought and
- * its tool calls; a turn drawn from a run also carries how far its prompt
- * was read, until the run ends and the saved rows replace it. Nothing on
- * this side knows a saved reply's model, its token counts or its speed.
+ * or a guess. How a turn was made (its model, token counts and times) comes
+ * from its `turn_usage` event while drawn and from its saved row once
+ * loaded: the same figures, so both say the same. The rate is computed
+ * here, tokens written over the time writing; nothing saves it.
  *
  * @module turnFigures
  */
 
 import type { GglibMessageCustom, PromptReading } from '../../../types/messages';
+import type { TurnMade } from '../../../utils/messages/turnMade';
 import { formatCount } from '../../../utils/format';
+import { formatPerSecond } from '../../../utils/formatPerSecond';
 
-/** How long a turn thought: "5.2s" or "1m 23s", as its reasoning block says it. */
+/** A turn's seconds: "5.2s" or "1m 23s", as its reasoning block says them. */
 export function formatThinkingDuration(seconds: number): string {
   if (seconds < 60) {
     return `${seconds.toFixed(1)}s`;
@@ -32,8 +34,23 @@ export interface ReplyFacts {
   toolCalls: number;
   /** The daemon saved it as a reply that did not finish. */
   unfinished: boolean;
-  /** How far the prompt was read, from the run's events. */
+  /** How far the prompt was read, from the run's events: only while it arrives. */
   prompt?: PromptReading;
+  /** How the turn was made. */
+  made?: TurnMade;
+}
+
+/** Who wrote the reply: its model, when known. */
+export function replyName(facts: ReplyFacts): string {
+  return facts.made?.modelName ?? 'Assistant';
+}
+
+/** Tokens written per second of writing; null without both figures. */
+export function writingRate(made: TurnMade | undefined): number | null {
+  const tokens = made?.completionTokens;
+  const ms = made?.writingDurationMs;
+  if (tokens == null || ms == null || ms <= 0) return null;
+  return tokens / (ms / 1000);
 }
 
 /** A reply's figures after it arrived, one line each, in the margin's order. */
@@ -46,10 +63,15 @@ export function madeLines(facts: ReplyFacts): string[] {
   if (facts.toolCalls > 0) {
     lines.push(`${facts.toolCalls} tool call${facts.toolCalls === 1 ? '' : 's'}`);
   }
-  if (facts.prompt) {
-    lines.push(`${formatCount(facts.prompt.total)} tok read`);
-    lines.push(`${formatCount(facts.prompt.cached)} from cache`);
-  }
+  const made = facts.made;
+  if (made?.promptTokens != null) lines.push(`${formatCount(made.promptTokens)} tok read`);
+  if (made?.cachedTokens != null) lines.push(`${formatCount(made.cachedTokens)} from cache`);
+  const rate = writingRate(made);
+  const timing = [
+    made?.turnDurationMs != null ? formatThinkingDuration(made.turnDurationMs / 1000) : null,
+    rate != null ? `${formatPerSecond(rate)} tok/s` : null,
+  ].filter((part): part is string => part !== null);
+  if (timing.length > 0) lines.push(timing.join(' · '));
   return lines;
 }
 
@@ -98,6 +120,7 @@ export function replyFacts(message: MessageLike): ReplyFacts {
     toolCalls,
     unfinished: saved && message.status?.type === 'incomplete',
     prompt: custom?.prompt,
+    made: custom?.made,
   };
 }
 
