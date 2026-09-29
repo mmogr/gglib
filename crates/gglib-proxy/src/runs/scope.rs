@@ -3,7 +3,9 @@
 //! Read from the [`Tunnelled`] extension `remote_marker` sets, never from a
 //! header directly. A request with no extension is `Local`. One with it is
 //! the device the edge named; one the edge named no device for never gets
-//! here, because `device_gate` refuses it first, and is refused here too.
+//! here, because `device_gate` refuses it first with `device_not_paired`. It
+//! is refused here too, under a code of its own, `device_not_named`, so a
+//! run route that left the gate's group shows in a test.
 //!
 //! **What this cannot tell apart.** The edge dials this proxy like any other
 //! client and presents the proxy's own key, so a client that holds that key
@@ -45,9 +47,9 @@ impl<S: Send + Sync> FromRequestParts<S> for Caller {
                 (
                     StatusCode::FORBIDDEN,
                     Json(ErrorResponse::with_code(
-                        "This request did not arrive on a device key.",
+                        "This request came through the tunnel without naming a device.",
                         "invalid_request_error",
-                        "device_not_paired",
+                        "device_not_named",
                     )),
                 )
                     .into_response()
