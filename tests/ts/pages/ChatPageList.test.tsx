@@ -6,7 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { chatTransport, conversation, wrapper, type ChatFixture } from './chatPageHarness';
+import { agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPageHarness';
+import { UNREAD_STORAGE_KEY } from '../../../src/components/ConversationListPanel/useConversationActivity';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
 vi.mock('../../../src/services/transport', async () => {
@@ -72,5 +73,25 @@ describe('ChatPage, conversation list', () => {
     const head = title.closest('.grid') as HTMLElement;
     expect(within(head).getByRole('tab', { name: /chat/i })).toBeVisible();
     expect(within(head).getByRole('button', { name: 'Close' })).toBeVisible();
+  });
+
+  it('marks a conversation Running and one New, in words, on its row and the rail', async () => {
+    const user = userEvent.setup();
+    fixture.conversations.push(conversation(3, 'Quantisation notes'));
+    fixture.runs = [agentRun('r2', 2, 'in_progress')];
+    window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 3: 1_000 }));
+    renderPage();
+
+    const running = await screen.findByRole('option', { name: /Parsing GGUF/ });
+    await waitFor(() => expect(within(running).getByText('Running')).toBeInTheDocument());
+    const unseen = screen.getByRole('option', { name: /Quantisation notes/ });
+    expect(within(unseen).getByText('New')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Conversations, 1 running, 1 new' })).toBeInTheDocument();
+
+    // Showing it clears the mark.
+    await user.click(unseen);
+    await waitFor(() => expect(within(unseen).queryByText('New')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Conversations, 1 running' })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!)).toEqual({});
   });
 });

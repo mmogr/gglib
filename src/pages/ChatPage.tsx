@@ -3,7 +3,12 @@ import { usePanelResize } from '../hooks/usePanelResize';
 import { type ChatPageTabId, ChatPageControls } from './chatTabs';
 import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
-import { ConversationListPanel, ConversationRail, useListFold } from '../components/ConversationListPanel';
+import {
+  ConversationListPanel,
+  ConversationRail,
+  useConversationActivity,
+  useListFold,
+} from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
@@ -75,6 +80,9 @@ export default function ChatPage(props: ChatPageProps) {
   
   // The conversation list beside the notebook, and the rail that folds it
   const listFold = useListFold();
+  // Running and New, for the list's rows and the rail's list button
+  const activity = useConversationActivity(activeConversationId);
+  const countOf = (ids: ReadonlySet<number>) => conversations.filter((c) => ids.has(c.id)).length;
   const listId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const handleSearch = () => {
@@ -369,6 +377,8 @@ export default function ChatPage(props: ChatPageProps) {
             onToggleList={listFold.toggle}
             listId={listId}
             remote={remote}
+            running={countOf(activity.running)}
+            unread={countOf(activity.unread)}
           />
           <div id={listId} hidden={!listFold.open} className={cn('w-[280px] shrink-0 flex flex-col min-h-0 border-r border-border-light', !listFold.open && 'hidden')}>
             <ConversationListPanel
@@ -380,6 +390,8 @@ export default function ChatPage(props: ChatPageProps) {
               onSearchChange={setConversationSearch}
               loading={conversationLoading}
               searchInputRef={searchInputRef}
+              running={activity.running}
+              unread={activity.unread}
             />
           </div>
           <ChatMessagesPanel

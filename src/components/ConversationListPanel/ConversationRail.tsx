@@ -1,9 +1,10 @@
 import { FC } from 'react';
-import { List, Plus, Search } from 'lucide-react';
+import { List, Loader2, Plus, Search } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { cn } from '../../utils/cn';
+import { conversationsLabel } from './ConversationMarks';
 
 interface ConversationRailProps {
   onNewConversation: () => void;
@@ -17,6 +18,9 @@ interface ConversationRailProps {
   listId: string;
   /** A chat whose model is on the other machine. */
   remote: boolean;
+  /** How many conversations have a reply running, and one not yet seen. */
+  running: number;
+  unread: number;
 }
 
 /** Which machine answers, and how this page reaches it, in words. */
@@ -58,6 +62,8 @@ export const ConversationRail: FC<ConversationRailProps> = ({
   onToggleList,
   listId,
   remote,
+  running,
+  unread,
 }) => {
   const machine = useMachine(remote);
   return (
@@ -73,14 +79,24 @@ export const ConversationRail: FC<ConversationRailProps> = ({
       </IconButton>
       {canFold && (
         <IconButton
-          label="Conversations"
+          label={conversationsLabel(running, unread)}
           size="lg"
           aria-expanded={listOpen}
           aria-controls={listId}
-          className={cn(listOpen && 'bg-surface-elevated text-text')}
+          className={cn('relative', listOpen && 'bg-surface-elevated text-text')}
           onClick={onToggleList}
         >
           <Icon icon={List} size={16} />
+          {unread > 0 && (
+            <span aria-hidden className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-[3px] rounded-full bg-primary text-text-inverse font-mono text-2xs leading-[16px] text-center">
+              {unread}
+            </span>
+          )}
+          {running > 0 && (
+            <span aria-hidden className="absolute -bottom-1 -right-1 flex text-success">
+              <Icon icon={Loader2} size={12} className="animate-spin-360" />
+            </span>
+          )}
         </IconButton>
       )}
       <div className="flex-1" />

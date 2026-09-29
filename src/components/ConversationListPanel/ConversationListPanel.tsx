@@ -7,6 +7,7 @@ import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 import { EmptyState } from '../primitives';
 import { ConversationListSkeleton } from './ConversationListSkeleton';
+import { ConversationMarks } from './ConversationMarks';
 import type { ConversationSummary } from '../../services/transport';
 
 interface ConversationListPanelProps {
@@ -19,7 +20,13 @@ interface ConversationListPanelProps {
   loading: boolean;
   /** The search field, for the rail's search button to focus. */
   searchInputRef?: Ref<HTMLInputElement>;
+  /** Conversations with a reply running. */
+  running?: ReadonlySet<number>;
+  /** Conversations with a reply not yet seen. */
+  unread?: ReadonlySet<number>;
 }
+
+const NONE: ReadonlySet<number> = new Set();
 
 const formatRelativeTime = (iso: string) => {
   const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
@@ -48,6 +55,8 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
   onSearchChange,
   loading,
   searchInputRef,
+  running = NONE,
+  unread = NONE,
 }) => {
   const filteredConversations = searchQuery.trim()
     ? conversations.filter(c => 
@@ -116,8 +125,12 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                   >
                     {conversation.title}
                   </span>
-                  <span className="text-xs text-text-muted">
+                  <span className="flex flex-wrap items-center gap-sm text-xs text-text-muted">
                     {formatRelativeTime(conversation.updated_at)}
+                    <ConversationMarks
+                      running={running.has(conversation.id)}
+                      unread={unread.has(conversation.id)}
+                    />
                   </span>
                 </Stack>
                 <IconButton
