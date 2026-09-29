@@ -13,7 +13,7 @@ use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, Run
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use super::compose::Prepared;
+use super::compose::{MadeBy, Prepared};
 use super::run::launch;
 use crate::state::AppState;
 
@@ -121,6 +121,10 @@ pub(super) fn paced(
         tx,
         rx,
         model: "qwen".to_owned(),
+        made_by: MadeBy {
+            model: "qwen-local".to_owned(),
+            quantization: Some("Q4_K_M".to_owned()),
+        },
     };
     (prepared, dropped)
 }

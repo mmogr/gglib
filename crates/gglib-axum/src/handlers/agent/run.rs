@@ -234,6 +234,7 @@ async fn work(
         config,
         tx,
         mut rx,
+        made_by,
         ..
     } = prepared;
     let run = async move {
@@ -245,10 +246,11 @@ async fn work(
     };
     let forward = async {
         let mut first = true;
-        while let Some(event) = rx.recv().await {
+        while let Some(mut event) = rx.recv().await {
             if std::mem::take(&mut first) {
                 log.started();
             }
+            made_by.stamp(&mut event);
             if log.append(frame(&event)).is_err() {
                 break;
             }

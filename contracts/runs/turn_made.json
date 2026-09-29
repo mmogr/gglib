@@ -1,0 +1,31 @@
+{
+  "frames": [
+    {
+      "content": "It restarts.",
+      "type": "text_delta"
+    },
+    {
+      "cached_tokens": 2100,
+      "completion_tokens": 496,
+      "duration_ms": 41000,
+      "model": "Qwen3.8-27B",
+      "prompt_tokens": 3180,
+      "quantization": "Q8_0",
+      "type": "turn_usage",
+      "writing_ms": 38200
+    },
+    {
+      "content": "It restarts.",
+      "type": "final_answer"
+    }
+  ],
+  "metadata": {
+    "cachedTokens": 2100,
+    "completionTokens": 496,
+    "modelName": "Qwen3.8-27B",
+    "modelQuantization": "Q8_0",
+    "promptTokens": 3180,
+    "turnDurationMs": 41000,
+    "writingDurationMs": 38200
+  }
+}

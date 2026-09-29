@@ -10,6 +10,7 @@ pub(crate) mod stagnation;
 pub mod tool_display;
 pub(crate) mod tool_types;
 mod transcript;
+mod turn_usage;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{
@@ -25,9 +26,10 @@ pub use loop_detection::{
 };
 pub use messages::{AgentMessage, AssistantContent};
 pub use replay::{
-    INCOMPLETE_KEY, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL, rows_from_frames,
-    rows_from_timed_frames,
+    INCOMPLETE_KEY, MADE_KEYS, MadeKeys, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL,
+    rows_from_frames, rows_from_timed_frames,
 };
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
 pub use transcript::to_new_message;
+pub use turn_usage::TurnUsage;

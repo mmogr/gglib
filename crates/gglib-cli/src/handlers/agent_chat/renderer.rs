@@ -139,8 +139,8 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
             }
         }
 
-        AgentEvent::PromptProgress { .. } => {
-            // Prompt pre-fill progress — silently ignored in CLI for now.
+        AgentEvent::PromptProgress { .. } | AgentEvent::TurnUsage(_) => {
+            // Pre-fill progress and a turn's usage: not shown in the CLI.
         }
     }
 }

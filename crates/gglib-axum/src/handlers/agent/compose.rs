@@ -30,6 +30,25 @@ pub(crate) struct Prepared {
     /// The model the loop is counted under: the request's, or the one
     /// running on its port.
     pub(crate) model: String,
+    /// The model each turn was made by, for its `turn_usage` event.
+    pub(crate) made_by: MadeBy,
+}
+
+/// The model a run drives, which the loop does not know: stamped on each
+/// turn's usage before it is logged.
+pub(crate) struct MadeBy {
+    pub(crate) model: String,
+    pub(crate) quantization: Option<String>,
+}
+
+impl MadeBy {
+    /// Name the model on a `turn_usage` event; any other passes unchanged.
+    pub(crate) fn stamp(&self, event: &mut AgentEvent) {
+        if let AgentEvent::TurnUsage(usage) = event {
+            usage.model = Some(self.model.clone());
+            usage.quantization.clone_from(&self.quantization);
+        }
+    }
 }
 
 /// One slot of the agent semaphore, or `None` when every slot is taken.
@@ -65,6 +84,10 @@ pub(crate) async fn prepare(
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
     let model = upstream.counted_as.clone();
+    let made_by = MadeBy {
+        model: upstream.drove.clone(),
+        quantization: upstream.quantization.clone(),
+    };
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
@@ -111,6 +134,7 @@ pub(crate) async fn prepare(
         tx,
         rx,
         model,
+        made_by,
     })
 }
 

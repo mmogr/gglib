@@ -47,6 +47,11 @@ pub(super) struct Upstream {
     /// placeholder would file real traffic under something that is not a
     /// model.
     pub counted_as: String,
+    /// The model the run drives, as each turn's saved row names it: locally
+    /// the one loaded on the port, remotely the one named.
+    pub drove: String,
+    /// Its quantisation, from this machine's catalogue: locally only.
+    pub quantization: Option<String>,
 }
 
 /// The model this request named, if it named one.
@@ -120,6 +125,8 @@ pub(super) async fn resolve(
             model_context,
             model: req.model.clone(),
             counted_as: counted_as(req, &server),
+            quantization: quantization_of(state, server.model_id).await,
+            drove: server.model_name,
         });
     }
 
@@ -163,8 +170,23 @@ pub(super) async fn resolve(
         // The far machine counts its own guard decisions under this name, in
         // its own ledger; this one counts what it composed here.
         counted_as: model.clone(),
+        drove: model.clone(),
+        quantization: None,
         model: Some(model),
     })
+}
+
+/// The catalogue's quantisation for a served model; `None` when it has none
+/// or cannot be read, which leaves the figure out rather than failing a run.
+async fn quantization_of(state: &AppState, model_id: i64) -> Option<String> {
+    let model = state
+        .core
+        .models()
+        .get_by_id(model_id)
+        .await
+        .ok()
+        .flatten()?;
+    model.quantization
 }
 
 #[cfg(test)]
