@@ -29,9 +29,11 @@ async fn cancel_drops_the_loop_frees_the_slot_and_saves_what_arrived_marked() {
         "the run holds it"
     );
 
-    let info = state.runs.cancel(&LOCAL, "a1").unwrap();
+    let answer = state.runs.cancel(&LOCAL, "a1").unwrap();
     settled(&state).await;
 
+    assert_eq!(answer.status, RunStatus::InProgress, "its reply is being saved");
+    let info = state.runs.get(&LOCAL, "a1").unwrap();
     assert_eq!(info.status, RunStatus::Cancelled);
     assert_eq!(dropped.load(Ordering::SeqCst), 1, "the loop was dropped");
     assert_eq!(state.agent_semaphore.available_permits(), 1);

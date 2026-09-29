@@ -95,7 +95,7 @@ impl RunRegistry {
     ///
     /// As `RunsPort::create`, less the body check.
     pub fn reserve(&self, id: &str, spec: RunSpec) -> Result<Reservation<'_>, RunsError> {
-        Ok(match self.admit(RunScope::Local, id, spec)? {
+        Ok(match self.admit(RunScope::Local, id, spec, true)? {
             Admitted::Existing(info) => Reservation::Existing(info),
             Admitted::New(cell) => Reservation::New(Reserved {
                 registry: self,

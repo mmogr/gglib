@@ -56,9 +56,13 @@ struct State {
     bytes: usize,
     dropped: bool,
     read_to_end_at_ms: Option<u64>,
-    /// Whether what follows a run's end (saving its reply) is done. A
-    /// reader is given the end only then, so the end it reads is final.
+    /// Whether what follows a run's end (saving its reply) is done. Until
+    /// then the run is shown as still going, to every reader, so the one
+    /// ending anyone sees is the final one.
     settled: bool,
+    /// Whether an end handler follows the end; without one, a run is
+    /// settled the moment it ends.
+    awaits_end: bool,
 }
 
 pub(super) struct RunCell {
@@ -74,7 +78,14 @@ pub(super) struct RunCell {
 }
 
 impl RunCell {
-    pub(super) fn new(id: &str, scope: RunScope, order: u64, spec: RunSpec, clock: Clock) -> Self {
+    pub(super) fn new(
+        id: &str,
+        scope: RunScope,
+        order: u64,
+        spec: RunSpec,
+        awaits_end: bool,
+        clock: Clock,
+    ) -> Self {
         let info = RunInfo {
             id: id.to_owned(),
             kind: spec.kind,
@@ -99,6 +110,7 @@ impl RunCell {
                 dropped: false,
                 read_to_end_at_ms: None,
                 settled: false,
+                awaits_end,
             }),
             changed: watch::Sender::new(0),
             clock,
@@ -117,8 +129,26 @@ impl RunCell {
         self.changed.subscribe()
     }
 
+    /// The run as every reader is shown it: an ended run whose end is not
+    /// yet handled is still `in_progress`.
     pub(super) fn info(&self) -> RunInfo {
+        Self::shown(&self.lock())
+    }
+
+    /// The run as it ended, before its end is handled: what the handler
+    /// is given.
+    pub(super) fn ending(&self) -> RunInfo {
         self.lock().info.clone()
+    }
+
+    fn shown(state: &State) -> RunInfo {
+        let mut info = state.info.clone();
+        if info.status.is_terminal() && !state.settled {
+            info.status = RunStatus::InProgress;
+            info.finished_at_ms = None;
+            info.error = None;
+        }
+        info
     }
 
     /// Every frame logged, for what reads the whole log once it has ended.
@@ -139,8 +169,12 @@ impl RunCell {
 
     /// The end is handled; `failure`, when handling it failed, makes the
     /// run `failed` whatever it ended as. Readers are given the end now.
+    /// Once settled, a run's ending never changes.
     pub(super) fn settle(&self, failure: Option<RunError>) {
         let mut state = self.lock();
+        if state.settled {
+            return;
+        }
         if let Some(error) = failure {
             state.info.status = RunStatus::Failed;
             state.info.error = Some(error);
@@ -190,6 +224,9 @@ impl RunCell {
         state.info.status = status;
         state.info.error = error;
         state.info.finished_at_ms = Some(now);
+        if !state.awaits_end {
+            state.settled = true;
+        }
     }
 
     /// End the run, unless it has ended already. Returns whether this call

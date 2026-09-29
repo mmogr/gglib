@@ -76,4 +76,7 @@ mod retention_tests;
 #[path = "scope_tests.rs"]
 mod scope_tests;
 #[cfg(test)]
+#[path = "settle_tests.rs"]
+mod settle_tests;
+#[cfg(test)]
 pub(crate) mod test_executor;

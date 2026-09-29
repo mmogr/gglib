@@ -52,6 +52,7 @@ impl RunRegistry {
         scope: RunScope,
         id: &str,
         spec: RunSpec,
+        awaits_end: bool,
     ) -> Result<Admitted, RunsError> {
         if !is_run_id(id) {
             return Err(RunsError::InvalidId);
@@ -75,6 +76,7 @@ impl RunRegistry {
             scope,
             order,
             spec,
+            awaits_end,
             Arc::clone(&self.clock),
         ));
         table.runs.insert(id.to_owned(), Arc::clone(&cell));
@@ -148,7 +150,7 @@ impl RunRegistry {
 
     /// Hand the ended run to `ended`; the error that should fail it, if any.
     async fn handle_end(cell: &RunCell, ended: RunEnded) -> Option<RunError> {
-        let handled = AssertUnwindSafe(ended(cell.info(), cell.frames()))
+        let handled = AssertUnwindSafe(ended(cell.ending(), cell.frames()))
             .catch_unwind()
             .await;
         handled

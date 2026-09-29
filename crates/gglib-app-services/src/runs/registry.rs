@@ -156,7 +156,8 @@ impl RunsPort for RunRegistry {
             model: body.get("model").and_then(Value::as_str).map(str::to_owned),
             conversation_id: None,
         };
-        let cell = match self.admit(scope, id, spec)? {
+        // No end handler: a chat run is settled the moment it ends.
+        let cell = match self.admit(scope, id, spec, false)? {
             Admitted::Existing(info) => {
                 return Ok(Created {
                     info,
