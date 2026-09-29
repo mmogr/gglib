@@ -205,8 +205,10 @@ async fn replace_from_a_row_of_another_conversation_changes_nothing() {
     let repo = repo().await;
     let mine = repo.create_conversation(make_conv("Mine")).await.unwrap();
     let theirs = repo.create_conversation(make_conv("Theirs")).await.unwrap();
-    repo.save_message(make_msg(mine, "A")).await.unwrap();
+    // Theirs is older than every row of mine, so a delete from its id on
+    // that ignored whose row it is would take all of mine.
     let other = repo.save_message(make_msg(theirs, "X")).await.unwrap();
+    repo.save_message(make_msg(mine, "A")).await.unwrap();
 
     let refused = repo.replace_from(other, make_msg(mine, "B")).await;
 
