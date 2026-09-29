@@ -13,7 +13,6 @@ import type {
   CreateConversationParams,
   SaveMessageParams,
   UpdateMessageParams,
-  DeleteMessageResult,
   GenerateTitleParams,
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
@@ -30,20 +29,16 @@ export async function listConversations(): Promise<ConversationSummary[]> {
 
 /**
  * Create a new conversation.
- * Returns the new conversation ID.
+ * Returns the new conversation ID, which the route sends as a bare number.
  */
 export async function createConversation(
   params: CreateConversationParams
 ): Promise<ConversationId> {
-  const response = await post<{ id: ConversationId }>(
-    '/api/conversations',
-    {
-      title: params.title,
-      model_id: params.modelId,
-      system_prompt: params.systemPrompt,
-    }
-  );
-  return response.id;
+  return post<ConversationId>('/api/conversations', {
+    title: params.title,
+    model_id: params.modelId,
+    system_prompt: params.systemPrompt,
+  });
 }
 
 /**
@@ -82,19 +77,15 @@ export async function getMessages(conversationId: ConversationId): Promise<ChatM
 
 /**
  * Save a new message.
- * Returns the new message ID.
+ * Returns the new message ID, which the route sends as a bare number.
  */
 export async function saveMessage(params: SaveMessageParams): Promise<MessageId> {
-  const response = await post<{ id: MessageId }>(
-    '/api/messages',
-    {
-      conversation_id: params.conversationId,
-      role: params.role,
-      content: params.content,
-      metadata: params.metadata ?? null,
-    }
-  );
-  return response.id;
+  return post<MessageId>('/api/messages', {
+    conversation_id: params.conversationId,
+    role: params.role,
+    content: params.content,
+    metadata: params.metadata ?? null,
+  });
 }
 
 /**
@@ -109,9 +100,10 @@ export async function updateMessage(id: MessageId, params: UpdateMessageParams):
 
 /**
  * Delete a message and all subsequent messages.
+ * Returns how many were deleted, which the route sends as a bare number.
  */
-export async function deleteMessage(id: MessageId): Promise<DeleteMessageResult> {
-  return del<DeleteMessageResult>(`/api/messages/${id}`);
+export async function deleteMessage(id: MessageId): Promise<number> {
+  return del<number>(`/api/messages/${id}`);
 }
 
 /**

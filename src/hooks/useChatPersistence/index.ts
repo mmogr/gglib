@@ -177,10 +177,10 @@ export function useChatPersistence({
       const dbIdToDelete = firstOrphanDbId;
       (async () => {
         try {
-          const result = await getTransport().deleteMessage(dbIdToDelete);
+          const deletedCount = await getTransport().deleteMessage(dbIdToDelete);
           appLogger.info('hook.persistence', 'Cascade-deleted truncated messages from DB', {
             firstDeletedDbId: dbIdToDelete,
-            deletedCount: result.deletedCount,
+            deletedCount,
           });
         } catch (error) {
           appLogger.error('hook.persistence', 'Failed to delete truncated messages', { error });

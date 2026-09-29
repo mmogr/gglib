@@ -88,7 +88,7 @@ function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; r
   const showToast = vi.fn();
 
   transport.getMessages.mockResolvedValue(dbMessages);
-  transport.deleteMessage.mockResolvedValue({ deletedCount: 1 });
+  transport.deleteMessage.mockResolvedValue(1);
 
   const hook = renderHook(() =>
     useMessageDeletion({

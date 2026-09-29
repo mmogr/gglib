@@ -95,13 +95,6 @@ export interface UpdateMessageParams {
 
 
 /**
- * Result of deleting a message (cascade deletes subsequent messages).
- */
-export interface DeleteMessageResult {
-  deletedCount: number;
-}
-
-/**
  * Parameters for generating a chat title via LLM.
  */
 export interface GenerateTitleParams {
