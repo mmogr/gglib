@@ -26,7 +26,17 @@ pub(super) const KEEP_AFTER_END_MS: u64 = 24 * 60 * 60 * 1000;
 
 /// The log refused a frame: the run has ended, and the executor should stop.
 #[derive(Debug)]
-pub(crate) struct Stopped;
+pub struct Stopped;
+
+/// What a run is, fixed when it is created.
+pub struct RunSpec {
+    /// What it produces.
+    pub kind: RunKind,
+    /// The model it is sent to, when one is named.
+    pub model: Option<String>,
+    /// The saved conversation its transcript is written to, if any.
+    pub conversation_id: Option<i64>,
+}
 
 /// What a reader at `cursor` should do next.
 pub(super) enum Step {
@@ -46,6 +56,13 @@ struct State {
     bytes: usize,
     dropped: bool,
     read_to_end_at_ms: Option<u64>,
+    /// Whether what follows a run's end (saving its reply) is done. Until
+    /// then the run is shown as still going, to every reader, so the one
+    /// ending anyone sees is the final one.
+    settled: bool,
+    /// Whether an end handler follows the end; without one, a run is
+    /// settled the moment it ends.
+    awaits_end: bool,
 }
 
 pub(super) struct RunCell {
@@ -65,17 +82,19 @@ impl RunCell {
         id: &str,
         scope: RunScope,
         order: u64,
-        model: Option<String>,
+        spec: RunSpec,
+        awaits_end: bool,
         clock: Clock,
     ) -> Self {
         let info = RunInfo {
             id: id.to_owned(),
-            kind: RunKind::Chat,
+            kind: spec.kind,
             status: RunStatus::Queued,
-            model,
+            model: spec.model,
             device: scope.device().map(str::to_owned),
             created_at_ms: clock(),
             finished_at_ms: None,
+            conversation_id: spec.conversation_id,
             last_seq: 0,
             error: None,
         };
@@ -90,6 +109,8 @@ impl RunCell {
                 bytes: 0,
                 dropped: false,
                 read_to_end_at_ms: None,
+                settled: false,
+                awaits_end,
             }),
             changed: watch::Sender::new(0),
             clock,
@@ -108,8 +129,31 @@ impl RunCell {
         self.changed.subscribe()
     }
 
+    /// The run as every reader is shown it: an ended run whose end is not
+    /// yet handled is still `in_progress`.
     pub(super) fn info(&self) -> RunInfo {
+        Self::shown(&self.lock())
+    }
+
+    /// The run as it ended, before its end is handled: what the handler
+    /// is given.
+    pub(super) fn ending(&self) -> RunInfo {
         self.lock().info.clone()
+    }
+
+    fn shown(state: &State) -> RunInfo {
+        let mut info = state.info.clone();
+        if info.status.is_terminal() && !state.settled {
+            info.status = RunStatus::InProgress;
+            info.finished_at_ms = None;
+            info.error = None;
+        }
+        info
+    }
+
+    /// Every frame logged, for what reads the whole log once it has ended.
+    pub(super) fn frames(&self) -> Vec<Arc<str>> {
+        self.lock().frames.clone()
     }
 
     /// The log's size in bytes, for the line that says a run ended.
@@ -117,8 +161,27 @@ impl RunCell {
         self.lock().bytes
     }
 
+    /// Ended, and its end handled: nothing about it will change.
     pub(super) fn is_ended(&self) -> bool {
-        self.lock().info.status.is_terminal()
+        let state = self.lock();
+        state.settled && state.info.status.is_terminal()
+    }
+
+    /// The end is handled; `failure`, when handling it failed, makes the
+    /// run `failed` whatever it ended as. Readers are given the end now.
+    /// Once settled, a run's ending never changes.
+    pub(super) fn settle(&self, failure: Option<RunError>) {
+        let mut state = self.lock();
+        if state.settled {
+            return;
+        }
+        if let Some(error) = failure {
+            state.info.status = RunStatus::Failed;
+            state.info.error = Some(error);
+        }
+        state.settled = true;
+        drop(state);
+        self.wake();
     }
 
     /// The upstream answered: `queued` becomes `in_progress`.
@@ -161,6 +224,9 @@ impl RunCell {
         state.info.status = status;
         state.info.error = error;
         state.info.finished_at_ms = Some(now);
+        if !state.awaits_end {
+            state.settled = true;
+        }
     }
 
     /// End the run, unless it has ended already. Returns whether this call
@@ -203,7 +269,7 @@ impl RunCell {
             let state = self.lock();
             (state.info.finished_at_ms, state.read_to_end_at_ms)
         };
-        let Some(ended) = finished else {
+        let Some(ended) = finished.filter(|_| self.is_ended()) else {
             return false;
         };
         let read_out = read.is_some_and(|read| now >= read.saturating_add(KEEP_AFTER_READ_MS));
@@ -219,7 +285,7 @@ impl RunCell {
         if cursor < state.frames.len() {
             return Step::Frames(state.frames[cursor..].to_vec());
         }
-        if state.info.status.is_terminal() {
+        if state.settled && state.info.status.is_terminal() {
             return Step::End(state.info.clone());
         }
         Step::Wait

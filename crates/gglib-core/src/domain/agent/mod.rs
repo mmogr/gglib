@@ -5,9 +5,11 @@ pub(crate) mod fnv1a;
 pub(crate) mod loop_detection;
 pub(crate) mod messages;
 mod messages_serde;
+mod replay;
 pub(crate) mod stagnation;
 pub mod tool_display;
 pub(crate) mod tool_types;
+mod transcript;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{
@@ -22,5 +24,7 @@ pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
 };
 pub use messages::{AgentMessage, AssistantContent};
+pub use replay::{INCOMPLETE_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL, rows_from_frames};
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
+pub use transcript::to_new_message;

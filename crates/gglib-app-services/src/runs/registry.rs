@@ -8,12 +8,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use gglib_core::domain::runs::{RunInfo, RunList, RunStatus, is_run_id};
+use gglib_core::domain::runs::{RunInfo, RunKind, RunList, is_run_id};
 use gglib_core::ports::{Created, RunEvents, RunScope, RunsError, RunsPort};
 use serde_json::Value;
+use tokio::sync::watch;
 
 use super::Clock;
-use super::cell::RunCell;
+use super::admit::Admitted;
+use super::cell::{RunCell, RunSpec};
 use super::executor::{RunExecutor, RunLog};
 use super::reader;
 
@@ -21,11 +23,11 @@ use super::reader;
 pub(super) const MAX_RUNS: usize = 32;
 
 #[derive(Default)]
-struct Table {
-    runs: HashMap<String, Arc<RunCell>>,
-    next_order: u64,
+pub(super) struct Table {
+    pub(super) runs: HashMap<String, Arc<RunCell>>,
+    pub(super) next_order: u64,
     /// Set by `shutdown`; no run starts after it.
-    closed: bool,
+    pub(super) closed: bool,
 }
 
 impl Table {
@@ -43,7 +45,7 @@ impl Table {
 
     /// Make room for one more run, dropping the oldest ended run if every
     /// slot is taken.
-    fn make_room(&mut self) -> Result<(), RunsError> {
+    pub(super) fn make_room(&mut self) -> Result<(), RunsError> {
         if self.runs.len() < MAX_RUNS {
             return Ok(());
         }
@@ -82,7 +84,9 @@ fn seen_by(cell: &RunCell, reader: &RunScope) -> RunInfo {
 pub struct RunRegistry {
     table: Mutex<Table>,
     executor: Arc<dyn RunExecutor>,
-    clock: Clock,
+    pub(super) clock: Clock,
+    /// How many runs are still being driven, their end included.
+    pub(super) live: watch::Sender<usize>,
 }
 
 impl std::fmt::Debug for RunRegistry {
@@ -97,10 +101,11 @@ impl RunRegistry {
             table: Mutex::new(Table::default()),
             executor,
             clock,
+            live: watch::Sender::new(0),
         }
     }
 
-    fn lock(&self) -> MutexGuard<'_, Table> {
+    pub(super) fn lock(&self) -> MutexGuard<'_, Table> {
         let mut table = self.table.lock().unwrap_or_else(PoisonError::into_inner);
         table.sweep((self.clock)());
         table
@@ -134,27 +139,6 @@ impl RunRegistry {
         }
         tracing::debug!(runs = drained.len(), "runs dropped at shutdown");
     }
-
-    async fn drive(executor: Arc<dyn RunExecutor>, cell: Arc<RunCell>, body: Value) {
-        let log = RunLog::new(Arc::clone(&cell));
-        let outcome = tokio::select! {
-            () = cell.cancel.cancelled() => None,
-            outcome = executor.execute(body, log) => Some(outcome),
-        };
-        match outcome {
-            Some(Ok(())) => cell.finish(RunStatus::Completed, None),
-            Some(Err(error)) => cell.finish(RunStatus::Failed, Some(error)),
-            None => cell.finish(RunStatus::Cancelled, None),
-        };
-        let info = cell.info();
-        tracing::debug!(
-            run = %cell.id,
-            status = ?info.status,
-            events = info.last_seq,
-            bytes = cell.bytes(),
-            "run ended"
-        );
-    }
 }
 
 impl RunsPort for RunRegistry {
@@ -165,37 +149,31 @@ impl RunsPort for RunRegistry {
         if !body.is_object() {
             return Err(RunsError::InvalidBody);
         }
-        let mut table = self.lock();
-        if table.closed {
-            return Err(RunsError::ShuttingDown);
-        }
-        if let Some(cell) = table.runs.get(id) {
-            return if cell.scope == scope {
-                Ok(Created {
-                    info: cell.info(),
+        // Always a chat run: an agent run is started only through the
+        // daemon's own routes, never through this port.
+        let spec = RunSpec {
+            kind: RunKind::Chat,
+            model: body.get("model").and_then(Value::as_str).map(str::to_owned),
+            conversation_id: None,
+        };
+        // No end handler: a chat run is settled the moment it ends.
+        let cell = match self.admit(scope, id, spec, false)? {
+            Admitted::Existing(info) => {
+                return Ok(Created {
+                    info,
                     created: false,
-                })
-            } else {
-                Err(RunsError::IdTaken)
-            };
-        }
-        table.make_room()?;
-        let model = body.get("model").and_then(Value::as_str).map(str::to_owned);
-        let order = table.next_order;
-        table.next_order += 1;
-        let cell = Arc::new(RunCell::new(
-            id,
-            scope,
-            order,
-            model,
-            Arc::clone(&self.clock),
-        ));
-        table.runs.insert(id.to_owned(), Arc::clone(&cell));
-        let held = table.runs.len();
-        drop(table);
+                });
+            }
+            Admitted::New(cell) => cell,
+        };
         let info = cell.info();
-        tracing::debug!(run = %id, runs_held = held, "run created");
-        tokio::spawn(Self::drive(Arc::clone(&self.executor), cell, body));
+        let executor = Arc::clone(&self.executor);
+        let log = RunLog::new(Arc::clone(&cell));
+        self.spawn(
+            cell,
+            Box::pin(async move { executor.execute(body, log).await }),
+            None,
+        );
         Ok(Created {
             info,
             created: true,

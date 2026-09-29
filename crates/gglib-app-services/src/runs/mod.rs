@@ -1,13 +1,18 @@
 #![doc = include_str!("README.md")]
 
+mod admit;
 mod cell;
 mod chat;
 mod door;
 mod executor;
+mod local;
 mod reader;
 mod registry;
 mod sse;
 
+pub use cell::{RunSpec, Stopped};
+pub use executor::RunLog;
+pub use local::{Reservation, Reserved, RunEnded, RunWork};
 pub use registry::RunRegistry;
 
 use std::sync::Arc;
@@ -42,6 +47,9 @@ mod chat_tests;
 #[path = "door_tests.rs"]
 mod door_tests;
 #[cfg(test)]
+#[path = "end_tests.rs"]
+mod end_tests;
+#[cfg(test)]
 #[path = "event_limit_tests.rs"]
 mod event_limit_tests;
 #[cfg(test)]
@@ -49,6 +57,9 @@ mod fake_proxy;
 #[cfg(test)]
 #[path = "limits_tests.rs"]
 mod limits_tests;
+#[cfg(test)]
+#[path = "local_tests.rs"]
+mod local_tests;
 #[cfg(test)]
 #[path = "privacy_tests.rs"]
 mod privacy_tests;
@@ -64,5 +75,8 @@ mod retention_tests;
 #[cfg(test)]
 #[path = "scope_tests.rs"]
 mod scope_tests;
+#[cfg(test)]
+#[path = "settle_tests.rs"]
+mod settle_tests;
 #[cfg(test)]
 pub(crate) mod test_executor;

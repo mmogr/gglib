@@ -1,32 +1,30 @@
 #![doc = include_str!("README.md")]
+mod compose;
 mod dto;
 mod guard;
 mod remote_upstream;
 mod retry_notice;
+mod run;
 
 pub(crate) use dto::AgentChatRequest;
+pub(crate) use run::create_run;
 
-use std::collections::HashSet;
 use std::convert::Infallible;
-use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_core::Stream;
 use futures_util::StreamExt as _;
-use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent};
-use gglib_core::ports::{AgentError, AgentGuardReporter, RetryObserver};
-use gglib_runtime::compose_agent_loop;
+use gglib_core::domain::agent::AgentEvent;
+use gglib_core::ports::AgentError;
 
+use compose::{Prepared, frame, prepare, take_permit};
 use guard::AgentTaskGuard;
-use retry_notice::RetryNotice;
 
 /// `POST /api/agent/chat` — start an agentic conversation with SSE streaming.
 ///
@@ -70,70 +68,18 @@ pub(crate) async fn chat(
     // Acquire a concurrency permit — reject immediately with 429 if all
     // slots are occupied rather than queuing (each active agent loop
     // consumes LLM inference time and tool I/O).
-    let permit = state
-        .agent_semaphore
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| {
-            HttpError::TooManyRequests("all agent loop slots are in use; try again later".into())
-        })?;
+    let permit = take_permit(&state).ok_or_else(|| {
+        HttpError::TooManyRequests("all agent loop slots are in use; try again later".into())
+    })?;
 
-    // Local llama-server or the remote tunnel: settled first, because it
-    // decides the port check, the model context and the bearer together.
-    let upstream = remote_upstream::resolve(&state, &req).await?;
-
-    // Read before `tool_filter` consumes the request piecemeal, and before the
-    // loop is composed: the two reasoning controls are the only sampling this
-    // endpoint accepts, and they occupy the ladder's top rung.
-    let sampling = req.sampling_layer();
-    let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
-
-    // Created before the loop is composed so the completion adapter can report
-    // its retries onto the same stream the loop emits through — otherwise a
-    // contended model is indistinguishable from a hung one for as long as the
-    // retry budget lasts.
-    let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
-    let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
-
-    let agent_loop = compose_agent_loop(
-        upstream.base_url,
-        state.http_client.clone(),
-        // `upstream`, not `req`: the two paths mean opposite things by an
-        // absent model, and `resolve` is where that was already decided.
-        upstream.model,
-        upstream.model_context,
-        state.mcp.clone(),
-        tool_filter,
-        // GUI chat runs in the same process as the embedded proxy; report its
-        // reuse to the shared agent-path store behind `agent_usage`.
-        Some(state.proxy.agent_metrics()),
-        // And its guard decisions to the same process's ledger, which is the
-        // only reason the agent path's trips are counted at all (#1091). The
-        // name is `resolve`'s, not `req`'s: a request that named no model is
-        // counted under the model actually running on the port.
-        AgentGuardReporter {
-            sink: state.proxy.agent_guard_sink(),
-            model: upstream.counted_as,
-        },
-        Some(retry_observer),
-        sampling,
-        upstream.far_machine,
-    );
-
-    let messages = req.messages;
-    // Stagnation threshold is a persisted server-side setting, not a request
-    // field; a settings-read failure falls back to the built-in default.
-    let max_stagnation_steps = state
-        .settings
-        .get()
-        .await
-        .ok()
-        .and_then(|s| s.max_stagnation_steps)
-        .map(|v| v as usize);
-    let config: AgentConfig = req
-        .config
-        .unwrap_or_default()
-        .into_agent_config(max_stagnation_steps);
+    let Prepared {
+        agent_loop,
+        messages,
+        config,
+        tx,
+        rx,
+        ..
+    } = prepare(&state, req).await?;
 
     // Move the semaphore permit into the spawned task so it is held for the
     // full duration of the agent loop.  When the task completes (or is
@@ -156,25 +102,7 @@ pub(crate) async fn chat(
     });
 
     let sse_stream = AgentTaskGuard::new(ReceiverStream::new(rx), handle)
-        .filter_map(|event| {
-        futures_util::future::ready(match serde_json::to_string(&event) {
-            Ok(json) => Some(Ok::<Event, Infallible>(Event::default().data(json))),
-            Err(e) => {
-                // Silently dropping a frame here would leave the client hanging
-                // indefinitely — especially fatal if the failed event is
-                // `FinalAnswer` or `Error`. Construct a typed fallback event so
-                // the client always receives a terminal signal that is
-                // structurally valid regardless of future AgentEvent changes.
-                tracing::error!(error = %e, "agent: failed to serialise AgentEvent; emitting fallback error");
-                let typed_fallback = AgentEvent::Error {
-                    message: "serialization failed".to_owned(),
-                };
-                let fallback = serde_json::to_string(&typed_fallback)
-                    .unwrap_or_else(|_| r#"{"type":"error","message":"serialization failed"}"#.to_owned());
-                Some(Ok::<Event, Infallible>(Event::default().data(fallback)))
-            }
-        })
-    });
+        .map(|event| Ok::<Event, Infallible>(sse_event(&event)));
 
     Ok(Sse::new(sse_stream).keep_alive(
         KeepAlive::new()
@@ -182,3 +110,20 @@ pub(crate) async fn chat(
             .text("ping"),
     ))
 }
+
+/// One event as this route's SSE frame.
+fn sse_event(event: &AgentEvent) -> Event {
+    Event::default().data(frame(event))
+}
+
+#[cfg(test)]
+#[path = "run_end_tests.rs"]
+mod run_end_tests;
+#[cfg(test)]
+mod run_fixture;
+#[cfg(test)]
+#[path = "run_privacy_tests.rs"]
+mod run_privacy_tests;
+#[cfg(test)]
+#[path = "run_tests.rs"]
+mod run_tests;

@@ -71,7 +71,7 @@ pub use remote::{
     RemoteEnableBody, RemoteEnableResponse, RemoteForgotten, RemoteGateway, RemoteJoinBody,
     RemoteJoinResponse, RemoteOps, RemotePeer, RemoteStatus,
 };
-pub use runs::RunRegistry;
+pub use runs::{Reservation, Reserved, RunEnded, RunLog, RunRegistry, RunSpec, RunWork, Stopped};
 pub use sampling_explain::{
     ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,
 };

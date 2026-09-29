@@ -22,6 +22,10 @@ const SHUTDOWN_WATCHDOG: Duration = Duration::from_secs(10);
 /// watchdog's ten seconds.
 const TRIP_LOG_DRAIN: Duration = Duration::from_secs(2);
 
+/// How long the runs may take to handle their ends, such as an agent run
+/// saving its reply, out of the same ten seconds.
+const RUNS_DRAIN: Duration = Duration::from_secs(2);
+
 /// Resolve when *either* trigger fires, then cancel the token so both converge.
 ///
 /// The cancel is the whole point. The daemon has two ways to stop — a signal,
@@ -155,7 +159,15 @@ pub(super) async fn teardown(state: &AppState) {
 
     //    Then the runs: each live one is cancelled, which closes its
     //    request to the proxy before the proxy drains, and every reader ends.
+    //    An agent run saves what it had of its reply as it ends; that write
+    //    is waited for, bounded.
     state.runs.shutdown();
+    if tokio::time::timeout(RUNS_DRAIN, state.runs.drained())
+        .await
+        .is_err()
+    {
+        warn!("a run's end was still being handled when shutdown moved on");
+    }
 
     // 1. Drain the proxy so in-flight requests finish before their upstream
     //    dies. "Not running" is a fine answer.

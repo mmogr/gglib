@@ -6,7 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
-use gglib_core::domain::runs::{RunInfo, RunList};
+use gglib_core::domain::runs::{RunInfo, RunKind, RunList};
 use gglib_core::ports::{RunScope, RunsPort};
 use serde::Deserialize;
 use serde_json::Value;
@@ -27,15 +27,29 @@ fn invalid(message: String) -> HttpError {
     }
 }
 
+#[derive(Deserialize)]
+pub(crate) struct PutQuery {
+    /// `agent` starts an agent run; absent, a chat run.
+    #[serde(default)]
+    kind: Option<RunKind>,
+}
+
 /// `PUT /api/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the run that already has the id. 201 new, 200 existing.
+/// With `?kind=agent` the body is an agent chat request, and the run is
+/// the agent loop; only this door starts one.
 pub(crate) async fn put(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    query: Result<Query<PutQuery>, QueryRejection>,
     body: Result<Json<Value>, JsonRejection>,
 ) -> Result<(StatusCode, Json<RunInfo>), HttpError> {
+    let Query(query) = query.map_err(|e| invalid(e.body_text()))?;
     let Json(body) = body.map_err(|e| invalid(e.body_text()))?;
-    let created = state.runs.create(SCOPE, &id, body)?;
+    let created = match query.kind {
+        Some(RunKind::Agent) => crate::handlers::agent::create_run(&state, &id, body).await?,
+        Some(RunKind::Chat) | None => state.runs.create(SCOPE, &id, body)?,
+    };
     let status = if created.created {
         StatusCode::CREATED
     } else {
