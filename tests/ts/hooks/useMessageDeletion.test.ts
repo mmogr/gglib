@@ -11,7 +11,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { createRef } from 'react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 
 const transport = vi.hoisted(() => ({
@@ -79,30 +78,23 @@ function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; r
     reset,
   } as any;
 
-  const persistedMessageIds = createRef<Set<string>>() as React.MutableRefObject<Set<string>>;
-  persistedMessageIds.current = new Set();
-  const dbIdByPosition = createRef<Map<number, number>>() as React.MutableRefObject<Map<number, number>>;
-  dbIdByPosition.current = new Map();
-
   const syncConversations = vi.fn().mockResolvedValue(undefined);
   const showToast = vi.fn();
 
   transport.getMessages.mockResolvedValue(dbMessages);
-  transport.deleteMessage.mockResolvedValue({ deletedCount: 1 });
+  transport.deleteMessage.mockResolvedValue(1);
 
   const hook = renderHook(() =>
     useMessageDeletion({
       threadRuntime,
       activeConversationId: CONVERSATION_ID,
       activeConversation: conversation,
-      persistedMessageIds,
-      dbIdByPosition,
       syncConversations,
       showToast,
     })
   );
 
-  return { hook, reset, persistedMessageIds, dbIdByPosition, syncConversations, showToast };
+  return { hook, reset, syncConversations, showToast };
 }
 
 describe('useMessageDeletion', () => {
@@ -145,16 +137,16 @@ describe('useMessageDeletion', () => {
     expect(transport.deleteMessage).toHaveBeenCalledWith(9);
   });
 
-  it('falls back to the position map for messages created this session', async () => {
-    const { hook, dbIdByPosition } = setup(messagesWithToolCall, [
-      { id: 'temp-abc', role: 'user' },
-    ]);
-    dbIdByPosition.current.set(0, 42);
+  it('deletes nothing for a message that is not saved yet, and still reloads', async () => {
+    // A reply being drawn has no row until its run ends; every saved row
+    // carries its id in its runtime id.
+    const { hook, reset } = setup(messagesWithToolCall, [{ id: 'temp-abc', role: 'user' }]);
 
     act(() => hook.result.current.initiateDelete('temp-abc'));
     await act(async () => { await hook.result.current.confirmDelete(); });
 
-    expect(transport.deleteMessage).toHaveBeenCalledWith(42);
+    expect(transport.deleteMessage).not.toHaveBeenCalled();
+    expect(reset).toHaveBeenCalledTimes(1);
   });
 
   it('preserves tool-call content parts on the reloaded thread', async () => {
@@ -180,20 +172,6 @@ describe('useMessageDeletion', () => {
       args: { tz: 'UTC' },
       result: '12:00',
     });
-  });
-
-  it('rebuilds the position map and persisted ids from the reloaded rows', async () => {
-    const { hook, dbIdByPosition, persistedMessageIds } = setup(messagesWithToolCall, [
-      { id: 'db-9', role: 'user' },
-    ]);
-
-    act(() => hook.result.current.initiateDelete('db-9'));
-    await act(async () => { await hook.result.current.confirmDelete(); });
-
-    // No system prompt on this conversation, so positions start at 0.
-    expect(dbIdByPosition.current.get(0)).toBe(1);
-    expect(dbIdByPosition.current.get(1)).toBe(2);
-    expect(persistedMessageIds.current).toEqual(new Set(['db-1', 'db-2']));
   });
 
   it('reports failure without leaving the modal open', async () => {

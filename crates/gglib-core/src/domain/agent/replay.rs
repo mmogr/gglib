@@ -22,6 +22,10 @@ use crate::domain::chat::NewMessage;
 /// The metadata key the chat page reads an assistant row's reasoning from.
 pub const THINKING_KEY: &str = "thinking";
 
+/// The metadata key the chat page reads how long a turn thought from, in
+/// seconds: from its first reasoning event to its last, as they were logged.
+pub const THINKING_DURATION_KEY: &str = "thinkingDurationSeconds";
+
 /// The metadata key set to `true` on the last assistant row of a reply that
 /// did not finish: its run was cancelled or failed.
 pub const INCOMPLETE_KEY: &str = "incomplete";
@@ -61,6 +65,8 @@ struct Turn {
     reasoning: String,
     calls: Vec<ToolCall>,
     results: Vec<ToolResult>,
+    /// When its first and last reasoning events were logged, in ms.
+    reasoned: Option<(u64, u64)>,
 }
 
 impl Turn {
@@ -83,6 +89,12 @@ impl Turn {
         let mut row = to_new_message(&assistant, conversation_id);
         if !self.reasoning.is_empty() {
             set(&mut row, THINKING_KEY, Value::String(self.reasoning));
+            if let Some((first, last)) = self.reasoned {
+                // Tenths of a second, as the page shows them.
+                let tenths = u32::try_from(last.saturating_sub(first) / 100).unwrap_or(u32::MAX);
+                let seconds = f64::from(tenths) / 10.0;
+                set(&mut row, THINKING_DURATION_KEY, Value::from(seconds));
+            }
         }
         rows.push(row);
         for call in &self.calls {
@@ -132,15 +144,35 @@ pub fn rows_from_frames<'a>(
     finished: bool,
     conversation_id: i64,
 ) -> Vec<NewMessage> {
+    rows_from_timed_frames(
+        frames.into_iter().map(|f| (f, None)),
+        finished,
+        conversation_id,
+    )
+}
+
+/// As [`rows_from_frames`], each frame with when it was logged (ms, any
+/// origin), so a turn that reasoned records how long for:
+/// [`THINKING_DURATION_KEY`], from its first reasoning event to its last.
+pub fn rows_from_timed_frames<'a>(
+    frames: impl IntoIterator<Item = (&'a str, Option<u64>)>,
+    finished: bool,
+    conversation_id: i64,
+) -> Vec<NewMessage> {
     let mut rows = Vec::new();
     let mut turn = Turn::default();
-    for frame in frames {
+    for (frame, at) in frames {
         let Ok(event) = serde_json::from_str::<Logged>(frame) else {
             continue;
         };
         match event {
             Logged::TextDelta { content } => turn.text.push_str(&content),
-            Logged::ReasoningDelta { content } => turn.reasoning.push_str(&content),
+            Logged::ReasoningDelta { content } => {
+                turn.reasoning.push_str(&content);
+                if let Some(at) = at {
+                    turn.reasoned = Some(turn.reasoned.map_or((at, at), |(first, _)| (first, at)));
+                }
+            }
             Logged::ToolCallStart { tool_call } => turn.calls.push(tool_call),
             Logged::ToolCallComplete { result } => turn.results.push(result),
             Logged::IterationComplete {} => {

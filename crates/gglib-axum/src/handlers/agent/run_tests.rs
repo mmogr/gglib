@@ -5,14 +5,16 @@ use std::convert::Infallible;
 
 use axum::response::IntoResponse as _;
 use axum::response::sse::Sse;
-use gglib_core::domain::agent::{AgentEvent, INCOMPLETE_KEY, THINKING_KEY, ToolCall};
+use gglib_core::domain::agent::{
+    AgentEvent, INCOMPLETE_KEY, THINKING_DURATION_KEY, THINKING_KEY, ToolCall,
+};
 use gglib_core::domain::chat::MessageRole;
 use gglib_core::domain::runs::{RunInfo, RunKind, RunStatus};
 use http_body_util::BodyExt as _;
 use serde_json::json;
 
 use super::run_fixture::{
-    End, LOCAL, conversation, finished_reply, meta, prepared, saved, settled, start, state,
+    End, LOCAL, conversation, finished_reply, meta, paced, prepared, saved, settled, start, state,
 };
 use super::sse_event;
 use gglib_core::ports::RunsPort as _;
@@ -145,4 +147,33 @@ async fn with_no_conversation_nothing_is_saved() {
         .await
         .unwrap();
     assert_eq!(conversations.len(), 1);
+}
+
+/// How long the model thought is saved where the page reads it, measured
+/// from when the reasoning's first and last events were logged.
+#[tokio::test]
+async fn a_turn_that_reasoned_saves_how_long_it_thought() {
+    let (_dir, state) = state().await;
+    let id = conversation(&state).await;
+    let reasoning = |c: &str| AgentEvent::ReasoningDelta {
+        content: c.to_owned(),
+    };
+    let events = vec![
+        reasoning("a"),
+        reasoning("b"),
+        AgentEvent::FinalAnswer {
+            content: "done".to_owned(),
+        },
+    ];
+    let (p, _) = paced(events, End::Finish, std::time::Duration::from_millis(250));
+
+    start(&state, "a1", Some(id), p).await;
+    settled(&state).await;
+
+    let rows = saved(&state, id).await;
+    let seconds = meta(&rows[1], THINKING_DURATION_KEY)
+        .as_f64()
+        .expect("a duration");
+    assert!((0.2..3.0).contains(&seconds), "{seconds}");
+    assert_eq!(meta(&rows[1], THINKING_KEY), json!("ab"));
 }

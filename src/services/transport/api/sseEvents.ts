@@ -1,28 +1,35 @@
 /**
- * Minimal POST-capable SSE reader for the backend agent stream.
+ * Reading server-sent events off a `fetch` response.
  *
- * Yields the trimmed JSON payload from each `data:` line.  Keepalive `ping`
- * frames and blank lines are silently skipped.
+ * Yields each event's `data:` payload with its `id:` and `event:` fields, so
+ * a run's reader can tell a numbered frame from the named `run` event that
+ * ends it. Keepalive comments, `ping` payloads and blank events are skipped.
  *
- * **Note:** only `data:` lines are processed.  Standard SSE fields `event:`,
- * `id:`, and `retry:` are silently ignored because the backend agent stream
- * uses plain `data:`-only events with JSON payloads — no named event types
- * or reconnection directives are emitted.
- *
- * @module agentSseReader
+ * @module sseEvents
  */
 
+/** One event: its data, and its id and name when it has them. */
+export interface SseEvent {
+  id?: string;
+  event?: string;
+  data: string;
+}
+
+/** The value of `field:` on one of an event's lines, or undefined. */
+function fieldValue(line: string, field: string): string | undefined {
+  if (!line.startsWith(`${field}:`)) return undefined;
+  return line.slice(field.length + 1).trim();
+}
+
 /**
- * Reads raw SSE data payloads from a POST response body.
- *
- * Yields the trimmed JSON string from each `data:` line.  Keepalive `ping`
- * frames and blank lines are silently skipped.
+ * Reads the events of a response body until it closes or `abortSignal`
+ * fires.
  */
-export async function* readAgentSSE(
+export async function* readSseEvents(
   response: Response,
   abortSignal?: AbortSignal,
-): AsyncGenerator<string> {
-  if (!response.body) throw new Error('Agent SSE: no response body');
+): AsyncGenerator<SseEvent> {
+  if (!response.body) throw new Error('SSE: no response body');
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -44,18 +51,24 @@ export async function* readAgentSSE(
       buffer = rawEvents.pop() ?? ''; // keep the trailing partial event
 
       for (const rawEvent of rawEvents) {
+        const lines = rawEvent.split('\n');
         // RFC 8895 §9.2: multiple `data:` lines in one event are concatenated
         // with a newline. Use filter+join rather than .find() to handle this
         // correctly and avoid silently dropping multi-line payloads.
-        const payload = rawEvent
-          .split('\n')
+        const data = lines
           .filter(l => l.startsWith('data:'))
           .map(l => l.slice(5))
           .join('\n')
           .trim();
-        if (!payload || payload === 'ping') continue;
+        if (!data || data === 'ping') continue;
 
-        yield payload;
+        let id: string | undefined;
+        let event: string | undefined;
+        for (const line of lines) {
+          id = fieldValue(line, 'id') ?? id;
+          event = fieldValue(line, 'event') ?? event;
+        }
+        yield { data, ...(id !== undefined && { id }), ...(event !== undefined && { event }) };
       }
     }
   } finally {

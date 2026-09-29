@@ -4,15 +4,13 @@ import { appLogger } from '../../../services/platform';
 import { getTransport } from '../../../services/transport';
 import type { ConversationSummary } from '../../../services/transport';
 import { extractDbId } from '../components/MessageActionsContext';
-import { buildThreadMessages } from './buildThreadMessages';
+import { buildThreadMessages } from '../../../hooks/useChatPersistence/buildThreadMessages';
 import type { ToastType } from '../../Toast';
 
 export interface UseMessageDeletionOptions {
   threadRuntime: ThreadRuntime | null;
   activeConversationId: number | null;
   activeConversation: ConversationSummary | null;
-  persistedMessageIds: React.MutableRefObject<Set<string>>;
-  dbIdByPosition: React.MutableRefObject<Map<number, number>>;
   syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
   showToast: (message: string, type?: ToastType, duration?: number) => void;
 }
@@ -37,15 +35,17 @@ export interface UseMessageDeletionResult {
  * thread context.
  *
  * Deleting a message also deletes everything after it, so the thread is
- * reloaded from the database afterwards rather than patched in place —
- * `dbIdByPosition` and the persisted-ID set are rebuilt from the same rows.
+ * reloaded from the database afterwards rather than patched in place.
+ *
+ * Only a saved row can be deleted, and every saved row carries its id in its
+ * runtime id (`db-<id>`): a reply is shown from its saved rows once its run
+ * ends. A message still being drawn has none, and deleting it deletes
+ * nothing.
  */
 export function useMessageDeletion({
   threadRuntime,
   activeConversationId,
   activeConversation,
-  persistedMessageIds,
-  dbIdByPosition,
   syncConversations,
   showToast,
 }: UseMessageDeletionOptions): UseMessageDeletionResult {
@@ -85,18 +85,7 @@ export function useMessageDeletion({
 
     setIsDeleting(true);
     try {
-      // Hydrated messages carry their DB ID in the runtime ID; messages created
-      // in this session do not, so fall back to the position map.
-      let dbId = extractDbId(deleteTargetId);
-
-      if (!dbId) {
-        const state = threadRuntime.getState();
-        const position = state.messages.findIndex((m) => m.id === deleteTargetId);
-        if (position >= 0) {
-          dbId = dbIdByPosition.current.get(position) ?? null;
-        }
-      }
-
+      const dbId = extractDbId(deleteTargetId);
       if (dbId) {
         await getTransport().deleteMessage(dbId);
       } else {
@@ -104,15 +93,7 @@ export function useMessageDeletion({
       }
 
       const dbMessages = await getTransport().getMessages(activeConversationId);
-      const { messages, dbIdByPosition: positions, seededIds } = buildThreadMessages(
-        dbMessages,
-        activeConversation,
-        activeConversationId,
-      );
-
-      dbIdByPosition.current = positions;
-      persistedMessageIds.current = seededIds;
-      threadRuntime.reset(messages);
+      threadRuntime.reset(buildThreadMessages(dbMessages, activeConversation, activeConversationId));
 
       await syncConversations({ silent: true });
       showToast('Message deleted', 'success');
@@ -129,8 +110,6 @@ export function useMessageDeletion({
     threadRuntime,
     activeConversationId,
     activeConversation,
-    dbIdByPosition,
-    persistedMessageIds,
     syncConversations,
     showToast,
   ]);

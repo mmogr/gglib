@@ -1,0 +1,48 @@
+/**
+ * A saved row as the thread shows it: an unfinished reply stays unfinished.
+ *
+ * The daemon marks the last assistant row of a run that ended without its
+ * answer (stopped, failed, or the daemon went away) `metadata.incomplete`.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
+import type { ChatMessage } from '../../../src/services/transport';
+
+function row(extra: Partial<ChatMessage>): ChatMessage {
+  return {
+    id: 5,
+    conversation_id: 1,
+    role: 'assistant',
+    content: 'half an ans',
+    created_at: '2026-09-29T00:00:00Z',
+    ...extra,
+  };
+}
+
+describe('buildLoadedMessage', () => {
+  it('shows an unfinished reply as a cancelled one', () => {
+    const loaded = buildLoadedMessage(row({ metadata: { incomplete: true } }), 1);
+    expect(loaded.status).toEqual({ type: 'incomplete', reason: 'cancelled' });
+    expect(loaded.id).toBe('db-5');
+  });
+
+  it('leaves a finished reply to the runtime\'s own status', () => {
+    expect(buildLoadedMessage(row({ metadata: null }), 1).status).toBeUndefined();
+    expect(buildLoadedMessage(row({ metadata: { incomplete: false } }), 1).status).toBeUndefined();
+  });
+
+  it('never marks a user row, which cannot carry a status', () => {
+    const loaded = buildLoadedMessage(row({ role: 'user', metadata: { incomplete: true } }), 1);
+    expect(loaded.status).toBeUndefined();
+  });
+
+  it('shows how long a reply thought, as the daemon saved it', () => {
+    const loaded = buildLoadedMessage(
+      row({ metadata: { thinking: 'hmm', thinkingDurationSeconds: 2.5 } }),
+      1,
+    );
+    expect(loaded.metadata?.custom).toMatchObject({ thinkingDurationSeconds: 2.5 });
+    expect((loaded.content as unknown as Array<{ type: string }>)[0]).toMatchObject({ type: 'reasoning', text: 'hmm' });
+  });
+});

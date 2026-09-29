@@ -19,7 +19,6 @@ import {
 } from './components';
 import type { MessageActionsContextValue } from './components';
 import {
-  useThreadHydration,
   useTitleGeneration,
   useMessageDeletion,
 } from './hooks';
@@ -40,10 +39,10 @@ interface ChatMessagesPanelProps {
   onExportConversation: () => void;
   onUpdateSystemPrompt: (prompt: string | null) => Promise<void>;
   onClose?: () => void;
-  persistedMessageIds: React.MutableRefObject<Set<string>>;
+  /** Whether the conversation's saved messages are still loading. */
+  messageLoading: boolean;
   syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
   chatError: string | null;
-  setChatError: (error: string | null) => void;
   showToast: (message: string, type?: ToastType, duration?: number) => void;
   timingTracker: ReasoningTimingTracker | null;
   currentStreamingAssistantMessageId: string | null;
@@ -67,10 +66,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   onExportConversation,
   onUpdateSystemPrompt,
   onClose,
-  persistedMessageIds,
+  messageLoading,
   syncConversations,
   chatError,
-  setChatError,
   showToast,
   timingTracker,
   currentStreamingAssistantMessageId,
@@ -86,18 +84,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // and ThinkingBlock re-renders are isolated. If performance issues arise on long
   // threads, migrate to useSyncExternalStore for ticker subscription.
   const tick = useSharedTicker(!!currentStreamingAssistantMessageId, 100);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Hydration hook — loads a conversation's messages into the thread runtime.
-  // Saving belongs to the hooks-level useChatPersistence, exclusively.
-  // ─────────────────────────────────────────────────────────────────────────────
-  const { isLoading: messageLoading, dbIdByPosition } = useThreadHydration({
-    threadRuntime,
-    activeConversationId,
-    activeConversation,
-    persistedMessageIds,
-    setChatError,
-  });
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Title generation hook — handles rename and AI title generation
@@ -136,8 +122,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     threadRuntime,
     activeConversationId,
     activeConversation,
-    persistedMessageIds,
-    dbIdByPosition,
     syncConversations,
     showToast,
   });

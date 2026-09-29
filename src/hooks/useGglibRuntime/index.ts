@@ -3,7 +3,7 @@
  *
  * This module provides:
  * - `useGglibRuntime` - Main hook for creating the chat runtime
- * - `streamAgentChat` - Backend SSE consumer for /api/agent/chat
+ * - `buildRunRequest` - The body of an agent run (`PUT /api/runs/{id}?kind=agent`)
  *
  * @module useGglibRuntime
  */
@@ -15,12 +15,8 @@ export {
   type UseGglibRuntimeReturn,
 } from './useGglibRuntime';
 
-// Backend SSE consumer
-export {
-  streamAgentChat,
-  type StreamAgentChatOptions,
-  type PartialAgentConfig,
-} from './streamAgentChat';
+// The body of an agent run
+export { buildRunRequest, type RunRequestOptions, type PartialAgentConfig } from './runRequest';
 
 // Message types (re-exported from types/messages)
 export type {

@@ -262,6 +262,50 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         tx.commit().await.map_err(db)
     }
 
+    async fn replace_from(&self, from: i64, msg: NewMessage) -> Result<i64, ChatHistoryError> {
+        let db = |e: sqlx::Error| ChatHistoryError::Database(e.to_string());
+        // Dropped before `commit`, the transaction rolls back.
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        // A write first, so the transaction holds the write lock from its
+        // first statement: a read first would have to upgrade, and a write
+        // that landed in between makes that upgrade fail. No row deleted
+        // means `from` is not this conversation's; nothing has changed.
+        let deleted = sqlx::query(
+            "DELETE FROM chat_messages WHERE conversation_id = ?1 AND id >= ?2 \
+             AND EXISTS (SELECT 1 FROM chat_messages WHERE id = ?2 AND conversation_id = ?1)",
+        )
+        .bind(msg.conversation_id)
+        .bind(from)
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?;
+        if deleted.rows_affected() == 0 {
+            return Err(ChatHistoryError::MessageNotFound(from));
+        }
+        let metadata = msg
+            .metadata
+            .as_ref()
+            .map(|m| serde_json::to_string(m).unwrap_or_default());
+        let id = sqlx::query(
+            "INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)",
+        )
+        .bind(msg.conversation_id)
+        .bind(msg.role.as_str())
+        .bind(&msg.content)
+        .bind(&metadata)
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?
+        .last_insert_rowid();
+        sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
+            .bind(msg.conversation_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        tx.commit().await.map_err(db)?;
+        Ok(id)
+    }
+
     async fn update_message(
         &self,
         id: i64,

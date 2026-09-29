@@ -76,32 +76,6 @@ export interface CreateConversationParams {
 }
 
 /**
- * Parameters for saving a message.
- */
-export interface SaveMessageParams {
-  conversationId: ConversationId;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  metadata?: ChatMessageMetadata | null;
-}
-
-/**
- * Parameters for updating a message.
- */
-export interface UpdateMessageParams {
-  content: string;
-  metadata?: ChatMessageMetadata | null;
-}
-
-
-/**
- * Result of deleting a message (cascade deletes subsequent messages).
- */
-export interface DeleteMessageResult {
-  deletedCount: number;
-}
-
-/**
  * Parameters for generating a chat title via LLM.
  */
 export interface GenerateTitleParams {

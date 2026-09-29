@@ -82,7 +82,7 @@ Custom React hooks for gglib GUI functionality.
 | Hook | Description |
 |------|-------------|
 | [`useGglibRuntime/`](useGglibRuntime/) | Consolidated runtime state (models, servers, downloads) |
-| [`useChatPersistence/`](useChatPersistence/) | Hydrating chat messages from the database and writing them back, for `ExternalStoreRuntime` |
+| [`useChatPersistence/`](useChatPersistence/) | Turning a conversation's saved rows into thread messages; the daemon writes them, the page only reads |
 
 ## Usage
 

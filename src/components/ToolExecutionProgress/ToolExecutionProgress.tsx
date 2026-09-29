@@ -25,7 +25,7 @@ import { formatToolDisplayName } from '../../services/tools/nameUtils';
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
 /**
- * Extends the base ToolCallPart with runtime fields stamped by streamAgentChat
+ * Extends the base ToolCallPart with runtime fields stamped by the run reader (`agentMessageState`)
  * as each tool settles. These fields are not part of the @assistant-ui/react
  * type surface because they are added dynamically.
  */
@@ -75,7 +75,7 @@ function formatDuration(ms: number): string {
 
 /**
  * Map a tool-call content part to display data.
- * `durationMs` and `isError` are custom fields stamped by streamAgentChat when each tool settles.
+ * `durationMs` and `isError` are custom fields stamped by the run reader (`agentMessageState`) when each tool settles.
  */
 function classifyPart(part: ToolCallPart): ToolRowData {
   const augmented = part as AugmentedToolCallPart;
@@ -156,7 +156,7 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
  *
  * Reads tool-call parts from the current message via `useMessage()`. Each part
  * is classified as `running`, `complete`, or `error` based on whether a
- * `result` field is present (stamped by streamAgentChat as each tool settles).
+ * `result` field is present (stamped by the run reader (`agentMessageState`) as each tool settles).
  *
  * The accordion defaults to expanded and **never auto-collapses** — only the
  * user can toggle it. This prevents CLS when the last tool finishes.

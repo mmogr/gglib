@@ -1,9 +1,9 @@
 /**
  * One SSE `AgentEvent` → React message state.
  *
- * Split from `streamAgentChat.ts`, unchanged, when the remote flag arrived and
- * that file was at its budget. `streamAgentChat` owns the request and the
- * stream; this owns what each event does to the messages.
+ * Split from `streamAgentChat.ts` (now `drawRun.ts`) when that file was at
+ * its budget. `drawRun` owns the run's stream; this owns what each event
+ * does to the messages.
  *
  * @module agentEventDispatch
  */
@@ -45,7 +45,7 @@ export interface DispatchDeps {
  *          continue consuming.  Throws on `error` events (fatal backend failure).
  *
  * Exported for unit testing — callers outside this module should use
- * {@link streamAgentChat} instead.
+ * {@link drawRun} instead.
  */
 export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: DispatchDeps): boolean {
   const { setMessages, timingTracker, makeNextMessage, cleanup, onSystemWarning } = deps;

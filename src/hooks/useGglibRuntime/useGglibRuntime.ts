@@ -18,49 +18,62 @@ export function askTheRemote(): { remote: boolean; model?: string } {
 }
 
 /**
- * Custom runtime hook using ExternalStoreRuntime.
- * 
- * Manages message state externally, allowing one assistant message per
- * agentic loop iteration without overwriting previous messages.
- * 
+ * The chat runtime: an `ExternalStoreRuntime` over the messages
+ * `useRunReader` holds, drawn from runs the daemon owns.
+ *
+ * A send starts a run (`PUT /api/runs/{id}?kind=agent`) under an id minted
+ * here, in a conversation that exists first, and reads it. The daemon saves
+ * the user's message when the run starts and the reply when it ends; the
+ * page saves no turn itself. Stop cancels the run; leaving only stops
+ * reading it.
+ *
  * @module useGglibRuntime
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect } from 'react';
 import { agentOverridesToWire, reasoningOverridesToWire } from '../../services/agentOverrides';
-import { appLogger } from '../../services/platform';
 import {
   useExternalStoreRuntime,
   useExternalMessageConverter,
   type AppendMessage,
 } from '@assistant-ui/react';
 import type { GglibMessage, GglibContent } from '../../types/messages';
-import { mkUserMessage, mkAssistantMessage } from '../../types/messages';
-import { streamAgentChat } from './streamAgentChat';
+import { mkUserMessage } from '../../types/messages';
+import { getTransport } from '../../services/transport';
 import { getRemoteState } from '../../services/remoteRegistry';
-import { ReasoningTimingTracker } from './reasoningTiming';
-import { performanceClock } from './clock';
-import { isAbortError } from '../../utils/errors';
+import { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
+import {
+  buildThreadMessages,
+  type ThreadConversation,
+} from '../useChatPersistence/buildThreadMessages';
+import type { ReasoningTimingTracker } from './reasoningTiming';
+import { buildRunRequest, mintRunId } from './runRequest';
+import { savedRowId } from './savedRows';
+import { useRunReader } from './useRunReader';
 
 export interface UseGglibRuntimeOptions {
   conversationId?: number;
+  /** The open conversation, whose system prompt heads its thread. */
+  conversation?: ThreadConversation | null;
   selectedServerPort?: number;
   maxToolIterations?: number;
   onError?: (error: Error) => void;
   /**
    * Called for each non-fatal `system_warning` the loop emits — an upstream
    * 503 being retried, a tool-call batch being trimmed. Unlike `onError` this
-   * does not mean the turn failed: the loop is still running. Wire it to a
-   * transient notice so the user knows why the response is slow.
+   * does not mean the turn failed: the loop is still running.
    */
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
   /**
-   * Whether the active model supports tool/function calling.
-   * - `true`  → tools sent normally
-   * - `false` → tools stripped (defense-in-depth)
-   * - `null` / `undefined` → unknown; treated as supported (permissive fallback)
+   * Whether the active model supports tool/function calling: `false` strips
+   * tools; `null` / `undefined` is unknown and treated as supported.
    */
   supportsToolCalls?: boolean | null;
+  /**
+   * Called with a conversation's id once a send created it, and once a run
+   * in it has saved its reply: the conversation list is the caller's.
+   */
+  onConversationChanged?: (conversationId: number) => void;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -68,222 +81,182 @@ export interface UseGglibRuntimeReturn {
   messages: GglibMessage[];
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>;
   isRunning: boolean;
+  /** Whether the open conversation's saved rows are still loading. */
+  isLoading: boolean;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
-  /** Set extra custom metadata to merge into the next user message */
-  setNextMessageMeta: (meta: Partial<import('../../types/messages').GglibMessageCustom>) => void;
 }
 
-/**
- * Custom runtime hook using ExternalStoreRuntime.
- * 
- * Creates one assistant message per agentic loop iteration, preventing
- * message overwriting. Uses external message state management.
- */
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
-  const {
-    conversationId,
-    selectedServerPort,
-    maxToolIterations,
-    onError,
-    onSystemWarning,
-    supportsToolCalls,
-  } = options;
+  const { conversationId, selectedServerPort, maxToolIterations, onError, supportsToolCalls } = options;
+  const reader = useRunReader(conversationId, options);
+  const { messages, setMessages, messagesRef, isRunning } = reader;
 
-  // Message state managed externally
-  const [messages, setMessages] = useState<GglibMessage[]>([]);
-  
-  // Ref to avoid stale closures in async callbacks
-  const messagesRef = useRef(messages);
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-
-  // Abort controller for cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-
-  // Extra metadata to merge into the next user message
-  const nextMessageMetaRef = useRef<Partial<import('../../types/messages').GglibMessageCustom>>({});
-  const setNextMessageMeta = useCallback((meta: Partial<import('../../types/messages').GglibMessageCustom>) => {
-    nextMessageMetaRef.current = meta;
-  }, []);
-  
-  // Track which assistant message is currently streaming (for live timer)
-  const [currentStreamingAssistantMessageId, setCurrentStreamingAssistantMessageId] = useState<string | null>(null);
-
-  // Timing tracker for reasoning duration (persists across renders)
-  const timingTrackerRef = useRef(new ReasoningTimingTracker(performanceClock));
-  const timingTracker = timingTrackerRef.current;
-
-  // Clear timing data when switching conversations (prevent memory leak)
-  useEffect(() => {
-    timingTracker.clearAll();
-  }, [conversationId, timingTracker]);
-
-  // Convert messages with joinStrategy: 'none' to prevent merging iterations
   const convertedMessages = useExternalMessageConverter({
     messages,
     callback: (m: GglibMessage) => m, // Already ThreadMessageLike
     isRunning,
-    joinStrategy: 'none', // Critical: preserves per-iteration boundaries
+    joinStrategy: 'none', // one message per loop iteration
   });
 
-  /**
-   * Shared generation logic used by both onNew and onEdit.
-   *
-   * Takes a base message history and a new user message, appends the user
-   * message, synchronises messagesRef, and runs the agentic loop.
-   */
-  const startGeneration = async (
-    baseMessages: GglibMessage[],
-    userMessage: GglibMessage,
-    extraMeta: Partial<import('../../types/messages').GglibMessageCustom> = {},
-  ) => {
-    // Where this turn is going, read once: the guard below and the request
-    // body must agree about it, and two reads of a live store can disagree.
-    const destination = askTheRemote();
+  const runtimeRef = useRef<ReturnType<typeof useExternalStoreRuntime> | null>(null);
+  // Stop pressed before the daemon accepted the run: cancel it once it has.
+  const stopAskedRef = useRef(false);
+  // `cancelRun` puts back the messages it held when Stop was pressed, a tick
+  // later. The run's end brings what the daemon saved; that copy must not
+  // land on top of it.
+  const skipResyncRef = useRef(false);
 
-    // Validate server selection. A remote turn has no local server to
-    // select — the daemon takes the tunnel's port and the stored key, and
-    // `selectedServerPort` travels without being consulted — so requiring
-    // one here is what made the chat screen unusable on a machine that
-    // serves nothing.
+  /** Put a plain text message back in the composer rather than lose it. */
+  const giveTextBack = (content: GglibContent) => {
+    const [only, ...more] = typeof content === 'string' ? [{ type: 'text', text: content } as const] : content;
+    if (more.length === 0 && only?.type === 'text') runtimeRef.current?.thread.composer.setText(only.text);
+  };
+
+  /**
+   * Send `content` after `base`: create the conversation if there is none,
+   * start the run and read it. `replaceFrom` is the saved row an edit or a
+   * regenerate replaces, with every later one; the daemon deletes them only
+   * once it accepts the run, so a refusal changes nothing. Refused here
+   * while a run is live, or while opening has not learned whether one is.
+   */
+  const start = async (
+    base: GglibMessage[],
+    content: GglibContent,
+    { replaceFrom, giveBack = true }: { replaceFrom?: number; giveBack?: boolean } = {},
+  ) => {
+    // Read once: the guard and the body must agree about where this goes.
+    const destination = askTheRemote();
+    // A remote turn has no local server to select; the daemon takes the
+    // tunnel's port and the stored key.
     if (!selectedServerPort && !destination.remote) {
-      const error = new Error('No server selected. Please serve a model first.');
-      onError?.(error);
+      onError?.(new Error('No server selected. Please serve a model first.'));
       return;
     }
-
-    // Abort any existing generation
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+    // Never from a conversation that is not loaded, or into a run that may
+    // still be going: the text goes back to the composer.
+    if (conversationId !== undefined && !(await reader.clearToSend(conversationId))) {
+      if (giveBack) giveTextBack(content);
+      return;
     }
-
-    // Create new abort controller
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    // Build the full message list with the new user message
-    const messagesWithUserMessage = [...baseMessages, userMessage];
-
-    // Synchronise ref immediately so async callbacks see the correct history
-    // (the useEffect sync won't fire until after the next render)
-    messagesRef.current = messagesWithUserMessage;
-    setMessages(messagesWithUserMessage);
-
-    // Start generation
-    setIsRunning(true);
-
-    // Generate unique turn ID
-    const turnId = crypto.randomUUID();
-
+    const signal = reader.beginSend();
+    if (!signal) return;
+    stopAskedRef.current = false;
+    let cid = conversationId;
     try {
-      // Run agentic loop against the backend SSE endpoint
-      await streamAgentChat({
-        turnId,
-        getMessages: () => messagesWithUserMessage,
-        setMessages,
+      if (cid === undefined) {
+        cid = await getTransport().createConversation({
+          title: 'New Chat',
+          modelId: null,
+          systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        });
+        reader.adopt(cid);
+        const created = { id: cid, system_prompt: DEFAULT_SYSTEM_PROMPT, created_at: new Date().toISOString() };
+        base = buildThreadMessages([], created, cid) as GglibMessage[];
+        options.onConversationChanged?.(cid);
+      }
+      const history = [...base, mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() })];
+      const request = buildRunRequest({
+        messages: history,
+        conversationId: cid,
+        replaceFrom,
         selectedServerPort,
-        abortSignal: abortController.signal,
-        conversationId,
-        mkAssistantMessage: (custom) => mkAssistantMessage({ ...custom, ...extraMeta }),
-        timingTracker,
-        setCurrentStreamingAssistantMessageId,
         config: {
           ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
           // Per-chat limits from the Tools popover, read fresh per send.
           ...agentOverridesToWire(),
         },
-        // Same store, different half of the body: these two are request
-        // sampling, not agent-loop configuration.
         reasoning: reasoningOverridesToWire(),
         supportsToolCalls,
-        // Read at send time, not render time: the Remote panel's choice may
-        // change between turns, and a preference for a machine that has
-        // since disconnected is already cleared by the registry. Spread as a
-        // pair so the model named for that machine cannot be left behind.
         ...destination,
-        onSystemWarning,
       });
-    } catch (error) {
-      if (isAbortError(error)) {
-        appLogger.debug('hook.runtime', 'Generation aborted');
-      } else {
-        appLogger.error('hook.runtime', 'Error in agentic loop', { error });
-        onError?.(error as Error);
+      messagesRef.current = history;
+      setMessages(history);
+      const runId = mintRunId();
+      await getTransport().startAgentRun(runId, request);
+      if (stopAskedRef.current) {
+        await getTransport().cancelRun(runId).catch((error: Error) => onError?.(error));
       }
-    } finally {
-      setIsRunning(false);
-      setCurrentStreamingAssistantMessageId(null);
-      abortControllerRef.current = null;
+      if (!signal.aborted) await reader.follow(cid, runId, signal);
+    } catch (error) {
+      if (signal.aborted) return;
+      reader.endReading(signal);
+      // Nothing was started and nothing changed: show what is saved, and
+      // hand the text of a send or an edit back to the composer.
+      if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
+      if (giveBack) giveTextBack(content);
+      onError?.(error as Error);
     }
   };
 
-  // Create runtime with external message management
   const runtime = useExternalStoreRuntime({
     messages: convertedMessages,
     isRunning,
     setMessages: (newMessages) => {
+      if (skipResyncRef.current) {
+        skipResyncRef.current = false;
+        return;
+      }
       setMessages([...newMessages] as GglibMessage[]); // Convert from readonly
     },
 
-    // User sends a new message
     onNew: async (msg: AppendMessage) => {
-      // Drain any one-shot metadata queued for this message
-      const extraMeta = nextMessageMetaRef.current;
-      nextMessageMetaRef.current = {};
-
-      const userMessage = mkUserMessage(msg.content as GglibContent, {
-        conversationId,
-        turnId: crypto.randomUUID(),
-        ...extraMeta,
-      });
-      await startGeneration(messagesRef.current, userMessage, extraMeta);
+      await start(messagesRef.current, msg.content as GglibContent);
     },
 
-    // User edits a message (regenerate)
+    // Edit and resend: the run replaces the edited row and everything after
+    // it with the new message.
     onEdit: async (msg: AppendMessage) => {
-      // msg.parentId is the ID of the message *before* the edited one
-      // (the branch-point parent in @assistant-ui/react's tree model).
-      const parentIdx = messages.findIndex(m => m.id === msg.parentId);
-      if (parentIdx === -1) return;
-
-      // Keep history up to and including the parent; drop the old edited
-      // message and everything after it.
-      const baseMessages = messages.slice(0, parentIdx + 1);
-
-      const userMessage = mkUserMessage(msg.content as GglibContent, {
-        conversationId,
-        turnId: crypto.randomUUID(),
+      const current = messagesRef.current;
+      const parent = msg.parentId === null ? -1 : current.findIndex((m) => m.id === msg.parentId);
+      if (msg.parentId !== null && parent === -1) return;
+      const rowId = savedRowId(current[parent + 1]);
+      await start(current.slice(0, parent + 1), msg.content as GglibContent, {
+        replaceFrom: rowId ?? undefined,
       });
-      await startGeneration(baseMessages, userMessage);
     },
 
-    // User reloads conversation (not supported yet)
-    onReload: async (_parentId: string | null) => {
-      // Reload not implemented yet
-      appLogger.warn('hook.runtime', 'Reload not implemented');
+    // Regenerate: the run replaces the question and its reply with the
+    // question again, so it is held once.
+    onReload: async (parentId: string | null) => {
+      const current = messagesRef.current;
+      let at = parentId === null ? -1 : current.findIndex((m) => m.id === parentId);
+      while (at >= 0 && current[at].role !== 'user') at--;
+      if (at < 0) return;
+      const rowId = savedRowId(current[at]);
+      await start(current.slice(0, at), current[at].content as GglibContent, {
+        replaceFrom: rowId ?? undefined,
+        giveBack: false,
+      });
     },
 
-    // User cancels generation
+    // Stop: cancel the run. Its end, and what it saved, arrive as they would.
     onCancel: async () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
+      skipResyncRef.current = true;
+      const runId = reader.liveRunId();
+      if (!runId) {
+        stopAskedRef.current = true;
+        return;
       }
-      setIsRunning(false);
+      try {
+        await getTransport().cancelRun(runId);
+      } catch (error) {
+        onError?.(error as Error);
+      }
     },
   });
+  useEffect(() => {
+    runtimeRef.current = runtime;
+  }, [runtime]);
 
   return {
     runtime,
     messages,
     setMessages,
     isRunning,
-    timingTracker,
-    currentStreamingAssistantMessageId,
-    setNextMessageMeta,
+    isLoading: reader.isLoading,
+    timingTracker: reader.timingTracker,
+    currentStreamingAssistantMessageId: reader.currentStreamingAssistantMessageId,
   };
 }
 

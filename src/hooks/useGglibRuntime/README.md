@@ -1,24 +1,39 @@
 # useGglibRuntime
 
 <!-- module-docs:start -->
-React hook that drives the chat runtime by delegating the agentic loop to the
-Rust backend (`POST /api/agent/chat`) and streaming the results back to the UI.
+React hook that drives the chat runtime from **runs**: replies the daemon owns
+from start to end, so closing the page no longer stops one.
 
 ---
 
 ## Architecture
 
 ```
-useGglibRuntime
-  └── streamAgentChat()      POST /api/agent/chat  → SSE AgentEvent stream
-        ├── text_delta       → append text to current assistant message
-        ├── thinking         → append reasoning part
-        ├── tool_call_start  → add pending tool-call part
-        ├── tool_call_complete → stamp result onto tool-call part
-        ├── iteration_complete → finalize current message, open next
-        ├── final_answer     → finalize last message, done
-        └── error            → surface error text, done
+useGglibRuntime                      send / edit / regenerate / Stop
+  │  PUT  /api/runs/{id}?kind=agent  (id minted here; the conversation exists first)
+  │  POST /api/runs/{id}/cancel      (Stop; leaving never cancels)
+  └── useRunReader                   the open conversation's messages
+        ├── open:  GET /api/runs → the agent run still going in it, if any
+        │          GET /api/conversations/{id}/messages → saved rows
+        │          (sending waits for both)
+        └── drawRun: GET /api/runs/{id}/events?after=0 → one frame per AgentEvent
+              ├── text_delta / reasoning_delta → current assistant message
+              ├── tool_call_start / _complete  → tool-call part, then its result
+              ├── iteration_complete           → finalize, open the next message
+              ├── final_answer / error         → settled
+              └── event: run (the end)         → show the rows the daemon saved
 ```
+
+The daemon saves the user's message when a run starts and the reply when it
+ends; the page saves no turn. What `drawRun` draws is provisional: at the end
+the thread becomes the saved rows, with their ids, tool rows folded, and an
+unfinished reply marked, and how long each turn thought. An edit or a
+regenerate names the edited message (or the regenerated question) as the
+run's `replace_from`; the daemon replaces it and every later row with the
+message only once it accepts the run, so a refused run changes nothing and
+the page never deletes. The live run is looked up before the rows load, so
+a run that ends during the opening is shown once. Nothing about a run is kept in browser storage; its
+id lives in memory while it is read.
 
 All loop orchestration (context pruning, tool execution, stagnation detection,
 loop detection) lives in the Rust `gglib-agent` crate.
@@ -29,11 +44,13 @@ loop detection) lives in the Rust `gglib-agent` crate.
 
 | File | Role |
 |---|---|
-| `useGglibRuntime.ts` | React hook; wires user input → `streamAgentChat` → message state |
-| `streamAgentChat.ts` | Backend SSE consumer; converts UI messages → wire format, runs the stream, and carries `remote` plus the model name the Remote panel named — refusing the turn when it asked for the far machine and named none |
-| `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `streamAgentChat` runs per event |
+| `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs |
+| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end |
+| `drawRun.ts` | Reads one run's events from the first and draws them |
+| `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; carries `remote` plus the model name the Remote panel named, refusing the turn when it asked for the far machine and named none |
+| `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is |
+| `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `drawRun` runs per event |
 | `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages |
-| `agentSseReader.ts` | Minimal POST-capable SSE reader (async generator) |
 | `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion |
 | `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
 | `clock.ts` | Monotonic clock abstraction for timing |
@@ -62,7 +79,7 @@ preserves the multi-message UI layout from the previous client-side loop.
 | Tools popover → Reasoning | **top-level** `reasoning_effort` / `reasoning_budget_tokens`, via `reasoningOverridesToWire()` | resolved from the profile / model / global / floor layers |
 
 The last row is the one that is easy to get wrong. Both reasoning controls sit
-at the top level of `AgentChatRequest`, not inside `config` — they are per-turn
+at the top level of `AgentRunRequest`, not inside `config` — they are per-turn
 shape rather than agent-loop tuning, and `AgentRequestConfig` declares neither,
 so a level routed through `config` would be dropped by serde without a word.
 That is why the store has two wire mappers rather than one.

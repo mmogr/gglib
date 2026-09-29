@@ -5,6 +5,7 @@ mod guard;
 mod remote_upstream;
 mod retry_notice;
 mod run;
+mod transcript;
 
 pub(crate) use dto::AgentChatRequest;
 pub(crate) use run::create_run;
@@ -124,6 +125,9 @@ mod run_fixture;
 #[cfg(test)]
 #[path = "run_privacy_tests.rs"]
 mod run_privacy_tests;
+#[cfg(test)]
+#[path = "run_replace_tests.rs"]
+mod run_replace_tests;
 #[cfg(test)]
 #[path = "run_tests.rs"]
 mod run_tests;
