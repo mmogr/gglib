@@ -26,6 +26,10 @@ pub const THINKING_KEY: &str = "thinking";
 /// did not finish: its run was cancelled or failed.
 pub const INCOMPLETE_KEY: &str = "incomplete";
 
+/// A tool row's content for a call the reply stopped before answering, so
+/// no saved call is left without its answer when the history is sent back.
+pub const UNFINISHED_TOOL_CALL: &str = "The tool call did not finish: the reply stopped first.";
+
 /// The parts of a logged event the rows are made from.
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -67,7 +71,8 @@ impl Turn {
             && self.results.is_empty()
     }
 
-    /// The assistant row, then a tool row per result in the calls' order.
+    /// The assistant row, then a tool row per call in the calls' order: its
+    /// result, or [`UNFINISHED_TOOL_CALL`] when none arrived.
     fn into_rows(mut self, conversation_id: i64, rows: &mut Vec<NewMessage>) {
         let assistant = AgentMessage::Assistant {
             content: AssistantContent {
@@ -81,10 +86,15 @@ impl Turn {
         }
         rows.push(row);
         for call in &self.calls {
-            if let Some(i) = self.results.iter().position(|r| r.tool_call_id == call.id) {
-                let result = self.results.remove(i);
-                rows.push(tool_row(result, conversation_id));
-            }
+            let result = match self.results.iter().position(|r| r.tool_call_id == call.id) {
+                Some(i) => self.results.remove(i),
+                None => ToolResult {
+                    tool_call_id: call.id.clone(),
+                    content: UNFINISHED_TOOL_CALL.to_owned(),
+                    success: false,
+                },
+            };
+            rows.push(tool_row(result, conversation_id));
         }
         for result in self.results {
             rows.push(tool_row(result, conversation_id));

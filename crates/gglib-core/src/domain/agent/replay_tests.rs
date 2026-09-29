@@ -148,7 +148,7 @@ fn an_unfinished_reply_keeps_what_arrived_and_marks_the_last_assistant_row() {
         false,
     );
 
-    assert_eq!(got.len(), 2, "the assistant row and the one result");
+    assert_eq!(got.len(), 3, "the assistant row and a row per call");
     assert_eq!(got[0].role, MessageRole::Assistant);
     assert_eq!(got[0].content, "Checking.");
     assert_eq!(
@@ -156,7 +156,15 @@ fn an_unfinished_reply_keeps_what_arrived_and_marks_the_last_assistant_row() {
         Some(2)
     );
     assert_eq!(meta(&got[0], INCOMPLETE_KEY), json!(true));
-    assert_eq!(got[1].role, MessageRole::Tool);
+    assert_eq!(
+        (got[1].content.as_str(), meta(&got[1], "tool_call_id")),
+        ("first", json!("c1"))
+    );
+    assert_eq!(
+        (got[2].content.as_str(), meta(&got[2], "tool_call_id")),
+        (UNFINISHED_TOOL_CALL, json!("c2")),
+        "a call with no answer still gets its row"
+    );
 }
 
 #[test]
