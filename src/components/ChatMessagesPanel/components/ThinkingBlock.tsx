@@ -7,16 +7,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { cn } from '../../../utils/cn';
 import { Icon } from '../../ui/Icon';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
-
-/** Format duration for display: "5.2s" or "1m 23s". */
-function formatThinkingDuration(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
-}
+import { formatThinkingDuration } from './turnFigures';
 
 interface ThinkingBlockProps {
   /** Message ID for timing tracker lookup */

@@ -23,14 +23,15 @@ describe('madeLines', () => {
         toolCalls: 2,
         prompt: { processed: 3420, total: 3420, cached: 2100 },
       }),
-    ).toEqual(['unfinished', 'thought 19s', '2 tool calls', '3,420 tok read', '2,100 from cache']);
+    ).toEqual(['unfinished', 'thought 19.0s', '2 tool calls', '3,420 tok read', '2,100 from cache']);
   });
 
-  it('does not round a short think up to a second', () => {
+  it('says how long it thought as the reasoning block does, not rounded up', () => {
     expect(madeLines({ toolCalls: 1, unfinished: false, thinkingSeconds: 0.4 })).toEqual([
-      'thought under 1s',
+      'thought 0.4s',
       '1 tool call',
     ]);
+    expect(madeLines({ toolCalls: 0, unfinished: false, thinkingSeconds: 83 })).toEqual(['thought 1m 23s']);
   });
 });
 

@@ -11,7 +11,17 @@
  */
 
 import type { GglibMessageCustom, PromptReading } from '../../../types/messages';
-import { formatCount, formatDuration } from '../../../utils/format';
+import { formatCount } from '../../../utils/format';
+
+/** How long a turn thought: "5.2s" or "1m 23s", as its reasoning block says it. */
+export function formatThinkingDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
+}
 
 /** The facts about one reply the margin is drawn from. */
 export interface ReplyFacts {
@@ -31,9 +41,7 @@ export function madeLines(facts: ReplyFacts): string[] {
   const lines: string[] = [];
   if (facts.unfinished) lines.push('unfinished');
   if (facts.thinkingSeconds != null) {
-    lines.push(
-      facts.thinkingSeconds < 1 ? 'thought under 1s' : `thought ${formatDuration(facts.thinkingSeconds)}`,
-    );
+    lines.push(`thought ${formatThinkingDuration(facts.thinkingSeconds)}`);
   }
   if (facts.toolCalls > 0) {
     lines.push(`${facts.toolCalls} tool call${facts.toolCalls === 1 ? '' : 's'}`);

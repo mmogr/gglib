@@ -69,7 +69,7 @@ describe('ChatPage, notebook', () => {
     const row = rowOf(body);
 
     expect(within(row).getByText('Assistant')).toBeInTheDocument();
-    expect(within(row).getByText('thought 19s')).toBeInTheDocument();
+    expect(within(row).getByText('thought 19.0s')).toBeInTheDocument();
     expect(within(row).getByText('1 tool call')).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'How this was made' })).toBeInTheDocument();
 
@@ -84,7 +84,7 @@ describe('ChatPage, notebook', () => {
     const body = await screen.findByText('It restarts the job whenever it exits.');
     const row = rowOf(body);
     const who = within(row).getByText('Assistant');
-    const made = within(row).getByText('thought 19s');
+    const made = within(row).getByText('thought 19.0s');
 
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(who, body)).toBe(true);
