@@ -169,6 +169,14 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
         .unwrap()
 }
 
+/// A transcript saved to `conversation`, replacing nothing.
+pub(super) fn saving(conversation: i64) -> super::run::Transcript {
+    super::run::Transcript {
+        conversation_id: Some(conversation),
+        replace_from: None,
+    }
+}
+
 pub(super) async fn start(
     state: &AppState,
     id: &str,
@@ -178,7 +186,10 @@ pub(super) async fn start(
     let created = launch(
         state,
         id,
-        conversation,
+        super::run::Transcript {
+            conversation_id: conversation,
+            replace_from: None,
+        },
         p,
         super::compose::take_permit(state).expect("a free slot"),
     )

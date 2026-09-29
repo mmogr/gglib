@@ -183,3 +183,55 @@ async fn save_messages_cut_off_part_way_writes_all_or_nothing() {
         );
     }
 }
+
+#[tokio::test]
+async fn replace_from_deletes_the_tail_and_saves_the_new_message() {
+    let repo = repo().await;
+    let cid = repo.create_conversation(make_conv("Edit")).await.unwrap();
+    repo.save_message(make_msg(cid, "A")).await.unwrap();
+    let b = repo.save_message(make_msg(cid, "B")).await.unwrap();
+    repo.save_message(make_msg(cid, "C")).await.unwrap();
+
+    let id = repo.replace_from(b, make_msg(cid, "B2")).await.unwrap();
+
+    let rows = repo.get_messages(cid).await.unwrap();
+    let contents: Vec<_> = rows.iter().map(|m| m.content.as_str()).collect();
+    assert_eq!(contents, ["A", "B2"]);
+    assert_eq!(rows[1].id, id);
+}
+
+#[tokio::test]
+async fn replace_from_a_row_of_another_conversation_changes_nothing() {
+    let repo = repo().await;
+    let mine = repo.create_conversation(make_conv("Mine")).await.unwrap();
+    let theirs = repo.create_conversation(make_conv("Theirs")).await.unwrap();
+    repo.save_message(make_msg(mine, "A")).await.unwrap();
+    let other = repo.save_message(make_msg(theirs, "X")).await.unwrap();
+
+    let refused = repo.replace_from(other, make_msg(mine, "B")).await;
+
+    assert!(matches!(refused, Err(ChatHistoryError::MessageNotFound(id)) if id == other));
+    assert_eq!(repo.get_messages(mine).await.unwrap().len(), 1);
+    assert_eq!(repo.get_messages(theirs).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn replace_from_that_cannot_save_deletes_nothing() {
+    let repo = repo().await;
+    let cid = repo
+        .create_conversation(make_conv("Rollback"))
+        .await
+        .unwrap();
+    let a = repo.save_message(make_msg(cid, "A")).await.unwrap();
+    repo.save_message(make_msg(cid, "B")).await.unwrap();
+    sqlx::query(
+        "CREATE TRIGGER refuse BEFORE INSERT ON chat_messages BEGIN SELECT RAISE(ABORT, 'no'); END",
+    )
+    .execute(&repo.pool)
+    .await
+    .unwrap();
+
+    assert!(repo.replace_from(a, make_msg(cid, "A2")).await.is_err());
+
+    assert_eq!(repo.get_messages(cid).await.unwrap().len(), 2);
+}

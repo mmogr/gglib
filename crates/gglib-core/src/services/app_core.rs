@@ -191,6 +191,13 @@ mod tests {
         async fn save_messages(&self, _msgs: Vec<NewMessage>) -> Result<(), ChatHistoryError> {
             Ok(())
         }
+        async fn replace_from(
+            &self,
+            _from: i64,
+            _msg: NewMessage,
+        ) -> Result<i64, ChatHistoryError> {
+            Ok(0)
+        }
         async fn update_message(
             &self,
             _id: i64,

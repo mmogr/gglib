@@ -252,6 +252,15 @@ pub(crate) struct AgentRunRequest {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub conversation_id: Option<i64>,
+
+    /// A saved message of that conversation the user's message replaces:
+    /// once the run is accepted, it and every later message are deleted and
+    /// the user's message saved, in one transaction. An edit names the
+    /// edited message; a regenerate, the question. Absent, the user's
+    /// message is added after the rest.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub replace_from: Option<i64>,
 }
 
 #[cfg(test)]

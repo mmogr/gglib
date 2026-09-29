@@ -15,6 +15,14 @@ export type AgentRunRequest = {
  */
 conversation_id: number | null, 
 /**
+ * A saved message of that conversation the user's message replaces:
+ * once the run is accepted, it and every later message are deleted and
+ * the user's message saved, in one transaction. An edit names the
+ * edited message; a regenerate, the question. Absent, the user's
+ * message is added after the rest.
+ */
+replace_from: number | null, 
+/**
  * Port of the llama-server instance to drive.
  *
  * Must match a currently-running server (the same constraint as the chat

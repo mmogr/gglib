@@ -43,6 +43,13 @@ export interface RunRequestOptions {
   /** The conversation the daemon saves the user's message and the reply to. */
   conversationId: number;
   /**
+   * The saved row the user's message replaces, with every later row: an
+   * edit names the edited message, a regenerate the question. The daemon
+   * deletes them only once the run is accepted, with the save of the new
+   * message, so a refused run changes nothing.
+   */
+  replaceFrom?: number;
+  /**
    * The local server this turn is for. Absent for a remote turn, which has
    * none: the body still carries a `port` because the wire type requires a
    * number, and the backend does not consult it on that branch.
@@ -126,6 +133,7 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
   }
   return {
     conversation_id: options.conversationId,
+    replace_from: options.replaceFrom ?? null,
     port: options.selectedServerPort ?? 0,
     remote,
     messages: convertToWireMessages(options.messages) as AgentMessage[],

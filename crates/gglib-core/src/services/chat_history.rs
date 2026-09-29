@@ -108,6 +108,12 @@ impl ChatHistoryService {
         self.repo.save_messages(msgs).await
     }
 
+    /// Delete message `from` and every later one, then save `msg`: all or
+    /// none.
+    pub async fn replace_from(&self, from: i64, msg: NewMessage) -> Result<i64, ChatHistoryError> {
+        self.repo.replace_from(from, msg).await
+    }
+
     /// Update a message's content and optionally its metadata.
     pub async fn update_message(
         &self,

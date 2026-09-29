@@ -63,6 +63,14 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// failed row or a call dropped part-way writes nothing.
     async fn save_messages(&self, msgs: Vec<NewMessage>) -> Result<(), ChatHistoryError>;
 
+    /// Delete message `from` and every later message of its conversation,
+    /// then save `msg` to that conversation, in one transaction: all of it
+    /// or none. Returns the saved message's id.
+    ///
+    /// `MessageNotFound` when `from` is not a message of `msg`'s
+    /// conversation; nothing is changed.
+    async fn replace_from(&self, from: i64, msg: NewMessage) -> Result<i64, ChatHistoryError>;
+
     /// Update a message's content and optionally its metadata.
     async fn update_message(
         &self,

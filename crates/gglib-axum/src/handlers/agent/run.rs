@@ -6,8 +6,9 @@
 //! request is prepared exactly as the chat route prepares it, and a slot of
 //! the same semaphore is held until the run ends. Each event is logged as
 //! the route's `data:` text. With a `conversation_id`, the user's message is
-//! saved when the run is created and the reply when it ends, whatever the
-//! end, rebuilt from the logged events.
+//! saved when the run is created (in place of the rows from `replace_from`
+//! on, when the request names one) and the reply when it ends, whatever the
+//! end, rebuilt from the logged events: see `transcript`.
 //!
 //! Nothing here logs or returns a frame, a request body or a tool argument:
 //! only ids, statuses and counts.
@@ -19,14 +20,14 @@ use futures_util::future::BoxFuture;
 use serde_json::Value;
 use tokio::sync::OwnedSemaphorePermit;
 
-use gglib_app_services::{Reservation, RunEnded, RunLog, RunSpec};
-use gglib_core::domain::agent::{AgentMessage, rows_from_frames, to_new_message};
-use gglib_core::domain::runs::{RunError, RunKind, RunStatus};
+use gglib_app_services::{Reservation, RunLog, RunSpec};
+use gglib_core::domain::agent::AgentMessage;
+use gglib_core::domain::runs::{RunError, RunKind};
 use gglib_core::ports::{AgentError, Created};
-use gglib_core::services::AppCore;
 
 use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
+use super::transcript::{save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -59,7 +60,9 @@ fn with_code(error: HttpError) -> HttpError {
 ///
 /// `invalid_request` for a body that is not an agent chat request, and
 /// whatever the chat route refuses, coded; `conversation_not_found` (404);
-/// `agent_busy` (429) when every agent slot is taken; and the runs' own.
+/// `agent_busy` (429) when every agent slot is taken; `message_not_found`
+/// (404) for a `replace_from` not in the conversation; and the runs' own.
+/// A refusal writes nothing.
 pub(crate) async fn create_run(
     state: &AppState,
     id: &str,
@@ -82,6 +85,16 @@ pub(crate) async fn create_run(
             info,
             created: false,
         });
+    }
+    if req.replace_from.is_some()
+        && (req.conversation_id.is_none()
+            || !matches!(req.chat.messages.last(), Some(AgentMessage::User { .. })))
+    {
+        return Err(coded(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "replace_from needs a conversation_id and a last message that is the user's",
+        ));
     }
     if let Some(conversation_id) = req.conversation_id {
         let found = state
@@ -112,23 +125,35 @@ pub(crate) async fn create_run(
         )
     })?;
     let prepared = prepare(state, req.chat).await.map_err(with_code)?;
-    launch(state, id, req.conversation_id, prepared, permit).await
+    let transcript = Transcript {
+        conversation_id: req.conversation_id,
+        replace_from: req.replace_from,
+    };
+    launch(state, id, transcript, prepared, permit).await
+}
+
+/// Where a run's transcript goes, and the rows its user's message replaces.
+#[derive(Clone, Copy)]
+pub(super) struct Transcript {
+    pub(super) conversation_id: Option<i64>,
+    pub(super) replace_from: Option<i64>,
 }
 
 /// Reserve the id, save the user's message, and start the loop, in one
 /// task of its own: a request dropped part-way cannot split them, so a
-/// retry finds the run rather than saving the message again.
+/// retry finds the run rather than saving the message, or replacing rows,
+/// again.
 pub(super) async fn launch(
     state: &AppState,
     id: &str,
-    conversation_id: Option<i64>,
+    transcript: Transcript,
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
     let task = tokio::spawn(reserve_and_start(
         Arc::clone(state),
         id.to_owned(),
-        conversation_id,
+        transcript,
         prepared,
         permit,
     ));
@@ -144,10 +169,14 @@ pub(super) async fn launch(
 async fn reserve_and_start(
     state: AppState,
     id: String,
-    conversation_id: Option<i64>,
+    transcript: Transcript,
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
+    let Transcript {
+        conversation_id,
+        replace_from,
+    } = transcript;
     let id = id.as_str();
     let state = &state;
     let spec = RunSpec {
@@ -166,22 +195,14 @@ async fn reserve_and_start(
     };
     let ended = match conversation_id {
         Some(conversation_id) => {
-            if let Some(user @ AgentMessage::User { .. }) = prepared.messages.last() {
-                let row = to_new_message(user, conversation_id);
-                // Dropping `reserved` on the way out leaves no run behind.
-                state
-                    .core
-                    .chat_history()
-                    .save_message(row)
-                    .await
-                    .map_err(|_| {
-                        coded(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "internal_error",
-                            "the user's message could not be saved",
-                        )
-                    })?;
-            }
+            // Dropping `reserved` on the way out leaves no run behind.
+            save_user(
+                &state.core,
+                conversation_id,
+                replace_from,
+                prepared.messages.last(),
+            )
+            .await?;
             save_reply(Arc::clone(&state.core), conversation_id)
         }
         None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {
@@ -265,27 +286,4 @@ fn run_error(error: &AgentError) -> RunError {
         code: code.to_owned(),
         message: message.to_owned(),
     }
-}
-
-/// Save the reply to `conversation_id` once the run ends, whatever the end:
-/// every row or none. A reply that could not be saved fails the run.
-fn save_reply(core: Arc<AppCore>, conversation_id: i64) -> RunEnded {
-    Box::new(move |info, frames| {
-        Box::pin(async move {
-            let finished = info.status == RunStatus::Completed;
-            let rows = rows_from_frames(frames.iter().map(|f| &**f), finished, conversation_id);
-            let total = rows.len();
-            if core.chat_history().save_messages(rows).await.is_err() {
-                tracing::warn!(run = %info.id, conversation = conversation_id, rows = total,
-                    "an agent run's reply was not saved");
-                return Err(RunError {
-                    code: "transcript_not_saved".to_owned(),
-                    message: "The reply could not be saved to its conversation.".to_owned(),
-                });
-            }
-            tracing::debug!(run = %info.id, conversation = conversation_id, rows = total,
-                "an agent run's reply was saved");
-            Ok(())
-        })
-    })
 }
