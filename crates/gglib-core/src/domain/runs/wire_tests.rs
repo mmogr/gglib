@@ -31,6 +31,7 @@ fn run(id: &str, kind: RunKind, status: RunStatus) -> RunInfo {
         device: None,
         created_at_ms: CREATED,
         finished_at_ms: None,
+        conversation_id: None,
         last_seq: 0,
         error: None,
     }
@@ -166,4 +167,18 @@ fn only_completed_failed_and_cancelled_are_terminal() {
     assert!(RunStatus::Completed.is_terminal());
     assert!(RunStatus::Failed.is_terminal());
     assert!(RunStatus::Cancelled.is_terminal());
+}
+
+#[test]
+fn a_conversation_id_is_a_number_and_absent_when_there_is_none() {
+    let with = RunInfo {
+        conversation_id: Some(42),
+        ..run("run-agent-06", RunKind::Agent, RunStatus::Queued)
+    };
+    let wire = serde_json::to_value(&with).unwrap();
+    assert_eq!(wire["conversation_id"], json!(42));
+    assert_eq!(serde_json::from_value::<RunInfo>(wire).unwrap(), with);
+
+    let without = serde_json::to_value(run("r", RunKind::Chat, RunStatus::Queued)).unwrap();
+    assert!(without.get("conversation_id").is_none(), "{without}");
 }

@@ -38,6 +38,11 @@ created_at_ms: number,
  */
 finished_at_ms?: number | null, 
 /**
+ * The saved conversation the daemon writes the run's transcript to;
+ * absent when it writes none.
+ */
+conversation_id?: number | null, 
+/**
  * The number of the last event logged for the run; 0 when none has been.
  */
 last_seq: number, 

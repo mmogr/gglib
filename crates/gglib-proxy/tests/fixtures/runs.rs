@@ -55,6 +55,7 @@ pub(crate) fn info(id: &str) -> RunInfo {
         device: None,
         created_at_ms: 1,
         finished_at_ms: Some(2),
+        conversation_id: None,
         last_seq: 2,
         error: None,
     }

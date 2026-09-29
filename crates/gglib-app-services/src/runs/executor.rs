@@ -14,7 +14,7 @@ use serde_json::Value;
 use super::cell::{RunCell, Stopped};
 
 /// Where an executor writes a run's events.
-pub(crate) struct RunLog {
+pub struct RunLog {
     cell: Arc<RunCell>,
 }
 
@@ -30,13 +30,17 @@ impl RunLog {
     }
 
     /// The upstream answered with a reply: the run is `in_progress`.
-    pub(crate) fn started(&self) {
+    pub fn started(&self) {
         self.cell.started();
     }
 
     /// Log one event. An `Err` means the run has ended and the executor
     /// should stop.
-    pub(crate) fn append(&self, frame: String) -> Result<(), Stopped> {
+    ///
+    /// # Errors
+    ///
+    /// [`Stopped`] once the run has ended.
+    pub fn append(&self, frame: String) -> Result<(), Stopped> {
         self.cell.append(frame)
     }
 }

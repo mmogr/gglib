@@ -1,13 +1,18 @@
 #![doc = include_str!("README.md")]
 
+mod admit;
 mod cell;
 mod chat;
 mod door;
 mod executor;
+mod local;
 mod reader;
 mod registry;
 mod sse;
 
+pub use cell::{RunSpec, Stopped};
+pub use executor::RunLog;
+pub use local::{Reservation, Reserved, RunEnded, RunWork};
 pub use registry::RunRegistry;
 
 use std::sync::Arc;
@@ -49,6 +54,9 @@ mod fake_proxy;
 #[cfg(test)]
 #[path = "limits_tests.rs"]
 mod limits_tests;
+#[cfg(test)]
+#[path = "local_tests.rs"]
+mod local_tests;
 #[cfg(test)]
 #[path = "privacy_tests.rs"]
 mod privacy_tests;

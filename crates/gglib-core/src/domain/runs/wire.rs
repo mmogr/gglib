@@ -81,6 +81,11 @@ pub struct RunInfo {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finished_at_ms: Option<u64>,
+    /// The saved conversation the daemon writes the run's transcript to;
+    /// absent when it writes none.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<i64>,
     /// The number of the last event logged for the run; 0 when none has been.
     pub last_seq: u32,
     /// Why the run failed; present only when `status` is `failed`.

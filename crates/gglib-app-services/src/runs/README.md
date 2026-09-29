@@ -14,6 +14,9 @@ runs/
   mod.rs          — the clock type
   registry.rs     — RunRegistry: create, list, get, events, cancel, the
                     scope rule, the limits, retention, forget_device
+  admit.rs        — a run admitted under its id, and driven to its end
+  local.rs        — a run this machine starts with work it prepared (an
+                    agent run): reserve, then start; never on the port
   cell.rs         — one run: status, log, the watch its readers wait on
   reader.rs       — a run's event stream: the log by index, then live
   executor.rs     — the seam an executor writes a run's events through

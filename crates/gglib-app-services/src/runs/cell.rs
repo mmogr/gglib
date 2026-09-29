@@ -26,7 +26,17 @@ pub(super) const KEEP_AFTER_END_MS: u64 = 24 * 60 * 60 * 1000;
 
 /// The log refused a frame: the run has ended, and the executor should stop.
 #[derive(Debug)]
-pub(crate) struct Stopped;
+pub struct Stopped;
+
+/// What a run is, fixed when it is created.
+pub struct RunSpec {
+    /// What it produces.
+    pub kind: RunKind,
+    /// The model it is sent to, when one is named.
+    pub model: Option<String>,
+    /// The saved conversation its transcript is written to, if any.
+    pub conversation_id: Option<i64>,
+}
 
 /// What a reader at `cursor` should do next.
 pub(super) enum Step {
@@ -61,21 +71,16 @@ pub(super) struct RunCell {
 }
 
 impl RunCell {
-    pub(super) fn new(
-        id: &str,
-        scope: RunScope,
-        order: u64,
-        model: Option<String>,
-        clock: Clock,
-    ) -> Self {
+    pub(super) fn new(id: &str, scope: RunScope, order: u64, spec: RunSpec, clock: Clock) -> Self {
         let info = RunInfo {
             id: id.to_owned(),
-            kind: RunKind::Chat,
+            kind: spec.kind,
             status: RunStatus::Queued,
-            model,
+            model: spec.model,
             device: scope.device().map(str::to_owned),
             created_at_ms: clock(),
             finished_at_ms: None,
+            conversation_id: spec.conversation_id,
             last_seq: 0,
             error: None,
         };
@@ -110,6 +115,11 @@ impl RunCell {
 
     pub(super) fn info(&self) -> RunInfo {
         self.lock().info.clone()
+    }
+
+    /// Every frame logged, for what reads the whole log once it has ended.
+    pub(super) fn frames(&self) -> Vec<Arc<str>> {
+        self.lock().frames.clone()
     }
 
     /// The log's size in bytes, for the line that says a run ended.
