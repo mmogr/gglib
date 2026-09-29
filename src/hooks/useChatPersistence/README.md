@@ -5,39 +5,15 @@
 
 <!-- module-docs:start -->
 
-Bidirectional bridge between the `@assistant-ui/react` streaming runtime and the backend database. Hydrates messages from the DB when a conversation is selected, and persists new or changed messages with debouncing and deduplication to prevent spurious writes during streaming.
-
-## Architecture
-
-```
-Conversation selected
-    ▼
-Effect 1 (Hydrate)
-    loadMessages(conversationId) → buildLoadedMessage() per row
-    foldToolMessages() ← merges tool-role rows into assistant contentParts
-    runtime.messages = hydrated[]
-
-Streaming / editing
-    ▼
-Effect 2 (Persist)
-    detect new / changed messages (digest comparison)
-    debounce 400ms
-    buildSaveMetadata() ← extracts structured parts, reasoning, timing
-    saveMessage(row) or deleteMessage(id)
-```
+Turning a conversation's saved rows into the messages the thread shows. The daemon writes every turn: the user's message when a run starts and the reply when it ends (`PUT /api/runs/{id}?kind=agent`). The page saves no turn; it loads rows, deletes them (a delete, an edit, a regenerate), and renames conversations.
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `index.ts` | Main hook; hydration + persistence effects; debounce timer management |
-| `buildLoadedMessage.ts` | DB row → `ThreadMessageLike`; reconstructs content parts; folds tool rows |
-| `buildSaveMetadata.ts` | `ThreadMessage` → DB metadata; extracts tool-calls, reasoning, thinking duration |
+| `buildThreadMessages.ts` | A conversation's rows → thread messages, system prompt first; shared by opening a conversation, a run's end and a delete |
+| `buildLoadedMessage.ts` | One row → `ThreadMessageLike`: content parts and reasoning restored, tool rows folded into the assistant row that called them, an unfinished reply (`metadata.incomplete`) marked as a cancelled one |
 
-## Caching Strategy
-
-- `persistedByMessageId` — tracks which messages are in the DB
-- `lastDigestByMessageId` — detects content changes since last save
-- Per-message debounce timers are cleaned up on conversation switch to prevent cross-conversation writes
+Every loaded message keeps its row's id in its runtime id (`db-<id>`), which is how a delete, an edit and a regenerate find the row.
 
 <!-- module-docs:end -->

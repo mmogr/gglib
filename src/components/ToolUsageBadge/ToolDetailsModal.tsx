@@ -13,7 +13,7 @@ import { ToolResultDisplay } from '../ToolUI/ToolResultDisplay';
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
 /**
- * Extends the base ToolCallPart with runtime fields stamped by streamAgentChat
+ * Extends the base ToolCallPart with runtime fields stamped by the run reader (`agentMessageState`)
  * as each tool settles. These fields are not part of the @assistant-ui/react
  * type surface because they are added dynamically.
  */

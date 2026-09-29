@@ -11,7 +11,6 @@ import { GenericToolUI } from '../components/ToolUI';
 import { NewConversationModal } from '../components/NewConversationModal';
 import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
-import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
@@ -73,9 +72,6 @@ export default function ChatPage(props: ChatPageProps) {
   const [newConversationPrompt, setNewConversationPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [creatingConversation, setCreatingConversation] = useState(false);
   
-  // Message persistence tracking
-  const persistedMessageIds = useRef<Set<string>>(new Set());
-  
   // Panel width for resize
   const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = usePanelResize({ initial: 35, min: 20, max: 50, storageKey: 'gglib.chat.split' });
 
@@ -112,9 +108,15 @@ export default function ChatPage(props: ChatPageProps) {
     return () => { cancelled = true; };
   }, [modelId]);
 
-  // Runtime - now with external message state
-  const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  // Get active conversation
+  const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
+
+  // Runtime: sends start runs the daemon owns and saves; opening a
+  // conversation shows what is saved, then the run still going in it.
+  const { runtime, isLoading: messageLoading, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
+    conversation: activeConversation,
+    onConversationChanged: (id) => void syncConversations({ preferredId: id, silent: true }),
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
     // Non-fatal: the turn is still running, so this is a transient notice
@@ -204,31 +206,9 @@ export default function ChatPage(props: ChatPageProps) {
     syncConversations();
   }, [syncConversations]);
 
-  // Get active conversation
-  const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
 
-  // Hydrate messages when conversation changes
-  // Note: Message persistence is handled by useChatPersistence below
-  // This effect just clears the message state when switching to a new conversation
-  useEffect(() => {
-    if (!activeConversationId) {
-      // New conversation - clear messages
-      setMessages([]);
-      persistedMessageIds.current.clear();
-    }
-  }, [activeConversationId, setMessages]);
-
-  // Persistence hook - handles hydration and saving
-  useChatPersistence({
-    activeConversationId,
-    systemPrompt: activeConversation?.system_prompt,
-    conversationCreatedAt: activeConversation?.created_at,
-    messages,
-    setMessages,
-    syncConversations,
-    setChatError,
-    timingTracker,
-  });
+  // An error belongs to the conversation it happened in.
+  useEffect(() => setChatError(null), [activeConversationId]);
 
   // Conversation handlers
   const handleDeleteConversation = async (conversationId: number) => {
@@ -242,7 +222,6 @@ export default function ChatPage(props: ChatPageProps) {
 
     try {
       await getTransport().deleteConversation(conversationId);
-      persistedMessageIds.current = new Set();
       await syncConversations();
     } catch (error) {
       setChatError(error instanceof Error ? error.message : String(error));
@@ -261,8 +240,7 @@ export default function ChatPage(props: ChatPageProps) {
       const title = newConversationTitle.trim() || DEFAULT_CONVERSATION_TITLE;
       const systemPrompt = newConversationPrompt.trim() || DEFAULT_SYSTEM_PROMPT;
       const newId = await getTransport().createConversation({ title, modelId: null, systemPrompt });
-      persistedMessageIds.current = new Set();
-      
+
       // Insert new conversation locally before selecting it
       const newConversation: ConversationSummary = {
         id: newId,
@@ -327,7 +305,6 @@ export default function ChatPage(props: ChatPageProps) {
         modelId: null,
         systemPrompt: activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
       });
-      persistedMessageIds.current = new Set();
       await syncConversations({ preferredId: newId });
     } catch (error) {
       setChatError(error instanceof Error ? error.message : String(error));
@@ -406,10 +383,9 @@ export default function ChatPage(props: ChatPageProps) {
               onExportConversation={handleExportConversation}
               onUpdateSystemPrompt={handleUpdateSystemPrompt}
               onClose={onClose}
-              persistedMessageIds={persistedMessageIds}
+              messageLoading={messageLoading}
               syncConversations={syncConversations}
               chatError={chatError}
-              setChatError={setChatError}
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}

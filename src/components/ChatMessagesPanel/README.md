@@ -36,6 +36,6 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
 |-----------|----------|
 | `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
-| `hooks/` | `useThreadHydration`, `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `buildThreadMessages` |
+| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration` |
 
 <!-- module-docs:end -->

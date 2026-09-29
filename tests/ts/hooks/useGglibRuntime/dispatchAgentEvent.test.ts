@@ -25,7 +25,7 @@ import {
   dispatchAgentEvent,
   type DispatchState,
   type DispatchDeps,
-} from '../../../../src/hooks/useGglibRuntime/streamAgentChat';
+} from '../../../../src/hooks/useGglibRuntime/agentEventDispatch';
 
 // ---------------------------------------------------------------------------
 // Helpers

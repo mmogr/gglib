@@ -4,7 +4,7 @@
  * Each function takes `setMessages` and a `messageId` and applies a targeted
  * update to the matching `GglibMessage` in state.  They are pure named
  * functions so they can be imported, tested, and re-used independently of the
- * main `streamAgentChat` orchestrator.
+ * run reader, `drawRun`.
  *
  * ## Performance: in-place part mutation
  *

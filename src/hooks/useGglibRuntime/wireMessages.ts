@@ -1,5 +1,5 @@
 /**
- * Wire-format types and conversion for the backend `/api/agent/chat` endpoint.
+ * Wire-format types and conversion for an agent run's history (`AgentRunRequest.messages`).
  *
  * The backend expects a flat `AgentMessage[]` (OpenAI multi-turn format) while
  * the UI stores messages as `GglibMessage[]` with rich content-part arrays.

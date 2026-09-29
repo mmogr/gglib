@@ -18,6 +18,7 @@ endpoint produces, and passing.
 | `mcp.ts` | `McpServerInfo` | The nested `{server, status, tools}` every server route answers with, not the bare row two mocks were returning. |
 | `ports.ts` | Test port constants | Centralised so a port is never hardcoded into a test, and CI can move them in one place. |
 | `dashboard.ts` | `SlotSnapshot`, `ActiveConnectionSnapshot`, `SamplingAuditSnapshot`, `DashboardSnapshot` | Every field of every frame, since nothing on the dashboard contract skips. The whole-snapshot builder replaces two tests that named five of sixteen fields behind a cast. Values are the ones the proxy can actually emit — `slots_status` is the poller's own default, not the GUI's fallback string. |
+| `fakeDaemon.ts` | The chat and runs routes behind `fetch` | Bodies as the routes send them: bare numbers from `POST /api/conversations` and `DELETE /api/messages/{id}`, the user's row saved at a run's start, and a run's `event: run` end sent only after its reply is saved. |
 
 ## Rules
 
