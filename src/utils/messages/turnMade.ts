@@ -19,7 +19,7 @@ export interface TurnMade {
   /** Tokens written. */
   completionTokens?: number;
   turnDurationMs?: number;
-  /** From the first thing written to the end. */
+  /** From the first generated token's arrival to the last, timed before normalisation. */
   writingDurationMs?: number;
 }
 

@@ -1,5 +1,5 @@
 //! The turn's usage: sent once, at the stream's end, with only what the
-//! upstream reported.
+//! upstream reported and the writing time its stream carried.
 
 use super::*;
 
@@ -7,14 +7,23 @@ fn stream(events: Vec<LlmStreamEvent>) -> LlmStream {
     Box::pin(futures_util::stream::iter(events.into_iter().map(Ok)))
 }
 
-async fn drain(events: Vec<LlmStreamEvent>) -> (usize, Vec<AgentEvent>) {
+async fn usage_of(events: Vec<LlmStreamEvent>) -> (usize, TurnUsage) {
     let (tx, mut rx) = mpsc::channel(8);
     let passed = measure_turn(stream(events), tx).count().await;
     let mut sent = Vec::new();
     while let Ok(event) = rx.try_recv() {
         sent.push(event);
     }
-    (passed, sent)
+    let [AgentEvent::TurnUsage(usage)] = sent.as_slice() else {
+        panic!("one turn_usage, got {sent:?}");
+    };
+    (passed, usage.clone())
+}
+
+fn text(content: &str) -> LlmStreamEvent {
+    LlmStreamEvent::TextDelta {
+        content: content.to_owned(),
+    }
 }
 
 fn done() -> LlmStreamEvent {
@@ -23,25 +32,25 @@ fn done() -> LlmStreamEvent {
     }
 }
 
+fn usage(cached_tokens: Option<u32>) -> LlmStreamEvent {
+    LlmStreamEvent::Usage {
+        prompt_tokens: 30,
+        completion_tokens: 2,
+        total_tokens: 32,
+        cached_tokens,
+    }
+}
+
 #[tokio::test]
-async fn a_turn_with_usage_sends_its_counts_once_at_the_end() {
-    let (passed, sent) = drain(vec![
-        LlmStreamEvent::TextDelta {
-            content: "hi".to_owned(),
-        },
+async fn a_turn_with_usage_sends_its_counts_and_its_streams_writing_time() {
+    let (passed, usage) = usage_of(vec![
+        text("hi"),
         done(),
-        LlmStreamEvent::Usage {
-            prompt_tokens: 30,
-            completion_tokens: 2,
-            total_tokens: 32,
-            cached_tokens: Some(20),
-        },
+        usage(Some(20)),
+        LlmStreamEvent::WritingTime { ms: 920 },
     ])
     .await;
-    assert_eq!(passed, 3, "every event passes through");
-    let [AgentEvent::TurnUsage(usage)] = sent.as_slice() else {
-        panic!("one turn_usage, got {sent:?}");
-    };
+    assert_eq!(passed, 4, "every event passes through");
     assert_eq!(
         (
             usage.prompt_tokens,
@@ -50,20 +59,29 @@ async fn a_turn_with_usage_sends_its_counts_once_at_the_end() {
         ),
         (Some(30), Some(20), Some(2))
     );
-    assert!(usage.writing_ms.is_some());
-    assert!(usage.writing_ms <= Some(usage.duration_ms));
+    assert_eq!(
+        usage.writing_ms,
+        Some(920),
+        "the stream's own time, not one taken here"
+    );
     assert_eq!(
         (usage.model.as_deref(), usage.quantization.as_deref()),
         (None, None)
     );
 }
 
+/// Absent is not zero: an upstream that reports no cached count has none.
 #[tokio::test]
-async fn a_turn_without_usage_sends_no_count() {
-    let (_, sent) = drain(vec![done()]).await;
-    let [AgentEvent::TurnUsage(usage)] = sent.as_slice() else {
-        panic!("one turn_usage, got {sent:?}");
-    };
+async fn an_unreported_cached_count_stays_absent() {
+    let (_, usage) = usage_of(vec![done(), usage(None)]).await;
+    assert_eq!(usage.cached_tokens, None);
+    assert_eq!(usage.prompt_tokens, Some(30));
+}
+
+/// Text arrived, but nothing timed it: no writing time, so no rate.
+#[tokio::test]
+async fn a_turn_without_usage_or_writing_time_sends_neither() {
+    let (_, usage) = usage_of(vec![text("hi"), text(" there"), done()]).await;
     assert_eq!(
         (
             usage.prompt_tokens,
@@ -72,7 +90,7 @@ async fn a_turn_without_usage_sends_no_count() {
         ),
         (None, None, None)
     );
-    assert_eq!(usage.writing_ms, None, "nothing was written");
+    assert_eq!(usage.writing_ms, None);
 }
 
 #[tokio::test]

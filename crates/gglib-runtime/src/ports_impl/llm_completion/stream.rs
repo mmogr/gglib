@@ -20,6 +20,8 @@ use gglib_core::{
     sse::SseStreamDecoder,
 };
 
+use super::writing_time::{Clock, monotonic, time_writing};
+
 /// Boxed stream of decoded, normalized completion events.
 pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>;
 
@@ -72,13 +74,23 @@ pub(super) fn normalized_event_stream(
         }
     };
 
-    let parser = get_parser(dialect);
-    let normalized: EventStream = Box::pin(NormalizingStream::new(Box::pin(raw), parser));
+    let normalized = normalize_timed(Box::pin(raw), dialect, monotonic());
 
     match sink {
         None => normalized,
         Some(sink) => tap_usage(normalized, sink),
     }
+}
+
+/// Time `raw`'s writing, then normalize it: the time is taken before a
+/// dialect parser can hold markup back (see [`time_writing`]).
+pub(super) fn normalize_timed(
+    raw: EventStream,
+    dialect: Option<&DialectSpec>,
+    clock: Clock,
+) -> EventStream {
+    let timed = time_writing(raw, clock);
+    Box::pin(NormalizingStream::new(timed, get_parser(dialect)))
 }
 
 /// Telemetry-only tap on the fully-normalized stream: the single point that

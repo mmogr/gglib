@@ -1199,14 +1199,14 @@ pub(crate) async fn drain_events(
                     cached_tokens,
                     ..
                 } => {
-                    // Trailing usage frame — capture the real prompt-token
-                    // count for chars-per-token calibration, and the cached
-                    // count for prompt-cache telemetry. Not counted as
-                    // visible output (it carries an empty `choices` array).
+                    // Trailing usage frame: the real prompt-token count for
+                    // chars-per-token calibration, the cached count for cache
+                    // telemetry. Not visible output (its `choices` is empty).
                     outcome.prompt_tokens = Some(*prompt_tokens);
                     outcome.cached_tokens = *cached_tokens;
                     encoder.encode(&ev).map(Bytes::from)
                 }
+                LlmStreamEvent::WritingTime { .. } => None,
             },
             Err(e) => {
                 error!("proxy stream error: {e}");

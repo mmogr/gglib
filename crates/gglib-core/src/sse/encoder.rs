@@ -157,7 +157,7 @@ impl SseEncoder {
                 *total_tokens,
                 *cached_tokens,
             )),
-            LlmStreamEvent::NormalizationError { .. } => None,
+            LlmStreamEvent::NormalizationError { .. } | LlmStreamEvent::WritingTime { .. } => None,
             LlmStreamEvent::UpstreamError {
                 message,
                 error_type,

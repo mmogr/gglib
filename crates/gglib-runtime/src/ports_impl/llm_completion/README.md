@@ -39,7 +39,8 @@ may key on the refusal code alone.
 `mod.rs` holds the struct and its request path; `builder.rs` the two
 constructors and the `with_*` builders; `far_machine.rs` the other end of a
 remote turn; `retry/` the send loop; `body.rs` and `stream.rs` the two ends
-of the wire format.
+of the wire format; `writing_time.rs` times the model's writing on the
+decoded stream, before a dialect parser holds tool-call markup back.
 
 # Lifetime
 

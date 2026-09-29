@@ -3,9 +3,11 @@
 //! [`measure_turn`] wraps a turn's LLM stream and, when the stream ends,
 //! sends one [`AgentEvent::TurnUsage`]: the upstream's token counts (each
 //! only when it reported it), the time from the stream's start to its end,
-//! and the time from the first thing the model wrote to the end. A stream
-//! the collector stops reading early (an error, a cancelled run) ends no
-//! turn, and sends nothing.
+//! and the writing time the stream itself reports
+//! ([`LlmStreamEvent::WritingTime`], timed before normalization; this
+//! stream is after it, where held-back markup makes writing look instant).
+//! A stream the collector stops reading early (an error, a cancelled run)
+//! ends no turn, and sends nothing.
 
 use std::pin::Pin;
 use std::time::Instant;
@@ -24,18 +26,13 @@ struct Measuring {
     inner: LlmStream,
     tx: mpsc::Sender<AgentEvent>,
     started: Instant,
-    first_written: Option<Instant>,
     usage: TurnUsage,
 }
 
 impl Measuring {
     fn observe(&mut self, event: &LlmStreamEvent) {
         match event {
-            LlmStreamEvent::TextDelta { .. }
-            | LlmStreamEvent::ReasoningDelta { .. }
-            | LlmStreamEvent::ToolCallDelta { .. } => {
-                self.first_written.get_or_insert_with(Instant::now);
-            }
+            LlmStreamEvent::WritingTime { ms } => self.usage.writing_ms = Some(*ms),
             LlmStreamEvent::Usage {
                 prompt_tokens,
                 completion_tokens,
@@ -53,7 +50,6 @@ impl Measuring {
     fn finish(mut self) -> (mpsc::Sender<AgentEvent>, TurnUsage) {
         let ended = Instant::now();
         self.usage.duration_ms = ms_between(self.started, ended);
-        self.usage.writing_ms = self.first_written.map(|from| ms_between(from, ended));
         (self.tx, self.usage)
     }
 }
@@ -68,7 +64,6 @@ pub(crate) fn measure_turn(stream: LlmStream, tx: mpsc::Sender<AgentEvent>) -> L
         inner: stream,
         tx,
         started: Instant::now(),
-        first_written: None,
         usage: TurnUsage::default(),
     });
     Box::pin(futures_util::stream::unfold(state, |state| async move {

@@ -186,9 +186,9 @@ impl NormalizingStream {
             LlmStreamEvent::PromptProgress { .. }
             | LlmStreamEvent::NormalizationError { .. }
             | LlmStreamEvent::Usage { .. }
-            | LlmStreamEvent::UpstreamError { .. } => {
-                // Trailer-safe: legitimately arrives before *or* after Done
-                // (e.g. a trailing Usage chunk), so no done_forwarded guard.
+            | LlmStreamEvent::UpstreamError { .. }
+            | LlmStreamEvent::WritingTime { .. } => {
+                // Trailer-safe (a trailing Usage or WritingTime): no done_forwarded guard.
                 self.queued.push_back(event);
             }
             LlmStreamEvent::Done { finish_reason } => {

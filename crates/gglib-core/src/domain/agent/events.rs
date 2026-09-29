@@ -225,6 +225,17 @@ pub enum LlmStreamEvent {
         cached_tokens: Option<u32>,
     },
 
+    /// How long the model spent writing: from the first generated token's
+    /// arrival to the last, timed on the upstream's own stream, before any
+    /// normalization holds dialect markup back.
+    ///
+    /// Sent at the stream's end by the agent path's adapter, and only when
+    /// two or more tokens arrived; never on the wire.
+    WritingTime {
+        /// The time between the first token's arrival and the last's, in ms.
+        ms: u64,
+    },
+
     /// Signals the end of the stream.
     ///
     /// Every conforming stream must end with exactly one `Done` item.

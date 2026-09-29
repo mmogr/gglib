@@ -28,8 +28,9 @@ pub struct TurnUsage {
     pub completion_tokens: Option<u32>,
     /// From the stream's start to its end, in ms.
     pub duration_ms: u64,
-    /// From the first thing written to the stream's end, in ms; absent when
-    /// the turn wrote nothing.
+    /// From the first generated token's arrival to the last, in ms, timed on
+    /// the upstream's stream before normalization; absent when it could not
+    /// be (fewer than two tokens, or an adapter that does not time it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub writing_ms: Option<u64>,
 }
