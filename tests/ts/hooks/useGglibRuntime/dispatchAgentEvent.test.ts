@@ -388,3 +388,31 @@ describe('dispatchAgentEvent — unknown event type', () => {
     expect(done).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// prompt_progress
+// ---------------------------------------------------------------------------
+
+describe('dispatchAgentEvent — prompt_progress', () => {
+  it('keeps the latest reading on the current message and nowhere else', () => {
+    const store = makeMessageStore([emptyAssistant(), emptyAssistant(MSG_ID_2)]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+
+    const progress = (processed: number): AgentEvent => ({
+      type: 'prompt_progress',
+      processed,
+      total: 3420,
+      cached: 2100,
+      time_ms: 900,
+    });
+    expect(dispatchAgentEvent(progress(1240), state, deps)).toBe(false);
+    dispatchAgentEvent(progress(3420), state, deps);
+
+    const custom = (m: GglibMessage) => (m.metadata as { custom?: Record<string, unknown> } | undefined)?.custom;
+    expect(custom(store.messages()[0])?.prompt).toEqual({ processed: 3420, total: 3420, cached: 2100 });
+    expect(custom(store.messages()[1])?.prompt).toBeUndefined();
+    // The reading is not content: nothing is drawn into the reply's text.
+    expect(partsOf(store.messages()[0])).toHaveLength(0);
+  });
+});

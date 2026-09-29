@@ -29,7 +29,7 @@ import type {
   TextPart,
   ReasoningPart,
 } from '../../types/messages';
-import type { AgentToolCallCompleteEvent } from '../../types/events/agentEvent';
+import type { AgentPromptProgressEvent, AgentToolCallCompleteEvent } from '../../types/events/agentEvent';
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -202,6 +202,26 @@ export function applyToolResult(
             : p,
         ) as GglibContent,
       };
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Prompt reading
+// ---------------------------------------------------------------------------
+
+/** Keep a turn's latest `prompt_progress` on its message. */
+export function applyPromptProgress(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  event: AgentPromptProgressEvent,
+): void {
+  const prompt = { processed: event.processed, total: event.total, cached: event.cached };
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const meta = m.metadata as { custom?: GglibMessageCustom } | undefined;
+      return { ...m, metadata: { ...m.metadata, custom: { ...meta?.custom, prompt } } };
     }),
   );
 }

@@ -68,7 +68,21 @@ export type GglibMessageCustom = {
   timingFinalized?: boolean;
   /** Thinking duration in seconds (restored from metadata on load). */
   thinkingDurationSeconds?: number | null;
+  /**
+   * How far the model has read this turn's prompt, from the run's last
+   * `prompt_progress` event. Only on a turn drawn from a run: saved rows do
+   * not keep it.
+   */
+  prompt?: PromptReading;
 };
+
+/** A `prompt_progress` event, as a turn keeps it. */
+export interface PromptReading {
+  processed: number;
+  total: number;
+  /** Of `total`, the tokens served from the KV cache. */
+  cached: number;
+}
 
 /**
  * Create a user message
