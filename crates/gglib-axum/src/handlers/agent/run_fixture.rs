@@ -13,7 +13,7 @@ use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, Run
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use super::compose::{MadeBy, Prepared};
+use super::compose::Prepared;
 use super::run::launch;
 use crate::state::AppState;
 
@@ -121,10 +121,15 @@ pub(super) fn paced(
         tx,
         rx,
         model: "qwen".to_owned(),
-        made_by: MadeBy {
-            model: "qwen-local".to_owned(),
-            quantization: Some("Q4_K_M".to_owned()),
-        },
+        // As `resolve` makes it for a run on the far machine; a test of what
+        // a local run is made by resolves one (see `run_made_tests`).
+        made_by: super::remote_upstream::remote(
+            "qwen".to_owned(),
+            9000,
+            "fp".to_owned(),
+            "key".to_owned(),
+        )
+        .made_by,
     };
     (prepared, dropped)
 }

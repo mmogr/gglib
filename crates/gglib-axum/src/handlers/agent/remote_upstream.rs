@@ -14,6 +14,7 @@ use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
 use super::AgentChatRequest;
+use super::compose::MadeBy;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
 
 /// Where the completion adapter points, and with what.
@@ -47,11 +48,10 @@ pub(super) struct Upstream {
     /// placeholder would file real traffic under something that is not a
     /// model.
     pub counted_as: String,
-    /// The model the run drives, as each turn's saved row names it: locally
-    /// the one loaded on the port, remotely the one named.
-    pub drove: String,
-    /// Its quantisation, from this machine's catalogue: locally only.
-    pub quantization: Option<String>,
+    /// The model each turn is made by, as its saved row names it: locally
+    /// the one loaded on the port with its catalogue quantisation, remotely
+    /// the one named, with none (this machine has no catalogue for it).
+    pub made_by: MadeBy,
 }
 
 /// The model this request named, if it named one.
@@ -117,17 +117,7 @@ pub(super) async fn resolve(
 ) -> Result<Upstream, HttpError> {
     if !req.remote {
         let server = validate_port(state, req.port).await?;
-        let model_context =
-            request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
-        return Ok(Upstream {
-            base_url: format!("http://127.0.0.1:{}", req.port),
-            far_machine: None,
-            model_context,
-            model: req.model.clone(),
-            counted_as: counted_as(req, &server),
-            quantization: quantization_of(state, server.model_id).await,
-            drove: server.model_name,
-        });
+        return Ok(local(state, req, server).await);
     }
 
     // Before the connection is read: the request's own shape is settled
@@ -157,23 +147,54 @@ pub(super) async fn resolve(
                     .to_owned(),
             )
         })?;
-    Ok(Upstream {
-        base_url: format!("http://127.0.0.1:{}", connection.port),
+    Ok(remote(
+        model,
+        connection.port,
+        connection.ticket_fingerprint,
+        key,
+    ))
+}
+
+/// A local request's upstream, once its port is known to serve `server`.
+pub(super) async fn local(
+    state: &AppState,
+    req: &AgentChatRequest,
+    server: ServerInfo,
+) -> Upstream {
+    let model_context =
+        request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
+    Upstream {
+        base_url: format!("http://127.0.0.1:{}", req.port),
+        far_machine: None,
+        model_context,
+        model: req.model.clone(),
+        counted_as: counted_as(req, &server),
+        made_by: MadeBy {
+            quantization: quantization_of(state, server.model_id).await,
+            model: server.model_name,
+        },
+    }
+}
+
+/// A remote request's upstream: the tunnel's `port`, the far machine's key
+/// and the fingerprint it is known by, and the `model` named there.
+pub(super) fn remote(model: String, port: u16, fingerprint: String, key: String) -> Upstream {
+    Upstream {
+        base_url: format!("http://127.0.0.1:{port}"),
         // The fingerprint travels with the key because only this function
         // knows both: the request that fails on a rotated key comes back to
         // the adapter, which by then has no way to ask who was asked.
-        far_machine: Some(FarMachine {
-            key,
-            fingerprint: connection.ticket_fingerprint,
-        }),
+        far_machine: Some(FarMachine { key, fingerprint }),
         model_context: ModelContext::passthrough(),
         // The far machine counts its own guard decisions under this name, in
         // its own ledger; this one counts what it composed here.
         counted_as: model.clone(),
-        drove: model.clone(),
-        quantization: None,
+        made_by: MadeBy {
+            model: model.clone(),
+            quantization: None,
+        },
         model: Some(model),
-    })
+    }
 }
 
 /// The catalogue's quantisation for a served model; `None` when it has none
@@ -190,104 +211,5 @@ async fn quantization_of(state: &AppState, model_id: i64) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn req(json: &str) -> AgentChatRequest {
-        serde_json::from_str(json).expect("parses")
-    }
-
-    /// A body with `remote` and no `model` is refused here, rather than
-    /// arriving at the far proxy as `"model": ""`.
-    #[test]
-    fn a_remote_request_naming_no_model_is_refused_here() {
-        let err = remote_model(&req(r#"{"port":9000,"messages":[],"remote":true}"#))
-            .expect_err("no model named");
-        assert!(matches!(err, HttpError::BadRequest(_)), "got {err:?}");
-        assert!(
-            err.to_string().contains("no model named"),
-            "the message has to name the real problem, got: {err}"
-        );
-    }
-
-    /// A field holding only spaces is the same absence, and `trim` downstream
-    /// would otherwise turn it into the same empty model.
-    #[test]
-    fn a_model_of_only_whitespace_is_no_model_at_all() {
-        assert!(
-            remote_model(&req(
-                r#"{"port":9000,"messages":[],"remote":true,"model":"  "}"#
-            ))
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn a_named_model_is_forwarded_trimmed() {
-        assert_eq!(
-            remote_model(&req(
-                r#"{"port":9000,"messages":[],"remote":true,"model":" qwen3 "}"#
-            ))
-            .expect("a name"),
-            "qwen3"
-        );
-    }
-
-    /// The model the port is actually serving, for the three ways a local
-    /// request declines to name one.
-    fn running(name: &str) -> ServerInfo {
-        ServerInfo {
-            model_id: 1,
-            model_name: name.to_owned(),
-            pid: Some(4242),
-            port: 9000,
-            started_at: 0,
-        }
-    }
-
-    /// Locally an absent model means "whatever is loaded", and that is a real
-    /// model with a real name — so the count goes under it rather than under a
-    /// placeholder, which would put real traffic in a bucket that is not a
-    /// model.
-    #[test]
-    fn a_request_naming_no_model_is_counted_under_the_running_one() {
-        assert_eq!(
-            counted_as(&req(r#"{"port":9000,"messages":[]}"#), &running("qwen3")),
-            "qwen3"
-        );
-    }
-
-    /// The same absence the remote path refuses outright, read the same way
-    /// here so the two cannot drift apart.
-    #[test]
-    fn a_whitespace_model_name_is_no_name_at_all() {
-        assert_eq!(
-            counted_as(
-                &req(r#"{"port":9000,"messages":[],"model":"   "}"#),
-                &running("qwen3")
-            ),
-            "qwen3",
-            "a name of only spaces is an absence, not a model called \"   \""
-        );
-    }
-
-    /// And the fallback is a fallback: a request that named a model is counted
-    /// under that name even when the port is serving something else, because
-    /// the name the client chose is the key it will look the count up by.
-    ///
-    /// Close to, but not identical with, what the proxy would key the same
-    /// traffic under. The proxy counts after `resolve_route`, so a
-    /// `model:profile` request lands under the base model, where this path
-    /// talks straight to llama-server and would count the suffixed string;
-    /// and this trims where the name that goes on the wire does not.
-    #[test]
-    fn a_named_model_is_counted_under_its_own_name() {
-        assert_eq!(
-            counted_as(
-                &req(r#"{"port":9000,"messages":[],"model":" llama3 "}"#),
-                &running("qwen3")
-            ),
-            "llama3"
-        );
-    }
-}
+#[path = "remote_upstream_tests.rs"]
+mod tests;

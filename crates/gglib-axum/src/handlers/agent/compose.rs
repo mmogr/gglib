@@ -84,10 +84,6 @@ pub(crate) async fn prepare(
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
     let model = upstream.counted_as.clone();
-    let made_by = MadeBy {
-        model: upstream.drove.clone(),
-        quantization: upstream.quantization.clone(),
-    };
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
@@ -134,7 +130,7 @@ pub(crate) async fn prepare(
         tx,
         rx,
         model,
-        made_by,
+        made_by: upstream.made_by,
     })
 }
 

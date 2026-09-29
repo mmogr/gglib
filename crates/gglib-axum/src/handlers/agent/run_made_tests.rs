@@ -8,6 +8,9 @@ use gglib_core::domain::chat::MessageRole;
 use gglib_core::ports::{RunEvent, RunsPort as _};
 use serde_json::{Value, json};
 
+use gglib_app_services::types::ServerInfo;
+
+use super::remote_upstream::local;
 use super::run_fixture::{End, LOCAL, conversation, meta, prepared, saved, settled, start, state};
 
 fn turn() -> Vec<AgentEvent> {
@@ -33,7 +36,25 @@ fn turn() -> Vec<AgentEvent> {
 async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     let (_dir, state) = state().await;
     let id = conversation(&state).await;
-    let (p, _) = prepared(turn(), End::Finish);
+    // The model as `resolve` gives it for a port serving a catalogued model.
+    let mut entry = gglib_core::domain::NewModel::new(
+        "catalogue-name".to_owned(),
+        std::path::PathBuf::from("/models/served.gguf"),
+        7.0,
+        chrono::Utc::now(),
+    );
+    entry.quantization = Some("Q4_K_M".to_owned());
+    let model_id = state.core.models().add(entry).await.unwrap().id;
+    let server = ServerInfo {
+        model_id,
+        model_name: "served-7b".to_owned(),
+        pid: None,
+        port: 9000,
+        started_at: 0,
+    };
+    let req = serde_json::from_str(r#"{"port":9000,"messages":[]}"#).unwrap();
+    let (mut p, _) = prepared(turn(), End::Finish);
+    p.made_by = local(&state, &req, server).await.made_by;
     start(&state, "a1", Some(id), p).await;
     settled(&state).await;
 
@@ -48,7 +69,7 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     let usage = usage.expect("the turn's usage was logged");
     assert_eq!(
         (&usage["model"], &usage["quantization"]),
-        (&json!("qwen-local"), &json!("Q4_K_M"))
+        (&json!("served-7b"), &json!("Q4_K_M"))
     );
 
     let rows = saved(&state, id).await;

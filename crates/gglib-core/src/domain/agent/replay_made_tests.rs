@@ -201,3 +201,29 @@ fn the_turn_made_contract_is_current() {
         "contracts/runs/turn_made.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1"
     );
 }
+
+/// A second turn that brought no usage (here cancelled mid-stream) says
+/// nothing of how it was made: the first turn's figures stay with the first.
+#[test]
+fn a_turn_without_usage_never_carries_the_previous_turns_figures() {
+    let saved = rows(
+        &[
+            text("looking"),
+            AgentEvent::TurnUsage(full_usage()),
+            AgentEvent::IterationComplete {
+                iteration: 1,
+                tool_calls: 0,
+            },
+            text("half an ans"),
+        ],
+        false,
+    );
+    let replies = assistants(&saved);
+    assert_eq!(replies.len(), 2);
+    assert!(!made(replies[0]).is_empty());
+    assert!(
+        made(replies[1]).is_empty(),
+        "turn 2 got {:?}",
+        made(replies[1])
+    );
+}
