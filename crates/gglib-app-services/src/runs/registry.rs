@@ -24,6 +24,8 @@ pub(super) const MAX_RUNS: usize = 32;
 struct Table {
     runs: HashMap<String, Arc<RunCell>>,
     next_order: u64,
+    /// Set by `shutdown`; no run starts after it.
+    closed: bool,
 }
 
 impl Table {
@@ -116,7 +118,11 @@ impl RunRegistry {
     /// Cancel and drop every run, ending every reader. For the daemon's
     /// shutdown.
     pub fn shutdown(&self) {
-        let drained: Vec<_> = self.lock().runs.drain().map(|(_, cell)| cell).collect();
+        let drained: Vec<_> = {
+            let mut table = self.lock();
+            table.closed = true;
+            table.runs.drain().map(|(_, cell)| cell).collect()
+        };
         for cell in &drained {
             cell.drop_now();
         }
@@ -154,6 +160,9 @@ impl RunsPort for RunRegistry {
             return Err(RunsError::InvalidBody);
         }
         let mut table = self.lock();
+        if table.closed {
+            return Err(RunsError::ShuttingDown);
+        }
         if let Some(cell) = table.runs.get(id) {
             return if cell.scope == scope {
                 Ok(Created {

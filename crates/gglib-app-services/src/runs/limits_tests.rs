@@ -94,3 +94,22 @@ async fn shutdown_cancels_and_drops_every_run_and_ends_its_readers() {
     assert!(runs.list(&LOCAL).runs.is_empty());
     until(|| executor.dropped.load(Ordering::SeqCst) == 2).await;
 }
+
+#[tokio::test]
+async fn once_shutdown_has_begun_a_new_run_is_refused_and_nothing_starts() {
+    let (runs, executor, _) = registry();
+    runs.create(LOCAL, "r1", body("m")).unwrap();
+    until(|| executor.started.load(Ordering::SeqCst) == 1).await;
+
+    runs.shutdown();
+    let refused = runs.create(LOCAL, "r2", body("m")).unwrap_err();
+
+    assert_eq!(refused, RunsError::ShuttingDown);
+    assert_eq!(
+        (refused.code(), refused.http_status()),
+        ("shutting_down", 503)
+    );
+    tokio::task::yield_now().await;
+    assert_eq!(executor.started.load(Ordering::SeqCst), 1);
+    assert!(runs.list(&LOCAL).runs.is_empty());
+}

@@ -86,6 +86,9 @@ pub enum RunsError {
     /// Every slot holds a run that has not ended.
     #[error("32 runs are still going; cancel one or wait for one to end")]
     TooManyRuns,
+    /// The daemon is stopping.
+    #[error("the daemon is shutting down, so it starts no more runs")]
+    ShuttingDown,
 }
 
 impl RunsError {
@@ -98,6 +101,7 @@ impl RunsError {
             Self::IdTaken => "conflict",
             Self::NotYours => "not_yours",
             Self::TooManyRuns => "too_many_runs",
+            Self::ShuttingDown => "shutting_down",
         }
     }
 
@@ -110,6 +114,7 @@ impl RunsError {
             Self::NotFound => 404,
             Self::IdTaken => 409,
             Self::TooManyRuns => 429,
+            Self::ShuttingDown => 503,
         }
     }
 }
@@ -131,8 +136,8 @@ pub trait RunsPort: Send + Sync {
     /// # Errors
     ///
     /// [`RunsError::InvalidId`], [`RunsError::InvalidBody`],
-    /// [`RunsError::IdTaken`] when another scope has the id, and
-    /// [`RunsError::TooManyRuns`].
+    /// [`RunsError::IdTaken`] when another scope has the id,
+    /// [`RunsError::TooManyRuns`], and [`RunsError::ShuttingDown`].
     fn create(&self, scope: RunScope, id: &str, body: Value) -> Result<Created, RunsError>;
 
     /// Every run the caller may see, newest first.
