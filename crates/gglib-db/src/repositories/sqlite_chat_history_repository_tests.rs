@@ -126,3 +126,60 @@ async fn delete_message_and_subsequent_removes_tail() {
     assert_eq!(removed, 2);
     assert_eq!(repo.get_messages(cid).await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn save_messages_writes_every_row_in_order() {
+    let repo = repo().await;
+    let id = repo.create_conversation(make_conv("t")).await.unwrap();
+
+    let rows = vec![
+        make_msg(id, "one"),
+        make_msg(id, "two"),
+        make_msg(id, "three"),
+    ];
+    repo.save_messages(rows).await.unwrap();
+
+    let saved = repo.get_messages(id).await.unwrap();
+    let contents: Vec<&str> = saved.iter().map(|m| m.content.as_str()).collect();
+    assert_eq!(contents, ["one", "two", "three"]);
+}
+
+/// A row that cannot be written (no such conversation) takes the rows
+/// before it with it.
+#[tokio::test]
+async fn save_messages_with_a_failing_row_writes_nothing() {
+    let repo = repo().await;
+    let id = repo.create_conversation(make_conv("t")).await.unwrap();
+
+    let rows = vec![make_msg(id, "one"), make_msg(id + 1000, "orphan")];
+    assert!(repo.save_messages(rows).await.is_err());
+
+    assert!(repo.get_messages(id).await.unwrap().is_empty());
+}
+
+/// Cut off after any number of steps, the call has written all of its rows
+/// or none of them.
+#[tokio::test]
+async fn save_messages_cut_off_part_way_writes_all_or_nothing() {
+    use std::task::{Context, Poll, Waker};
+
+    let repo = repo().await;
+    for steps in 0..40 {
+        let id = repo.create_conversation(make_conv("t")).await.unwrap();
+        let rows: Vec<NewMessage> = (0..5).map(|n| make_msg(id, &n.to_string())).collect();
+        let mut save = Box::pin(repo.save_messages(rows));
+        for _ in 0..steps {
+            let poll = save.as_mut().poll(&mut Context::from_waker(Waker::noop()));
+            if matches!(poll, Poll::Ready(_)) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        drop(save);
+        let written = repo.get_messages(id).await.unwrap().len();
+        assert!(
+            written == 0 || written == 5,
+            "{written} rows after {steps} steps"
+        );
+    }
+}

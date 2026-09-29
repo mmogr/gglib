@@ -103,6 +103,11 @@ impl ChatHistoryService {
         self.repo.save_message(msg).await
     }
 
+    /// Save every message, in order, or none of them.
+    pub async fn save_messages(&self, msgs: Vec<NewMessage>) -> Result<(), ChatHistoryError> {
+        self.repo.save_messages(msgs).await
+    }
+
     /// Update a message's content and optionally its metadata.
     pub async fn update_message(
         &self,

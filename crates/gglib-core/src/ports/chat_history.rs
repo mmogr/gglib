@@ -59,6 +59,10 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// Save a new message and update conversation timestamp.
     async fn save_message(&self, msg: NewMessage) -> Result<i64, ChatHistoryError>;
 
+    /// Save every message, in order, or none of them: one transaction, so a
+    /// failed row or a call dropped part-way writes nothing.
+    async fn save_messages(&self, msgs: Vec<NewMessage>) -> Result<(), ChatHistoryError>;
+
     /// Update a message's content and optionally its metadata.
     async fn update_message(
         &self,

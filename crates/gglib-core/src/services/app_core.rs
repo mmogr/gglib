@@ -188,6 +188,9 @@ mod tests {
         async fn save_message(&self, _msg: NewMessage) -> Result<i64, ChatHistoryError> {
             Ok(1)
         }
+        async fn save_messages(&self, _msgs: Vec<NewMessage>) -> Result<(), ChatHistoryError> {
+            Ok(())
+        }
         async fn update_message(
             &self,
             _id: i64,

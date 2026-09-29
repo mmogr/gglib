@@ -230,6 +230,38 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         Ok(message_id)
     }
 
+    async fn save_messages(&self, msgs: Vec<NewMessage>) -> Result<(), ChatHistoryError> {
+        let db = |e: sqlx::Error| ChatHistoryError::Database(e.to_string());
+        // Dropped before `commit`, the transaction rolls back.
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        let mut touched = std::collections::BTreeSet::new();
+        for msg in &msgs {
+            let metadata = msg
+                .metadata
+                .as_ref()
+                .map(|m| serde_json::to_string(m).unwrap_or_default());
+            sqlx::query(
+                "INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)",
+            )
+            .bind(msg.conversation_id)
+            .bind(msg.role.as_str())
+            .bind(&msg.content)
+            .bind(&metadata)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+            touched.insert(msg.conversation_id);
+        }
+        for conversation_id in touched {
+            sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
+                .bind(conversation_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db)?;
+        }
+        tx.commit().await.map_err(db)
+    }
+
     async fn update_message(
         &self,
         id: i64,
