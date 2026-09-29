@@ -1,9 +1,9 @@
 /**
  * What the chat routes send, read as they send it.
  *
- * `POST /api/conversations`, `POST /api/messages` and
- * `DELETE /api/messages/{id}` answer with a bare JSON number
- * (`Json<i64>` in `crates/gglib-axum/src/chat_api.rs`). The page read `.id`
+ * `POST /api/conversations` and `DELETE /api/messages/{id}` answer with a
+ * bare JSON number (`Json<i64>` in `crates/gglib-axum/src/chat_api.rs`).
+ * The page read `.id`
  * and `.deletedCount` off them, so every id it recorded was `undefined` and
  * an edit of a message saved in the same session deleted nothing.
  */
@@ -14,11 +14,7 @@ vi.mock('../../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
-import {
-  createConversation,
-  deleteMessage,
-  saveMessage,
-} from '../../../../src/services/transport/api/chat';
+import { createConversation, deleteMessage } from '../../../../src/services/transport/api/chat';
 
 const fetchMock = vi.fn();
 
@@ -40,13 +36,6 @@ describe('chat routes that answer with a bare number', () => {
     fetchMock.mockResolvedValueOnce(bare(41));
     await expect(createConversation({ title: 'New Chat' })).resolves.toBe(41);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/conversations');
-  });
-
-  it('saving a message returns its id', async () => {
-    fetchMock.mockResolvedValueOnce(bare(9));
-    await expect(
-      saveMessage({ conversationId: 41, role: 'user', content: 'hi' }),
-    ).resolves.toBe(9);
   });
 
   it('deleting a saved message sends its id and returns how many went', async () => {

@@ -11,8 +11,6 @@ import type {
   ConversationSummary,
   ChatMessage,
   CreateConversationParams,
-  SaveMessageParams,
-  UpdateMessageParams,
   GenerateTitleParams,
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
@@ -73,29 +71,6 @@ export async function deleteConversation(id: ConversationId): Promise<void> {
  */
 export async function getMessages(conversationId: ConversationId): Promise<ChatMessage[]> {
   return get<ChatMessage[]>(`/api/conversations/${conversationId}/messages`);
-}
-
-/**
- * Save a new message.
- * Returns the new message ID, which the route sends as a bare number.
- */
-export async function saveMessage(params: SaveMessageParams): Promise<MessageId> {
-  return post<MessageId>('/api/messages', {
-    conversation_id: params.conversationId,
-    role: params.role,
-    content: params.content,
-    metadata: params.metadata ?? null,
-  });
-}
-
-/**
- * Update a message's content and/or metadata.
- */
-export async function updateMessage(id: MessageId, params: UpdateMessageParams): Promise<void> {
-  await put<void>(`/api/messages/${id}`, { 
-    content: params.content,
-    metadata: params.metadata ?? null,
-  });
 }
 
 /**
