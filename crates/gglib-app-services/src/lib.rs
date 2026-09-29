@@ -39,13 +39,6 @@ mod proxy_port;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod remote;
-#[cfg_attr(
-    not(test),
-    allow(
-        dead_code,
-        reason = "the service graph builds it once the chat executor exists"
-    )
-)]
 mod runs;
 mod sampling_explain;
 #[allow(

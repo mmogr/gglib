@@ -23,7 +23,8 @@ impl RunLog {
         Self { cell }
     }
 
-    /// The run's id, for a log line.
+    /// The run's id; the scripted executor finds its script by it.
+    #[cfg(test)]
     pub(crate) fn id(&self) -> &str {
         &self.cell.id
     }

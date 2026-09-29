@@ -188,6 +188,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         mcp_ops,
         proxy,
         remote,
+        runs: _,
         setup,
         benchmark,
         proxy_supervisor: _,

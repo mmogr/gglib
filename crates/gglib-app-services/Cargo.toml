@@ -79,6 +79,8 @@ tokio = { workspace = true, features = ["test-util"] }
 tokio-test = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }
 tempfile = { workspace = true }
+# The runs' privacy test reads every log line a run writes.
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true
