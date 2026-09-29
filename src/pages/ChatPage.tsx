@@ -89,6 +89,8 @@ export default function ChatPage(props: ChatPageProps) {
   // null = unknown (permissive fallback - never gates tools when status is uncertain).
   const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
   const [toolFormat, setToolFormat] = useState<string | null>(null);
+  // The model's quantisation, from its catalogue entry; the composer says it.
+  const [quantization, setQuantization] = useState<string | null>(null);
   useEffect(() => {
     // Nothing to ask about remotely: the capability is read from this
     // machine's server registry and the model is on the other machine.
@@ -105,6 +107,9 @@ export default function ChatPage(props: ChatPageProps) {
       .catch(() => {
         // Permissive fallback: leave supportsToolCalls as null (unknown)
       });
+    getTransport().getModel(modelId)
+      .then((model) => { if (!cancelled) setQuantization(model?.quantization ?? null); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [modelId]);
 
@@ -391,6 +396,8 @@ export default function ChatPage(props: ChatPageProps) {
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
+              modelName={modelName}
+              quantization={quantization}
             />
           }
         />

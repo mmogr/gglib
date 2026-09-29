@@ -1,131 +1,144 @@
-import React, { useContext } from 'react';
+import React, { useContext, useId, useState } from 'react';
 import {
   ComposerPrimitive,
   MessagePrimitive,
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
-import { Bot, Copy, Pencil, RefreshCw, Trash2, User as UserIcon } from 'lucide-react';
+import { Copy, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import ThinkingBlock from './ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
 import { MessageActionsContext } from './MessageActionsContext';
+import { TurnRow } from './TurnRow';
+import { ReplyArriving, ReplyMade, TurnWho } from './TurnMargin';
+import { arrivingPhase, replyFacts } from './turnFigures';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
-import type { GglibMessageCustom } from '../../../types/messages';
 import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
 
-/** Shared styling for small action buttons in message bubble footers. */
+/** Shared styling for small action buttons under a turn's body. */
 const ACTION_BTN =
   'bg-transparent border-none cursor-pointer py-xs px-sm rounded-base text-sm opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-surface-elevated focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-primary';
 
+/** The action bar: hidden until the turn is hovered or holds focus. */
+const ACTION_BAR =
+  'flex gap-sm mt-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100';
+
+/** The text of a message's text parts, joined. */
+function textOf(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  const chunks: string[] = [];
+  for (const part of content) {
+    const text =
+      typeof part === 'string'
+        ? part
+        : (part as { type?: unknown; text?: unknown })?.type === 'text'
+          ? (part as { text?: unknown }).text
+          : null;
+    if (typeof text === 'string' && text.trim()) chunks.push(text.trim());
+  }
+  return chunks.join('\n\n');
+}
+
 /**
- * Message bubble for assistant responses.
- * Handles thinking blocks and markdown rendering.
+ * A reply: the model's turn. The margin says who and, from what the page
+ * has for this turn, how it was made; while it arrives, what it is doing.
+ * Its reasoning and tool calls are the detail "How this was made" opens,
+ * shown while it arrives.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
-  const timestamp = new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(message.createdAt ?? new Date());
+  const detailId = useId();
+  const [detailChoice, setDetailChoice] = useState<boolean | null>(null);
 
-  // Extract custom metadata once — used by all detection paths below.
-  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
-
-  // Extract reasoning and text parts from message content
-  const content = (message as any)?.content;
-  const contentArray = Array.isArray(content) ? content : [];
+  const contentArray: readonly unknown[] = Array.isArray(message.content) ? message.content : [];
   const thinkingText = extractReasoningText(contentArray);
+  const contentText = textOf(message.content);
+  const facts = replyFacts(message);
 
-  const textChunks: string[] = [];
-  for (const part of contentArray) {
-    if (typeof part === 'string') {
-      const trimmed = part.trim();
-      if (trimmed) textChunks.push(trimmed);
-    } else if (
-      typeof part === 'object' && part !== null &&
-      'type' in part && part.type === 'text' &&
-      'text' in part && typeof part.text === 'string'
-    ) {
-      const trimmed = part.text.trim();
-      if (trimmed) textChunks.push(trimmed);
-    }
-  }
-  if (!contentArray.length && typeof content === 'string' && content.trim()) {
-    textChunks.push(content.trim());
-  }
-  const contentText = textChunks.join('\n\n');
-
-  // Get thinking duration from loaded metadata or timing tracker
-  const loadedDuration = custom?.thinkingDurationSeconds ?? null;
-  
-  // Determine if this message is currently streaming
   const isStreaming = timing?.currentStreamingAssistantMessageId === message.id;
-  
-  // Determine if we're currently in the thinking phase (streaming with only thinking, no main content yet)
   const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
+  const toolCallsRunning = contentArray.some(
+    (part) => (part as { type?: unknown }).type === 'tool-call' && !('result' in (part as object)),
+  );
+  const hasDetail = !!thinkingText || facts.toolCalls > 0;
+  const detailOpen = detailChoice ?? isStreaming;
+
+  const made = isStreaming ? (
+    <ReplyArriving
+      phase={arrivingPhase({
+        prompt: facts.prompt,
+        hasReasoning: !!thinkingText,
+        hasText: !!contentText,
+        toolCallsRunning,
+      })}
+      prompt={facts.prompt}
+    />
+  ) : (
+    <ReplyMade
+      facts={facts}
+      detailId={hasDetail ? detailId : undefined}
+      detailOpen={detailOpen}
+      onToggleDetail={() => setDetailChoice(!detailOpen)}
+    />
+  );
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-surface phone:mr-xl">
-      <div className="flex items-center gap-sm">
-        <div className="text-lg" aria-hidden>
-          <Icon icon={Bot} size={18} />
-        </div>
-        <div>
-          <div className="font-medium text-sm">Assistant</div>
-          <div className="text-xs text-text-muted">
-            {timestamp}
-            <ToolUsageBadge />
-          </div>
-        </div>
-      </div>
-      <div className="leading-[1.6]">
-        {thinkingText && (
-          <ThinkingBlock
-            messageId={message.id}
-            segmentIndex={0}
-            thinking={thinkingText}
-            durationSeconds={loadedDuration}
-            isStreaming={isCurrentlyThinking}
-          />
-        )}
-        {contentText && (
-          <MarkdownMessageContent text={contentText} />
-        )}
-        {!thinkingText && !contentText && isStreaming && (
-          <span className="text-text-muted animate-blink">…</span>
-        )}
-      </div>
-      <ToolExecutionProgress />
-      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
-        <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
-          <Icon icon={Copy} size={14} />
-        </ActionBarPrimitive.Copy>
-        <ActionBarPrimitive.Reload className={ACTION_BTN} title="Regenerate reply" aria-label="Regenerate reply">
-          <Icon icon={RefreshCw} size={14} />
-        </ActionBarPrimitive.Reload>
-      </ActionBarPrimitive.Root>
+    <MessagePrimitive.Root className="group">
+      <TurnRow
+        who={<TurnWho name="Assistant" at={facts.savedAt} />}
+        made={made}
+        body={
+          <>
+            {hasDetail && (
+              <div id={detailId} hidden={!detailOpen} className="mb-md">
+                {thinkingText && (
+                  <ThinkingBlock
+                    messageId={message.id}
+                    segmentIndex={0}
+                    thinking={thinkingText}
+                    durationSeconds={facts.thinkingSeconds ?? null}
+                    isStreaming={isCurrentlyThinking}
+                  />
+                )}
+                <ToolUsageBadge />
+                <ToolExecutionProgress />
+              </div>
+            )}
+            <div className="text-base leading-relaxed text-text">
+              {contentText && <MarkdownMessageContent text={contentText} />}
+              {!thinkingText && !contentText && isStreaming && (
+                <span className="text-text-muted animate-blink" aria-hidden>…</span>
+              )}
+            </div>
+            <ActionBarPrimitive.Root className={ACTION_BAR}>
+              <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
+                <Icon icon={Copy} size={14} />
+              </ActionBarPrimitive.Copy>
+              <ActionBarPrimitive.Reload className={ACTION_BTN} title="Regenerate reply" aria-label="Regenerate reply">
+                <Icon icon={RefreshCw} size={14} />
+              </ActionBarPrimitive.Reload>
+            </ActionBarPrimitive.Root>
+          </>
+        }
+      />
     </MessagePrimitive.Root>
   );
 };
 
 /**
- * Message bubble for user messages.
- * Includes copy, edit, and delete actions.
+ * A turn of the user's. Includes copy, edit, and delete actions.
  */
 export const UserMessageBubble: React.FC = () => {
   const message = useMessage();
   const messageActions = useContext(MessageActionsContext);
-  const timestamp = new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(message.createdAt ?? new Date());
 
   const handleDelete = () => {
     if (messageActions && message.id) {
@@ -134,38 +147,36 @@ export const UserMessageBubble: React.FC = () => {
   };
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-primary-subtle phone:ml-xl">
-      <div className="flex items-center gap-sm">
-        <div className="text-lg" aria-hidden>
-          <Icon icon={UserIcon} size={18} />
-        </div>
-        <div>
-          <div className="font-medium text-sm">You</div>
-          <div className="text-xs text-text-muted">{timestamp}</div>
-        </div>
-      </div>
-      <div className="leading-[1.6]">
-        <MarkdownMessageContent />
-      </div>
-      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
-        <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
-          <Icon icon={Copy} size={14} />
-        </ActionBarPrimitive.Copy>
-        <ActionBarPrimitive.Edit className={ACTION_BTN} title="Edit message" aria-label="Edit message">
-          <Icon icon={Pencil} size={14} />
-        </ActionBarPrimitive.Edit>
-        <Button
-          variant="dangerGhost"
-          size="sm"
-          className={cn(ACTION_BTN, 'hover:opacity-100')}
-          onClick={handleDelete}
-          title="Delete message"
-          aria-label="Delete message"
-          iconOnly
-        >
-          <Icon icon={Trash2} size={14} />
-        </Button>
-      </ActionBarPrimitive.Root>
+    <MessagePrimitive.Root className="group">
+      <TurnRow
+        who={<TurnWho name="You" at={message.createdAt} />}
+        body={
+          <>
+            <div className="text-base leading-relaxed text-text-secondary">
+              <MarkdownMessageContent />
+            </div>
+            <ActionBarPrimitive.Root className={ACTION_BAR}>
+              <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
+                <Icon icon={Copy} size={14} />
+              </ActionBarPrimitive.Copy>
+              <ActionBarPrimitive.Edit className={ACTION_BTN} title="Edit message" aria-label="Edit message">
+                <Icon icon={Pencil} size={14} />
+              </ActionBarPrimitive.Edit>
+              <Button
+                variant="dangerGhost"
+                size="sm"
+                className={cn(ACTION_BTN, 'hover:opacity-100')}
+                onClick={handleDelete}
+                title="Delete message"
+                aria-label="Delete message"
+                iconOnly
+              >
+                <Icon icon={Trash2} size={14} />
+              </Button>
+            </ActionBarPrimitive.Root>
+          </>
+        }
+      />
     </MessagePrimitive.Root>
   );
 };
@@ -180,33 +191,28 @@ export const SystemMessageBubble: React.FC = () => null;
  */
 export const EditComposer: React.FC = () => {
   const message = useMessage();
-  const timestamp = new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(message.createdAt ?? new Date());
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-primary-subtle ring-2 ring-primary phone:ml-xl">
-      <div className="flex items-center gap-sm">
-        <div className="text-lg" aria-hidden>
-          <Icon icon={UserIcon} size={18} />
-        </div>
-        <div>
-          <div className="font-medium text-sm">You</div>
-          <div className="text-xs text-text-muted">{timestamp}</div>
-        </div>
-      </div>
-      <ComposerPrimitive.Root className="flex flex-col gap-sm w-full">
-        <ComposerPrimitive.Input className="w-full min-h-[60px] p-sm bg-background border border-border rounded-sm text-text font-[inherit] text-sm resize-y focus:outline-none focus:border-primary" />
-        <div className="flex justify-end gap-sm">
-          <ComposerPrimitive.Cancel className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-transparent border border-border text-text-muted hover:bg-surface-hover hover:text-text">
-            Cancel
-          </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send className="py-xs px-md rounded-base text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text-inverse font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
-            Save & Regenerate
-          </ComposerPrimitive.Send>
-        </div>
-      </ComposerPrimitive.Root>
+    <MessagePrimitive.Root className="group">
+      <TurnRow
+        who={<TurnWho name="You" at={message.createdAt} />}
+        body={
+          <ComposerPrimitive.Root className="flex flex-col gap-sm w-full">
+            <ComposerPrimitive.Input
+              aria-label="Edit message"
+              className="w-full min-h-[60px] p-sm bg-background-input border border-border rounded-md text-text font-[inherit] text-base resize-y focus:outline-none focus:border-primary"
+            />
+            <div className="flex justify-end gap-sm">
+              <ComposerPrimitive.Cancel className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-transparent border border-border text-text-muted hover:bg-surface-hover hover:text-text">
+                Cancel
+              </ComposerPrimitive.Cancel>
+              <ComposerPrimitive.Send className="py-xs px-md rounded-base text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text-inverse font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
+                Save & Regenerate
+              </ComposerPrimitive.Send>
+            </div>
+          </ComposerPrimitive.Root>
+        }
+      />
     </MessagePrimitive.Root>
   );
 };

@@ -36,7 +36,12 @@ const getToolIcon = (name: string) => {
   return Wrench;
 };
 
-export const ToolsPopover: React.FC = () => {
+interface ToolsPopoverProps {
+  /** Open above the button, for a trigger near the bottom of the window. */
+  opensUpward?: boolean;
+}
+
+export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -132,7 +137,7 @@ export const ToolsPopover: React.FC = () => {
       </Button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1 bg-surface-elevated border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] z-popover overflow-hidden" ref={popoverRef}>
+        <div className={cn('absolute right-0 bg-surface-elevated', opensUpward ? 'bottom-full mb-1' : 'top-full mt-1', 'border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] z-popover overflow-hidden')} ref={popoverRef}>
           <div className="flex items-center justify-between px-[14px] py-[10px] border-b border-border bg-surface-elevated">
             <span className="text-sm font-semibold text-text-primary">
               <Icon icon={Wrench} size={14} />

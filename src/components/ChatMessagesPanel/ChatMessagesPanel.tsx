@@ -53,7 +53,18 @@ interface ChatMessagesPanelProps {
   supportsToolCalls?: boolean | null;
   /** Detected tool-calling format, e.g. "hermes" or "llama3". */
   toolFormat?: string | null;
+  /** The model the next send goes to, as the page names it. */
+  modelName: string;
+  /** Its quantisation, from its catalogue entry, when known. */
+  quantization?: string | null;
+  /** The head's margin: the page's own controls. */
+  headMargin?: React.ReactNode;
 }
+
+/** The notebook's column: the width its rows are laid out in. */
+const NotebookColumn: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="@container mx-auto w-full max-w-[1000px] px-lg pt-xl">{children}</div>
+);
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   activeConversation,
@@ -74,6 +85,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   currentStreamingAssistantMessageId,
   supportsToolCalls,
   toolFormat,
+  modelName,
+  quantization,
+  headMargin,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -149,16 +163,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       ? 'Start a server to generate titles'
       : null;
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────────
-  return (
-    <div className="flex flex-col overflow-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
+  const head = (
+    <>
       <ChatPanelHeader
         title={activeConversation?.title || 'New Chat'}
         isThreadRunning={isThreadRunning}
-        supportsToolCalls={supportsToolCalls}
-        toolFormat={toolFormat}
         generateTitleBlockedReason={generateTitleBlockedReason}
         isRenaming={isRenaming}
         titleDraft={titleDraft}
@@ -170,52 +179,56 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         onGenerateTitle={() => generateTitle()}
         onClearConversation={onClearConversation}
         onExportConversation={onExportConversation}
-      />
+        margin={headMargin}
+      >
+        <SystemPromptSection conversation={activeConversation} onSave={onUpdateSystemPrompt} />
+      </ChatPanelHeader>
+      <ChatStatusBanners chatError={chatError} isServerConnected={isServerConnected} onClose={onClose} />
+    </>
+  );
 
-      {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
-        <SystemPromptSection
-          conversation={activeConversation}
-          onSave={onUpdateSystemPrompt}
-        />
-
-        <ChatStatusBanners
-          chatError={chatError}
-          isServerConnected={isServerConnected}
-          onClose={onClose}
-        />
-
-        {/* Messages area */}
-        <div className="flex-1 min-h-0 flex flex-col rounded-md bg-background overflow-hidden">
-          {messageLoading ? (
-            <div role="status" className="flex items-center justify-center h-full text-text-muted">Loading messages…</div>
-          ) : (
-            <MessageActionsContext.Provider value={messageActionsValue}>
-              <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
-                <ThreadPrimitive.Root
-                  key={activeConversationId ?? 'thread-root'}
-                  className="flex flex-col h-full min-h-0"
-                >
-                  <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto p-md flex flex-col gap-md scroll-smooth" autoScroll>
-                    <ThreadPrimitive.Messages
-                      components={messageComponents}
-                    />
-                    <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
-                      Jump to latest
-                    </ThreadPrimitive.ScrollToBottom>
-                  </ThreadPrimitive.Viewport>
-
-                  <ComposerFooter
-                    isServerConnected={isServerConnected}
-                    isThreadRunning={isThreadRunning}
-                    onStopGeneration={() => threadRuntime?.cancelRun()}
-                  />
-                </ThreadPrimitive.Root>
-              </ThinkingTimingProvider>
-            </MessageActionsContext.Provider>
-          )}
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col overflow-hidden relative flex-1 bg-background md:h-full md:min-h-0">
+      {messageLoading ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <NotebookColumn>
+            {head}
+            <div role="status" className="py-lg text-text-muted">Loading messages…</div>
+          </NotebookColumn>
         </div>
-      </div>
+      ) : (
+        <MessageActionsContext.Provider value={messageActionsValue}>
+          <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
+            <ThreadPrimitive.Root
+              key={activeConversationId ?? 'thread-root'}
+              className="flex flex-col flex-1 min-h-0"
+            >
+              <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
+                <NotebookColumn>
+                  {head}
+                  <ThreadPrimitive.Messages components={messageComponents} />
+                </NotebookColumn>
+                <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
+                  Jump to latest
+                </ThreadPrimitive.ScrollToBottom>
+              </ThreadPrimitive.Viewport>
+
+              <ComposerFooter
+                isServerConnected={isServerConnected}
+                isThreadRunning={isThreadRunning}
+                onStopGeneration={() => threadRuntime?.cancelRun()}
+                modelName={modelName}
+                quantization={quantization}
+                supportsToolCalls={supportsToolCalls}
+                toolFormat={toolFormat}
+              />
+            </ThreadPrimitive.Root>
+          </ThinkingTimingProvider>
+        </MessageActionsContext.Provider>
+      )}
 
       {/* Delete confirmation modal */}
       <ConfirmDeleteModal
