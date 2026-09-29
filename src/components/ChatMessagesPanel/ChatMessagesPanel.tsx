@@ -191,7 +191,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col overflow-hidden relative flex-1 bg-background md:h-full md:min-h-0">
+    <div className="flex flex-col overflow-hidden relative flex-1 min-w-0 bg-background md:h-full md:min-h-0">
       {messageLoading ? (
         <div className="flex-1 min-h-0 overflow-y-auto">
           <NotebookColumn>

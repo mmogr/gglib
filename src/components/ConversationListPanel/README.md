@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Left sidebar listing past conversations with search filtering, relative timestamps, per-item delete, and a new conversation shortcut. Includes a skeleton loader for the initial DB fetch.
+The chat page's left side: a narrow rail (new chat, search, the list's fold, the machine that answers) and the conversation list beside the notebook, with search filtering, relative timestamps and per-item delete. The list is visible by default; `LIST_POLICY` in `useListFold.ts` is the one line that makes it rail-only or always visible.
 
 ## Key Files
 
@@ -13,6 +13,8 @@ Left sidebar listing past conversations with search filtering, relative timestam
 |------|------|
 | `ConversationListPanel.tsx` | Searchable list; active highlighting; relative time via `Intl.RelativeTimeFormat` |
 | `ConversationListSkeleton.tsx` | Animated skeleton placeholder during initial load |
+| `ConversationRail.tsx` | The 72 px rail: new chat, search, the list button, and the machine and how it is reached |
+| `useListFold.ts` | Whether the list shows: the policy, the remembered choice, and folding by itself in a narrow window |
 
 Timestamps use relative format for recent conversations ("2 minutes ago") and switch to absolute date strings for entries older than 7 days.
 

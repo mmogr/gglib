@@ -1,9 +1,6 @@
-import { FC } from 'react';
-import { Plus, X } from 'lucide-react';
-import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
-import { Tabs, TabItem } from '../ui/Tabs';
+import { FC, Ref } from 'react';
+import { X } from 'lucide-react';
 import { Icon } from '../ui/Icon';
-import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { Stack } from '../primitives';
@@ -17,20 +14,11 @@ interface ConversationListPanelProps {
   activeConversationId: number | null;
   onSelectConversation: (id: number) => void;
   onDeleteConversation: (id: number) => void;
-  onNewConversation: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   loading: boolean;
-  modelName: string;
-  onClose: () => void;
-  activeTab: ChatPageTabId;
-  onTabChange: (tab: ChatPageTabId) => void;
-  /**
-   * Which views this chat actually has. Defaults to both; a chat with
-   * another machine passes the chat-only set, because its console lives on
-   * that machine.
-   */
-  tabs?: TabItem<ChatPageTabId>[];
+  /** The search field, for the rail's search button to focus. */
+  searchInputRef?: Ref<HTMLInputElement>;
 }
 
 const formatRelativeTime = (iso: string) => {
@@ -56,15 +44,10 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
   activeConversationId,
   onSelectConversation,
   onDeleteConversation,
-  onNewConversation,
   searchQuery,
   onSearchChange,
   loading,
-  modelName,
-  onClose,
-  activeTab,
-  onTabChange,
-  tabs = CHAT_PAGE_TABS,
+  searchInputRef,
 }) => {
   const filteredConversations = searchQuery.trim()
     ? conversations.filter(c => 
@@ -73,55 +56,19 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
     : conversations;
 
   return (
-    <div className="flex flex-col overflow-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
-      <div className="p-md border-b border-border-light shrink-0">
-        {/* View Tabs */}
-        <div className="mb-md">
-          <Tabs<ChatPageTabId>
-            tabs={tabs}
-            activeId={activeTab}
-            onChange={onTabChange}
-            aria-label="Chat views"
-          />
-        </div>
-
-        <div className="flex flex-col gap-sm mobile:flex-row mobile:justify-between mobile:items-start mobile:gap-md">
-          <Stack gap="xs" className="min-w-0">
-            <span className="text-xs font-medium text-text-muted">Chatting with</span>
-            <h2 className="text-lg font-semibold m-0 text-text overflow-hidden text-ellipsis whitespace-nowrap">{modelName}</h2>
-          </Stack>
-          <div className="flex gap-sm items-center w-full justify-between mobile:w-auto mobile:shrink-0">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={onNewConversation}
-              title="New conversation"
-              leftIcon={<Icon icon={Plus} size={14} />}
-            >
-              New
-            </Button>
-            <Button
-              variant="dangerGhost"
-              size="sm"
-              onClick={onClose}
-              title="Stop server and close chat"
-              leftIcon={<Icon icon={X} size={14} />}
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-        
-        <div className="flex-1">
-          <Input
-            type="text"
-            placeholder="Search conversations..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full"
-            size="sm"
-          />
-        </div>
+    <div className="flex flex-col overflow-hidden relative flex-1 min-h-0 bg-background-elevated">
+      <div className="p-md border-b border-border-light shrink-0 flex flex-col gap-sm">
+        <h2 className="text-sm font-semibold m-0 text-text-secondary">Conversations</h2>
+        <Input
+          ref={searchInputRef}
+          type="search"
+          aria-label="Search conversations"
+          placeholder="Search conversations..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="w-full"
+          size="sm"
+        />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">

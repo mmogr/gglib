@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ReactNode } from 'react';
 
@@ -93,7 +93,8 @@ describe('ChatPage, remote', () => {
   it('offers no console and asks this machine nothing about the model', async () => {
     render(<ChatPage remote modelName="qwen3" onClose={async () => {}} />, { wrapper });
 
-    expect(await screen.findByText('qwen3')).toBeInTheDocument();
+    // The composer names the model, once the conversation has loaded.
+    await waitFor(() => expect(screen.getByText('qwen3')).toBeInTheDocument());
     // The console reports a process on the other machine, which this window
     // has no port, id or log for.
     expect(screen.queryByRole('tab', { name: /console/i })).not.toBeInTheDocument();

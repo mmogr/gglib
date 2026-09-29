@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { usePanelResize } from '../hooks/usePanelResize';
-import { type ChatPageTabId, CHAT_PAGE_TABS, REMOTE_CHAT_PAGE_TABS } from './chatTabs';
+import { type ChatPageTabId, ChatPageControls } from './chatTabs';
 import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
-import { ConversationListPanel } from '../components/ConversationListPanel';
+import { ConversationListPanel, ConversationRail, useListFold } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
@@ -14,6 +14,7 @@ import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime
 import { useSettings } from '../hooks/useSettings';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
+import { cn } from '../utils/cn';
 
 import { useServerState } from '../services/serverEvents';
 import { getTransport, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/transport';
@@ -72,7 +73,16 @@ export default function ChatPage(props: ChatPageProps) {
   const [newConversationPrompt, setNewConversationPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [creatingConversation, setCreatingConversation] = useState(false);
   
-  // Panel width for resize
+  // The conversation list beside the notebook, and the rail that folds it
+  const listFold = useListFold();
+  const listId = useId();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const handleSearch = () => {
+    listFold.unfold();
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  // Panel width for resize (the console view)
   const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = usePanelResize({ initial: 35, min: 20, max: 50, storageKey: 'gglib.chat.split' });
 
   // Toast notifications
@@ -350,57 +360,55 @@ export default function ChatPage(props: ChatPageProps) {
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
-        <TwoPanelLayout
-          ref={activeTab === 'chat' ? layoutRef : undefined}
-          isHidden={activeTab !== 'chat'}
-          className="flex-1 min-h-0"
-          leftWidth={leftPanelWidth}
-          onResizeStart={handlePointerDown}
-          onKeyboardResize={handleKeyboardResize}
-          leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
-          left={
+        <div className={cn('flex flex-1 min-h-0', activeTab !== 'chat' && 'hidden')}>
+          <ConversationRail
+            onNewConversation={handleNewConversation}
+            onSearch={handleSearch}
+            listOpen={listFold.open}
+            canFold={listFold.canFold}
+            onToggleList={listFold.toggle}
+            listId={listId}
+            remote={remote}
+          />
+          <div id={listId} hidden={!listFold.open} className={cn('w-[280px] shrink-0 flex flex-col min-h-0 border-r border-border-light', !listFold.open && 'hidden')}>
             <ConversationListPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
               onSelectConversation={setActiveConversationId}
               onDeleteConversation={handleDeleteConversation}
-              onNewConversation={handleNewConversation}
               searchQuery={conversationSearch}
               onSearchChange={setConversationSearch}
               loading={conversationLoading}
-              modelName={modelName}
-              onClose={onClose}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              tabs={remote ? REMOTE_CHAT_PAGE_TABS : CHAT_PAGE_TABS}
+              searchInputRef={searchInputRef}
             />
-          }
-          right={
-            <ChatMessagesPanel
-              key={activeConversationId ?? "none"}
-              activeConversation={activeConversation}
-              activeConversationId={activeConversationId}
-              isServerConnected={isServerRunning}
-              serverPort={serverPort}
-              titleGenerationPrompt={titleGenerationPrompt}
-              onRenameConversation={handleRenameConversation}
-              onClearConversation={handleClearConversation}
-              onExportConversation={handleExportConversation}
-              onUpdateSystemPrompt={handleUpdateSystemPrompt}
-              onClose={onClose}
-              messageLoading={messageLoading}
-              syncConversations={syncConversations}
-              chatError={chatError}
-              showToast={showToast}
-              timingTracker={timingTracker}
-              currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
-              supportsToolCalls={supportsToolCalls}
-              toolFormat={toolFormat}
-              modelName={modelName}
-              quantization={quantization}
-            />
-          }
-        />
+          </div>
+          <ChatMessagesPanel
+            key={activeConversationId ?? "none"}
+            activeConversation={activeConversation}
+            activeConversationId={activeConversationId}
+            isServerConnected={isServerRunning}
+            serverPort={serverPort}
+            titleGenerationPrompt={titleGenerationPrompt}
+            onRenameConversation={handleRenameConversation}
+            onClearConversation={handleClearConversation}
+            onExportConversation={handleExportConversation}
+            onUpdateSystemPrompt={handleUpdateSystemPrompt}
+            onClose={onClose}
+            messageLoading={messageLoading}
+            syncConversations={syncConversations}
+            chatError={chatError}
+            showToast={showToast}
+            timingTracker={timingTracker}
+            currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+            supportsToolCalls={supportsToolCalls}
+            toolFormat={toolFormat}
+            modelName={modelName}
+            quantization={quantization}
+            headMargin={
+              <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />
+            }
+          />
+        </div>
 
       </AssistantRuntimeProvider>
 
