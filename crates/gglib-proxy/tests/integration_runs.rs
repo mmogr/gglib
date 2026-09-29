@@ -12,58 +12,11 @@ use std::time::Duration;
 
 use futures_util::StreamExt as _;
 use gglib_core::ports::{RunScope, RunsError, RunsPort};
-use gglib_core::{CorsConfig, ProxyAccessConfig};
 use reqwest::{Client, StatusCode};
-use serde_json::Value;
 
 mod fixtures;
-use fixtures::runs::{FakeRuns, info};
+use fixtures::runs::{FakeRuns, code, info, json, routes, serve};
 use fixtures::tunnel::{DEVICE, DEVICE_KEY, PROXY_KEY, get, spawn_proxy_serving, tunnel_to};
-
-async fn serve(runs: Option<Arc<FakeRuns>>) -> (String, tokio_util::sync::CancellationToken) {
-    serve_demanding(None, runs).await
-}
-
-/// [`serve`], demanding `key` as the bearer when there is one.
-async fn serve_demanding(
-    key: Option<&str>,
-    runs: Option<Arc<FakeRuns>>,
-) -> (String, tokio_util::sync::CancellationToken) {
-    let access = ProxyAccessConfig::new(
-        CorsConfig::LocalOnly,
-        key.map(str::to_owned),
-        "127.0.0.1",
-        vec![],
-    )
-    .with_runs(runs.map(|r| r as Arc<dyn RunsPort>));
-    let (base, _, cancel) = fixtures::access::spawn_proxy(access).await;
-    (base, cancel)
-}
-
-async fn json(response: reqwest::Response) -> (StatusCode, Value) {
-    let status = response.status();
-    let body = response.text().await.unwrap();
-    let value = serde_json::from_str(&body).unwrap_or_else(|e| panic!("not JSON ({e}): {body}"));
-    (status, value)
-}
-
-fn code(body: &Value) -> &str {
-    body["error"]["code"].as_str().unwrap_or_default()
-}
-
-/// Each route with its method, as a client reaches it.
-fn routes(base: &str) -> Vec<reqwest::RequestBuilder> {
-    let client = Client::new();
-    vec![
-        client
-            .put(format!("{base}/v1/runs/r1"))
-            .json(&serde_json::json!({})),
-        client.get(format!("{base}/v1/runs")),
-        client.get(format!("{base}/v1/runs/r1")),
-        client.get(format!("{base}/v1/runs/r1/events")),
-        client.post(format!("{base}/v1/runs/r1/cancel")),
-    ]
-}
 
 #[tokio::test]
 async fn every_route_answers_503_with_a_code_when_the_proxy_holds_no_runs() {
@@ -281,54 +234,5 @@ async fn a_device_through_the_tunnel_is_served_in_its_own_scope() {
 
     connected.shutdown().await;
     serving.shutdown().await;
-    cancel.cancel();
-}
-
-/// The run routes are in the protected group: with a key set, each is
-/// refused without the token and served with it. Modelled on
-/// `integration_auth.rs`'s dashboard test; a route added beside `/health`
-/// would be served without one.
-#[tokio::test]
-async fn every_run_route_requires_the_token() {
-    let runs = Arc::new(FakeRuns::default());
-    let (base, cancel) = serve_demanding(Some("secret123"), Some(Arc::clone(&runs))).await;
-    for request in routes(&base) {
-        let (status, body) = json(request.send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
-    }
-    assert!(runs.scopes().is_empty(), "nothing reached the runs");
-    for request in routes(&base) {
-        let status = request
-            .bearer_auth("secret123")
-            .send()
-            .await
-            .unwrap()
-            .status();
-        assert!(status.is_success(), "{status}");
-    }
-    assert_eq!(runs.scopes(), vec![RunScope::Local; 5]);
-    cancel.cancel();
-}
-
-/// The device gate, not only the scope extractor, covers every run route:
-/// a tunnelled request that names no device and carries the token is refused
-/// with the gate's `device_not_paired`. The extractor answers
-/// `device_not_named`, so a route that left the group fails here.
-#[tokio::test]
-async fn the_device_gate_covers_every_run_route() {
-    let runs = Arc::new(FakeRuns::default());
-    let (base, cancel) = serve_demanding(Some("secret123"), Some(Arc::clone(&runs))).await;
-    for request in routes(&base) {
-        let response = request
-            .bearer_auth("secret123")
-            .header("via", "1.1 modelpipe")
-            .send()
-            .await
-            .unwrap();
-        let (status, body) = json(response).await;
-        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
-        assert_eq!(code(&body), "device_not_paired", "{body}");
-    }
-    assert!(runs.scopes().is_empty());
     cancel.cancel();
 }
