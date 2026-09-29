@@ -77,6 +77,12 @@ describe('useGglibRuntime opening a conversation while its run ends', () => {
     await settles(await mount(open));
   });
 
+  it('ended as the lookup is asked: the saved reply, once', async () => {
+    live();
+    endAt('/api/runs');
+    await settles(await mount(open));
+  });
+
   it('ended between the lookup and the load: the saved reply, once', async () => {
     live();
     endAt('/api/conversations/1/messages');
