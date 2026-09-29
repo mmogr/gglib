@@ -97,9 +97,9 @@ pub(super) fn save_reply(core: Arc<AppCore>, conversation_id: i64, times: FrameT
         Box::pin(async move {
             let finished = info.status == RunStatus::Completed;
             let logged = times.lock().clone();
-            // A time for every frame, or none: a list that is short pairs
-            // frames with the wrong times.
-            let at = |i: usize| (logged.len() == frames.len()).then(|| logged[i]);
+            // One time per frame by construction: the loop records it right
+            // after the frame is logged, with no await between the two.
+            let at = |i: usize| logged.get(i).copied();
             let with_times = frames.iter().enumerate().map(|(i, f)| (&**f, at(i)));
             let rows = rows_from_timed_frames(with_times, finished, conversation_id);
             let total = rows.len();
