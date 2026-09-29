@@ -236,22 +236,7 @@ impl ProxySupervisor {
         settings_repo: Arc<dyn SettingsRepository>,
     ) -> Result<ProxyBind, SupervisorError> {
         let mut guard = self.handle.lock().await;
-
-        // Check if there's an existing handle
-        if let Some(old) = guard.take() {
-            if !old.join_handle.is_finished() {
-                // Still running - put it back and error
-                let addr = old.bound_addr;
-                *guard = Some(old);
-                return Err(SupervisorError::AlreadyRunning(addr));
-            }
-            // Finished - log the result if we can get it
-            match old.join_handle.await {
-                Ok(Ok(())) => debug!("Previous proxy task completed normally"),
-                Ok(Err(e)) => warn!("Previous proxy task ended with error: {e}"),
-                Err(e) => warn!("Previous proxy task panicked: {e}"),
-            }
-        }
+        reap_finished(&mut guard).await?;
 
         // Bind FIRST - get real address before spawning
         let bind_addr = format!("{}:{}", config.host, config.port);
@@ -484,6 +469,27 @@ impl fmt::Debug for ProxySupervisor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProxySupervisor").finish()
     }
+}
+
+/// Clear a previous proxy's handle once its task has finished, logging how
+/// it ended; refuse while it is still running.
+async fn reap_finished(slot: &mut Option<ProxyHandle>) -> Result<(), SupervisorError> {
+    // Check if there's an existing handle
+    if let Some(old) = slot.take() {
+        if !old.join_handle.is_finished() {
+            // Still running - put it back and error
+            let addr = old.bound_addr;
+            *slot = Some(old);
+            return Err(SupervisorError::AlreadyRunning(addr));
+        }
+        // Finished - log the result if we can get it
+        match old.join_handle.await {
+            Ok(Ok(())) => debug!("Previous proxy task completed normally"),
+            Ok(Err(e)) => warn!("Previous proxy task ended with error: {e}"),
+            Err(e) => warn!("Previous proxy task panicked: {e}"),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
