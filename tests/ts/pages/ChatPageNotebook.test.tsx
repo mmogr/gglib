@@ -174,4 +174,16 @@ describe('ChatPage, notebook', () => {
     expect(within(thought).getByText('Reasoning')).toBeVisible();
     expect(within(thought).queryByRole('button', { name: 'How this was made' })).not.toBeInTheDocument();
   });
+
+  it('never makes up a quantisation: a reply or a model without one shows none', async () => {
+    fixture.rows[1][1].metadata = { ...fixture.rows[1][1].metadata, modelName: 'qwen3' };
+    (transport.current as { getModel: () => Promise<unknown> }).getModel = async () => ({ quantization: null });
+    renderLocal();
+    const row = rowOf(await screen.findByText('It restarts the job whenever it exits.'));
+    expect(within(row).getByText('qwen3')).toBeInTheDocument();
+    const when = within(row).getByText((_, el) => el?.tagName === 'TIME');
+    expect(when.parentElement?.textContent).toBe(when.textContent);
+    const composer = rowOf(screen.getByRole('textbox', { name: 'Message' }));
+    expect(composer).not.toHaveTextContent(/Q\d|·/);
+  });
 });

@@ -94,4 +94,13 @@ describe('ChatPage, conversation list', () => {
     expect(screen.getByRole('button', { name: 'Conversations, 1 running' })).toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!)).toEqual({});
   });
+
+  it('counts only listed conversations: a mark kept for a deleted one is not counted', async () => {
+    fixture.runs = [agentRun('r2', 2, 'in_progress')];
+    window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 99: 1_000 }));
+    renderPage();
+
+    await screen.findByRole('button', { name: 'Conversations, 1 running' });
+    expect(screen.queryByText('New')).not.toBeInTheDocument();
+  });
 });

@@ -416,3 +416,38 @@ describe('dispatchAgentEvent — prompt_progress', () => {
     expect(partsOf(store.messages()[0])).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// turn_usage
+// ---------------------------------------------------------------------------
+
+describe('dispatchAgentEvent — turn_usage', () => {
+  it('says how the current turn was made, and nothing of any other', () => {
+    const store = makeMessageStore([emptyAssistant(MSG_ID_2), emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+
+    const done = dispatchAgentEvent(
+      { type: 'turn_usage', model: 'qwen3', prompt_tokens: 30, duration_ms: 900 },
+      state,
+      deps,
+    );
+
+    expect(done).toBe(false);
+    const custom = (m: GglibMessage) => (m.metadata as { custom?: Record<string, unknown> } | undefined)?.custom;
+    expect(custom(store.messages()[1])?.made).toEqual({ modelName: 'qwen3', promptTokens: 30, turnDurationMs: 900 });
+    expect(custom(store.messages()[0])?.made).toBeUndefined();
+  });
+
+  it('takes a frame with none of its figures without failing, and says nothing', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+
+    expect(() =>
+      dispatchAgentEvent({ type: 'turn_usage' } as AgentEvent, state, deps),
+    ).not.toThrow();
+    const custom = (store.messages()[0].metadata as { custom?: Record<string, unknown> } | undefined)?.custom;
+    expect(custom?.made).toBeUndefined();
+  });
+});
