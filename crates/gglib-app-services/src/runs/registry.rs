@@ -60,6 +60,22 @@ impl Table {
     }
 }
 
+/// What an error's message becomes for a reader outside the run's scope.
+pub(super) const OTHERS_MESSAGE: &str =
+    "The run failed; its details are for the device that started it.";
+
+/// A run as `reader` may see it. An error's message can quote the reply, so
+/// a reader outside the run's own scope gets the code with fixed text.
+fn seen_by(cell: &RunCell, reader: &RunScope) -> RunInfo {
+    let mut info = cell.info();
+    if cell.scope != *reader {
+        if let Some(error) = &mut info.error {
+            OTHERS_MESSAGE.clone_into(&mut error.message);
+        }
+    }
+    info
+}
+
 /// Every run this daemon holds. See the [module docs](super).
 pub struct RunRegistry {
     table: Mutex<Table>,
@@ -179,13 +195,13 @@ impl RunsPort for RunRegistry {
             .filter(|cell| *scope == RunScope::Local || cell.scope == *scope)
             .collect();
         cells.sort_by_key(|cell| std::cmp::Reverse(cell.order));
-        let runs: Vec<RunInfo> = cells.iter().map(|cell| cell.info()).collect();
+        let runs: Vec<RunInfo> = cells.iter().map(|cell| seen_by(cell, scope)).collect();
         drop(table);
         RunList { runs }
     }
 
     fn get(&self, scope: &RunScope, id: &str) -> Result<RunInfo, RunsError> {
-        Ok(self.visible(scope, id)?.info())
+        Ok(seen_by(&*self.visible(scope, id)?, scope))
     }
 
     fn events(&self, scope: &RunScope, id: &str, after: u32) -> Result<RunEvents, RunsError> {
@@ -198,7 +214,8 @@ impl RunsPort for RunRegistry {
 
     fn cancel(&self, scope: &RunScope, id: &str) -> Result<RunInfo, RunsError> {
         let cell = self.visible(scope, id)?;
-        let info = cell.cancel();
+        cell.cancel();
+        let info = seen_by(&cell, scope);
         tracing::debug!(run = %id, status = ?info.status, "run cancel asked for");
         Ok(info)
     }

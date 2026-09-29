@@ -197,3 +197,35 @@ async fn this_machine_sees_and_cancels_a_devices_run() {
     let (status, _) = call(&app, Method::POST, &run_cancel_path("phones"), None).await;
     assert_eq!(status, StatusCode::OK);
 }
+
+/// An error's message can quote a device's reply, so this machine's routes
+/// answer a device's failed run with its code and fixed text.
+#[tokio::test]
+async fn a_devices_error_text_stays_with_the_device() {
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let phone = RunScope::Device("phone".into());
+    state.runs.create(phone.clone(), "phones", chat()).unwrap();
+    let own = loop {
+        let info = state.runs.get(&phone, "phones").unwrap();
+        if info.status.is_terminal() {
+            break info;
+        }
+        tokio::task::yield_now().await;
+    };
+    let real = own.error.expect("it failed").message;
+    assert!(real.contains("proxy is not running"), "{real}");
+
+    let (_, one) = call(&app, Method::GET, &run_path("phones"), None).await;
+    let (_, all) = call(&app, Method::GET, RUNS_PATH, None).await;
+    let (_, cancelled) = call(&app, Method::POST, &run_cancel_path("phones"), None).await;
+    for body in [one, all, cancelled] {
+        assert!(
+            body.contains("proxy_not_running"),
+            "the code is kept: {body}"
+        );
+        assert!(
+            !body.contains(&real),
+            "the device's text reached this machine: {body}"
+        );
+    }
+}

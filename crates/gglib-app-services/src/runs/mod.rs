@@ -50,6 +50,9 @@ mod limits_tests;
 #[path = "privacy_tests.rs"]
 mod privacy_tests;
 #[cfg(test)]
+#[path = "redaction_tests.rs"]
+mod redaction_tests;
+#[cfg(test)]
 #[path = "registry_tests.rs"]
 mod registry_tests;
 #[cfg(test)]
