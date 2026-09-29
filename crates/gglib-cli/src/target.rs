@@ -109,6 +109,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
         Commands::Gui { .. } => ("gui", Reach::Local),
         Commands::Web { .. } => ("web", Reach::Local),
         Commands::Remote { .. } => ("remote", Reach::Local),
+        Commands::Run(_) => ("run", Reach::Local),
         Commands::Completions { .. } => ("completions", Reach::Local),
     }
 }

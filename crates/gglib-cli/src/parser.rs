@@ -34,7 +34,8 @@ mcp             Manage MCP (Model Context Protocol) tool servers\n\n\
 Inference:\n  \
 serve           Serve one pinned model behind the OpenAI-compatible proxy\n  \
 chat            Chat with a model interactively\n  \
-question        Ask a question with optional context from stdin or file\n\n\
+question        Ask a question with optional context from stdin or file\n  \
+run             Start a reply the daemon finishes, and read it later\n\n\
 Interfaces:\n  \
 gui             Launch the Tauri desktop GUI\n  \
 web             Ensure the daemon is up and print its URL\n  \

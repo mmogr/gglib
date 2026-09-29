@@ -289,6 +289,10 @@ pub enum Commands {
         command: RemoteCommand,
     },
 
+    /// Start a reply the daemon finishes, and read it later
+    #[command(display_order = 14)]
+    Run(crate::handlers::run::RunArgs),
+
     /// Generate shell completion scripts (bash, zsh, fish, elvish, powershell)
     ///
     /// Prints a completion script to stdout. Pipe it into your shell's config:

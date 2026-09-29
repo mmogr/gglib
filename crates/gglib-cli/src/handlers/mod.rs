@@ -23,5 +23,6 @@ pub(crate) mod proxy_cache_clear;
 pub(crate) mod proxy_dashboard;
 pub(crate) mod proxy_trips;
 pub(crate) mod remote;
+pub(crate) mod run;
 pub(crate) mod up;
 pub(crate) mod web;

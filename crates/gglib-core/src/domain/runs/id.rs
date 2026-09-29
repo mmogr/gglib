@@ -16,6 +16,13 @@ pub fn is_run_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+/// A fresh id for a run this client starts: `run-` and 12 random hex digits.
+#[must_use]
+pub fn new_run_id() -> String {
+    let hex = uuid::Uuid::new_v4().simple().to_string();
+    format!("run-{}", &hex[..12])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -25,6 +32,14 @@ mod tests {
         assert!(is_run_id("a"));
         assert!(is_run_id("Run-01_x"));
         assert!(is_run_id(&"z".repeat(64)));
+    }
+
+    #[test]
+    fn a_minted_id_is_an_id_and_two_differ() {
+        let (a, b) = (new_run_id(), new_run_id());
+        assert!(is_run_id(&a), "{a}");
+        assert!(a.starts_with("run-") && a.len() == 16, "{a}");
+        assert_ne!(a, b);
     }
 
     #[test]
