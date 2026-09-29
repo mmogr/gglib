@@ -7,14 +7,15 @@
 
 POST /api/agent/chat — server-side agentic loop with SSE streaming.
 
-The handler calls [`compose_agent_loop`] to wire up the LLM adapter, MCP
-tool executor, and agent loop, spawns the loop as a background task, and
-bridges the resulting `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`]
-response.
+`compose::prepare` resolves the upstream, validates the request, applies the
+configured limits and calls [`compose_agent_loop`](gglib_runtime::compose_agent_loop),
+so every caller of the loop does those alike. The handler spawns the loop as
+a background task and bridges the resulting `mpsc::Receiver<AgentEvent>` to an
+Axum [`Sse`] response, each event framed by `compose::frame`.
 
 Inline `<think>` reclassification is handled upstream by
 [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
-handler only forwards already-typed [`AgentEvent`]s.
+handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
 
 # Which upstream
 
