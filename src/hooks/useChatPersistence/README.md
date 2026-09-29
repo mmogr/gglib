@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Turning a conversation's saved rows into the messages the thread shows. The daemon writes every turn: the user's message when a run starts and the reply when it ends (`PUT /api/runs/{id}?kind=agent`). The page saves no turn; it loads rows, deletes them (a delete, an edit, a regenerate), and renames conversations.
+Turning a conversation's saved rows into the messages the thread shows. The daemon writes every turn: the user's message when a run starts and the reply when it ends (`PUT /api/runs/{id}?kind=agent`). The page saves no turn; it loads rows, deletes them (the delete button), and renames conversations. An edit or a regenerate replaces rows through the run itself (`replace_from`).
 
 ## Key Files
 

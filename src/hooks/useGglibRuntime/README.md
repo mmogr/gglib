@@ -13,8 +13,9 @@ useGglibRuntime                      send / edit / regenerate / Stop
   │  PUT  /api/runs/{id}?kind=agent  (id minted here; the conversation exists first)
   │  POST /api/runs/{id}/cancel      (Stop; leaving never cancels)
   └── useRunReader                   the open conversation's messages
-        ├── open:  GET /api/conversations/{id}/messages → saved rows
-        │          GET /api/runs → the agent run still going in it, if any
+        ├── open:  GET /api/runs → the agent run still going in it, if any
+        │          GET /api/conversations/{id}/messages → saved rows
+        │          (sending waits for both)
         └── drawRun: GET /api/runs/{id}/events?after=0 → one frame per AgentEvent
               ├── text_delta / reasoning_delta → current assistant message
               ├── tool_call_start / _complete  → tool-call part, then its result
@@ -26,9 +27,12 @@ useGglibRuntime                      send / edit / regenerate / Stop
 The daemon saves the user's message when a run starts and the reply when it
 ends; the page saves no turn. What `drawRun` draws is provisional: at the end
 the thread becomes the saved rows, with their ids, tool rows folded, and an
-unfinished reply marked. An edit or a regenerate deletes the rows from the
-edited message (or the regenerated question) on, then starts a run, which
-saves that message again. Nothing about a run is kept in browser storage; its
+unfinished reply marked, and how long each turn thought. An edit or a
+regenerate names the edited message (or the regenerated question) as the
+run's `replace_from`; the daemon replaces it and every later row with the
+message only once it accepts the run, so a refused run changes nothing and
+the page never deletes. The live run is looked up before the rows load, so
+a run that ends during the opening is shown once. Nothing about a run is kept in browser storage; its
 id lives in memory while it is read.
 
 All loop orchestration (context pruning, tool execution, stagnation detection,
@@ -41,7 +45,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | File | Role |
 |---|---|
 | `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs |
-| `useRunReader.ts` | The open conversation's messages: loads them, attaches to its live run, stops reading on leave, shows what was saved at a run's end |
+| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
 | `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; carries `remote` plus the model name the Remote panel named, refusing the turn when it asked for the far machine and named none |
 | `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is |

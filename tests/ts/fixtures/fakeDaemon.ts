@@ -1,15 +1,23 @@
 /**
- * A daemon in memory, behind `fetch`, speaking the chat and runs routes
- * with the bodies the real routes send.
+ * A daemon in memory, behind `fetch`, speaking the chat and runs routes as
+ * `crates/gglib-axum/src/chat_api.rs` and `handlers/runs/` + `handlers/agent/`
+ * do:
  *
  * - `POST /api/conversations` and `DELETE /api/messages/{id}` answer with a
- *   bare number, as `chat_api.rs` does.
- * - `PUT /api/runs/{id}?kind=agent` saves the request's last message when it
- *   is the user's, as `handlers/agent/run.rs` does, and refuses as it does.
- * - A run's events are `id: <seq>` + `data: <frame>`, and its end is one
- *   `event: run` sent only once its reply is saved.
+ *   bare number.
+ * - `PUT /api/runs/{id}?kind=agent` answers `201` with the run `queued`, or
+ *   `200` with the run that already has the id, saving nothing again. Once
+ *   accepted it saves the request's last message when it is the user's; with
+ *   `replace_from`, in place of that row and every later one. A refusal
+ *   changes nothing.
+ * - A run is `in_progress` from its first event. Its end (a `finish`, or a
+ *   cancel) saves the reply after the call that asked for it returns, and
+ *   only then does its status read as ended and its readers get the one
+ *   `event: run`.
+ * - `GET /api/runs` is newest first; absent optional fields are left out.
  *
- * A test drives a run with `emit` and `finish`. Every request is recorded.
+ * A test drives a run with `emit` and `finish`, and can act at any request
+ * with `before`. Every request is recorded.
  */
 
 import type { ChatMessage } from '../../../src/services/transport';
@@ -27,6 +35,7 @@ interface FakeRun {
   request: AgentRunRequest | null;
   frames: string[];
   streams: Array<ReadableStreamDefaultController<Uint8Array>>;
+  ending: Promise<void> | null;
 }
 
 type NewRow = Omit<ChatMessage, 'id' | 'conversation_id' | 'created_at'>;
@@ -40,6 +49,10 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function refusal(status: number, type: string, error: string): Response {
+  return json({ error, status, type }, status);
+}
+
 function sse(text: string): Uint8Array {
   return encoder.encode(text);
 }
@@ -51,12 +64,19 @@ export class FakeDaemon {
   requests: Recorded[] = [];
   /** The answer the next run start gets instead of a run, once. */
   refuseNext: { status: number; type: string; error: string } | null = null;
+  /** The next run start never reaches the daemon: `fetch` rejects, once. */
+  dropNextStart = false;
   /** Holds every run start until it settles, when set. */
   startGate: Promise<void> | null = null;
+  /** Runs whose events the daemon no longer has: a 404. */
+  vanished = new Set<string>();
+  /** Awaited before each request is answered. */
+  before: ((method: string, path: string) => Promise<void> | void) | null = null;
   /** Readers whose `fetch` was aborted. */
   abortedReads = 0;
   private nextRow = 1;
   private nextConversation = 100;
+  private created = 0;
 
   /** Save a row as the daemon would. */
   save(conversationId: number, row: NewRow): ChatMessage {
@@ -77,20 +97,8 @@ export class FakeDaemon {
 
   /** A run already going, started elsewhere (another tab, before a reload). */
   running(id: string, conversationId: number, frames: object[] = []): FakeRun {
-    const run: FakeRun = {
-      info: {
-        id,
-        kind: 'agent',
-        status: 'in_progress',
-        created_at_ms: 1,
-        conversation_id: conversationId,
-        last_seq: 0,
-      },
-      request: null,
-      frames: [],
-      streams: [],
-    };
-    this.runs.set(id, run);
+    const run = this.accept(id, conversationId);
+    run.info.status = 'in_progress';
     frames.forEach((f) => this.emit(id, f));
     return run;
   }
@@ -105,25 +113,37 @@ export class FakeDaemon {
   /** Log one event to run `id` and send it to its readers. */
   emit(id: string, event: object): void {
     const run = this.runs.get(id)!;
+    if (run.info.status === 'queued') run.info.status = 'in_progress';
     run.frames.push(JSON.stringify(event));
     run.info.last_seq = run.frames.length;
     const text = `id: ${run.frames.length}\ndata: ${JSON.stringify(event)}\n\n`;
     run.streams.forEach((s) => s.enqueue(sse(text)));
   }
 
-  /** End run `id`: save `rows`, then tell its readers, then close. */
-  finish(id: string, status: RunInfo['status'], rows: NewRow[] = []): void {
+  /**
+   * End run `id` as `status`. Its reply (`rows`) is saved after this
+   * returns; then, at once, it reads as ended and its readers are told.
+   */
+  finish(id: string, status: RunInfo['status'], rows: NewRow[] = []): Promise<void> {
     const run = this.runs.get(id)!;
-    const conversationId = run.info.conversation_id!;
-    rows.forEach((row) => this.save(conversationId, row));
-    run.info = { ...run.info, status, finished_at_ms: 2 };
-    if (status === 'failed') run.info.error = { code: 'agent_error', message: 'The agent loop failed.' };
-    const text = `event: run\ndata: ${JSON.stringify(run.info)}\n\n`;
-    run.streams.forEach((s) => {
-      s.enqueue(sse(text));
-      s.close();
+    run.ending ??= new Promise((resolve) => {
+      setTimeout(() => {
+        const conversationId = run.info.conversation_id!;
+        rows.forEach((row) => this.save(conversationId, row));
+        run.info = { ...run.info, status, finished_at_ms: 1790000008250 };
+        if (status === 'failed') {
+          run.info.error = { code: 'agent_error', message: 'The agent loop failed.' };
+        }
+        const text = `event: run\ndata: ${JSON.stringify(run.info)}\n\n`;
+        run.streams.forEach((s) => {
+          s.enqueue(sse(text));
+          s.close();
+        });
+        run.streams = [];
+        resolve();
+      }, 0);
     });
-    run.streams = [];
+    return run.ending;
   }
 
   /** How many requests went to `method` on a path starting `prefix`. */
@@ -137,6 +157,7 @@ export class FakeDaemon {
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
     this.requests.push({ method, url, body });
     const path = url.split('?')[0];
+    await this.before?.(method, path);
     let m: RegExpExecArray | null;
 
     if (method === 'POST' && path === '/api/conversations') {
@@ -149,7 +170,7 @@ export class FakeDaemon {
     }
     if (method === 'DELETE' && (m = /^\/api\/messages\/(\d+)$/.exec(path))) {
       const target = this.rows.find((r) => r.id === Number(m![1]));
-      if (!target) return json({ error: 'not found', status: 404 }, 404);
+      if (!target) return refusal(404, 'not_found', 'Message not found');
       const before = this.rows.length;
       this.rows = this.rows.filter(
         (r) => r.conversation_id !== target.conversation_id || r.id < target.id,
@@ -157,51 +178,84 @@ export class FakeDaemon {
       return json(before - this.rows.length);
     }
     if (method === 'PUT' && (m = /^\/api\/runs\/([^/]+)$/.exec(path))) {
+      if (this.dropNextStart) {
+        this.dropNextStart = false;
+        throw new TypeError('Failed to fetch');
+      }
       await this.startGate;
       return this.start(decodeURIComponent(m[1]), body as AgentRunRequest);
     }
     if (method === 'GET' && path === '/api/runs') {
-      return json({ runs: [...this.runs.values()].map((r) => r.info) });
+      const newest = [...this.runs.values()].reverse();
+      return json({ runs: newest.map((r) => r.info) });
     }
     if (method === 'POST' && (m = /^\/api\/runs\/([^/]+)\/cancel$/.exec(path))) {
       const run = this.runs.get(decodeURIComponent(m[1]));
-      if (!run) return json({ error: 'no such run', status: 404 }, 404);
+      if (!run) return refusal(404, 'run_not_found', 'no such run');
+      // As the route answers: going, until the reply is saved.
+      const ended = run.info.status === 'completed' || run.info.status === 'failed' || run.info.status === 'cancelled';
+      const shown: RunInfo = ended ? { ...run.info } : { ...run.info, status: 'in_progress' };
       const text = run.frames
         .map((f) => JSON.parse(f) as { type: string; content?: string })
         .filter((e) => e.type === 'text_delta')
         .map((e) => e.content)
         .join('');
-      this.finish(run.info.id, 'cancelled', [
+      void this.finish(run.info.id, 'cancelled', [
         { role: 'assistant', content: text, metadata: { incomplete: true } },
       ]);
-      return json(run.info);
+      return json(shown);
     }
     if (method === 'GET' && (m = /^\/api\/runs\/([^/]+)\/events$/.exec(path))) {
       return this.events(decodeURIComponent(m[1]), url, init.signal ?? undefined);
     }
-    return json({ error: `no route ${method} ${path}`, status: 404 }, 404);
+    return refusal(404, 'not_found', `no route ${method} ${path}`);
   };
 
+  private accept(id: string, conversationId: number | null): FakeRun {
+    const info: RunInfo = {
+      id,
+      kind: 'agent',
+      status: 'queued',
+      model: 'qwen',
+      created_at_ms: 1790000000000 + this.created++,
+      last_seq: 0,
+    };
+    if (conversationId !== null) info.conversation_id = conversationId;
+    const run: FakeRun = { info, request: null, frames: [], streams: [], ending: null };
+    this.runs.set(id, run);
+    return run;
+  }
+
   private start(id: string, request: AgentRunRequest): Response {
+    const existing = this.runs.get(id);
+    if (existing) return json(existing.info, 200);
     if (this.refuseNext) {
-      const refusal = this.refuseNext;
+      const { status, type, error } = this.refuseNext;
       this.refuseNext = null;
-      return json({ error: refusal.error, status: refusal.status, type: refusal.type }, refusal.status);
+      return refusal(status, type, error);
     }
     const cid = request.conversation_id;
     if (cid !== null && !this.conversations.has(cid)) {
-      return json({ error: `no conversation has id ${cid}`, status: 404, type: 'conversation_not_found' }, 404);
+      return refusal(404, 'conversation_not_found', `no conversation has id ${cid}`);
     }
-    const run = this.running(id, cid!);
-    run.request = request;
     const last = request.messages[request.messages.length - 1];
+    const from = request.replace_from;
+    if (from !== null) {
+      const target = this.rows.find((r) => r.id === from && r.conversation_id === cid);
+      if (!target) {
+        return refusal(404, 'message_not_found', `conversation ${cid} has no message ${from} to replace`);
+      }
+      this.rows = this.rows.filter((r) => r.conversation_id !== cid || r.id < from);
+    }
+    const run = this.accept(id, cid);
+    run.request = request;
     if (cid !== null && last?.role === 'user') this.save(cid, { role: 'user', content: last.content });
     return json(run.info, 201);
   }
 
   private events(id: string, url: string, signal?: AbortSignal): Response {
     const run = this.runs.get(id);
-    if (!run) return json({ error: `no run has id ${id}`, status: 404 }, 404);
+    if (!run || this.vanished.has(id)) return refusal(404, 'run_not_found', `no run has id ${id}`);
     const after = Number(new URL(url, 'http://daemon').searchParams.get('after') ?? 0);
     const ended = run.info.status !== 'in_progress' && run.info.status !== 'queued';
     const stream = new ReadableStream<Uint8Array>({

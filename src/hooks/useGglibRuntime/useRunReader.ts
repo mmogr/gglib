@@ -1,10 +1,14 @@
 /**
  * The open conversation's messages, and the run being read into them.
  *
- * Opening a conversation shows its saved rows, then asks whether a run is
- * still going in it and, if one is, reads it from its first event. Whenever
- * a run ends, the messages become what the daemon saved: the rows, their
- * ids, and a reply marked unfinished when it was.
+ * Opening a conversation first asks whether a run is still going in it,
+ * then loads its saved rows, then, if one was going, reads it from its
+ * first event. In that order a run that ends at any point of the opening is
+ * shown once: ended before the question, its reply is in the rows (a run
+ * reads as ended only once its reply is saved); ended after, its stream
+ * replays it, and at its end the messages become what the daemon saved:
+ * the rows, their ids, and a reply marked unfinished when it was. Nothing
+ * can be sent until the question and the rows have both come back.
  *
  * Leaving (another conversation, unmount) stops reading; it never cancels
  * the run. The run's id is kept in memory only.
@@ -48,6 +52,8 @@ export function useRunReader(
   const [isRunning, setIsRunning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const runningRef = useRef(false);
+  /** An opening that has not yet learned whether a run is live. */
+  const openingRef = useRef(false);
   /** The reading in progress. Aborting it stops reading, never the run. */
   const readerRef = useRef<AbortController | null>(null);
   /** The run read here, once the daemon has accepted it. */
@@ -82,6 +88,7 @@ export function useRunReader(
 
   /** Leave: stop reading. A run being read carries on at the daemon. */
   const stopReading = useCallback(() => {
+    openingRef.current = false;
     readerRef.current?.abort();
     readerRef.current = null;
     setRunning(false);
@@ -139,25 +146,32 @@ export function useRunReader(
     if (outcome.error) latest.current.onError?.(outcome.error);
   }, [endReading, showSaved, timingTracker]);
 
-  /** Show `cid`'s saved rows, then the run still going in it. */
+  /** Learn whether a run is live in `cid`, show its rows, then read the run. */
   const open = useCallback(async (cid: number, signal: AbortSignal) => {
+    openingRef.current = true;
     setIsLoading(true);
     try {
+      const live = await liveRunFor(cid);
+      if (signal.aborted) return;
       await showSaved(cid, signal);
       if (signal.aborted) return;
+      openingRef.current = false;
       setIsLoading(false);
-      const live = await liveRunFor(cid);
-      if (live && !signal.aborted) await follow(cid, live.id, signal);
+      if (live) await follow(cid, live.id, signal);
     } catch (error) {
       if (!signal.aborted) latest.current.onError?.(error as Error);
     } finally {
-      if (!signal.aborted) setIsLoading(false);
+      if (!signal.aborted) {
+        openingRef.current = false;
+        setIsLoading(false);
+      }
     }
   }, [follow, showSaved]);
 
   const systemPrompt = inputs.conversation?.system_prompt;
   useEffect(() => {
     if (conversationId === undefined) {
+      openingRef.current = false;
       setMessages([]);
       setIsLoading(false);
       return undefined;
@@ -168,9 +182,12 @@ export function useRunReader(
     return stopReading;
   }, [conversationId, systemPrompt, open, beginReading, stopReading]);
 
-  /** Claim the conversation for a send: null while a run is live in it. */
+  /**
+   * Claim the conversation for a send: null while a run is live in it, or
+   * while opening it has not yet learned whether one is.
+   */
   const beginSend = useCallback((): AbortSignal | null => {
-    if (runningRef.current) return null;
+    if (runningRef.current || openingRef.current) return null;
     runningRef.current = true;
     setIsRunning(true);
     return beginReading();

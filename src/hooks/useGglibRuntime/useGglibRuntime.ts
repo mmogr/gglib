@@ -109,10 +109,16 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
 
   /**
    * Send `content` after `base`: create the conversation if there is none,
-   * run `clear` (the deletes an edit or a regenerate needs), start the run
-   * and read it. Refused while a run is live here.
+   * start the run and read it. `replaceFrom` is the saved row an edit or a
+   * regenerate replaces, with every later one; the daemon deletes them only
+   * once it accepts the run, so a refusal changes nothing. Refused here
+   * while a run is live, or while opening has not learned whether one is.
    */
-  const start = async (base: GglibMessage[], content: GglibContent, clear?: () => Promise<unknown>) => {
+  const start = async (
+    base: GglibMessage[],
+    content: GglibContent,
+    { replaceFrom, giveBack = true }: { replaceFrom?: number; giveBack?: boolean } = {},
+  ) => {
     // Read once: the guard and the body must agree about where this goes.
     const destination = askTheRemote();
     // A remote turn has no local server to select; the daemon takes the
@@ -141,6 +147,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       const request = buildRunRequest({
         messages: history,
         conversationId: cid,
+        replaceFrom,
         selectedServerPort,
         config: {
           ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
@@ -153,7 +160,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       });
       messagesRef.current = history;
       setMessages(history);
-      await clear?.();
       const runId = mintRunId();
       await getTransport().startAgentRun(runId, request);
       if (stopAskedRef.current) {
@@ -163,11 +169,11 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     } catch (error) {
       if (signal.aborted) return;
       reader.endReading(signal);
-      // Nothing was started: show what is saved, and hand a plain send's
-      // text back to the composer rather than lose it.
+      // Nothing was started and nothing changed: show what is saved, and
+      // hand the text of a send or an edit back to the composer.
       if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
-      const [only, ...more] = typeof content === 'string' ? [] : content;
-      if (!clear && more.length === 0 && only?.type === 'text') {
+      const [only, ...more] = typeof content === 'string' ? [{ type: 'text', text: content } as const] : content;
+      if (giveBack && more.length === 0 && only?.type === 'text') {
         runtimeRef.current?.thread.composer.setText(only.text);
       }
       onError?.(error as Error);
@@ -189,33 +195,30 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       await start(messagesRef.current, msg.content as GglibContent);
     },
 
-    // Edit and resend: the edited row and everything after it are deleted,
-    // and the run saves the new message.
+    // Edit and resend: the run replaces the edited row and everything after
+    // it with the new message.
     onEdit: async (msg: AppendMessage) => {
       const current = messagesRef.current;
       const parent = msg.parentId === null ? -1 : current.findIndex((m) => m.id === msg.parentId);
       if (msg.parentId !== null && parent === -1) return;
       const rowId = savedRowId(current[parent + 1]);
-      await start(
-        current.slice(0, parent + 1),
-        msg.content as GglibContent,
-        rowId === null ? undefined : () => getTransport().deleteMessage(rowId),
-      );
+      await start(current.slice(0, parent + 1), msg.content as GglibContent, {
+        replaceFrom: rowId ?? undefined,
+      });
     },
 
-    // Regenerate: the question and its reply are deleted, and the run saves
-    // the question again, so it is held once.
+    // Regenerate: the run replaces the question and its reply with the
+    // question again, so it is held once.
     onReload: async (parentId: string | null) => {
       const current = messagesRef.current;
       let at = parentId === null ? -1 : current.findIndex((m) => m.id === parentId);
       while (at >= 0 && current[at].role !== 'user') at--;
       if (at < 0) return;
       const rowId = savedRowId(current[at]);
-      await start(
-        current.slice(0, at),
-        current[at].content as GglibContent,
-        rowId === null ? undefined : () => getTransport().deleteMessage(rowId),
-      );
+      await start(current.slice(0, at), current[at].content as GglibContent, {
+        replaceFrom: rowId ?? undefined,
+        giveBack: false,
+      });
     },
 
     // Stop: cancel the run. Its end, and what it saved, arrive as they would.

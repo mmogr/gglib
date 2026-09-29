@@ -44,3 +44,21 @@ export function send(hook: Awaited<ReturnType<typeof mount>>, text: string): voi
     });
   });
 }
+
+/** Edit the message after `parentId` to `text`, without waiting for the reply. */
+export function edit(hook: Awaited<ReturnType<typeof mount>>, parentId: string | null, text: string): void {
+  act(() => {
+    void hook.result.current.runtime.thread.append({
+      parentId,
+      role: 'user',
+      content: [{ type: 'text', text }],
+    });
+  });
+}
+
+/** Regenerate the reply to the message `parentId`, without waiting for it. */
+export function regenerate(hook: Awaited<ReturnType<typeof mount>>, parentId: string): void {
+  act(() => {
+    void hook.result.current.runtime.thread.startRun({ parentId });
+  });
+}
