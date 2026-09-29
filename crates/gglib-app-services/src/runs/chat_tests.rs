@@ -239,3 +239,30 @@ async fn a_proxy_that_is_not_running_fails_the_run_and_is_not_started() {
         gglib_runtime::proxy::ProxyStatus::Stopped
     ));
 }
+
+/// A refusal's head is not an answer: the run stays queued while its body
+/// is still coming, then fails.
+#[tokio::test]
+async fn a_refusal_whose_body_is_held_back_leaves_the_run_queued_until_it_fails() {
+    let mut proxy = FakeProxy::start().await;
+    let runs = registry_on(door(proxy.addr, None));
+    runs.create(LOCAL, "r1", request()).unwrap();
+    (&mut proxy.seen).await.unwrap();
+    let body = r#"{"error":{"message":"busy","type":"server_error","code":"overloaded"}}"#;
+    proxy.say(format!(
+        "HTTP/1.1 503 Service Unavailable\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        body.len()
+    ));
+
+    // The head has had time to arrive and be read; the body has not been sent.
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        assert_eq!(runs.get(&LOCAL, "r1").unwrap().status, RunStatus::Queued);
+    }
+    proxy.say(body);
+    proxy.close();
+
+    let (_, info) = finished(&runs, "r1").await;
+    assert_eq!(info.status, RunStatus::Failed);
+    assert_eq!(info.error.map(|e| e.code).as_deref(), Some("overloaded"));
+}
