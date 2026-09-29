@@ -5,22 +5,22 @@
 
 <!-- module-docs:start -->
 
-Central chat interface managing the message thread, system prompt, conversation operations (rename, clear, export), and AI title generation. `ChatMessagesPanel.tsx` is a thin composition root: it owns the `@assistant-ui/react` thread runtime and the state that touches it, and delegates everything else to the named children in `components/` and the hooks in `hooks/`.
+Central chat interface, laid out as a notebook (each turn a row: a margin saying who and how it was made, then the body), managing the message thread, system prompt, conversation operations (rename, clear, export), and AI title generation. `ChatMessagesPanel.tsx` is a thin composition root: it owns the `@assistant-ui/react` thread runtime and the state that touches it, and delegates everything else to the named children in `components/` and the hooks in `hooks/`.
 
 ## Architecture
 
 ```
 ChatMessagesPanel                 ← composition root; owns the thread runtime
-    ├── ChatPanelHeader           ← title, rename, AI title, status, tool support
-    ├── SystemPromptSection       ← prompt preview + editor (own draft state)
-    ├── ChatStatusBanners         ← chat error / server-down warning
     ├── ThinkingTimingProvider    ← context for live reasoning timers
-    │     └── ThreadPrimitive     ← @assistant-ui message list
-    │           ├── MessageBubbles      ← per-message rendering
+    │     └── ThreadPrimitive     ← @assistant-ui message list, one notebook column
+    │           ├── ChatPanelHeader     ← head row: title, rename, AI title, actions
+    │           │     └── SystemPromptSection  (own draft state)
+    │           ├── ChatStatusBanners   ← chat error / server-down warning
+    │           ├── MessageBubbles      ← each turn a TurnRow: margin + body
+    │           │     ├── TurnMargin (who; figures or arrival, from turnFigures)
     │           │     ├── MarkdownMessageContent
-    │           │     ├── ThinkingBlock  (collapsible CoT with live timer)
-    │           │     └── ToolUsageBadge / ToolExecutionProgress
-    │           └── ComposerFooter      ← input, send / stop
+    │           │     └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
+    │           └── ComposerFooter      ← model and tools; input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 

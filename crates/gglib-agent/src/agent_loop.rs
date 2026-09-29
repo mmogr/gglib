@@ -45,13 +45,13 @@ use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
 };
 
-use crate::stream_collector::CollectedResponse;
+use crate::turn_usage::measure_turn;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
 use crate::guards::Guards;
-use crate::stream_collector::{MAX_TOOL_CALL_INDEX, collect_stream};
+use crate::stream_collector::{CollectedResponse, MAX_TOOL_CALL_INDEX, collect_stream};
 use crate::tool_execution::execute_tools_parallel;
 use crate::util::emit_error_event;
 use gglib_core::domain::agent::{batch_results_hash, hash_result_text};
@@ -185,7 +185,7 @@ impl AgentLoop {
             Ok(s) => s,
             Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
         };
-        match collect_stream(stream, tx).await {
+        match collect_stream(measure_turn(stream, tx.clone()), tx).await {
             Ok(r) => Ok(r),
             Err(e) => fail_loop(tx, format!("stream collection error: {e:#}")).await,
         }

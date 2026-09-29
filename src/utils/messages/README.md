@@ -12,6 +12,7 @@ Message conversion and serialization utilities — the single source of truth fo
 | File | Role |
 |------|------|
 | `contentParts.ts` | `extractNonTextContentParts()` (save) and `reconstructContent()` (load) for tool-calls, audio, file, image parts |
+| `turnMade.ts` | How a reply's turn was made (model, token counts, times), from a run's `turn_usage` event or a saved row's metadata, in one shape |
 | `threadMessageToTranscriptMarkdown.ts` | Converts a `ThreadMessage` to plain-text Markdown (answer only, no reasoning, no tool calls) |
 
 ## Persistence Contract

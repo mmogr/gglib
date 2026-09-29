@@ -17,6 +17,11 @@ Inline `<think>` reclassification is handled upstream by
 [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
 
+An agent run stamps each turn's `turn_usage` event with the model it drove
+(`compose::MadeBy`: locally the model on the port and its catalogue
+quantisation, remotely the name the request gave) before logging it, so the
+frame a page draws and the row the reply is saved as say the same.
+
 # Which upstream
 
 `remote_upstream` decides, before anything else, whether the loop drives a

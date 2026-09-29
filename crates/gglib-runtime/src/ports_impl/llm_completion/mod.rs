@@ -20,6 +20,7 @@ mod body;
 mod far_machine;
 mod retry;
 mod stream;
+mod writing_time;
 
 pub use far_machine::FarMachine;
 

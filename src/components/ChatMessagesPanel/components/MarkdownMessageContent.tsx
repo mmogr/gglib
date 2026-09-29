@@ -39,35 +39,26 @@ const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
 
   const components: Partial<Components> = {
     table: ({ children }) => (
-      <div className="overflow-x-auto my-sm [&_table]:border-collapse [&_table]:w-full [&_th]:border [&_th]:border-border [&_th]:py-xs [&_th]:px-sm [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:py-xs [&_td]:px-sm [&_td]:text-left">
+      <div className="overflow-x-auto my-md [&_table]:border-collapse [&_table]:w-full [&_th]:border-b [&_th]:border-border [&_th]:py-sm [&_th]:pr-md [&_th]:text-left [&_th]:text-sm [&_th]:font-semibold [&_th]:text-text-secondary [&_td]:border-b [&_td]:border-border-light [&_td]:py-sm [&_td]:pr-md [&_td]:text-left">
         <table>{children}</table>
       </div>
     ),
-    code(props) {
-      const { inline, className, children, ...rest } = props as {
-        inline?: boolean;
-        className?: string;
-        children?: React.ReactNode;
-      };
-      if (inline) {
-        return (
-          <code className={cn('bg-background py-[2px] px-[6px] rounded-sm font-mono text-[0.9em]', className)} {...rest}>
-            {children}
-          </code>
-        );
-      }
-      return (
-        <pre className="bg-background rounded-sm p-md overflow-x-auto my-sm [&_code]:font-mono [&_code]:text-sm">
-          <code className={className} {...rest}>
-            {children}
-          </code>
-        </pre>
-      );
-    },
+    // react-markdown draws a block as <pre><code>, and says nothing else of
+    // which code is inline: the <pre> is the block, and <code> alone is inline.
+    pre: ({ children }) => (
+      <pre className="bg-surface rounded-md py-md px-base overflow-x-auto my-md font-mono text-sm [&_code]:bg-transparent! [&_code]:p-0! [&_code]:text-sm">
+        {children}
+      </pre>
+    ),
+    code: ({ className, children, node: _node, ...rest }) => (
+      <code className={cn('bg-surface-elevated py-[1px] px-[5px] rounded-sm font-mono text-[0.9em]', className)} {...rest}>
+        {children}
+      </code>
+    ),
   };
 
   return (
-    <div className="text-sm [&_p]:m-0 [&_p]:mb-sm [&_p:last-child]:mb-0 [&_ul]:my-sm [&_ul]:pl-lg [&_ol]:my-sm [&_ol]:pl-lg">
+    <div className="[&_p]:m-0 [&_p]:mb-md [&_p:last-child]:mb-0 [&_ul]:my-sm [&_ul]:pl-lg [&_ol]:my-sm [&_ol]:pl-lg">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}

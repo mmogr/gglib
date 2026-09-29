@@ -242,9 +242,9 @@ pub async fn collect_stream(
             LlmStreamEvent::Usage {
                 completion_tokens: ct,
                 ..
-            } => {
-                completion_tokens = Some(ct);
-            }
+            } => completion_tokens = Some(ct),
+            // Read by `turn_usage`, which wraps this stream; nothing to collect.
+            LlmStreamEvent::WritingTime { .. } => {}
 
             LlmStreamEvent::UpstreamError {
                 message,

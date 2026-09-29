@@ -7,6 +7,8 @@
  * @module agentEvent
  */
 
+import type { TurnUsageWire } from '../../utils/messages/turnMade';
+
 // ---------------------------------------------------------------------------
 // Embedded wire types (mirror Rust ToolCall / ToolResult)
 // ---------------------------------------------------------------------------
@@ -127,6 +129,15 @@ export interface AgentPromptProgressEvent {
 }
 
 /**
+ * How one model turn was made, once its stream ended: the model (stamped by
+ * the daemon's run), the upstream's token counts, and how long the turn took
+ * and spent writing. Each field is absent when unknown.
+ */
+export interface AgentTurnUsageEvent extends TurnUsageWire {
+  type: 'turn_usage';
+}
+
+/**
  * Union of all events emitted by the backend agentic loop over SSE.
  *
  * Consumers should handle all variants; unknown `type` values should be
@@ -141,4 +152,5 @@ export type AgentEvent =
   | AgentFinalAnswerEvent
   | AgentErrorEvent
   | AgentSystemWarningEvent
-  | AgentPromptProgressEvent;
+  | AgentPromptProgressEvent
+  | AgentTurnUsageEvent;

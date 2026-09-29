@@ -23,7 +23,8 @@ no infrastructure concerns.
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |
 | [`stagnation`] | [`StagnationDetector`] — repeated assistant-text guard |
 | `transcript` | [`to_new_message`] — an agent message as a saved chat row |
-| `replay` | [`rows_from_frames`] — a reply's saved rows, rebuilt from its logged events |
+| `replay` | [`rows_from_frames`] — a reply's saved rows, rebuilt from its logged events, each turn's [`TurnUsage`] saved under [`MADE_KEYS`] |
+| `turn_usage` | [`TurnUsage`] — how one model turn was made: model, token counts, times; never text |
 | [`fnv1a`] | [`fnv1a::fnv1a_64`] — the hash backing both detectors |
 
 # Design Principles

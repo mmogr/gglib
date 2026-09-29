@@ -29,7 +29,12 @@ import type {
   TextPart,
   ReasoningPart,
 } from '../../types/messages';
-import type { AgentToolCallCompleteEvent } from '../../types/events/agentEvent';
+import type {
+  AgentPromptProgressEvent,
+  AgentToolCallCompleteEvent,
+  AgentTurnUsageEvent,
+} from '../../types/events/agentEvent';
+import { turnMadeFromUsage } from '../../utils/messages/turnMade';
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -202,6 +207,43 @@ export function applyToolResult(
             : p,
         ) as GglibContent,
       };
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Prompt reading
+// ---------------------------------------------------------------------------
+
+/** Keep a turn's latest `prompt_progress` on its message. */
+export function applyPromptProgress(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  event: AgentPromptProgressEvent,
+): void {
+  const prompt = { processed: event.processed, total: event.total, cached: event.cached };
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const meta = m.metadata as { custom?: GglibMessageCustom } | undefined;
+      return { ...m, metadata: { ...m.metadata, custom: { ...meta?.custom, prompt } } };
+    }),
+  );
+}
+
+/** Keep how a turn was made, from its `turn_usage` event, on its message. */
+export function applyTurnUsage(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  event: AgentTurnUsageEvent,
+): void {
+  const made = turnMadeFromUsage(event);
+  if (!made) return;
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const meta = m.metadata as { custom?: GglibMessageCustom } | undefined;
+      return { ...m, metadata: { ...m.metadata, custom: { ...meta?.custom, made } } };
     }),
   );
 }

@@ -121,6 +121,15 @@ pub(super) fn paced(
         tx,
         rx,
         model: "qwen".to_owned(),
+        // As `resolve` makes it for a run on the far machine; a test of what
+        // a local run is made by resolves one (see `run_made_tests`).
+        made_by: super::remote_upstream::remote(
+            "qwen".to_owned(),
+            9000,
+            "fp".to_owned(),
+            "key".to_owned(),
+        )
+        .made_by,
     };
     (prepared, dropped)
 }

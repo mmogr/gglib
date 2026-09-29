@@ -1,5 +1,7 @@
-import { MessageSquare, Terminal } from 'lucide-react';
-import { TabItem } from '../components/ui/Tabs';
+import { MessageSquare, Terminal, X } from 'lucide-react';
+import { Tabs, TabItem } from '../components/ui/Tabs';
+import { Button } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 
 export type ChatPageTabId = 'chat' | 'console';
 
@@ -20,3 +22,40 @@ export const CHAT_PAGE_TABS: TabItem<ChatPageTabId>[] = [
 export const REMOTE_CHAT_PAGE_TABS: TabItem<ChatPageTabId>[] = CHAT_PAGE_TABS.filter(
   (tab) => tab.id !== 'console',
 );
+
+/**
+ * The page's own controls, in the notebook head's margin: the view
+ * switcher and Close, which stops the server and leaves the chat.
+ */
+export function ChatPageControls({
+  activeTab,
+  onTabChange,
+  remote,
+  onClose,
+}: {
+  activeTab: ChatPageTabId;
+  onTabChange: (tab: ChatPageTabId) => void;
+  remote: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <Tabs<ChatPageTabId>
+        tabs={remote ? REMOTE_CHAT_PAGE_TABS : CHAT_PAGE_TABS}
+        activeId={activeTab}
+        onChange={onTabChange}
+        aria-label="Chat views"
+        size="sm"
+      />
+      <Button
+        variant="dangerGhost"
+        size="sm"
+        onClick={onClose}
+        title="Stop server and close chat"
+        leftIcon={<Icon icon={X} size={14} />}
+      >
+        Close
+      </Button>
+    </>
+  );
+}

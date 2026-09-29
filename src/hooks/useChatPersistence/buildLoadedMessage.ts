@@ -1,5 +1,5 @@
 import type { ThreadMessageLike } from '@assistant-ui/react';
-import { reconstructContent } from '../../utils/messages';
+import { reconstructContent, turnMadeFromMetadata } from '../../utils/messages';
 import type { SerializableContentPart, SerializableToolCallPart } from '../../utils/messages';
 import type { ChatMessage } from '../../services/transport';
 
@@ -121,6 +121,8 @@ export function buildLoadedMessage(
   if (thinkingDuration != null) {
     custom.thinkingDurationSeconds = thinkingDuration;
   }
+  const made = msg.role === 'assistant' ? turnMadeFromMetadata(msg.metadata) : undefined;
+  if (made) custom.made = made;
 
   let content = reconstructContent(msg.content, storedParts ?? null);
 

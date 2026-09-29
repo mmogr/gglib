@@ -10,6 +10,7 @@ pub(crate) mod context_pruning;
 pub(crate) mod guards;
 pub(crate) mod stream_collector;
 pub(crate) mod tool_execution;
+pub(crate) mod turn_usage;
 pub(crate) mod util;
 
 pub use agent_loop::AgentLoop;

@@ -17,6 +17,7 @@ use serde_json::{Map, Value};
 use super::messages::{AgentMessage, AssistantContent};
 use super::tool_types::{ToolCall, ToolResult};
 use super::transcript::to_new_message;
+use super::turn_usage::TurnUsage;
 use crate::domain::chat::NewMessage;
 
 /// The metadata key the chat page reads an assistant row's reasoning from.
@@ -25,6 +26,32 @@ pub const THINKING_KEY: &str = "thinking";
 /// The metadata key the chat page reads how long a turn thought from, in
 /// seconds: from its first reasoning event to its last, as they were logged.
 pub const THINKING_DURATION_KEY: &str = "thinkingDurationSeconds";
+
+/// The metadata keys that say how an assistant row's turn was made.
+///
+/// Each is set only when the turn's [`TurnUsage`] had it: the model's name
+/// and quantisation, tokens read, of them from the cache, tokens written,
+/// and how long the turn took and spent writing, in ms.
+pub const MADE_KEYS: MadeKeys = MadeKeys {
+    model: "modelName",
+    quantization: "modelQuantization",
+    prompt_tokens: "promptTokens",
+    cached_tokens: "cachedTokens",
+    completion_tokens: "completionTokens",
+    duration_ms: "turnDurationMs",
+    writing_ms: "writingDurationMs",
+};
+
+/// The names of [`MADE_KEYS`], one per [`TurnUsage`] field.
+pub struct MadeKeys {
+    pub model: &'static str,
+    pub quantization: &'static str,
+    pub prompt_tokens: &'static str,
+    pub cached_tokens: &'static str,
+    pub completion_tokens: &'static str,
+    pub duration_ms: &'static str,
+    pub writing_ms: &'static str,
+}
 
 /// The metadata key set to `true` on the last assistant row of a reply that
 /// did not finish: its run was cancelled or failed.
@@ -51,6 +78,7 @@ enum Logged {
         result: ToolResult,
     },
     IterationComplete {},
+    TurnUsage(TurnUsage),
     FinalAnswer {
         content: String,
     },
@@ -67,6 +95,8 @@ struct Turn {
     results: Vec<ToolResult>,
     /// When its first and last reasoning events were logged, in ms.
     reasoned: Option<(u64, u64)>,
+    /// How it was made, when its stream ended and said.
+    usage: Option<TurnUsage>,
 }
 
 impl Turn {
@@ -96,6 +126,9 @@ impl Turn {
                 set(&mut row, THINKING_DURATION_KEY, Value::from(seconds));
             }
         }
+        if let Some(usage) = self.usage.take() {
+            set_made(&mut row, usage);
+        }
         rows.push(row);
         for call in &self.calls {
             let result = match self.results.iter().position(|r| r.tool_call_id == call.id) {
@@ -110,6 +143,30 @@ impl Turn {
         }
         for result in self.results {
             rows.push(tool_row(result, conversation_id));
+        }
+    }
+}
+
+/// Write what `usage` has into the row, under [`MADE_KEYS`]; what it lacks
+/// is left out.
+fn set_made(row: &mut NewMessage, usage: TurnUsage) {
+    let k = &MADE_KEYS;
+    let text = [(k.model, usage.model), (k.quantization, usage.quantization)];
+    for (key, value) in text {
+        if let Some(value) = value {
+            set(row, key, Value::String(value));
+        }
+    }
+    let counts = [
+        (k.prompt_tokens, usage.prompt_tokens.map(u64::from)),
+        (k.cached_tokens, usage.cached_tokens.map(u64::from)),
+        (k.completion_tokens, usage.completion_tokens.map(u64::from)),
+        (k.duration_ms, Some(usage.duration_ms)),
+        (k.writing_ms, usage.writing_ms),
+    ];
+    for (key, value) in counts {
+        if let Some(value) = value {
+            set(row, key, Value::from(value));
         }
     }
 }
@@ -175,6 +232,7 @@ pub fn rows_from_timed_frames<'a>(
             }
             Logged::ToolCallStart { tool_call } => turn.calls.push(tool_call),
             Logged::ToolCallComplete { result } => turn.results.push(result),
+            Logged::TurnUsage(usage) => turn.usage = Some(usage),
             Logged::IterationComplete {} => {
                 std::mem::take(&mut turn).into_rows(conversation_id, &mut rows);
             }
@@ -210,3 +268,7 @@ fn mark_incomplete(rows: &mut Vec<NewMessage>, conversation_id: i64) {
 #[cfg(test)]
 #[path = "replay_tests.rs"]
 mod replay_tests;
+
+#[cfg(test)]
+#[path = "replay_made_tests.rs"]
+mod replay_made_tests;

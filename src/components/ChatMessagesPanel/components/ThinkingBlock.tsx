@@ -7,16 +7,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { cn } from '../../../utils/cn';
 import { Icon } from '../../ui/Icon';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
-
-/** Format duration for display: "5.2s" or "1m 23s". */
-function formatThinkingDuration(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
-}
+import { formatThinkingDuration } from './turnFigures';
 
 interface ThinkingBlockProps {
   /** Message ID for timing tracker lookup */
@@ -31,6 +22,8 @@ interface ThinkingBlockProps {
   isStreaming?: boolean;
   /** Whether to start expanded (default: false) */
   defaultExpanded?: boolean;
+  /** The turn's margin already says how long it thought: the header does not. */
+  timeInMargin?: boolean;
 }
 
 /**
@@ -45,6 +38,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   durationSeconds,
   isStreaming = false,
   defaultExpanded = false,
+  timeInMargin = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const timing = useThinkingTiming();
@@ -90,10 +84,11 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       }
       return 'Thinking…';
     }
+    if (timeInMargin) return 'Reasoning';
     if (displaySeconds != null) {
       return `Thought for ${formatThinkingDuration(displaySeconds)}`;
     }
-    return 'Thinking';
+    return 'Reasoning';
   };
 
   // Markdown components for thinking content (simplified)

@@ -19,6 +19,8 @@ import {
   applyReasoningDelta,
   addToolCallPart,
   applyToolResult,
+  applyPromptProgress,
+  applyTurnUsage,
   setFullText,
 } from './agentMessageState';
 
@@ -110,6 +112,20 @@ export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps
         waitMs: event.wait_ms,
         durationMs: event.execute_duration_ms,
       });
+      return false;
+    }
+
+    case 'prompt_progress': {
+      // How far the model has read this turn's prompt; the page shows it
+      // while the turn arrives.
+      if (typeof event.processed !== 'number' || typeof event.total !== 'number') return false;
+      applyPromptProgress(setMessages, state.currentId, event);
+      return false;
+    }
+
+    case 'turn_usage': {
+      // How the turn was made: the same figures its saved row will hold.
+      applyTurnUsage(setMessages, state.currentId, event);
       return false;
     }
 
