@@ -142,8 +142,9 @@ impl RemoteOps {
         }))
     }
 
-    /// Stop admitting one device and forget it. `false` when this machine
-    /// held nothing under that name.
+    /// Stop admitting one device and forget it, then cancel and drop the
+    /// runs it started. `false` when this machine held nothing under that
+    /// name.
     ///
     /// Works with the tunnel down, and must: a laptop is lost at a moment
     /// nobody chose, and a `forget` that needed the tunnel up would be one
@@ -188,6 +189,15 @@ impl RemoteOps {
             && handle.remove_token(device)
         {
             warn!(device = %device, "a tunnel armed mid-forget had seeded the retired key; removed");
+        }
+        // Last, once no key admits the device: its runs hold replies only it
+        // may read, and it can no longer ask for them.
+        let dropped = self
+            .proxy
+            .runs()
+            .map_or(0, |runs| runs.forget_device(device));
+        if dropped > 0 {
+            info!(device = %device, dropped, "dropped a forgotten device's runs");
         }
         Ok(gone)
     }
@@ -272,3 +282,6 @@ fn refusal_without_a_tunnel(busy: Option<&Busy>, switched_on: bool) -> GuiError 
 #[cfg(test)]
 #[path = "devices_tests.rs"]
 mod devices_tests;
+#[cfg(test)]
+#[path = "forget_runs_tests.rs"]
+mod forget_runs_tests;
