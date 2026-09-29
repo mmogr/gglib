@@ -1,5 +1,5 @@
 /**
- * Unit tests for agentSseReader — SSE stream reader for the backend agent.
+ * Unit tests for sseEvents — the SSE reader a run's events are read with.
  *
  * Uses a mock ReadableStream to verify:
  * - Well-formed single events
@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readAgentSSE } from '../../../../src/hooks/useGglibRuntime/agentSseReader';
+import { readSseEvents } from '../../../../src/services/transport/api/sseEvents';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -36,8 +36,8 @@ function makeResponse(chunks: string[]): Response {
 /** Collect all payloads from the async generator. */
 async function collect(response: Response, signal?: AbortSignal): Promise<string[]> {
   const payloads: string[] = [];
-  for await (const payload of readAgentSSE(response, signal)) {
-    payloads.push(payload);
+  for await (const event of readSseEvents(response, signal)) {
+    payloads.push(event.data);
   }
   return payloads;
 }
@@ -46,7 +46,7 @@ async function collect(response: Response, signal?: AbortSignal): Promise<string
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('readAgentSSE', () => {
+describe('readSseEvents', () => {
   it('throws when response has no body', async () => {
     const response = new Response(null);
     await expect(collect(response)).rejects.toThrow('no response body');
@@ -115,12 +115,22 @@ describe('readAgentSSE', () => {
     expect(payloads).toEqual(['{"ok":true}']);
   });
 
-  it('ignores non-data SSE fields (event:, id:, retry:)', async () => {
+  it('carries an event\'s id and name beside its data, and ignores retry:', async () => {
     const response = makeResponse([
-      'event: message\nid: 42\nretry: 3000\ndata: {"ok":true}\n\n',
+      'event: run\nid: 42\nretry: 3000\ndata: {"ok":true}\n\n',
+      'id:7\ndata: {"n":7}\n\n',
     ]);
-    const payloads = await collect(response);
-    expect(payloads).toEqual(['{"ok":true}']);
+    const events = [];
+    for await (const event of readSseEvents(response)) events.push(event);
+    expect(events).toEqual([
+      { id: '42', event: 'run', data: '{"ok":true}' },
+      { id: '7', data: '{"n":7}' },
+    ]);
+  });
+
+  it('skips keepalive comments', async () => {
+    const response = makeResponse([':\n\n', 'data: {"ok":true}\n\n']);
+    expect(await collect(response)).toEqual(['{"ok":true}']);
   });
 
   it('returns empty array for an empty stream', async () => {
@@ -152,8 +162,8 @@ describe('readAgentSSE', () => {
 
     // Abort immediately after consuming the first event.
     const payloads: string[] = [];
-    for await (const payload of readAgentSSE(response, controller.signal)) {
-      payloads.push(payload);
+    for await (const event of readSseEvents(response, controller.signal)) {
+      payloads.push(event.data);
       controller.abort();
     }
 

@@ -16,6 +16,7 @@ import * as verification from './verification';
 import * as setup from './setup';
 import * as version from './version';
 import * as remote from './remote';
+import * as runs from './runs';
 
 /**
  * Create unified API transport.
@@ -36,5 +37,6 @@ export function createApiTransport() {
     ...setup,
     ...version,
     ...remote,
+    ...runs,
   };
 }

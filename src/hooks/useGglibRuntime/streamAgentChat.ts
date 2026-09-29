@@ -26,7 +26,7 @@ import type { GglibMessage, GglibMessageCustom } from '../../types/messages';
 import type { AgentEvent } from '../../types/events/agentEvent';
 import type { ReasoningTimingTracker } from './reasoningTiming';
 import { convertToWireMessages } from './wireMessages';
-import { readAgentSSE } from './agentSseReader';
+import { readSseEvents } from '../../services/transport/api/sseEvents';
 import { finalizeMessageTiming } from './agentMessageState';
 import { dispatchAgentEvent, type DispatchDeps, type DispatchState } from './agentEventDispatch';
 import { isAbortError } from '../../utils/errors';
@@ -265,7 +265,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     onSystemWarning,
   };
   try {
-    for await (const payload of readAgentSSE(response, abortSignal)) {
+    for await (const { data: payload } of readSseEvents(response, abortSignal)) {
       let event: AgentEvent;
       try {
         event = JSON.parse(payload) as AgentEvent;

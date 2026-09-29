@@ -33,7 +33,6 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `streamAgentChat.ts` | Backend SSE consumer; converts UI messages → wire format, runs the stream, and carries `remote` plus the model name the Remote panel named — refusing the turn when it asked for the far machine and named none |
 | `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `streamAgentChat` runs per event |
 | `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages |
-| `agentSseReader.ts` | Minimal POST-capable SSE reader (async generator) |
 | `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion |
 | `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
 | `clock.ts` | Monotonic clock abstraction for timing |

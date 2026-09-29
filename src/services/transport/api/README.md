@@ -39,6 +39,8 @@ Axum backend (HTTP response) → typed result
 | `models/` | Local and HuggingFace model APIs |
 | `setup.ts` | First-run setup and dependency probes |
 | `sse.ts` | The server-sent-events endpoint this transport subscribes to |
+| `runs.ts` | Runs (`/api/runs`): start an agent run under a minted id, list, cancel, and read its events from any point |
+| `sseEvents.ts` | Reading SSE events, with their `id:` and `event:` fields, off a `fetch` response |
 | `version.ts` | Which build of gglib the daemon is running |
 
 <!-- module-docs:end -->

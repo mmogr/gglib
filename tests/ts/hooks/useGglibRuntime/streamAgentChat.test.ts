@@ -27,9 +27,9 @@ vi.mock('../../../../src/services/tools', () => ({
   getToolRegistry: () => ({ getEnabledDefinitions: () => [], getBackendName: (n: string) => n }),
 }));
 // The stream itself is another file's subject; here the turn only has to end.
-vi.mock('../../../../src/hooks/useGglibRuntime/agentSseReader', () => ({
+vi.mock('../../../../src/services/transport/api/sseEvents', () => ({
   // eslint-disable-next-line require-yield
-  readAgentSSE: async function* () {
+  readSseEvents: async function* () {
     return;
   },
 }));
