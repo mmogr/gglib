@@ -172,7 +172,13 @@ impl RemoteOps {
             let live = self.live.lock().await;
             live.full().map(|l| Arc::clone(&l.handle))
         };
-        let gone = forget(self, handle.as_deref(), device).await?;
+        let gone = match forget(self, handle.as_deref(), device).await {
+            Ok(gone) => gone,
+            Err(e) => {
+                self.drop_runs_once_unkeyed(device);
+                return Err(e);
+            }
+        };
 
         // Peeked again, because the slot may have filled while the writes
         // above were waiting on `roster`. An `arm` that had already taken
@@ -190,15 +196,7 @@ impl RemoteOps {
         {
             warn!(device = %device, "a tunnel armed mid-forget had seeded the retired key; removed");
         }
-        // Last, once no key admits the device: its runs hold replies only it
-        // may read, and it can no longer ask for them.
-        let dropped = self
-            .proxy
-            .runs()
-            .map_or(0, |runs| runs.forget_device(device));
-        if dropped > 0 {
-            info!(device = %device, dropped, "dropped a forgotten device's runs");
-        }
+        self.drop_runs_once_unkeyed(device);
         Ok(gone)
     }
 
@@ -282,6 +280,3 @@ fn refusal_without_a_tunnel(busy: Option<&Busy>, switched_on: bool) -> GuiError 
 #[cfg(test)]
 #[path = "devices_tests.rs"]
 mod devices_tests;
-#[cfg(test)]
-#[path = "forget_runs_tests.rs"]
-mod forget_runs_tests;
