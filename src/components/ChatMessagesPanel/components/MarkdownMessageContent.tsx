@@ -43,27 +43,18 @@ const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
         <table>{children}</table>
       </div>
     ),
-    code(props) {
-      const { inline, className, children, ...rest } = props as {
-        inline?: boolean;
-        className?: string;
-        children?: React.ReactNode;
-      };
-      if (inline) {
-        return (
-          <code className={cn('bg-surface-elevated py-[1px] px-[5px] rounded-sm font-mono text-[0.9em]', className)} {...rest}>
-            {children}
-          </code>
-        );
-      }
-      return (
-        <pre className="bg-surface rounded-md py-md px-base overflow-x-auto my-md [&_code]:font-mono [&_code]:text-sm">
-          <code className={className} {...rest}>
-            {children}
-          </code>
-        </pre>
-      );
-    },
+    // react-markdown draws a block as <pre><code>, and says nothing else of
+    // which code is inline: the <pre> is the block, and <code> alone is inline.
+    pre: ({ children }) => (
+      <pre className="bg-surface rounded-md py-md px-base overflow-x-auto my-md font-mono text-sm [&_code]:bg-transparent! [&_code]:p-0! [&_code]:text-sm">
+        {children}
+      </pre>
+    ),
+    code: ({ className, children, node: _node, ...rest }) => (
+      <code className={cn('bg-surface-elevated py-[1px] px-[5px] rounded-sm font-mono text-[0.9em]', className)} {...rest}>
+        {children}
+      </code>
+    ),
   };
 
   return (
