@@ -104,7 +104,9 @@ describe('ChatPage, notebook', () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(detail).toBeVisible();
-    expect(within(detail).getByText(/Thought for 19\.0s/)).toBeInTheDocument();
+    // The margin says how long it thought; the block does not say it again.
+    expect(within(detail).getByText('Reasoning')).toBeInTheDocument();
+    expect(detail).not.toHaveTextContent(/Thought for/);
   });
 
   it('shows a reply arriving as how far its prompt has been read', async () => {
@@ -155,5 +157,21 @@ describe('ChatPage, notebook', () => {
     expect(within(row).getByText(/· Q8_0$/)).toBeInTheDocument();
     const lines = within(row).getAllByRole('listitem').map((li) => li.textContent);
     expect(lines).toEqual(['thought 19.0s', '1 tool call', '3,180 tok read', '2,100 from cache', '41.0s · 12 tok/s']);
+  });
+
+  it('never draws a margin beside an empty body: a turn of only a tool call or only reasoning shows it', async () => {
+    fixture.rows[1] = [
+      savedExchange()[0],
+      { ...savedExchange()[1], content: '', metadata: { tool_calls: [{ id: 'c1', name: 'read_file', arguments: {} }] } },
+      savedExchange()[2],
+      { id: 14, conversation_id: 1, role: 'assistant', content: '', created_at: '2026-09-01T09:14:00Z', metadata: { thinking: 'Only thought.', thinkingDurationSeconds: 2 } },
+    ];
+    renderLocal();
+    const tool = rowOf(await screen.findByText('1 tool call'));
+    expect(within(tool).getByText('read_file')).toBeVisible();
+    expect(within(tool).queryByRole('button', { name: 'How this was made' })).not.toBeInTheDocument();
+    const thought = rowOf(screen.getByText('thought 2.0s'));
+    expect(within(thought).getByText('Reasoning')).toBeVisible();
+    expect(within(thought).queryByRole('button', { name: 'How this was made' })).not.toBeInTheDocument();
   });
 });

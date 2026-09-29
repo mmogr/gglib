@@ -22,6 +22,8 @@ interface ThinkingBlockProps {
   isStreaming?: boolean;
   /** Whether to start expanded (default: false) */
   defaultExpanded?: boolean;
+  /** The turn's margin already says how long it thought: the header does not. */
+  timeInMargin?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   durationSeconds,
   isStreaming = false,
   defaultExpanded = false,
+  timeInMargin = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const timing = useThinkingTiming();
@@ -81,10 +84,11 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       }
       return 'Thinking…';
     }
+    if (timeInMargin) return 'Reasoning';
     if (displaySeconds != null) {
       return `Thought for ${formatThinkingDuration(displaySeconds)}`;
     }
-    return 'Thinking';
+    return 'Reasoning';
   };
 
   // Markdown components for thinking content (simplified)

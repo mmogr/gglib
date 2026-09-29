@@ -50,7 +50,8 @@ function textOf(content: unknown): string {
  * A reply: the model's turn. The margin says who and, from what the page
  * has for this turn, how it was made; while it arrives, what it is doing.
  * Its reasoning and tool calls are the detail "How this was made" opens,
- * shown while it arrives.
+ * shown while it arrives. A turn with no text of its own always shows them,
+ * so no row is a margin beside an empty body.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
@@ -69,7 +70,8 @@ export const AssistantMessageBubble: React.FC = () => {
     (part) => (part as { type?: unknown }).type === 'tool-call' && !('result' in (part as object)),
   );
   const hasDetail = !!thinkingText || facts.toolCalls > 0;
-  const detailOpen = detailChoice ?? isStreaming;
+  // Without text the detail is the body: never folded away.
+  const detailOpen = !contentText || (detailChoice ?? isStreaming);
 
   const made = isStreaming ? (
     <ReplyArriving
@@ -84,7 +86,7 @@ export const AssistantMessageBubble: React.FC = () => {
   ) : (
     <ReplyMade
       facts={facts}
-      detailId={hasDetail ? detailId : undefined}
+      detailId={hasDetail && contentText ? detailId : undefined}
       detailOpen={detailOpen}
       onToggleDetail={() => setDetailChoice(!detailOpen)}
     />
@@ -106,6 +108,7 @@ export const AssistantMessageBubble: React.FC = () => {
                     thinking={thinkingText}
                     durationSeconds={facts.thinkingSeconds ?? null}
                     isStreaming={isCurrentlyThinking}
+                    timeInMargin={!isStreaming && facts.thinkingSeconds != null}
                   />
                 )}
                 <ToolUsageBadge />
@@ -116,6 +119,11 @@ export const AssistantMessageBubble: React.FC = () => {
               {contentText && <MarkdownMessageContent text={contentText} />}
               {!thinkingText && !contentText && isStreaming && (
                 <span className="text-text-muted animate-blink" aria-hidden>…</span>
+              )}
+              {!hasDetail && !contentText && !isStreaming && (
+                <p className="m-0 text-text-muted">
+                  {facts.unfinished ? 'Stopped before it wrote anything.' : 'No text.'}
+                </p>
               )}
             </div>
             <ActionBarPrimitive.Root className={ACTION_BAR}>
