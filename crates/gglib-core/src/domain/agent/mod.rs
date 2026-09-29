@@ -8,6 +8,7 @@ mod messages_serde;
 pub(crate) mod stagnation;
 pub mod tool_display;
 pub(crate) mod tool_types;
+mod transcript;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{
@@ -24,3 +25,4 @@ pub use loop_detection::{
 pub use messages::{AgentMessage, AssistantContent};
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
+pub use transcript::to_new_message;

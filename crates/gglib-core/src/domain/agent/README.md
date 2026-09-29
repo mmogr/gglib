@@ -22,6 +22,7 @@ no infrastructure concerns.
 | [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |
 | [`stagnation`] | [`StagnationDetector`] — repeated assistant-text guard |
+| `transcript` | [`to_new_message`] — an agent message as a saved chat row |
 | [`fnv1a`] | [`fnv1a::fnv1a_64`] — the hash backing both detectors |
 
 # Design Principles
