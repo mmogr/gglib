@@ -11,7 +11,9 @@ and cancels every run but cannot read a paired device's reply.
 ```text
 runs/
   mod.rs   — start, list, read and cancel a run; a run's events are framed
-             by `gglib_proxy::runs::sse`, which the proxy's door shares
+             by `gglib_proxy::runs::sse`, which the proxy's door shares;
+             `?kind=agent` starts an agent run (`handlers/agent/run.rs`),
+             which only this door can
 ```
 
 <!-- module-docs:end -->

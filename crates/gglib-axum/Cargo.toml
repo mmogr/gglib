@@ -72,6 +72,7 @@ rust-embed = { version = "8.12", features = ["mime-guess", "debug-embed"] }
 ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-app-services/ts-bindings"]
 
 [dev-dependencies]
+async-trait = { workspace = true }
 # Re-declared to turn on `test-support`, which carries
 # `Broadcaster::subscribe_events`. The feature stays off in the normal build.
 gglib-sse = { path = "../gglib-sse", features = ["test-support"] }

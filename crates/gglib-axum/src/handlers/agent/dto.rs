@@ -236,6 +236,24 @@ impl AgentChatRequest {
     }
 }
 
+/// Request body for an agent run, `PUT /api/runs/{id}?kind=agent`: the body
+/// `/api/agent/chat` takes, and where to save the transcript.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub(crate) struct AgentRunRequest {
+    /// The agent chat request, as `/api/agent/chat` takes it.
+    #[serde(flatten)]
+    #[cfg_attr(feature = "ts-bindings", ts(flatten))]
+    pub chat: AgentChatRequest,
+
+    /// The saved conversation the daemon writes the transcript to: the
+    /// request's last message when the run is created, if it is the user's,
+    /// and the reply when the run ends. Absent, nothing is saved.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub conversation_id: Option<i64>,
+}
+
 #[cfg(test)]
 #[path = "dto_tests.rs"]
 mod dto_tests;

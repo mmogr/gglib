@@ -4,8 +4,10 @@ mod dto;
 mod guard;
 mod remote_upstream;
 mod retry_notice;
+mod run;
 
 pub(crate) use dto::AgentChatRequest;
+pub(crate) use run::create_run;
 
 use std::convert::Infallible;
 
@@ -18,6 +20,7 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use crate::error::HttpError;
 use crate::state::AppState;
+use gglib_core::domain::agent::AgentEvent;
 use gglib_core::ports::AgentError;
 
 use compose::{Prepared, frame, prepare, take_permit};
@@ -38,7 +41,7 @@ use guard::AgentTaskGuard;
 ///
 /// # Response
 ///
-/// Content-Type: `text/event-stream`. Each frame carries one [`AgentEvent`](gglib_core::domain::agent::AgentEvent)
+/// Content-Type: `text/event-stream`. Each frame carries one [`AgentEvent`]
 /// serialised with `#[serde(tag = "type", rename_all = "snake_case")]`:
 ///
 /// ```text
@@ -75,6 +78,7 @@ pub(crate) async fn chat(
         config,
         tx,
         rx,
+        ..
     } = prepare(&state, req).await?;
 
     // Move the semaphore permit into the spawned task so it is held for the
@@ -98,7 +102,7 @@ pub(crate) async fn chat(
     });
 
     let sse_stream = AgentTaskGuard::new(ReceiverStream::new(rx), handle)
-        .map(|event| Ok::<Event, Infallible>(Event::default().data(frame(&event))));
+        .map(|event| Ok::<Event, Infallible>(sse_event(&event)));
 
     Ok(Sse::new(sse_stream).keep_alive(
         KeepAlive::new()
@@ -106,3 +110,20 @@ pub(crate) async fn chat(
             .text("ping"),
     ))
 }
+
+/// One event as this route's SSE frame.
+fn sse_event(event: &AgentEvent) -> Event {
+    Event::default().data(frame(event))
+}
+
+#[cfg(test)]
+#[path = "run_end_tests.rs"]
+mod run_end_tests;
+#[cfg(test)]
+mod run_fixture;
+#[cfg(test)]
+#[path = "run_privacy_tests.rs"]
+mod run_privacy_tests;
+#[cfg(test)]
+#[path = "run_tests.rs"]
+mod run_tests;

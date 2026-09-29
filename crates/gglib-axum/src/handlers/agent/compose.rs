@@ -27,6 +27,9 @@ pub(crate) struct Prepared {
     pub(crate) tx: mpsc::Sender<AgentEvent>,
     /// Where the loop's events arrive.
     pub(crate) rx: mpsc::Receiver<AgentEvent>,
+    /// The model the loop is counted under: the request's, or the one
+    /// running on its port.
+    pub(crate) model: String,
 }
 
 /// One slot of the agent semaphore, or `None` when every slot is taken.
@@ -61,6 +64,7 @@ pub(crate) async fn prepare(
     let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
+    let model = upstream.counted_as.clone();
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
@@ -106,6 +110,7 @@ pub(crate) async fn prepare(
         config,
         tx,
         rx,
+        model,
     })
 }
 

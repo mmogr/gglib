@@ -41,6 +41,8 @@ Axum drops the SSE response and therefore the [`guard::AgentTaskGuard`] stream
 wrapper. Its [`Drop`] impl calls [`tokio::task::JoinHandle::abort`], which cancels the
 spawned `AgentLoop` task at its next `await` point — immediately stopping
 LLM token generation and any in-flight tool calls without leaking compute
-or resources.
+or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
+runs the same prepared loop detached from any response, so only cancel or
+shutdown stops it, and saves the transcript to the request's conversation.
 
 <!-- module-docs:end -->

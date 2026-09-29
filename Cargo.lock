@@ -2415,6 +2415,7 @@ name = "gglib-axum"
 version = "0.20.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chrono",
  "futures-core",
