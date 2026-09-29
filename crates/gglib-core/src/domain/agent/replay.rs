@@ -91,8 +91,8 @@ impl Turn {
             set(&mut row, THINKING_KEY, Value::String(self.reasoning));
             if let Some((first, last)) = self.reasoned {
                 // Tenths of a second, as the page shows them.
-                #[allow(clippy::cast_precision_loss)]
-                let seconds = (last.saturating_sub(first) / 100) as f64 / 10.0;
+                let tenths = u32::try_from(last.saturating_sub(first) / 100).unwrap_or(u32::MAX);
+                let seconds = f64::from(tenths) / 10.0;
                 set(&mut row, THINKING_DURATION_KEY, Value::from(seconds));
             }
         }
