@@ -179,3 +179,50 @@ async fn teardown_drops_every_run() {
 
     assert!(state.runs.list(&RunScope::Local).runs.is_empty());
 }
+
+/// The teardown waits for the runs to handle their ends (an agent run
+/// saving its reply), and the wait is bounded: a run whose end never
+/// finishes being handled holds shutdown for `RUNS_DRAIN`, no longer.
+#[tokio::test]
+async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
+    use gglib_app_services::{Reservation, RunEnded, RunSpec};
+    use gglib_core::domain::runs::RunKind;
+
+    let dir = tempfile::tempdir().unwrap();
+    let state: AppState = std::sync::Arc::new(
+        crate::bootstrap::bootstrap(crate::ServerConfig {
+            host: "127.0.0.1".into(),
+            port: 0,
+            base_port: 19_300,
+            llama_server_path: "/nonexistent/llama-server".into(),
+            max_concurrent_agent_loops: 1,
+            static_dir: None,
+            cors: gglib_core::CorsConfig::AllowAll,
+            db_path: Some(dir.path().join("gglib.db")),
+            device_keys_path: Some(dir.path().join("remote_devices")),
+        })
+        .await
+        .expect("bootstrap an isolated context"),
+    );
+    let spec = RunSpec {
+        kind: RunKind::Agent,
+        model: None,
+        conversation_id: None,
+    };
+    let Ok(Reservation::New(reserved)) = state.runs.reserve("a1", spec) else {
+        panic!("a new reservation");
+    };
+    let never: RunEnded = Box::new(|_, _| Box::pin(std::future::pending()));
+    reserved.start(|_| Box::pin(std::future::pending()), never);
+
+    let began = std::time::Instant::now();
+    tokio::time::timeout(RUNS_DRAIN + Duration::from_secs(5), teardown(&state))
+        .await
+        .expect("the teardown does not hang on a run");
+
+    assert!(
+        began.elapsed() >= RUNS_DRAIN,
+        "it waited: {:?}",
+        began.elapsed()
+    );
+}

@@ -128,3 +128,29 @@ async fn a_repeated_id_answers_with_its_run_before_any_check() {
     let info: RunInfo = serde_json::from_value(info).unwrap();
     assert_eq!((info.id.as_str(), info.kind), ("r1", RunKind::Chat));
 }
+
+#[tokio::test]
+async fn an_unknown_kind_is_refused() {
+    let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let uri = format!("{}?kind=essay", run_path("a1"));
+
+    let (status, error) = call(&app, Method::PUT, &uri, Some(chat_request())).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["type"], "invalid_request");
+    no_runs(&app).await;
+}
+
+/// `kind=chat` is the chat path, with a chat request's body.
+#[tokio::test]
+async fn kind_chat_starts_a_chat_run() {
+    let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let uri = format!("{}?kind=chat", run_path("c1"));
+    let chat = json!({ "model": "qwen", "messages": [] });
+
+    let (status, info) = call(&app, Method::PUT, &uri, Some(chat)).await;
+
+    assert_eq!(status, StatusCode::CREATED, "{info}");
+    let info: RunInfo = serde_json::from_value(info).unwrap();
+    assert_eq!(info.kind, RunKind::Chat);
+}

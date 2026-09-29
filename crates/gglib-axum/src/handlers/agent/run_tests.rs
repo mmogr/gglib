@@ -5,7 +5,7 @@ use std::convert::Infallible;
 
 use axum::response::IntoResponse as _;
 use axum::response::sse::Sse;
-use gglib_core::domain::agent::{INCOMPLETE_KEY, THINKING_KEY};
+use gglib_core::domain::agent::{AgentEvent, INCOMPLETE_KEY, THINKING_KEY, ToolCall};
 use gglib_core::domain::chat::MessageRole;
 use gglib_core::domain::runs::{RunInfo, RunKind, RunStatus};
 use http_body_util::BodyExt as _;
@@ -30,6 +30,42 @@ fn data_lines(body: &str) -> Vec<String> {
         .filter(|line| line.starts_with("data:"))
         .map(str::to_owned)
         .collect()
+}
+
+/// The chat route's own bytes, as the page parses them today: a change to
+/// the framing both routes share must show here, not only as agreement.
+#[tokio::test]
+async fn the_chat_routes_frames_are_these_bytes() {
+    let events = [
+        AgentEvent::TextDelta {
+            content: "hi \"there\"\n".to_owned(),
+        },
+        AgentEvent::ToolCallStart {
+            tool_call: ToolCall {
+                id: "c1".to_owned(),
+                name: "read_file".to_owned(),
+                arguments: json!({ "path": "a.rs" }),
+            },
+            display_name: "Read File".to_owned(),
+            args_summary: None,
+        },
+    ];
+    let frames = events
+        .iter()
+        .map(|e| Ok::<_, Infallible>(sse_event(e)))
+        .collect::<Vec<_>>();
+
+    let chat = body(Sse::new(futures_util::stream::iter(frames)).into_response()).await;
+
+    assert_eq!(
+        chat,
+        concat!(
+            r#"data: {"type":"text_delta","content":"hi \"there\"\n"}"#,
+            "\n\n",
+            r#"data: {"type":"tool_call_start","tool_call":{"id":"c1","name":"read_file","arguments":{"path":"a.rs"}},"display_name":"Read File","args_summary":null}"#,
+            "\n\n",
+        )
+    );
 }
 
 #[tokio::test]
