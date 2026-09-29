@@ -154,6 +154,46 @@ describe('useGglibRuntime and a run that outlives the page', () => {
     expect(last.status).toEqual({ type: 'incomplete', reason: 'cancelled' });
   });
 
+  it('after Stop the page waits for the run to end, not for cancel to answer', async () => {
+    let release = () => {};
+    daemon.endGate = new Promise((r) => {
+      release = r;
+    });
+    daemon.running('r-live', 1, [{ type: 'text_delta', content: 'Hel' }]);
+    const hook = await mount(open(1));
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
+    const loads = () => daemon.count('GET', '/api/conversations/1/messages');
+    const loadedBefore = loads();
+
+    act(() => hook.result.current.runtime.thread.cancelRun());
+    await waitFor(() => expect(daemon.count('POST', '/api/runs/r-live/cancel')).toBe(1));
+    await settle();
+
+    // Cancel answered `in_progress`; the end has not come, so nothing is reloaded.
+    expect(hook.result.current.isRunning).toBe(true);
+    expect(loads()).toBe(loadedBefore);
+
+    release();
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    const last = hook.result.current.messages.at(-1)!;
+    expect(shown([last])).toEqual([['db-1', 'assistant', 'Hel']]);
+    expect(last.status).toEqual({ type: 'incomplete', reason: 'cancelled' });
+  });
+
+  it('a Stop whose reply could not be saved shows the run failed', async () => {
+    daemon.cancelEndsAs = 'failed';
+    daemon.running('r-live', 1, [{ type: 'text_delta', content: 'Hel' }]);
+    const onError = vi.fn();
+    const hook = await mount({ ...open(1), onError });
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
+
+    act(() => hook.result.current.runtime.thread.cancelRun());
+
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError.mock.calls[0][0].message).toBe('The reply could not be saved to its conversation.');
+    expect(hook.result.current.isRunning).toBe(false);
+  });
+
   it('Stop pressed before the daemon accepted the run cancels it once it has', async () => {
     let release = () => {};
     daemon.startGate = new Promise((r) => {

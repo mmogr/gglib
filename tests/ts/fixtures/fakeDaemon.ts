@@ -68,12 +68,17 @@ export class FakeDaemon {
   dropNextStart = false;
   /** Holds every run start until it settles, when set. */
   startGate: Promise<void> | null = null;
+  /** Holds every run's end (its save, then its ending) until it settles, when set. */
+  endGate: Promise<void> | null = null;
+  /** How a cancelled run ends: `failed` when its reply could not be saved. */
+  cancelEndsAs: 'cancelled' | 'failed' = 'cancelled';
   /** Runs whose events the daemon no longer has: a 404. */
   vanished = new Set<string>();
   /** Awaited before each request is answered. */
   before: ((method: string, path: string) => Promise<void> | void) | null = null;
   /** Readers whose `fetch` was aborted. */
   abortedReads = 0;
+  private unsaved = new Set<string>();
   private nextRow = 1;
   private nextConversation = 100;
   private created = 0;
@@ -127,12 +132,16 @@ export class FakeDaemon {
   finish(id: string, status: RunInfo['status'], rows: NewRow[] = []): Promise<void> {
     const run = this.runs.get(id)!;
     run.ending ??= new Promise((resolve) => {
-      setTimeout(() => {
+      setTimeout(async () => {
+        await this.endGate;
         const conversationId = run.info.conversation_id!;
         rows.forEach((row) => this.save(conversationId, row));
         run.info = { ...run.info, status, finished_at_ms: 1790000008250 };
         if (status === 'failed') {
           run.info.error = { code: 'agent_error', message: 'The agent loop failed.' };
+        }
+        if (this.unsaved.has(id)) {
+          run.info.error = { code: 'transcript_not_saved', message: 'The reply could not be saved to its conversation.' };
         }
         const text = `event: run\ndata: ${JSON.stringify(run.info)}\n\n`;
         run.streams.forEach((s) => {
@@ -200,9 +209,14 @@ export class FakeDaemon {
         .filter((e) => e.type === 'text_delta')
         .map((e) => e.content)
         .join('');
-      void this.finish(run.info.id, 'cancelled', [
-        { role: 'assistant', content: text, metadata: { incomplete: true } },
-      ]);
+      if (this.cancelEndsAs === 'failed') {
+        this.unsaved.add(run.info.id);
+        void this.finish(run.info.id, 'failed');
+      } else {
+        void this.finish(run.info.id, 'cancelled', [
+          { role: 'assistant', content: text, metadata: { incomplete: true } },
+        ]);
+      }
       return json(shown);
     }
     if (method === 'GET' && (m = /^\/api\/runs\/([^/]+)\/events$/.exec(path))) {
