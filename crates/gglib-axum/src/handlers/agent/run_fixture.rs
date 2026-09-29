@@ -31,6 +31,8 @@ pub(super) struct Scripted {
     events: Vec<AgentEvent>,
     end: End,
     dropped: Arc<AtomicUsize>,
+    /// How long it waits after each event.
+    pace: Duration,
 }
 
 pub(super) struct Dropped(Arc<AtomicUsize>);
@@ -52,6 +54,7 @@ impl AgentLoopPort for Scripted {
         let _guard = Dropped(Arc::clone(&self.dropped));
         for event in &self.events {
             let _ = tx.send(event.clone()).await;
+            tokio::time::sleep(self.pace).await;
         }
         match self.end {
             End::Finish => Ok(AgentRunOutput {
@@ -94,12 +97,22 @@ pub(super) fn user() -> AgentMessage {
 }
 
 pub(super) fn prepared(events: Vec<AgentEvent>, end: End) -> (Prepared, Arc<AtomicUsize>) {
+    paced(events, end, Duration::ZERO)
+}
+
+/// As [`prepared`], waiting `pace` after each event.
+pub(super) fn paced(
+    events: Vec<AgentEvent>,
+    end: End,
+    pace: Duration,
+) -> (Prepared, Arc<AtomicUsize>) {
     let dropped = Arc::new(AtomicUsize::new(0));
     let (tx, rx) = mpsc::channel(64);
     let agent_loop = Arc::new(Scripted {
         events,
         end,
         dropped: Arc::clone(&dropped),
+        pace,
     });
     let prepared = Prepared {
         agent_loop,

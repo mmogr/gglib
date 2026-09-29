@@ -36,4 +36,13 @@ describe('buildLoadedMessage', () => {
     const loaded = buildLoadedMessage(row({ role: 'user', metadata: { incomplete: true } }), 1);
     expect(loaded.status).toBeUndefined();
   });
+
+  it('shows how long a reply thought, as the daemon saved it', () => {
+    const loaded = buildLoadedMessage(
+      row({ metadata: { thinking: 'hmm', thinkingDurationSeconds: 2.5 } }),
+      1,
+    );
+    expect(loaded.metadata?.custom).toMatchObject({ thinkingDurationSeconds: 2.5 });
+    expect((loaded.content as unknown as Array<{ type: string }>)[0]).toMatchObject({ type: 'reasoning', text: 'hmm' });
+  });
 });

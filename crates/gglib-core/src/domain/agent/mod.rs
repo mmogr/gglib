@@ -24,7 +24,10 @@ pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
 };
 pub use messages::{AgentMessage, AssistantContent};
-pub use replay::{INCOMPLETE_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL, rows_from_frames};
+pub use replay::{
+    INCOMPLETE_KEY, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL, rows_from_frames,
+    rows_from_timed_frames,
+};
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
 pub use transcript::to_new_message;

@@ -207,3 +207,61 @@ fn a_reply_that_produced_nothing_still_says_it_stopped() {
 fn a_finished_reply_with_nothing_logged_writes_nothing_and_bad_frames_are_skipped() {
     assert!(rows_from_frames(["not json", "{\"type\":\"new_kind\"}"], true, 9).is_empty());
 }
+
+fn reasoning(content: &str) -> AgentEvent {
+    AgentEvent::ReasoningDelta {
+        content: content.to_owned(),
+    }
+}
+
+/// How long each turn thought, from its first reasoning event's time to its
+/// last's, in tenths of a second; a turn that did not reason records none.
+#[test]
+fn each_turn_records_how_long_it_thought() {
+    let events = [
+        reasoning("a"),
+        reasoning("b"),
+        text("t"),
+        AgentEvent::IterationComplete {
+            iteration: 1,
+            tool_calls: 0,
+        },
+        text("no thinking"),
+        AgentEvent::IterationComplete {
+            iteration: 2,
+            tool_calls: 0,
+        },
+        reasoning("c"),
+        reasoning("d"),
+        AgentEvent::FinalAnswer {
+            content: "done".to_owned(),
+        },
+    ];
+    let logged_at = [
+        1_000, 3_560, 3_600, 3_700, 4_000, 4_100, 5_000, 5_049, 6_000,
+    ];
+    let frames = frames(&events);
+    let with_times = frames.iter().map(String::as_str).zip(logged_at.map(Some));
+
+    let rows = rows_from_timed_frames(with_times, true, 9);
+
+    let seconds: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            r.metadata
+                .as_ref()
+                .and_then(|m| m.get(THINKING_DURATION_KEY))
+                .cloned()
+                .unwrap_or(Value::Null)
+        })
+        .collect();
+    assert_eq!(seconds, [json!(2.5), Value::Null, json!(0.0)]);
+}
+
+#[test]
+fn frames_with_no_times_record_no_duration() {
+    let rows = rows(&[reasoning("a"), text("t")], true);
+    let meta = rows[0].metadata.as_ref().unwrap();
+    assert_eq!(meta[THINKING_KEY], json!("a"));
+    assert!(meta.get(THINKING_DURATION_KEY).is_none());
+}

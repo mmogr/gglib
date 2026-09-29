@@ -27,7 +27,7 @@ use gglib_core::ports::{AgentError, Created};
 
 use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
-use super::transcript::{save_reply, save_user};
+use super::transcript::{FrameTimes, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -193,6 +193,7 @@ async fn reserve_and_start(
         }
         Reservation::New(reserved) => reserved,
     };
+    let times = FrameTimes::new();
     let ended = match conversation_id {
         Some(conversation_id) => {
             // Dropping `reserved` on the way out leaves no run behind.
@@ -203,13 +204,13 @@ async fn reserve_and_start(
                 prepared.messages.last(),
             )
             .await?;
-            save_reply(Arc::clone(&state.core), conversation_id)
+            save_reply(Arc::clone(&state.core), conversation_id, times.clone())
         }
         None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {
             Box::pin(async { Ok(()) })
         }),
     };
-    let info = reserved.start(|log| Box::pin(work(prepared, permit, log)), ended);
+    let info = reserved.start(|log| Box::pin(work(prepared, permit, log, times)), ended);
     tracing::debug!(run = %id, saved = conversation_id.is_some(), "agent run started");
     Ok(Created {
         info,
@@ -224,6 +225,7 @@ async fn work(
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
     log: RunLog,
+    times: FrameTimes,
 ) -> Result<(), RunError> {
     let _permit = permit;
     let Prepared {
@@ -250,6 +252,7 @@ async fn work(
             if log.append(frame(&event)).is_err() {
                 break;
             }
+            times.logged();
         }
     };
     let (outcome, ()) = tokio::join!(run, forward);

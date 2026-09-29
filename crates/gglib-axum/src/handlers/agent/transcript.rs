@@ -4,12 +4,14 @@
 //! names a row to replace (an edit, or a regenerate), that row and every
 //! later row are deleted in the same transaction, so a refused run, or one
 //! that never got as far, changes nothing. The reply is saved when the run
-//! ends, all rows or none.
+//! ends, all rows or none, with how long each turn thought: from its first
+//! reasoning event to its last, as they were logged.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Instant;
 
 use axum::http::StatusCode;
-use gglib_core::domain::agent::{AgentMessage, rows_from_frames, to_new_message};
+use gglib_core::domain::agent::{AgentMessage, rows_from_timed_frames, to_new_message};
 use gglib_core::domain::runs::{RunError, RunStatus};
 use gglib_core::ports::ChatHistoryError;
 use gglib_core::services::AppCore;
@@ -17,6 +19,33 @@ use gglib_core::services::AppCore;
 use gglib_app_services::RunEnded;
 
 use crate::error::HttpError;
+
+/// When each of a run's frames was logged, in ms from the run's start;
+/// shared by the loop that logs and the end that saves.
+#[derive(Clone)]
+pub(super) struct FrameTimes {
+    start: Instant,
+    logged: Arc<Mutex<Vec<u64>>>,
+}
+
+impl FrameTimes {
+    pub(super) fn new() -> Self {
+        Self {
+            start: Instant::now(),
+            logged: Arc::default(),
+        }
+    }
+
+    /// A frame was logged now.
+    pub(super) fn logged(&self) {
+        let ms = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        self.lock().push(ms);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<u64>> {
+        self.logged.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
 
 fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> HttpError {
     HttpError::Coded {
@@ -63,11 +92,16 @@ pub(super) async fn save_user(
 
 /// Save the reply to `conversation_id` once the run ends, whatever the end:
 /// every row or none. A reply that could not be saved fails the run.
-pub(super) fn save_reply(core: Arc<AppCore>, conversation_id: i64) -> RunEnded {
+pub(super) fn save_reply(core: Arc<AppCore>, conversation_id: i64, times: FrameTimes) -> RunEnded {
     Box::new(move |info, frames| {
         Box::pin(async move {
             let finished = info.status == RunStatus::Completed;
-            let rows = rows_from_frames(frames.iter().map(|f| &**f), finished, conversation_id);
+            let logged = times.lock().clone();
+            // A time for every frame, or none: a list that is short pairs
+            // frames with the wrong times.
+            let at = |i: usize| (logged.len() == frames.len()).then(|| logged[i]);
+            let with_times = frames.iter().enumerate().map(|(i, f)| (&**f, at(i)));
+            let rows = rows_from_timed_frames(with_times, finished, conversation_id);
             let total = rows.len();
             if core.chat_history().save_messages(rows).await.is_err() {
                 tracing::warn!(run = %info.id, conversation = conversation_id, rows = total,
