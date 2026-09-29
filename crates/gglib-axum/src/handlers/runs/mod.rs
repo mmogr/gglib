@@ -1,7 +1,5 @@
 #![doc = include_str!("README.md")]
 
-mod sse;
-
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
 use axum::extract::{Path, Query, State};
@@ -74,7 +72,7 @@ pub(crate) struct EventsQuery {
     after: u32,
 }
 
-/// `GET /api/runs/{id}/events?after=N`: see [`sse`].
+/// `GET /api/runs/{id}/events?after=N`: see [`gglib_proxy::runs::sse`].
 pub(crate) async fn events(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -82,5 +80,8 @@ pub(crate) async fn events(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
     let Query(query) = query.map_err(|e| invalid(e.body_text()))?;
     let events = state.runs.events(&SCOPE, &id, query.after)?;
-    Ok(sse::stream(events, state.daemon_shutdown.clone()))
+    Ok(gglib_proxy::runs::sse::stream(
+        events,
+        state.daemon_shutdown.clone(),
+    ))
 }
