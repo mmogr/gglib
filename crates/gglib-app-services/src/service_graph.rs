@@ -29,7 +29,7 @@ use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
     LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort,
-    Repos, SystemProbePort, ToolSupportDetectorPort,
+    Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use gglib_core::services::AppCore;
@@ -221,6 +221,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         Arc::clone(&proxy),
         Arc::clone(&core),
     ));
+    proxy.bind_runs(&(Arc::clone(&runs) as Arc<dyn RunsPort>));
 
     let models = Arc::new(ModelOps::new(ModelDeps {
         core: Arc::clone(&core),

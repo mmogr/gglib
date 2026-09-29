@@ -128,8 +128,9 @@ pub struct Created {
     pub created: bool,
 }
 
-/// The daemon's runs.
-pub trait RunsPort: Send + Sync {
+/// The daemon's runs. `Debug` so it can travel in the proxy's config, as
+/// the remote gateway does.
+pub trait RunsPort: Send + Sync + std::fmt::Debug {
     /// Start a chat run under the client's `id`, or return the caller's run
     /// that already has it.
     ///

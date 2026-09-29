@@ -27,6 +27,10 @@ const TUNNEL_REACHABLE: &[&str] = &[
     "/v1/proxy/status/stream",
     "/v1/proxy/cache/clear",
     "/v1/proxy/shutdown",
+    "/v1/runs",
+    "/v1/runs/{id}",
+    "/v1/runs/{id}/events",
+    "/v1/runs/{id}/cancel",
     "/mcp",
 ];
 

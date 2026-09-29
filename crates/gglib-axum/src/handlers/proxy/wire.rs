@@ -174,6 +174,7 @@ pub(super) fn to_runtime_config(
         // may be in front of it.
         daemon_cancel: None,
         remote: None,
+        runs: None,
     }
 }
 

@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::{
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, UsageSink,
+    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, RunsPort, UsageSink,
 };
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
@@ -59,6 +59,10 @@ pub struct ProxyOps {
     /// reason: every proxy this starts carries it, so the pairing route and
     /// the `/mcp` gate have someone to ask (ADR 0012).
     remote_gateway: std::sync::OnceLock<Arc<dyn RemoteGatewayPort>>,
+    /// The daemon's runs, handed over the same way, so every proxy this
+    /// starts serves a paired device its own runs. Weak because the runs
+    /// reach their replies through this same `ProxyOps`.
+    runs: std::sync::OnceLock<std::sync::Weak<dyn RunsPort>>,
     /// The bearer token the running proxy actually demands, and where it came
     /// from. `None` while stopped.
     ///
@@ -80,6 +84,7 @@ impl ProxyOps {
             runtime: deps.runtime,
             daemon_cancel: std::sync::OnceLock::new(),
             remote_gateway: std::sync::OnceLock::new(),
+            runs: std::sync::OnceLock::new(),
             effective_key: std::sync::RwLock::new(None),
         }
     }
@@ -97,6 +102,17 @@ impl ProxyOps {
     /// before any proxy starts — the service graph does it at assembly.
     pub fn bind_remote_gateway(&self, gateway: Arc<dyn RemoteGatewayPort>) {
         let _ = self.remote_gateway.set(gateway);
+    }
+
+    /// Hand over the daemon's runs. Once, at assembly, like the gateway.
+    pub fn bind_runs(&self, runs: &Arc<dyn RunsPort>) {
+        let _ = self.runs.set(Arc::downgrade(runs));
+    }
+
+    /// The daemon's runs, once bound.
+    #[must_use]
+    pub fn runs(&self) -> Option<Arc<dyn RunsPort>> {
+        self.runs.get().and_then(std::sync::Weak::upgrade)
     }
 
     /// The token the running proxy demands right now, with its source, or
@@ -180,6 +196,9 @@ impl ProxyOps {
         }
         if config.remote.is_none() {
             config.remote = self.remote_gateway.get().cloned();
+        }
+        if config.runs.is_none() {
+            config.runs = self.runs();
         }
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).

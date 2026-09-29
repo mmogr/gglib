@@ -69,3 +69,28 @@ async fn ensure_running_reports_a_clear_conflict_when_the_port_is_taken_by_anoth
 
     drop(listener);
 }
+
+/// A proxy this starts carries the runs it was handed, so `/v1/runs` is
+/// served rather than answered 503.
+#[tokio::test]
+async fn a_started_proxy_serves_the_runs_it_was_handed() {
+    let (_, proxy) = crate::test_support::test_core_and_proxy().await;
+    let (runs, _, _) = crate::runs::test_executor::registry();
+    let runs: Arc<dyn gglib_core::ports::RunsPort> = Arc::new(runs);
+    proxy.bind_runs(&runs);
+
+    let config = ProxyConfig {
+        port: 0,
+        ..ProxyConfig::default()
+    };
+    let addr = proxy.start(config, None).await.expect("the proxy starts");
+    let status = gglib_proxy::loopback::client()
+        .get(format!("http://{addr}/v1/runs"))
+        .send()
+        .await
+        .expect("the proxy answers")
+        .status();
+    proxy.stop().await.expect("stop");
+
+    assert_eq!(status.as_u16(), 200);
+}

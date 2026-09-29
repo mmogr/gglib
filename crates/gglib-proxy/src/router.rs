@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use gglib_core::access::{ApiKeySource, BearerPolicy};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
@@ -72,6 +72,15 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             "/v1/proxy/shutdown",
             post(crate::admin::handle_proxy_shutdown),
         )
+        // A paired device's own runs: the scope is read from the marker, so
+        // a device reaches only what it started (ADR 0013's amendment).
+        .route("/v1/runs", get(crate::runs::list_runs))
+        .route(
+            "/v1/runs/{id}",
+            put(crate::runs::put_run).get(crate::runs::get_run),
+        )
+        .route("/v1/runs/{id}/events", get(crate::runs::run_events))
+        .route("/v1/runs/{id}/cancel", post(crate::runs::cancel_run))
         .merge(mcp);
 
     // Unconditional: a key set after this process started has to have a layer

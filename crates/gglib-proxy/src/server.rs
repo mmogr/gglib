@@ -21,10 +21,10 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
-use gglib_core::ports::RemoteGatewayPort;
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
+use gglib_core::ports::{RemoteGatewayPort, RunsPort};
 use gglib_core::request_pipeline::{ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
@@ -84,7 +84,7 @@ pub(crate) struct AppState {
     /// in-flight connection to close, so an endless stream stops the server
     /// from ever returning. Request/response handlers ignore it entirely —
     /// they finish on their own and the drain takes care of them.
-    shutdown: CancellationToken,
+    pub(crate) shutdown: CancellationToken,
     /// Cancels the *daemon*, when this proxy is running under one.
     ///
     /// `None` for an embedded server or a test, where there is no daemon to
@@ -94,6 +94,8 @@ pub(crate) struct AppState {
     /// Asked to redeem a pairing code and whether `/mcp` is open to tunnelled
     /// requests; told when one arrives. `None` where no tunnel can exist.
     remote: Option<Arc<dyn RemoteGatewayPort>>,
+    /// The daemon's runs, served at `/v1/runs`; `None` answers those 503.
+    pub(crate) runs: Option<Arc<dyn RunsPort>>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -332,6 +334,7 @@ pub async fn serve(
         shutdown: cancel.clone(),
         daemon_shutdown: daemon_cancel,
         remote: access.remote.clone(),
+        runs: access.runs.clone(),
         upstream_health,
         stream_bounds: StreamBounds::for_serve(),
         calibration: Arc::new(TokenCalibration::new()),
