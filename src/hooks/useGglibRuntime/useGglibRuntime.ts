@@ -107,6 +107,12 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   // land on top of it.
   const skipResyncRef = useRef(false);
 
+  /** Put a plain text message back in the composer rather than lose it. */
+  const giveTextBack = (content: GglibContent) => {
+    const [only, ...more] = typeof content === 'string' ? [{ type: 'text', text: content } as const] : content;
+    if (more.length === 0 && only?.type === 'text') runtimeRef.current?.thread.composer.setText(only.text);
+  };
+
   /**
    * Send `content` after `base`: create the conversation if there is none,
    * start the run and read it. `replaceFrom` is the saved row an edit or a
@@ -125,6 +131,12 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     // tunnel's port and the stored key.
     if (!selectedServerPort && !destination.remote) {
       onError?.(new Error('No server selected. Please serve a model first.'));
+      return;
+    }
+    // Never from a conversation that is not loaded, or into a run that may
+    // still be going: the text goes back to the composer.
+    if (conversationId !== undefined && !(await reader.clearToSend(conversationId))) {
+      if (giveBack) giveTextBack(content);
       return;
     }
     const signal = reader.beginSend();
@@ -172,10 +184,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       // Nothing was started and nothing changed: show what is saved, and
       // hand the text of a send or an edit back to the composer.
       if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
-      const [only, ...more] = typeof content === 'string' ? [{ type: 'text', text: content } as const] : content;
-      if (giveBack && more.length === 0 && only?.type === 'text') {
-        runtimeRef.current?.thread.composer.setText(only.text);
-      }
+      if (giveBack) giveTextBack(content);
       onError?.(error as Error);
     }
   };

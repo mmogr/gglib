@@ -143,4 +143,91 @@ describe('useGglibRuntime opening a conversation while its run ends', () => {
     send(hook, 'again');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
   });
+
+  describe('when the daemon cannot say whether a run is live', () => {
+    /** `method path` fails (the request never answers) its first `times` times. */
+    function failing(failures: Record<string, number>) {
+      daemon.before = (method, path) => {
+        const key = `${method} ${path}`;
+        if ((failures[key] ?? 0) > 0) {
+          failures[key] -= 1;
+          throw new TypeError('Failed to fetch');
+        }
+      };
+    }
+
+    function saved() {
+      daemon.save(1, { role: 'user', content: 'q' });
+      daemon.save(1, { role: 'assistant', content: 'a' });
+    }
+
+    it('the rows still load, and a send carries the whole history', async () => {
+      saved();
+      failing({ 'GET /api/runs': 1 });
+      const onError = vi.fn();
+      const hook = await mount({ ...open, onError });
+
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Failed to fetch' }));
+      expect(shown(hook.result.current.messages).map(([, role, text]) => [role, text])).toEqual([
+        ['system', 'You are a helpful assistant.'],
+        ['user', 'q'],
+        ['assistant', 'a'],
+      ]);
+
+      send(hook, 'next');
+      await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+      expect(daemon.only().request!.messages.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    });
+
+    it('rows that cannot load leave nothing to send from, until it is opened again', async () => {
+      saved();
+      failing({ 'GET /api/runs': 1, 'GET /api/conversations/1/messages': 1 });
+      const onError = vi.fn();
+      const hook = await mount({ ...open, onError });
+      await waitFor(() => expect(onError).toHaveBeenCalled());
+      expect(onError.mock.calls.at(-1)![0].message).toMatch(/^This conversation could not be loaded/);
+      expect(hook.result.current.messages).toEqual([]);
+
+      send(hook, 'lost?');
+      await waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+      expect(onError.mock.calls[1][0].message).toMatch(/nothing can be sent from it/);
+      expect(daemon.count('PUT', '/api/runs/')).toBe(0);
+      expect(hook.result.current.runtime.thread.composer.getState().text).toBe('lost?');
+
+      hook.rerender({ ...open, conversationId: 2, conversation: conversation(2) });
+      hook.rerender({ ...open, onError });
+      await waitFor(() => expect(shown(hook.result.current.messages)).toHaveLength(3));
+      send(hook, 'now');
+      await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    });
+
+    it('a send that finds a run still live sends nothing and draws the run', async () => {
+      live();
+      failing({ 'GET /api/runs': 1 });
+      const onError = vi.fn();
+      const hook = await mount({ ...open, onError });
+      expect(hook.result.current.isRunning).toBe(false);
+
+      send(hook, 'meanwhile');
+      await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
+      expect(onError.mock.calls.at(-1)![0].message).toBe(
+        'Nothing was sent: a reply is still running in this conversation.',
+      );
+      expect(daemon.count('PUT', '/api/runs/')).toBe(0);
+      expect(hook.result.current.runtime.thread.composer.getState().text).toBe('meanwhile');
+      await waitFor(() => expect(shown(hook.result.current.messages).at(-1)?.[2]).toBe('answer'));
+    });
+
+    it('a send that still cannot ask sends nothing', async () => {
+      saved();
+      failing({ 'GET /api/runs': 2 });
+      const onError = vi.fn();
+      const hook = await mount({ ...open, onError });
+
+      send(hook, 'blind');
+      await waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+      expect(onError.mock.calls[1][0].message).toMatch(/^Nothing was sent: whether a reply is still running/);
+      expect(daemon.count('PUT', '/api/runs/')).toBe(0);
+    });
+  });
 });

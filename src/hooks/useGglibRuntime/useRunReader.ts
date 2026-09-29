@@ -10,6 +10,12 @@
  * the rows, their ids, and a reply marked unfinished when it was. Nothing
  * can be sent until the question and the rows have both come back.
  *
+ * Nothing is ever sent from a conversation that is not loaded. A question
+ * that fails still loads the rows, and the run is taken as not live; the
+ * next send asks again first, and does not go while a run is live or while
+ * the answer is still unknown. Rows that fail to load leave the thread
+ * empty and sending off until the conversation is opened again.
+ *
  * Leaving (another conversation, unmount) stops reading; it never cancels
  * the run. The run's id is kept in memory only.
  *
@@ -24,6 +30,12 @@ import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 import { drawRun, type RunOutcome } from './drawRun';
 import { liveRunFor, loadSavedThread } from './savedRows';
+
+const NOT_LOADED =
+  'This conversation could not be loaded, so nothing can be sent from it. Open it again to retry.';
+const UNKNOWN_LIVE =
+  'Nothing was sent: whether a reply is still running in this conversation could not be checked.';
+const STILL_RUNNING = 'Nothing was sent: a reply is still running in this conversation.';
 
 /** What the reader reads from the caller's latest render. */
 export interface RunReaderInputs {
@@ -54,6 +66,10 @@ export function useRunReader(
   const runningRef = useRef(false);
   /** An opening that has not yet learned whether a run is live. */
   const openingRef = useRef(false);
+  /** The open conversation's rows could not be loaded: nothing may be sent. */
+  const unloadedRef = useRef(false);
+  /** Whether a run is live in it is unknown: a send must ask first. */
+  const unaskedRef = useRef(false);
   /** The reading in progress. Aborting it stops reading, never the run. */
   const readerRef = useRef<AbortController | null>(null);
   /** The run read here, once the daemon has accepted it. */
@@ -89,6 +105,8 @@ export function useRunReader(
   /** Leave: stop reading. A run being read carries on at the daemon. */
   const stopReading = useCallback(() => {
     openingRef.current = false;
+    unloadedRef.current = false;
+    unaskedRef.current = false;
     readerRef.current?.abort();
     readerRef.current = null;
     setRunning(false);
@@ -149,14 +167,36 @@ export function useRunReader(
   /** Learn whether a run is live in `cid`, show its rows, then read the run. */
   const open = useCallback(async (cid: number, signal: AbortSignal) => {
     openingRef.current = true;
+    unloadedRef.current = false;
+    unaskedRef.current = false;
     setIsLoading(true);
     try {
-      const live = await liveRunFor(cid);
+      let live: Awaited<ReturnType<typeof liveRunFor>>;
+      let unasked: Error | null = null;
+      try {
+        live = await liveRunFor(cid);
+      } catch (error) {
+        unasked = error as Error;
+      }
       if (signal.aborted) return;
-      await showSaved(cid, signal);
+      try {
+        await showSaved(cid, signal);
+      } catch (error) {
+        if (signal.aborted) return;
+        unloadedRef.current = true;
+        messagesRef.current = [];
+        setMessages([]);
+        const reason = (error as Error).message;
+        latest.current.onError?.(new Error(`${NOT_LOADED} ${reason}`));
+        return;
+      }
       if (signal.aborted) return;
       openingRef.current = false;
       setIsLoading(false);
+      if (unasked) {
+        unaskedRef.current = true;
+        latest.current.onError?.(unasked);
+      }
       if (live) await follow(cid, live.id, signal);
     } catch (error) {
       if (!signal.aborted) latest.current.onError?.(error as Error);
@@ -167,6 +207,30 @@ export function useRunReader(
       }
     }
   }, [follow, showSaved]);
+
+  /**
+   * Whether a send may go in `cid`: false when its rows are not loaded, or
+   * when opening could not learn whether a run is live and asking again
+   * finds one (which is then drawn) or fails. Says why when it is false.
+   */
+  const clearToSend = useCallback(async (cid: number): Promise<boolean> => {
+    const refuse = (message: string) => {
+      latest.current.onError?.(new Error(message));
+      return false;
+    };
+    if (unloadedRef.current) return refuse(NOT_LOADED);
+    if (!unaskedRef.current) return true;
+    let live: Awaited<ReturnType<typeof liveRunFor>>;
+    try {
+      live = await liveRunFor(cid);
+    } catch (error) {
+      return refuse(`${UNKNOWN_LIVE} ${(error as Error).message}`);
+    }
+    unaskedRef.current = false;
+    if (!live) return true;
+    void follow(cid, live.id, beginReading());
+    return refuse(STILL_RUNNING);
+  }, [beginReading, follow]);
 
   const systemPrompt = inputs.conversation?.system_prompt;
   useEffect(() => {
@@ -208,6 +272,7 @@ export function useRunReader(
       adoptRef.current = cid;
     },
     beginSend,
+    clearToSend,
     endReading,
     showSaved,
     follow,
