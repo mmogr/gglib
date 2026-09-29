@@ -29,6 +29,9 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
     for (methods, path) in [
         (daemon::BENCHMARK_TUNE_APPLY_METHODS, apply),
         (daemon::REMOTE_FORGET_METHODS, forget),
+        // A run's `GET` changes nothing, so only its `PUT` is walked.
+        (&["PUT"] as &[&str], daemon::run_path("run-1")),
+        (daemon::RUN_CANCEL_METHODS, daemon::run_cancel_path("run-1")),
     ] {
         changes.extend(methods.iter().map(|m| (*m, path.clone())));
     }

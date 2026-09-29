@@ -2,6 +2,8 @@
 //!
 //! Split out via `#[path]`, as this repo's other test modules are.
 
+use gglib_core::ports::{RunEvent, RunScope, RunsPort};
+
 use super::*;
 
 /// The signal path must cancel the token, not merely observe it.
@@ -121,4 +123,59 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         ),
         (1, 1, 1, 1)
     );
+}
+
+/// Teardown drops every run; the registry's own tests show that ends its
+/// readers and cancels a live one. The run goes through a
+/// real proxy, to a model that does not exist, so it fails there rather than
+/// for want of a proxy: the daemon's own registry reaches its own proxy.
+#[tokio::test]
+async fn teardown_drops_every_run() {
+    use futures_util::StreamExt as _;
+    use serde_json::json;
+
+    let dir = tempfile::tempdir().unwrap();
+    let state: AppState = std::sync::Arc::new(
+        crate::bootstrap::bootstrap(crate::ServerConfig {
+            host: "127.0.0.1".into(),
+            port: 0,
+            base_port: 19_100,
+            llama_server_path: "/nonexistent/llama-server".into(),
+            max_concurrent_agent_loops: 1,
+            static_dir: None,
+            cors: gglib_core::CorsConfig::AllowAll,
+            db_path: Some(dir.path().join("gglib.db")),
+            device_keys_path: Some(dir.path().join("remote_devices")),
+        })
+        .await
+        .expect("bootstrap an isolated context"),
+    );
+    state
+        .proxy
+        .start(
+            gglib_runtime::proxy::ProxyConfig {
+                host: "127.0.0.1".into(),
+                port: 0,
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .expect("start the proxy on a free port");
+    let body =
+        json!({ "model": "no-such-model", "messages": [{ "role": "user", "content": "hi" }] });
+    state.runs.create(RunScope::Local, "r-1", body).unwrap();
+    let mut events = state.runs.events(&RunScope::Local, "r-1", 0).unwrap();
+    let mut end = None;
+    while let Some(event) = events.next().await {
+        if let RunEvent::End(info) = event {
+            end = Some(info);
+        }
+    }
+    let error = end.and_then(|info| info.error).expect("the run failed");
+    assert_ne!(error.code, "proxy_not_running", "{error:?}");
+
+    teardown(&state).await;
+
+    assert!(state.runs.list(&RunScope::Local).runs.is_empty());
 }
