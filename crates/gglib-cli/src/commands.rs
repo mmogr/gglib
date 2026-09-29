@@ -180,11 +180,7 @@ pub enum Commands {
     },
 
     /// Ask a question with optional context from stdin or file
-    #[command(
-        display_order = 12,
-        alias = "q",
-        after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\"\n    gglib q \"How is error handling done in this project?\"\n    cat file.rs | gglib q \"Explain this code in depth\""
-    )]
+    #[command(display_order = 12, alias = "q", after_help = crate::subcommands::QUESTION_EXAMPLES)]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
         question: String,
