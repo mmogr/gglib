@@ -12,7 +12,8 @@ use serde_json::json;
 
 use super::run::launch;
 use super::run_fixture::{
-    End, LOCAL, conversation, drain, logged, meta, prepared, reply, saved, settled, start, state,
+    End, LOCAL, conversation, drain, finished_reply, logged, meta, prepared, reply, saved, settled,
+    start, state,
 };
 
 #[tokio::test]
@@ -82,6 +83,51 @@ async fn shutdown_drops_the_loop_and_the_reply_is_saved_before_drained() {
     let rows = saved(&state, id).await;
     assert_eq!(rows.len(), 2, "the user's message and the stopped reply");
     assert_eq!(meta(&rows[1], INCOMPLETE_KEY), json!(true));
+}
+
+/// A create dropped as soon as it started (the client gave up) still
+/// finishes starting its run in its own task, so the retry finds that run
+/// and the user's message is saved once.
+#[tokio::test]
+async fn a_create_dropped_part_way_and_retried_saves_the_users_message_once() {
+    use std::task::{Context, Waker};
+
+    let (_dir, state) = state().await;
+    let id = conversation(&state).await;
+    let (first, _) = prepared(finished_reply(), End::Finish);
+    let mut dropped = Box::pin(launch(
+        &state,
+        "a1",
+        Some(id),
+        first,
+        super::compose::take_permit(&state).unwrap(),
+    ));
+    assert!(
+        dropped
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending()
+    );
+    drop(dropped);
+
+    let (again, _) = prepared(Vec::new(), End::Hang);
+    let spare = Arc::new(tokio::sync::Semaphore::new(1));
+    let retried = launch(
+        &state,
+        "a1",
+        Some(id),
+        again,
+        spare.try_acquire_owned().unwrap(),
+    )
+    .await
+    .unwrap();
+
+    assert!(!retried.created, "the retry found the run");
+    let (_, end) = drain(state.runs.events(&LOCAL, "a1", 0).unwrap()).await;
+    assert_eq!(end.map(|e| e.status), Some(RunStatus::Completed));
+    let rows = saved(&state, id).await;
+    let users = rows.iter().filter(|r| r.role == MessageRole::User).count();
+    assert_eq!(users, 1);
 }
 
 #[tokio::test]

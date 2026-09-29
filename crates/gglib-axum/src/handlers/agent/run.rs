@@ -115,7 +115,9 @@ pub(crate) async fn create_run(
     launch(state, id, req.conversation_id, prepared, permit).await
 }
 
-/// Reserve the id, save the user's message, and start the loop.
+/// Reserve the id, save the user's message, and start the loop, in one
+/// task of its own: a request dropped part-way cannot split them, so a
+/// retry finds the run rather than saving the message again.
 pub(super) async fn launch(
     state: &AppState,
     id: &str,
@@ -123,6 +125,31 @@ pub(super) async fn launch(
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
+    let task = tokio::spawn(reserve_and_start(
+        Arc::clone(state),
+        id.to_owned(),
+        conversation_id,
+        prepared,
+        permit,
+    ));
+    task.await.unwrap_or_else(|_| {
+        Err(coded(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "the run could not be started",
+        ))
+    })
+}
+
+async fn reserve_and_start(
+    state: AppState,
+    id: String,
+    conversation_id: Option<i64>,
+    prepared: Prepared,
+    permit: OwnedSemaphorePermit,
+) -> Result<Created, HttpError> {
+    let id = id.as_str();
+    let state = &state;
     let spec = RunSpec {
         kind: RunKind::Agent,
         model: Some(prepared.model.clone()),
