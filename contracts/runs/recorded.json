@@ -1,0 +1,76 @@
+{
+  "queued": {
+    "id": "run-queued-01",
+    "kind": "chat",
+    "status": "queued",
+    "created_at_ms": 1790000000000,
+    "last_seq": 0
+  },
+  "in_progress": {
+    "id": "run-busy-02",
+    "kind": "agent",
+    "status": "in_progress",
+    "model": "qwen3-8b",
+    "device": "phone-7c2e",
+    "created_at_ms": 1790000000000,
+    "last_seq": 42
+  },
+  "completed": {
+    "id": "run-done-03",
+    "kind": "chat",
+    "status": "completed",
+    "model": "qwen3-8b",
+    "created_at_ms": 1790000000000,
+    "finished_at_ms": 1790000008250,
+    "last_seq": 311
+  },
+  "failed": {
+    "id": "run-failed-04",
+    "kind": "agent",
+    "status": "failed",
+    "model": "gemma-3-12b",
+    "device": "phone-7c2e",
+    "created_at_ms": 1790000000000,
+    "finished_at_ms": 1790000001500,
+    "last_seq": 3,
+    "error": {
+      "code": "model_unavailable",
+      "message": "The model could not be loaded."
+    }
+  },
+  "cancelled": {
+    "id": "run-cancelled-05",
+    "kind": "chat",
+    "status": "cancelled",
+    "created_at_ms": 1790000000000,
+    "finished_at_ms": 1790000000600,
+    "last_seq": 7
+  },
+  "list": {
+    "runs": [
+      {
+        "id": "run-busy-02",
+        "kind": "agent",
+        "status": "in_progress",
+        "model": "qwen3-8b",
+        "device": "phone-7c2e",
+        "created_at_ms": 1790000000000,
+        "last_seq": 42
+      },
+      {
+        "id": "run-failed-04",
+        "kind": "agent",
+        "status": "failed",
+        "model": "gemma-3-12b",
+        "device": "phone-7c2e",
+        "created_at_ms": 1790000000000,
+        "finished_at_ms": 1790000001500,
+        "last_seq": 3,
+        "error": {
+          "code": "model_unavailable",
+          "message": "The model could not be loaded."
+        }
+      }
+    ]
+  }
+}

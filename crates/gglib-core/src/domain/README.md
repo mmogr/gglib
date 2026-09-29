@@ -14,6 +14,7 @@ infrastructure concerns (database, filesystem, etc.).
 - `model_naming` - Shared model-naming policy (`resolve_model_name`, `NameSource`)
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types
+- `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)
 - `gguf` - GGUF metadata and capability types
 - `capabilities` - Model capability detection and inference
 - `thinking` - Thinking/reasoning tag parsing and streaming accumulation
