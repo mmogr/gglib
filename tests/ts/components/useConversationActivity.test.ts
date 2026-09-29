@@ -16,6 +16,7 @@ vi.mock('../../../src/services/transport', async () => {
 import {
   UNREAD_STORAGE_KEY,
   useConversationActivity,
+  type FetchedList,
 } from '../../../src/components/ConversationListPanel/useConversationActivity';
 
 const POLL = 10;
@@ -155,17 +156,17 @@ describe('useConversationActivity', () => {
     expect(stored()).toEqual({ 4: 9 });
   });
 
-  it('drops the marks of conversations no longer listed, once the list has loaded', () => {
-    window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 2: 7, 99: 8 }));
-    const { result, rerender } = renderHook(({ listed }) => useConversationActivity(1, listed, POLL), {
-      initialProps: { listed: null as number[] | null },
+  it('drops a mark only on the daemon\'s word: absent from a fetched list, and older than the asking', () => {
+    window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 2: 7, 99: 8, 7: 5_000 }));
+    const { result, rerender } = renderHook(({ fetched }) => useConversationActivity(1, fetched, POLL), {
+      initialProps: { fetched: null as FetchedList | null },
     });
-    expect(stored()).toEqual({ 2: 7, 99: 8 });
-    rerender({ listed: [] });
-    expect(stored()).toEqual({ 2: 7, 99: 8 });
+    expect(stored()).toEqual({ 2: 7, 99: 8, 7: 5_000 });
 
-    rerender({ listed: [1, 2] });
-    expect(stored()).toEqual({ 2: 7 });
-    expect([...result.current.unread]).toEqual([2]);
+    // 99 was deleted before the list was asked for; 7 was marked after it,
+    // by a tab that knew a conversation this list predates.
+    rerender({ fetched: { ids: [1, 2], askedAt: 1_000 } });
+    expect(stored()).toEqual({ 2: 7, 7: 5_000 });
+    expect([...result.current.unread].sort()).toEqual([2, 7]);
   });
 });

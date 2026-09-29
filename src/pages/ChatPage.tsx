@@ -8,6 +8,7 @@ import {
   ConversationRail,
   useConversationActivity,
   useListFold,
+  type FetchedList,
 } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
@@ -81,7 +82,9 @@ export default function ChatPage(props: ChatPageProps) {
   // The conversation list beside the notebook, and the rail that folds it
   const listFold = useListFold();
   // Running and New, for the list's rows and the rail's list button
-  const activity = useConversationActivity(activeConversationId, conversationLoading ? null : conversations.map((c) => c.id));
+  // The list as the daemon last sent it: the only word a New mark is dropped on.
+  const [fetched, setFetched] = useState<FetchedList | null>(null);
+  const activity = useConversationActivity(activeConversationId, fetched);
   const countOf = (ids: ReadonlySet<number>) => conversations.filter((c) => ids.has(c.id)).length;
   const listId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +193,7 @@ export default function ChatPage(props: ChatPageProps) {
         setConversationLoading(true);
       }
       try {
+        const askedAt = Date.now();
         let list = await getTransport().listConversations();
         let preferredId = options.preferredId ?? null;
 
@@ -204,6 +208,7 @@ export default function ChatPage(props: ChatPageProps) {
         }
 
         setConversations(list);
+        setFetched({ ids: list.map((c) => c.id), askedAt });
         setActiveConversationId((prev) => {
           if (preferredId && list.some((c) => c.id === preferredId)) {
             return preferredId;

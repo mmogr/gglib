@@ -38,6 +38,16 @@ function writeMarks(marks: Marks): void {
 
 const isLive = (run: RunInfo) => run.status === 'queued' || run.status === 'in_progress';
 
+/**
+ * A conversation list as the daemon sent it, and when it was asked for.
+ * Never a list built or patched on this side.
+ */
+export interface FetchedList {
+  ids: readonly number[];
+  /** When the fetch was sent, in ms since the epoch. */
+  askedAt: number;
+}
+
 export interface ConversationActivity {
   /** Conversations with an agent run going. */
   running: ReadonlySet<number>;
@@ -55,7 +65,7 @@ export interface ConversationActivity {
  */
 export function useConversationActivity(
   activeId: number | null,
-  listed: readonly number[] | null = null,
+  fetched: FetchedList | null = null,
   pollMs: number = ACTIVITY_POLL_MS,
 ): ConversationActivity {
   const [running, setRunning] = useState<ReadonlySet<number>>(() => new Set());
@@ -88,14 +98,18 @@ export function useConversationActivity(
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  // A mark for a conversation no longer listed is dropped once the list has
-  // loaded (it is never empty then: the page makes one when there is none).
-  const listedKey = listed && listed.length > 0 ? listed.join(',') : null;
+  // A mark is dropped only on the daemon's word: its conversation is absent
+  // from a list the daemon just sent, and the mark predates the asking (a
+  // conversation this tab has not heard of is not a deleted one).
   useEffect(() => {
-    if (listedKey === null) return;
-    const keep = new Set(listedKey.split(','));
-    change((current) => Object.fromEntries(Object.entries(current).filter(([id]) => keep.has(id))));
-  }, [listedKey, change]);
+    if (!fetched) return;
+    const listed = new Set(fetched.ids.map(String));
+    change((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([id, at]) => listed.has(id) || at >= fetched.askedAt),
+      ),
+    );
+  }, [fetched, change]);
   const activeRef = useRef(activeId);
   /** When each conversation was last left: a reply ended before that was seen. */
   const leftAt = useRef(new Map<number, number>());

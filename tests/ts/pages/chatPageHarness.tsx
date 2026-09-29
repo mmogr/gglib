@@ -79,8 +79,16 @@ export function chatTransport(fixture: ChatFixture) {
   return {
     getServerToolSupport: vi.fn(async () => ({ supports_tool_calls: true, detected_format: null })),
     getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
-    listConversations: vi.fn(async () => fixture.conversations),
-    createConversation: vi.fn(async () => fixture.conversations[0]?.id ?? 1),
+    // A copy, as a fetch gives: the page must not see the fixture change under it.
+    listConversations: vi.fn(async () => [...fixture.conversations]),
+    createConversation: vi.fn(async (params: { title: string }) => {
+      const id = Math.max(0, ...fixture.conversations.map((c) => c.id)) + 1;
+      fixture.conversations.unshift(conversation(id, params.title));
+      return id;
+    }),
+    deleteConversation: vi.fn(async (id: number) => {
+      fixture.conversations = fixture.conversations.filter((c) => c.id !== id);
+    }),
     getMessages: vi.fn(async (id: number) => fixture.rows[id] ?? []),
     listRuns: vi.fn(async () => fixture.runs),
     readRunEvents: (id: string, _after: number, signal: AbortSignal) =>

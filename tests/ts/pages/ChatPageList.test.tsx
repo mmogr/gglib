@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { agentRun, chatTransport, conversation, wrapper, type ChatFixture } from './chatPageHarness';
@@ -104,5 +104,78 @@ describe('ChatPage, conversation list', () => {
     expect(screen.queryByText('New')).not.toBeInTheDocument();
     // And once the list has loaded, the deleted one's mark is dropped.
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!)).toEqual({}));
+  });
+
+  it('keeps a mark for a conversation this tab has not heard of, through a chat made here', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('option', { name: /Parsing GGUF/ });
+
+    // Another tab makes conversation 30, runs it, and marks it New.
+    fixture.conversations.unshift(conversation(30, 'Made in the other tab'));
+    act(() => {
+      window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 30: Date.now() }));
+      window.dispatchEvent(new StorageEvent('storage', { key: UNREAD_STORAGE_KEY }));
+    });
+
+    // This tab, whose list predates 30, makes a chat of its own; its list
+    // holds the new chat, locally, until the resync answers.
+    let answer: () => void = () => {};
+    const t = transport.current as { listConversations: () => Promise<unknown> };
+    const fetchList = t.listConversations;
+    t.listConversations = async () => {
+      await new Promise<void>((resolve) => { answer = resolve; });
+      return fetchList();
+    };
+    await user.click(screen.getByRole('button', { name: 'New chat' }));
+    await user.click(await screen.findByRole('button', { name: 'Create chat' }));
+    await screen.findByRole('option', { name: /New Chat/ });
+    expect(Object.keys(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!))).toEqual(['30']);
+    await act(async () => answer());
+
+    const made = await screen.findByRole('option', { name: /Made in the other tab/ });
+    await waitFor(() => expect(within(made).getByText('New')).toBeInTheDocument());
+    expect(Object.keys(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!))).toEqual(['30']);
+  });
+
+  it('drops the mark of a conversation deleted on the daemon, after the next fetch', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 2: 1_000 }));
+    renderPage();
+    const doomed = await screen.findByRole('option', { name: /Parsing GGUF/ });
+    expect(within(doomed).getByText('New')).toBeInTheDocument();
+
+    await user.click(within(doomed).getByRole('button', { name: 'Delete conversation' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('option', { name: /Parsing GGUF/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!)).toEqual({}));
+  });
+
+  it('keeps a mark made while a fetch was in flight, which that fetch could not have listed', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('option', { name: /Parsing GGUF/ });
+
+    // The next list is taken now, before conversation 30 exists, and answered late.
+    let answer: () => void = () => {};
+    const t = transport.current as { listConversations: () => Promise<unknown> };
+    t.listConversations = async () => {
+      const snapshot = [...fixture.conversations];
+      await new Promise<void>((resolve) => { answer = resolve; });
+      return snapshot;
+    };
+    await user.click(screen.getByRole('button', { name: 'New chat' }));
+    await user.click(await screen.findByRole('button', { name: 'Create chat' }));
+
+    // Meanwhile another tab makes 30 and marks it.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    act(() => {
+      window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify({ 30: Date.now() }));
+      window.dispatchEvent(new StorageEvent('storage', { key: UNREAD_STORAGE_KEY }));
+    });
+    await act(async () => answer());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(Object.keys(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!))).toEqual(['30']);
   });
 });
