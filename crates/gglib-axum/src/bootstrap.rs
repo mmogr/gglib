@@ -44,6 +44,8 @@ pub struct AxumContext {
     pub proxy: Arc<ProxyOps>,
     /// The remote tunnel (ADR 0012).
     pub remote: Arc<RemoteOps>,
+    /// Replies the daemon owns until they end.
+    pub runs: Arc<gglib_app_services::RunRegistry>,
     pub setup: Arc<SetupOps>,
     /// The core application facade.
     pub core: Arc<AppCore>,
@@ -188,6 +190,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         mcp_ops,
         proxy,
         remote,
+        runs,
         setup,
         benchmark,
         proxy_supervisor: _,
@@ -231,6 +234,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         mcp_ops,
         proxy,
         remote,
+        runs,
         setup,
         core,
         mcp,

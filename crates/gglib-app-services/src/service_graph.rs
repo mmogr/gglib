@@ -44,6 +44,7 @@ use crate::mcp::{McpDeps, McpOps};
 use crate::models::{ModelDeps, ModelOps};
 use crate::proxy::{ProxyDeps, ProxyOps};
 use crate::remote::{RemoteGateway, RemoteOps};
+use crate::runs::RunRegistry;
 use crate::servers::{ServerDeps, ServerOps};
 use crate::settings::{SettingsDeps, SettingsOps};
 use crate::setup::{SetupDeps, SetupOps};
@@ -109,6 +110,8 @@ pub struct AppServices {
     pub proxy: Arc<ProxyOps>,
     /// The remote tunnel (ADR 0012).
     pub remote: Arc<RemoteOps>,
+    /// Replies the daemon owns until they end.
+    pub runs: Arc<RunRegistry>,
     /// First-run setup operations.
     pub setup: Arc<SetupOps>,
     /// Benchmark operations.
@@ -214,6 +217,11 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         device_keys_path,
     ));
 
+    let runs = Arc::new(crate::runs::chat_registry(
+        Arc::clone(&proxy),
+        Arc::clone(&core),
+    ));
+
     let models = Arc::new(ModelOps::new(ModelDeps {
         core: Arc::clone(&core),
         // The shared runtime, not a standalone runner: `ServerOps` starts
@@ -270,6 +278,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         mcp_ops,
         proxy,
         remote,
+        runs,
         setup,
         benchmark,
         proxy_supervisor,

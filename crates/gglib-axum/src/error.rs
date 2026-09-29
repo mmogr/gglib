@@ -6,6 +6,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::GuiError;
+use gglib_core::ports::RunsError;
 use gglib_core::ports::chat_history::ChatHistoryError;
 use gglib_core::{CoreError, RepositoryError};
 use serde::Serialize;
@@ -46,6 +47,14 @@ pub enum HttpError {
     /// Internal server error.
     #[error("Internal error: {0}")]
     Internal(String),
+
+    /// A refusal with a stable code, which the body carries as `type`.
+    #[error("{message}")]
+    Coded {
+        status: StatusCode,
+        code: &'static str,
+        message: String,
+    },
 }
 
 /// JSON error response body.
@@ -96,6 +105,11 @@ impl IntoResponse for HttpError {
             }
             Self::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone(), None, None),
             Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone(), None, None),
+            Self::Coded {
+                status,
+                code,
+                message,
+            } => (*status, message.clone(), Some((*code).to_owned()), None),
         };
 
         let body = ErrorBody {
@@ -152,6 +166,17 @@ impl From<GuiError> for HttpError {
                 reason,
             },
             GuiError::Internal(msg) => Self::Internal(msg),
+        }
+    }
+}
+
+impl From<RunsError> for HttpError {
+    fn from(e: RunsError) -> Self {
+        Self::Coded {
+            status: StatusCode::from_u16(e.http_status())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            code: e.code(),
+            message: e.to_string(),
         }
     }
 }

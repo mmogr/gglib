@@ -12,7 +12,7 @@ mod far_daemon;
 mod gateway;
 mod identity;
 mod invite_watch;
-mod key;
+pub(crate) mod key;
 mod pairing;
 mod resume_wait;
 mod roster;

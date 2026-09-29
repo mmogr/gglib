@@ -266,6 +266,8 @@ pub async fn dispatch(
 
         // ── Remote tunnel (ADR 0012) ────────────────────────────────────────
         Commands::Remote { command } => handlers::remote::dispatch(ctx, command).await?,
+        // ── Runs: replies the daemon owns ───────────────────────────────────
+        Commands::Run(args) => handlers::run::dispatch(ctx, args).await?,
 
         // ── MCP tool gateway ────────────────────────────────────────────────
         Commands::Mcp { command } => {

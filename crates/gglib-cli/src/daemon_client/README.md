@@ -16,4 +16,7 @@ thin request wrappers commands share. It is **not** responsible for
 rendering — handlers own their output — and it never falls back to
 instantiating a local runtime: single process ownership is the point.
 
+`runs.rs` holds the run calls and reads a run's event stream, which
+`drain_items` splits into numbered frames and the run's final state.
+
 <!-- module-docs:end -->

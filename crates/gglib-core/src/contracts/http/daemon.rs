@@ -99,6 +99,40 @@ pub fn benchmark_tune_apply_path(run_id: i64) -> String {
     format!("{BENCHMARK_TUNE_PATH}/{run_id}/apply")
 }
 
+/// Runs, a reply the daemon owns until it ends: `GET` lists them.
+pub const RUNS_PATH: &str = "/api/runs";
+
+/// One run, interpolating `id` into [`RUNS_PATH`].
+///
+/// `PUT` starts it and `GET` reads it. The caller owes the charset, as for
+/// [`remote_forget_path`]: `gglib run` checks an id with
+/// `domain::runs::is_run_id` first.
+#[must_use]
+pub fn run_path(id: &str) -> String {
+    format!("{RUNS_PATH}/{id}")
+}
+
+/// The verbs [`run_path`] is called with.
+pub const RUN_METHODS: &[&str] = &["GET", "PUT"];
+
+/// A run's events after `after`, as server-sent events.
+#[must_use]
+pub fn run_events_path(id: &str, after: u32) -> String {
+    format!("{RUNS_PATH}/{id}/events?after={after}")
+}
+
+/// The verbs [`run_events_path`] is called with.
+pub const RUN_EVENTS_METHODS: &[&str] = &["GET"];
+
+/// Cancel a run.
+#[must_use]
+pub fn run_cancel_path(id: &str) -> String {
+    format!("{RUNS_PATH}/{id}/cancel")
+}
+
+/// The verbs [`run_cancel_path`] is called with.
+pub const RUN_CANCEL_METHODS: &[&str] = &["POST"];
+
 /// Every fixed path above, paired with the verbs the CLI sends to it.
 ///
 /// The verb is half the contract: a deleted route often still *matches* some
@@ -125,6 +159,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], BENCHMARK_TUNE_PATH),
     (&["POST"], BENCHMARK_AGENTIC_PATH),
     (&["GET"], SETUP_STATUS_PATH),
+    (&["GET"], RUNS_PATH),
 ];
 
 /// The verbs [`benchmark_tune_apply_path`] is called with.

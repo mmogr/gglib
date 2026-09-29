@@ -153,6 +153,10 @@ pub(super) async fn teardown(state: &AppState) {
         tracing::debug!("remote disconnect during shutdown: {e}");
     }
 
+    //    Then the runs: each live one is cancelled, which closes its
+    //    request to the proxy before the proxy drains, and every reader ends.
+    state.runs.shutdown();
+
     // 1. Drain the proxy so in-flight requests finish before their upstream
     //    dies. "Not running" is a fine answer.
     if let Err(e) = state.proxy.stop().await {

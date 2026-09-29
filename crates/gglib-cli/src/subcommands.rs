@@ -237,3 +237,6 @@ pub enum RemoteCommand {
         show: bool,
     },
 }
+
+/// The examples `gglib q --help` ends with.
+pub(crate) const QUESTION_EXAMPLES: &str = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\"\n    gglib q \"How is error handling done in this project?\"\n    cat file.rs | gglib q \"Explain this code in depth\"";

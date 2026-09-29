@@ -52,19 +52,27 @@ pub(super) fn decide(
     effective: Option<(String, ApiKeySource)>,
     stored: Option<&str>,
 ) -> KeyDecision {
+    match enforced(effective, stored) {
+        Some((key, pinned)) => KeyDecision::Use { key, pinned },
+        None => KeyDecision::Mint(generate_api_key()),
+    }
+}
+
+/// Steps 1 and 2 of [`decide`]: the key the local proxy demands or is about
+/// to, and whether it is pinned; `None` when nothing is enforced. Never
+/// mints, so a caller that only needs to present the key (a run posting to
+/// the proxy) uses this rather than `decide`.
+pub(crate) fn enforced(
+    effective: Option<(String, ApiKeySource)>,
+    stored: Option<&str>,
+) -> Option<(String, bool)> {
     if let Some((key, source)) = effective {
-        return KeyDecision::Use {
-            key,
-            pinned: source == ApiKeySource::Flag,
-        };
+        return Some((key, source == ApiKeySource::Flag));
     }
-    if let Some(stored) = stored.map(str::trim).filter(|s| !s.is_empty()) {
-        return KeyDecision::Use {
-            key: stored.to_owned(),
-            pinned: false,
-        };
-    }
-    KeyDecision::Mint(generate_api_key())
+    stored
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|stored| (stored.to_owned(), false))
 }
 
 /// The key this tunnel will enforce, and the write it may still owe.

@@ -209,6 +209,7 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
 pub(crate) mod auth;
 mod calls;
 mod remote;
+pub(crate) mod runs;
 pub(crate) mod wire;
 
 pub(crate) use wire::{QueueDownloadBody, StartProxyBody};
