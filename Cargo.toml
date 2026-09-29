@@ -195,6 +195,10 @@ redundant_pub_crate = "allow"
 opt-level = 2
 lto = "thin"
 codegen-units = 16
+# Cargo strips debug info from a release build by default. Xcode 27's `strip`
+# can leave a library's string pool off an 8-byte boundary, and macOS 27 then
+# refuses to load it. A proc macro that comes out that way stops the build.
+strip = "none"
 
 [profile.dev]
 opt-level = 0
