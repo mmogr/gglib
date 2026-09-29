@@ -102,5 +102,7 @@ describe('ChatPage, conversation list', () => {
 
     await screen.findByRole('button', { name: 'Conversations, 1 running' });
     expect(screen.queryByText('New')).not.toBeInTheDocument();
+    // And once the list has loaded, the deleted one's mark is dropped.
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY)!)).toEqual({}));
   });
 });

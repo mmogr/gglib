@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTransport } from '../../services/transport';
 import type { RunInfo } from '../../types/generated/RunInfo';
 
@@ -13,7 +13,8 @@ export const UNREAD_STORAGE_KEY = 'gglib.chat.unread';
 
 type Marks = Record<string, number>;
 
-function readMarks(): Marks {
+/** The marks as stored now; `null` when storage cannot be read. */
+function readStored(): Marks | null {
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
@@ -21,9 +22,11 @@ function readMarks(): Marks {
       Object.entries(parsed).filter(([id, at]) => /^\d+$/.test(id) && typeof at === 'number'),
     );
   } catch {
-    return {};
+    return null;
   }
 }
+
+const readMarks = (): Marks => readStored() ?? {};
 
 function writeMarks(marks: Marks): void {
   try {
@@ -52,10 +55,47 @@ export interface ConversationActivity {
  */
 export function useConversationActivity(
   activeId: number | null,
+  listed: readonly number[] | null = null,
   pollMs: number = ACTIVITY_POLL_MS,
 ): ConversationActivity {
   const [running, setRunning] = useState<ReadonlySet<number>>(() => new Set());
   const [marks, setMarks] = useState<Marks>(readMarks);
+  const marksRef = useRef(marks);
+
+  /**
+   * Change the marks as another tab may have left them: read what is
+   * stored, change that, and write it back only if it changed. A tab that
+   * wrote from its own copy would restore a mark another tab had cleared.
+   */
+  const change = useCallback((edit: (marks: Marks) => Marks) => {
+    const current = readStored() ?? marksRef.current;
+    const next = edit(current);
+    if (JSON.stringify(next) !== JSON.stringify(current)) writeMarks(next);
+    marksRef.current = next;
+    setMarks(next);
+  }, []);
+
+  // Another tab's change: take it as it stands.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== UNREAD_STORAGE_KEY && event.key !== null) return;
+      const stored = readStored();
+      if (!stored) return;
+      marksRef.current = stored;
+      setMarks(stored);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // A mark for a conversation no longer listed is dropped once the list has
+  // loaded (it is never empty then: the page makes one when there is none).
+  const listedKey = listed && listed.length > 0 ? listed.join(',') : null;
+  useEffect(() => {
+    if (listedKey === null) return;
+    const keep = new Set(listedKey.split(','));
+    change((current) => Object.fromEntries(Object.entries(current).filter(([id]) => keep.has(id))));
+  }, [listedKey, change]);
   const activeRef = useRef(activeId);
   /** When each conversation was last left: a reply ended before that was seen. */
   const leftAt = useRef(new Map<number, number>());
@@ -65,14 +105,12 @@ export function useConversationActivity(
     if (previous !== null && previous !== activeId) leftAt.current.set(previous, Date.now());
     activeRef.current = activeId;
     if (activeId === null) return;
-    setMarks((prev) => {
-      if (!(activeId in prev)) return prev;
-      const next = { ...prev };
+    change((current) => {
+      const next = { ...current };
       delete next[activeId];
-      writeMarks(next);
       return next;
     });
-  }, [activeId]);
+  }, [activeId, change]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,13 +147,7 @@ export function useConversationActivity(
         ended[cid] = at;
       }
       seen = known;
-      if (Object.keys(ended).length > 0) {
-        setMarks((prev) => {
-          const next = { ...prev, ...ended };
-          writeMarks(next);
-          return next;
-        });
-      }
+      if (Object.keys(ended).length > 0) change((current) => ({ ...current, ...ended }));
     };
 
     void poll();
@@ -124,7 +156,7 @@ export function useConversationActivity(
       cancelled = true;
       clearInterval(timer);
     };
-  }, [pollMs]);
+  }, [pollMs, change]);
 
   const unread = new Set(Object.keys(marks).map(Number));
   return { running, unread };

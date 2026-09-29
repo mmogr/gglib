@@ -81,7 +81,7 @@ export default function ChatPage(props: ChatPageProps) {
   // The conversation list beside the notebook, and the rail that folds it
   const listFold = useListFold();
   // Running and New, for the list's rows and the rail's list button
-  const activity = useConversationActivity(activeConversationId);
+  const activity = useConversationActivity(activeConversationId, conversationLoading ? null : conversations.map((c) => c.id));
   const countOf = (ids: ReadonlySet<number>) => conversations.filter((c) => ids.has(c.id)).length;
   const listId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
