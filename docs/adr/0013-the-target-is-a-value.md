@@ -73,6 +73,18 @@ far machine is a `daemon` command pointed at another machine, not a
 pairing command. `proxy stop --remote` is refused with its own sentence,
 because the far proxy is what carries the request.
 
+### Amendment, 2026-09-29: a device's own runs
+
+Over the pairing a device may also start, read and cancel **its own** runs,
+at `/v1/runs`. A run is a turn the daemon finishes for the device, not a
+change to this machine: its text is held in the daemon's memory only,
+bounded and dropped when it expires, when the daemon stops, or when
+`gglib remote forget` retires the device. A device sees only the runs it
+started. This machine's own door, `/api/runs`, lists and cancels every run
+but is refused a device's reply. The proxy takes the device from the tunnel
+edge's marker, and a client that reaches the proxy directly can forge it, so
+that refusal is a courtesy of the API to local clients, not a boundary.
+
 ### 4. A turn remembers the model it asked that machine for
 
 `RemotePairing` gains `default_model`: the model this machine last asked

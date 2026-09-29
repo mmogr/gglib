@@ -104,6 +104,7 @@ impl Default for GlobalDefaults {
             // tunnel to answer for.
             daemon_cancel: _,
             remote: _,
+            runs: _,
             // Set per-caller on the start body, not inherited as a tier-3
             // default: `serve` takes it from the resolved profile selection
             // and the GUI from its own request.
@@ -213,6 +214,7 @@ impl UnifiedServerConfig {
             // Filled in by the daemon when it is the one starting this.
             daemon_cancel: None,
             remote: None,
+            runs: None,
         }
     }
 

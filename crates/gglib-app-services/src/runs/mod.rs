@@ -65,4 +65,4 @@ mod retention_tests;
 #[path = "scope_tests.rs"]
 mod scope_tests;
 #[cfg(test)]
-mod test_executor;
+pub(crate) mod test_executor;

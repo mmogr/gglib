@@ -7,11 +7,14 @@
 //! `/mcp` gate can act on them, and tells the tunnel's owner a request
 //! arrived.
 //!
-//! **Restrictive only.** A local client can write these headers too. What it
-//! gains is a refusal on `/mcp` and a tick on a counter — nothing is granted
-//! on the marker's say-so, and nothing ever should be. The direction that
-//! matters holds: a tunnelled peer cannot make its request look local,
-//! because the edge always overwrites.
+//! **Restrictive, with one exception.** A local client can write these
+//! headers too. On every route but `/v1/runs` what it gains is a refusal on
+//! `/mcp` and a tick on a counter. On `/v1/runs` the device name is the
+//! caller's scope, so a client that reaches the proxy directly and forges
+//! them is taken for that device and can read its runs, which this machine's own
+//! scope is refused; `runs::scope` says why nothing here can tell. The
+//! direction that matters holds: a tunnelled peer cannot make its request
+//! look local, because the edge always overwrites.
 
 use std::sync::Arc;
 

@@ -10,10 +10,8 @@ and cancels every run but cannot read a paired device's reply.
 
 ```text
 runs/
-  mod.rs   — start, list, read and cancel a run
-  sse.rs   — a run's events as server-sent events: `id: <seq>` and
-             `data: <frame>`, then one `event: run` with the run's final
-             state, ending early when the daemon stops
+  mod.rs   — start, list, read and cancel a run; a run's events are framed
+             by `gglib_proxy::runs::sse`, which the proxy's door shares
 ```
 
 <!-- module-docs:end -->

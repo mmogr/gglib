@@ -5,6 +5,7 @@ mod connect;
 mod connect_watch;
 mod device_keys;
 mod device_line;
+mod device_runs;
 mod device_view;
 mod devices;
 mod enrolment;

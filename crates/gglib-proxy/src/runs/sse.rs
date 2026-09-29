@@ -2,9 +2,10 @@
 //!
 //! Each event is `id: <seq>` and `data: <frame>`; the run's end is one
 //! `event: run` whose data is the run's final `RunInfo`, and the stream
-//! closes after it. It also closes when the daemon's shutdown token fires,
+//! closes after it. It also closes when the server's shutdown token fires,
 //! since an open SSE response would otherwise hold the graceful shutdown
-//! open, as `/api/events` explains.
+//! open. Shared by both doors to the runs: the daemon's `/api/runs` and the
+//! proxy's `/v1/runs`, so the two cannot drift.
 
 use std::convert::Infallible;
 
@@ -25,7 +26,7 @@ fn encode(event: RunEvent) -> Event {
 }
 
 /// The SSE response for `events`, ending early on `shutdown`.
-pub(super) fn stream(
+pub fn stream(
     events: RunEvents,
     shutdown: Option<CancellationToken>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {

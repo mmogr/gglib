@@ -229,3 +229,15 @@ async fn a_devices_error_text_stays_with_the_device() {
         );
     }
 }
+
+/// The service graph hands the daemon's registry to its proxy, so the door a
+/// paired device reaches serves these same runs.
+#[tokio::test]
+async fn the_proxy_is_handed_the_daemons_runs() {
+    let (state, _) = test_state_and_app(CorsConfig::AllowAll).await;
+    let phone = RunScope::Device("phone".into());
+    state.runs.create(phone.clone(), "phones", chat()).unwrap();
+
+    let bound = state.proxy.runs().expect("the graph binds the runs");
+    assert_eq!(bound.list(&phone).runs[0].id, "phones");
+}

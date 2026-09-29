@@ -19,7 +19,7 @@ pub use origin::may_change;
 use std::sync::Arc;
 
 use crate::cors::CorsConfig;
-use crate::ports::RemoteGatewayPort;
+use crate::ports::{RemoteGatewayPort, RunsPort};
 
 /// Where the proxy's bearer token came from.
 ///
@@ -110,11 +110,17 @@ pub struct ProxyAccessConfig {
     /// `None` for an embedded server or a test, where nothing is listening
     /// for the answers.
     pub remote: Option<Arc<dyn RemoteGatewayPort>>,
+    /// The daemon's runs, served to paired devices at `/v1/runs`. Not an
+    /// access rule: it rides here, beside [`remote`](Self::remote), because
+    /// this is the one value the supervisor hands the proxy its live ports
+    /// in. `None` answers those routes 503.
+    pub runs: Option<Arc<dyn RunsPort>>,
 }
 
 /// Equality is over the *policy* — CORS, token, source, hosts — and not
-/// over [`remote`](ProxyAccessConfig::remote), which is a live object rather
-/// than a value. Two configs that differ only in whether a tunnel owner is
+/// over [`remote`](ProxyAccessConfig::remote) or
+/// [`runs`](ProxyAccessConfig::runs), which are live objects rather than
+/// values. Two configs that differ only in whether a tunnel owner is
 /// attached describe the same access rules.
 impl PartialEq for ProxyAccessConfig {
     fn eq(&self, other: &Self) -> bool {
@@ -170,6 +176,7 @@ impl ProxyAccessConfig {
             api_key_source: ApiKeySource::default(),
             allowed_hosts,
             remote: None,
+            runs: None,
         }
     }
 
@@ -181,6 +188,14 @@ impl ProxyAccessConfig {
     #[must_use]
     pub fn with_remote(mut self, remote: Option<Arc<dyn RemoteGatewayPort>>) -> Self {
         self.remote = remote;
+        self
+    }
+
+    /// Attach the daemon's runs, for the same reason as
+    /// [`with_remote`](Self::with_remote).
+    #[must_use]
+    pub fn with_runs(mut self, runs: Option<Arc<dyn RunsPort>>) -> Self {
+        self.runs = runs;
         self
     }
 

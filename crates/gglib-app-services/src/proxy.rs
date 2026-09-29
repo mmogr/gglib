@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::{
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, UsageSink,
+    ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort, RunsPort, UsageSink,
 };
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
@@ -59,6 +59,10 @@ pub struct ProxyOps {
     /// reason: every proxy this starts carries it, so the pairing route and
     /// the `/mcp` gate have someone to ask (ADR 0012).
     remote_gateway: std::sync::OnceLock<Arc<dyn RemoteGatewayPort>>,
+    /// The daemon's runs, handed over the same way, so every proxy this
+    /// starts serves a paired device its own runs. Weak because the runs
+    /// reach their replies through this same `ProxyOps`.
+    runs: std::sync::OnceLock<std::sync::Weak<dyn RunsPort>>,
     /// The bearer token the running proxy actually demands, and where it came
     /// from. `None` while stopped.
     ///
@@ -80,6 +84,7 @@ impl ProxyOps {
             runtime: deps.runtime,
             daemon_cancel: std::sync::OnceLock::new(),
             remote_gateway: std::sync::OnceLock::new(),
+            runs: std::sync::OnceLock::new(),
             effective_key: std::sync::RwLock::new(None),
         }
     }
@@ -97,6 +102,17 @@ impl ProxyOps {
     /// before any proxy starts — the service graph does it at assembly.
     pub fn bind_remote_gateway(&self, gateway: Arc<dyn RemoteGatewayPort>) {
         let _ = self.remote_gateway.set(gateway);
+    }
+
+    /// Hand over the daemon's runs. Once, at assembly, like the gateway.
+    pub fn bind_runs(&self, runs: &Arc<dyn RunsPort>) {
+        let _ = self.runs.set(Arc::downgrade(runs));
+    }
+
+    /// The daemon's runs, once bound.
+    #[must_use]
+    pub fn runs(&self) -> Option<Arc<dyn RunsPort>> {
+        self.runs.get().and_then(std::sync::Weak::upgrade)
     }
 
     /// The token the running proxy demands right now, with its source, or
@@ -180,6 +196,9 @@ impl ProxyOps {
         }
         if config.remote.is_none() {
             config.remote = self.remote_gateway.get().cloned();
+        }
+        if config.runs.is_none() {
+            config.runs = self.runs();
         }
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).
@@ -370,76 +389,5 @@ impl ProxyOps {
     }
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ---------------------------------------------------------------
-    // ensure_running — settings-aware port, and BindFailed as Conflict
-    // ---------------------------------------------------------------
-
-    /// `ensure_running` must bind the saved `proxy_port`, not the hardcoded
-    /// `ProxyConfig::default()` port — otherwise a user with a standing
-    /// `gglib serve`/`gglib proxy` on a non-default port would still collide
-    /// on 8080 the moment the GUI starts a model.
-    #[tokio::test]
-    async fn ensure_running_uses_the_saved_proxy_port_setting() {
-        let (core, proxy) = crate::test_support::test_core_and_proxy().await;
-
-        let saved_port = 18080;
-        core.settings()
-            .update(gglib_core::SettingsUpdate {
-                proxy_port: Some(Some(saved_port)),
-                ..Default::default()
-            })
-            .await
-            .expect("settings update should succeed");
-
-        let addr = proxy
-            .ensure_running()
-            .await
-            .expect("ensure_running should succeed on an unused port");
-        assert_eq!(addr.port(), saved_port);
-
-        proxy.stop().await.expect("stop should succeed");
-    }
-
-    /// A foreign process already holding the configured port must surface as
-    /// a `Conflict` naming the port — not `Internal`, and not the confusing
-    /// "reported as already running but status is Stopped" message that
-    /// `ensure_running`'s self-race recovery would produce if `BindFailed`
-    /// were routed through it: this supervisor never started the foreign
-    /// process, so its own status correctly stays `Stopped` throughout.
-    #[tokio::test]
-    async fn ensure_running_reports_a_clear_conflict_when_the_port_is_taken_by_another_process() {
-        let (core, proxy) = crate::test_support::test_core_and_proxy().await;
-
-        // Hold the port ourselves to simulate a foreign gglib process.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("failed to bind a port for the test");
-        let taken_port = listener.local_addr().unwrap().port();
-
-        core.settings()
-            .update(gglib_core::SettingsUpdate {
-                proxy_port: Some(Some(taken_port)),
-                ..Default::default()
-            })
-            .await
-            .expect("settings update should succeed");
-
-        let err = proxy
-            .ensure_running()
-            .await
-            .expect_err("a taken port must not be reported as success");
-
-        let GuiError::Conflict(message) = &err else {
-            panic!("expected Conflict, got {err:?}");
-        };
-        assert!(
-            message.contains(&taken_port.to_string()),
-            "conflict message should name the port: {message}"
-        );
-
-        drop(listener);
-    }
-}
+#[path = "proxy_tests.rs"]
+mod tests;

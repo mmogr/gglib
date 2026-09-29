@@ -142,8 +142,9 @@ impl RemoteOps {
         }))
     }
 
-    /// Stop admitting one device and forget it. `false` when this machine
-    /// held nothing under that name.
+    /// Stop admitting one device and forget it, then cancel and drop the
+    /// runs it started. `false` when this machine held nothing under that
+    /// name.
     ///
     /// Works with the tunnel down, and must: a laptop is lost at a moment
     /// nobody chose, and a `forget` that needed the tunnel up would be one
@@ -171,7 +172,13 @@ impl RemoteOps {
             let live = self.live.lock().await;
             live.full().map(|l| Arc::clone(&l.handle))
         };
-        let gone = forget(self, handle.as_deref(), device).await?;
+        let gone = match forget(self, handle.as_deref(), device).await {
+            Ok(gone) => gone,
+            Err(e) => {
+                self.drop_runs_once_unkeyed(device);
+                return Err(e);
+            }
+        };
 
         // Peeked again, because the slot may have filled while the writes
         // above were waiting on `roster`. An `arm` that had already taken
@@ -189,6 +196,7 @@ impl RemoteOps {
         {
             warn!(device = %device, "a tunnel armed mid-forget had seeded the retired key; removed");
         }
+        self.drop_runs_once_unkeyed(device);
         Ok(gone)
     }
 

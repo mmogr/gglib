@@ -26,13 +26,16 @@ arrives under a new one every time it connects, while ggchat keeps one per
 machine it pairs with from 0.3.1. The device name is the durable identity,
 because this side issued it.
 
-**They are restrictive only.** A local client can write these headers too,
-and what it gains is a refusal — on `/mcp`, or now from [`device_gate()`] — and
-a tick on a counter. Nothing is granted on the marker's say-so and nothing
-ever should be; a forged device name buys nothing, because the key it would
-have to accompany is checked at the edge, not here. The direction that
-matters holds: a tunnelled peer cannot make its request look local, because
-the edge overwrites rather than inherits.
+**They are restrictive, with one exception.** A local client can write these
+headers too, and on every route but `/v1/runs` what it gains is a refusal —
+on `/mcp`, or from [`device_gate()`] — and a tick on a counter. On
+`/v1/runs` the device name is the caller's scope: a client that reaches the
+proxy directly and forges the markers is taken for that device and can
+read its runs, which this machine's scope is refused. The edge reaches the
+proxy as any client does, with the proxy's key, so nothing here can tell the
+two apart; that refusal is a courtesy of the API, not a boundary. The
+direction that matters holds: a tunnelled peer cannot make its request look
+local, because the edge overwrites rather than inherits.
 
 # The device gate
 

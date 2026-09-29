@@ -646,13 +646,16 @@ readability.
 ## What the other machine can reach
 
 Everything the desktop's proxy serves — `/v1/models`,
-`/v1/chat/completions`, the dashboard, `POST /v1/proxy/shutdown` — with one
-exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
+`/v1/chat/completions`, `/v1/runs`, the dashboard, `POST /v1/proxy/shutdown` —
+with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
 server configured on the desktop is remote code execution. The refusal is
 a `403` naming the flag; local clients are unaffected. The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
-remove or forge to its advantage — forging it only denies yourself `/mcp`.
+remove. Forging it denies yourself `/mcp`, and on `/v1/runs`, where a device
+sees only the runs it started, it lets a client that reaches the desktop's proxy
+directly act as that device: this machine not reading a device's reply is a courtesy of
+the API, not a boundary.
 
 A tunnelled request the edge did not admit on a *device* key reaches no
 protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The
