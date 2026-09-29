@@ -73,6 +73,8 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-app-services/ts-bin
 
 [dev-dependencies]
 async-trait = { workspace = true }
+# A test refuses one kind of row with a trigger, to see a reply saved whole or not at all.
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 # Re-declared to turn on `test-support`, which carries
 # `Broadcaster::subscribe_events`. The feature stays off in the normal build.
 gglib-sse = { path = "../gglib-sse", features = ["test-support"] }

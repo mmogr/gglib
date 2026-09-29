@@ -204,3 +204,30 @@ async fn a_reply_that_cannot_be_saved_fails_the_run() {
     assert_eq!(frames, reply().len());
     assert_eq!(end.map(|e| e.status), Some(RunStatus::Failed));
 }
+
+/// A reply one of whose rows the database refuses is not saved at all: no
+/// assistant row is left without the rows that follow it.
+#[tokio::test]
+async fn a_reply_with_a_refused_row_saves_none_of_it() {
+    let (dir, state) = state().await;
+    let id = conversation(&state).await;
+    let url = format!("sqlite:{}", dir.path().join("gglib.db").display());
+    let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+    sqlx::query(
+        "CREATE TRIGGER refuse_tool_rows BEFORE INSERT ON chat_messages \
+         WHEN NEW.role = 'tool' BEGIN SELECT RAISE(ABORT, 'refused'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (p, _) = prepared(finished_reply(), End::Finish);
+
+    start(&state, "a1", Some(id), p).await;
+    settled(&state).await;
+
+    let rows = saved(&state, id).await;
+    let roles: Vec<MessageRole> = rows.iter().map(|r| r.role).collect();
+    assert_eq!(roles, [MessageRole::User], "only the user's message");
+    let error = state.runs.get(&LOCAL, "a1").unwrap().error.unwrap();
+    assert_eq!(error.code, "transcript_not_saved");
+}
