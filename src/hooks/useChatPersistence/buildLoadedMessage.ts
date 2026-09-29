@@ -148,11 +148,18 @@ export function buildLoadedMessage(
     }
   }
 
+  // A reply the daemon saved when its run ended before the answer did
+  // (stopped, failed, or the daemon went away) is marked; it is shown as
+  // assistant-ui shows a cancelled reply, which marks its unfinished tool
+  // calls incomplete.
+  const unfinished = msg.role === 'assistant' && msg.metadata?.incomplete === true;
+
   return {
     id: `db-${msg.id}`,
     role: msg.role as 'user' | 'assistant',
     content,
     createdAt: new Date(msg.created_at),
+    ...(unfinished && { status: { type: 'incomplete' as const, reason: 'cancelled' as const } }),
     metadata: { custom },
   };
 }
