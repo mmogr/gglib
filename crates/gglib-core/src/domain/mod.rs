@@ -27,6 +27,7 @@ pub(crate) mod query;
 pub(crate) mod reasoning_effort;
 pub mod recommendation;
 pub(crate) mod residency;
+pub mod runs;
 pub(crate) mod runtime_capabilities;
 pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;

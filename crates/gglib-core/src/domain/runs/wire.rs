@@ -1,0 +1,98 @@
+//! The run types as they cross the wire.
+//!
+//! An optional field is left out of the body when it has no value, and reads
+//! back as empty whether it arrives absent or as `null`.
+
+use serde::{Deserialize, Serialize};
+
+/// What a run produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub enum RunKind {
+    /// One chat completion.
+    Chat,
+    /// An agent loop, which may call tools between completions.
+    Agent,
+}
+
+/// Where a run is in its life.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub enum RunStatus {
+    /// Accepted, and waiting for a model.
+    Queued,
+    /// Producing events.
+    InProgress,
+    /// Ended with a full reply.
+    Completed,
+    /// Ended on an error, which the run's `error` names.
+    Failed,
+    /// Ended because a client asked it to stop.
+    Cancelled,
+}
+
+impl RunStatus {
+    /// Whether the run has ended, so no further event will be logged.
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        match self {
+            Self::Queued | Self::InProgress => false,
+            Self::Completed | Self::Failed | Self::Cancelled => true,
+        }
+    }
+}
+
+/// Why a run failed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct RunError {
+    /// A stable, machine-readable code, such as `model_unavailable`.
+    pub code: String,
+    /// A sentence for a person to read.
+    pub message: String,
+}
+
+/// One run, as the daemon reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct RunInfo {
+    /// The run's id, minted by the client that started it.
+    pub id: String,
+    /// What the run produces.
+    pub kind: RunKind,
+    /// Where the run is in its life.
+    pub status: RunStatus,
+    /// The model the run was sent to, when one was named.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The paired device that started the run; absent when it came from this
+    /// machine.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// When the run was accepted, in milliseconds since the Unix epoch.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub created_at_ms: u64,
+    /// When the run ended, in milliseconds since the Unix epoch; absent while
+    /// it has not.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at_ms: Option<u64>,
+    /// The number of the last event logged for the run; 0 when none has been.
+    pub last_seq: u32,
+    /// Why the run failed; present only when `status` is `failed`.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<RunError>,
+}
+
+/// A set of runs, as a listing returns them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct RunList {
+    /// The runs, in the order the listing chose.
+    pub runs: Vec<RunInfo>,
+}
