@@ -12,7 +12,7 @@ use serde_json::json;
 
 use super::run::launch;
 use super::run_fixture::{
-    End, LOCAL, conversation, logged, meta, prepared, reply, saved, settled, start, state,
+    End, LOCAL, conversation, drain, logged, meta, prepared, reply, saved, settled, start, state,
 };
 
 #[tokio::test]
@@ -129,4 +129,32 @@ async fn a_panicking_loop_ends_the_run_failed_and_saves_what_arrived() {
     let rows = saved(&state, id).await;
     assert_eq!(rows.first().map(|r| r.role), Some(MessageRole::User));
     assert_eq!(meta(rows.last().unwrap(), INCOMPLETE_KEY), json!(true));
+}
+
+/// A reply that cannot be saved (its conversation was deleted mid-run)
+/// fails the run, visibly, and its events can still be read.
+#[tokio::test]
+async fn a_reply_that_cannot_be_saved_fails_the_run() {
+    let (_dir, state) = state().await;
+    let id = conversation(&state).await;
+    let (p, _) = prepared(reply(), End::Hang);
+    start(&state, "a1", Some(id), p).await;
+    logged(&state, "a1", reply().len()).await;
+    state
+        .core
+        .chat_history()
+        .delete_conversation(id)
+        .await
+        .unwrap();
+
+    state.runs.cancel(&LOCAL, "a1").unwrap();
+    settled(&state).await;
+
+    let info = state.runs.get(&LOCAL, "a1").unwrap();
+    assert_eq!(info.status, RunStatus::Failed);
+    let error = info.error.unwrap();
+    assert_eq!(error.code, "transcript_not_saved");
+    let (frames, end) = drain(state.runs.events(&LOCAL, "a1", 0).unwrap()).await;
+    assert_eq!(frames, reply().len());
+    assert_eq!(end.map(|e| e.status), Some(RunStatus::Failed));
 }

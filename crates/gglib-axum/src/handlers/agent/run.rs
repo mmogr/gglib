@@ -240,26 +240,24 @@ fn run_error(error: &AgentError) -> RunError {
     }
 }
 
-/// Save the reply to `conversation_id` once the run ends, whatever the end.
+/// Save the reply to `conversation_id` once the run ends, whatever the end:
+/// every row or none. A reply that could not be saved fails the run.
 fn save_reply(core: Arc<AppCore>, conversation_id: i64) -> RunEnded {
     Box::new(move |info, frames| {
         Box::pin(async move {
             let finished = info.status == RunStatus::Completed;
             let rows = rows_from_frames(frames.iter().map(|f| &**f), finished, conversation_id);
             let total = rows.len();
-            let mut failed = 0_usize;
-            for row in rows {
-                if core.chat_history().save_message(row).await.is_err() {
-                    failed += 1;
-                }
+            if core.chat_history().save_messages(rows).await.is_err() {
+                tracing::warn!(run = %info.id, conversation = conversation_id, rows = total,
+                    "an agent run's reply was not saved");
+                return Err(RunError {
+                    code: "transcript_not_saved".to_owned(),
+                    message: "The reply could not be saved to its conversation.".to_owned(),
+                });
             }
-            if failed > 0 {
-                tracing::warn!(run = %info.id, conversation = conversation_id, failed, total,
-                    "an agent run's reply was not fully saved");
-            } else {
-                tracing::debug!(run = %info.id, conversation = conversation_id, rows = total,
-                    "an agent run's reply was saved");
-            }
+            tracing::debug!(run = %info.id, conversation = conversation_id, rows = total,
+                "an agent run's reply was saved");
             Ok(())
         })
     })

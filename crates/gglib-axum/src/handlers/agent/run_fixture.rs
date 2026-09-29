@@ -223,3 +223,21 @@ pub(super) async fn logged(state: &AppState, id: &str, events: usize) {
     .await
     .expect("the events are logged within five seconds");
 }
+
+/// How many frames a run's stream gives, and the end it closes with.
+pub(super) async fn drain(mut events: gglib_core::ports::RunEvents) -> (usize, Option<RunInfo>) {
+    use futures_util::StreamExt as _;
+    let mut frames = 0;
+    let read = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(event) = events.next().await {
+            match event {
+                gglib_core::ports::RunEvent::Frame { .. } => frames += 1,
+                gglib_core::ports::RunEvent::End(info) => return Some(info),
+            }
+        }
+        None
+    })
+    .await
+    .expect("the stream ends within five seconds");
+    (frames, read)
+}
