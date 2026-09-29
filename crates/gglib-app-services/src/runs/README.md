@@ -21,7 +21,8 @@ runs/
                     each `data:` payload logged verbatim, `[DONE]` not
   door.rs         — where that proxy is and the key it wants, by the
                     tunnel's rule in `remote/key.rs`; never minted
-  sse.rs          — `data:` payloads out of a byte stream
+  sse.rs          — `data:` payloads out of a byte stream, holding no
+                    more of one event than the log could take
 ```
 
 # Privacy

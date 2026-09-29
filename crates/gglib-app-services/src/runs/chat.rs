@@ -14,6 +14,7 @@ use gglib_core::domain::runs::RunError;
 use gglib_proxy::models::ErrorResponse;
 use serde_json::Value;
 
+use super::cell::LOG_LIMIT;
 use super::door::{ProxyDoor, dial};
 use super::executor::{RunExecutor, RunLog};
 use super::sse::DataFrames;
@@ -34,6 +35,9 @@ fn run_error(code: &str, message: &str) -> RunError {
 pub(crate) struct ChatExecutor {
     door: Arc<dyn ProxyDoor>,
     client: reqwest::Client,
+    /// The most one incomplete event may hold before the run fails: the
+    /// log's own limit, since such an event could never be logged.
+    event_limit: usize,
 }
 
 impl ChatExecutor {
@@ -42,7 +46,20 @@ impl ChatExecutor {
             .connect_timeout(CONNECT_TIMEOUT)
             .build()
             .unwrap_or_else(|_| gglib_proxy::loopback::client());
-        Self { door, client }
+        Self {
+            door,
+            client,
+            event_limit: LOG_LIMIT,
+        }
+    }
+
+    /// The same, with a smaller event limit, so a test need not send 8 MB.
+    #[cfg(test)]
+    pub(crate) fn with_event_limit(door: Arc<dyn ProxyDoor>, event_limit: usize) -> Self {
+        Self {
+            event_limit,
+            ..Self::new(door)
+        }
     }
 }
 
@@ -72,7 +89,7 @@ impl RunExecutor for ChatExecutor {
             return Err(refusal(response).await);
         }
         log.started();
-        read_reply(response, &log).await
+        read_reply(response, &log, self.event_limit).await
     }
 }
 
@@ -101,9 +118,13 @@ async fn refusal(response: reqwest::Response) -> RunError {
 }
 
 /// Log the reply's events until `[DONE]`.
-async fn read_reply(response: reqwest::Response, log: &RunLog) -> Result<(), RunError> {
+async fn read_reply(
+    response: reqwest::Response,
+    log: &RunLog,
+    event_limit: usize,
+) -> Result<(), RunError> {
     let mut stream = response.bytes_stream();
-    let mut frames = DataFrames::default();
+    let mut frames = DataFrames::new(event_limit);
     while let Some(chunk) = stream.next().await {
         let chunk =
             chunk.map_err(|_| run_error("upstream_error", "The reply stream broke off."))?;
@@ -120,6 +141,12 @@ async fn read_reply(response: reqwest::Response, log: &RunLog) -> Result<(), Run
             if let Some(error) = failure {
                 return Err(error);
             }
+        }
+        if frames.overflowed() {
+            return Err(run_error(
+                "log_full",
+                "One event of the reply passed the 8 MB a run may hold.",
+            ));
         }
     }
     Err(run_error(

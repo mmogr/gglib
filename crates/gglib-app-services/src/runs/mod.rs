@@ -42,6 +42,9 @@ mod chat_tests;
 #[path = "door_tests.rs"]
 mod door_tests;
 #[cfg(test)]
+#[path = "event_limit_tests.rs"]
+mod event_limit_tests;
+#[cfg(test)]
 mod fake_proxy;
 #[cfg(test)]
 #[path = "limits_tests.rs"]
