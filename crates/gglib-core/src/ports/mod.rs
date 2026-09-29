@@ -20,6 +20,7 @@ pub mod model_runtime;
 pub(crate) mod process_runner;
 pub(crate) mod remote_gateway;
 pub(crate) mod retry_observer;
+pub(crate) mod runs;
 pub(crate) mod server_health;
 pub(crate) mod server_log_sink;
 pub(crate) mod settings_repository;
@@ -65,6 +66,7 @@ pub use model_runtime::{
 pub use process_runner::{JinjaMode, ProcessHandle, ServerConfig};
 pub use remote_gateway::RemoteGatewayPort;
 pub use retry_observer::RetryObserver;
+pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;
 pub use settings_repository::{SettingsChange, SettingsRepository};
