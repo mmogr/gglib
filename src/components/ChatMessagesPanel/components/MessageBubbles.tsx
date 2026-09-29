@@ -5,7 +5,7 @@ import {
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
-import { Bot, Copy, Pencil, Trash2, User as UserIcon } from 'lucide-react';
+import { Bot, Copy, Pencil, RefreshCw, Trash2, User as UserIcon } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import ThinkingBlock from './ThinkingBlock';
@@ -107,6 +107,9 @@ export const AssistantMessageBubble: React.FC = () => {
         <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
           <Icon icon={Copy} size={14} />
         </ActionBarPrimitive.Copy>
+        <ActionBarPrimitive.Reload className={ACTION_BTN} title="Regenerate reply" aria-label="Regenerate reply">
+          <Icon icon={RefreshCw} size={14} />
+        </ActionBarPrimitive.Reload>
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
