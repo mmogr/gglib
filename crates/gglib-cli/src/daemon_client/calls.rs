@@ -60,13 +60,13 @@ impl DaemonHandle {
         if status.is_success() {
             return Ok(response);
         }
+        let body = response.text().await.unwrap_or_default();
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(anyhow!(
                 "daemon answered 401: {}",
-                auth::unauthorized_hint()
+                auth::unauthorized(&body)
             ));
         }
-        let body = response.text().await.unwrap_or_default();
         // The daemon's error envelope is {"error": "..."} — surface just the
         // message when it parses, the raw body otherwise.
         let message = serde_json::from_str::<serde_json::Value>(&body)
@@ -159,6 +159,13 @@ impl DaemonHandle {
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
+    /// The request that asks the daemon to judge tune run `run_id` against the
+    /// apply gate, carrying this handle's credential. A builder, because the
+    /// caller reads a refusal as a verdict rather than an error.
+    pub(crate) fn tune_apply(&self, run_id: i64) -> reqwest::RequestBuilder {
+        self.post(&paths::benchmark_tune_apply_path(run_id))
+    }
+
     /// Ask the daemon to shut down. `Ok(true)` when a shutdown was accepted,
     /// `Ok(false)` when the server said it is not running as a daemon.
     ///
@@ -174,11 +181,33 @@ impl DaemonHandle {
             .send()
             .await?;
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            let body = response.text().await.unwrap_or_default();
             return Err(anyhow!(
                 "daemon answered 401: {}",
-                auth::unauthorized_hint()
+                auth::unauthorized(&body)
             ));
         }
         Ok(response.status() == reqwest::StatusCode::ACCEPTED)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every call carries the credential, the one that posts a tune's verdict
+    /// included: it was the one raw post left, and 401'd on every daemon.
+    #[test]
+    fn the_tune_apply_request_carries_the_credential() {
+        let handle = DaemonHandle {
+            client: gglib_proxy::loopback::client(),
+            api_key: Some("the-token".to_owned()),
+        };
+        let request = handle.tune_apply(7).build().expect("a request");
+
+        assert_eq!(request.method(), reqwest::Method::POST);
+        assert_eq!(request.url().path(), paths::benchmark_tune_apply_path(7));
+        let auth = request.headers().get(reqwest::header::AUTHORIZATION);
+        assert_eq!(auth.and_then(|v| v.to_str().ok()), Some("Bearer the-token"));
     }
 }

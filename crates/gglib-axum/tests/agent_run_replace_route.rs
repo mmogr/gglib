@@ -6,7 +6,7 @@ mod common;
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Method, Request, StatusCode};
+use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::run_path;
 use gglib_core::domain::chat::{MessageRole, NewMessage};
@@ -15,9 +15,10 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
+use common::origin::authed;
 
 async fn put(app: &Router, id: &str, body: Value) -> (StatusCode, Value) {
-    let request = Request::builder()
+    let request = authed()
         .method(Method::PUT)
         .uri(format!("{}?kind=agent", run_path(id)))
         .header("Host", "127.0.0.1:9887")

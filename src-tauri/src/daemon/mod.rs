@@ -2,10 +2,12 @@
 
 mod launch;
 mod snapshot;
+mod token;
 mod watch;
 
 use launch::spawn_external_daemon;
 pub(crate) use snapshot::DaemonSnapshot;
+pub(crate) use token::daemon_token;
 pub(crate) use watch::{Refresh, spawn as watch};
 
 use std::time::Duration;
@@ -192,8 +194,7 @@ impl Daemon {
     /// GET a JSON value from the daemon.
     pub(crate) async fn get_json(&self, path: &str) -> Result<serde_json::Value, String> {
         let response = self
-            .client
-            .get(format!("{}{path}", base_url()))
+            .request(reqwest::Method::GET, path)
             .timeout(Duration::from_secs(10))
             .send()
             .await
@@ -208,8 +209,7 @@ impl Daemon {
         body: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let response = self
-            .client
-            .post(format!("{}{path}", base_url()))
+            .request(reqwest::Method::POST, path)
             .json(body)
             .timeout(Duration::from_secs(30))
             .send()
@@ -241,8 +241,7 @@ impl Daemon {
     /// when the caller needs it finished.
     pub(crate) async fn request_shutdown(&self) {
         let _ = self
-            .client
-            .post(format!("{}/api/daemon/shutdown", base_url()))
+            .request(reqwest::Method::POST, "/api/daemon/shutdown")
             .timeout(Duration::from_secs(5))
             .send()
             .await;

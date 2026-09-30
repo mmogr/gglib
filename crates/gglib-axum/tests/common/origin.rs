@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use axum::http::request::Builder;
 use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use gglib_axum::{CorsConfig, DaemonAccess, DaemonOptions};
 
-use super::harness::test_state;
+use super::harness::{test_state, test_token, with_test_token};
 
 /// The daemon's `Host` on its default loopback bind.
 pub(crate) const HOST: &str = "127.0.0.1:9887";
@@ -22,16 +23,30 @@ pub(crate) const JSON: (&str, &str) = ("content-type", "application/json");
 /// What a form post sends, which no preflight is asked for.
 pub(crate) const FORM: (&str, &str) = ("content-type", "text/plain");
 
+/// `Authorization: Bearer <test_token()>`, the value a client holding the
+/// daemon token sends.
+pub(crate) fn bearer_token() -> String {
+    format!("Bearer {}", test_token().as_str())
+}
+
+/// `Request::builder()` for a client that holds the daemon token, as the CLI,
+/// the desktop app and the daemon's own page do.
+pub(crate) fn authed() -> Builder {
+    Request::builder().header("authorization", bearer_token())
+}
+
 /// The CORS config `gglib daemon run` and the desktop app start the daemon
 /// with.
 pub(crate) fn shipped_cors() -> CorsConfig {
     DaemonOptions::default().cors
 }
 
-/// The router a shipped daemon builds, over a context of its own.
+/// The router a shipped daemon builds, over a context of its own, with
+/// `access` asking [`test_token`] as a shipped daemon asks the one it minted.
 pub(crate) async fn shipped(cors: &CorsConfig, access: DaemonAccess) -> Router {
     let state = test_state(cors.clone()).await;
-    gglib_axum::create_embedded_spa_router(state, cors, Arc::new(access))
+    let access = Arc::new(with_test_token(access));
+    gglib_axum::create_embedded_spa_router(state, cors, access)
 }
 
 /// What came back, read whole.
@@ -48,7 +63,9 @@ impl Answer {
     }
 }
 
-/// Send one request to `host` with `headers`, and read the answer.
+/// Send one request to `host` with `headers`, and read the answer. It carries
+/// the daemon token, as the daemon's own page does, so what refuses it is
+/// what the test is about.
 pub(crate) async fn send(
     app: &Router,
     method: Method,
@@ -56,10 +73,7 @@ pub(crate) async fn send(
     host: &str,
     headers: &[(&str, &str)],
 ) -> Answer {
-    let mut request = Request::builder()
-        .method(method)
-        .uri(path)
-        .header("host", host);
+    let mut request = authed().method(method).uri(path).header("host", host);
     for (name, value) in headers {
         request = request.header(*name, *value);
     }

@@ -162,6 +162,15 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], RUNS_PATH),
 ];
 
+/// The `type` of the daemon's 401 when it wanted its token, so a client can
+/// tell it from the API key's `INVALID_API_KEY` and show
+/// [`DAEMON_TOKEN_REQUIRED_MESSAGE`] rather than ask for a key.
+pub const DAEMON_TOKEN_REQUIRED_TYPE: &str = "DAEMON_TOKEN_REQUIRED";
+
+/// The `error` of that 401: what it wants and how to get it.
+pub const DAEMON_TOKEN_REQUIRED_MESSAGE: &str = "this route needs the daemon's token: run the \
+     command from `gglib` on this machine, or open the page from the link `gglib web` prints";
+
 /// The verbs [`benchmark_tune_apply_path`] is called with.
 pub const BENCHMARK_TUNE_APPLY_METHODS: &[&str] = &["POST"];
 

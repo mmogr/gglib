@@ -14,10 +14,11 @@ use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::access::{DaemonAccess, bearer_guard, host_guard, origin_guard};
+use crate::access::{DaemonAccess, host_guard, origin_guard};
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
+use crate::trust::{ApiCredentials, bearer_guard};
 use gglib_core::CorsConfig;
 use gglib_core::services::SettingsCache;
 
@@ -309,7 +310,7 @@ fn config_routes() -> Router<AppState> {
 /// The router core shared by [`create_router`], [`create_spa_router`] and
 /// [`crate::create_embedded_spa_router`]: `/health` plus `/api/*`, with CORS,
 /// the origin guard and the bearer guard scoped to `/api/*`. The bearer guard
-/// is always installed; it asks a token only when the daemon bound with one.
+/// asks the daemon token, or the API key when the daemon bound with one.
 ///
 /// The Host guard is *not* applied here — each public constructor layers it
 /// last, after any fallback service, so it wraps everything the router will
@@ -318,17 +319,20 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
     let cors = build_cors_layer(cfg);
 
     let settings = Arc::new(SettingsCache::new(state.core.settings().repo()));
-    let policy = access.bearer_policy(settings);
-    // Always installed: a daemon that bound *with* a key follows a later
-    // rotation of it, and one that bound without demands nothing and keeps
-    // demanding nothing — `DaemonAccess::bearer_policy` says why that asymmetry
-    // is the point. /health stays outside the group: probes must not need
+    let credentials = ApiCredentials {
+        policy: access.bearer_policy(settings),
+        token: access.daemon_token().cloned(),
+    };
+    // A daemon that bound *with* a key follows a later rotation of it, and one
+    // that bound without takes only the token and keeps taking only the token
+    // — `DaemonAccess::bearer_policy` says why that asymmetry is the point.
+    // /health stays outside the group: probes must not need
     // credentials. The origin guard reads the same config CORS does. CORS is
     // layered outside both guards so preflight OPTIONS requests, which never
     // carry Authorization, are answered by the CORS layer instead of a 401.
     let api = api_routes()
         .with_state(state)
-        .layer(middleware::from_fn_with_state(policy, bearer_guard))
+        .layer(middleware::from_fn_with_state(credentials, bearer_guard))
         .layer(middleware::from_fn_with_state(
             Arc::new(cfg.clone()),
             origin_guard,

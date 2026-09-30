@@ -1,6 +1,6 @@
 # <member> <lints allowed> <of those, without a reason>
 # Written by scripts/check_lint_inheritance.sh --update.
-crates/gglib-core 76 75
+crates/gglib-core 77 75
 crates/gglib-db 9 0
 crates/gglib-download 10 10
 crates/gglib-gguf 8 8

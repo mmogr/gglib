@@ -33,6 +33,20 @@ export interface SSEStreamOptions {
 }
 
 /**
+ * The stream was refused with an HTTP status, which a caller may act on: a
+ * 401 is a credential gone stale, not a network that dropped.
+ */
+export class SSEHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, statusText: string) {
+    super(`SSE request failed: ${status} ${statusText}`);
+    this.name = 'SSEHttpError';
+    this.status = status;
+  }
+}
+
+/**
  * Creates an async iterable SSE stream from a URL.
  *
  * Parses Server-Sent Events according to the spec:
@@ -71,7 +85,7 @@ export async function* createSSEStream(
   });
 
   if (!response.ok) {
-    throw new Error(`SSE request failed: ${response.status} ${response.statusText}`);
+    throw new SSEHttpError(response.status, response.statusText);
   }
 
   if (!response.body) {

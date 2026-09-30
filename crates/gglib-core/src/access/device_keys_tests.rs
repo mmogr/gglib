@@ -4,6 +4,10 @@
 //! the 300-line budget, the split `bearer_tests.rs` already makes.
 
 use super::*;
+#[cfg(unix)]
+use crate::access::private_file::create_private;
+#[cfg(unix)]
+use std::io::Write;
 
 fn temp() -> std::path::PathBuf {
     let mut p = std::env::temp_dir();

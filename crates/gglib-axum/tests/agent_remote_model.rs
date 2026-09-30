@@ -18,6 +18,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use common::harness::test_app;
+use common::origin::authed;
 use gglib_core::CorsConfig;
 
 async fn body_json(response: axum::response::Response) -> serde_json::Value {
@@ -26,7 +27,7 @@ async fn body_json(response: axum::response::Response) -> serde_json::Value {
 }
 
 fn chat(body: &'static str) -> Request<Body> {
-    Request::builder()
+    authed()
         .method("POST")
         .uri("/api/agent/chat")
         .header("Host", "127.0.0.1:9887")

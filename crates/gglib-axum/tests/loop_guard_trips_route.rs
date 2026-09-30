@@ -5,7 +5,7 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::StatusCode;
 use gglib_core::contracts::http::daemon::PROXY_LOOP_GUARD_TRIPS_PATH;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::LoopGuardTripEvent;
@@ -16,6 +16,7 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
+use common::origin::authed;
 
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
@@ -27,7 +28,7 @@ fn now_secs() -> u64 {
 async fn get(app: axum::Router, uri: &str) -> (StatusCode, Value) {
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri(uri)
                 .body(Body::empty())

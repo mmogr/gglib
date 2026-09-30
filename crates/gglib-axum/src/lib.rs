@@ -52,6 +52,7 @@ pub(crate) mod routes_remote;
 pub(crate) mod routes_runs;
 pub(crate) mod sse;
 pub(crate) mod state;
+pub(crate) mod trust;
 pub(crate) mod ui;
 
 // Re-export primary types

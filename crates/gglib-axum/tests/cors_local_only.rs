@@ -6,10 +6,10 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::Request;
 use tower::ServiceExt;
 
 use common::harness::test_app;
+use common::origin::authed;
 use gglib_axum::ServerConfig;
 use gglib_core::CorsConfig;
 
@@ -19,7 +19,7 @@ async fn local_only_rejects_remote_origin() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .method("OPTIONS")
                 .uri("/api/models")
                 .header("Host", "127.0.0.1:9887")
@@ -44,7 +44,7 @@ async fn local_only_allows_localhost_origin() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .method("OPTIONS")
                 .uri("/api/models")
                 .header("Host", "127.0.0.1:9887")
@@ -71,7 +71,7 @@ async fn local_only_allows_127_0_0_1_origin() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .method("OPTIONS")
                 .uri("/api/models")
                 .header("Host", "127.0.0.1:9887")
@@ -93,7 +93,7 @@ async fn local_only_allows_ipv6_localhost() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .method("OPTIONS")
                 .uri("/api/models")
                 .header("Host", "127.0.0.1:9887")
@@ -133,7 +133,7 @@ async fn local_only_allows_tauri_localhost_origin() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .method("OPTIONS")
                 .uri("/api/models")
                 .header("Host", "127.0.0.1:9887")

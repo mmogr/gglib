@@ -33,8 +33,9 @@ gglib model capabilities 3
 # Force strict-turn coalescing on
 gglib model capabilities 3 --set requires-strict-turns
 
-# Or via the REST API
+# Or via the REST API, with the daemon's token from <data root>/data/daemon_token
 curl -X PATCH http://localhost:9887/api/models/3/capabilities \
+     -H "Authorization: Bearer $(cat "$DATA_ROOT/data/daemon_token")" \
      -H 'Content-Type: application/json' \
      -d '{"requiresStrictTurns": true}'
 ```

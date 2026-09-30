@@ -85,6 +85,8 @@ tarpaulin-report.html
 boundary-status.json
 .vscode/settings.json
 logs/
+# A tool's log written at the root, such as a gate script run from here.
+/*.log
 
 # Local AI/assistant tooling — never tracked.
 # These directories are scratch space for coding assistants (session state,

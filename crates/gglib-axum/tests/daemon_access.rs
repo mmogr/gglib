@@ -8,12 +8,24 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use common::harness::{test_app_with_access, test_state_and_app, test_state_and_app_with_access};
+use common::harness::{
+    test_app_with_access, test_state_and_app, test_state_and_app_with_access, with_test_token,
+};
+use common::origin::bearer_token;
 use gglib_axum::DaemonAccess;
 use gglib_core::{CorsConfig, SettingsUpdate};
 
 async fn build_app(access: DaemonAccess) -> axum::Router {
-    test_app_with_access(CorsConfig::AllowAll, access).await
+    test_app_with_access(CorsConfig::AllowAll, with_test_token(access)).await
+}
+
+/// [`get`], carrying `Authorization: <value>`.
+fn get_with(uri: &str, value: &str) -> Request<Body> {
+    let mut request = get(uri, "127.0.0.1:9887");
+    request
+        .headers_mut()
+        .insert("authorization", value.parse().unwrap());
+    request
 }
 
 fn get(uri: &str, host: &str) -> Request<Body> {
@@ -61,10 +73,10 @@ async fn missing_host_is_rejected() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-/// The unchanged default: loopback clients keep working with no token and
-/// no configuration.
+/// Loopback asks no API key, and every loopback name reaches `/health`; `/api`
+/// takes the daemon token and nothing less.
 #[tokio::test]
-async fn loopback_stays_open_by_default() {
+async fn loopback_asks_the_token_and_no_key() {
     let app = build_app(DaemonAccess::loopback()).await;
 
     for host in ["127.0.0.1:9887", "localhost:9887", "[::1]:9887"] {
@@ -73,25 +85,33 @@ async fn loopback_stays_open_by_default() {
     }
 
     let response = app
+        .clone()
         .oneshot(get("/api/servers", "127.0.0.1:9887"))
         .await
         .unwrap();
     assert_eq!(
         response.status(),
-        StatusCode::OK,
-        "/api must not require a token when none is configured"
+        StatusCode::UNAUTHORIZED,
+        "no token → 401"
     );
+
+    let response = app
+        .oneshot(get_with("/api/servers", &bearer_token()))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK, "the token → 200");
 }
 
 /// The regression this file exists to prevent from returning.
 ///
 /// `gglib remote enable` mints and persists `proxy_api_key` so the *proxy* can
 /// enforce it at the tunnel edge. The management API reads no such thing: it
-/// bound on loopback with no token, and `DaemonAccess::new`'s contract is that
-/// no token means unauthenticated. Before the fix the router rebuilt the policy
+/// bound on loopback with no key, and `DaemonAccess::new`'s contract is that
+/// no key means the token alone. Before the fix the router rebuilt the policy
 /// as `tracking(None, settings)`, which re-read `proxy_api_key` on every
 /// request — so enabling remote access 401'd the CLI and the desktop app out of
-/// their own daemon, including out of `gglib remote disable`.
+/// their own daemon, including out of `gglib remote disable`. Nor does the
+/// proxy's key open the daemon.
 ///
 /// The write happens before the first request on purpose: `SettingsCache` is
 /// lazily populated, so its very first `get()` already sees the key. No sleep,
@@ -111,7 +131,8 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
         .expect("store a proxy api key");
 
     let response = app
-        .oneshot(get("/api/servers", "127.0.0.1:9887"))
+        .clone()
+        .oneshot(get_with("/api/servers", &bearer_token()))
         .await
         .unwrap();
     assert_eq!(
@@ -120,10 +141,15 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
         "a proxy_api_key set after bind must not close a management API that \
          bound without one — that is the `gglib remote enable` lockout"
     );
+    let response = app
+        .oneshot(get_with("/api/servers", "Bearer minted-by-remote-enable"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-/// The other half, so the fix above cannot be mistaken for "loopback is always
-/// open" or "the daemon ignores settings".
+/// The other half, so the fix above cannot be mistaken for "the daemon
+/// ignores settings".
 ///
 /// A daemon that bound *with* a key must keep following the stored value, which
 /// is what makes rotation through `gglib config settings set` reach a running
@@ -137,7 +163,11 @@ async fn a_stored_proxy_key_does_not_close_the_loopback_api() {
 async fn a_bound_key_still_follows_a_rotation() {
     let (state, app) = test_state_and_app_with_access(
         CorsConfig::AllowAll,
-        DaemonAccess::new(Some("bound-key".into()), "0.0.0.0", Vec::new()),
+        with_test_token(DaemonAccess::new(
+            Some("bound-key".into()),
+            "0.0.0.0",
+            Vec::new(),
+        )),
     )
     .await;
 
@@ -151,10 +181,7 @@ async fn a_bound_key_still_follows_a_rotation() {
         .await
         .expect("rotate the stored key");
 
-    let mut rotated = get("/api/servers", "127.0.0.1:9887");
-    rotated
-        .headers_mut()
-        .insert("authorization", "Bearer rotated-key".parse().unwrap());
+    let rotated = get_with("/api/servers", "Bearer rotated-key");
     let response = app.clone().oneshot(rotated).await.unwrap();
     assert_eq!(
         response.status(),
@@ -162,10 +189,7 @@ async fn a_bound_key_still_follows_a_rotation() {
         "a rotation must reach a listener that bound with a key"
     );
 
-    let mut stale = get("/api/servers", "127.0.0.1:9887");
-    stale
-        .headers_mut()
-        .insert("authorization", "Bearer bound-key".parse().unwrap());
+    let stale = get_with("/api/servers", "Bearer bound-key");
     let response = app.oneshot(stale).await.unwrap();
     assert_eq!(
         response.status(),
@@ -196,10 +220,7 @@ async fn configured_token_gates_api_but_not_health() {
         "no token → 401"
     );
 
-    let mut wrong = get("/api/servers", "127.0.0.1:9887");
-    wrong
-        .headers_mut()
-        .insert("authorization", "Bearer wrong".parse().unwrap());
+    let wrong = get_with("/api/servers", "Bearer wrong");
     let response = app.clone().oneshot(wrong).await.unwrap();
     assert_eq!(
         response.status(),
@@ -207,10 +228,7 @@ async fn configured_token_gates_api_but_not_health() {
         "wrong token → 401"
     );
 
-    let mut right = get("/api/servers", "127.0.0.1:9887");
-    right
-        .headers_mut()
-        .insert("authorization", "Bearer s3cret".parse().unwrap());
+    let right = get_with("/api/servers", "Bearer s3cret");
     let response = app.clone().oneshot(right).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK, "right token → 200");
 
@@ -231,10 +249,7 @@ async fn the_daemon_matches_the_scheme_case_insensitively() {
     .await;
 
     for header in ["bearer s3cret", "BEARER s3cret", "Bearer  s3cret"] {
-        let mut request = get("/api/servers", "127.0.0.1:9887");
-        request
-            .headers_mut()
-            .insert("authorization", header.parse().unwrap());
+        let request = get_with("/api/servers", header);
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(
             response.status(),
@@ -246,10 +261,7 @@ async fn the_daemon_matches_the_scheme_case_insensitively() {
     // And the widening stops at the scheme: a different one, and a credential
     // in the wrong case, are still refused.
     for header in ["Basic s3cret", "Bearer S3CRET", "Bearer ", "Bearer"] {
-        let mut request = get("/api/servers", "127.0.0.1:9887");
-        request
-            .headers_mut()
-            .insert("authorization", header.parse().unwrap());
+        let request = get_with("/api/servers", header);
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(
             response.status(),

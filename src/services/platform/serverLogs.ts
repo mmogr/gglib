@@ -16,6 +16,8 @@
 
 import { appLogger } from './index';
 import { getApiBaseUrl, getAuthHeaders } from '../transport/api/client';
+import { createSSEStream } from '../../utils/sse';
+import { renewAfterRefusal } from '../transport/api/renew';
 
 export interface ServerLogEntry {
   timestamp: number;
@@ -64,31 +66,47 @@ export async function getServerLogs(port: number): Promise<ServerLogEntry[]> {
   return [];
 }
 
+/** How long to wait before reopening a log stream that dropped. */
+const RECONNECT_DELAY_MS = 2000;
+
 /**
  * Listen for real-time server log events.
  * Returns an unsubscribe function.
+ *
+ * A `fetch` stream rather than `EventSource`, which cannot send the
+ * `Authorization` header every `/api` route asks for. It reopens a stream
+ * that drops, as `EventSource` did, until unsubscribed.
  */
 export async function listenToServerLogs(
   port: number,
   callback: (entry: ServerLogEntry) => void
 ): Promise<() => void> {
-  const baseUrl = getApiBaseUrl();
-  const eventSource = new EventSource(`${baseUrl}/api/servers/${port}/logs/stream`);
-  
-  eventSource.onmessage = (event) => {
-    try {
-      if (!event.data || event.data.trim() === '') return;
-      if (event.data === 'ping') return;
-      const logEntry = JSON.parse(event.data) as ServerLogEntry;
-      callback(logEntry);
-    } catch (e) {
-      appLogger.error('service.server', 'Failed to parse log event', { error: e, data: event.data });
+  const url = `${getApiBaseUrl()}/api/servers/${port}/logs/stream`;
+  const controller = new AbortController();
+
+  void (async () => {
+    while (!controller.signal.aborted) {
+      try {
+        for await (const message of createSSEStream(url, {
+          headers: getAuthHeaders(),
+          signal: controller.signal,
+        })) {
+          if (!message.data || message.data.trim() === '' || message.data === 'ping') continue;
+          try {
+            callback(JSON.parse(message.data) as ServerLogEntry);
+          } catch (e) {
+            appLogger.error('service.server', 'Failed to parse log event', { error: e, data: message.data });
+          }
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        appLogger.error('service.server', 'SSE Error', { error: err, port });
+        await renewAfterRefusal(err);
+      }
+      if (controller.signal.aborted) return;
+      await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
     }
-  };
-  
-  eventSource.onerror = (err) => {
-    appLogger.error('service.server', 'SSE Error', { error: err, port });
-  };
-  
-  return () => eventSource.close();
+  })();
+
+  return () => controller.abort();
 }

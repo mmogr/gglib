@@ -347,14 +347,8 @@ async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
 
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    let url = format!(
-        "{}{}",
-        daemon_client::base_url(),
-        daemon_client::paths::benchmark_tune_apply_path(run_id)
-    );
     let outcome: ApplyOutcome = handle
-        .client
-        .post(&url)
+        .tune_apply(run_id)
         .send()
         .await
         .context("apply request failed")?

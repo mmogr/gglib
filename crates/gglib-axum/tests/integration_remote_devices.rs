@@ -19,6 +19,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use common::harness::test_app;
+use common::origin::bearer_token;
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon;
 
@@ -27,13 +28,15 @@ async fn body_json(response: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
-/// Every request carries the host guard's header, or it is refused before a
-/// handler is reached and the test proves nothing about the route.
+/// Every request carries the host guard's header and the daemon token, or it
+/// is refused before a handler is reached and the test proves nothing about
+/// the route.
 fn request(method: &str, path: &str) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(path)
         .header("Host", "127.0.0.1:9887")
+        .header("Authorization", bearer_token())
         .body(Body::empty())
         .unwrap()
 }

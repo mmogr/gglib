@@ -22,7 +22,7 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
 
 1. **Backend (Rust)**: The Tauri backend in `src-tauri/src/main.rs` owns no runtime of its own. `src/daemon/` connects to the gglib daemon, launching `gglib daemon run` detached when nothing answers, and hosting the daemon composition in-process only as a bundle-only fallback. A daemon that will not start is a state, not a crash: the app comes up disconnected, and the tray says so.
 
-2. **The daemon's API**: Everything backend-shaped goes to `127.0.0.1:{DAEMON_PORT}` — a fixed loopback port, deliberately a constant rather than a setting, so every client can find the one daemon without configuration. Loopback traffic is unauthenticated; the stored API key is required only for a LAN-shared daemon (`gglib daemon run --share-lan`).
+2. **The daemon's API**: Everything backend-shaped goes to `127.0.0.1:{DAEMON_PORT}` — a fixed loopback port, deliberately a constant rather than a setting, so every client can find the one daemon without configuration. Every request carries the daemon's token, which the daemon mints in a `0600` file at every start and the app reads for each request; a LAN-shared daemon (`gglib daemon run --share-lan`) also takes the stored API key.
 
 3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the daemon:
    - `/api/models` - List and manage models

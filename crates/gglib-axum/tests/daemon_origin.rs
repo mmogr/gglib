@@ -16,7 +16,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderValue, Method, Request, StatusCode};
 
-use common::harness::test_state;
+use common::harness::{test_state, with_test_token};
 use common::origin::{
     Answer, ELSEWHERE, FORM, HOST, JSON, send, send_request, shipped, shipped_cors,
 };
@@ -132,7 +132,7 @@ async fn a_rebound_page_is_refused_unless_its_name_is_one_the_daemon_answers_to(
     let state = test_state(cors.clone()).await;
     let spa_dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-dashboard");
     let routers = |access: DaemonAccess| {
-        let access = Arc::new(access);
+        let access = Arc::new(with_test_token(access));
         let state = || Arc::clone(&state);
         [
             gglib_axum::create_router(state(), &cors, Arc::clone(&access)),

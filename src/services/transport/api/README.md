@@ -26,6 +26,8 @@ Axum backend (HTTP response) → typed result
 | File | Role |
 |------|------|
 | `client.ts` | HTTP client with auth injection, retry, and error normalization |
+| `renew.ts` | A stream refused with a 401 renews the session's credential before it reconnects |
+| `daemonToken.ts` | The daemon's token from the link `gglib web` prints: stripped from the address bar, kept until the daemon next starts |
 | `chat.ts` | Conversations and messages |
 | `servers.ts` | llama.cpp server lifecycle and proxy |
 | `downloads.ts` | Download queue management |
