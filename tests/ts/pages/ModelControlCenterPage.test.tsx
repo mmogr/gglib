@@ -24,6 +24,10 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ReactNode } from 'react';
 
+// The library the page loads. Empty for the remote cases; one model for the
+// case about a model already running here.
+const library = vi.hoisted(() => ({ models: [] as unknown[] }));
+
 vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>(
     '../../../src/services/transport',
@@ -31,7 +35,8 @@ vi.mock('../../../src/services/transport', async () => {
   return {
     ...actual,
     getTransport: () => ({
-      listModels: vi.fn(async () => []),
+      listModels: vi.fn(async () => library.models),
+      getModelDetail: vi.fn(async () => null),
       listTags: vi.fn(async () => []),
       getModelFilterOptions: vi.fn(async () => ({
         architectures: [],
@@ -46,7 +51,11 @@ vi.mock('../../../src/services/transport', async () => {
   };
 });
 vi.mock('../../../src/services/transport/api/client', () => ({
-  get: vi.fn(async () => []),
+  // The library list the page draws is the filtered fetch, not `listModels`;
+  // a model's sampling explanation is "none", which the inspector can draw.
+  get: vi.fn(async (path: string) =>
+    path.startsWith('/api/models?') ? library.models : path.startsWith('/api/models/') ? null : [],
+  ),
   getAuthenticatedFetchConfig: vi.fn(async () => ({ baseUrl: '', headers: {} })),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({
@@ -77,6 +86,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
 
 import ModelControlCenterPage from '../../../src/pages/ModelControlCenterPage';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
+import { guiModel } from '../fixtures/model';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import {
@@ -128,6 +138,7 @@ async function askForRemoteChat(modelName: string) {
 
 describe('ModelControlCenterPage', () => {
   beforeEach(() => {
+    library.models = [];
     resetRemoteState();
     stopServer.mockClear();
     loadServers.mockClear();
@@ -158,5 +169,24 @@ describe('ModelControlCenterPage', () => {
 
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
     expect(stopServer).not.toHaveBeenCalled();
+  });
+
+  it("an already-running model's Open chat opens the chat page", async () => {
+    // Served before the page loaded — by the CLI, the tray, another window —
+    // so no serve here ever fired the handler that opens chat by itself.
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true })];
+    const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }];
+    render(
+      <ModelControlCenterPage servers={running} loadServers={loadServers} stopServer={stopServer} />,
+      { wrapper },
+    );
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
+    await user.click(await screen.findByRole('button', { name: /open chat/i }));
+
+    const chat = await screen.findByTestId('chat-page');
+    expect(chat).toHaveTextContent('Chatting with qwen3-8b');
+    expect(chat).toHaveAttribute('data-remote', 'no');
   });
 });

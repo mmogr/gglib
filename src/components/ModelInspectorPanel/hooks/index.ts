@@ -22,3 +22,6 @@ export type { RetagModelState } from './useRetagModel';
 
 export { useInspectorModals } from './useInspectorModals';
 export type { UseInspectorModalsResult } from './useInspectorModals';
+
+export { useHfDownload } from './useHfDownload';
+export type { HfDownloadState } from './useHfDownload';

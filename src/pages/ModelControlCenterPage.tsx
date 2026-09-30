@@ -295,6 +295,7 @@ export default function ModelControlCenterPage({
               selectedHfModel={selectedHfModel}
               onStartServer={loadServers}
               onServerStarted={handleServerStarted}
+              onOpenChat={(modelId) => openChatSession(modelId, 'chat')}
               onStopServer={stopServer}
               servers={servers}
               onRemoveModel={removeModel}

@@ -168,12 +168,10 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
               contextLength: Number.isFinite(customCtx) && customCtx > 0 ? customCtx : undefined,
             },
           });
-          closeServeModal();
           showToast(
             `Proxy pinned to ${model.name}${status.port ? ` on port ${status.port}` : ''}`,
             'success',
           );
-          onStartServer();
         } catch (err) {
           const raw = err instanceof Error ? err.message : String(err);
           showToast(
@@ -182,8 +180,11 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
               : `Could not pin the proxy: ${raw}`,
             'error',
           );
+          return;
         }
-        return;
+        // The pin loads nothing: the proxy starts its model on the first
+        // request, and chat needs a running server's port. So the model is
+        // started below the ordinary way, under the pin, and chat opens on it.
       }
 
       const result = await getTransport().serveModel(serveConfig);

@@ -280,9 +280,9 @@ describe('useServerActions handleStartServer — the context it sends', () => {
       await result.current.handleStartServer();
     });
 
-    expect(serveModel).not.toHaveBeenCalled();
     expect(startPinnedProxy).toHaveBeenCalledTimes(1);
     expect(startPinnedProxy.mock.calls[0][0].options.contextLength).toBeUndefined();
+    expect(serveModel.mock.calls[0][0].contextLength).toBeUndefined();
   });
 
   it('sends a typed value on the pinned path', async () => {
@@ -302,5 +302,71 @@ describe('useServerActions handleStartServer — the context it sends', () => {
     });
 
     expect(startPinnedProxy.mock.calls[0][0].options.contextLength).toBe(16384);
+  });
+});
+
+describe('useServerActions handleStartServer — chat opens on what was served', () => {
+  beforeEach(() => {
+    serveModel.mockReset();
+    startPinnedProxy.mockReset();
+  });
+
+  it('a serve calls onServerStarted', async () => {
+    serveModel.mockResolvedValue({ port: 9001 });
+    const onServerStarted = vi.fn();
+
+    const { result } = renderHook(
+      () => useServerActions(makeConfig({ onServerStarted })),
+      { wrapper },
+    );
+    await act(async () => {
+      await result.current.handleStartServer();
+    });
+
+    expect(onServerStarted).toHaveBeenCalledWith({
+      modelId: baseModel.id,
+      modelName: baseModel.name,
+      port: 9001,
+      status: 'running',
+    });
+  });
+
+  it('a pinned serve calls onServerStarted', async () => {
+    // The pin loads nothing, so the model is started after it, under the
+    // pin, and chat opens on the model's own port — not the proxy's.
+    startPinnedProxy.mockResolvedValue({ port: 11434 });
+    serveModel.mockResolvedValue({ port: 9002 });
+    const onServerStarted = vi.fn();
+
+    const { result } = renderHook(
+      () => useServerActions(makeConfig({ pinProxy: true, onServerStarted })),
+      { wrapper },
+    );
+    await act(async () => {
+      await result.current.handleStartServer();
+    });
+
+    expect(startPinnedProxy.mock.invocationCallOrder[0]).toBeLessThan(
+      serveModel.mock.invocationCallOrder[0],
+    );
+    expect(onServerStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: baseModel.id, port: 9002 }),
+    );
+  });
+
+  it('a pin that fails starts nothing and opens no chat', async () => {
+    startPinnedProxy.mockRejectedValue(new Error('Proxy already running'));
+    const onServerStarted = vi.fn();
+
+    const { result } = renderHook(
+      () => useServerActions(makeConfig({ pinProxy: true, onServerStarted })),
+      { wrapper },
+    );
+    await act(async () => {
+      await result.current.handleStartServer();
+    });
+
+    expect(serveModel).not.toHaveBeenCalled();
+    expect(onServerStarted).not.toHaveBeenCalled();
   });
 });
