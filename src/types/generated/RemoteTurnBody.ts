@@ -2,7 +2,8 @@
 
 /**
  * Body for `PUT /api/remote/chats/{id}/turns/{run_id}`: the new message
- * and nothing else. The far machine rebuilds the history from its record.
+ * and nothing else. The far machine rebuilds the history from its record,
+ * so a body that carries more is refused rather than half read.
  */
 export type RemoteTurnBody = { 
 /**
