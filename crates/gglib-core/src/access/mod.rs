@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 mod bearer;
 mod device_keys;
+mod device_ports;
 mod host;
 mod origin;
 
@@ -13,13 +14,14 @@ pub use bearer::{BearerPolicy, bearer_matches};
 pub use device_keys::{
     DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys,
 };
+pub use device_ports::DevicePorts;
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
 pub use origin::may_change;
 
 use std::sync::Arc;
 
 use crate::cors::CorsConfig;
-use crate::ports::{RemoteGatewayPort, RunsPort};
+use crate::ports::{HubChatsPort, RemoteGatewayPort, RunsPort};
 
 /// Where the proxy's bearer token came from.
 ///
@@ -110,16 +112,15 @@ pub struct ProxyAccessConfig {
     /// `None` for an embedded server or a test, where nothing is listening
     /// for the answers.
     pub remote: Option<Arc<dyn RemoteGatewayPort>>,
-    /// The daemon's runs, served to paired devices at `/v1/runs`. Not an
-    /// access rule: it rides here, beside [`remote`](Self::remote), because
-    /// this is the one value the supervisor hands the proxy its live ports
-    /// in. `None` answers those routes 503.
-    pub runs: Option<Arc<dyn RunsPort>>,
+    /// The daemon's ports a paired device reaches: its runs and the hub's
+    /// chats. Rides here, beside [`remote`](Self::remote); see
+    /// [`DevicePorts`].
+    pub devices: DevicePorts,
 }
 
 /// Equality is over the *policy* — CORS, token, source, hosts — and not
 /// over [`remote`](ProxyAccessConfig::remote) or
-/// [`runs`](ProxyAccessConfig::runs), which are live objects rather than
+/// [`devices`](ProxyAccessConfig::devices), which are live objects rather than
 /// values. Two configs that differ only in whether a tunnel owner is
 /// attached describe the same access rules.
 impl PartialEq for ProxyAccessConfig {
@@ -176,7 +177,7 @@ impl ProxyAccessConfig {
             api_key_source: ApiKeySource::default(),
             allowed_hosts,
             remote: None,
-            runs: None,
+            devices: DevicePorts::default(),
         }
     }
 
@@ -195,7 +196,21 @@ impl ProxyAccessConfig {
     /// [`with_remote`](Self::with_remote).
     #[must_use]
     pub fn with_runs(mut self, runs: Option<Arc<dyn RunsPort>>) -> Self {
-        self.runs = runs;
+        self.devices.runs = runs;
+        self
+    }
+
+    /// Attach the hub's chats, for the same reason.
+    #[must_use]
+    pub fn with_chats(mut self, chats: Option<Arc<dyn HubChatsPort>>) -> Self {
+        self.devices.chats = chats;
+        self
+    }
+
+    /// Attach every port a paired device reaches, for the same reason.
+    #[must_use]
+    pub fn with_devices(mut self, devices: DevicePorts) -> Self {
+        self.devices = devices;
         self
     }
 

@@ -268,7 +268,7 @@ impl ProxySupervisor {
         )
         .with_key_source(api_key_source)
         .with_remote(config.remote)
-        .with_runs(config.runs);
+        .with_devices(config.devices);
 
         // Start reading the device's memory capacity, but do not wait for it.
         // The admission path needs the figure to fit a context and the probe is

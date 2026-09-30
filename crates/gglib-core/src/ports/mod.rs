@@ -7,6 +7,7 @@ pub(crate) mod download;
 pub(crate) mod download_manager;
 pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
+pub(crate) mod hub_chats;
 pub mod huggingface;
 pub(crate) mod llm_completion;
 pub(crate) mod loop_guard_trips;
@@ -50,6 +51,7 @@ pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,
 };
+pub use hub_chats::{HubChatsError, HubChatsPort};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };

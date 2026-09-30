@@ -43,6 +43,13 @@ impl Table {
         });
     }
 
+    /// The run whose reply to `conversation_id` is not yet saved, if any.
+    pub(super) fn live_on(&self, conversation_id: i64) -> Option<&Arc<RunCell>> {
+        self.runs
+            .values()
+            .find(|cell| !cell.is_ended() && cell.info().conversation_id == Some(conversation_id))
+    }
+
     /// Make room for one more run, dropping the oldest ended run if every
     /// slot is taken.
     pub(super) fn make_room(&mut self) -> Result<(), RunsError> {
@@ -124,6 +131,15 @@ impl RunRegistry {
         } else {
             Err(RunsError::NotFound)
         }
+    }
+
+    /// The run whose reply to `conversation_id` is not yet saved, by id:
+    /// the run that would refuse another turn to it.
+    #[must_use]
+    pub fn live_on(&self, conversation_id: i64) -> Option<String> {
+        self.lock()
+            .live_on(conversation_id)
+            .map(|cell| cell.id.clone())
     }
 
     /// Cancel and drop every run, ending every reader. For the daemon's

@@ -14,12 +14,16 @@ use super::agent::tool_types::ToolCall;
 
 /// A chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct Conversation {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
     pub title: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub model_id: Option<i64>,
     pub system_prompt: Option<String>,
     /// Session parameters captured at creation for resume.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<ConversationSettings>,
     pub created_at: String,
@@ -28,13 +32,20 @@ pub struct Conversation {
 
 /// A chat message within a conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct Message {
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub id: i64,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub conversation_id: i64,
     pub role: MessageRole,
     pub content: String,
     pub created_at: String,
     /// Optional JSON metadata for tool usage, etc.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(type = "Record<string, unknown>", optional)
+    )]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
 }
@@ -91,6 +102,7 @@ impl Message {
 /// The role of a message sender.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum MessageRole {
     System,
     User,
@@ -164,44 +176,58 @@ pub struct ConversationUpdate {
 /// Stores sampling, context, and tool configuration so a CLI or GUI session
 /// can be faithfully restored. Serialized as a JSON column in the database.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ConversationSettings {
     /// Model name or identifier used for this session.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_name: Option<String>,
     /// Sampling temperature (0.0–2.0).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     /// Nucleus sampling threshold (0.0–1.0).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
     /// Top-K sampling limit.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_k: Option<i32>,
     /// Maximum tokens per response.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
     /// Repetition penalty.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_penalty: Option<f32>,
     /// Context window size (numeric or "max").
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ctx_size: Option<String>,
     /// Whether memory locking was enabled.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mlock: Option<bool>,
     /// Tool allowlist (empty = all tools).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<String>,
     /// Per-tool timeout in milliseconds.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_timeout_ms: Option<u64>,
     /// Maximum parallel tool calls.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
     /// Maximum agent loop iterations.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_iterations: Option<usize>,
     /// Whether tools were disabled entirely.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub no_tools: Option<bool>,
 }

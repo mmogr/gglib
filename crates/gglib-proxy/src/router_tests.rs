@@ -16,7 +16,7 @@
 //! the thing that drifts.
 
 /// Every path the proxy serves, and therefore every path the tunnel
-/// carries. `/mcp` is here and is the one with a guard of its own.
+/// carries. `/mcp` and `/v1/chats` are here with guards of their own.
 const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
     "/v1/models",
@@ -31,6 +31,8 @@ const TUNNEL_REACHABLE: &[&str] = &[
     "/v1/runs/{id}",
     "/v1/runs/{id}/events",
     "/v1/runs/{id}/cancel",
+    "/v1/chats",
+    "/v1/chats/{id}",
     "/mcp",
 ];
 

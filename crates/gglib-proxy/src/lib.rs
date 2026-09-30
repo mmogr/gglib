@@ -12,6 +12,7 @@ mod admin;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod audit_records;
+pub(crate) mod chats;
 // Crate-internal. The seven that stay `pub` below are the ones other crates
 // name by path: dashboard, loopback, models, props, repair, slot_eviction, slots.
 // `server` is internal too — the root re-exports `serve`, which is all

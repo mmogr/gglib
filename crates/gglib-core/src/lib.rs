@@ -24,7 +24,7 @@ pub mod telemetry;
 pub mod utils;
 
 // Re-export commonly used types for convenience
-pub use access::{ApiKeySource, ProxyAccessConfig};
+pub use access::{ApiKeySource, DevicePorts, ProxyAccessConfig};
 pub use cors::CorsConfig;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, AssistantContent,

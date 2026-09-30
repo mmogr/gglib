@@ -21,10 +21,10 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::ports::{HubChatsPort, RemoteGatewayPort, RunsPort};
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
-use gglib_core::ports::{RemoteGatewayPort, RunsPort};
 use gglib_core::request_pipeline::{ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
@@ -96,6 +96,8 @@ pub(crate) struct AppState {
     remote: Option<Arc<dyn RemoteGatewayPort>>,
     /// The daemon's runs, served at `/v1/runs`; `None` answers those 503.
     pub(crate) runs: Option<Arc<dyn RunsPort>>,
+    /// The hub's chats, served at `/v1/chats`; `None` answers those 503.
+    pub(crate) chats: Option<Arc<dyn HubChatsPort>>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -334,7 +336,8 @@ pub async fn serve(
         shutdown: cancel.clone(),
         daemon_shutdown: daemon_cancel,
         remote: access.remote.clone(),
-        runs: access.runs.clone(),
+        runs: access.devices.runs.clone(),
+        chats: access.devices.chats.clone(),
         upstream_health,
         stream_bounds: StreamBounds::for_serve(),
         calibration: Arc::new(TokenCalibration::new()),

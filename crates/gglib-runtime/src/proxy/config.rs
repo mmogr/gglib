@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gglib_core::DevicePorts;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{RemoteGatewayPort, RunsPort};
+use gglib_core::ports::RemoteGatewayPort;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 use gglib_proxy::slot_eviction::DiskBudget;
 
@@ -58,9 +59,10 @@ pub struct ProxyConfig {
     /// `None` for an embedded server, where nothing is listening for the
     /// answers.
     pub remote: Option<Arc<dyn RemoteGatewayPort>>,
-    /// The daemon's runs, which a paired device reaches at `/v1/runs`.
-    /// `None` for an embedded server: those routes then answer 503.
-    pub runs: Option<Arc<dyn RunsPort>>,
+    /// The daemon's ports a paired device reaches: its runs at `/v1/runs`
+    /// and the hub's chats at `/v1/chats`. Empty for an embedded server:
+    /// those routes then answer 503.
+    pub devices: DevicePorts,
 }
 
 impl Default for ProxyConfig {
@@ -78,7 +80,7 @@ impl Default for ProxyConfig {
             daemon_cancel: None,
             allowed_hosts: Vec::new(),
             remote: None,
-            runs: None,
+            devices: DevicePorts::default(),
         }
     }
 }

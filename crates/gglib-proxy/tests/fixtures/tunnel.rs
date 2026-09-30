@@ -25,7 +25,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, RemoteGatewayPort, RunsPort};
+use gglib_core::ports::{
+    HubChatsPort, ModelCatalogPort, ModelRuntimePort, RemoteGatewayPort, RunsPort,
+};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use modelpipe::{ConnectOptions, ServeOptions, TokenPolicy};
 use reqwest::{Client, StatusCode};
@@ -62,6 +64,15 @@ pub(crate) async fn spawn_proxy_serving(
     key: &str,
     runs: Option<Arc<dyn RunsPort>>,
 ) -> (String, CancellationToken, Arc<StubGateway>) {
+    spawn_proxy_holding(key, runs, None).await
+}
+
+/// The same, holding `chats` for `/v1/chats` as well.
+pub(crate) async fn spawn_proxy_holding(
+    key: &str,
+    runs: Option<Arc<dyn RunsPort>>,
+    chats: Option<Arc<dyn HubChatsPort>>,
+) -> (String, CancellationToken, Arc<StubGateway>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
@@ -75,7 +86,8 @@ pub(crate) async fn spawn_proxy_serving(
         vec![],
     )
     .with_remote(Some(Arc::clone(&gateway) as Arc<dyn RemoteGatewayPort>))
-    .with_runs(runs);
+    .with_runs(runs)
+    .with_chats(chats);
 
     let cancel = CancellationToken::new();
     let cancel_clone = cancel.clone();

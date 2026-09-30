@@ -137,6 +137,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
+- **`chats/`** — `/v1/chats` and `/v1/chats/{id}`: a paired device lists and opens the hub's chats; any request not tunnelled from a named device is refused `device_not_named`
 - **`runs/`** — `/v1/runs/*`: a paired device starts, reads and cancels its own runs through the tunnel; the SSE framing is shared with the daemon's `/api/runs`
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)

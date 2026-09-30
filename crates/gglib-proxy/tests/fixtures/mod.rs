@@ -1,6 +1,7 @@
 //! Test fixtures shared by proxy integration tests.
 #![allow(dead_code)]
 pub(crate) mod access;
+pub(crate) mod chats;
 #[allow(
     clippy::significant_drop_tightening,
     reason = "a guard's scope is its critical section, so this lint is never applied \
