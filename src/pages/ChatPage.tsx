@@ -45,9 +45,10 @@ type ChatPageProps = {
   serverStartTime?: number; // Unix timestamp in seconds
   initialView?: 'chat' | 'console'; // Which view to show initially
   conversationId?: number | null; // The conversation to open with, e.g. after a model switch
-  // Move the chat to another model, keeping open the conversation that
-  // `context` reads when the switch lands; local only.
-  onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null }) => Promise<void>;
+  draft?: string; // Unsent text to put back in the composer, e.g. after a model switch
+  // Move the chat to another model, keeping open the conversation (and the
+  // draft) that `context` reads when the switch lands; local only.
+  onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: string }) => Promise<void>;
   onClose: () => Promise<void>; // Stops server and exits
 } & (
   | { remote?: false; serverPort: number; modelId: number }
@@ -66,6 +67,7 @@ export default function ChatPage(props: ChatPageProps) {
     serverStartTime,
     initialView = 'chat',
     conversationId = null,
+    draft,
     onSwitchModel,
     remote = false,
     onClose,
@@ -138,6 +140,14 @@ export default function ChatPage(props: ChatPageProps) {
     maxToolIterations,
     supportsToolCalls,
   });
+
+  // A draft carried over a model switch goes back in the composer, once.
+  const draftSeeded = useRef(false);
+  useEffect(() => {
+    if (draftSeeded.current || !draft) return;
+    draftSeeded.current = true;
+    runtime.thread.composer.setText(draft);
+  }, [draft, runtime]);
 
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
@@ -409,7 +419,10 @@ export default function ChatPage(props: ChatPageProps) {
               toolFormat={toolFormat}
               modelName={modelName}
               modelId={modelId}
-              onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({ conversationId: activeConversationIdRef.current })))}
+              onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
+                conversationId: activeConversationIdRef.current,
+                draft: runtime.thread.composer.getState().text,
+              })))}
               quantization={quantization}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />

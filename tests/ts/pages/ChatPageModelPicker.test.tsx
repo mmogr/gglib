@@ -36,14 +36,15 @@ const wrapper = ({ children }: { children: ReactNode }) =>
   pageWrapper({ children: <><ToastProbe />{children}</> });
 
 let fixture: ChatFixture;
-type SwitchContext = () => { conversationId: number | null };
+type SwitchContext = () => { conversationId: number | null; draft: string };
 const onSwitchModel = vi.fn(async (_choice: ModelChoice, _context: SwitchContext) => {});
 
-function renderPage(conversationId?: number, modelId = 7) {
+function renderPage(conversationId?: number, modelId = 7, draft?: string) {
   return render(
     <ChatPage
       modelName="Qwen3.8-27B"
       modelId={modelId}
+      draft={draft}
       serverPort={4321}
       conversationId={conversationId}
       onSwitchModel={onSwitchModel}
@@ -153,5 +154,23 @@ describe('ChatPage, model picker', () => {
       expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'),
     );
     expect(screen.getByRole('heading', { name: 'Parsing GGUF' })).toBeInTheDocument();
+  });
+
+  it('hands up the unsent text, and a page given it puts it back in the composer', async () => {
+    const user = userEvent.setup();
+    const said = { id: 11, conversation_id: 1, role: 'user' as const, content: 'What is a GGUF?', created_at: '2026-09-01T09:12:00Z' };
+    fixture.rows = { 1: [said], 2: [{ ...said, id: 21, conversation_id: 2 }] };
+    const page = renderPage();
+    // Once the saved turn is drawn, the thread has stopped remounting.
+    await screen.findByText('What is a GGUF?');
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'half a thought');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
+    expect(onSwitchModel.mock.calls[0][1]().draft).toBe('half a thought');
+    page.unmount();
+
+    renderPage(2, 7, 'half a thought');
+    await screen.findByText('What is a GGUF?');
+
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('half a thought'));
   });
 });

@@ -33,6 +33,7 @@ const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ 
 const stub = vi.hoisted(() => ({
   choice: { modelId: 9, modelName: 'gemma-3-12b' },
   conversationId: 2 as number | null,
+  draft: 'half a thought',
 }));
 
 vi.mock('../../../src/services/transport', async () => {
@@ -80,6 +81,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     modelName,
     serverPort,
     conversationId,
+    draft,
     remote,
     onSwitchModel,
     onClose,
@@ -87,10 +89,11 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     modelName: string;
     serverPort?: number;
     conversationId?: number | null;
+    draft?: string;
     remote?: boolean;
     onSwitchModel?: (
       choice: { modelId: number; modelName: string },
-      context: () => { conversationId: number | null },
+      context: () => { conversationId: number | null; draft: string },
     ) => Promise<void>;
     onClose: () => Promise<void>;
   }) => {
@@ -101,13 +104,14 @@ vi.mock('../../../src/pages/ChatPage', () => ({
         data-remote={remote ? 'yes' : 'no'}
         data-port={mountedPort}
         data-conversation={conversationId ?? ''}
+        data-draft={draft ?? ''}
       >
         Chatting with {modelName}
         <button
           type="button"
           // The real picker toasts a failure; the stub only swallows it.
           onClick={() =>
-            void onSwitchModel?.(stub.choice, () => ({ conversationId: stub.conversationId }))?.catch(() => {})
+            void onSwitchModel?.(stub.choice, () => ({ conversationId: stub.conversationId, draft: stub.draft }))?.catch(() => {})
           }
         >
           Switch model
@@ -271,6 +275,7 @@ describe('ModelControlCenterPage', () => {
     const chat = screen.getByTestId('chat-page');
     expect(chat).toHaveAttribute('data-port', '9456');
     expect(chat).toHaveAttribute('data-conversation', '2');
+    expect(chat).toHaveAttribute('data-draft', 'half a thought');
     // The model it left keeps running; only Close stops a server.
     expect(stopServer).not.toHaveBeenCalled();
   });

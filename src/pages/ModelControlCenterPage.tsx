@@ -223,6 +223,7 @@ export default function ModelControlCenterPage({
             modelName={chatSession.modelName}
             initialView={chatSession.initialView}
             conversationId={chatSession.conversationId}
+            draft={chatSession.draft}
             onSwitchModel={(choice, context) => switchChatModel(chatSession, choice, context)}
             onClose={handleCloseChat}
           />

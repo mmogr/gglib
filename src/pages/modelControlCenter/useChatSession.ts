@@ -39,12 +39,16 @@ export type ChatSession =
       initialView: 'chat' | 'console';
       /** The conversation to open with: the one open before a model switch. */
       conversationId?: number | null;
+      /** The unsent text to put back in the composer after a model switch. */
+      draft?: string;
     }
   | { kind: 'remote'; modelName: string };
 
 /** What a model switch carries to the new page, read when the switch lands. */
 export interface SwitchContext {
   conversationId: number | null;
+  /** The composer's unsent text, put back in the new page's composer. */
+  draft: string;
 }
 
 export interface UseChatSessionResult {
@@ -92,7 +96,7 @@ export function useChatSession(servers: ServerViewModel[]): UseChatSessionResult
     async (from: ChatSession, choice: ModelChoice, context: () => SwitchContext) => {
       const server = servers.find((s) => s.modelId === choice.modelId);
       const port = server?.port ?? (await getTransport().serveModel({ id: choice.modelId })).port;
-      const { conversationId } = context();
+      const { conversationId, draft } = context();
       setChatSession((current) =>
         current !== from
           ? current
@@ -103,6 +107,7 @@ export function useChatSession(servers: ServerViewModel[]): UseChatSessionResult
               modelName: server?.modelName ?? choice.modelName,
               initialView: 'chat',
               conversationId,
+              draft,
             },
       );
     },
