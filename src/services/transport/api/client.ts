@@ -7,6 +7,7 @@
 
 import { readData } from '../errors';
 import { appLogger } from '../../platform';
+import { isDaemonTokenRefusal, takeDaemonToken } from './daemonToken';
 
 /**
  * Module-level API session context.
@@ -215,11 +216,11 @@ function buildClient(config: HttpClientConfig): HttpClient {
         body: hasBody ? JSON.stringify(body) : undefined,
       });
       
-      // A 401 means a LAN-shared daemon wants its key. Retrying with the same
-      // credential cannot help, so only a newly entered one earns the retry —
-      // the desktop app used to rebuild an identically tokenless client here
-      // and fail again with nothing asked of the user.
-      if (response.status === 401 && !isRetry && promptForApiKey()) {
+      // A 401 means a LAN-shared daemon wants its key, unless the route wants
+      // the daemon's token, which no key opens: its body says how to get one.
+      // Only a newly entered key earns the retry — the desktop app used to
+      // rebuild an identically tokenless client here and fail again.
+      if (response.status === 401 && !isRetry && !(await isDaemonTokenRefusal(response)) && promptForApiKey()) {
         appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
         resetClientCache();
         const newClient = await getClient();
@@ -265,7 +266,7 @@ export async function getClient(): Promise<HttpClient> {
       // The desktop app reaches such a daemon whenever one is already running,
       // so it needs the same stored-key path web mode has rather than a
       // hardcoded empty token it could never recover from.
-      const token = readStoredApiKey() ?? apiAuthToken;
+      const token = takeDaemonToken() ?? readStoredApiKey() ?? apiAuthToken;
 
       if (isTauri()) {
         const info = await discoverEmbeddedApi();
@@ -324,9 +325,6 @@ export async function patch<T>(path: string, body: unknown): Promise<T> {
 
 /**
  * Helper for DELETE requests.
- */
-/**
- * DELETE request.
  */
 export async function del<T>(path: string, body?: unknown): Promise<T> {
   const client = await getClient();
