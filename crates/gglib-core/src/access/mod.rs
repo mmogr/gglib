@@ -1,9 +1,11 @@
 #![doc = include_str!("README.md")]
 mod bearer;
+mod daemon_token;
 mod device_keys;
 mod device_ports;
 mod host;
 mod origin;
+mod private_file;
 
 #[cfg(test)]
 mod access_tests;
@@ -11,6 +13,10 @@ mod access_tests;
 mod host_tests;
 
 pub use bearer::{BearerPolicy, bearer_matches};
+pub use daemon_token::{
+    DaemonToken, daemon_token_path, load_or_mint as load_or_mint_daemon_token,
+    read as read_daemon_token,
+};
 pub use device_keys::{
     DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys,
 };
