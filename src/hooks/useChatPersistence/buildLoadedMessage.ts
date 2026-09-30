@@ -123,6 +123,9 @@ export function buildLoadedMessage(
   }
   const made = msg.role === 'assistant' ? turnMadeFromMetadata(msg.metadata) : undefined;
   if (made) custom.made = made;
+  // A user's turn names the paired device that sent it; this machine's none.
+  const device = msg.role === 'user' ? msg.metadata?.device : undefined;
+  if (typeof device === 'string' && device) custom.device = device;
 
   let content = reconstructContent(msg.content, storedParts ?? null);
 

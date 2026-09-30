@@ -8,11 +8,18 @@ import { madeLines, turnTime, type ArrivingPhase, type ReplyFacts } from './turn
 
 /**
  * The margin's head: who wrote the turn, then when and, for a reply, the
- * model's quantisation, each when known.
+ * model's quantisation, each when known. A reply to a paired device's turn
+ * names the device.
  */
-export const TurnWho: FC<{ name: string; at?: Date; quantization?: string }> = ({ name, at, quantization }) => (
+export const TurnWho: FC<{ name: string; at?: Date; quantization?: string; device?: string }> = ({
+  name,
+  at,
+  quantization,
+  device,
+}) => (
   <>
     <span className="text-sm font-semibold text-text-secondary">{name}</span>
+    {device && <span>for {device}</span>}
     {(at || quantization) && (
       <span className="font-mono tabular-nums">
         {at && <time dateTime={at.toISOString()}>{turnTime(at)}</time>}

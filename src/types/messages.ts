@@ -77,6 +77,8 @@ export type GglibMessageCustom = {
   prompt?: PromptReading;
   /** How the turn was made, from its `turn_usage` event or its saved row. */
   made?: TurnMade;
+  /** The paired device that sent a user's turn, from its saved row. */
+  device?: string;
 };
 
 /** A `prompt_progress` event, as a turn keeps it. */

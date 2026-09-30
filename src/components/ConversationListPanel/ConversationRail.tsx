@@ -4,7 +4,9 @@ import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { useRemoteState } from '../../services/remoteRegistry';
 import { cn } from '../../utils/cn';
+import type { ChatSource } from '../../services/transport';
 import { conversationsLabel } from './ConversationMarks';
+import { SourceSwitch } from './SourceSwitch';
 
 interface ConversationRailProps {
   onNewConversation: () => void;
@@ -21,6 +23,10 @@ interface ConversationRailProps {
   /** How many conversations have a reply running, and one not yet seen. */
   running: number;
   unread: number;
+  /** Whose chats the list shows. */
+  source: ChatSource;
+  /** Show another source's chats: offered while joined to a machine. */
+  onSource: (source: ChatSource) => void;
 }
 
 /** Which machine answers, and how this page reaches it, in words. */
@@ -52,7 +58,9 @@ const TONE: Record<'ok' | 'away' | 'off', string> = {
 
 /**
  * The narrow rail beside the notebook: a new chat, search, the conversation
- * list's fold, and at the foot the machine that answers.
+ * list's fold, and at the foot the machine that answers. Joined to another
+ * machine, the foot is the switch between its chats and this machine's; a
+ * chat is started only on the machine that holds it, so a new one only here.
  */
 export const ConversationRail: FC<ConversationRailProps> = ({
   onNewConversation,
@@ -64,16 +72,21 @@ export const ConversationRail: FC<ConversationRailProps> = ({
   remote,
   running,
   unread,
+  source,
+  onSource,
 }) => {
   const machine = useMachine(remote);
+  const connection = useRemoteState().status?.connected ?? null;
   return (
     <nav
       aria-label="Chat"
       className="w-[72px] shrink-0 flex flex-col items-center gap-sm py-md bg-background-elevated border-r border-border-light"
     >
-      <IconButton label="New chat" variant="outline" size="lg" onClick={onNewConversation}>
-        <Icon icon={Plus} size={16} />
-      </IconButton>
+      {source === 'this' && (
+        <IconButton label="New chat" variant="outline" size="lg" onClick={onNewConversation}>
+          <Icon icon={Plus} size={16} />
+        </IconButton>
+      )}
       <IconButton label="Search conversations" size="lg" onClick={onSearch}>
         <Icon icon={Search} size={16} />
       </IconButton>
@@ -100,14 +113,18 @@ export const ConversationRail: FC<ConversationRailProps> = ({
         </IconButton>
       )}
       <div className="flex-1" />
-      <div
-        className="flex flex-col items-center gap-xs px-xs text-center text-2xs text-text-secondary"
-        title={machine.title}
-      >
-        <span aria-hidden className={cn('w-[7px] h-[7px] rounded-full', TONE[machine.tone])} />
-        <span className="leading-tight">{machine.name}</span>
-        <span className="font-mono tabular-nums">{machine.how}</span>
-      </div>
+      {connection || source === 'far' ? (
+        <SourceSwitch source={source} onSource={onSource} connection={connection} />
+      ) : (
+        <div
+          className="flex flex-col items-center gap-xs px-xs text-center text-2xs text-text-secondary"
+          title={machine.title}
+        >
+          <span aria-hidden className={cn('w-[7px] h-[7px] rounded-full', TONE[machine.tone])} />
+          <span className="leading-tight">{machine.name}</span>
+          <span className="font-mono tabular-nums">{machine.how}</span>
+        </div>
+      )}
     </nav>
   );
 };

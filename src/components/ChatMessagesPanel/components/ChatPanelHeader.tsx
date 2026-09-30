@@ -26,6 +26,8 @@ interface ChatPanelHeaderProps {
   margin?: ReactNode;
   /** Under the title: the system prompt. */
   children?: ReactNode;
+  /** A chat this page reads but does not change: the title alone. */
+  readOnly?: boolean;
 }
 
 /**
@@ -49,6 +51,7 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
   onExportConversation,
   margin,
   children,
+  readOnly = false,
 }) => (
   <TurnRow
     className="border-t-0 pt-0"
@@ -72,7 +75,7 @@ export const ChatPanelHeader: FC<ChatPanelHeaderProps> = ({
           ) : (
             <h2 className="text-3xl font-semibold leading-tight m-0 min-w-0 break-words">{title}</h2>
           )}
-          <div className="flex gap-xs shrink-0">
+          <div hidden={readOnly} className={cn('flex gap-xs shrink-0', readOnly && 'hidden')}>
             <Button variant="ghost" size="sm" title="Rename conversation" onClick={onStartRename} iconOnly>
               <Icon icon={Pencil} size={14} />
             </Button>

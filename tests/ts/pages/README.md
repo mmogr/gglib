@@ -14,6 +14,7 @@ So these tests drive the page the way a user does — click the control, assert 
 | `chatPageHarness.tsx` | Not a test: the transport stub, providers and jsdom patches the chat page tests share |
 | `ChatPageConsole.test.tsx` | `ChatPage`'s Console view: the rail and the notebook head with its one view switcher stay, the body becomes the server and its log, and the thread is hidden rather than unmounted |
 | `ChatPageModelPicker.test.tsx` | The composer's model picker: running servers, then models that are not; the current model listed once; a choice handed up with the conversation open when the switch lands; a failed start toasted, the picker left on the old model; a page given a conversation opens on it; the unsent text handed up and put back in the new page's composer; the picker stays locked across a change of conversation while a model starts |
+| `ChatPageFar.test.tsx` | `ChatPage` on a computer joined to another machine: the rail's switch is absent until joined; switching lists the far machine's chats and switching back keeps this machine's New marks; a far chat's margin names the device behind each turn and never says "You"; a far chat offers no edit, regenerate, delete, rename, prompt edit, Console or new chat |
 | `ChatPageRemote.test.tsx` | `ChatPage` in remote mode: no Console tab, no capability probe for a model this machine does not have, and no read-only claim from a local server registry that knows nothing about the far one |
 
 ## Mocking, and what must not be mocked
