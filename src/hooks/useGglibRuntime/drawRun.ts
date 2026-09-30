@@ -11,18 +11,21 @@
 
 import React from 'react';
 
-import { getTransport } from '../../services/transport';
+import type { ChatSource } from '../../services/transport';
 import type { GglibMessage, GglibMessageCustom } from '../../types/messages';
 import type { AgentEvent } from '../../types/events/agentEvent';
 import type { RunInfo } from '../../types/generated/RunInfo';
 import type { ReasoningTimingTracker } from './reasoningTiming';
 import { finalizeMessageTiming } from './agentMessageState';
 import { dispatchAgentEvent, type DispatchDeps, type DispatchState } from './agentEventDispatch';
+import { runsOf } from './chatSource';
 
 export interface DrawRunOptions {
   runId: string;
   turnId: string;
   conversationId: number;
+  /** The machine whose run it is; this one when absent. */
+  source?: ChatSource;
   /** Stops the reading; the run carries on. */
   signal: AbortSignal;
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>;
@@ -65,6 +68,7 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
     runId,
     turnId,
     conversationId,
+    source = 'this',
     signal,
     setMessages,
     mkAssistantMessage,
@@ -89,7 +93,7 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
   let error: Error | null = null;
   // After `final_answer` or `error` the reply is settled; nothing after is drawn.
   let settled = false;
-  for await (const item of getTransport().readRunEvents(runId, 0, signal)) {
+  for await (const item of runsOf(source).readRunEvents(runId, 0, signal)) {
     if (item.type === 'end') {
       if (!settled) cleanup();
       return { info: item.info, error: error ?? endFailure(item.info) };

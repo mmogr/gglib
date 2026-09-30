@@ -17,12 +17,14 @@
  * empty and sending off until the conversation is opened again.
  *
  * Leaving (another conversation, unmount) stops reading; it never cancels
- * the run. The run's id is kept in memory only.
+ * the run. The run's id is kept in memory only. A far chat is read the same
+ * way from the far machine, and nothing of it is kept.
  *
  * @module useRunReader
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import type { ChatSource } from '../../services/transport';
 import type { GglibMessage } from '../../types/messages';
 import { mkAssistantMessage } from '../../types/messages';
 import type { ThreadConversation } from '../useChatPersistence/buildThreadMessages';
@@ -40,6 +42,8 @@ const STILL_RUNNING = 'Nothing was sent: a reply is still running in this conver
 /** What the reader reads from the caller's latest render. */
 export interface RunReaderInputs {
   conversation?: ThreadConversation | null;
+  /** Whose chat `conversationId` is; this machine's when absent. */
+  source?: ChatSource;
   onError?: (error: Error) => void;
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
   onConversationChanged?: (conversationId: number) => void;
@@ -121,7 +125,7 @@ export function useRunReader(
 
   /** Show what is saved in `cid`, unless the reading was left. */
   const showSaved = useCallback(async (cid: number, signal: AbortSignal) => {
-    const thread = await loadSavedThread(cid, latest.current.conversation ?? null);
+    const thread = await loadSavedThread(cid, latest.current.conversation ?? null, latest.current.source);
     if (signal.aborted) return;
     messagesRef.current = thread;
     setMessages(thread);
@@ -141,6 +145,7 @@ export function useRunReader(
         runId,
         turnId: crypto.randomUUID(),
         conversationId: cid,
+        source: latest.current.source,
         signal,
         setMessages: unlessLeft(setMessages),
         mkAssistantMessage,
@@ -174,7 +179,7 @@ export function useRunReader(
       let live: Awaited<ReturnType<typeof liveRunFor>>;
       let unasked: Error | null = null;
       try {
-        live = await liveRunFor(cid);
+        live = await liveRunFor(cid, latest.current.source);
       } catch (error) {
         unasked = error as Error;
       }
@@ -222,7 +227,7 @@ export function useRunReader(
     if (!unaskedRef.current) return true;
     let live: Awaited<ReturnType<typeof liveRunFor>>;
     try {
-      live = await liveRunFor(cid);
+      live = await liveRunFor(cid, latest.current.source);
     } catch (error) {
       return refuse(`${UNKNOWN_LIVE} ${(error as Error).message}`);
     }
@@ -233,6 +238,7 @@ export function useRunReader(
   }, [beginReading, follow]);
 
   const systemPrompt = inputs.conversation?.system_prompt;
+  const source = inputs.source ?? 'this';
   useEffect(() => {
     if (conversationId === undefined) {
       openingRef.current = false;
@@ -244,7 +250,7 @@ export function useRunReader(
     adoptRef.current = null;
     if (!adopted) void open(conversationId, beginReading());
     return stopReading;
-  }, [conversationId, systemPrompt, open, beginReading, stopReading]);
+  }, [conversationId, source, systemPrompt, open, beginReading, stopReading]);
 
   /**
    * Claim the conversation for a send: null while a run is live in it, or

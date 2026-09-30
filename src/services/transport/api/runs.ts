@@ -46,13 +46,21 @@ export async function cancelRun(id: string): Promise<RunInfo> {
  * A run's events after `after` (0 for all of them), then its final state,
  * read until the daemon closes the stream or `signal` fires.
  */
-export async function* readRunEvents(
+export function readRunEvents(
   id: string,
   after: number,
   signal: AbortSignal,
 ): AsyncGenerator<RunStreamItem> {
+  return readRunStream(`${runPath(id)}/events?after=${after}`, signal);
+}
+
+/** A run's stream at `path` on the daemon, as `readRunEvents` reads it. */
+export async function* readRunStream(
+  path: string,
+  signal: AbortSignal,
+): AsyncGenerator<RunStreamItem> {
   const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}${runPath(id)}/events?after=${after}`, {
+  const response = await fetch(`${baseUrl}${path}`, {
     headers: { ...(headers as Record<string, string>), Accept: 'text/event-stream' },
     signal,
   });
