@@ -9,7 +9,7 @@ use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
-use gglib_core::ports::{AgentGuardReporter, AgentLoopPort, RetryObserver};
+use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_runtime::compose_agent_loop;
 
 use super::AgentChatRequest;
@@ -32,6 +32,11 @@ pub(crate) struct Prepared {
     pub(crate) model: String,
     /// The model each turn was made by, for its `turn_usage` event.
     pub(crate) made_by: MadeBy,
+    /// The port and id of the local model the loop drives; remotely none.
+    pub(crate) local_model: Option<(u16, i64)>,
+    /// A run's hold on that model (`remote_upstream::hold`); `prepare` takes
+    /// none.
+    pub(crate) hold: Option<AdmissionLease>,
 }
 
 /// The model a run drives, which the loop does not know: stamped on each
@@ -84,6 +89,7 @@ pub(crate) async fn prepare(
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
     let model = upstream.counted_as.clone();
+    let local_model = upstream.local_model;
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
@@ -131,6 +137,8 @@ pub(crate) async fn prepare(
         rx,
         model,
         made_by: upstream.made_by,
+        local_model,
+        hold: None,
     })
 }
 

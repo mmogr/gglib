@@ -121,10 +121,14 @@ async fn every_refusal_carries_the_registry_code_in_the_proxy_error_shape() {
         RunsError::InvalidBody,
         RunsError::NotFound,
         RunsError::IdTaken,
+        RunsError::ConversationBusy {
+            conversation_id: 7,
+            run: "chat-1".to_owned(),
+        },
         RunsError::NotYours,
         RunsError::TooManyRuns,
     ] {
-        *runs.fail.lock().unwrap() = Some(err);
+        *runs.fail.lock().unwrap() = Some(err.clone());
         let response = Client::new()
             .put(format!("{base}/v1/runs/r1"))
             .json(&serde_json::json!({}))

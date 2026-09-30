@@ -10,6 +10,7 @@
 //! runs its own pipeline over its own models.
 
 use gglib_app_services::types::ServerInfo;
+use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
 use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
@@ -52,6 +53,8 @@ pub(super) struct Upstream {
     /// the one loaded on the port with its catalogue quantisation, remotely
     /// the one named, with none (this machine has no catalogue for it).
     pub made_by: MadeBy,
+    /// Locally, the port and the id of the model found on it; remotely none.
+    pub local_model: Option<(u16, i64)>,
 }
 
 /// The model this request named, if it named one.
@@ -173,7 +176,36 @@ pub(super) async fn local(
             quantization: quantization_of(state, server.model_id).await,
             model: server.model_name,
         },
+        local_model: Some((req.port, server.model_id)),
     }
+}
+
+/// A local run's hold on the model it resolved, which its loop talks to past
+/// the proxy's queue: while held, no proxy request swaps or recycles it. A
+/// remote run holds nothing here; the far proxy admits each of its requests.
+///
+/// # Errors
+///
+/// `unavailable` (503) when that model is no longer the one on its port: a
+/// swap came between resolving it and holding it.
+pub(super) fn hold(
+    runtime: &dyn ModelRuntimePort,
+    local_model: Option<(u16, i64)>,
+) -> Result<Option<AdmissionLease>, HttpError> {
+    let Some((port, model_id)) = local_model else {
+        return Ok(None);
+    };
+    let held = u32::try_from(model_id)
+        .ok()
+        .and_then(|id| runtime.hold(port, id));
+    held.map(Some).ok_or_else(|| HttpError::Coded {
+        status: axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        code: "unavailable",
+        message: format!(
+            "the model on port {port} was stopped or swapped while the run was prepared; \
+             try again"
+        ),
+    })
 }
 
 /// A remote request's upstream: the tunnel's `port`, the far machine's key
@@ -194,6 +226,7 @@ pub(super) fn remote(model: String, port: u16, fingerprint: String, key: String)
             quantization: None,
         },
         model: Some(model),
+        local_model: None,
     }
 }
 

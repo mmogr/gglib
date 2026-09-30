@@ -78,6 +78,14 @@ waiter, which is exactly the hog-or-wedge case the backstop exists for.
 This is why admission returns a lease rather than just a target — see
 [`AdmissionLease`](gglib_core::ports::AdmissionLease).
 
+A run that talks to llama-server's port directly (an agent run) takes a
+*hold* instead (`hold.rs`): while held, the resident is neither swapped out
+nor recycled, yet none of its `SERVER_PARALLEL` capacity is taken. A rival
+waiting behind a held primary gets the ordinary stall 503 after
+[`ADMISSION_DEADLINE`], which does not mention the hold. A request for the
+held model at another context gets a 503 at once; since VS Code's gateway
+treats a 503 as final, waiting up to the deadline would serve it better.
+
 # Two slots
 
 [`SLOT_COUNT`] is 2. The second exists so a small auxiliary model — an embedder,

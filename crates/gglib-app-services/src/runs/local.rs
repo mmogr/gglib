@@ -93,7 +93,9 @@ impl RunRegistry {
     ///
     /// # Errors
     ///
-    /// As `RunsPort::create`, less the body check.
+    /// As `RunsPort::create`, less the body check, and
+    /// [`RunsError::ConversationBusy`] while another run's reply to the
+    /// same conversation is not yet saved.
     pub fn reserve(&self, id: &str, spec: RunSpec) -> Result<Reservation<'_>, RunsError> {
         Ok(match self.admit(RunScope::Local, id, spec, true)? {
             Admitted::Existing(info) => Reservation::Existing(info),

@@ -68,6 +68,19 @@ impl RunRegistry {
                 Err(RunsError::IdTaken)
             };
         }
+        // One live reply per conversation: a run is live until its reply is
+        // saved, so a new run's user message never races the last one's save.
+        if let Some(conversation_id) = spec.conversation_id {
+            let live = table.runs.values().find(|cell| {
+                !cell.is_ended() && cell.info().conversation_id == Some(conversation_id)
+            });
+            if let Some(cell) = live {
+                return Err(RunsError::ConversationBusy {
+                    conversation_id,
+                    run: cell.id.clone(),
+                });
+            }
+        }
         table.make_room()?;
         let order = table.next_order;
         table.next_order += 1;

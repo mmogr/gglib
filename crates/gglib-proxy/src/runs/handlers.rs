@@ -31,7 +31,7 @@ fn error(status: StatusCode, error_type: &str, code: &str, message: String) -> R
 }
 
 /// A refusal from the runs, with its own status and code.
-fn refused(err: RunsError) -> Response {
+fn refused(err: &RunsError) -> Response {
     let status = StatusCode::from_u16(err.http_status()).unwrap_or(StatusCode::BAD_REQUEST);
     let error_type = if status == StatusCode::TOO_MANY_REQUESTS {
         "rate_limit_error"
@@ -81,7 +81,7 @@ pub(crate) async fn put_run(
             "a run's request body must be a JSON object, sent as application/json",
         ));
     };
-    let created = runs.create(scope, &id, body).map_err(refused)?;
+    let created = runs.create(scope, &id, body).map_err(|e| refused(&e))?;
     let status = if created.created {
         StatusCode::CREATED
     } else {
@@ -104,7 +104,7 @@ pub(crate) async fn get_run(
     let info = runs(&state)
         .ok_or_else(unavailable)?
         .get(&scope, &id)
-        .map_err(refused)?;
+        .map_err(|e| refused(&e))?;
     Ok(Json(info).into_response())
 }
 
@@ -117,7 +117,7 @@ pub(crate) async fn cancel_run(
     let info = runs(&state)
         .ok_or_else(unavailable)?
         .cancel(&scope, &id)
-        .map_err(refused)?;
+        .map_err(|e| refused(&e))?;
     Ok(Json(info).into_response())
 }
 
@@ -142,6 +142,8 @@ pub(crate) async fn run_events(
             "`after` is the number of the last event the client has",
         ));
     };
-    let events = runs.events(&scope, &id, query.after).map_err(refused)?;
+    let events = runs
+        .events(&scope, &id, query.after)
+        .map_err(|e| refused(&e))?;
     Ok(sse::stream(events, Some(state.shutdown.clone())).into_response())
 }

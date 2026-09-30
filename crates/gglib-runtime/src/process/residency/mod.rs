@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod context;
 pub mod explain;
 mod launch;
 mod spawned_child;
@@ -12,9 +13,7 @@ use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     PinnedSpec, RunningTarget,
 };
-use gglib_core::server_config::{
-    CacheRamSetting, ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
-};
+use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
@@ -23,6 +22,7 @@ use crate::process::admission::{
 };
 use crate::process::core::GuiProcessCore;
 use crate::process::health::check_http_health;
+use context::{fit_or_undivided, resolve_launch_opts};
 use launch::{LaunchRequest, run as run_launch};
 
 pub use vram::ram_available_for;
@@ -65,54 +65,6 @@ pub struct ResidentSet {
     /// the daemon owns one long-lived manager, and `gglib serve` pins it over
     /// HTTP for the lifetime of one proxy run.
     pinned: std::sync::RwLock<Option<PinnedSpec>>,
-}
-
-/// Resolve one launch's [`ServerConfigOptions`] and context size together.
-///
-/// Pulled out of the admission path so the context-resolution logic can be
-/// tested without spawning a process. Its result is the one context the rest
-/// of a launch reads, so no later step sizes the context its own way ([#685]).
-///
-/// The context chain is assigned onto the overlaid template rather than
-/// overlaid itself: the manager is authoritative for every rung, and a
-/// stale `model_server_ctx` inherited from `template` would silently size the
-/// launch for a different model than `model_server_ctx` names here.
-///
-/// [#685]: https://github.com/mmogr/gglib/issues/685
-fn resolve_launch_opts(
-    template: &ServerConfigOptions,
-    per_call: &ServerConfigOptions,
-    num_ctx: Option<u64>,
-    default_ctx: Option<u64>,
-    fitted_ctx: Option<u64>,
-    model_server_ctx: Option<usize>,
-) -> (ServerConfigOptions, u64, ContextSizeSource) {
-    let mut opts = template.overlay(per_call);
-    opts.context_size = num_ctx.or(opts.context_size);
-    opts.model_server_ctx = model_server_ctx;
-    opts.fitted_ctx = fitted_ctx;
-    // Assigned as given, not `Some(default_ctx)`: a user who set nothing must
-    // fall through to the fitted rung rather than be handed the floor as
-    // though they had chosen it.
-    opts.global_default_ctx = default_ctx;
-    let (resolved_ctx, ctx_source) = resolve_context_size_with_source(&opts);
-    (opts, resolved_ctx, ctx_source)
-}
-
-/// Fit against the reserved budget, falling back to the undivided device.
-///
-/// A seam, not indirection: the chain is the whole of the co-resident
-/// reservation's escape hatch, and inlining it left the behaviour unguarded —
-/// deleting the fallback passed every test in the crate.
-///
-/// The seam guards the logic, not the wiring. Passing the same budget as both
-/// arguments still neuters the fallback and no test would notice; catching that
-/// needs `admit` exercised end to end, which this module does not do.
-fn fit_or_undivided<F>(fit: F, reserved: Option<u64>, undivided: Option<u64>) -> Option<u64>
-where
-    F: Fn(Option<u64>) -> Option<u64>,
-{
-    fit(reserved).or_else(|| fit(undivided))
 }
 
 /// Removes a ticket from the queue on every exit path.
@@ -373,7 +325,7 @@ impl ResidentSet {
                 .poll(&queued.ticket, self.secondary_verdict(&request))
             {
                 AdmissionDecision::Serve { slot } => {
-                    if let Some(admission) = self.serve(slot, resolved_ctx, core).await {
+                    if let Some(admission) = self.serve(slot, resolved_ctx, core).await? {
                         return Ok(admission);
                     }
                     // The resident turned out to be unusable and has been
@@ -445,18 +397,21 @@ impl ResidentSet {
     /// Returns `None` when the resident cannot serve this request after all —
     /// it was launched with a different context size, or it has stopped
     /// answering its health check. Both cases evict it, so the caller's next
-    /// pass launches a fresh instance.
+    /// pass launches a fresh instance — unless a run holds it: then it is
+    /// kept, and this request refused.
     async fn serve(
         &self,
         slot: usize,
         resolved_ctx: u64,
         core: &Arc<RwLock<GuiProcessCore>>,
-    ) -> Option<Admission> {
+    ) -> Result<Option<Admission>, ModelRuntimeError> {
         // `poll` has already counted this request against the slot, so the
         // lease must be claimed here even on the reject paths — dropping it is
         // what balances the count.
         let lease = self.queue.claim(slot);
-        let resident = self.queue.slot(slot)?;
+        let Some(resident) = self.queue.slot(slot) else {
+            return Ok(None);
+        };
 
         if resident.context_size != resolved_ctx {
             info!(
@@ -466,8 +421,8 @@ impl ResidentSet {
                 "resident model was launched with a different context — recycling"
             );
             drop(lease);
-            self.recycle(slot, core).await;
-            return None;
+            self.recycle(slot, core).await?;
+            return Ok(None);
         }
 
         if !check_http_health(resident.port).await {
@@ -477,8 +432,8 @@ impl ResidentSet {
                 "resident model failed health check; recycling degraded instance"
             );
             drop(lease);
-            self.recycle(slot, core).await;
-            return None;
+            self.recycle(slot, core).await?;
+            return Ok(None);
         }
 
         debug!(
@@ -508,7 +463,7 @@ impl ResidentSet {
             target = target.with_narration(narration);
         }
 
-        Some(Admission { target, lease })
+        Ok(Some(Admission { target, lease }))
     }
 
     /// Drive one launch, detached from this request's future.
@@ -586,14 +541,19 @@ impl ResidentSet {
         }
     }
 
-    /// Stop and forget whatever is in `slot`.
-    async fn recycle(&self, slot: usize, core: &Arc<RwLock<GuiProcessCore>>) {
-        if let Some(previous) = self.queue.evict(slot) {
+    /// Stop and forget whatever is in `slot`, unless a run holds it.
+    async fn recycle(
+        &self,
+        slot: usize,
+        core: &Arc<RwLock<GuiProcessCore>>,
+    ) -> Result<(), ModelRuntimeError> {
+        if let Some(previous) = self.queue.evict_unheld(slot)? {
             let mut core_w = core.write().await;
             if let Err(e) = core_w.kill(previous.model_id).await {
                 warn!(error = %e, "Failed to stop resident model cleanly, continuing");
             }
         }
+        Ok(())
     }
 
     /// The primary slot's resident, projected as a routing target.
@@ -631,6 +591,9 @@ fn target_of(resident: Resident) -> RunningTarget {
     .with_cache_ram_health(resident.cache_ram_health)
 }
 
+#[cfg(test)]
+#[path = "hold_tests.rs"]
+mod hold_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 mod residency_tests;

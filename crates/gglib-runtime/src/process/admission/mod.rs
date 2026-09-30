@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod hold;
 mod lease;
 #[allow(
     clippy::cast_possible_truncation,
@@ -9,13 +10,12 @@ mod lease;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod state;
+mod timing;
 
 pub use lease::AdmissionQueue;
-pub(crate) use state::launch_timeout;
-pub use state::{
-    ADMISSION_DEADLINE, AdmissionDecision, DRAIN_QUANTUM, PRIMARY_SLOT, Resident, SLOT_COUNT,
-    SlotState, Ticket,
-};
+pub use state::{AdmissionDecision, PRIMARY_SLOT, Resident, SLOT_COUNT, SlotState, Ticket};
+pub(crate) use timing::launch_timeout;
+pub use timing::{ADMISSION_DEADLINE, DRAIN_QUANTUM};
 
 #[cfg(test)]
 #[path = "queue_tests.rs"]

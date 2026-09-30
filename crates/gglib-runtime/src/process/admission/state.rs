@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::time::Duration;
 // Tokio's clock rather than `std`'s: identical in a normal runtime, but it is
 // the one `tokio::time::pause()` advances, which is what lets a test drive a
 // whole drain quantum without sleeping through it.
@@ -20,6 +19,7 @@ use gglib_core::domain::{
     ResidentSlotSnapshot, SecondarySlotDecision, SecondarySlotStatus,
 };
 
+use super::timing::{ADMISSION_DEADLINE, DRAIN_QUANTUM};
 use crate::command::SERVER_PARALLEL;
 
 /// How many models may be resident in VRAM at once.
@@ -33,78 +33,6 @@ pub const SLOT_COUNT: usize = 2;
 
 /// The slot chat traffic and the llama.cpp `/slots` poller follow.
 pub const PRIMARY_SLOT: usize = 0;
-
-/// How long a model keeps the GPU once it has won a turn, while another model
-/// is waiting.
-///
-/// The value trades swap amortisation against rival latency. A swap costs
-/// roughly 5–15 s (process teardown, weight load, health check), so a quantum
-/// materially shorter than that would spend more time swapping than serving.
-/// Twenty seconds drains a healthy burst while keeping the rival's wait inside
-/// what an agentic client will sit through.
-pub const DRAIN_QUANTUM: Duration = Duration::from_secs(20);
-
-/// Everything in a launch that is not waiting for the server to answer.
-///
-/// Model resolution, the *displaced* process's shutdown — which is inline and
-/// awaited, and can itself take SIGTERM plus a five-second grace — the purge of
-/// stale slot files, and the spawn.
-///
-/// Deliberately not headroom for the failed-launch cleanup: that runs from a
-/// `Drop` on a detached task, outside this budget by construction, because the
-/// case it exists for is the one where this budget has already expired.
-pub(crate) const LAUNCH_OVERHEAD: Duration = Duration::from_secs(40);
-
-/// How long one model launch may take before it is abandoned.
-///
-/// Derived per launch rather than fixed, because the health wait it contains
-/// is itself sized to the model — see `process::health::launch_deadline_secs`.
-/// A flat budget would silently cap that wait: a model whose deadline exceeded
-/// it would have its future dropped by this timeout first, skipping the
-/// cleanup inside it and leaking the very process the deadline was extended
-/// for.
-#[must_use]
-pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
-    health_deadline.saturating_add(LAUNCH_OVERHEAD)
-}
-
-/// How long a request may wait **with no queue progress** before giving up
-/// with a 503.
-///
-/// A *stall* deadline, not a wall clock: the clock measures time since the
-/// queue last did anything on anyone's behalf, so a first request on a cold
-/// daemon waiting out a model load that is proceeding normally does not expire
-/// the way a wedged queue does. Two things hold it back:
-///
-/// - **A launch in flight pauses every waiter's clock.** A loading slot is
-///   the opposite of a stall, and it is bounded on its own: [`launch_timeout`]
-///   abandons an overrunning launch and frees the slot, at which point the
-///   clock runs again. Waiting out a load can therefore extend a wait by at
-///   most one launch budget at a time, never indefinitely.
-///
-///   That budget scales with the model: [`launch_timeout`] runs from 160 s to
-///   640 s. So a large model loading can pause every other waiter's clock for
-///   well past this deadline. That is consistent with what the clock measures
-///   — a load in flight is progress, not a stall — but whether a waiter behind
-///   a ten-minute load should have its clock paused outright rather than
-///   merely extended is a question this constant does not answer.
-/// - **Progress resets the clock.** A lease released (a generation finished),
-///   a launch landing or failing, a slot evicted — each proves the queue is
-///   moving, so a waiter behind it is queued, not stuck.
-///
-/// [`DRAIN_QUANTUM`] bounds how long a *turn* lasts, but a turn cannot end
-/// while the outgoing model still has requests in flight — no swap may preempt
-/// a live generation. A single generation is indivisible, so the rival behind
-/// it has no bound but this one: an in-flight count that stays pinned with no
-/// release for this long is a hog or a wedge, and the waiter behind it gets
-/// its 503.
-///
-/// A model under *overlapping* load cannot hold its slot indefinitely:
-/// `SERVER_PARALLEL` caps how many requests are in flight at once, and
-/// `owes_slot_to_rival` makes an idle slot stand aside for a waiting rival. So
-/// reaching this deadline is the exception, not the ordinary outcome of two
-/// clients sharing an endpoint.
-pub const ADMISSION_DEADLINE: Duration = Duration::from_mins(3);
 
 /// A model loaded in VRAM, and everything the fast path needs to know about it.
 ///
@@ -294,6 +222,9 @@ pub(super) struct QueueState {
     /// Waiters compare against it to tell a queue that is working through
     /// its backlog from one that has stalled — see [`ADMISSION_DEADLINE`].
     progress_epoch: u64,
+    /// Holds on residents, by port and model id (`hold.rs`): a held resident
+    /// is never evictable, whatever its in-flight count.
+    holds: HashMap<(u16, u32), u32>,
 }
 
 impl Default for QueueState {
@@ -306,6 +237,7 @@ impl Default for QueueState {
             stats: Stats::default(),
             secondary_slot: SecondarySlotStatus::default(),
             progress_epoch: 0,
+            holds: HashMap::new(),
         }
     }
 }
@@ -399,9 +331,9 @@ impl QueueState {
         // a secondary slot could actually have used it, so the dashboard shows
         // the last verdict that mattered rather than one for a moment when no
         // slot was on offer.
-        let secondary_available = self.secondary_slots().any(|slot| {
-            matches!(self.slots[slot], SlotState::Empty) || self.slots[slot].is_evictable()
-        });
+        let secondary_available = self
+            .secondary_slots()
+            .any(|slot| matches!(self.slots[slot], SlotState::Empty) || self.evictable(slot));
         if secondary_available {
             self.secondary_slot = SecondarySlotStatus::from_decision(secondary);
         }
@@ -523,7 +455,7 @@ impl QueueState {
     /// than it strictly had to. That costs a little latency. Erring the other
     /// way costs the stall this rule exists to prevent.
     fn owes_slot_to_rival(&self, slot: usize, now: Instant) -> bool {
-        if !self.slots[slot].is_evictable() {
+        if !self.evictable(slot) {
             return false;
         }
         let Some(rival) = self.oldest_waiting_model() else {
@@ -564,15 +496,45 @@ impl QueueState {
         // displace the primary or wait, never be squeezed in where it does not
         // belong.
         if may_co_reside
-            && let Some(slot) = self
-                .secondary_slots()
-                .find(|&slot| self.slots[slot].is_evictable())
+            && let Some(slot) = self.secondary_slots().find(|&slot| self.evictable(slot))
         {
             return Some(slot);
         }
-        self.slots[PRIMARY_SLOT]
-            .is_evictable()
-            .then_some(PRIMARY_SLOT)
+        self.evictable(PRIMARY_SLOT).then_some(PRIMARY_SLOT)
+    }
+
+    /// Whether `slot` could be handed to a different model now: its state
+    /// allows it and no run holds its resident.
+    fn evictable(&self, slot: usize) -> bool {
+        self.slots[slot].is_evictable() && !self.is_held(slot)
+    }
+
+    /// Whether a run holds the resident in `slot`.
+    pub(super) fn is_held(&self, slot: usize) -> bool {
+        self.slot(slot)
+            .is_some_and(|r| self.holds.contains_key(&(r.port, r.model_id)))
+    }
+
+    /// Hold the resident listening on `port`, if it is `model_id`: its slot.
+    pub(super) fn hold(&mut self, port: u16, model_id: u32) -> Option<usize> {
+        let (slot, _) = self
+            .residents()
+            .find(|(_, r)| r.port == port && r.model_id == model_id)?;
+        *self.holds.entry((port, model_id)).or_default() += 1;
+        Some(slot)
+    }
+
+    /// Release one hold on the resident at `port` with `model_id`.
+    pub(super) fn unhold(&mut self, port: u16, model_id: u32) {
+        let key = (port, model_id);
+        if let Some(count) = self.holds.get_mut(&key) {
+            *count -= 1;
+            if *count == 0 {
+                self.holds.remove(&key);
+            }
+        }
+        // A swap waiting on this model may now go ahead.
+        self.record_progress();
     }
 
     /// Every slot that is not the primary.

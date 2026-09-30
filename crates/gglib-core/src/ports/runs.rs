@@ -64,9 +64,9 @@ pub enum RunEvent {
 /// (a forgotten device, or the daemon stopping).
 pub type RunEvents = Pin<Box<dyn Stream<Item = RunEvent> + Send>>;
 
-/// Why a runs call was refused. Every message is fixed text: none carries a
-/// frame or a request body.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+/// Why a runs call was refused. Every message is fixed text or ids: none
+/// carries a frame or a request body.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RunsError {
     /// The id is not 1 to 64 characters of `[A-Za-z0-9_-]`.
     #[error("a run id is 1 to 64 characters of letters, digits, '-' and '_'")]
@@ -83,6 +83,14 @@ pub enum RunsError {
     /// This machine asked for the events of a paired device's run.
     #[error("that run belongs to a paired device, so only it may read the reply")]
     NotYours,
+    /// The conversation already has a run whose reply is not yet saved.
+    #[error("conversation {conversation_id} already has a live reply, run {run}; stop it or wait")]
+    ConversationBusy {
+        /// The conversation asked for.
+        conversation_id: i64,
+        /// The id of the run that holds it.
+        run: String,
+    },
     /// Every slot holds a run that has not ended.
     #[error("32 runs are still going; cancel one or wait for one to end")]
     TooManyRuns,
@@ -94,11 +102,11 @@ pub enum RunsError {
 impl RunsError {
     /// The stable code a client matches on.
     #[must_use]
-    pub const fn code(self) -> &'static str {
+    pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidId | Self::InvalidBody => "invalid_request",
             Self::NotFound => "not_found",
-            Self::IdTaken => "conflict",
+            Self::IdTaken | Self::ConversationBusy { .. } => "conflict",
             Self::NotYours => "not_yours",
             Self::TooManyRuns => "too_many_runs",
             Self::ShuttingDown => "shutting_down",
@@ -107,12 +115,12 @@ impl RunsError {
 
     /// The HTTP status it is answered with.
     #[must_use]
-    pub const fn http_status(self) -> u16 {
+    pub const fn http_status(&self) -> u16 {
         match self {
             Self::InvalidId | Self::InvalidBody => 400,
             Self::NotYours => 403,
             Self::NotFound => 404,
-            Self::IdTaken => 409,
+            Self::IdTaken | Self::ConversationBusy { .. } => 409,
             Self::TooManyRuns => 429,
             Self::ShuttingDown => 503,
         }

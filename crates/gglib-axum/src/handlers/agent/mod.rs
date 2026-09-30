@@ -118,10 +118,16 @@ fn sse_event(event: &AgentEvent) -> Event {
 }
 
 #[cfg(test)]
+#[path = "run_busy_tests.rs"]
+mod run_busy_tests;
+#[cfg(test)]
 #[path = "run_end_tests.rs"]
 mod run_end_tests;
 #[cfg(test)]
 mod run_fixture;
+#[cfg(test)]
+#[path = "run_hold_tests.rs"]
+mod run_hold_tests;
 #[cfg(test)]
 #[path = "run_made_tests.rs"]
 mod run_made_tests;
