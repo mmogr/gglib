@@ -6,7 +6,7 @@ use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewMessage};
 use gglib_core::ports::RemoteGatewayPort as _;
 
 use super::hub_turn_tests::{chat, turn};
-use super::plan;
+use super::{plan, tools_of};
 use crate::handlers::agent::hub_model::model_for;
 use crate::handlers::agent::run_fixture::state;
 
@@ -14,7 +14,7 @@ use crate::handlers::agent::run_fixture::state;
 async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second"), false).await.unwrap();
+    let plan = plan(&state, turn(id, "second")).await.unwrap();
     let user = |c: &str| AgentMessage::User {
         content: c.to_owned(),
     };
@@ -50,13 +50,29 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     );
 }
 
-/// The tools a device's turn may call: none while the tunnel is closed to
-/// this machine's MCP tools, and when it is open only those the chat names.
+/// A device's turn calls no tool while the tunnel's owner keeps the tunnel
+/// closed to this machine's MCP tools, which it is until `enable
+/// --allow-mcp`: not even the tools the chat names.
 #[tokio::test]
-async fn a_device_turn_calls_no_tool_unless_the_tunnel_may_reach_them() {
+async fn a_device_turn_calls_no_tool_while_the_tunnel_is_closed_to_them() {
     let (_dir, state) = state().await;
     let named = ConversationSettings {
         max_iterations: Some(4),
+        tools: vec!["fs:read_file".to_owned()],
+        ..ConversationSettings::default()
+    };
+    let named = chat(&state, Some(named)).await;
+    assert!(!state.remote.gateway().mcp_allowed(), "closed by default");
+    let plan = plan(&state, turn(named, "second")).await.unwrap();
+    assert_eq!(plan.chat.tool_filter, Some(Vec::new()));
+    assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
+}
+
+/// With the tunnel open to them, only the tools the chat names: none when
+/// it names none or turned them off, never every tool.
+#[test]
+fn with_the_tunnel_open_a_device_turn_may_call_only_the_tools_the_chat_names() {
+    let named = ConversationSettings {
         tools: vec!["fs:read_file".to_owned()],
         ..ConversationSettings::default()
     };
@@ -64,27 +80,14 @@ async fn a_device_turn_calls_no_tool_unless_the_tunnel_may_reach_them() {
         no_tools: Some(true),
         ..named.clone()
     };
-    let named = chat(&state, Some(named)).await;
-    let off = chat(&state, Some(off)).await;
-    let unnamed = chat(&state, None).await;
-    let read_file = Some(vec!["fs:read_file".to_owned()]);
-    let none = Some(Vec::new());
-    for (id, allowed, want) in [
-        (named, false, &none),
-        (unnamed, false, &none),
-        (named, true, &read_file),
-        (unnamed, true, &none),
-        (off, true, &none),
-    ] {
-        let plan = plan(&state, turn(id, "second"), allowed).await.unwrap();
-        assert_eq!(&plan.chat.tool_filter, want, "chat {id}, allowed {allowed}");
-    }
-    let plan = plan(&state, turn(named, "second"), false).await.unwrap();
-    assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
-    assert!(
-        !state.remote.gateway().mcp_allowed(),
-        "closed until `enable --allow-mcp`"
+    let read_file = vec!["fs:read_file".to_owned()];
+    assert_eq!(tools_of(&named, true), read_file);
+    assert_eq!(tools_of(&named, false), Vec::<String>::new());
+    assert_eq!(
+        tools_of(&ConversationSettings::default(), true),
+        Vec::<String>::new()
     );
+    assert_eq!(tools_of(&off, true), Vec::<String>::new());
 }
 
 /// The prompt is the conversation's; a saved system row is not sent again.
@@ -103,7 +106,7 @@ async fn a_saved_system_row_is_left_out_of_the_history() {
         })
         .await
         .unwrap();
-    let plan = plan(&state, turn(id, "second"), false).await.unwrap();
+    let plan = plan(&state, turn(id, "second")).await.unwrap();
     let systems: Vec<&AgentMessage> = plan
         .chat
         .messages

@@ -111,7 +111,7 @@ async fn a_chat_that_names_no_model_is_refused_before_anything_runs() {
 async fn a_device_turn_saves_its_message_and_the_reply() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second"), false).await.unwrap();
+    let plan = plan(&state, turn(id, "second")).await.unwrap();
     let (mut p, _) = prepared(finished_reply(), End::Finish);
     p.messages = plan.chat.messages;
     let created = super::begin(

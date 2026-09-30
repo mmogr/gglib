@@ -107,7 +107,7 @@ pub(super) async fn start(
             created: false,
         });
     }
-    let plan = plan(state, turn, state.remote.gateway().mcp_allowed()).await?;
+    let plan = plan(state, turn).await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,
@@ -148,13 +148,9 @@ pub(super) struct Plan {
     pub(super) chat: AgentChatRequest,
 }
 
-/// Read `turn` against the chat it names. `mcp_allowed` is whether this
-/// machine lets the tunnel reach its MCP tools.
-pub(super) async fn plan(
-    state: &AppState,
-    turn: HubTurn,
-    mcp_allowed: bool,
-) -> Result<Plan, HttpError> {
+/// Read `turn` against the chat it names, with the tools the tunnel's owner
+/// lets a device's turn reach.
+pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
     if turn.content.trim().is_empty() {
         return Err(coded(
             StatusCode::BAD_REQUEST,
@@ -213,7 +209,7 @@ pub(super) async fn plan(
         remote: false,
         messages,
         config: config_of(&settings),
-        tool_filter: Some(tools_of(&settings, mcp_allowed)),
+        tool_filter: Some(tools_of(&settings, state.remote.gateway().mcp_allowed())),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: None,
@@ -244,7 +240,7 @@ fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
 /// itself does: a leaked key must not run a shell server. Then only those
 /// the conversation's settings name, and none when it names none or turned
 /// them off. Never every tool, which the page's own turns may call.
-fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Vec<String> {
+pub(super) fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Vec<String> {
     if !mcp_allowed || settings.no_tools == Some(true) {
         return Vec::new();
     }
