@@ -7,7 +7,7 @@
 
 import { readData } from '../errors';
 import { appLogger } from '../../platform';
-import { isDaemonTokenRefusal, takeDaemonToken } from './daemonToken';
+import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
 
 /**
  * Module-level API session context.
@@ -161,7 +161,7 @@ let cachedClientPromise: Promise<HttpClient> | null = null;
 /**
  * Reset cached client (used on auth/network errors for retry).
  */
-function resetClientCache(): void {
+export function resetClientCache(): void {
   appLogger.debug('transport.api', '[ApiClient] Resetting client cache for retry');
   cachedClientPromise = null;
 }
@@ -220,6 +220,10 @@ function buildClient(config: HttpClientConfig): HttpClient {
       // rebuild an identically tokenless client here and fail again.
       const refused = await isDaemonTokenRefusal(response);
       if (refused) resetClientCache(); // the next call rereads a token minted since
+      if (refused && isTauri()) { // the desktop rereads the file: retry once, never the sentence
+        if (isRetry) throw serviceRestarted();
+        return (await getClient()).request<T>(path, options, true);
+      }
       if (response.status === 401 && !isRetry && !refused && promptForApiKey()) {
         appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
         resetClientCache();

@@ -17,6 +17,7 @@
 import { appLogger } from './index';
 import { getApiBaseUrl, getAuthHeaders } from '../transport/api/client';
 import { createSSEStream } from '../../utils/sse';
+import { renewAfterRefusal } from '../transport/api/renew';
 
 export interface ServerLogEntry {
   timestamp: number;
@@ -100,6 +101,7 @@ export async function listenToServerLogs(
       } catch (err) {
         if (controller.signal.aborted) return;
         appLogger.error('service.server', 'SSE Error', { error: err, port });
+        await renewAfterRefusal(err);
       }
       if (controller.signal.aborted) return;
       await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));

@@ -126,25 +126,63 @@ describe('the daemon token from the link', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('comes from the desktop app, and is asked for again after the daemon refused it', async () => {
-    const invoke = vi
-      .fn()
-      .mockResolvedValueOnce({ port: 9887, token: null })
-      .mockResolvedValue({ port: 9887, token: 'desk-token' });
-    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
-    fetchMock.mockImplementationOnce(async () => refusal());
-    const api = await client();
+  describe('in the desktop app, after its service restarted', () => {
+    let invoke: ReturnType<typeof vi.fn>;
 
-    try {
-      await expect(api.post('/api/remote/invite')).rejects.toThrow(SENTENCE);
-      await api.post('/api/remote/invite');
-    } finally {
+    beforeEach(() => {
+      invoke = vi
+        .fn()
+        .mockResolvedValueOnce({ port: 9887, token: 'old-token' })
+        .mockResolvedValue({ port: 9887, token: 'new-token' });
+      Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    });
+
+    afterEach(() => {
       delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-    }
+    });
 
-    expect(authOf(fetchMock, 0)).toBeUndefined();
-    expect(authOf(fetchMock, 1)).toBe('Bearer desk-token');
-    expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/remote/invite');
+    it('reads the token again and retries once with it', async () => {
+      fetchMock.mockImplementationOnce(async () => refusal());
+      const prompt = vi.spyOn(window, 'prompt');
+      const api = await client();
+
+      await api.get('/api/models');
+
+      expect(invoke).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(authOf(fetchMock, 0)).toBe('Bearer old-token');
+      expect(authOf(fetchMock, 1)).toBe('Bearer new-token');
+      expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/models');
+      expect(api.getAuthHeaders()).toEqual({ Authorization: 'Bearer new-token' });
+      expect(prompt).not.toHaveBeenCalled();
+    });
+
+    it('retries only once, and never shows the link sentence', async () => {
+      fetchMock.mockImplementation(async () => refusal());
+      const api = await client();
+
+      const error = await api.get('/api/models').catch((e: unknown) => e);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(error)).toContain('The gglib service restarted; reconnecting.');
+      expect(String(error)).not.toContain('gglib web');
+    });
+
+    it('renews the event stream before it reconnects after a 401', async () => {
+      const open = new Response(new ReadableStream({ start() {} }), { status: 200 });
+      fetchMock.mockImplementationOnce(async () => refusal()).mockImplementation(async () => open);
+      await client();
+      const { SSEConnectionManager } = await import('../../../../src/services/transport/events/sse');
+
+      const manager = new SSEConnectionManager('/api/events');
+      const stop = manager.subscribe(() => {});
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      stop();
+
+      const auth = (n: number) => new Headers((fetchMock.mock.calls[n][1] as RequestInit).headers);
+      expect(auth(0).get('Authorization')).toBe('Bearer old-token');
+      expect(auth(1).get('Authorization')).toBe('Bearer new-token');
+    });
   });
 
   it('is sent on the server log stream, which EventSource could not carry', async () => {

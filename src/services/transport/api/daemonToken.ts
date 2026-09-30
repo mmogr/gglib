@@ -8,6 +8,8 @@
  * of the page keeps working until the daemon next starts and mints a new one.
  */
 
+import { TransportError } from '../errors';
+
 const STORAGE_KEY = 'gglib_daemon_token';
 
 /** The `type` of the daemon's 401 when it wanted its token. */
@@ -66,4 +68,13 @@ export async function isDaemonTokenRefusal(response: Response): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+/**
+ * What the desktop app says when the daemon refused the token it read again
+ * after a refusal: its service restarted and is not answering with the new
+ * one yet. Never the link sentence, which is a browser's remedy.
+ */
+export function serviceRestarted(): TransportError {
+  return new TransportError('UNAUTHORIZED', 'The gglib service restarted; reconnecting.', { status: 401 });
 }

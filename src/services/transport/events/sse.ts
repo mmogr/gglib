@@ -15,6 +15,7 @@ import { decodeDownloadEvent } from '../../decoders/downloadEvent';
 import { appLogger } from '../../platform';
 import { createSSEStream, type SSEMessage } from '../../../utils/sse';
 import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
+import { renewAfterRefusal } from '../api/renew';
 import { getEventCategory } from './category';
 
 /**
@@ -136,7 +137,6 @@ export class SSEConnectionManager<T = unknown> {
     this.abort = new AbortController();
 
     const backoff = new Backoff();
-
     // Ensure client is initialized (triggers API discovery in Tauri mode)
     await getClient();
 
@@ -168,8 +168,8 @@ export class SSEConnectionManager<T = unknown> {
         }
 
         appLogger.error('transport.sse', '[SSE] Connection error', { error });
+        await renewAfterRefusal(error); // a restarted daemon minted a new token
         const wait = backoff.next();
-
         appLogger.debug('transport.sse', '[SSE] Reconnecting', { waitMs: wait });
 
         await new Promise((resolve) => setTimeout(resolve, wait));
