@@ -85,6 +85,31 @@ but is refused a device's reply. The proxy takes the device from the tunnel
 edge's marker, and a client that reaches the proxy directly can forge it, so
 that refusal is a courtesy of the API to local clients, not a boundary.
 
+### Amendment, 2026-09-30: a device reads the hub's chats and adds a turn
+
+Over the pairing a device may also read this machine's chats, at
+`/v1/chats`, and add a turn to one, with `PUT /v1/runs/{id}?kind=agent` and
+`{conversation_id, content}`. Pairing is the grant: there is no separate
+switch, and `gglib remote forget` takes it away with the key. Nothing is
+copied: each read is of this machine's rows, live. A turn is still using
+the machine, not changing it — the same thing its own chat page does: this
+machine rebuilds the history from its record, runs the reply on the chat's
+model as an agent run in the device's scope, and saves the message and the
+reply to the chat, each marked with the device's name. Models, settings and
+pairings stay out of reach.
+
+A run on one of this machine's chats belongs to the chat, not to whoever
+started it: this machine's page and every paired device may list, read and
+cancel it, so "writing" shows everywhere. A device's own chat runs, with no
+chat here, stay its own as above. A forgotten device loses the chats, the
+turns, and every run: its own chat runs are dropped, while a reply it
+started on one of this machine's chats finishes and is saved, because the
+chat is this machine's. Only a request tunnelled from a named device reaches
+`/v1/chats` or adds a turn — a local client, or a LAN client holding the
+proxy's key, is refused `device_not_named`, since this machine reads its own
+chats at `/api` — and, as with runs, a client that reaches the proxy
+directly can forge the marker.
+
 ### 4. A turn remembers the model it asked that machine for
 
 `RemotePairing` gains `default_model`: the model this machine last asked

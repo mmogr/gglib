@@ -63,3 +63,7 @@ pub struct HubTurn {
     /// The user's message.
     pub content: String,
 }
+
+#[cfg(test)]
+#[path = "hub_chats_tests.rs"]
+mod hub_chats_tests;

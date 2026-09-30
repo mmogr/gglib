@@ -646,16 +646,25 @@ readability.
 ## What the other machine can reach
 
 Everything the desktop's proxy serves — `/v1/models`,
-`/v1/chat/completions`, `/v1/runs`, the dashboard, `POST /v1/proxy/shutdown` —
+`/v1/chat/completions`, `/v1/runs`, `/v1/chats`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
 server configured on the desktop is remote code execution. The refusal is
 a `403` naming the flag; local clients are unaffected. The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
 remove. Forging it denies yourself `/mcp`, and on `/v1/runs`, where a device
-sees only the runs it started, it lets a client that reaches the desktop's proxy
-directly act as that device: this machine not reading a device's reply is a courtesy of
-the API, not a boundary.
+sees the runs it started and every run on the desktop's chats, and `/v1/chats`,
+it lets a client that reaches the desktop's proxy directly act as that device:
+this machine not reading a device's reply is a courtesy of the API, not a
+boundary.
+
+A paired device may read the desktop's chats at `/v1/chats` and carry one on
+with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content}`: the
+desktop runs the reply from its own record and saves both rows, marked with
+the device's name, and its own page and every paired device can follow that
+run. Nothing is copied to the device, only a named device gets past `403
+device_not_named`, and `gglib remote forget` takes the chats away with the key,
+though a reply the device already started still finishes and is saved.
 
 A tunnelled request the edge did not admit on a *device* key reaches no
 protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The
