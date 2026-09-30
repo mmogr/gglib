@@ -164,3 +164,64 @@ fn a_fresh_manager_reports_an_empty_resident_set() {
 fn a_fresh_manager_has_no_current_model() {
     assert!(manager().current_model().is_none());
 }
+
+// ---------------------------------------------------------------
+// Holds, through the manager and the port
+// ---------------------------------------------------------------
+
+/// A manager whose primary holds model 1 at port 8001, idle.
+fn manager_with_resident() -> Arc<ProcessManager> {
+    use crate::process::admission::{PRIMARY_SLOT, Resident};
+    let manager = Arc::new(manager());
+    let resident = Resident {
+        model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
+        model_id: 1,
+        model_name: "qwen".to_owned(),
+        context_size: 4096,
+        port: 8001,
+        model_path: "/models/qwen.gguf".into(),
+        slot_restore_supported: true,
+        cache_ram_health: gglib_core::domain::CacheRamHealth::LlamaDefault,
+        narration: None,
+        inflight: 0,
+        resident_since: tokio::time::Instant::now(),
+        weights_bytes: 1024,
+    };
+    drop(manager.residency.queue().install(PRIMARY_SLOT, resident));
+    manager
+}
+
+/// Whether the queue would refuse to recycle the primary, putting it back
+/// when it would not.
+fn primary_is_held(manager: &ProcessManager) -> bool {
+    use crate::process::admission::PRIMARY_SLOT;
+    let queue = manager.residency.queue();
+    let Ok(previous) = queue.evict_unheld(PRIMARY_SLOT) else {
+        return true;
+    };
+    drop(queue.install(PRIMARY_SLOT, previous.expect("a resident")));
+    false
+}
+
+#[test]
+fn the_manager_holds_a_resident_in_its_queue() {
+    let manager = manager_with_resident();
+
+    let hold = manager.hold(8001, 1).expect("model 1 is on 8001");
+    assert!(primary_is_held(&manager));
+    drop(hold);
+    assert!(!primary_is_held(&manager));
+}
+
+#[test]
+fn the_runtime_port_holds_through_the_manager() {
+    use gglib_core::ports::ModelRuntimePort as _;
+    let manager = manager_with_resident();
+    let port = crate::ports_impl::RuntimePortImpl::new(Arc::clone(&manager));
+
+    assert!(port.hold(8001, 2).is_none(), "model 2 is not on 8001");
+    let hold = port.hold(8001, 1).expect("model 1 is on 8001");
+    assert!(primary_is_held(&manager));
+    drop(hold);
+    assert!(!primary_is_held(&manager));
+}
