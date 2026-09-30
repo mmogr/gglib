@@ -17,7 +17,7 @@ use crate::state::AppState;
 ///
 /// # Errors
 ///
-/// `no_model` (409) when none of them names one.
+/// `no_model` (422) when none of them names one: nothing to wait for.
 pub(super) async fn model_for(
     state: &AppState,
     conversation: &Conversation,
@@ -49,7 +49,7 @@ pub(super) async fn model_for(
         return Ok(name);
     }
     Err(coded(
-        StatusCode::CONFLICT,
+        StatusCode::UNPROCESSABLE_ENTITY,
         "no_model",
         "the chat names no model and the hub has no default; choose one on the hub",
     ))

@@ -4,7 +4,6 @@
 
 use std::time::Duration;
 
-use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::{RunScope, RunsPort as _};
@@ -13,18 +12,17 @@ use serde_json::json;
 use super::{plan, start};
 use crate::error::HttpError;
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::hub_model::model_for;
 use crate::handlers::agent::launch::launch;
 use crate::handlers::agent::run_fixture::{
-    End, finished_reply, paced, prepared, saved, saving, settled, state,
+    End, finished_reply, meta, paced, prepared, saved, saving, settled, state,
 };
 use crate::state::AppState;
 
-fn device(name: &str) -> RunScope {
+pub(super) fn device(name: &str) -> RunScope {
     RunScope::Device(name.to_owned())
 }
 
-fn turn(conversation_id: i64, content: &str) -> HubTurn {
+pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
     HubTurn {
         conversation_id,
         content: content.to_owned(),
@@ -33,7 +31,7 @@ fn turn(conversation_id: i64, content: &str) -> HubTurn {
 
 /// A chat with a system prompt, one question and its reply, made by
 /// `qwen3-8b`.
-async fn chat(state: &AppState, settings: Option<ConversationSettings>) -> i64 {
+pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings>) -> i64 {
     let history = state.core.chat_history();
     let id = history
         .create_conversation_with_settings(NewConversation {
@@ -66,69 +64,12 @@ async fn chat(state: &AppState, settings: Option<ConversationSettings>) -> i64 {
 }
 
 /// The refusal's status and code.
-fn refused<T>(result: Result<T, HttpError>) -> (u16, &'static str) {
+pub(super) fn refused<T>(result: Result<T, HttpError>) -> (u16, &'static str) {
     match result {
         Err(HttpError::Coded { status, code, .. }) => (status.as_u16(), code),
         Err(other) => panic!("uncoded: {other}"),
         Ok(_) => panic!("not refused"),
     }
-}
-
-#[tokio::test]
-async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
-    let (_dir, state) = state().await;
-    let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
-    let user = |c: &str| AgentMessage::User {
-        content: c.to_owned(),
-    };
-    let wire: Vec<String> = plan
-        .chat
-        .messages
-        .iter()
-        .map(|m| serde_json::to_string(m).unwrap())
-        .collect();
-    let want: Vec<String> = [
-        AgentMessage::System {
-            content: "Be brief.".to_owned(),
-        },
-        user("first"),
-        AgentMessage::Assistant {
-            content: gglib_core::domain::agent::AssistantContent {
-                text: Some("answer".to_owned()),
-                tool_calls: Vec::new(),
-            },
-        },
-        user("second"),
-    ]
-    .iter()
-    .map(|m| serde_json::to_string(m).unwrap())
-    .collect();
-    assert_eq!(wire, want);
-    assert_eq!(plan.model, "qwen3-8b", "the model of the last reply");
-    assert!(plan.chat.config.is_none() && plan.chat.tool_filter.is_none());
-}
-
-#[tokio::test]
-async fn the_conversations_settings_set_the_limits_and_the_tools() {
-    let (_dir, state) = state().await;
-    let settings = ConversationSettings {
-        max_iterations: Some(4),
-        tools: vec!["fs:read_file".to_owned()],
-        ..ConversationSettings::default()
-    };
-    let id = chat(&state, Some(settings)).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
-    assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
-    assert_eq!(plan.chat.tool_filter, Some(vec!["fs:read_file".to_owned()]));
-
-    let off = ConversationSettings {
-        no_tools: Some(true),
-        ..ConversationSettings::default()
-    };
-    let id = chat(&state, Some(off)).await;
-    let plan = super::plan(&state, turn(id, "second")).await.unwrap();
-    assert_eq!(plan.chat.tool_filter, Some(Vec::new()));
 }
 
 #[tokio::test]
@@ -160,33 +101,8 @@ async fn a_chat_that_names_no_model_is_refused_before_anything_runs() {
         .await
         .unwrap();
     let refusal = refused(start(&state, "phone", "d1", turn(id, "hi")).await);
-    assert_eq!(refusal, (409, "no_model"));
+    assert_eq!(refusal, (422, "no_model"));
     assert!(saved(&state, id).await.is_empty());
-}
-
-#[tokio::test]
-async fn the_chats_own_model_comes_before_the_one_it_last_used() {
-    let (_dir, state) = state().await;
-    let model = gglib_core::domain::NewModel::new(
-        "catalogued".to_owned(),
-        std::path::PathBuf::from("/models/c.gguf"),
-        7.0,
-        chrono::Utc::now(),
-    );
-    let model_id = state.core.models().add(model).await.unwrap().id;
-    let id = chat(&state, None).await;
-    let history = state.core.chat_history();
-    let mut conversation = history.get_conversation(id).await.unwrap().unwrap();
-    let rows = history.get_messages(id).await.unwrap();
-    assert_eq!(
-        model_for(&state, &conversation, &rows).await.unwrap(),
-        "qwen3-8b"
-    );
-    conversation.model_id = Some(model_id);
-    assert_eq!(
-        model_for(&state, &conversation, &rows).await.unwrap(),
-        "catalogued"
-    );
 }
 
 /// The device's run saves the message it sent and, once the loop ends, the
@@ -195,27 +111,37 @@ async fn the_chats_own_model_comes_before_the_one_it_last_used() {
 async fn a_device_turn_saves_its_message_and_the_reply() {
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
-    let plan = plan(&state, turn(id, "second")).await.unwrap();
+    let plan = plan(&state, turn(id, "second"), false).await.unwrap();
     let (mut p, _) = prepared(finished_reply(), End::Finish);
     p.messages = plan.chat.messages;
-    let created = launch(
+    let created = super::begin(
         &state,
+        "phone",
         "d1",
-        device("phone"),
-        saving(id),
+        plan.conversation_id,
         p,
         take_permit(&state).unwrap(),
     )
     .await
     .unwrap();
+    assert!(created.created);
     assert_eq!(created.info.device.as_deref(), Some("phone"));
     assert_eq!(created.info.conversation_id, Some(id));
+    assert!(
+        state
+            .runs
+            .existing(&device("phone"), "d1")
+            .unwrap()
+            .is_some()
+    );
     settled(&state).await;
 
     let rows = saved(&state, id).await;
     let said: Vec<(MessageRole, &str)> =
         rows.iter().map(|r| (r.role, r.content.as_str())).collect();
     assert_eq!(said[2], (MessageRole::User, "second"));
+    let device_of = |i: usize| meta(&rows[i], "device");
+    assert_eq!(device_of(2), json!("phone"));
     assert_eq!(
         said.last().copied(),
         Some((MessageRole::Assistant, "ANSWER-SECRET"))

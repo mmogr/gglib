@@ -96,7 +96,10 @@ the machine, not changing it — the same thing its own chat page does: this
 machine rebuilds the history from its record, runs the reply on the chat's
 model as an agent run in the device's scope, and saves the message and the
 reply to the chat, each marked with the device's name. Models, settings and
-pairings stay out of reach.
+pairings stay out of reach, and so do this machine's MCP tools: a device's
+turn calls no tool unless `gglib remote enable --allow-mcp` opened the tunnel
+to them, the same gate as `/mcp` and for the same reason (a leaked key must
+not run a shell server), and then only the tools the chat's settings name.
 
 A run on one of this machine's chats belongs to the chat, not to whoever
 started it: this machine's page and every paired device may list, read and

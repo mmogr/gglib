@@ -58,8 +58,9 @@ in the caller's scope, saves the user's message and starts the loop.
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
 starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
 chat's id and the device's message. The history is rebuilt from the hub's
-record (the system prompt, every row, the message), the limits and tools
-from the conversation's settings, and the reply runs on the chat's model
+record (the system prompt, every row, the message), the limits from the
+conversation's settings, no tools unless `enable --allow-mcp` opened the
+tunnel to them (then only those the settings name), and the reply runs on the chat's model
 (`hub_model`: its own, its settings', its last reply's, or the hub's
 default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.

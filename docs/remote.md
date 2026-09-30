@@ -664,7 +664,9 @@ desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. Nothing is copied to the device, only a named device gets past `403
 device_not_named`, and `gglib remote forget` takes the chats away with the key,
-though a reply the device already started still finishes and is saved.
+though a reply the device already started still finishes and is saved. Such a
+turn calls none of the desktop's MCP tools unless the desktop ran `enable
+--allow-mcp`, the same gate as `/mcp`, and then only the tools the chat names.
 
 A tunnelled request the edge did not admit on a *device* key reaches no
 protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The

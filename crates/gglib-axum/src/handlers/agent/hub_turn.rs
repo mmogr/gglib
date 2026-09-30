@@ -4,8 +4,10 @@
 //!
 //! The device sends only its message. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
-//! prompt, then every saved row, then the new message, with the limits and
-//! tools the conversation's settings name. The reply runs on the chat's
+//! prompt, then every saved row but a system one, then the new message,
+//! with the limits the conversation's settings name. It calls no tool unless
+//! this machine lets the tunnel reach its MCP tools, and then only those the
+//! settings name. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
 //! running, as an agent run in the device's scope, saved to the chat.
 //!
@@ -18,12 +20,15 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
 use gglib_core::domain::agent::AgentMessage;
-use gglib_core::domain::chat::{ConversationSettings, Message};
+use gglib_core::domain::chat::{ConversationSettings, Message, MessageRole};
 use gglib_core::domain::hub_chats::HubTurn;
-use gglib_core::ports::{AgentRunStarter, Created, RunScope, RunsError, TurnRefused};
+use gglib_core::ports::{
+    AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
+};
+use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{prepare, take_permit};
+use super::compose::{Prepared, prepare, take_permit};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
 use super::launch::{Transcript, launch};
@@ -86,7 +91,7 @@ fn refusal(error: HttpError) -> TurnRefused {
 ///
 /// `invalid_request` (400) for an empty message; `conversation_not_found`
 /// (404); `conflict` (409) while the chat has a live reply; `no_model`
-/// (409) when nothing names the chat's model; `agent_busy` (429);
+/// (422) when nothing names the chat's model; `agent_busy` (429);
 /// `model_unavailable` (503) when it cannot be loaded; and whatever the
 /// daemon's own door refuses the same run with. A refusal writes nothing.
 pub(super) async fn start(
@@ -102,7 +107,7 @@ pub(super) async fn start(
             created: false,
         });
     }
-    let plan = plan(state, turn).await?;
+    let plan = plan(state, turn, state.remote.gateway().mcp_allowed()).await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,
@@ -111,12 +116,27 @@ pub(super) async fn start(
         )
     })?;
     let chat = on_model(state, &plan.model, plan.chat).await?;
-    let mut prepared = prepare(state, chat).await.map_err(with_code)?;
+    let prepared = prepare(state, chat).await.map_err(with_code)?;
+    begin(state, device, id, plan.conversation_id, prepared, permit).await
+}
+
+/// Start `device`'s run `id` with its prepared loop: held on its model,
+/// reserved in the device's scope, its message and reply saved to
+/// `conversation_id`.
+pub(super) async fn begin(
+    state: &AppState,
+    device: &str,
+    id: &str,
+    conversation_id: i64,
+    mut prepared: Prepared,
+    permit: OwnedSemaphorePermit,
+) -> Result<Created, HttpError> {
     prepared.hold = remote_upstream::hold(state.runtime.as_ref(), prepared.local_model)?;
     let transcript = Transcript {
-        conversation_id: Some(plan.conversation_id),
+        conversation_id: Some(conversation_id),
         replace_from: None,
     };
+    let scope = RunScope::Device(device.to_owned());
     launch(state, id, scope, transcript, prepared, permit).await
 }
 
@@ -128,8 +148,13 @@ pub(super) struct Plan {
     pub(super) chat: AgentChatRequest,
 }
 
-/// Read `turn` against the chat it names.
-pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
+/// Read `turn` against the chat it names. `mcp_allowed` is whether this
+/// machine lets the tunnel reach its MCP tools.
+pub(super) async fn plan(
+    state: &AppState,
+    turn: HubTurn,
+    mcp_allowed: bool,
+) -> Result<Plan, HttpError> {
     if turn.content.trim().is_empty() {
         return Err(coded(
             StatusCode::BAD_REQUEST,
@@ -175,7 +200,10 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         })
         .into_iter()
         .collect();
-    messages.extend(rows.iter().map(Message::to_agent_message));
+    // The prompt comes from the conversation, as the page takes it; a saved
+    // system row would send it twice.
+    let saved = rows.iter().filter(|row| row.role != MessageRole::System);
+    messages.extend(saved.map(Message::to_agent_message));
     messages.push(AgentMessage::User {
         content: turn.content,
     });
@@ -185,7 +213,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         remote: false,
         messages,
         config: config_of(&settings),
-        tool_filter: tools_of(&settings),
+        tool_filter: Some(tools_of(&settings, mcp_allowed)),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: None,
@@ -211,18 +239,24 @@ fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
     named.then_some(config)
 }
 
-/// The tools the conversation's settings allow: none when it turned them
-/// off, its list when it names one, and otherwise every tool.
-fn tools_of(settings: &ConversationSettings) -> Option<Vec<String>> {
-    if settings.no_tools == Some(true) {
-        return Some(Vec::new());
+/// The tools a device's turn may call. None unless this machine lets the
+/// tunnel reach its MCP tools (`gglib remote enable --allow-mcp`), as `/mcp`
+/// itself does: a leaked key must not run a shell server. Then only those
+/// the conversation's settings name, and none when it names none or turned
+/// them off. Never every tool, which the page's own turns may call.
+fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Vec<String> {
+    if !mcp_allowed || settings.no_tools == Some(true) {
+        return Vec::new();
     }
-    Some(settings.tools.clone()).filter(|tools| !tools.is_empty())
+    settings.tools.clone()
 }
 
 #[cfg(test)]
 #[path = "hub_turn_forget_tests.rs"]
 mod hub_turn_forget_tests;
+#[cfg(test)]
+#[path = "hub_turn_plan_tests.rs"]
+mod hub_turn_plan_tests;
 #[cfg(test)]
 #[path = "hub_turn_tests.rs"]
 mod hub_turn_tests;
