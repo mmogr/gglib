@@ -48,7 +48,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Paths permitted to name the floor as a fallback, with the reason.
 ALLOWED=(
   "crates/gglib-core/src/server_config.rs"          # the chain's last rung
-  "crates/gglib-core/src/ports/model_runtime.rs"    # MinimalRuntime, a test double
+  "crates/gglib-core/src/ports/model_runtime_tests.rs"  # MinimalRuntime, a test double
 )
 
 is_allowed() {
