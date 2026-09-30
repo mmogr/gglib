@@ -5,9 +5,9 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::{Method, Request, StatusCode};
+use axum::http::{Method, StatusCode};
 
-use common::origin::{HOST, send_request, shipped, shipped_cors};
+use common::origin::{HOST, authed, send_request, shipped, shipped_cors};
 use gglib_axum::DaemonAccess;
 use gglib_core::contracts::http::daemon;
 
@@ -27,7 +27,7 @@ async fn every_far_chat_route_is_a_409_when_not_joined() {
         (Method::GET, daemon::remote_run_events_path("chat-1", 0), ""),
         (Method::POST, daemon::remote_run_cancel_path("chat-1"), ""),
     ] {
-        let request = Request::builder()
+        let request = authed()
             .method(method.clone())
             .uri(&path)
             .header("host", HOST)
@@ -56,7 +56,7 @@ async fn every_far_chat_route_is_a_409_when_not_joined() {
 #[tokio::test]
 async fn a_turn_that_carries_history_is_refused() {
     let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
-    let request = Request::builder()
+    let request = authed()
         .method(Method::PUT)
         .uri(daemon::remote_turn_path(12, "chat-1"))
         .header("host", HOST)
