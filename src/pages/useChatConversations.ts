@@ -95,6 +95,16 @@ export function useChatConversations(initialId: number | null, onError: (message
     void syncConversations();
   }, [syncConversations]);
 
+  /**
+   * The conversation a model switch opens when it lands: this machine's
+   * open one, or none while a far chat is open, since its id means another
+   * chat here. Read when the switch lands, not when it was asked for.
+   */
+  const landingConversationId = useCallback(
+    (): number | null => (sourceRef.current === 'far' ? null : activeConversationIdRef.current),
+    [],
+  );
+
   // Load conversations on mount
   useEffect(() => {
     void syncConversations();
@@ -108,7 +118,7 @@ export function useChatConversations(initialId: number | null, onError: (message
     conversationLoading,
     activeConversationId,
     setActiveConversationId,
-    activeConversationIdRef,
+    landingConversationId,
     fetched,
     syncConversations,
   };

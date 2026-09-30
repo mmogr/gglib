@@ -1,7 +1,6 @@
 import { useState, useEffect, useId, useRef } from 'react';
 import { usePanelResize } from '../hooks/usePanelResize';
 import { type ChatPageTabId, ChatPageControls } from './chatTabs';
-import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import {
   ConversationListPanel,
@@ -11,6 +10,7 @@ import {
 } from '../components/ConversationListPanel';
 import { ACTIVITY_POLL_MS } from '../components/ConversationListPanel/useConversationActivity';
 import { useChatConversations } from './useChatConversations';
+import { useConversationActions } from './useConversationActions';
 import { ChatMessagesPanel, type ModelChoice } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
@@ -84,7 +84,7 @@ export default function ChatPage(props: ChatPageProps) {
   // read and carried on here, and changed only there.
   const {
     source, switchSource, conversations, setConversations, conversationLoading, activeConversationId,
-    setActiveConversationId, activeConversationIdRef, fetched, syncConversations,
+    setActiveConversationId, landingConversationId, fetched, syncConversations,
   } = useChatConversations(conversationId, setChatError);
   const far = source === 'far';
   
@@ -184,23 +184,9 @@ export default function ChatPage(props: ChatPageProps) {
   // An error belongs to the conversation it happened in.
   useEffect(() => setChatError(null), [activeConversationId]);
 
-  // Conversation handlers
-  const handleDeleteConversation = async (conversationId: number) => {
-    const shouldDelete = await confirm({
-      title: 'Delete this conversation?',
-      description: 'This cannot be undone.',
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!shouldDelete) return;
-
-    try {
-      await getTransport().deleteConversation(conversationId);
-      await syncConversations();
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
+  // What changes a conversation: this machine's only, never a far chat.
+  const { handleDeleteConversation, handleRenameConversation, handleClearConversation, handleExportConversation, handleUpdateSystemPrompt } =
+    useConversationActions({ far, activeConversation, confirm, syncConversations, onError: setChatError });
 
   const handleNewConversation = () => {
     setNewConversationTitle(DEFAULT_CONVERSATION_TITLE);
@@ -209,6 +195,7 @@ export default function ChatPage(props: ChatPageProps) {
   };
 
   const handleCreateConversation = async () => {
+    if (far) return; // A chat is made on the machine that holds it.
     setCreatingConversation(true);
     try {
       const title = newConversationTitle.trim() || DEFAULT_CONVERSATION_TITLE;
@@ -238,77 +225,6 @@ export default function ChatPage(props: ChatPageProps) {
       setChatError(error instanceof Error ? error.message : String(error));
     } finally {
       setCreatingConversation(false);
-    }
-  };
-
-  const handleRenameConversation = async (title: string) => {
-    if (!activeConversation) return;
-    try {
-      appLogger.debug('component.chat', 'Rename conversation called', {
-        conversationId: activeConversation.id,
-        title,
-        titleLength: title.length,
-      });
-      await getTransport().updateConversationTitle(activeConversation.id, title);
-      appLogger.debug('component.chat', 'Title update succeeded, syncing');
-      await syncConversations({ preferredId: activeConversation.id, silent: true });
-      appLogger.debug('component.chat', 'Rename conversation completed successfully');
-    } catch (error: any) {
-      appLogger.error('component.chat', 'Rename conversation failed', {
-        error,
-        conversationId: activeConversation.id,
-        title
-      });
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const handleClearConversation = async () => {
-    if (!activeConversation) return;
-    const confirmed = await confirm({
-      title: 'Start a fresh copy?',
-      description: 'The current conversation will be deleted and replaced with a new copy.',
-      confirmLabel: 'Start fresh',
-    });
-    if (!confirmed) return;
-
-    try {
-      await getTransport().deleteConversation(activeConversation.id);
-      const newId = await getTransport().createConversation({
-        title: activeConversation.title,
-        modelId: null,
-        systemPrompt: activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
-      });
-      await syncConversations({ preferredId: newId });
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const handleExportConversation = async () => {
-    if (!activeConversation) return;
-    try {
-      const messages = await getTransport().getMessages(activeConversation.id);
-      const data = { conversation: activeConversation, messages };
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `conversation-${activeConversation.id}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const handleUpdateSystemPrompt = async (prompt: string | null) => {
-    if (!activeConversation) return;
-    try {
-      await getTransport().updateConversationSystemPrompt(activeConversation.id, prompt);
-      await syncConversations({ preferredId: activeConversation.id, silent: true });
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -373,7 +289,7 @@ export default function ChatPage(props: ChatPageProps) {
               modelId={far ? undefined : modelId}
               source={source}
               onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
-                conversationId: activeConversationIdRef.current,
+                conversationId: landingConversationId(),
                 draft: runtime.thread.composer.getState().text,
               })))}
               startingModel={startingModel}

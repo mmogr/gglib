@@ -160,6 +160,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     activeConversation,
     syncConversations,
     showToast,
+    readOnly: source === 'far',
   });
 
   // Context value for message actions

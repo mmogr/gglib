@@ -26,6 +26,8 @@ export class FakeFarDaemon {
   hub = new FakeDaemon();
   farRequests: Recorded[] = [];
   titles: Record<number, string> = { 1: 'Why the build broke', 2: 'Parsing GGUF' };
+  /** How many more listings of the far chats fail, as a dropped tunnel would. */
+  listFails = 0;
 
   /** How many far requests went to `method` on a path starting `prefix`. */
   farCount(method: string, prefix: string): number {
@@ -44,6 +46,10 @@ export class FakeFarDaemon {
     let m: RegExpExecArray | null;
 
     if (method === 'GET' && path === '/api/remote/chats') {
+      if (this.listFails > 0) {
+        this.listFails--;
+        return json({ error: 'the other machine did not answer', status: 503, type: 'unavailable' }, 503);
+      }
       const live = [...this.hub.runs.values()].filter((r) => LIVE.has(r.info.status));
       const chats = [...this.hub.conversations].map((id) => {
         const run = live.find((r) => r.info.conversation_id === id);

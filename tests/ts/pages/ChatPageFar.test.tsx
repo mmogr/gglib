@@ -13,6 +13,10 @@ import type { ChatMessage } from '../../../src/services/transport';
 import type { HubChat } from '../../../src/types/generated/HubChat';
 import { chatTransport, conversation, framesThenWait, wrapper, type ChatFixture } from './chatPageHarness';
 import { UNREAD_STORAGE_KEY } from '../../../src/components/ConversationListPanel/useConversationActivity';
+import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
+import { guiModel } from '../fixtures/model';
+import { act } from '@testing-library/react';
+import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
@@ -53,6 +57,14 @@ function farTransport() {
       messages: id === 1 ? FAR_ROWS : [],
     })),
     listFarRuns: vi.fn(async () => []),
+    addFarTurn: vi.fn(async (_id: number, runId: string) => ({
+      id: runId,
+      kind: 'agent',
+      status: 'queued',
+      created_at_ms: 1,
+      conversation_id: 1,
+      last_seq: 0,
+    })),
     readFarRunEvents: (_id: string, _after: number, signal: AbortSignal) => framesThenWait([], signal),
   };
 }
@@ -166,5 +178,78 @@ describe('ChatPage, the far machine’s chats', () => {
     const asked = rowOf(await screen.findByText('Asked here.'));
     expect(within(asked).getByText('You')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
+  });
+
+  it('a turn a paired device added to one of this machine’s chats names the device, not "You"', async () => {
+    fixture.rows[2] = [
+      { id: 21, conversation_id: 2, role: 'user', content: 'Sent from the phone.', created_at: '2026-09-01T09:12:00Z', metadata: { device: 'phone-7c2e' } },
+    ];
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
+
+    const asked = rowOf(await screen.findByText('Sent from the phone.'));
+    expect(within(asked).getByText('phone-7c2e')).toBeInTheDocument();
+    expect(within(asked).queryByText('You')).not.toBeInTheDocument();
+  });
+
+  it('keeps the switch while a far chat is open and the connection drops, so this machine is one click away', async () => {
+    const user = userEvent.setup();
+    joined();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /Other machine/ }));
+    await screen.findByText('Why did the build break?');
+
+    act(() => applyRemoteStatus({ ...IDLE_STATUS }));
+
+    expect(screen.getByRole('group', { name: 'Whose chats' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Other machine/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Other machine/ })).toHaveTextContent('not connected');
+    await user.click(screen.getByRole('button', { name: /This machine/ }));
+    await screen.findByText('Asked here.');
+  });
+
+  it('a turn just sent on a far chat is "You" while its reply is written', async () => {
+    const user = userEvent.setup();
+    joined();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /Other machine/ }));
+    await screen.findByText('Why did the build break?');
+
+    await user.type(screen.getByRole('textbox'), 'And how do I fix it?{Enter}');
+
+    const sent = rowOf(await screen.findByText('And how do I fix it?'));
+    expect(within(sent).getByText('You')).toBeInTheDocument();
+    const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
+    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?');
+  });
+
+  it('a model switch that lands while a far chat is open opens no conversation here', async () => {
+    const user = userEvent.setup();
+    joined();
+    act(() => ingestServerEvent({ type: 'running', modelId: '8', port: 5555, updatedAt: Date.now(), modelName: 'llama-3.2-3b' }));
+    (transport.current as { listModels: unknown }).listModels = vi.fn(async () => [
+      guiModel({ id: 7, name: 'qwen3' }),
+      guiModel({ id: 8, name: 'llama-3.2-3b' }),
+    ]);
+    const onSwitchModel = vi.fn(
+      async (_choice: ModelChoice, _context: () => { conversationId: number | null; draft: string }) => {},
+    );
+    render(
+      <ChatPage modelName="qwen3" modelId={7} serverPort={4321} onSwitchModel={onSwitchModel} onClose={async () => {}} />,
+      { wrapper },
+    );
+    await screen.findByText('Asked here.');
+    await waitFor(() => expect(screen.getByRole('option', { name: 'llama-3.2-3b' })).toBeInTheDocument());
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
+    await waitFor(() => expect(onSwitchModel).toHaveBeenCalledTimes(1));
+    const context = onSwitchModel.mock.calls[0][1];
+    expect(context().conversationId).toBe(1);
+
+    await user.click(screen.getByRole('button', { name: /Other machine/ }));
+    await screen.findByText('Why did the build break?');
+
+    expect(context().conversationId).toBeNull();
+    act(() => ingestServerEvent({ type: 'stopped', modelId: '8', port: 5555, updatedAt: Date.now(), modelName: 'llama-3.2-3b' }));
   });
 });

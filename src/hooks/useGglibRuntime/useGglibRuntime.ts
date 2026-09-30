@@ -144,6 +144,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     }
     if (far && conversationId === undefined) {
       onError?.(new Error('A chat on the other machine is started there.'));
+      if (giveBack) giveTextBack(content);
       return;
     }
     // Never from a conversation that is not loaded, or into a run that may
@@ -153,7 +154,12 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       return;
     }
     const signal = reader.beginSend();
-    if (!signal) return;
+    if (!signal) {
+      // A run is live, or opening has not learned whether one is: nothing
+      // is sent, and the text goes back rather than being lost.
+      if (giveBack) giveTextBack(content);
+      return;
+    }
     stopAskedRef.current = false;
     let cid = conversationId;
     try {

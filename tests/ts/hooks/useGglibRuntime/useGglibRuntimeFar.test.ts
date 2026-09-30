@@ -121,13 +121,51 @@ describe('useGglibRuntime on the far machine', () => {
     expect([here.edit, here.reload]).toEqual([true, true]);
   });
 
-  it('makes no chat on the far machine: a send with none open sends nothing', async () => {
+  it('makes no chat on the far machine: a send with none open sends nothing, and the text comes back', async () => {
     const onError = vi.fn();
     const hook = await mount({ source: 'far', onError });
     send(hook, 'hello');
 
     await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError.mock.calls[0][0].message).toBe('A chat on the other machine is started there.');
+    expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello');
     expect(daemons.farRequests.filter((r) => r.method !== 'GET')).toEqual([]);
+    nothingHere();
+  });
+
+  it('a send refused because a far reply is still running sends nothing, and reads that reply', async () => {
+    const onError = vi.fn();
+    daemons.hub.save(1, { role: 'user', content: 'q' });
+    daemons.hub.running('r-far', 1, [{ type: 'text_delta', content: 'Hel' }]);
+    // Opening cannot learn whether a reply is running: the listing fails once.
+    daemons.listFails = 1;
+    const hook = await mount({ ...far(1), onError });
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+
+    send(hook, 'again');
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+    expect(onError.mock.calls[1][0].message).toBe('Nothing was sent: a reply is still running in this conversation.');
+    expect(daemons.farCount('PUT', '/api/remote/chats/')).toBe(0);
+    expect(hook.result.current.runtime.thread.composer.getState().text).toBe('again');
+    await waitFor(() => expect(daemons.farCount('GET', '/api/remote/runs/r-far/events')).toBe(1));
+    nothingHere();
+  });
+
+  it.each([
+    [422, 'no_model', 'the chat names no model the other machine has'],
+    [403, 'device_not_paired', 'this device is not paired with the other machine'],
+    [503, 'unavailable', 'the other machine did not answer'],
+  ])('a far send refused with %i says the far sentence and gives the text back', async (status, type, error) => {
+    const onError = vi.fn();
+    daemons.hub.refuseNext = { status, type, error };
+    const hook = await mount({ ...far(1), onError });
+    send(hook, 'hello');
+
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError.mock.calls[0][0].message).toBe(error);
+    expect(hook.result.current.isRunning).toBe(false);
+    expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello');
     nothingHere();
   });
 

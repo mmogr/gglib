@@ -153,12 +153,15 @@ export const AssistantMessageBubble: React.FC = () => {
 };
 
 /**
- * Who sent a user's turn: the paired device its row names; else "You" on
- * this machine, and the other machine's own user on a far chat.
+ * Who sent a user's turn: the paired device its saved row names, on either
+ * machine. Otherwise "You" on this machine, and on a far chat for a turn
+ * just sent from here and not yet read back; a far row that names no
+ * device was typed at the other machine.
  */
-function userName(metadata: unknown, far: boolean): string {
-  const device = (metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.device;
-  return device ?? (far ? 'Other machine' : 'You');
+function userName(message: { id: string; metadata?: unknown }, far: boolean): string {
+  const device = (message.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.device;
+  if (device) return device;
+  return far && message.id.startsWith('db-') ? 'Other machine' : 'You';
 }
 
 /**
@@ -179,7 +182,7 @@ export const UserMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className="group">
       <TurnRow
-        who={<TurnWho name={userName(message.metadata, far)} at={message.createdAt} />}
+        who={<TurnWho name={userName(message, far)} at={message.createdAt} />}
         body={
           <>
             <div className="text-base leading-relaxed text-text-secondary">

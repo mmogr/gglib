@@ -13,6 +13,11 @@ export interface UseMessageDeletionOptions {
   activeConversation: ConversationSummary | null;
   syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
   showToast: (message: string, type?: ToastType, duration?: number) => void;
+  /**
+   * A far chat: its rows are the far machine's, and a delete here would
+   * reach this machine's daemon with its ids. Nothing is deleted.
+   */
+  readOnly?: boolean;
 }
 
 export interface UseMessageDeletionResult {
@@ -48,6 +53,7 @@ export function useMessageDeletion({
   activeConversation,
   syncConversations,
   showToast,
+  readOnly = false,
 }: UseMessageDeletionOptions): UseMessageDeletionResult {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -71,9 +77,10 @@ export function useMessageDeletion({
   }, [threadRuntime]);
 
   const initiateDelete = useCallback((runtimeMessageId: string) => {
+    if (readOnly) return;
     setDeleteTargetId(runtimeMessageId);
     setIsDeleteModalOpen(true);
-  }, []);
+  }, [readOnly]);
 
   const cancelDelete = useCallback(() => {
     setIsDeleteModalOpen(false);
@@ -81,7 +88,7 @@ export function useMessageDeletion({
   }, []);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteTargetId || !threadRuntime || !activeConversationId) return;
+    if (readOnly || !deleteTargetId || !threadRuntime || !activeConversationId) return;
 
     setIsDeleting(true);
     try {
@@ -106,6 +113,7 @@ export function useMessageDeletion({
       setDeleteTargetId(null);
     }
   }, [
+    readOnly,
     deleteTargetId,
     threadRuntime,
     activeConversationId,
