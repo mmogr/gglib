@@ -13,7 +13,7 @@ Custom hooks for the Model Control Center page's filter state, panel layout, cha
 |------|------|
 | `useMccFilters.ts` | Filter state; debounced API calls (300ms); client-side full-text search on top of server results; model addition refresh |
 | `useMccLayout.ts` | Panel resize state via `usePanelResize`; persists panel widths across sessions |
-| `useChatSession.ts` | Which chat screen is open, local or remote; opens a local one from a served model, and a remote one when the Remote panel asks; moves an open chat to another model, serving it first if needed |
+| `useChatSession.ts` | Which chat screen is open, local or remote; opens a local one from a served model, and a remote one when the Remote panel asks; moves an open chat to another model, serving it first if needed, unless the chat was closed or moved meanwhile |
 | `useMccMenuActions.ts` | Registers macOS menu callbacks; wires destructive operations through `ConfirmContext` |
 
 ## Filter Data Flow

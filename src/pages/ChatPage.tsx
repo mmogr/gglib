@@ -45,8 +45,9 @@ type ChatPageProps = {
   serverStartTime?: number; // Unix timestamp in seconds
   initialView?: 'chat' | 'console'; // Which view to show initially
   conversationId?: number | null; // The conversation to open with, e.g. after a model switch
-  // Move the chat to another model, keeping this conversation open; local only.
-  onSwitchModel?: (choice: ModelChoice, conversationId: number | null) => Promise<void>;
+  // Move the chat to another model, keeping open the conversation that
+  // `context` reads when the switch lands; local only.
+  onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null }) => Promise<void>;
   onClose: () => Promise<void>; // Stops server and exits
 } & (
   | { remote?: false; serverPort: number; modelId: number }
@@ -76,6 +77,9 @@ export default function ChatPage(props: ChatPageProps) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationLoading, setConversationLoading] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(conversationId);
+  // Read by a model switch when it lands, which can be well after the pick.
+  const activeConversationIdRef = useRef(activeConversationId);
+  useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
   const [conversationSearch, setConversationSearch] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   
@@ -405,7 +409,7 @@ export default function ChatPage(props: ChatPageProps) {
               toolFormat={toolFormat}
               modelName={modelName}
               modelId={modelId}
-              onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, activeConversationId))}
+              onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({ conversationId: activeConversationIdRef.current })))}
               quantization={quantization}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />

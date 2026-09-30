@@ -42,13 +42,21 @@ export type ChatSession =
     }
   | { kind: 'remote'; modelName: string };
 
+/** What a model switch carries to the new page, read when the switch lands. */
+export interface SwitchContext {
+  conversationId: number | null;
+}
+
 export interface UseChatSessionResult {
   chatSession: ChatSession | null;
   setChatSession: (session: ChatSession | null) => void;
   /** Open the chat screen on a model already served here. */
   openChatSession: (modelId: number, view: 'chat' | 'console') => void;
-  /** Move an open chat to another model, keeping its conversation open. */
-  switchChatModel: (choice: ModelChoice, conversationId: number | null) => Promise<void>;
+  /**
+   * Move the open chat `from` to another model, keeping its conversation
+   * open. Lands only if `from` is still the open chat when the model is up.
+   */
+  switchChatModel: (from: ChatSession, choice: ModelChoice, context: () => SwitchContext) => Promise<void>;
   closeChatSession: () => void;
 }
 
@@ -75,18 +83,28 @@ export function useChatSession(servers: ServerViewModel[]): UseChatSessionResult
   // A model that is not running is served first with an empty request, so
   // the daemon launches it on the model's saved settings and its own
   // defaults. The server the chat leaves is left running.
+  //
+  // Starting a model takes long enough for the chat to be closed, or moved
+  // again, meanwhile; that later choice wins and this switch is dropped. The
+  // conversation is read when the switch lands, not when the model was
+  // picked, so one chosen while it loaded is the one that opens.
   const switchChatModel = useCallback(
-    async (choice: ModelChoice, conversationId: number | null) => {
+    async (from: ChatSession, choice: ModelChoice, context: () => SwitchContext) => {
       const server = servers.find((s) => s.modelId === choice.modelId);
       const port = server?.port ?? (await getTransport().serveModel({ id: choice.modelId })).port;
-      setChatSession({
-        kind: 'local',
-        serverPort: port,
-        modelId: choice.modelId,
-        modelName: server?.modelName ?? choice.modelName,
-        initialView: 'chat',
-        conversationId,
-      });
+      const { conversationId } = context();
+      setChatSession((current) =>
+        current !== from
+          ? current
+          : {
+              kind: 'local',
+              serverPort: port,
+              modelId: choice.modelId,
+              modelName: server?.modelName ?? choice.modelName,
+              initialView: 'chat',
+              conversationId,
+            },
+      );
     },
     [servers],
   );

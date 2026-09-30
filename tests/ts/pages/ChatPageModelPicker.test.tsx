@@ -12,7 +12,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { chatTransport, conversation, wrapper, type ChatFixture } from './chatPageHarness';
+import type { ReactNode } from 'react';
+import { chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPageHarness';
 import { guiModel } from '../fixtures/model';
 
 const transport = vi.hoisted(() => ({ current: {} as unknown }));
@@ -23,15 +24,26 @@ vi.mock('../../../src/services/transport', async () => {
 
 import ChatPage from '../../../src/pages/ChatPage';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
+import { useToastContext } from '../../../src/contexts/ToastContext';
+import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
+
+/** The toasts, which `ToastProvider` holds but does not draw. */
+const ToastProbe = () => {
+  const { toasts } = useToastContext();
+  return <div data-testid="toasts">{toasts.map((t) => t.message).join(' | ')}</div>;
+};
+const wrapper = ({ children }: { children: ReactNode }) =>
+  pageWrapper({ children: <><ToastProbe />{children}</> });
 
 let fixture: ChatFixture;
-const onSwitchModel = vi.fn(async () => {});
+type SwitchContext = () => { conversationId: number | null };
+const onSwitchModel = vi.fn(async (_choice: ModelChoice, _context: SwitchContext) => {});
 
-function renderPage(conversationId?: number) {
+function renderPage(conversationId?: number, modelId = 7) {
   return render(
     <ChatPage
       modelName="Qwen3.8-27B"
-      modelId={7}
+      modelId={modelId}
       serverPort={4321}
       conversationId={conversationId}
       onSwitchModel={onSwitchModel}
@@ -82,17 +94,57 @@ describe('ChatPage, model picker', () => {
     expect(picker()).toHaveDisplayValue('Qwen3.8-27B');
   });
 
-  it('hands up the chosen model with the conversation that is open', async () => {
+  it('hands up the chosen model, and the conversation open when the switch lands', async () => {
     const user = userEvent.setup();
     renderPage();
+    const selected = (name: RegExp) =>
+      waitFor(() => expect(screen.getByRole('option', { name })).toHaveAttribute('aria-selected', 'true'));
     await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
-    await waitFor(() =>
-      expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'),
-    );
+    await selected(/Parsing GGUF/);
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
 
-    expect(onSwitchModel).toHaveBeenCalledWith({ modelId: 8, modelName: 'llama-3.2-3b' }, 2);
+    expect(onSwitchModel).toHaveBeenCalledTimes(1);
+    const [choice, context] = onSwitchModel.mock.calls[0];
+    expect(choice).toEqual({ modelId: 8, modelName: 'llama-3.2-3b' });
+    expect(context().conversationId).toBe(2);
+    // A model can take a while to start; a conversation opened meanwhile
+    // is the one the new page opens on.
+    await user.click(screen.getByRole('option', { name: /launchd KeepAlive/ }));
+    await selected(/launchd KeepAlive/);
+    expect(context().conversationId).toBe(1);
+  });
+
+  it('says why a model would not start, and stays on the model it was on', async () => {
+    const user = userEvent.setup();
+    onSwitchModel.mockRejectedValueOnce(new Error('not enough memory'));
+    renderPage();
+    const picker = () => screen.getByRole('combobox', { name: 'Model' });
+    await waitFor(() => expect(within(picker()).getByRole('option', { name: 'gemma-3-12b' })).toBeInTheDocument());
+
+    await user.selectOptions(picker(), 'gemma-3-12b');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('toasts')).toHaveTextContent('Could not start gemma-3-12b: not enough memory'),
+    );
+    expect(picker()).toHaveDisplayValue('Qwen3.8-27B');
+    expect(picker()).toBeEnabled();
+  });
+
+  it('lists the current model once, though it is running and registered', async () => {
+    serve(10, 'Qwen3.8-27B', 'running');
+    (transport.current as { listModels: () => Promise<unknown> }).listModels = async () => [
+      guiModel({ id: 10, name: 'Qwen3.8-27B' }),
+      guiModel({ id: 9, name: 'gemma-3-12b' }),
+    ];
+    try {
+      renderPage(undefined, 10);
+      const picker = () => screen.getByRole('combobox', { name: 'Model' });
+      await waitFor(() => expect(within(picker()).getByRole('option', { name: 'gemma-3-12b' })).toBeInTheDocument());
+      expect(within(picker()).getAllByRole('option', { name: 'Qwen3.8-27B' })).toHaveLength(1);
+    } finally {
+      serve(10, 'Qwen3.8-27B', 'stopped');
+    }
   });
 
   it('opens on the conversation it is given, not the newest', async () => {

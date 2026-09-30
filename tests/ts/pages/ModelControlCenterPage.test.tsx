@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ReactNode, useState } from 'react';
@@ -27,7 +27,13 @@ import { ReactNode, useState } from 'react';
 // The library the page loads. Empty for the remote cases; one model for the
 // case about a model already running here.
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
-const serveModel = vi.hoisted(() => vi.fn(async () => ({ port: 9456 })));
+const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ port: 9456 })));
+// What the stub chat page's switch button picks, and the conversation it
+// reports as open when the switch lands.
+const stub = vi.hoisted(() => ({
+  choice: { modelId: 9, modelName: 'gemma-3-12b' },
+  conversationId: 2 as number | null,
+}));
 
 vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>(
@@ -82,7 +88,10 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     serverPort?: number;
     conversationId?: number | null;
     remote?: boolean;
-    onSwitchModel?: (choice: { modelId: number; modelName: string }, conversationId: number | null) => Promise<void>;
+    onSwitchModel?: (
+      choice: { modelId: number; modelName: string },
+      context: () => { conversationId: number | null },
+    ) => Promise<void>;
     onClose: () => Promise<void>;
   }) => {
     const [mountedPort] = useState(serverPort);
@@ -94,8 +103,14 @@ vi.mock('../../../src/pages/ChatPage', () => ({
         data-conversation={conversationId ?? ''}
       >
         Chatting with {modelName}
-        <button type="button" onClick={() => void onSwitchModel?.({ modelId: 9, modelName: 'gemma-3-12b' }, 2)}>
-          Switch to gemma
+        <button
+          type="button"
+          // The real picker toasts a failure; the stub only swallows it.
+          onClick={() =>
+            void onSwitchModel?.(stub.choice, () => ({ conversationId: stub.conversationId }))?.catch(() => {})
+          }
+        >
+          Switch model
         </button>
         <button type="button" onClick={() => void onClose()}>
           Close chat
@@ -160,6 +175,9 @@ async function askForRemoteChat(modelName: string) {
 describe('ModelControlCenterPage', () => {
   beforeEach(() => {
     library.models = [];
+    serveModel.mockClear();
+    stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
+    stub.conversationId = 2;
     resetRemoteState();
     stopServer.mockClear();
     loadServers.mockClear();
@@ -211,9 +229,10 @@ describe('ModelControlCenterPage', () => {
     expect(chat).toHaveAttribute('data-remote', 'no');
   });
 
-  it('serves a model that is not running, then moves the chat to it with its conversation', async () => {
+  /** One model running here, one not, and the chat open on the running one. */
+  async function openChatOnQwen(extra: { modelId: number; modelName: string; port: number; status: 'running' }[] = []) {
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true }), guiModel({ id: 9, name: 'gemma-3-12b' })];
-    const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }];
+    const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }, ...extra];
     render(
       <ModelControlCenterPage servers={running} loadServers={loadServers} stopServer={stopServer} />,
       { wrapper },
@@ -221,8 +240,31 @@ describe('ModelControlCenterPage', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
     await user.click(await screen.findByRole('button', { name: /open chat/i }));
+    await screen.findByTestId('chat-page');
+    return user;
+  }
 
-    await user.click(await screen.findByRole('button', { name: 'Switch to gemma' }));
+  /** A serve that answers when the test says so. */
+  function heldServe() {
+    let answer!: (value: { port: number }) => void;
+    serveModel.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
+    return (port: number) => act(async () => answer({ port }));
+  }
+
+  it('offers Open chat only for a model that is running', async () => {
+    library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+
+    expect(await screen.findByRole('button', { name: /start endpoint/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open chat/i })).not.toBeInTheDocument();
+  });
+
+  it('serves a model that is not running, then moves the chat to it with its conversation', async () => {
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
 
     await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
     expect(serveModel).toHaveBeenCalledWith({ id: 9 });
@@ -231,5 +273,54 @@ describe('ModelControlCenterPage', () => {
     expect(chat).toHaveAttribute('data-conversation', '2');
     // The model it left keeps running; only Close stops a server.
     expect(stopServer).not.toHaveBeenCalled();
+  });
+
+  it('moves the chat to a server already running without starting anything', async () => {
+    stub.choice = { modelId: 8, modelName: 'llama-3.2-3b' };
+    const user = await openChatOnQwen([{ modelId: 8, modelName: 'llama-3.2-3b', port: 9200, status: 'running' }]);
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with llama-3.2-3b'));
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '9200');
+    expect(serveModel).not.toHaveBeenCalled();
+  });
+
+  it('stays closed when the chat is closed while the new model starts', async () => {
+    const answer = heldServe();
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+    await user.click(screen.getByRole('button', { name: 'Close chat' }));
+    await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
+    expect(stopServer).toHaveBeenCalledWith(7);
+
+    await answer(9456);
+
+    expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument();
+  });
+
+  it('opens the conversation chosen while the new model started, not the one open at the pick', async () => {
+    const answer = heldServe();
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+    stub.conversationId = 3;
+    await answer(9456);
+
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-conversation', '3');
+  });
+
+  it('stays on the model it was on when the new one will not start', async () => {
+    serveModel.mockRejectedValueOnce(new Error('not enough memory'));
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+
+    await waitFor(() => expect(serveModel).toHaveBeenCalledTimes(1));
+    const chat = screen.getByTestId('chat-page');
+    expect(chat).toHaveTextContent('Chatting with qwen3-8b');
+    expect(chat).toHaveAttribute('data-port', '9123');
   });
 });
