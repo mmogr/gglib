@@ -32,8 +32,10 @@ pub(crate) struct Prepared {
     pub(crate) model: String,
     /// The model each turn was made by, for its `turn_usage` event.
     pub(crate) made_by: MadeBy,
-    /// A run's hold on the local model it drives (`remote_upstream::hold`);
-    /// `prepare` takes none.
+    /// The port and id of the local model the loop drives; remotely none.
+    pub(crate) local_model: Option<(u16, i64)>,
+    /// A run's hold on that model (`remote_upstream::hold`); `prepare` takes
+    /// none.
     pub(crate) hold: Option<AdmissionLease>,
 }
 
@@ -87,6 +89,7 @@ pub(crate) async fn prepare(
     let retry_observer: Arc<dyn RetryObserver> = Arc::new(RetryNotice::new(tx.clone()));
 
     let model = upstream.counted_as.clone();
+    let local_model = upstream.local_model;
     let agent_loop = compose_agent_loop(
         upstream.base_url,
         state.http_client.clone(),
@@ -134,6 +137,7 @@ pub(crate) async fn prepare(
         rx,
         model,
         made_by: upstream.made_by,
+        local_model,
         hold: None,
     })
 }

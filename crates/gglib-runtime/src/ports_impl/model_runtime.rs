@@ -95,8 +95,8 @@ impl ModelRuntimePort for RuntimePortImpl {
         self.mgr.current_model()
     }
 
-    fn hold(&self, port: u16) -> Option<AdmissionLease> {
-        self.mgr.hold(port)
+    fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
+        self.mgr.hold(port, model_id)
     }
 
     async fn list_running(&self) -> Vec<ProcessHandle> {

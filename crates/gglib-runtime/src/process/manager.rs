@@ -183,12 +183,12 @@ impl ProcessManager {
         self.residency.pinned_name()
     }
 
-    /// Keep the resident listening on `port` loaded, and unrecycled, until
-    /// the returned lease drops. See
+    /// Keep model `model_id` on `port` loaded, and unrecycled, until the
+    /// returned lease drops. See
     /// [`ModelRuntimePort::hold`](gglib_core::ports::ModelRuntimePort::hold).
     #[must_use]
-    pub fn hold(&self, port: u16) -> Option<AdmissionLease> {
-        self.residency.queue().hold(port)
+    pub fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
+        self.residency.queue().hold(port, model_id)
     }
 
     /// Check if any slot is mid-launch.

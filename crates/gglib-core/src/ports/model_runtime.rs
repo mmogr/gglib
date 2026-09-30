@@ -499,16 +499,16 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         Vec::new()
     }
 
-    /// Keep the model listening on `port` resident, neither swapped out nor
-    /// recycled, until the returned lease drops.
+    /// Keep model `model_id`, listening on `port`, resident — neither swapped
+    /// out nor recycled — until the returned lease drops.
     ///
     /// For a caller that talks to llama-server's port directly rather than
     /// through [`Self::admit`] — an agent run — so a proxy request cannot take
     /// the model from under it. Unlike an admission it takes none of the
-    /// model's parallel capacity. `None` when no resident listens on `port`,
-    /// and by default, for runtimes with no resident set.
-    fn hold(&self, port: u16) -> Option<AdmissionLease> {
-        let _ = port;
+    /// model's parallel capacity. `None` when that model is not the one on
+    /// `port`, and by default, for runtimes with no resident set.
+    fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
+        let _ = (port, model_id);
         None
     }
 

@@ -515,14 +515,13 @@ impl QueueState {
             .is_some_and(|r| self.holds.contains_key(&(r.port, r.model_id)))
     }
 
-    /// Hold the resident listening on `port`: its slot and model id.
-    pub(super) fn hold(&mut self, port: u16) -> Option<(usize, u32)> {
-        let (slot, model_id) = self
+    /// Hold the resident listening on `port`, if it is `model_id`: its slot.
+    pub(super) fn hold(&mut self, port: u16, model_id: u32) -> Option<usize> {
+        let (slot, _) = self
             .residents()
-            .find(|(_, r)| r.port == port)
-            .map(|(slot, r)| (slot, r.model_id))?;
+            .find(|(_, r)| r.port == port && r.model_id == model_id)?;
         *self.holds.entry((port, model_id)).or_default() += 1;
-        Some((slot, model_id))
+        Some(slot)
     }
 
     /// Release one hold on the resident at `port` with `model_id`.

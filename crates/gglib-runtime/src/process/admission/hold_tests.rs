@@ -44,7 +44,7 @@ fn with_resident() -> Arc<AdmissionQueue> {
 #[tokio::test]
 async fn a_held_resident_is_not_swapped_out_until_the_hold_drops() {
     let q = with_resident();
-    let hold = q.hold(8001).expect("a resident listens there");
+    let hold = q.hold(8001, 1).expect("a resident listens there");
 
     let rival = q.enqueue("nomic-embed");
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Wait);
@@ -62,7 +62,7 @@ async fn a_held_resident_is_not_swapped_out_until_the_hold_drops() {
 #[tokio::test]
 async fn a_held_resident_still_serves_its_own_requests() {
     let q = with_resident();
-    let _hold = q.hold(8001).unwrap();
+    let _hold = q.hold(8001, 1).unwrap();
     // A rival waiting would make an idle, unheld slot stand aside.
     let _rival = q.enqueue("nomic-embed");
 
@@ -76,8 +76,8 @@ async fn a_held_resident_still_serves_its_own_requests() {
 #[tokio::test]
 async fn a_held_resident_is_not_recycled_until_every_hold_drops() {
     let q = with_resident();
-    let first = q.hold(8001).unwrap();
-    let second = q.hold(8001).unwrap();
+    let first = q.hold(8001, 1).unwrap();
+    let second = q.hold(8001, 1).unwrap();
 
     let refused = q.evict_unheld(PRIMARY_SLOT).unwrap_err();
     assert!(matches!(refused, ModelRuntimeError::AdmissionTimeout(_)));
@@ -98,6 +98,46 @@ async fn a_held_resident_is_not_recycled_until_every_hold_drops() {
 #[tokio::test]
 async fn nothing_is_held_on_a_port_no_resident_listens_on() {
     let q = with_resident();
-    assert!(q.hold(8002).is_none());
+    assert!(q.hold(8002, 1).is_none());
     assert!(q.evict_unheld(PRIMARY_SLOT).unwrap().is_some());
+}
+
+/// A run holds the model it resolved, not whatever now listens on its port.
+#[tokio::test]
+async fn a_hold_names_its_model_as_well_as_its_port() {
+    let q = with_resident();
+    assert!(q.hold(8001, 2).is_none(), "model 2 is not on 8001");
+    assert!(q.evict_unheld(PRIMARY_SLOT).unwrap().is_some());
+
+    drop(q.install(PRIMARY_SLOT, resident(1, "qwen-coder")));
+    assert!(q.hold(8001, 1).is_some());
+}
+
+/// Ports are reused: a model stopped while held, then another loaded on
+/// the same port, leaves the newcomer unheld.
+#[tokio::test]
+async fn a_hold_on_a_stopped_model_does_not_hold_the_next_on_its_port() {
+    let q = with_resident();
+    let stale = q.hold(8001, 1).unwrap();
+    assert!(q.evict(PRIMARY_SLOT).is_some(), "an explicit stop");
+
+    let next = || Resident {
+        port: 8001,
+        ..resident(2, "nomic-embed")
+    };
+    drop(q.install(PRIMARY_SLOT, next()));
+    let rival = q.enqueue("llama");
+    assert_eq!(
+        q.poll(&rival, NEVER_FITS),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(2)
+        },
+        "the newcomer is swapped out as any idle model is"
+    );
+    drop(rival);
+
+    drop(q.install(PRIMARY_SLOT, next()));
+    assert!(q.evict_unheld(PRIMARY_SLOT).is_ok(), "and recycled");
+    drop(stale);
 }

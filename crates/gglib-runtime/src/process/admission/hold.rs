@@ -29,11 +29,11 @@ impl AdmissionRelease for Hold {
 }
 
 impl AdmissionQueue {
-    /// Hold the resident listening on `port` until the returned lease is
-    /// dropped: it is neither swapped out nor recycled meanwhile. `None`
-    /// when no resident listens on `port`.
-    pub fn hold(self: &Arc<Self>, port: u16) -> Option<AdmissionLease> {
-        let (slot, model_id) = self.lock().hold(port)?;
+    /// Hold model `model_id`, listening on `port`, until the returned lease
+    /// is dropped: it is neither swapped out nor recycled meanwhile. `None`
+    /// when the resident on `port` is not that model, or there is none.
+    pub fn hold(self: &Arc<Self>, port: u16, model_id: u32) -> Option<AdmissionLease> {
+        let slot = self.lock().hold(port, model_id)?;
         let hold = Hold {
             queue: Arc::clone(self),
             port,

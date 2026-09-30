@@ -127,9 +127,9 @@ pub(crate) async fn create_run(
             "all agent loop slots are in use; try again later",
         )
     })?;
-    let (remote, port) = (req.chat.remote, req.chat.port);
     let mut prepared = prepare(state, req.chat).await.map_err(with_code)?;
-    prepared.hold = remote_upstream::hold(state.runtime.as_ref(), remote, port);
+    // Untested: `create_run` cannot be driven without a running llama-server.
+    prepared.hold = remote_upstream::hold(state.runtime.as_ref(), prepared.local_model)?;
     let transcript = Transcript {
         conversation_id: req.conversation_id,
         replace_from: req.replace_from,

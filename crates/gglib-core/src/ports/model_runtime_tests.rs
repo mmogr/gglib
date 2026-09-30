@@ -114,7 +114,7 @@ fn pinned_model_defaults_to_unpinned() {
 /// A runtime with no resident set holds nothing.
 #[test]
 fn hold_defaults_to_none() {
-    assert!(MinimalRuntime.hold(5500).is_none());
+    assert!(MinimalRuntime.hold(5500, 1).is_none());
 }
 
 #[tokio::test]

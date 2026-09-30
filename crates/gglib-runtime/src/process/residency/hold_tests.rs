@@ -84,7 +84,7 @@ fn inflight(set: &ResidentSet) -> u32 {
 async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
     let port = dead_port();
     let set = set_with_resident(port);
-    let hold = set.queue().hold(port).unwrap();
+    let hold = set.queue().hold(port, 1).unwrap();
 
     granted(&set);
     let refused = set.serve(PRIMARY_SLOT, 8192, &core()).await.unwrap_err();
@@ -108,7 +108,7 @@ async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
 async fn a_failed_health_check_does_not_recycle_a_held_model() {
     let port = dead_port();
     let set = set_with_resident(port);
-    let _hold = set.queue().hold(port).unwrap();
+    let _hold = set.queue().hold(port, 1).unwrap();
 
     granted(&set);
     let refused = set.serve(PRIMARY_SLOT, 4096, &core()).await.unwrap_err();
