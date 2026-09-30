@@ -173,4 +173,31 @@ describe('ChatPage, model picker', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('half a thought'));
   });
+
+  it('stays locked while a model starts, across a change of conversation', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatPage
+        modelName="Qwen3.8-27B"
+        modelId={7}
+        serverPort={4321}
+        startingModel="gemma-3-12b"
+        onSwitchModel={onSwitchModel}
+        onClose={async () => {}}
+      />,
+      { wrapper },
+    );
+    const locked = async () => {
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Model' })).toBeDisabled());
+      expect(screen.getByText('Starting gemma-3-12b…')).toBeInTheDocument();
+    };
+    await locked();
+
+    // The composer, picker and all, remounts with the conversation.
+    await user.click(await screen.findByRole('option', { name: /Parsing GGUF/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Parsing GGUF/ })).toHaveAttribute('aria-selected', 'true'),
+    );
+    await locked();
+  });
 });

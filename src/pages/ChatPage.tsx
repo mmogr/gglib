@@ -46,6 +46,7 @@ type ChatPageProps = {
   initialView?: 'chat' | 'console'; // Which view to show initially
   conversationId?: number | null; // The conversation to open with, e.g. after a model switch
   draft?: string; // Unsent text to put back in the composer, e.g. after a model switch
+  startingModel?: string | null; // The model a switch is starting, which locks the picker
   // Move the chat to another model, keeping open the conversation (and the
   // draft) that `context` reads when the switch lands; local only.
   onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: string }) => Promise<void>;
@@ -68,6 +69,7 @@ export default function ChatPage(props: ChatPageProps) {
     initialView = 'chat',
     conversationId = null,
     draft,
+    startingModel = null,
     onSwitchModel,
     remote = false,
     onClose,
@@ -141,12 +143,9 @@ export default function ChatPage(props: ChatPageProps) {
     supportsToolCalls,
   });
 
-  // A draft carried over a model switch goes back in the composer, once.
-  const draftSeeded = useRef(false);
+  // A draft carried over a model switch goes back in the composer.
   useEffect(() => {
-    if (draftSeeded.current || !draft) return;
-    draftSeeded.current = true;
-    runtime.thread.composer.setText(draft);
+    if (draft) runtime.thread.composer.setText(draft);
   }, [draft, runtime]);
 
   // Server state from registry - derives isServerRunning reactively
@@ -423,6 +422,7 @@ export default function ChatPage(props: ChatPageProps) {
                 conversationId: activeConversationIdRef.current,
                 draft: runtime.thread.composer.getState().text,
               })))}
+              startingModel={startingModel}
               quantization={quantization}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />

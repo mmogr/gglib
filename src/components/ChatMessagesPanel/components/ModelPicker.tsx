@@ -19,6 +19,11 @@ interface ModelPickerProps {
   quantization?: string | null;
   /** Move the chat to another model; a failure is toasted here. Absent where there is nothing to pick. */
   onPick?: (choice: ModelChoice) => Promise<void>;
+  /**
+   * The model a switch is starting. Held by the page's session, not here:
+   * this remounts with each conversation, and must stay locked across that.
+   */
+  starting?: string | null;
 }
 
 /**
@@ -29,11 +34,10 @@ interface ModelPickerProps {
  * starting the model first if it is not running. A chat with another machine
  * has nothing here to pick from, so it names its model as text.
  */
-export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantization, onPick }) => {
+export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantization, onPick, starting = null }) => {
   const { servers } = useServers();
   const { showToast } = useToastContext();
   const [models, setModels] = useState<GgufModel[]>([]);
-  const [starting, setStarting] = useState<string | null>(null);
   const canPick = onPick !== undefined && modelId !== undefined;
 
   useEffect(() => {
@@ -64,14 +68,11 @@ export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantiza
     const server = running.find((s) => s.modelId === id);
     const name = server?.modelName ?? idle.find((m) => m.id === id)?.name;
     if (name === undefined) return;
-    if (!server) setStarting(name);
     try {
       await onPick({ modelId: id, modelName: name });
     } catch (error) {
       // The chat stays on the model it was on.
       showToast(`Could not start ${name}: ${formatError(error)}`, 'error');
-    } finally {
-      setStarting(null);
     }
   };
 

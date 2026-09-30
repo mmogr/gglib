@@ -97,7 +97,7 @@ export default function ModelControlCenterPage({
   // Chat session state - when set, shows ChatPage instead of model panels.
   // Local sessions come from a served model here; remote ones from the
   // Remote panel, which is why the hook and not this page owns the wiring.
-  const { chatSession, setChatSession, openChatSession, switchChatModel, closeChatSession } =
+  const { chatSession, setChatSession, openChatSession, switchChatModel, startingModel, closeChatSession } =
     useChatSession(servers);
 
   // Benchmark state - when set, shows BenchmarkPage instead of model panels
@@ -224,6 +224,7 @@ export default function ModelControlCenterPage({
             initialView={chatSession.initialView}
             conversationId={chatSession.conversationId}
             draft={chatSession.draft}
+            startingModel={startingModel}
             onSwitchModel={(choice, context) => switchChatModel(chatSession, choice, context)}
             onClose={handleCloseChat}
           />

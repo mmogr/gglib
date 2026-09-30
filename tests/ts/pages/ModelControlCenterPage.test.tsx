@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ReactNode, useState } from 'react';
@@ -82,6 +82,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     serverPort,
     conversationId,
     draft,
+    startingModel,
     remote,
     onSwitchModel,
     onClose,
@@ -90,6 +91,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     serverPort?: number;
     conversationId?: number | null;
     draft?: string;
+    startingModel?: string | null;
     remote?: boolean;
     onSwitchModel?: (
       choice: { modelId: number; modelName: string },
@@ -105,6 +107,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
         data-port={mountedPort}
         data-conversation={conversationId ?? ''}
         data-draft={draft ?? ''}
+        data-starting={startingModel ?? ''}
       >
         Chatting with {modelName}
         <button
@@ -327,5 +330,66 @@ describe('ModelControlCenterPage', () => {
     const chat = screen.getByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
     expect(chat).toHaveAttribute('data-port', '9123');
+  });
+
+  it('lands the last model picked, whichever starts first', async () => {
+    for (const order of [['first', 'second'], ['second', 'first']] as const) {
+      const answer = { first: heldServe(), second: heldServe() };
+      const user = await openChatOnQwen();
+      await user.click(screen.getByRole('button', { name: 'Switch model' }));
+      stub.choice = { modelId: 11, modelName: 'phi-4' };
+      await user.click(screen.getByRole('button', { name: 'Switch model' }));
+      expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'phi-4');
+
+      await answer[order[0]](order[0] === 'first' ? 9456 : 9457);
+      if (order[0] === 'first') {
+        // The superseded model is up, and the chat still waits on the last pick.
+        expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
+        expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'phi-4');
+      }
+      await answer[order[1]](order[1] === 'first' ? 9456 : 9457);
+
+      const chat = screen.getByTestId('chat-page');
+      expect(chat, `resolved ${order.join(' then ')}`).toHaveTextContent('Chatting with phi-4');
+      expect(chat).toHaveAttribute('data-port', '9457');
+      expect(chat).toHaveAttribute('data-starting', '');
+      cleanup();
+      stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
+    }
+  });
+
+  it('does not hand a switch to a chat reopened on the same model while it was pending', async () => {
+    const answer = heldServe();
+    const user = await openChatOnQwen();
+    const first = screen.getByTestId('chat-page');
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+    await user.click(screen.getByRole('button', { name: 'Close chat' }));
+    await user.click(await screen.findByRole('button', { name: /open chat/i }));
+    const reopened = await screen.findByTestId('chat-page');
+    expect(reopened).not.toBe(first);
+    expect(reopened).toHaveAttribute('data-starting', '');
+
+    await answer(9456);
+
+    expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-port', '9123');
+  });
+
+  it('tells the chat page which model is starting, until the switch lands or fails', async () => {
+    const answer = heldServe();
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', 'gemma-3-12b');
+    await answer(9456);
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
+    expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', '');
+
+    serveModel.mockRejectedValueOnce(new Error('not enough memory'));
+    stub.choice = { modelId: 11, modelName: 'phi-4' };
+    await user.click(screen.getByRole('button', { name: 'Switch model' }));
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', ''));
+    expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b');
   });
 });

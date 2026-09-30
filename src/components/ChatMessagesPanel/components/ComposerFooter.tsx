@@ -18,6 +18,8 @@ interface ComposerFooterProps {
   modelId?: number;
   /** Move the chat to another model; absent where there is none to pick. */
   onPickModel?: (choice: ModelChoice) => Promise<void>;
+  /** The model a switch is starting; the picker is locked until it lands. */
+  startingModel?: string | null;
   /** Its quantisation, from the model's catalogue entry, when known. */
   quantization?: string | null;
   /** null = capability status not yet resolved. */
@@ -37,6 +39,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   modelName,
   modelId,
   onPickModel,
+  startingModel,
   quantization,
   supportsToolCalls,
   toolFormat,
@@ -45,7 +48,13 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
     <TurnRow
       className="border-t-0 pt-md pb-lg"
       who={
-        <ModelPicker modelId={modelId} modelName={modelName} quantization={quantization} onPick={onPickModel} />
+        <ModelPicker
+          modelId={modelId}
+          modelName={modelName}
+          quantization={quantization}
+          onPick={onPickModel}
+          starting={startingModel}
+        />
       }
       made={
         <div className="flex items-center gap-sm">
