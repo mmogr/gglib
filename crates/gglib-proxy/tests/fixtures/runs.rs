@@ -31,7 +31,7 @@ pub(crate) struct FakeRuns {
 impl FakeRuns {
     fn note(&self, what: &'static str, scope: &RunScope) -> Result<(), RunsError> {
         self.calls.lock().unwrap().push((what, scope.clone()));
-        self.fail.lock().unwrap().map_or(Ok(()), Err)
+        self.fail.lock().unwrap().clone().map_or(Ok(()), Err)
     }
 
     /// The scopes the proxy called with, in order.

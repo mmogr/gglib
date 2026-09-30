@@ -61,8 +61,9 @@ fn with_code(error: HttpError) -> HttpError {
 /// `invalid_request` for a body that is not an agent chat request, and
 /// whatever the chat route refuses, coded; `conversation_not_found` (404);
 /// `agent_busy` (429) when every agent slot is taken; `message_not_found`
-/// (404) for a `replace_from` not in the conversation; and the runs' own.
-/// A refusal writes nothing.
+/// (404) for a `replace_from` not in the conversation; `conflict` (409)
+/// while the conversation has a live reply; and the runs' own. A refusal
+/// writes nothing.
 pub(crate) async fn create_run(
     state: &AppState,
     id: &str,
