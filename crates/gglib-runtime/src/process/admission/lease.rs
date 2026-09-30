@@ -55,7 +55,7 @@ impl AdmissionQueue {
     /// subsequent request: the queue is on the path of every single one, so
     /// refusing to serve any of them because one unrelated section unwound is
     /// strictly worse than continuing with the state as it was left.
-    fn lock(&self) -> MutexGuard<'_, QueueState> {
+    pub(super) fn lock(&self) -> MutexGuard<'_, QueueState> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -66,7 +66,7 @@ impl AdmissionQueue {
     /// Broadcast rather than targeted: the scheduler's decision depends on
     /// global state (whose turn it is, who has waited longest), so the requester
     /// that should proceed is not knowable from the event that woke it.
-    fn notify(&self) {
+    pub(super) fn notify(&self) {
         self.wake.notify_waiters();
     }
 

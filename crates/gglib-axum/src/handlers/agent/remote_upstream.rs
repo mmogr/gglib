@@ -10,6 +10,7 @@
 //! runs its own pipeline over its own models.
 
 use gglib_app_services::types::ServerInfo;
+use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
 use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
@@ -174,6 +175,17 @@ pub(super) async fn local(
             model: server.model_name,
         },
     }
+}
+
+/// A local run's hold on the model at `port`, which its loop talks to past
+/// the proxy's queue: while held, no proxy request swaps or recycles it. A
+/// remote run holds nothing here; the far proxy admits each of its requests.
+pub(super) fn hold(
+    runtime: &dyn ModelRuntimePort,
+    remote: bool,
+    port: u16,
+) -> Option<AdmissionLease> {
+    (!remote).then(|| runtime.hold(port)).flatten()
 }
 
 /// A remote request's upstream: the tunnel's `port`, the far machine's key

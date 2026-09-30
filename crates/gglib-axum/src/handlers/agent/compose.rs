@@ -9,7 +9,7 @@ use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
-use gglib_core::ports::{AgentGuardReporter, AgentLoopPort, RetryObserver};
+use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_runtime::compose_agent_loop;
 
 use super::AgentChatRequest;
@@ -32,6 +32,9 @@ pub(crate) struct Prepared {
     pub(crate) model: String,
     /// The model each turn was made by, for its `turn_usage` event.
     pub(crate) made_by: MadeBy,
+    /// A run's hold on the local model it drives (`remote_upstream::hold`);
+    /// `prepare` takes none.
+    pub(crate) hold: Option<AdmissionLease>,
 }
 
 /// The model a run drives, which the loop does not know: stamped on each
@@ -131,6 +134,7 @@ pub(crate) async fn prepare(
         rx,
         model,
         made_by: upstream.made_by,
+        hold: None,
     })
 }
 

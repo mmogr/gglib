@@ -130,6 +130,7 @@ pub(super) fn paced(
             "key".to_owned(),
         )
         .made_by,
+        hold: None,
     };
     (prepared, dropped)
 }

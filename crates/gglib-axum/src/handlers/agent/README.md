@@ -49,5 +49,7 @@ LLM token generation and any in-flight tool calls without leaking compute
 or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
 runs the same prepared loop detached from any response, so only cancel or
 shutdown stops it, and saves the transcript to the request's conversation.
+A local run holds its model until it ends (`remote_upstream::hold`), so no
+proxy request swaps it out or recycles it mid-run.
 
 <!-- module-docs:end -->

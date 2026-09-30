@@ -4,11 +4,12 @@
 //! Started only here, at the daemon's own door (`PUT /api/runs/{id}?kind=agent`);
 //! the proxy's door holds only `RunsPort`, whose create makes chat runs. The
 //! request is prepared exactly as the chat route prepares it, and a slot of
-//! the same semaphore is held until the run ends. Each event is logged as
-//! the route's `data:` text. With a `conversation_id`, the user's message is
-//! saved when the run is created (in place of the rows from `replace_from`
-//! on, when the request names one) and the reply when it ends, whatever the
-//! end, rebuilt from the logged events: see `transcript`.
+//! the same semaphore (and, for a local model, a hold on it) is kept until
+//! the run ends. Each event is logged as the route's `data:` text. With a
+//! `conversation_id`, the user's message is saved when the run is created
+//! (in place of the rows from `replace_from` on, when the request names
+//! one) and the reply when it ends, whatever the end, rebuilt from the
+//! logged events: see `transcript`.
 //!
 //! Nothing here logs or returns a frame, a request body or a tool argument:
 //! only ids, statuses and counts.
@@ -27,6 +28,7 @@ use gglib_core::ports::{AgentError, Created};
 
 use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
+use super::remote_upstream;
 use super::transcript::{FrameTimes, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -125,7 +127,9 @@ pub(crate) async fn create_run(
             "all agent loop slots are in use; try again later",
         )
     })?;
-    let prepared = prepare(state, req.chat).await.map_err(with_code)?;
+    let (remote, port) = (req.chat.remote, req.chat.port);
+    let mut prepared = prepare(state, req.chat).await.map_err(with_code)?;
+    prepared.hold = remote_upstream::hold(state.runtime.as_ref(), remote, port);
     let transcript = Transcript {
         conversation_id: req.conversation_id,
         replace_from: req.replace_from,
@@ -221,7 +225,7 @@ async fn reserve_and_start(
 
 /// Run the loop, logging each event as the chat route frames it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
-/// flight and releases the permit.
+/// flight and releases the permit and the model's hold.
 async fn work(
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
@@ -236,6 +240,7 @@ async fn work(
         tx,
         mut rx,
         made_by,
+        hold: _hold,
         ..
     } = prepared;
     let run = async move {

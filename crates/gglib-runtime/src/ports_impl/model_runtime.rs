@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle, RunningTarget,
+    Admission, AdmissionLease, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle,
+    RunningTarget,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -92,6 +93,10 @@ impl ModelRuntimePort for RuntimePortImpl {
 
     async fn current_model(&self) -> Option<RunningTarget> {
         self.mgr.current_model()
+    }
+
+    fn hold(&self, port: u16) -> Option<AdmissionLease> {
+        self.mgr.hold(port)
     }
 
     async fn list_running(&self) -> Vec<ProcessHandle> {
