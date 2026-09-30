@@ -4,7 +4,8 @@
  * reply just drawn and the same reply loaded say the same.
  *
  * The keys are the saved row's (`MADE_KEYS` in `gglib-core`'s replay). Each
- * is present only when the turn had it: absent is not zero.
+ * is present only when the turn had it: absent is not zero. `device` names
+ * the paired device whose turn it answered; this machine's own name none.
  *
  * @module turnMade
  */
@@ -21,9 +22,11 @@ export interface TurnMade {
   turnDurationMs?: number;
   /** From the first generated token's arrival to the last, timed before normalisation. */
   writingDurationMs?: number;
+  /** The paired device whose turn this answered. */
+  device?: string;
 }
 
-const TEXT_KEYS = ['modelName', 'modelQuantization'] as const;
+const TEXT_KEYS = ['modelName', 'modelQuantization', 'device'] as const;
 const COUNT_KEYS = [
   'promptTokens',
   'cachedTokens',
@@ -56,6 +59,7 @@ export interface TurnUsageWire {
   completion_tokens?: number;
   duration_ms?: number;
   writing_ms?: number;
+  device?: string;
 }
 
 /** The figures a `turn_usage` event carries, under the saved row's keys. */
@@ -68,5 +72,6 @@ export function turnMadeFromUsage(event: TurnUsageWire): TurnMade | undefined {
     completionTokens: event.completion_tokens,
     turnDurationMs: event.duration_ms,
     writingDurationMs: event.writing_ms,
+    device: event.device,
   });
 }

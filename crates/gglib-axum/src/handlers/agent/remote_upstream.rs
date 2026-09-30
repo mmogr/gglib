@@ -175,6 +175,7 @@ pub(super) async fn local(
         made_by: MadeBy {
             quantization: quantization_of(state, server.model_id).await,
             model: server.model_name,
+            device: None,
         },
         local_model: Some((req.port, server.model_id)),
     }
@@ -224,6 +225,7 @@ pub(super) fn remote(model: String, port: u16, fingerprint: String, key: String)
         made_by: MadeBy {
             model: model.clone(),
             quantization: None,
+            device: None,
         },
         model: Some(model),
         local_model: None,

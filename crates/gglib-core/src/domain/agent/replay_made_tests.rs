@@ -32,6 +32,7 @@ fn full_usage() -> TurnUsage {
         completion_tokens: Some(496),
         duration_ms: 41_000,
         writing_ms: Some(38_200),
+        device: Some("phone-7c2e".to_owned()),
     }
 }
 
@@ -91,6 +92,7 @@ fn a_turn_with_usage_saves_each_figure_under_its_key() {
             "completionTokens": 496,
             "turnDurationMs": 41_000,
             "writingDurationMs": 38_200,
+            "device": "phone-7c2e",
         })
     );
 }

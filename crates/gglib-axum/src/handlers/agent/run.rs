@@ -14,26 +14,28 @@
 //! Nothing here logs or returns a frame, a request body or a tool argument:
 //! only ids, statuses and counts.
 
-use std::sync::Arc;
-
 use axum::http::StatusCode;
-use futures_util::future::BoxFuture;
 use serde_json::Value;
 use tokio::sync::OwnedSemaphorePermit;
 
-use gglib_app_services::{Reservation, RunLog, RunSpec};
+use gglib_app_services::RunLog;
 use gglib_core::domain::agent::AgentMessage;
-use gglib_core::domain::runs::{RunError, RunKind};
-use gglib_core::ports::{AgentError, Created};
+use gglib_core::domain::runs::RunError;
+use gglib_core::ports::{AgentError, Created, RunScope};
 
 use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
+use super::launch::{Transcript, launch};
 use super::remote_upstream;
-use super::transcript::{FrameTimes, save_reply, save_user};
+use super::transcript::FrameTimes;
 use crate::error::HttpError;
 use crate::state::AppState;
 
-fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> HttpError {
+pub(super) fn coded(
+    status: StatusCode,
+    code: &'static str,
+    message: impl Into<String>,
+) -> HttpError {
     HttpError::Coded {
         status,
         code,
@@ -42,7 +44,7 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
 }
 
 /// The chat route's refusals, with the code a run's client matches on.
-fn with_code(error: HttpError) -> HttpError {
+pub(super) fn with_code(error: HttpError) -> HttpError {
     match error {
         HttpError::BadRequest(m) => coded(StatusCode::BAD_REQUEST, "invalid_request", m),
         HttpError::NotFound(m) => coded(StatusCode::NOT_FOUND, "not_found", m),
@@ -83,7 +85,7 @@ pub(crate) async fn create_run(
             ),
         )
     })?;
-    if let Some(info) = state.runs.existing(id)? {
+    if let Some(info) = state.runs.existing(&RunScope::Local, id)? {
         return Ok(Created {
             info,
             created: false,
@@ -134,99 +136,13 @@ pub(crate) async fn create_run(
         conversation_id: req.conversation_id,
         replace_from: req.replace_from,
     };
-    launch(state, id, transcript, prepared, permit).await
-}
-
-/// Where a run's transcript goes, and the rows its user's message replaces.
-#[derive(Clone, Copy)]
-pub(super) struct Transcript {
-    pub(super) conversation_id: Option<i64>,
-    pub(super) replace_from: Option<i64>,
-}
-
-/// Reserve the id, save the user's message, and start the loop, in one
-/// task of its own: a request dropped part-way cannot split them, so a
-/// retry finds the run rather than saving the message, or replacing rows,
-/// again.
-pub(super) async fn launch(
-    state: &AppState,
-    id: &str,
-    transcript: Transcript,
-    prepared: Prepared,
-    permit: OwnedSemaphorePermit,
-) -> Result<Created, HttpError> {
-    let task = tokio::spawn(reserve_and_start(
-        Arc::clone(state),
-        id.to_owned(),
-        transcript,
-        prepared,
-        permit,
-    ));
-    task.await.unwrap_or_else(|_| {
-        Err(coded(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "the run could not be started",
-        ))
-    })
-}
-
-async fn reserve_and_start(
-    state: AppState,
-    id: String,
-    transcript: Transcript,
-    prepared: Prepared,
-    permit: OwnedSemaphorePermit,
-) -> Result<Created, HttpError> {
-    let Transcript {
-        conversation_id,
-        replace_from,
-    } = transcript;
-    let id = id.as_str();
-    let state = &state;
-    let spec = RunSpec {
-        kind: RunKind::Agent,
-        model: Some(prepared.model.clone()),
-        conversation_id,
-    };
-    let reserved = match state.runs.reserve(id, spec)? {
-        Reservation::Existing(info) => {
-            return Ok(Created {
-                info,
-                created: false,
-            });
-        }
-        Reservation::New(reserved) => reserved,
-    };
-    let times = FrameTimes::new();
-    let ended = match conversation_id {
-        Some(conversation_id) => {
-            // Dropping `reserved` on the way out leaves no run behind.
-            save_user(
-                &state.core,
-                conversation_id,
-                replace_from,
-                prepared.messages.last(),
-            )
-            .await?;
-            save_reply(Arc::clone(&state.core), conversation_id, times.clone())
-        }
-        None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {
-            Box::pin(async { Ok(()) })
-        }),
-    };
-    let info = reserved.start(|log| Box::pin(work(prepared, permit, log, times)), ended);
-    tracing::debug!(run = %id, saved = conversation_id.is_some(), "agent run started");
-    Ok(Created {
-        info,
-        created: true,
-    })
+    launch(state, id, RunScope::Local, transcript, prepared, permit).await
 }
 
 /// Run the loop, logging each event as the chat route frames it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
 /// flight and releases the permit and the model's hold.
-async fn work(
+pub(super) async fn work(
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
     log: RunLog,

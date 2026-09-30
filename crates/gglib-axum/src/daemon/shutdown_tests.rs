@@ -209,7 +209,7 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
         model: None,
         conversation_id: None,
     };
-    let Ok(Reservation::New(reserved)) = state.runs.reserve("a1", spec) else {
+    let Ok(Reservation::New(reserved)) = state.runs.reserve(RunScope::Local, "a1", spec) else {
         panic!("a new reservation");
     };
     let never: RunEnded = Box::new(|_, _| Box::pin(std::future::pending()));

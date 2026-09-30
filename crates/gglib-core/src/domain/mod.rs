@@ -13,6 +13,7 @@ mod defects_agent;
 pub mod dialect;
 pub(crate) mod generation_config;
 pub mod gguf;
+pub mod hub_chats;
 pub(crate) mod inference;
 pub mod inference_profile;
 pub(crate) mod kv_estimate;

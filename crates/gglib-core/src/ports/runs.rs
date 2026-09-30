@@ -9,8 +9,10 @@
 //! # Design Rules
 //!
 //! - A caller names its scope on every call, and the port decides what that
-//!   scope may see. A device sees only its own runs; this machine sees every
-//!   run but may not read the events of a device's run.
+//!   scope may see. A device sees its own runs; this machine sees every run
+//!   but may not read the events of a device's own chat run. A run on one of
+//!   the hub's chats (with a `conversation_id`) belongs to the chat: this
+//!   machine and every paired device may see, read and cancel it.
 //! - Frames are opaque strings. Nothing behind this port puts one, or a
 //!   request body, in a log line, a tracing field, an error or a file.
 //! - Synchronous, except the event stream: every call is a lock and a lookup.
@@ -80,7 +82,7 @@ pub enum RunsError {
     /// The id is in use by a run the caller may not see.
     #[error("that run id is already in use")]
     IdTaken,
-    /// This machine asked for the events of a paired device's run.
+    /// This machine asked for the events of a paired device's own run.
     #[error("that run belongs to a paired device, so only it may read the reply")]
     NotYours,
     /// The conversation already has a run whose reply is not yet saved.
@@ -164,7 +166,7 @@ pub trait RunsPort: Send + Sync + std::fmt::Debug {
     /// # Errors
     ///
     /// [`RunsError::NotFound`], and [`RunsError::NotYours`] for this machine
-    /// asking for a device's run.
+    /// asking for a device's own run, one not on a hub chat.
     fn events(&self, scope: &RunScope, id: &str, after: u32) -> Result<RunEvents, RunsError>;
 
     /// Stop a run. Idempotent: an ended run is answered as it is.
@@ -175,6 +177,7 @@ pub trait RunsPort: Send + Sync + std::fmt::Debug {
     fn cancel(&self, scope: &RunScope, id: &str) -> Result<RunInfo, RunsError>;
 
     /// Cancel and drop every run of `device` at once; its open readers end.
-    /// Returns how many runs were dropped.
+    /// A run it started on a hub chat is the chat's and goes on, its reply
+    /// saved. Returns how many runs were dropped.
     fn forget_device(&self, device: &str) -> usize;
 }

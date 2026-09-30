@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Counts and times only, never text. Each count is the upstream's own,
 /// and absent when it reported none: absent is not zero. The model is the
-/// one the run drove, stamped by whoever composed the loop; the loop itself
-/// does not know it. Nothing derived is carried: a rate is
+/// one the run drove, and the device the paired one whose turn it answered,
+/// both stamped by whoever composed the loop; the loop itself knows neither. Nothing derived is carried: a rate is
 /// `completion_tokens` over `writing_ms`, computed where it is shown.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnUsage {
@@ -33,4 +33,8 @@ pub struct TurnUsage {
     /// be (fewer than two tokens, or an adapter that does not time it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub writing_ms: Option<u64>,
+    /// The paired device whose turn this answered; absent for this
+    /// machine's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
 }

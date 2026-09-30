@@ -41,6 +41,12 @@ pub(crate) fn chat_registry(proxy: Arc<ProxyOps>, core: Arc<AppCore>) -> RunRegi
 }
 
 #[cfg(test)]
+#[path = "chat_scope_read_tests.rs"]
+mod chat_scope_read_tests;
+#[cfg(test)]
+#[path = "chat_scope_tests.rs"]
+mod chat_scope_tests;
+#[cfg(test)]
 #[path = "chat_tests.rs"]
 mod chat_tests;
 #[cfg(test)]

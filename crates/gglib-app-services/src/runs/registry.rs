@@ -1,6 +1,10 @@
 //! The registry: every run this daemon holds, the scope rule, the limits and
 //! retention.
 //!
+//! The scope rule: this machine sees every run, a device sees its own, and
+//! a run on one of the hub's chats (one with a `conversation_id`) belongs to
+//! the chat, so this machine and every paired device may read and cancel it.
+//!
 //! Shaped like the download manager: a map under a mutex, a cancellation
 //! token per job. Retention is swept at the start of every call, against the
 //! registry's clock, so a run is gone by the first call after its time is up.
@@ -43,6 +47,13 @@ impl Table {
         });
     }
 
+    /// The run whose reply to `conversation_id` is not yet saved, if any.
+    pub(super) fn live_on(&self, conversation_id: i64) -> Option<&Arc<RunCell>> {
+        self.runs
+            .values()
+            .find(|cell| !cell.is_ended() && cell.info().conversation_id == Some(conversation_id))
+    }
+
     /// Make room for one more run, dropping the oldest ended run if every
     /// slot is taken.
     pub(super) fn make_room(&mut self) -> Result<(), RunsError> {
@@ -68,11 +79,22 @@ impl Table {
 pub(super) const OTHERS_MESSAGE: &str =
     "The run failed; its details are for the device that started it.";
 
+/// Whether the run answers one of the hub's chats, and so belongs to it.
+fn on_chat(cell: &RunCell) -> bool {
+    cell.info().conversation_id.is_some()
+}
+
+/// Whether `reader` may read `cell`'s reply: its own scope, or anyone for a
+/// run on a hub chat.
+fn may_read(cell: &RunCell, reader: &RunScope) -> bool {
+    cell.scope == *reader || on_chat(cell)
+}
+
 /// A run as `reader` may see it. An error's message can quote the reply, so
-/// a reader outside the run's own scope gets the code with fixed text.
+/// a reader who may not read the reply gets the code with fixed text.
 fn seen_by(cell: &RunCell, reader: &RunScope) -> RunInfo {
     let mut info = cell.info();
-    if cell.scope != *reader {
+    if !may_read(cell, reader) {
         if let Some(error) = &mut info.error {
             OTHERS_MESSAGE.clone_into(&mut error.message);
         }
@@ -119,11 +141,20 @@ impl RunRegistry {
             .get(id)
             .cloned()
             .ok_or(RunsError::NotFound)?;
-        if *scope == RunScope::Local || cell.scope == *scope {
+        if *scope == RunScope::Local || may_read(&cell, scope) {
             Ok(cell)
         } else {
             Err(RunsError::NotFound)
         }
+    }
+
+    /// The run whose reply to `conversation_id` is not yet saved, by id:
+    /// the run that would refuse another turn to it.
+    #[must_use]
+    pub fn live_on(&self, conversation_id: i64) -> Option<String> {
+        self.lock()
+            .live_on(conversation_id)
+            .map(|cell| cell.id.clone())
     }
 
     /// Cancel and drop every run, ending every reader. For the daemon's
@@ -185,7 +216,7 @@ impl RunsPort for RunRegistry {
         let mut cells: Vec<&Arc<RunCell>> = table
             .runs
             .values()
-            .filter(|cell| *scope == RunScope::Local || cell.scope == *scope)
+            .filter(|cell| *scope == RunScope::Local || may_read(cell, scope))
             .collect();
         cells.sort_by_key(|cell| std::cmp::Reverse(cell.order));
         let runs: Vec<RunInfo> = cells.iter().map(|cell| seen_by(cell, scope)).collect();
@@ -199,10 +230,11 @@ impl RunsPort for RunRegistry {
 
     fn events(&self, scope: &RunScope, id: &str, after: u32) -> Result<RunEvents, RunsError> {
         let cell = self.visible(scope, id)?;
-        if cell.scope != *scope {
+        if !may_read(&cell, scope) {
             return Err(RunsError::NotYours);
         }
-        Ok(reader::events(cell, after))
+        let owner = cell.scope == *scope;
+        Ok(reader::events(cell, after, owner))
     }
 
     fn cancel(&self, scope: &RunScope, id: &str) -> Result<RunInfo, RunsError> {
@@ -219,7 +251,9 @@ impl RunsPort for RunRegistry {
         let ids: Vec<String> = table
             .runs
             .values()
-            .filter(|cell| cell.scope == scope)
+            // A run on a hub chat is the chat's: it goes on, and its reply
+            // is saved.
+            .filter(|cell| cell.scope == scope && !on_chat(cell))
             .map(|cell| cell.id.clone())
             .collect();
         let dropped: Vec<_> = ids.iter().filter_map(|id| table.runs.remove(id)).collect();

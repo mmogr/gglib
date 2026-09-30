@@ -80,7 +80,7 @@ fn start(
     let seen = Seen::default();
     let dropped = Arc::new(AtomicUsize::new(0));
     let (finish, rx) = oneshot::channel();
-    let Ok(Reservation::New(reserved)) = runs.reserve(id, agent(Some(7))) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, id, agent(Some(7))) else {
         panic!("a new reservation");
     };
     reserved.start(work(frames, rx, &dropped), ended(&seen));
@@ -165,14 +165,14 @@ async fn a_repeated_id_answers_with_the_run_and_reserves_nothing() {
     let (runs, _, _) = registry();
     let (_, _finish, _) = start(&runs, "a1", &[]);
 
-    let again = runs.reserve("a1", agent(Some(9))).unwrap();
+    let again = runs.reserve(RunScope::Local, "a1", agent(Some(9))).unwrap();
 
     let Reservation::Existing(info) = again else {
         panic!("the existing run");
     };
     assert_eq!(info.conversation_id, Some(7));
     assert_eq!(
-        runs.existing("a1").unwrap().map(|i| i.id),
+        runs.existing(&RunScope::Local, "a1").unwrap().map(|i| i.id),
         Some("a1".into())
     );
 }
@@ -181,11 +181,11 @@ async fn a_repeated_id_answers_with_the_run_and_reserves_nothing() {
 async fn a_reservation_dropped_unstarted_leaves_no_run() {
     let (runs, _, _) = registry();
 
-    let reserved = runs.reserve("a1", agent(None)).unwrap();
-    assert!(runs.existing("a1").unwrap().is_some());
+    let reserved = runs.reserve(RunScope::Local, "a1", agent(None)).unwrap();
+    assert!(runs.existing(&RunScope::Local, "a1").unwrap().is_some());
     drop(reserved);
 
-    assert_eq!(runs.existing("a1").unwrap(), None);
+    assert_eq!(runs.existing(&RunScope::Local, "a1").unwrap(), None);
     assert!(runs.list(&RunScope::Local).runs.is_empty());
 }
 
@@ -195,9 +195,12 @@ async fn a_device_runs_id_is_taken_for_this_machine() {
     let phone = RunScope::Device("phone".into());
     runs.create(phone, "d1", json!({ "model": "m" })).unwrap();
 
-    assert_eq!(runs.existing("d1"), Err(RunsError::IdTaken));
+    assert_eq!(
+        runs.existing(&RunScope::Local, "d1"),
+        Err(RunsError::IdTaken)
+    );
     assert!(matches!(
-        runs.reserve("d1", agent(None)),
+        runs.reserve(RunScope::Local, "d1", agent(None)),
         Err(RunsError::IdTaken)
     ));
 }

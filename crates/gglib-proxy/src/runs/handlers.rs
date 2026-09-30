@@ -11,6 +11,7 @@ use axum::extract::rejection::{JsonRejection, QueryRejection};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{RunsError, RunsPort};
 use serde::Deserialize;
 use serde_json::Value;
@@ -20,9 +21,9 @@ use super::sse;
 use crate::models::ErrorResponse;
 use crate::server::AppState;
 
-type Answer = Result<Response, Response>;
+pub(super) type Answer = Result<Response, Response>;
 
-fn error(status: StatusCode, error_type: &str, code: &str, message: String) -> Response {
+pub(super) fn error(status: StatusCode, error_type: &str, code: &str, message: String) -> Response {
     (
         status,
         Json(ErrorResponse::with_code(message, error_type, code)),
@@ -42,7 +43,7 @@ fn refused(err: &RunsError) -> Response {
 }
 
 /// A request the route could not read.
-fn invalid(message: &str) -> Response {
+pub(super) fn invalid(message: &str) -> Response {
     error(
         StatusCode::BAD_REQUEST,
         "invalid_request_error",
@@ -52,7 +53,7 @@ fn invalid(message: &str) -> Response {
 }
 
 /// The answer when this proxy was started without runs.
-fn unavailable() -> Response {
+pub(super) fn unavailable() -> Response {
     error(
         StatusCode::SERVICE_UNAVAILABLE,
         "service_unavailable",
@@ -66,21 +67,36 @@ fn runs(state: &AppState) -> Option<Arc<dyn RunsPort>> {
     state.runs.clone()
 }
 
+#[derive(Deserialize)]
+pub(crate) struct PutQuery {
+    /// `agent` adds a turn to a hub chat; absent, a chat run.
+    #[serde(default)]
+    kind: Option<RunKind>,
+}
+
 /// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
-/// existing.
+/// existing. With `?kind=agent`, a device's turn on a hub chat: see
+/// [`super::turn`].
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
     Path(id): Path<String>,
+    query: Result<Query<PutQuery>, QueryRejection>,
     body: Result<Json<Value>, JsonRejection>,
 ) -> Answer {
-    let runs = runs(&state).ok_or_else(unavailable)?;
+    let Ok(Query(query)) = query else {
+        return Err(invalid("`kind` is `chat` or `agent`"));
+    };
     let Ok(Json(body)) = body else {
         return Err(invalid(
             "a run's request body must be a JSON object, sent as application/json",
         ));
     };
+    if query.kind == Some(RunKind::Agent) {
+        return super::turn::put(&state, scope, &id, body).await;
+    }
+    let runs = runs(&state).ok_or_else(unavailable)?;
     let created = runs.create(scope, &id, body).map_err(|e| refused(&e))?;
     let status = if created.created {
         StatusCode::CREATED

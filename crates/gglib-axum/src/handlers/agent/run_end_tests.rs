@@ -10,7 +10,7 @@ use gglib_core::domain::runs::RunStatus;
 use gglib_core::ports::RunsPort as _;
 use serde_json::json;
 
-use super::run::launch;
+use super::launch::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, drain, finished_reply, logged, meta, prepared, reply, saved, saving,
     settled, start, state,
@@ -104,6 +104,7 @@ async fn a_create_dropped_part_way_and_retried_saves_the_users_message_once() {
     let mut dropped = Box::pin(launch(
         &state,
         "a1",
+        LOCAL,
         saving(id),
         first,
         super::compose::take_permit(&state).unwrap(),
@@ -121,6 +122,7 @@ async fn a_create_dropped_part_way_and_retried_saves_the_users_message_once() {
     let retried = launch(
         &state,
         "a1",
+        LOCAL,
         saving(id),
         again,
         spare.try_acquire_owned().unwrap(),
@@ -148,6 +150,7 @@ async fn a_repeated_create_saves_the_users_message_once() {
     let created = launch(
         &state,
         "a1",
+        LOCAL,
         saving(id),
         again,
         spare.try_acquire_owned().unwrap(),

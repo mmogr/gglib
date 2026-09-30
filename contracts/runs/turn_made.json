@@ -7,6 +7,7 @@
     {
       "cached_tokens": 2100,
       "completion_tokens": 496,
+      "device": "phone-7c2e",
       "duration_ms": 41000,
       "model": "Qwen3.8-27B",
       "prompt_tokens": 3180,
@@ -22,6 +23,7 @@
   "metadata": {
     "cachedTokens": 2100,
     "completionTokens": 496,
+    "device": "phone-7c2e",
     "modelName": "Qwen3.8-27B",
     "modelQuantization": "Q8_0",
     "promptTokens": 3180,

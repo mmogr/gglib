@@ -18,6 +18,7 @@ mod test_support_remote;
 
 mod error;
 mod helpers;
+mod hub_chats;
 
 pub mod benchmark;
 #[allow(
@@ -63,6 +64,7 @@ pub use error::GuiError;
 // Domain ops + their Deps
 pub use benchmark::BenchmarkOps;
 pub use downloads::DownloadOps;
+pub use hub_chats::HubChats;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;

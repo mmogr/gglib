@@ -264,6 +264,7 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
 
     let ctx = bootstrap(config.clone()).await?;
     let state: crate::state::AppState = Arc::new(ctx);
+    crate::handlers::agent::hub_turn::bind(&state);
 
     // Host-guarded, tokenless: this entry point has no key resolution of its
     // own, so a non-loopback bind here relies on the allowlist alone. The

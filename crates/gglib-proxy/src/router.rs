@@ -13,6 +13,7 @@
 //!           bearer_guard   the protected group only
 //!             device_gate  the protected group: tunnelled ⇒ names a device
 //!               mcp_tunnel_guard   /mcp only: tunnelled ⇒ needs --allow-mcp
+//!               named_device_only  /v1/chats only: a named device, never local
 //!                 handler
 //! ```
 //!
@@ -50,6 +51,13 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             crate::remote::mcp_tunnel_guard,
         ));
 
+    // The hub's chats, for a paired device only: this machine reads them at
+    // `/api`, and a key-holder on a LAN bind must not read every chat.
+    let chats = Router::new()
+        .route("/v1/chats", get(crate::chats::list_chats))
+        .route("/v1/chats/{id}", get(crate::chats::open_chat))
+        .route_layer(axum::middleware::from_fn(crate::chats::named_device_only));
+
     // Everything a client can reach with credentials. Grouped separately from
     // `/health` so `route_layer` can require the bearer token here without
     // closing the one endpoint a supervisor or a load balancer needs to poll
@@ -81,6 +89,7 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         )
         .route("/v1/runs/{id}/events", get(crate::runs::run_events))
         .route("/v1/runs/{id}/cancel", post(crate::runs::cancel_run))
+        .merge(chats)
         .merge(mcp);
 
     // Unconditional: a key set after this process started has to have a layer
