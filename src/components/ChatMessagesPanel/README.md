@@ -24,6 +24,8 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
+In the page's Console view the panel draws only its head (`headOnly`), and the page puts the server beneath it; the thread and composer stay mounted, hidden.
+
 ## Key Files
 
 | File | Role |

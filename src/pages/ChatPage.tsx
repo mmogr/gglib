@@ -350,12 +350,13 @@ export default function ChatPage(props: ChatPageProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
-      {/* Chat Tab Content - always mounted, hidden when not active */}
       <AssistantRuntimeProvider runtime={runtime}>
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
-        <div className={cn('flex flex-1 min-h-0', activeTab !== 'chat' && 'hidden')}>
+        {/* The rail, the list and the notebook's head stay in both views; the
+            head's margin switches the body between the thread and the console. */}
+        <div className="flex flex-1 min-h-0">
           <ConversationRail
             onNewConversation={handleNewConversation}
             onSearch={handleSearch}
@@ -381,65 +382,64 @@ export default function ChatPage(props: ChatPageProps) {
               unread={activity.unread}
             />
           </div>
-          <ChatMessagesPanel
-            key={activeConversationId ?? "none"}
-            activeConversation={activeConversation}
-            activeConversationId={activeConversationId}
-            isServerConnected={isServerRunning}
-            serverPort={serverPort}
-            titleGenerationPrompt={titleGenerationPrompt}
-            onRenameConversation={handleRenameConversation}
-            onClearConversation={handleClearConversation}
-            onExportConversation={handleExportConversation}
-            onUpdateSystemPrompt={handleUpdateSystemPrompt}
-            onClose={onClose}
-            messageLoading={messageLoading}
-            syncConversations={syncConversations}
-            chatError={chatError}
-            showToast={showToast}
-            timingTracker={timingTracker}
-            currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
-            supportsToolCalls={supportsToolCalls}
-            toolFormat={toolFormat}
-            modelName={modelName}
-            modelId={modelId}
-            onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, activeConversationId))}
-            quantization={quantization}
-            headMargin={
-              <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />
-            }
-          />
-        </div>
-
-      </AssistantRuntimeProvider>
-
-      {/* Console Tab Content - always mounted, hidden when not active.
-          Absent entirely for a remote chat: the process it reports on is on
-          the other machine, so there is no id, port or log to hand it. */}
-      {!props.remote && (
-        <TwoPanelLayout
-          ref={activeTab === 'console' ? layoutRef : undefined}
-          isHidden={activeTab !== 'console'}
-          className="flex-1 min-h-0"
-          leftWidth={leftPanelWidth}
-          onResizeStart={handlePointerDown}
-          onKeyboardResize={handleKeyboardResize}
-          leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
-          left={
-            <ConsoleInfoPanel
-              modelId={props.modelId}
+          <div className="flex flex-col flex-1 min-w-0 min-h-0">
+            <ChatMessagesPanel
+              key={activeConversationId ?? "none"}
+              activeConversation={activeConversation}
+              activeConversationId={activeConversationId}
+              isServerConnected={isServerRunning}
+              serverPort={serverPort}
+              titleGenerationPrompt={titleGenerationPrompt}
+              onRenameConversation={handleRenameConversation}
+              onClearConversation={handleClearConversation}
+              onExportConversation={handleExportConversation}
+              onUpdateSystemPrompt={handleUpdateSystemPrompt}
+              onClose={onClose}
+              messageLoading={messageLoading}
+              syncConversations={syncConversations}
+              chatError={chatError}
+              showToast={showToast}
+              timingTracker={timingTracker}
+              currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+              supportsToolCalls={supportsToolCalls}
+              toolFormat={toolFormat}
               modelName={modelName}
-              serverPort={props.serverPort}
-              contextLength={contextLength}
-              startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
-              onStopServer={onClose}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
+              modelId={modelId}
+              onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, activeConversationId))}
+              quantization={quantization}
+              headMargin={
+                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />
+              }
+              headOnly={activeTab === 'console'}
             />
-          }
-          right={<ConsoleLogPanel serverPort={props.serverPort} />}
-        />
-      )}
+            {/* Console - always mounted, hidden when not active. Absent
+                entirely for a remote chat: the process it reports on is on the
+                other machine, so there is no id, port or log to hand it. */}
+            {!props.remote && (
+              <TwoPanelLayout
+                ref={activeTab === 'console' ? layoutRef : undefined}
+                isHidden={activeTab !== 'console'}
+                className="flex-1 min-h-0 border-t border-border-light"
+                leftWidth={leftPanelWidth}
+                onResizeStart={handlePointerDown}
+                onKeyboardResize={handleKeyboardResize}
+                leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
+                left={
+                  <ConsoleInfoPanel
+                    modelId={props.modelId}
+                    modelName={modelName}
+                    serverPort={props.serverPort}
+                    contextLength={contextLength}
+                    startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
+                    onStopServer={onClose}
+                  />
+                }
+                right={<ConsoleLogPanel serverPort={props.serverPort} />}
+              />
+            )}
+          </div>
+        </div>
+      </AssistantRuntimeProvider>
 
       {isNewConversationModalOpen && (
         <NewConversationModal
