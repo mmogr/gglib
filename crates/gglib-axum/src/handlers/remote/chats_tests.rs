@@ -97,6 +97,11 @@ async fn far(status: u16, body: &str) -> (Arc<Fake>, FarChats) {
     (fake, client)
 }
 
+/// Whether a request carried this device's key as its bearer.
+fn carries_key(seen: &Seen) -> bool {
+    seen.bearer.as_deref() == Some(format!("Bearer {KEY}").as_str())
+}
+
 fn only(fake: &Fake) -> Seen {
     let seen = fake.seen.lock().unwrap();
     assert_eq!(seen.len(), 1, "{seen:?}");
@@ -126,10 +131,7 @@ async fn a_listing_reaches_the_far_chats_with_the_key_and_comes_back_as_it_was()
         (seen.method.as_str(), seen.uri.as_str()),
         ("GET", "/v1/chats")
     );
-    assert_eq!(
-        seen.bearer.as_deref(),
-        Some(format!("Bearer {KEY}").as_str())
-    );
+    assert!(carries_key(&seen), "{seen:?}");
 }
 
 #[tokio::test]
@@ -144,10 +146,7 @@ async fn opening_a_chat_reaches_it_by_id() {
         (seen.method.as_str(), seen.uri.as_str()),
         ("GET", "/v1/chats/12")
     );
-    assert_eq!(
-        seen.bearer.as_deref(),
-        Some(format!("Bearer {KEY}").as_str())
-    );
+    assert!(carries_key(&seen), "{seen:?}");
 }
 
 #[tokio::test]
@@ -166,10 +165,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         (seen.method.as_str(), seen.uri.as_str()),
         ("PUT", "/v1/runs/chat-1?kind=agent")
     );
-    assert_eq!(
-        seen.bearer.as_deref(),
-        Some(format!("Bearer {KEY}").as_str())
-    );
+    assert!(carries_key(&seen), "{seen:?}");
     assert_eq!(
         json(&seen.body),
         serde_json::json!({ "conversation_id": 12, "content": "And how do I fix it?" })
@@ -267,7 +263,12 @@ async fn a_refused_key_is_a_conflict_that_says_to_pair_again() {
 async fn a_runs_events_stream_through_in_order_as_they_come() {
     let (fake, far) = far(200, "").await;
 
-    let response = run_events_via(&far, "chat-1", 3).await.unwrap();
+    // Bounded: a forward that gathered the stream first would wait here for
+    // an end the far run only reaches after the first frame is read.
+    let response = tokio::time::timeout(Duration::from_secs(5), run_events_via(&far, "chat-1", 3))
+        .await
+        .expect("the events were answered before the run ended")
+        .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
@@ -276,10 +277,7 @@ async fn a_runs_events_stream_through_in_order_as_they_come() {
     );
     let seen = only(&fake);
     assert_eq!(seen.uri, "/v1/runs/chat-1/events?after=3");
-    assert_eq!(
-        seen.bearer.as_deref(),
-        Some(format!("Bearer {KEY}").as_str())
-    );
+    assert!(carries_key(&seen), "{seen:?}");
 
     let mut body = response.into_body();
     let first = tokio::time::timeout(Duration::from_secs(5), body.frame())

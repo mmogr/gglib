@@ -131,6 +131,23 @@ describe('useGglibRuntime on the far machine', () => {
     nothingHere();
   });
 
+  it('a far send while the far machine is not reachable says why and gives the text back', async () => {
+    const onError = vi.fn();
+    daemons.hub.refuseNext = {
+      status: 409,
+      type: 'conflict',
+      error: 'not connected to a remote machine — `gglib remote join` first',
+    };
+    const hook = await mount({ ...far(1), onError });
+    send(hook, 'hello');
+
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onError.mock.calls[0][0].message).toContain('`gglib remote join`');
+    expect(hook.result.current.isRunning).toBe(false);
+    expect(hook.result.current.runtime.thread.composer.getState().text).toBe('hello');
+    nothingHere();
+  });
+
   it('keeps nothing of the far chat in browser storage', async () => {
     const before = [{ ...localStorage }, { ...sessionStorage }];
     daemons.hub.save(1, { role: 'user', content: 'a private question' });
