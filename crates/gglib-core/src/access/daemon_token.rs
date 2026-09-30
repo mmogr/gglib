@@ -133,7 +133,10 @@ fn refuse_loose(path: &Path) -> io::Result<()> {
 /// Windows has no mode to read: the file has the directory's ACL, so nothing
 /// is refused. The signature matches the Unix one for the callers' sake.
 #[cfg(not(unix))]
-#[allow(clippy::unnecessary_wraps)]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the Unix twin returns io::Result; the callers share one signature"
+)]
 fn refuse_loose(_path: &Path) -> io::Result<()> {
     Ok(())
 }
