@@ -97,7 +97,7 @@ export default function ModelControlCenterPage({
   // Chat session state - when set, shows ChatPage instead of model panels.
   // Local sessions come from a served model here; remote ones from the
   // Remote panel, which is why the hook and not this page owns the wiring.
-  const { chatSession, setChatSession, openChatSession, closeChatSession } =
+  const { chatSession, setChatSession, openChatSession, switchChatModel, closeChatSession } =
     useChatSession(servers);
 
   // Benchmark state - when set, shows BenchmarkPage instead of model panels
@@ -210,16 +210,20 @@ export default function ModelControlCenterPage({
     closeChatSession();
   };
 
-  // If chat session is active, show ChatPage
+  // If chat session is active, show ChatPage. Keyed by the server, so a
+  // model switch remounts it on the new one.
   if (chatSession) {
     return (
       <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden"><div className="loading-chat">Loading chat...</div></div>}>
         {chatSession.kind === 'local' ? (
           <ChatPage
+            key={`${chatSession.modelId}:${chatSession.serverPort}`}
             serverPort={chatSession.serverPort}
             modelId={chatSession.modelId}
             modelName={chatSession.modelName}
             initialView={chatSession.initialView}
+            conversationId={chatSession.conversationId}
+            onSwitchModel={switchChatModel}
             onClose={handleCloseChat}
           />
         ) : (

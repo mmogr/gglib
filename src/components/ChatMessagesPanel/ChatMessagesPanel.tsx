@@ -17,7 +17,7 @@ import {
   SystemMessageBubble,
   EditComposer,
 } from './components';
-import type { MessageActionsContextValue } from './components';
+import type { MessageActionsContextValue, ModelChoice } from './components';
 import {
   useTitleGeneration,
   useMessageDeletion,
@@ -55,6 +55,10 @@ interface ChatMessagesPanelProps {
   toolFormat?: string | null;
   /** The model the next send goes to, as the page names it. */
   modelName: string;
+  /** Its registry id; absent for a chat with another machine. */
+  modelId?: number;
+  /** Move the chat to another model, from the composer's margin. */
+  onPickModel?: (choice: ModelChoice) => Promise<void>;
   /** Its quantisation, from its catalogue entry, when known. */
   quantization?: string | null;
   /** The head's margin: the page's own controls. */
@@ -86,6 +90,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   supportsToolCalls,
   toolFormat,
   modelName,
+  modelId,
+  onPickModel,
   quantization,
   headMargin,
 }) => {
@@ -221,6 +227,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 isThreadRunning={isThreadRunning}
                 onStopGeneration={() => threadRuntime?.cancelRun()}
                 modelName={modelName}
+                modelId={modelId}
+                onPickModel={onPickModel}
                 quantization={quantization}
                 supportsToolCalls={supportsToolCalls}
                 toolFormat={toolFormat}

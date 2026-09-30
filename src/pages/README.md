@@ -48,7 +48,7 @@ The main window's landing page containing:
 Interactive chat interface featuring:
 - Real-time streaming responses
 - Conversation history
-- Model selection
+- Model selection from the composer's margin: a server running here, or a registered model, started first
 - MCP tool integration
 
 ## Sub-modules

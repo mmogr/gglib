@@ -22,11 +22,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 
 // The library the page loads. Empty for the remote cases; one model for the
 // case about a model already running here.
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
+const serveModel = vi.hoisted(() => vi.fn(async () => ({ port: 9456 })));
 
 vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>(
@@ -37,6 +38,7 @@ vi.mock('../../../src/services/transport', async () => {
     getTransport: () => ({
       listModels: vi.fn(async () => library.models),
       getModelDetail: vi.fn(async () => null),
+      serveModel,
       listTags: vi.fn(async () => []),
       getModelFilterOptions: vi.fn(async () => ({
         architectures: [],
@@ -63,25 +65,44 @@ vi.mock('../../../src/services/remoteEvents', () => ({
 }));
 
 // The screen under test is "which page is showing", so the chat page is a
-// placard: it names the model it was given and says whether it was told the
-// session is remote.
+// placard: it names the model, port and conversation it was given, says
+// whether it was told the session is remote, and offers its model switch.
+// The port is held as the real page holds its session, from its first
+// render, so a switch that does not remount the page shows the old one.
 vi.mock('../../../src/pages/ChatPage', () => ({
   default: ({
     modelName,
+    serverPort,
+    conversationId,
     remote,
+    onSwitchModel,
     onClose,
   }: {
     modelName: string;
+    serverPort?: number;
+    conversationId?: number | null;
     remote?: boolean;
+    onSwitchModel?: (choice: { modelId: number; modelName: string }, conversationId: number | null) => Promise<void>;
     onClose: () => Promise<void>;
-  }) => (
-    <div data-testid="chat-page" data-remote={remote ? 'yes' : 'no'}>
-      Chatting with {modelName}
-      <button type="button" onClick={() => void onClose()}>
-        Close chat
-      </button>
-    </div>
-  ),
+  }) => {
+    const [mountedPort] = useState(serverPort);
+    return (
+      <div
+        data-testid="chat-page"
+        data-remote={remote ? 'yes' : 'no'}
+        data-port={mountedPort}
+        data-conversation={conversationId ?? ''}
+      >
+        Chatting with {modelName}
+        <button type="button" onClick={() => void onSwitchModel?.({ modelId: 9, modelName: 'gemma-3-12b' }, 2)}>
+          Switch to gemma
+        </button>
+        <button type="button" onClick={() => void onClose()}>
+          Close chat
+        </button>
+      </div>
+    );
+  },
 }));
 
 import ModelControlCenterPage from '../../../src/pages/ModelControlCenterPage';
@@ -188,5 +209,27 @@ describe('ModelControlCenterPage', () => {
     const chat = await screen.findByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
     expect(chat).toHaveAttribute('data-remote', 'no');
+  });
+
+  it('serves a model that is not running, then moves the chat to it with its conversation', async () => {
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true }), guiModel({ id: 9, name: 'gemma-3-12b' })];
+    const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }];
+    render(
+      <ModelControlCenterPage servers={running} loadServers={loadServers} stopServer={stopServer} />,
+      { wrapper },
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /qwen3-8b/i }));
+    await user.click(await screen.findByRole('button', { name: /open chat/i }));
+
+    await user.click(await screen.findByRole('button', { name: 'Switch to gemma' }));
+
+    await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b'));
+    expect(serveModel).toHaveBeenCalledWith({ id: 9 });
+    const chat = screen.getByTestId('chat-page');
+    expect(chat).toHaveAttribute('data-port', '9456');
+    expect(chat).toHaveAttribute('data-conversation', '2');
+    // The model it left keeps running; only Close stops a server.
+    expect(stopServer).not.toHaveBeenCalled();
   });
 });

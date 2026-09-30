@@ -19,7 +19,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import type { ServerViewModel } from '../../hooks/useServers';
+import type { ModelChoice } from '../../components/ChatMessagesPanel';
 import { clearRemoteChatRequest, useRemoteState } from '../../services/remoteRegistry';
+import { getTransport } from '../../services/transport';
 
 /**
  * An open chat screen.
@@ -35,6 +37,8 @@ export type ChatSession =
       modelId: number;
       modelName: string;
       initialView: 'chat' | 'console';
+      /** The conversation to open with: the one open before a model switch. */
+      conversationId?: number | null;
     }
   | { kind: 'remote'; modelName: string };
 
@@ -43,6 +47,8 @@ export interface UseChatSessionResult {
   setChatSession: (session: ChatSession | null) => void;
   /** Open the chat screen on a model already served here. */
   openChatSession: (modelId: number, view: 'chat' | 'console') => void;
+  /** Move an open chat to another model, keeping its conversation open. */
+  switchChatModel: (choice: ModelChoice, conversationId: number | null) => Promise<void>;
   closeChatSession: () => void;
 }
 
@@ -66,6 +72,25 @@ export function useChatSession(servers: ServerViewModel[]): UseChatSessionResult
     [servers],
   );
 
+  // A model that is not running is served first with an empty request, so
+  // the daemon launches it on the model's saved settings and its own
+  // defaults. The server the chat leaves is left running.
+  const switchChatModel = useCallback(
+    async (choice: ModelChoice, conversationId: number | null) => {
+      const server = servers.find((s) => s.modelId === choice.modelId);
+      const port = server?.port ?? (await getTransport().serveModel({ id: choice.modelId })).port;
+      setChatSession({
+        kind: 'local',
+        serverPort: port,
+        modelId: choice.modelId,
+        modelName: server?.modelName ?? choice.modelName,
+        initialView: 'chat',
+        conversationId,
+      });
+    },
+    [servers],
+  );
+
   const closeChatSession = useCallback(() => setChatSession(null), []);
 
   // The Remote panel asked for the far machine. Cleared as it is served so
@@ -77,5 +102,5 @@ export function useChatSession(servers: ServerViewModel[]): UseChatSessionResult
     setChatSession({ kind: 'remote', modelName: chatModel.trim() });
   }, [chatRequestedAt, chatModel]);
 
-  return { chatSession, setChatSession, openChatSession, closeChatSession };
+  return { chatSession, setChatSession, openChatSession, switchChatModel, closeChatSession };
 }

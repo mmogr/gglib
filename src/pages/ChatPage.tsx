@@ -10,7 +10,7 @@ import {
   useListFold,
   type FetchedList,
 } from '../components/ConversationListPanel';
-import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
+import { ChatMessagesPanel, type ModelChoice } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
@@ -18,6 +18,7 @@ import { NewConversationModal } from '../components/NewConversationModal';
 import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
+import { useChatModelFacts } from '../hooks/useChatModelFacts';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -43,6 +44,9 @@ type ChatPageProps = {
   contextLength?: number;
   serverStartTime?: number; // Unix timestamp in seconds
   initialView?: 'chat' | 'console'; // Which view to show initially
+  conversationId?: number | null; // The conversation to open with, e.g. after a model switch
+  // Move the chat to another model, keeping this conversation open; local only.
+  onSwitchModel?: (choice: ModelChoice, conversationId: number | null) => Promise<void>;
   onClose: () => Promise<void>; // Stops server and exits
 } & (
   | { remote?: false; serverPort: number; modelId: number }
@@ -60,6 +64,8 @@ export default function ChatPage(props: ChatPageProps) {
     contextLength,
     serverStartTime,
     initialView = 'chat',
+    conversationId = null,
+    onSwitchModel,
     remote = false,
     onClose,
   } = props;
@@ -69,7 +75,7 @@ export default function ChatPage(props: ChatPageProps) {
   // Conversation state
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationLoading, setConversationLoading] = useState(true);
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(conversationId);
   const [conversationSearch, setConversationSearch] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   
@@ -105,34 +111,10 @@ export default function ChatPage(props: ChatPageProps) {
   const titleGenerationPrompt = settings?.titleGenerationPrompt || DEFAULT_TITLE_GENERATION_PROMPT;
   const maxToolIterations = settings?.maxToolIterations ?? undefined;
 
-  // Tool support capability for the active model.
-  // Fetched once on mount (model identity is fixed for the lifetime of ChatPage).
-  // null = unknown (permissive fallback - never gates tools when status is uncertain).
-  const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
-  const [toolFormat, setToolFormat] = useState<string | null>(null);
-  // The model's quantisation, from its catalogue entry; the composer says it.
-  const [quantization, setQuantization] = useState<string | null>(null);
-  useEffect(() => {
-    // Nothing to ask about remotely: the capability is read from this
-    // machine's server registry and the model is on the other machine.
-    // `null` is already the permissive answer, which is the right one here.
-    if (modelId === undefined) return;
-    let cancelled = false;
-    getTransport().getServerToolSupport(modelId)
-      .then((data) => {
-        if (!cancelled) {
-          setSupportsToolCalls(data.supports_tool_calls);
-          setToolFormat(data.detected_format ?? null);
-        }
-      })
-      .catch(() => {
-        // Permissive fallback: leave supportsToolCalls as null (unknown)
-      });
-    getTransport().getModel(modelId)
-      .then((model) => { if (!cancelled) setQuantization(model?.quantization ?? null); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [modelId]);
+  // Tool support and quantisation for the active model. The model is fixed
+  // for the lifetime of ChatPage: a switch from the composer's picker
+  // remounts the page on the new session, with this conversation still open.
+  const { supportsToolCalls, toolFormat, quantization } = useChatModelFacts(modelId);
 
   // Get active conversation
   const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
@@ -420,6 +402,8 @@ export default function ChatPage(props: ChatPageProps) {
             supportsToolCalls={supportsToolCalls}
             toolFormat={toolFormat}
             modelName={modelName}
+            modelId={modelId}
+            onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, activeConversationId))}
             quantization={quantization}
             headMargin={
               <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />

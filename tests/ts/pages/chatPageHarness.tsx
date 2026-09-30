@@ -79,6 +79,8 @@ export function chatTransport(fixture: ChatFixture) {
   return {
     getServerToolSupport: vi.fn(async () => ({ supports_tool_calls: true, detected_format: null })),
     getModel: vi.fn(async () => ({ quantization: 'Q8_0' })),
+    // The composer's model picker lists these; none unless a test says so.
+    listModels: vi.fn(async () => []),
     // A copy, as a fetch gives: the page must not see the fixture change under it.
     listConversations: vi.fn(async () => [...fixture.conversations]),
     createConversation: vi.fn(async (params: { title: string }) => {
