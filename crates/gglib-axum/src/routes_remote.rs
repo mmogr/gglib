@@ -1,11 +1,11 @@
 //! The remote tunnel's routes, nested under `/api/remote` (ADR 0012).
 //!
 //! Two sides, as the tunnel has: `enable`/`disable`/`status` and the device
-//! routes are this machine serving, `join`/`disconnect`/`kill` are this
-//! machine reaching another one.
+//! routes are this machine serving, `join`/`disconnect`/`kill` and the far
+//! machine's chats and runs are this machine reaching another one.
 
 use axum::Router;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 
 use crate::handlers;
 use crate::state::AppState;
@@ -32,4 +32,15 @@ pub(crate) fn remote_routes() -> Router<AppState> {
         .route("/join", post(handlers::remote::join))
         .route("/disconnect", post(handlers::remote::disconnect))
         .route("/kill", post(handlers::remote::kill))
+        // The far machine's chats and runs, for this machine's chat page:
+        // each forwarded through the tunnel with the stored key.
+        .route("/chats", get(handlers::remote::list_chats))
+        .route("/chats/{id}", get(handlers::remote::open_chat))
+        .route(
+            "/chats/{id}/turns/{run_id}",
+            put(handlers::remote::add_turn),
+        )
+        .route("/runs", get(handlers::remote::list_runs))
+        .route("/runs/{run_id}/events", get(handlers::remote::run_events))
+        .route("/runs/{run_id}/cancel", post(handlers::remote::cancel_run))
 }

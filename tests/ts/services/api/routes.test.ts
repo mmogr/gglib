@@ -9,7 +9,9 @@ import {
   HF_SEARCH_PATH,
   HF_QUANTIZATIONS_PATH,
   HF_TOOL_SUPPORT_PATH,
+  REMOTE_CHATS_PATH,
   REMOTE_JOIN_PATH,
+  REMOTE_RUNS_PATH,
   VERSION_PATH,
 } from '../../../../src/services/api/routes';
 
@@ -26,6 +28,14 @@ describe('services/api/routes', () => {
     // routes no other name for it, so a stale path here is a 405.
     it('REMOTE_JOIN_PATH is canonical', () => {
       expect(REMOTE_JOIN_PATH).toBe('/api/remote/join');
+    });
+
+    // `REMOTE_CHATS_PATH` and `REMOTE_RUNS_PATH` in
+    // `gglib-core::contracts::http::daemon`: the chat page reads the far
+    // machine's chats and runs under these, and a stale one is a 404.
+    it('REMOTE_CHATS_PATH and REMOTE_RUNS_PATH are canonical', () => {
+      expect(REMOTE_CHATS_PATH).toBe('/api/remote/chats');
+      expect(REMOTE_RUNS_PATH).toBe('/api/remote/runs');
     });
   });
 

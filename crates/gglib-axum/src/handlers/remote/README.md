@@ -7,6 +7,16 @@ enable, disable, status on the serve side; invite, the device list and forget
 for who may use it; join, disconnect, kill on the connect side. Thin: each
 maps one `RemoteOps` call onto the wire.
 
+`chats.rs` is the connect side too: the far machine's chats and runs for this
+machine's chat page (`/api/remote/chats`, `/chats/{id}`,
+`/chats/{id}/turns/{run_id}`, `/runs`, `/runs/{run_id}/events`,
+`/runs/{run_id}/cancel`), each forwarded through the tunnel with the stored
+key by `gglib_app_services::FarChats`. A turn sends only `{content}`; the
+far machine adds the chat's history itself. Bodies pass through and events
+stream through as they come; nothing is kept. A far refusal keeps its status
+and code, but a refused key is a `409`, since a `401` would have the page ask
+for this daemon's own key.
+
 Two decisions live here rather than in `RemoteOps`:
 
 - **Enable is not idempotent.** A second `enable` while the tunnel is up is a

@@ -1,4 +1,4 @@
-//! The one request the connect side makes *through* the tunnel.
+//! The request that stops the far daemon, made *through* the tunnel.
 //!
 //! It goes to the far proxy over the local listener, which is the point: the
 //! shutdown route is the far machine's, and this side reaches it the way any
