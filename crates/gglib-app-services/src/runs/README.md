@@ -13,7 +13,9 @@ at most 32, each log at most 8 MB — and serves them through
 runs/
   mod.rs          — the clock type
   registry.rs     — RunRegistry: create, list, get, events, cancel, the
-                    scope rule, the limits, retention, forget_device
+                    scope rule (a run on a hub chat is the chat's, read by
+                    this machine and every device), the limits, retention,
+                    forget_device
   admit.rs        — a run admitted under its id, and driven to its end; a
                     panic ends it `failed`; until its end is handled (an
                     agent run's reply saved) every reader sees `in_progress`

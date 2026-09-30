@@ -22,6 +22,8 @@ struct Reader {
     changed: watch::Receiver<u64>,
     pending: VecDeque<RunEvent>,
     done: bool,
+    /// Whether the reader is the run's own scope.
+    owner: bool,
 }
 
 impl Reader {
@@ -43,10 +45,11 @@ impl Reader {
                     }
                 }
                 Step::End(info) => {
-                    // Only a reader of the run's own scope gets a stream at
-                    // all, so reaching the end here starts the short
-                    // retention.
-                    self.cell.mark_read();
+                    // The run's own scope reaching the end starts the short
+                    // retention; another reader of a hub chat's run does not.
+                    if self.owner {
+                        self.cell.mark_read();
+                    }
                     self.done = true;
                     return Some(RunEvent::End(info));
                 }
@@ -63,9 +66,11 @@ impl Reader {
     }
 }
 
-/// The events of `cell` after `after`, for a reader of the run's own scope.
-pub(super) fn events(cell: Arc<RunCell>, after: u32) -> RunEvents {
+/// The events of `cell` after `after`, for a reader who may read them;
+/// `owner` when it is the run's own scope.
+pub(super) fn events(cell: Arc<RunCell>, after: u32, owner: bool) -> RunEvents {
     let reader = Reader {
+        owner,
         changed: cell.subscribe(),
         cell,
         cursor: after as usize,

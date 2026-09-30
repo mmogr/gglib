@@ -14,8 +14,8 @@ scope and saves it to the chat. Only a named device may; anything else is
 `403 device_not_named`.
 
 A request the tunnel edge marked is served in the scope of the device it
-named, and sees only that device's runs; any other request is this
-machine's. The edge reaches the proxy as any client does, so a client
+named, and sees that device's runs and every run on one of the hub's
+chats, which belongs to the chat; any other request is this machine's. The edge reaches the proxy as any client does, so a client
 that reaches the proxy directly can forge the markers and be taken for a
 device:
 this machine not reading a device's reply is a courtesy, not a boundary.
