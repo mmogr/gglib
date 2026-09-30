@@ -99,9 +99,8 @@ See [src-tauri/README.md](../../src-tauri/README.md) for the full architecture e
 
 ## Events
 
-Domain events are delivered via SSE (`/api/events`), not Tauri emit. Loopback
-is unauthenticated; a bearer token is required only against a LAN-shared
-daemon:
+Domain events are delivered via SSE (`/api/events`), not Tauri emit, with the
+daemon's token as the bearer, as every `/api` request carries it:
 
 | Event | Description |
 |-------|-------------|
