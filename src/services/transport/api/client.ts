@@ -51,6 +51,7 @@ export function getAuthHeaders(): HeadersInit {
  */
 interface EmbeddedApiInfo {
   port: number;
+  token?: string | null; // the daemon's token, when the desktop can read it
 }
 
 /**
@@ -176,7 +177,6 @@ function buildClient(config: HttpClientConfig): HttpClient {
    */
   function getHeaders(includeContentType: boolean): HeadersInit {
     const headers: HeadersInit = {};
-    
     if (includeContentType) {
       headers['Content-Type'] = 'application/json';
     }
@@ -186,7 +186,6 @@ function buildClient(config: HttpClientConfig): HttpClient {
       
       appLogger.debug('transport.api', '[ApiClient] Request headers', {
         hasAuth: !!headers['Authorization'],
-        tokenPrefix: token.substring(0, 8) + '...',
         contentType: headers['Content-Type'],
       });
     }
@@ -204,7 +203,6 @@ function buildClient(config: HttpClientConfig): HttpClient {
   ): Promise<T> {
     const { method = 'GET', body } = options || {};
     const hasBody = body !== undefined;
-    
     // Include Content-Type header for POST/PUT/DELETE requests (even if body is undefined)
     // Backend may expect application/json header to parse Json<Option<T>> types
     const shouldIncludeContentType = method !== 'GET';
@@ -220,7 +218,9 @@ function buildClient(config: HttpClientConfig): HttpClient {
       // the daemon's token, which no key opens: its body says how to get one.
       // Only a newly entered key earns the retry — the desktop app used to
       // rebuild an identically tokenless client here and fail again.
-      if (response.status === 401 && !isRetry && !(await isDaemonTokenRefusal(response)) && promptForApiKey()) {
+      const refused = await isDaemonTokenRefusal(response);
+      if (refused) resetClientCache(); // the next call rereads a token minted since
+      if (response.status === 401 && !isRetry && !refused && promptForApiKey()) {
         appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - retrying with entered API key');
         resetClientCache();
         const newClient = await getClient();
@@ -270,7 +270,7 @@ export async function getClient(): Promise<HttpClient> {
 
       if (isTauri()) {
         const info = await discoverEmbeddedApi();
-        const config = { baseUrl: `http://127.0.0.1:${info.port}`, token };
+        const config = { baseUrl: `http://127.0.0.1:${info.port}`, token: info.token ?? token };
         // Set module-level session for SSE and other fetch-based utilities
         setApiSession(config.baseUrl, config.token);
         return buildClient(config);

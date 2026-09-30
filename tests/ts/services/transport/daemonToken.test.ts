@@ -104,6 +104,29 @@ describe('the daemon token from the link', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('comes from the desktop app, and is asked for again after a trust route refused it', async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({ port: 9887, token: null })
+      .mockResolvedValue({ port: 9887, token: 'desk-token' });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    fetchMock.mockImplementationOnce(async () =>
+      json({ error: SENTENCE, status: 401, type: 'DAEMON_TOKEN_REQUIRED' }, 401),
+    );
+    const api = await client();
+
+    try {
+      await expect(api.post('/api/remote/invite')).rejects.toThrow(SENTENCE);
+      await api.post('/api/remote/invite');
+    } finally {
+      delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    }
+
+    expect(authOf(fetchMock, 0)).toBeUndefined();
+    expect(authOf(fetchMock, 1)).toBe('Bearer desk-token');
+    expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/remote/invite');
+  });
+
   it('still asks for the API key when a LAN-shared daemon wants one', async () => {
     fetchMock.mockImplementation(async () =>
       json({ error: 'Missing or invalid API key.', status: 401, type: 'INVALID_API_KEY' }, 401),

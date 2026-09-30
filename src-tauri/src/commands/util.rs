@@ -6,21 +6,26 @@ use crate::app::AppState;
 use crate::menu::state_sync;
 use tauri::AppHandle;
 
-/// Where the frontend reaches the backend API: the daemon's fixed loopback
-/// port, which is unauthenticated, so there is no token.
-#[derive(Debug, Clone, serde::Serialize)]
+/// Where the frontend reaches the backend API, the daemon's fixed loopback
+/// port, and the daemon's token, which the routes that change who is trusted
+/// ask for there (#983).
+#[derive(Clone, serde::Serialize)]
 pub(crate) struct ApiInfo {
     /// Port of the daemon's management API.
     pub port: u16,
+    /// The daemon's token, or `None` when there is none to read yet.
+    pub token: Option<String>,
 }
 
-/// Get backend API info (its port).
+/// Get backend API info (its port and token).
 ///
-/// The frontend calls this once at startup to discover where the API lives.
+/// The frontend calls this at startup, and again after a trust route refused
+/// it, to discover where the API lives and what to present.
 #[tauri::command]
 pub(crate) fn get_embedded_api_info() -> ApiInfo {
     ApiInfo {
         port: gglib_core::DAEMON_PORT,
+        token: crate::daemon::daemon_token(),
     }
 }
 
