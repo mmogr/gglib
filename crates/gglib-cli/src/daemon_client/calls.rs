@@ -60,13 +60,13 @@ impl DaemonHandle {
         if status.is_success() {
             return Ok(response);
         }
+        let body = response.text().await.unwrap_or_default();
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(anyhow!(
                 "daemon answered 401: {}",
-                auth::unauthorized_hint()
+                auth::unauthorized(&body)
             ));
         }
-        let body = response.text().await.unwrap_or_default();
         // The daemon's error envelope is {"error": "..."} — surface just the
         // message when it parses, the raw body otherwise.
         let message = serde_json::from_str::<serde_json::Value>(&body)

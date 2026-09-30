@@ -159,7 +159,12 @@ pub(crate) async fn ensure_daemon(api_key: Option<String>) -> Result<DaemonHandl
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
         match probe(&client).await {
-            DaemonProbe::Running => return Ok(DaemonHandle { client, api_key }),
+            // The daemon just minted its token if it had none, which this
+            // call was resolved before.
+            DaemonProbe::Running => {
+                let api_key = auth::daemon_token().or(api_key);
+                return Ok(DaemonHandle { client, api_key });
+            }
             DaemonProbe::ForeignServer => {
                 bail!("port {DAEMON_PORT} was taken by another program while the daemon started")
             }
