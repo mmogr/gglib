@@ -16,6 +16,8 @@ Popover listing all registered tools with individual enable/disable checkboxes a
 
 The tool list is refreshed from the registry each time the popover opens, ensuring newly registered MCP tools appear immediately.
 
+The popout lines up with the button's right edge by default; the composer's button sits in the notebook's left margin, so it passes `align="left"` and the popout grows rightwards over the page instead of off it. Its height is capped at 70vh and scrolls, so a short window cannot clip its top.
+
 Every number row bounds its value on blur and never on keystroke. The inputs are controlled, so a rejected keystroke blanks the field: checking `min` per keystroke rejects the below-floor *prefixes* of a legal answer ("3", "30" on the way to a 30000 ms timeout) and makes the row impossible to type into. `tests/ts/components/AgentLimitsSection.test.tsx` holds that.
 
 The reasoning rows are not `AgentConfig` fields and do not travel in `config` — see `services/agentOverrides.ts`. They are here because this is the popover for settings that apply to the chats this client sends, and a per-turn thinking level is one; the model inspector is where a *model's* template support is stated.

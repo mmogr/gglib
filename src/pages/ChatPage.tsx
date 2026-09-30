@@ -10,7 +10,7 @@ import {
   useListFold,
   type FetchedList,
 } from '../components/ConversationListPanel';
-import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
+import { ChatMessagesPanel, type ModelChoice } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
@@ -18,6 +18,7 @@ import { NewConversationModal } from '../components/NewConversationModal';
 import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
+import { useChatModelFacts } from '../hooks/useChatModelFacts';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -43,6 +44,12 @@ type ChatPageProps = {
   contextLength?: number;
   serverStartTime?: number; // Unix timestamp in seconds
   initialView?: 'chat' | 'console'; // Which view to show initially
+  conversationId?: number | null; // The conversation to open with, e.g. after a model switch
+  draft?: string; // Unsent text to put back in the composer, e.g. after a model switch
+  startingModel?: string | null; // The model a switch is starting, which locks the picker
+  // Move the chat to another model, keeping open the conversation (and the
+  // draft) that `context` reads when the switch lands; local only.
+  onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: string }) => Promise<void>;
   onClose: () => Promise<void>; // Stops server and exits
 } & (
   | { remote?: false; serverPort: number; modelId: number }
@@ -60,6 +67,10 @@ export default function ChatPage(props: ChatPageProps) {
     contextLength,
     serverStartTime,
     initialView = 'chat',
+    conversationId = null,
+    draft,
+    startingModel = null,
+    onSwitchModel,
     remote = false,
     onClose,
   } = props;
@@ -69,7 +80,10 @@ export default function ChatPage(props: ChatPageProps) {
   // Conversation state
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationLoading, setConversationLoading] = useState(true);
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(conversationId);
+  // Read by a model switch when it lands, which can be well after the pick.
+  const activeConversationIdRef = useRef(activeConversationId);
+  useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
   const [conversationSearch, setConversationSearch] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   
@@ -105,34 +119,10 @@ export default function ChatPage(props: ChatPageProps) {
   const titleGenerationPrompt = settings?.titleGenerationPrompt || DEFAULT_TITLE_GENERATION_PROMPT;
   const maxToolIterations = settings?.maxToolIterations ?? undefined;
 
-  // Tool support capability for the active model.
-  // Fetched once on mount (model identity is fixed for the lifetime of ChatPage).
-  // null = unknown (permissive fallback - never gates tools when status is uncertain).
-  const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
-  const [toolFormat, setToolFormat] = useState<string | null>(null);
-  // The model's quantisation, from its catalogue entry; the composer says it.
-  const [quantization, setQuantization] = useState<string | null>(null);
-  useEffect(() => {
-    // Nothing to ask about remotely: the capability is read from this
-    // machine's server registry and the model is on the other machine.
-    // `null` is already the permissive answer, which is the right one here.
-    if (modelId === undefined) return;
-    let cancelled = false;
-    getTransport().getServerToolSupport(modelId)
-      .then((data) => {
-        if (!cancelled) {
-          setSupportsToolCalls(data.supports_tool_calls);
-          setToolFormat(data.detected_format ?? null);
-        }
-      })
-      .catch(() => {
-        // Permissive fallback: leave supportsToolCalls as null (unknown)
-      });
-    getTransport().getModel(modelId)
-      .then((model) => { if (!cancelled) setQuantization(model?.quantization ?? null); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [modelId]);
+  // Tool support and quantisation for the active model. The model is fixed
+  // for the lifetime of ChatPage: a switch from the composer's picker
+  // remounts the page on the new session, with this conversation still open.
+  const { supportsToolCalls, toolFormat, quantization } = useChatModelFacts(modelId);
 
   // Get active conversation
   const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
@@ -152,6 +142,11 @@ export default function ChatPage(props: ChatPageProps) {
     maxToolIterations,
     supportsToolCalls,
   });
+
+  // A draft carried over a model switch goes back in the composer.
+  useEffect(() => {
+    if (draft) runtime.thread.composer.setText(draft);
+  }, [draft, runtime]);
 
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
@@ -368,12 +363,13 @@ export default function ChatPage(props: ChatPageProps) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
-      {/* Chat Tab Content - always mounted, hidden when not active */}
       <AssistantRuntimeProvider runtime={runtime}>
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
-        <div className={cn('flex flex-1 min-h-0', activeTab !== 'chat' && 'hidden')}>
+        {/* The rail, the list and the notebook's head stay in both views; the
+            head's margin switches the body between the thread and the console. */}
+        <div className="flex flex-1 min-h-0">
           <ConversationRail
             onNewConversation={handleNewConversation}
             onSearch={handleSearch}
@@ -399,63 +395,68 @@ export default function ChatPage(props: ChatPageProps) {
               unread={activity.unread}
             />
           </div>
-          <ChatMessagesPanel
-            key={activeConversationId ?? "none"}
-            activeConversation={activeConversation}
-            activeConversationId={activeConversationId}
-            isServerConnected={isServerRunning}
-            serverPort={serverPort}
-            titleGenerationPrompt={titleGenerationPrompt}
-            onRenameConversation={handleRenameConversation}
-            onClearConversation={handleClearConversation}
-            onExportConversation={handleExportConversation}
-            onUpdateSystemPrompt={handleUpdateSystemPrompt}
-            onClose={onClose}
-            messageLoading={messageLoading}
-            syncConversations={syncConversations}
-            chatError={chatError}
-            showToast={showToast}
-            timingTracker={timingTracker}
-            currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
-            supportsToolCalls={supportsToolCalls}
-            toolFormat={toolFormat}
-            modelName={modelName}
-            quantization={quantization}
-            headMargin={
-              <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />
-            }
-          />
-        </div>
-
-      </AssistantRuntimeProvider>
-
-      {/* Console Tab Content - always mounted, hidden when not active.
-          Absent entirely for a remote chat: the process it reports on is on
-          the other machine, so there is no id, port or log to hand it. */}
-      {!props.remote && (
-        <TwoPanelLayout
-          ref={activeTab === 'console' ? layoutRef : undefined}
-          isHidden={activeTab !== 'console'}
-          className="flex-1 min-h-0"
-          leftWidth={leftPanelWidth}
-          onResizeStart={handlePointerDown}
-          onKeyboardResize={handleKeyboardResize}
-          leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
-          left={
-            <ConsoleInfoPanel
-              modelId={props.modelId}
+          <div className="flex flex-col flex-1 min-w-0 min-h-0">
+            <ChatMessagesPanel
+              key={activeConversationId ?? "none"}
+              activeConversation={activeConversation}
+              activeConversationId={activeConversationId}
+              isServerConnected={isServerRunning}
+              serverPort={serverPort}
+              titleGenerationPrompt={titleGenerationPrompt}
+              onRenameConversation={handleRenameConversation}
+              onClearConversation={handleClearConversation}
+              onExportConversation={handleExportConversation}
+              onUpdateSystemPrompt={handleUpdateSystemPrompt}
+              onClose={onClose}
+              messageLoading={messageLoading}
+              syncConversations={syncConversations}
+              chatError={chatError}
+              showToast={showToast}
+              timingTracker={timingTracker}
+              currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+              supportsToolCalls={supportsToolCalls}
+              toolFormat={toolFormat}
               modelName={modelName}
-              serverPort={props.serverPort}
-              contextLength={contextLength}
-              startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
-              onStopServer={onClose}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
+              modelId={modelId}
+              onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
+                conversationId: activeConversationIdRef.current,
+                draft: runtime.thread.composer.getState().text,
+              })))}
+              startingModel={startingModel}
+              quantization={quantization}
+              headMargin={
+                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />
+              }
+              headOnly={activeTab === 'console'}
             />
-          }
-          right={<ConsoleLogPanel serverPort={props.serverPort} />}
-        />
-      )}
+            {/* Console - always mounted, hidden when not active. Absent
+                entirely for a remote chat: the process it reports on is on the
+                other machine, so there is no id, port or log to hand it. */}
+            {!props.remote && (
+              <TwoPanelLayout
+                ref={activeTab === 'console' ? layoutRef : undefined}
+                isHidden={activeTab !== 'console'}
+                className="flex-1 min-h-0 border-t border-border-light"
+                leftWidth={leftPanelWidth}
+                onResizeStart={handlePointerDown}
+                onKeyboardResize={handleKeyboardResize}
+                leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
+                left={
+                  <ConsoleInfoPanel
+                    modelId={props.modelId}
+                    modelName={modelName}
+                    serverPort={props.serverPort}
+                    contextLength={contextLength}
+                    startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
+                    onStopServer={onClose}
+                  />
+                }
+                right={<ConsoleLogPanel serverPort={props.serverPort} />}
+              />
+            )}
+          </div>
+        </div>
+      </AssistantRuntimeProvider>
 
       {isNewConversationModalOpen && (
         <NewConversationModal

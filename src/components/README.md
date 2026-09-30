@@ -42,7 +42,7 @@ The UI uses a clean 2-panel layout:
 
 When a model is served, the view transitions to a Chat layout with tab switching:
 1. **Chat View**: Conversation List (left) + Messages Panel (right)
-2. **Console View**: Server Info Panel (left) + Live Logs (right)
+2. **Console View**: the same conversation rail and notebook head, with Server Info Panel (left) + Live Logs (right) below
 
 ## Core Components
 

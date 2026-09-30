@@ -1,7 +1,5 @@
 import { FC, useState, useCallback } from 'react';
 import { StopCircle } from 'lucide-react';
-import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
-import { Tabs } from '../ui/Tabs';
 import { useServerState } from '../../services/serverEvents';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
@@ -18,14 +16,13 @@ interface ConsoleInfoPanelProps {
   contextLength?: number;
   startTime: number; // Unix timestamp in seconds
   onStopServer: () => Promise<void>;
-  activeTab: ChatPageTabId;
-  onTabChange: (tab: ChatPageTabId) => void;
 }
 
 /**
  * Left panel in Console view: model info, live telemetry readouts, and the
- * stop button. Polling, uptime, and the section renderings live in sibling
- * modules — this file only composes them.
+ * stop button. The view switcher is the notebook head's, above it. Polling,
+ * uptime, and the section renderings live in sibling modules — this file
+ * only composes them.
  */
 const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   modelId,
@@ -34,8 +31,6 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   contextLength,
   startTime,
   onStopServer,
-  activeTab,
-  onTabChange,
 }) => {
   const [isStopping, setIsStopping] = useState(false);
 
@@ -61,15 +56,6 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   return (
     <div className="flex flex-col overflow-y-auto overflow-x-hidden relative tabular-nums flex-1 md:h-full md:min-h-0">
       <div className="p-md border-b border-border-light shrink-0">
-        <div className="mb-md">
-          <Tabs<ChatPageTabId>
-            tabs={CHAT_PAGE_TABS}
-            activeId={activeTab}
-            onChange={onTabChange}
-            aria-label="Chat views"
-          />
-        </div>
-
         <div className="flex items-start justify-between gap-md">
           <Stack gap="xs">
             <span className="text-xs font-medium text-text-muted">Server running</span>

@@ -15,6 +15,7 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 | `SystemPromptSection.tsx` | System prompt card; owns its own draft/edit state and reports only on save |
 | `ChatStatusBanners.tsx` | Chat error banner and the read-only warning shown while the server is down |
 | `ComposerFooter.tsx` | The composer on the turns' grid: model, quantisation and tools in the margin; input and Stop/Send in the body |
+| `ModelPicker.tsx` | The composer margin's model: on this machine a picker of the servers running here and the models that are not, handing the choice to the page, and locked while the page's session says a model is starting; plain text for a chat with another machine |
 | `ConfirmDeleteModal.tsx` | Warns about cascade deletion when removing a mid-thread message |
 
 ## Message rendering

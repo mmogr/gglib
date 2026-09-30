@@ -21,7 +21,7 @@ Presentational sub-components for the model inspector panel, each scoped to a si
 | `ReasoningSupport.tsx` | Whether this model's template reads `reasoning_effort`, and a re-measurement when the answer is stale |
 | `DeleteModal.tsx` | Confirmation dialog for permanent model removal |
 | `InspectorHeader.tsx` | Model name, sync and trust badges, and the header actions |
-| `InspectorFooter.tsx` | Action row: serve or stop, edit, save, cancel, delete, benchmark |
+| `InspectorFooter.tsx` | Action row: serve or stop, open chat on a running model, edit, save, cancel, delete, benchmark |
 | `InspectorCapabilities.tsx` | gglib's own editable shaping flags, over `CAPABILITY_FLAGS` |
 | `InspectorTags.tsx` | `TagChips` plus the add control, as one editable tag section |
 | `InspectorModals.tsx` | The panel's modals in one place, including the llama-server-not-installed path |

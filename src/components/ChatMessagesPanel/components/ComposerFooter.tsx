@@ -5,6 +5,7 @@ import { ToolsPopover } from '../../ToolsPopover';
 import { ToolSupportIndicator } from '../../ToolSupportIndicator';
 import { getToolRegistry } from '../../../services/tools';
 import { TurnRow } from './TurnRow';
+import { ModelPicker, type ModelChoice } from './ModelPicker';
 
 interface ComposerFooterProps {
   isServerConnected: boolean;
@@ -13,6 +14,12 @@ interface ComposerFooterProps {
   onStopGeneration: () => void;
   /** The model the next send goes to, as the page names it. */
   modelName: string;
+  /** Its registry id; absent for a chat with another machine. */
+  modelId?: number;
+  /** Move the chat to another model; absent where there is none to pick. */
+  onPickModel?: (choice: ModelChoice) => Promise<void>;
+  /** The model a switch is starting; the picker is locked until it lands. */
+  startingModel?: string | null;
   /** Its quantisation, from the model's catalogue entry, when known. */
   quantization?: string | null;
   /** null = capability status not yet resolved. */
@@ -21,14 +28,18 @@ interface ComposerFooterProps {
 }
 
 /**
- * The composer, on the notebook's grid: the model and the tools in the
- * margin, the text box and Stop or Send in the body.
+ * The composer, on the notebook's grid: the model (a picker, on this
+ * machine) and the tools in the margin, the text box and Stop or Send in
+ * the body.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
   isThreadRunning,
   onStopGeneration,
   modelName,
+  modelId,
+  onPickModel,
+  startingModel,
   quantization,
   supportsToolCalls,
   toolFormat,
@@ -37,10 +48,13 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
     <TurnRow
       className="border-t-0 pt-md pb-lg"
       who={
-        <>
-          <span className="font-mono text-sm font-medium text-text-secondary">{modelName}</span>
-          {quantization && <span className="font-mono">{quantization}</span>}
-        </>
+        <ModelPicker
+          modelId={modelId}
+          modelName={modelName}
+          quantization={quantization}
+          onPick={onPickModel}
+          starting={startingModel}
+        />
       }
       made={
         <div className="flex items-center gap-sm">
@@ -49,7 +63,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
             toolFormat={toolFormat}
           />
-          <ToolsPopover opensUpward />
+          <ToolsPopover opensUpward align="left" />
         </div>
       }
       body={

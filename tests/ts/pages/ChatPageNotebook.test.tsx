@@ -139,6 +139,30 @@ describe('ChatPage, notebook', () => {
     expect(await within(row).findByText('Q8_0')).toBeInTheDocument();
   });
 
+  it('keeps the model and its quantisation in the margin when the name is a picker', async () => {
+    render(
+      <ChatPage modelName="Qwen3.8-27B" modelId={7} serverPort={4321} onSwitchModel={async () => {}} onClose={async () => {}} />,
+      { wrapper },
+    );
+    await screen.findByText('It restarts the job whenever it exits.');
+    const row = rowOf(screen.getByRole('textbox', { name: 'Message' }));
+    expect(within(row).getByRole('combobox', { name: 'Model' })).toHaveDisplayValue('Qwen3.8-27B');
+    expect(await within(row).findByText('Q8_0')).toBeInTheDocument();
+  });
+
+  it("opens the composer's tools popout rightwards, over the page and not off it", async () => {
+    const user = userEvent.setup();
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    const row = rowOf(screen.getByRole('textbox', { name: 'Message' }));
+
+    await user.click(within(row).getByRole('button', { name: 'Tools' }));
+
+    const popout = within(row).getByText(/active$/).closest('.z-popover');
+    expect(popout).toHaveClass('left-0');
+    expect(popout).not.toHaveClass('right-0');
+  });
+
   it('names the model and says how the reply was made, in the mock-up order', async () => {
     fixture.rows[1][1].metadata = {
       ...fixture.rows[1][1].metadata,

@@ -5,6 +5,7 @@ export { ChatPanelHeader } from './ChatPanelHeader';
 export { SystemPromptSection } from './SystemPromptSection';
 export { ChatStatusBanners } from './ChatStatusBanners';
 export { ComposerFooter } from './ComposerFooter';
+export type { ModelChoice } from './ModelPicker';
 export { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 // Message rendering

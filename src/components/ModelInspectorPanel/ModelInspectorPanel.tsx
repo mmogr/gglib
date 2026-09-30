@@ -1,6 +1,5 @@
 import { FC, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
-import { appLogger } from '../../services/platform';
 import { GgufModel, ModelDetail, HfModelSummary } from '../../types';
 import type { ServerViewModel } from '../../hooks/useServers';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
@@ -16,6 +15,7 @@ import {
   useServerActions,
   useRetagModel,
   useInspectorModals,
+  useHfDownload,
 } from './hooks';
 import {
   ModelMetadataGrid,
@@ -30,7 +30,6 @@ import {
   InspectorEmptyState,
   InspectorModals,
 } from './components';
-import { getTransport } from '../../services/transport';
 
 /**
  * Outer shell. `overflow-hidden` (not `auto`) so the header and footer stay
@@ -43,6 +42,8 @@ interface ModelInspectorPanelProps {
   selectedHfModel?: HfModelSummary | null;
   onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerViewModel) => void;
+  /** Open the chat screen on this model's running server. */
+  onOpenChat?: (modelId: number) => void;
   onStopServer: (modelId: number) => Promise<void>;
   servers: ServerViewModel[];
   onRemoveModel: (id: number, force: boolean) => void;
@@ -66,6 +67,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   selectedHfModel,
   onStartServer,
   onServerStarted,
+  onOpenChat,
   onStopServer,
   servers,
   onRemoveModel,
@@ -145,25 +147,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     resetEditState: editMode.resetEditState,
   });
 
-  // Download handler for HF models
-  const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
-    try {
-      await getTransport().queueDownload({ modelId, quantization });
-      showToast(`Download queued: ${modelId}`, 'success');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to start download';
-      showToast(message, 'error');
-      appLogger.error('component.model', 'Failed to start download', { error });
-    }
-  }, [showToast]);
-
-  // Queue status for download button
-  const maxQueueSize = queueStatus?.max_size ?? 3;
-  const currentQueueCount = (queueStatus?.current ? 1 : 0) + (queueStatus?.pending?.length ?? 0);
-  const downloadsDisabled = currentQueueCount >= maxQueueSize;
-  const disabledReason = downloadsDisabled 
-    ? `Download queue is full (${currentQueueCount}/${maxQueueSize})`
-    : undefined;
+  // Download handler and queue room for HF models
+  const { handleHfDownload, downloadsDisabled, disabledReason } = useHfDownload(queueStatus);
 
   // Handle toggle server (open modal or stop)
   const handleToggleServer = useCallback(() => {
@@ -272,6 +257,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
         isRunning={serverActions.isRunning}
         isEditMode={editMode.isEditMode}
         onToggleServer={handleToggleServer}
+        onOpenChat={onOpenChat && model?.id != null ? () => onOpenChat(model.id!) : undefined}
         onEdit={editMode.handleEdit}
         onSave={serverActions.handleSave}
         onCancel={editMode.handleCancel}

@@ -42,6 +42,7 @@ Custom React hooks for gglib GUI functionality.
 | [`useModels.ts`](useModels.ts) | Model CRUD operations and listing |
 | [`useModelLibraryEvents.ts`](useModelLibraryEvents.ts) | Reload the library when another client changes it |
 | [`useServers.ts`](useServers.ts) | Server lifecycle management (start/stop/health) |
+| [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, and quantisation |
 | [`useTags.ts`](useTags.ts) | Model tagging operations |
 | [`useMcpServers.ts`](useMcpServers.ts) | MCP server configuration |
 | [`useSettings.ts`](useSettings.ts) | Application settings management |
