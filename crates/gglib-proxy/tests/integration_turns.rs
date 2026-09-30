@@ -74,6 +74,8 @@ async fn a_body_that_is_not_a_turn_is_400_and_echoes_nothing() {
         json!({ "content": secret }),
         json!({ "conversation_id": "seven", "content": secret }),
         json!({ "messages": [{ "role": "user", "content": secret }] }),
+        json!({ "conversation_id": 7, "content": secret, "model": "m" }),
+        json!({ "conversation_id": 7, "content": secret, "replace_from": 3 }),
     ] {
         let (status, answer) = json(from_device(put(&base, &bad)).send().await.unwrap()).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");

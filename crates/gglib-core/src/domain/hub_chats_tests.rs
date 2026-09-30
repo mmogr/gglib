@@ -145,4 +145,9 @@ fn a_turn_is_the_chat_and_the_message() {
     );
     let missing: Result<HubTurn, _> = serde_json::from_value(json!({ "content": "x" }));
     assert!(missing.is_err());
+    for key in ["model", "messages", "replace_from"] {
+        let mut more = body.clone();
+        more[key] = json!(null);
+        assert!(serde_json::from_value::<HubTurn>(more).is_err(), "{key}");
+    }
 }
