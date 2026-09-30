@@ -90,8 +90,8 @@ async fn check(app: &axum::Router, methods: &[&str], path: &str) -> Option<Strin
     // therefore 401s every path here identically — which read as "routed" to
     // every other arm below, and is how a total CLI lockout stayed green
     // through this suite. These tests run under `DaemonAccess::loopback()`,
-    // which by contract requires no API key, and send the daemon token the
-    // routes that change who is trusted ask for, so a 401 is never correct.
+    // which by contract requires no API key, and send the daemon token every
+    // `/api` route asks for, so a 401 is never correct.
     if status == StatusCode::UNAUTHORIZED {
         return Some(format!(
             "{path}: 401 - the loopback daemon is demanding a token it never bound with"

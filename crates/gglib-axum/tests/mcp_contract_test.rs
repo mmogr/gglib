@@ -7,12 +7,13 @@ mod common;
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::StatusCode;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use common::harness::test_app;
+use common::origin::authed;
 use gglib_core::CorsConfig;
 
 /// The server the list test seeds and then looks for by name.
@@ -36,7 +37,7 @@ async fn add_server(app: &Router, name: &str) -> Value {
     let response = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .uri("/api/mcp/servers")
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
@@ -101,7 +102,7 @@ async fn test_list_mcp_servers_json_structure() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .uri("/api/mcp/servers")
                 .header("Host", "127.0.0.1:9887")
                 .body(Body::empty())

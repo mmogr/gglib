@@ -1,17 +1,18 @@
 //! The daemon's own credential, on disk.
 //!
-//! A loopback daemon asks no API key, because the socket is the boundary. But
-//! the socket is the machine's and not the owner's: any account on it can
-//! reach `127.0.0.1:9887`. Most routes do little harm in other hands. The ones
-//! that change who is trusted do: enabling the tunnel and inviting a device
-//! hands whoever asked a key that outlives them. Those routes ask for this
-//! token. `proxy_api_key` cannot serve, because `GET /api/config/settings`
-//! returns it unmasked to anybody who asks.
+//! A loopback daemon's socket is the machine's and not the owner's: any
+//! account on it can reach `127.0.0.1:9887`, and through `/api` pair a device,
+//! run a command as an MCP server, or rewrite settings. So every `/api` route
+//! asks for this token. `proxy_api_key` cannot serve: it is the proxy's key,
+//! handed to the proxy's clients and printed by `gglib config settings show`.
 //!
 //! The file is `0600` beside the device keys, written the way they are, so
 //! reading it is proof of being the owner's account on this machine (or
-//! root). The daemon mints it the first time it starts and reads it again at
-//! every start after, so a client that read it once keeps a token that works.
+//! root). **A new one at every start.** Whatever bound the port while the
+//! daemon was down, another account's program included, could answer
+//! `/health` as the daemon and read the token a client sent it; minting again
+//! at start makes that token worthless from then on. Clients read the file at
+//! every call, so only an open page needs a fresh link after a restart.
 
 use std::fmt;
 use std::fs;
@@ -79,15 +80,17 @@ pub fn daemon_token_path() -> Result<PathBuf, PathError> {
 }
 
 /// The stored token, or `None` when there is none yet. What a client calls:
-/// it never mints, because a token the daemon did not read is one it refuses.
+/// it never mints, because a token the daemon did not mint is one it refuses.
 ///
 /// A blank file is no token, as a blank `proxy_api_key` is no key.
 ///
 /// # Errors
 ///
 /// [`io::Error`] when the file exists and cannot be read, as it cannot by
-/// another account.
+/// another account, and when group or other may read or write it: a token
+/// others could read, or write one of their own into, proves nothing.
 pub fn read(path: &Path) -> io::Result<Option<DaemonToken>> {
+    refuse_loose(path)?;
     match fs::read_to_string(path) {
         Ok(text) => {
             let token = text.trim();
@@ -98,19 +101,41 @@ pub fn read(path: &Path) -> io::Result<Option<DaemonToken>> {
     }
 }
 
-/// The stored token, minted and written first when there is none. What the
-/// daemon calls at start, holding the daemon lock, so no two mint at once.
+/// A new token, written over whatever the file held. What the daemon calls at
+/// every start, holding the daemon lock, so no two mint at once.
+///
+/// Written through [`write_private`]: a new `0600` file renamed into place, so
+/// a file somebody left there, loose or not, is replaced rather than reused.
 ///
 /// # Errors
 ///
-/// [`io::Error`] from reading the file, or from minting and writing one.
-pub fn load_or_mint(path: &Path) -> io::Result<DaemonToken> {
-    if let Some(token) = read(path)? {
-        return Ok(token);
-    }
+/// [`io::Error`] from minting, or from writing the file.
+pub fn mint_and_store(path: &Path) -> io::Result<DaemonToken> {
     let token = DaemonToken::mint()?;
     write_private(path, token.as_str().as_bytes())?;
     Ok(token)
+}
+
+/// Refuse a file group or other may read or write. Absent is not refused, and
+/// on Windows, which has no mode to read, the file has the directory's ACL.
+fn refuse_loose(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        match fs::metadata(path) {
+            Ok(meta) if meta.permissions().mode() & 0o077 != 0 => {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("{} is open to other accounts", path.display()),
+                ));
+            }
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -9,12 +9,13 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::StatusCode;
 use tower::ServiceExt;
 
 use std::sync::Arc;
 
 use common::harness::{test_access, test_state};
+use common::origin::authed;
 use gglib_core::CorsConfig;
 
 /// The embedded router is the one every shipped daemon now builds, and until
@@ -37,7 +38,7 @@ async fn embedded_router_does_not_swallow_api_paths() {
         let response = app
             .clone()
             .oneshot(
-                Request::builder()
+                authed()
                     .header("Host", "127.0.0.1:9887")
                     .uri(uri)
                     .body(Body::empty())
@@ -81,7 +82,7 @@ async fn the_host_guard_covers_embedded_assets() {
     let allowed = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/")
                 .body(Body::empty())
@@ -97,7 +98,7 @@ async fn the_host_guard_covers_embedded_assets() {
 
     let rebound = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "evil.example.com")
                 .uri("/")
                 .body(Body::empty())

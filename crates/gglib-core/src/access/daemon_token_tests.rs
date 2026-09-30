@@ -2,22 +2,23 @@
 
 use super::*;
 
-fn temp() -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("gglib-daemon-token-{}", uuid::Uuid::new_v4()));
-    p.push("daemon_token");
-    p
+/// A directory of its own, removed when the guard drops, and the token
+/// file's path inside it.
+fn temp() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("daemon_token");
+    (dir, path)
 }
 
 /// The file is the whole protection: another account that can read it holds
-/// the key to every route that changes who is trusted.
+/// the key to every `/api` route.
 #[cfg(unix)]
 #[test]
 fn the_file_is_created_unreadable_to_anybody_else() {
     use std::os::unix::fs::PermissionsExt;
 
-    let path = temp();
-    load_or_mint(&path).expect("mint");
+    let (_dir, path) = temp();
+    mint_and_store(&path).expect("mint");
 
     let mode = fs::metadata(&path).expect("metadata").permissions().mode();
     assert_eq!(
@@ -27,53 +28,66 @@ fn the_file_is_created_unreadable_to_anybody_else() {
     );
 }
 
-/// A restart reads the token again rather than minting one, or every client
-/// holding the old one would be refused by the daemon it read it for.
+/// A token something captured while the daemon was down is worthless after
+/// the next start, and the file holds the one the daemon now asks for.
 #[test]
-fn a_second_start_reuses_the_token() {
-    let path = temp();
-    let first = load_or_mint(&path).expect("first start");
-    let second = load_or_mint(&path).expect("second start");
+fn every_start_mints_a_new_token() {
+    let (_dir, path) = temp();
+    let first = mint_and_store(&path).expect("first start");
+    let second = mint_and_store(&path).expect("second start");
 
-    assert_eq!(first, second);
-    assert_eq!(
-        read(&path).expect("read").expect("a token"),
-        first,
-        "a client reads the token the daemon holds"
-    );
-}
-
-/// No file is no token for a client, and one mint for the daemon, whose
-/// file is then what a client reads.
-#[test]
-fn an_absent_file_mints_once() {
-    let path = temp();
-    assert!(read(&path).expect("absent is not an error").is_none());
-
-    let minted = load_or_mint(&path).expect("mint");
+    assert_ne!(first, second, "a restart retires the old token");
+    assert_eq!(read(&path).expect("read").expect("a token"), second);
     let on_disk = fs::read_to_string(&path).expect("written");
-    assert_eq!(on_disk, minted.as_str());
     assert_eq!(on_disk.len(), 2 * TOKEN_BYTES);
     assert!(on_disk.chars().all(|c| c.is_ascii_hexdigit()));
-
-    load_or_mint(&path).expect("again");
-    assert_eq!(
-        fs::read_to_string(&path).expect("read"),
-        on_disk,
-        "not minted twice"
-    );
 }
 
-/// A blank file is no token, and minting over it is how the daemon recovers.
+/// A file somebody left open to others is replaced at start, not used, and
+/// what replaces it is `0600`.
+#[cfg(unix)]
 #[test]
-fn a_blank_file_is_minted_over() {
-    let path = temp();
-    fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
-    fs::write(&path, " \n").expect("plant a blank file");
+fn a_loose_file_left_there_is_replaced_private() {
+    use std::os::unix::fs::PermissionsExt;
 
-    assert!(read(&path).expect("read").is_none());
-    let minted = load_or_mint(&path).expect("mint");
+    let (_dir, path) = temp();
+    fs::write(&path, "planted").expect("plant");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
+
+    let minted = mint_and_store(&path).expect("mint");
+
     assert_eq!(fs::read_to_string(&path).expect("read"), minted.as_str());
+    let mode = fs::metadata(&path).expect("metadata").permissions().mode();
+    assert_eq!(mode & 0o077, 0, "group and other have nothing: {mode:o}");
+}
+
+/// A client does not present a token others could have read, or written.
+#[cfg(unix)]
+#[test]
+fn a_reader_refuses_a_file_open_to_others() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_dir, path) = temp();
+    mint_and_store(&path).expect("mint");
+    for mode in [0o640, 0o604, 0o620, 0o602] {
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("chmod");
+        let refused = read(&path).expect_err("a loose file is refused");
+        assert_eq!(refused.kind(), io::ErrorKind::PermissionDenied, "{mode:o}");
+    }
+}
+
+#[test]
+fn an_absent_or_blank_file_is_no_token() {
+    let (_dir, path) = temp();
+    assert!(read(&path).expect("absent is not an error").is_none());
+
+    fs::write(&path, " \n").expect("plant a blank file");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).expect("chmod");
+    }
+    assert!(read(&path).expect("read").is_none());
 }
 
 #[test]

@@ -3,15 +3,16 @@
 //! The management API can start and stop inference, change settings, and
 //! queue downloads, so it gets the same two gates the `OpenAI` proxy received
 //! in the `--api-key`/`--allowed-host` work: a Host-header allowlist (the
-//! DNS-rebinding guard, always on) and an optional bearer token. The pure
+//! DNS-rebinding guard, always on) and a bearer token: the daemon's own,
+//! always, and on a `--share-lan` daemon its API key besides. The pure
 //! policy — normalization, loopback detection, the allowlist itself — is
 //! [`gglib_core::ProxyAccessConfig`], shared with the proxy; this module
 //! only adapts it to the daemon's router and error shape.
 //!
 //! A third gate, [`origin_guard`], refuses a change a browser sends from a
 //! page on another site. A page can post to `127.0.0.1:9887` with a loopback
-//! `Host` and a body no preflight is asked for; on a loopback daemon, which
-//! asks no token, neither gate above refuses it.
+//! `Host` and a body no preflight is asked for. The token refuses such a
+//! page, which cannot know it; this gate refuses it as well, and before.
 //!
 //! One deliberate divergence from the proxy: when the daemon is bound off
 //! loopback (`--share-lan`), a `Host` header that is an IP literal is
@@ -45,23 +46,24 @@ pub struct DaemonAccess {
     /// only for non-loopback binds; see the module docs for why this is
     /// safe against rebinding.
     allow_ip_literal_hosts: bool,
-    /// What the routes that change who is trusted ask for; `crate::trust`
-    /// says why. `None` shuts them to everybody.
+    /// What every `/api` route asks for; `crate::trust` says why. `None`
+    /// shuts `/api` to everybody.
     daemon_token: Option<DaemonToken>,
 }
 
 impl DaemonAccess {
     /// Build the access policy for a daemon about to bind `bind_host`.
     ///
-    /// `api_key = None` leaves `/api/*` unauthenticated — the right default
-    /// for loopback, where the socket itself is the boundary. Callers that
-    /// bind anything else are expected to resolve or mint a key first.
+    /// `api_key = None` asks no API key of `/api/*` — the right default for
+    /// loopback. Callers that bind anything else are expected to resolve or
+    /// mint a key first.
     ///
-    /// That boundary is the machine, not the user, so the routes that change
-    /// who is trusted ask the daemon token besides ([`Self::with_daemon_token`]).
-    /// A page in a browser that is not the daemon's own, nor one the router's
-    /// CORS lets read, changes nothing: [`origin_guard`] refuses it.
-    /// `docs/remote.md`, "How it stays private", says so.
+    /// Loopback is the machine's boundary, not the user's, so `/api` asks the
+    /// daemon token whatever the key ([`Self::with_daemon_token`]); without
+    /// one it serves nothing. A page in a browser that is not the daemon's
+    /// own, nor one the router's CORS lets read, changes nothing:
+    /// [`origin_guard`] refuses it. `docs/remote.md`, "How it stays private",
+    /// says so.
     #[must_use]
     pub fn new(api_key: Option<String>, bind_host: &str, extra_hosts: Vec<String>) -> Self {
         Self {
@@ -71,14 +73,14 @@ impl DaemonAccess {
         }
     }
 
-    /// Ask `token` on the routes that change who is trusted.
+    /// Ask `token` on every `/api` route.
     #[must_use]
     pub fn with_daemon_token(mut self, token: Option<DaemonToken>) -> Self {
         self.daemon_token = token;
         self
     }
 
-    /// The token those routes ask for, or `None` while they are shut.
+    /// The token `/api` asks for, or `None` while it is shut.
     #[must_use]
     pub const fn daemon_token(&self) -> Option<&DaemonToken> {
         self.daemon_token.as_ref()
@@ -101,8 +103,8 @@ impl DaemonAccess {
                 .is_some_and(|host| host.parse::<std::net::IpAddr>().is_ok())
     }
 
-    /// The bare bearer token this daemon requires, or `None` when
-    /// authentication is off.
+    /// The bare API key this daemon takes beside its token, or `None` when it
+    /// takes none.
     ///
     /// The token rather than a pre-formatted `"Bearer <token>"` header,
     /// because [`BearerPolicy`] parses the scheme instead of comparing a
@@ -115,9 +117,10 @@ impl DaemonAccess {
     /// The bearer policy `/api/*` enforces, decided where the bind host is
     /// still known.
     ///
-    /// [`Self::new`] settles whether this daemon authenticates at all, and its
-    /// contract is that `api_key() == None` leaves `/api/*` unauthenticated.
-    /// This method is what makes that contract survive into the router.
+    /// [`Self::new`] settles whether this daemon takes an API key at all, and
+    /// its contract is that `api_key() == None` takes none: only the daemon
+    /// token opens `/api/*`. This method is what makes that contract survive
+    /// into the router.
     ///
     /// The distinction matters because [`BearerPolicy::tracking`] is not
     /// "enforce this key" — it is "enforce whatever `proxy_api_key` says right
@@ -129,7 +132,7 @@ impl DaemonAccess {
     /// the desktop app come through, including the `remote disable` that would
     /// undo it.
     ///
-    /// So a keyless daemon gets a policy that demands nothing, permanently.
+    /// So a keyless daemon gets a policy that names no key, permanently.
     /// [`crate::bootstrap::start_server`] builds its access the same way and is
     /// loopback-only by design; anything reaching this machine from another one
     /// goes through the tunnel, which is guarded at the proxy.

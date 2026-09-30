@@ -18,27 +18,14 @@ use axum::http::{HeaderValue, Method, Request, StatusCode};
 
 use common::harness::{test_state, with_test_token};
 use common::origin::{
-    Answer, ELSEWHERE, FORM, HOST, JSON, bearer_token, send, send_request, shipped, shipped_cors,
+    Answer, ELSEWHERE, FORM, HOST, JSON, send, send_request, shipped, shipped_cors,
 };
 use gglib_axum::{CorsConfig, DaemonAccess};
 use gglib_core::contracts::http::daemon;
 
-/// A `disconnect`, carrying the daemon token that route asks for, so what
-/// refuses it or not is the origin guard.
 async fn disconnect(app: &Router, host: &str, headers: &[(&str, &str)]) -> Answer {
     let path = daemon::REMOTE_DISCONNECT_PATH;
-    let token = bearer_token();
-    let mut headers = headers.to_vec();
-    headers.push(("authorization", &token));
-    send(app, Method::POST, path, host, &headers).await
-}
-
-fn loopback() -> DaemonAccess {
-    with_test_token(DaemonAccess::loopback())
-}
-
-fn loopback_naming(host: &str) -> DaemonAccess {
-    with_test_token(DaemonAccess::new(None, "127.0.0.1", vec![host.into()]))
+    send(app, Method::POST, path, host, headers).await
 }
 
 fn refused(answer: &Answer) -> bool {
@@ -47,7 +34,7 @@ fn refused(answer: &Answer) -> bool {
 
 #[tokio::test]
 async fn a_cross_site_post_to_remote_disconnect_is_refused() {
-    let app = shipped(&shipped_cors(), loopback()).await;
+    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
     let answer = disconnect(&app, HOST, &[("origin", ELSEWHERE), FORM]).await;
     assert!(refused(&answer), "{} {}", answer.status, answer.body);
 }
@@ -56,7 +43,7 @@ async fn a_cross_site_post_to_remote_disconnect_is_refused() {
 /// own rule for `null` rather than an origin missing from a list.
 #[tokio::test]
 async fn a_page_that_hides_its_origin_is_refused() {
-    let app = shipped(&CorsConfig::AllowAll, loopback()).await;
+    let app = shipped(&CorsConfig::AllowAll, DaemonAccess::loopback()).await;
     let answer = disconnect(&app, HOST, &[("origin", "null"), FORM]).await;
     assert!(refused(&answer), "{} {}", answer.status, answer.body);
 }
@@ -65,7 +52,7 @@ async fn a_page_that_hides_its_origin_is_refused() {
 /// refused. Read as absent, it would pass as a program's request.
 #[tokio::test]
 async fn an_origin_that_is_not_text_is_refused_not_read_as_absent() {
-    let app = shipped(&shipped_cors(), loopback()).await;
+    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
     let origin = HeaderValue::from_bytes(b"http://\xffevil.example").unwrap();
     let request = Request::post(daemon::REMOTE_DISCONNECT_PATH)
         .header("host", HOST)
@@ -79,7 +66,7 @@ async fn an_origin_that_is_not_text_is_refused_not_read_as_absent() {
 
 #[tokio::test]
 async fn a_cross_site_request_without_an_origin_is_refused_by_its_fetch_metadata() {
-    let app = shipped(&shipped_cors(), loopback()).await;
+    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
     let answer = disconnect(&app, HOST, &[("sec-fetch-site", "cross-site"), FORM]).await;
     assert!(refused(&answer), "{} {}", answer.status, answer.body);
 }
@@ -101,7 +88,7 @@ async fn the_desktop_app_and_the_dev_server_still_change_things() {
     ] {
         assert!(origins.iter().any(|o| o == expected), "{origins:?}");
     }
-    let app = shipped(&cors, loopback()).await;
+    let app = shipped(&cors, DaemonAccess::loopback()).await;
     for origin in origins {
         let headers = [
             ("origin", origin.as_str()),
@@ -115,14 +102,14 @@ async fn the_desktop_app_and_the_dev_server_still_change_things() {
 
 #[tokio::test]
 async fn a_request_shaped_like_the_clis_still_passes() {
-    let app = shipped(&shipped_cors(), loopback()).await;
+    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
     let answer = disconnect(&app, HOST, &[JSON]).await;
     assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
 }
 
 #[tokio::test]
 async fn the_daemons_own_page_passes_under_a_name_it_answers_to() {
-    let access = loopback_naming("gglib.test");
+    let access = DaemonAccess::new(None, "127.0.0.1", vec!["gglib.test".into()]);
     let app = shipped(&shipped_cors(), access).await;
     let own = [("origin", "http://gglib.test:9887"), FORM];
     let answer = disconnect(&app, "gglib.test:9887", &own).await;
@@ -145,7 +132,7 @@ async fn a_rebound_page_is_refused_unless_its_name_is_one_the_daemon_answers_to(
     let state = test_state(cors.clone()).await;
     let spa_dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-dashboard");
     let routers = |access: DaemonAccess| {
-        let access = Arc::new(access);
+        let access = Arc::new(with_test_token(access));
         let state = || Arc::clone(&state);
         [
             gglib_axum::create_router(state(), &cors, Arc::clone(&access)),
@@ -154,11 +141,11 @@ async fn a_rebound_page_is_refused_unless_its_name_is_one_the_daemon_answers_to(
         ]
     };
     let rebound = [("origin", "http://evil.com:9887"), FORM];
-    for app in routers(loopback()) {
+    for app in routers(DaemonAccess::loopback()) {
         let answer = disconnect(&app, "evil.com:9887", &rebound).await;
         assert_eq!(answer.status, StatusCode::FORBIDDEN, "{}", answer.body);
     }
-    let named = loopback_naming("evil.com");
+    let named = DaemonAccess::new(None, "127.0.0.1", vec!["evil.com".into()]);
     for app in routers(named) {
         let answer = disconnect(&app, "evil.com:9887", &rebound).await;
         assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
@@ -167,7 +154,7 @@ async fn a_rebound_page_is_refused_unless_its_name_is_one_the_daemon_answers_to(
 
 #[tokio::test]
 async fn a_cross_site_read_is_left_to_cors() {
-    let app = shipped(&shipped_cors(), loopback()).await;
+    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
     let path = daemon::REMOTE_STATUS_PATH;
     let answer = send(&app, Method::GET, path, HOST, &[("origin", ELSEWHERE)]).await;
     assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);

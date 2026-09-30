@@ -20,7 +20,6 @@ use crate::handlers;
 use crate::state::AppState;
 use crate::trust::{ApiCredentials, bearer_guard};
 use gglib_core::CorsConfig;
-use gglib_core::access::DaemonToken;
 use gglib_core::services::SettingsCache;
 
 /// Build CORS layer from configuration. It lets an origin read exactly when
@@ -52,13 +51,12 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 /// Routes are organized into domain groups:
 /// - `/models/*`  — CRUD, tags, verification, downloads, `HuggingFace` discovery
 /// - `/config/*`  — settings, system setup
-/// - `/remote/*`  — the tunnel and the devices it admits (ADR 0012); the
-///   routes among them that change who is trusted ask for `token`
-pub(crate) fn api_routes(token: Option<DaemonToken>) -> Router<AppState> {
+/// - `/remote/*`  — the tunnel and the devices it admits (ADR 0012)
+pub(crate) fn api_routes() -> Router<AppState> {
     Router::new()
         .nest("/models", model_routes())
         .nest("/config", config_routes())
-        .nest("/remote", crate::routes_remote::remote_routes(token))
+        .nest("/remote", crate::routes_remote::remote_routes())
         .nest("/runs", crate::routes_runs::run_routes())
         .route("/version", get(handlers::version::get_version))
         // Servers API
@@ -312,7 +310,7 @@ fn config_routes() -> Router<AppState> {
 /// The router core shared by [`create_router`], [`create_spa_router`] and
 /// [`crate::create_embedded_spa_router`]: `/health` plus `/api/*`, with CORS,
 /// the origin guard and the bearer guard scoped to `/api/*`. The bearer guard
-/// is always installed; it asks a token only when the daemon bound with one.
+/// asks the daemon token, or the API key when the daemon bound with one.
 ///
 /// The Host guard is *not* applied here — each public constructor layers it
 /// last, after any fallback service, so it wraps everything the router will
@@ -325,14 +323,14 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
         policy: access.bearer_policy(settings),
         token: access.daemon_token().cloned(),
     };
-    // Always installed: a daemon that bound *with* a key follows a later
-    // rotation of it, and one that bound without demands nothing and keeps
-    // demanding nothing — `DaemonAccess::bearer_policy` says why that asymmetry
-    // is the point. /health stays outside the group: probes must not need
+    // A daemon that bound *with* a key follows a later rotation of it, and one
+    // that bound without takes only the token and keeps taking only the token
+    // — `DaemonAccess::bearer_policy` says why that asymmetry is the point.
+    // /health stays outside the group: probes must not need
     // credentials. The origin guard reads the same config CORS does. CORS is
     // layered outside both guards so preflight OPTIONS requests, which never
     // carry Authorization, are answered by the CORS layer instead of a 401.
-    let api = api_routes(credentials.token.clone())
+    let api = api_routes()
         .with_state(state)
         .layer(middleware::from_fn_with_state(credentials, bearer_guard))
         .layer(middleware::from_fn_with_state(

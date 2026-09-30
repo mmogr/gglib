@@ -5,13 +5,14 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::StatusCode;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use std::sync::Arc;
 
 use common::harness::{test_access, test_app, test_state};
+use common::origin::authed;
 use common::ports::TEST_MODEL_PORT;
 use gglib_core::CorsConfig;
 
@@ -21,7 +22,7 @@ async fn health_endpoint_returns_ok() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/health")
                 .body(Body::empty())
@@ -45,7 +46,7 @@ async fn models_endpoint_returns_json() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/models")
                 .body(Body::empty())
@@ -71,7 +72,7 @@ async fn servers_endpoint_returns_json_array() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/servers")
                 .body(Body::empty())
@@ -92,7 +93,7 @@ async fn downloads_endpoint_returns_queue_snapshot() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/models/downloads/queue")
                 .body(Body::empty())
@@ -116,7 +117,7 @@ async fn events_endpoint_returns_sse_stream() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/events")
                 .body(Body::empty())
@@ -161,7 +162,7 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/events")
                 .body(Body::empty())
@@ -196,7 +197,7 @@ async fn nonexistent_route_returns_not_found() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/nonexistent")
                 .body(Body::empty())
@@ -232,7 +233,7 @@ async fn spa_fallback_returns_index_html() {
     // Request a non-existent client-side route (not under /api/)
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/some/client/route")
                 .body(Body::empty())
@@ -264,7 +265,7 @@ async fn hf_search_endpoint_accepts_post_and_returns_valid_response() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri(gglib_core::contracts::http::hf::SEARCH_PATH)
@@ -299,7 +300,7 @@ async fn settings_endpoint_accepts_get() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/config/settings")
                 .body(Body::empty())
@@ -321,7 +322,7 @@ async fn settings_endpoint_accepts_put() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("PUT")
                 .uri("/api/config/settings")
@@ -349,7 +350,7 @@ async fn settings_endpoint_accepts_patch() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("PATCH")
                 .uri("/api/config/settings")
@@ -381,7 +382,7 @@ async fn servers_start_collection_route_accepts_post() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/servers/start")
@@ -418,7 +419,7 @@ async fn servers_stop_collection_route_accepts_post() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/servers/stop")
@@ -456,7 +457,7 @@ async fn proxy_status_returns_stopped_when_not_running() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/proxy/status")
                 .body(Body::empty())
@@ -492,7 +493,7 @@ async fn proxy_start_accepts_json_config() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/proxy/start")
@@ -520,7 +521,7 @@ async fn proxy_stop_is_idempotent() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/proxy/stop")
@@ -551,7 +552,7 @@ async fn downloads_queue_accepts_get() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/models/downloads/queue")
                 .body(Body::empty())
@@ -600,7 +601,7 @@ async fn model_get_by_id_returns_json_not_html() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/models/test-model-id")
                 .body(Body::empty())
@@ -644,7 +645,7 @@ async fn model_tags_by_id_returns_json_not_html() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/models/test-model-id/tags")
                 .body(Body::empty())
@@ -687,7 +688,7 @@ async fn a_path_param_route_returns_json_not_html() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/servers/1/tool-support")
                 .body(Body::empty())
@@ -719,7 +720,7 @@ async fn model_tags_accepts_post_with_body() {
     // Frontend POSTs to /api/models/{id}/tags with { tag: "..." } in body
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/models/1/tags")
@@ -748,7 +749,7 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
     let settings_response = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("PUT")
                 .uri("/api/config/settings")
@@ -768,7 +769,7 @@ async fn proxy_start_uses_settings_default_context_when_not_overridden() {
     // Now start the proxy with no explicit config (null body)
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/proxy/start")
@@ -802,7 +803,7 @@ async fn proxy_start_accepts_a_request_that_configures_no_context() {
     let settings_response = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("PUT")
                 .uri("/api/config/settings")
@@ -822,7 +823,7 @@ async fn proxy_start_accepts_a_request_that_configures_no_context() {
     // Start the proxy with an empty config object (no default_context field)
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/proxy/start")
@@ -871,7 +872,7 @@ async fn proxy_start_pinned_resolves_the_model_or_404s() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/proxy/start-pinned")
@@ -897,7 +898,7 @@ async fn proxy_start_pinned_accepts_a_minimal_body() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/proxy/start-pinned")
@@ -919,7 +920,7 @@ async fn model_retag_is_wired_and_404s_on_unknown_id() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/models/999999/retag")
@@ -941,7 +942,7 @@ async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
     let check = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/models/999999/upgrade-check")
                 .body(Body::empty())
@@ -953,7 +954,7 @@ async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
 
     let apply = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .method("POST")
                 .uri("/api/models/999999/upgrade")
@@ -973,7 +974,7 @@ async fn llama_status_route_returns_json() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/config/system/llama-status")
                 .body(Body::empty())
@@ -1002,7 +1003,7 @@ async fn llama_check_updates_route_rejects_get() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .header("Host", "127.0.0.1:9887")
                 .uri("/api/config/system/llama-check-updates")
                 .body(Body::empty())

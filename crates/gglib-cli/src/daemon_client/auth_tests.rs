@@ -16,6 +16,12 @@ fn temp() -> (tempfile::TempDir, PathBuf) {
 async fn the_token_file_is_preferred_to_the_api_key() {
     let (_dir, path) = temp();
     std::fs::write(&path, "the-token\n").expect("write");
+    // `0600`, as the daemon writes it: a file open to others is not read.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+    }
     let fallback = async { Some("the-key".to_owned()) };
 
     assert_eq!(

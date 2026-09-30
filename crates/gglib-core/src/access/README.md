@@ -97,10 +97,10 @@ a key set afterwards has to be enforced.
 # The daemon token
 
 A second credential, the daemon's alone. [`DaemonToken`] is 32 random bytes
-in a `0600` file beside the device keys ([`daemon_token_path`]), minted when
-the daemon first starts and read again at every start after. The routes that
-change who is trusted ask for it on loopback too, where the socket is the
-machine's boundary but not the owner's; `proxy_api_key` cannot stand in,
-because the settings route returns it to anybody who asks.
+in a `0600` file beside the device keys ([`daemon_token_path`]), minted anew
+at every daemon start, so a token something captured while the daemon was down
+dies with the next start. Every `/api` route asks for it on loopback too,
+where the socket is the machine's boundary but not the owner's;
+`proxy_api_key` cannot stand in, because the settings route returns it.
 
 <!-- module-docs:end -->

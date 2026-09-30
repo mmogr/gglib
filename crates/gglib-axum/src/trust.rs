@@ -1,86 +1,85 @@
 //! The daemon token at the management API's door.
 //!
-//! A loopback daemon asks no API key: the socket is the boundary. It is the
-//! machine's boundary, though, not the owner's, and a few routes hand whoever
-//! reaches them something that outlives them: enabling the tunnel, inviting a
-//! device, forgetting one, joining another machine. [`trust_guard`] stands in
-//! front of those and admits only the daemon token, which only the owner's
-//! account can read (`gglib_core::access::DaemonToken`). The API key cannot
-//! stand in for it: the settings route returns that key to anybody who asks,
-//! and on a `--share-lan` daemon it is the key the LAN holds.
-//!
-//! [`bearer_guard`] is the outer door, in front of every `/api/*` route. It
-//! admits the daemon token beside the API key, so a client that holds only
-//! the token, as `gglib` on this machine and the page `gglib web` opens do,
-//! gets through both.
+//! The daemon's socket is the machine's boundary, not the owner's: any account
+//! on the machine can reach `127.0.0.1:9887`. Through `/api` it could pair a
+//! device, register an MCP server whose command then runs as the owner, or
+//! rewrite settings. So [`bearer_guard`] asks every `/api` request for the
+//! daemon token, which only the owner's account can read
+//! (`gglib_core::access::DaemonToken`), on loopback too. A daemon started
+//! `--share-lan` also takes its API key, which the LAN holds. `/health` stays
+//! outside, so a probe needs nothing.
 
 use axum::{
     Json,
     extract::{Request, State},
-    http::{StatusCode, header},
+    http::{HeaderValue, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{BearerPolicy, DaemonToken, daemon_token_path, load_or_mint_daemon_token};
+use gglib_core::access::{
+    BearerPolicy, DaemonToken, bearer_matches, daemon_token_path, mint_daemon_token,
+};
 use gglib_core::contracts::http::daemon::{
     DAEMON_TOKEN_REQUIRED_MESSAGE, DAEMON_TOKEN_REQUIRED_TYPE,
 };
 use serde_json::json;
 use tracing::warn;
 
-/// The credentials `/api/*` accepts: the API key as [`BearerPolicy`] says,
-/// and the daemon token.
+/// The credentials `/api/*` accepts: the daemon token, and the API key when
+/// [`BearerPolicy`] says there is one.
 #[derive(Clone)]
 pub(crate) struct ApiCredentials {
     pub(crate) policy: BearerPolicy,
     pub(crate) token: Option<DaemonToken>,
 }
 
-/// The daemon's token, read from its file or minted into it.
+/// A new token for this start, written over the last one.
 ///
-/// A token that cannot be had is logged and leaves the trust routes shut to
-/// everybody rather than stopping the daemon: every other route still works,
-/// and the log says why pairing does not.
+/// A token that cannot be had is logged, and `/api` then serves nothing: a
+/// door with no key to ask for would otherwise stand open.
 pub(crate) fn daemon_token() -> Option<DaemonToken> {
-    let loaded = daemon_token_path()
+    let minted = daemon_token_path()
         .map_err(|e| std::io::Error::other(e.to_string()))
-        .and_then(|path| load_or_mint_daemon_token(&path));
-    match loaded {
+        .and_then(|path| mint_daemon_token(&path));
+    match minted {
         Ok(token) => Some(token),
         Err(e) => {
-            warn!("no daemon token, so the routes that change who is trusted are shut: {e}");
+            warn!("no daemon token, so /api serves nothing this run: {e}");
             None
         }
     }
 }
 
-/// The raw `Authorization` header, or `None` when there is none or it is
-/// not text.
-fn presented(req: &Request) -> Option<&str> {
-    req.headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-}
-
-/// Require `Authorization: Bearer <token>` before a request reaches `/api/*`,
-/// where the token is the API key or the daemon token.
+/// Admit an `/api` request that carries the daemon token, or the API key on a
+/// daemon that has one.
 ///
-/// Installed unconditionally, and reading the API key it requires from
-/// [`BearerPolicy`] rather than from a value frozen at bind. The proxy's twin
-/// guard uses the same type for the same reasons: the two doors have to agree
-/// about what a valid credential looks like, and about which credential is
-/// valid right now.
+/// The API key is read from [`BearerPolicy`] rather than frozen at bind, as
+/// the proxy's twin guard does: the two doors have to agree about which key
+/// is valid right now. The refusal names what was wanted: the key where the
+/// daemon has one, since a person may be asked for it, and otherwise the
+/// token, with how to get it.
 pub(crate) async fn bearer_guard(
     State(credentials): State<ApiCredentials>,
     req: Request,
     next: Next,
 ) -> Response {
-    let presented = presented(&req);
-    let holds_token = credentials
-        .token
-        .as_ref()
-        .is_some_and(|token| token.admits(presented));
-    if holds_token || credentials.policy.admits(presented).await {
+    let Some(token) = &credentials.token else {
+        return refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "DAEMON_TOKEN_MISSING",
+            "The daemon could not make its token, so /api serves nothing this run; \
+             its log says why.",
+        );
+    };
+    let presented = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok());
+    let api_key = credentials.policy.current().await;
+    let holds_key = api_key
+        .as_deref()
+        .is_some_and(|key| bearer_matches(presented, key));
+    if token.admits(presented) || holds_key {
         return next.run(req).await;
     }
 
@@ -88,45 +87,30 @@ pub(crate) async fn bearer_guard(
         path = %req.uri().path(),
         "rejected management API request with a missing or invalid bearer token"
     );
-    (
+    if api_key.is_some() {
+        return refuse(
+            StatusCode::UNAUTHORIZED,
+            "INVALID_API_KEY",
+            "Missing or invalid API key. Send it as 'Authorization: Bearer <key>'.",
+        );
+    }
+    refuse(
         StatusCode::UNAUTHORIZED,
-        [(header::WWW_AUTHENTICATE, "Bearer")],
-        Json(json!({
-            "error": "Missing or invalid API key. Send it as 'Authorization: Bearer <key>'.",
-            "status": StatusCode::UNAUTHORIZED.as_u16(),
-            "type": "INVALID_API_KEY",
-        })),
+        DAEMON_TOKEN_REQUIRED_TYPE,
+        DAEMON_TOKEN_REQUIRED_MESSAGE,
     )
-        .into_response()
 }
 
-/// Admit a request to a route that changes who is trusted only when it
-/// carries the daemon token, on loopback too. Installed with `route_layer`
-/// on those routes alone.
-pub(crate) async fn trust_guard(
-    State(token): State<Option<DaemonToken>>,
-    req: Request,
-    next: Next,
-) -> Response {
-    if token
-        .as_ref()
-        .is_some_and(|token| token.admits(presented(&req)))
-    {
-        return next.run(req).await;
+/// The daemon's error shape, with `WWW-Authenticate` on a 401.
+fn refuse(status: StatusCode, kind: &str, message: &str) -> Response {
+    let body = Json(json!({
+        "error": message,
+        "status": status.as_u16(),
+        "type": kind,
+    }));
+    if status == StatusCode::UNAUTHORIZED {
+        let challenge = [(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"))];
+        return (status, challenge, body).into_response();
     }
-
-    warn!(
-        path = %req.uri().path(),
-        "refused a route that changes who is trusted: no daemon token"
-    );
-    (
-        StatusCode::UNAUTHORIZED,
-        [(header::WWW_AUTHENTICATE, "Bearer")],
-        Json(json!({
-            "error": DAEMON_TOKEN_REQUIRED_MESSAGE,
-            "status": StatusCode::UNAUTHORIZED.as_u16(),
-            "type": DAEMON_TOKEN_REQUIRED_TYPE,
-        })),
-    )
-        .into_response()
+    (status, body).into_response()
 }

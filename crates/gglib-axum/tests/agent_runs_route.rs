@@ -9,7 +9,7 @@ mod common;
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Method, Request, StatusCode};
+use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_path};
 use gglib_core::domain::runs::{RunInfo, RunKind, RunList};
@@ -18,9 +18,10 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
+use common::origin::authed;
 
 async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
-    let mut request = Request::builder()
+    let mut request = authed()
         .method(method)
         .uri(uri)
         .header("Host", "127.0.0.1:9887");

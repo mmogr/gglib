@@ -83,8 +83,8 @@ impl Default for DaemonOptions {
 /// 3. [`bootstrap`] the one `AxumContext` —
 ///    and with it the one `ProcessManager` on this machine.
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
-///    non-loopback binds, the daemon token (read, or minted the first time)
-///    on the routes that change who is trusted — then bind
+///    non-loopback binds, a new daemon token on every `/api` route — then
+///    bind
 ///    `{host}:{DAEMON_PORT}` and serve the management API (+ SPA when a
 ///    frontend build is found).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
@@ -133,7 +133,7 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 
     // 4. Access policy, then the router. The Host guard is always on; the
     //    bearer token exists only for non-loopback binds, where the socket
-    //    stops being the boundary; the daemon token, on every bind.
+    //    stops being the boundary; the daemon token, minted anew, always.
     let api_key = resolve_daemon_api_key(&opts.host, &state).await;
     let access = Arc::new(
         crate::access::DaemonAccess::new(api_key, &opts.host, opts.allowed_hosts.clone())

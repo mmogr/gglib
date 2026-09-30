@@ -8,11 +8,12 @@
 mod common;
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use axum::http::StatusCode;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use common::harness::{test_app, test_state_and_app};
+use common::origin::authed;
 use gglib_core::CorsConfig;
 
 async fn body_json(response: axum::response::Response) -> serde_json::Value {
@@ -31,7 +32,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
     let response = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .method("POST")
                 .uri("/api/proxy/start")
                 .header("Host", "127.0.0.1:9887")
@@ -73,7 +74,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
     let response = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .method("POST")
                 .uri("/api/proxy/start")
                 .header("Host", "127.0.0.1:9887")
@@ -89,7 +90,7 @@ async fn pinned_start_pins_the_runtime_and_stop_clears_it() {
     let response = app
         .clone()
         .oneshot(
-            Request::builder()
+            authed()
                 .method("POST")
                 .uri("/api/proxy/stop")
                 .header("Host", "127.0.0.1:9887")
@@ -118,7 +119,7 @@ async fn shutdown_route_refuses_when_not_a_daemon() {
 
     let response = app
         .oneshot(
-            Request::builder()
+            authed()
                 .method("POST")
                 .uri("/api/daemon/shutdown")
                 .header("Host", "127.0.0.1:9887")
