@@ -4,7 +4,7 @@
  * deleted, and nothing is asked.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { ThreadRuntime } from '@assistant-ui/react';
 
@@ -22,17 +22,24 @@ import { useMessageDeletion } from '../../../src/components/ChatMessagesPanel/ho
 const threadRuntime = { getState: () => ({ messages: [] }), reset: vi.fn() } as unknown as ThreadRuntime;
 
 function mount(readOnly: boolean) {
-  return renderHook(() =>
-    useMessageDeletion({
-      threadRuntime,
-      activeConversationId: 1,
-      activeConversation: null,
-      syncConversations: vi.fn(async () => {}),
-      showToast: vi.fn(),
-      readOnly,
-    }),
+  return renderHook(
+    ({ readOnly: shown }: { readOnly: boolean }) =>
+      useMessageDeletion({
+        threadRuntime,
+        activeConversationId: 1,
+        activeConversation: null,
+        syncConversations: vi.fn(async () => {}),
+        showToast: vi.fn(),
+        readOnly: shown,
+      }),
+    { initialProps: { readOnly } },
   );
 }
+
+beforeEach(() => {
+  transport.deleteMessage.mockClear();
+  transport.getMessages.mockClear();
+});
 
 describe('useMessageDeletion on a far chat', () => {
   it('opens no confirmation and deletes nothing', async () => {
@@ -54,5 +61,17 @@ describe('useMessageDeletion on a far chat', () => {
     await act(async () => result.current.confirmDelete());
 
     expect(transport.deleteMessage).toHaveBeenCalledWith(40);
+  });
+
+  it('a confirmation left open when the page turns to a far chat deletes nothing', async () => {
+    const { result, rerender } = mount(false);
+    act(() => result.current.initiateDelete('db-40'));
+    expect(result.current.isDeleteModalOpen).toBe(true);
+
+    rerender({ readOnly: true });
+    await act(async () => result.current.confirmDelete());
+
+    expect(transport.deleteMessage).not.toHaveBeenCalled();
+    expect(transport.getMessages).not.toHaveBeenCalled();
   });
 });
