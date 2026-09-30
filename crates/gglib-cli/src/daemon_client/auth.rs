@@ -10,8 +10,10 @@
 //! `proxy_api_key`; a CLI that cannot read the file, another account's among
 //! them, falls back to that key, and on loopback is refused.
 //!
-//! A key the operator sets in `GGLIB_API_KEY` comes first: the operator's key
-//! outranks anything read from disk, as `shared_args` documents.
+//! The token comes first, because it opens every daemon, loopback and
+//! `--share-lan` alike. `GGLIB_API_KEY` is the proxy's key (`shared_args`
+//! recommends it in `.env`), which a loopback daemon never takes, so it is
+//! sent only where there is no token to read, ahead of the stored key.
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -21,12 +23,12 @@ use gglib_core::contracts::http::daemon::DAEMON_TOKEN_REQUIRED_TYPE;
 
 use crate::bootstrap::CliContext;
 
-/// The environment variable an operator uses to override the stored token.
+/// The environment variable an operator uses to override the stored key.
 ///
 /// `gglib proxy` subcommands take it as `--api-key`'s `env =` source, but the
-/// daemon-facing commands have no such flag, so it is read directly here. The
-/// precedence is the one `shared_args` documents: a key supplied by the
-/// operator outranks anything stored.
+/// daemon-facing commands have no such flag, so it is read directly here. It
+/// outranks the stored key, as `shared_args` documents, and not the daemon's
+/// token, which it is not.
 const API_KEY_ENV: &str = "GGLIB_API_KEY";
 
 /// The credential to present to the daemon; [`Local::credential`] says which.
@@ -39,8 +41,8 @@ pub(crate) fn daemon_token() -> Option<String> {
     token_at(&daemon_token_path().ok()?)
 }
 
-/// Where this machine's credentials for its own daemon are: the operator's
-/// key and the daemon's token file. A value, so a test can name its own.
+/// Where this machine's credentials for its own daemon are: the daemon's token
+/// file and the operator's key. A value, so a test can name its own.
 pub(crate) struct Local {
     /// `GGLIB_API_KEY`, when it is set and not blank.
     pub(crate) env: Option<String>,
@@ -59,18 +61,18 @@ impl Local {
         }
     }
 
-    /// The operator's key first, then the daemon's token, then `stored`,
+    /// The daemon's token first, then the operator's key, then `stored`,
     /// which is only awaited when neither is there. Read at each call: the
     /// daemon mints a new token at every start.
     pub(crate) async fn credential(
         &self,
         stored: impl Future<Output = Option<String>>,
     ) -> Option<String> {
-        if let Some(key) = &self.env {
-            return Some(key.clone());
-        }
         if let Some(token) = self.token_path.as_deref().and_then(token_at) {
             return Some(token);
+        }
+        if let Some(key) = &self.env {
+            return Some(key.clone());
         }
         stored.await
     }

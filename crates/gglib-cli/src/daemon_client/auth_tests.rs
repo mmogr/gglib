@@ -50,11 +50,21 @@ async fn the_token_file_is_preferred_to_the_stored_key() {
     assert_eq!(sent.as_deref(), Some("the-token"));
 }
 
-/// The operator's key outranks anything read from disk.
+/// `GGLIB_API_KEY` is the proxy's key, often in `.env`, and a loopback daemon
+/// takes only the token, which opens a `--share-lan` daemon too.
 #[tokio::test]
-async fn the_operators_key_is_preferred_to_the_token_file() {
+async fn the_token_file_is_preferred_to_the_operators_key() {
     let (_dir, path) = temp();
     write_token(&path, "the-token");
+
+    let sent = local(Some("the-env-key"), &path).credential(stored()).await;
+    assert_eq!(sent.as_deref(), Some("the-token"));
+}
+
+/// Without a token to read, the operator's key outranks the stored one.
+#[tokio::test]
+async fn without_a_token_file_the_operators_key_is_preferred_to_the_stored_one() {
+    let (_dir, path) = temp();
 
     let sent = local(Some("the-env-key"), &path).credential(stored()).await;
     assert_eq!(sent.as_deref(), Some("the-env-key"));
