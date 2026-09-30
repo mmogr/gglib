@@ -51,11 +51,12 @@ pub struct HubChatOpen {
     pub messages: Vec<Message>,
 }
 
-/// A turn a paired device adds to one of the hub's chats: the body of
-/// `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No history travels:
-/// the hub rebuilds it from its own record. Any other key is refused, so a
-/// client sending `model`, `messages` or `replace_from` learns none is
-/// honoured.
+/// A turn a paired device adds to one of the hub's chats.
+///
+/// The body of `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No
+/// history travels: the hub rebuilds it from its own record. Any other key
+/// is refused, so a client sending `model`, `messages` or `replace_from`
+/// learns none is honoured.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
