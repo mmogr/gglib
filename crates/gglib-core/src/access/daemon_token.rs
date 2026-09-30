@@ -116,25 +116,25 @@ pub fn mint_and_store(path: &Path) -> io::Result<DaemonToken> {
     Ok(token)
 }
 
-/// Refuse a file group or other may read or write. Absent is not refused, and
-/// on Windows, which has no mode to read, the file has the directory's ACL.
+/// Refuse a file group or other may read or write. Absent is not refused.
+#[cfg(unix)]
 fn refuse_loose(path: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        match fs::metadata(path) {
-            Ok(meta) if meta.permissions().mode() & 0o077 != 0 => {
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    format!("{} is open to other accounts", path.display()),
-                ));
-            }
-            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-            _ => {}
-        }
+    use std::os::unix::fs::PermissionsExt;
+    match fs::metadata(path) {
+        Ok(meta) if meta.permissions().mode() & 0o077 != 0 => Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("{} is open to other accounts", path.display()),
+        )),
+        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
     }
-    #[cfg(not(unix))]
-    let _ = path;
+}
+
+/// Windows has no mode to read: the file has the directory's ACL, so nothing
+/// is refused. The signature matches the Unix one for the callers' sake.
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
+fn refuse_loose(_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
