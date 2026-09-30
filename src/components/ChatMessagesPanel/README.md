@@ -26,6 +26,8 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
 
 In the page's Console view the panel draws only its head (`headOnly`), and the page puts the server beneath it; the thread and composer stay mounted, hidden.
 
+A far chat (`source="far"`, the machine this one is joined to) is read and carried on but not changed here: the head shows its title alone, and no turn is edited, regenerated or deleted. The margin names the paired device behind a turn when its row does, and says "You" only for this machine's own user turns.
+
 ## Key Files
 
 | File | Role |
