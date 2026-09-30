@@ -47,8 +47,10 @@ remote/
                       paired with: reading it, writing it, what a dial that
                       has come up owes it, and what a write that fails after
                       the code is spent has to say
-  far_daemon.rs     — the one request made *through* the tunnel: stop the
-                      far daemon
+  far_daemon.rs     — a request made *through* the tunnel: stop the far
+                      daemon
+  far_chats.rs      — the others: the far machine's chats and runs, read
+                      and carried on for this machine's chat page
   gateway.rs        — RemoteGateway: the port the proxy asks (is /mcp open,
                       a tunnelled request arrived), and the invite a session
                       holds

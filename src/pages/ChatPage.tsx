@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback, useId, useRef } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { usePanelResize } from '../hooks/usePanelResize';
 import { type ChatPageTabId, ChatPageControls } from './chatTabs';
-import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import {
   ConversationListPanel,
   ConversationRail,
   useConversationActivity,
   useListFold,
-  type FetchedList,
 } from '../components/ConversationListPanel';
+import { ACTIVITY_POLL_MS } from '../components/ConversationListPanel/useConversationActivity';
+import { useChatConversations } from './useChatConversations';
+import { useConversationActions } from './useConversationActions';
 import { ChatMessagesPanel, type ModelChoice } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
@@ -77,15 +78,15 @@ export default function ChatPage(props: ChatPageProps) {
   // Tab state
   const [activeTab, setActiveTab] = useState<ChatPageTabId>(initialView);
   
-  // Conversation state
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [conversationLoading, setConversationLoading] = useState(true);
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(conversationId);
-  // Read by a model switch when it lands, which can be well after the pick.
-  const activeConversationIdRef = useRef(activeConversationId);
-  useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
   const [conversationSearch, setConversationSearch] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
+  // The list, from this machine or the one it is joined to; a far chat is
+  // read and carried on here, and changed only there.
+  const {
+    source, switchSource, conversations, setConversations, conversationLoading, activeConversationId,
+    setActiveConversationId, landingConversationId, fetched, syncConversations,
+  } = useChatConversations(conversationId, setChatError);
+  const far = source === 'far';
   
   // New conversation modal state
   const [isNewConversationModalOpen, setIsNewConversationModalOpen] = useState(false);
@@ -96,9 +97,7 @@ export default function ChatPage(props: ChatPageProps) {
   // The conversation list beside the notebook, and the rail that folds it
   const listFold = useListFold();
   // Running and New, for the list's rows and the rail's list button
-  // The list as the daemon last sent it: the only word a New mark is dropped on.
-  const [fetched, setFetched] = useState<FetchedList | null>(null);
-  const activity = useConversationActivity(activeConversationId, fetched);
+  const activity = useConversationActivity(activeConversationId, fetched, ACTIVITY_POLL_MS, source);
   const countOf = (ids: ReadonlySet<number>) => conversations.filter((c) => ids.has(c.id)).length;
   const listId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +131,7 @@ export default function ChatPage(props: ChatPageProps) {
   const { runtime, isLoading: messageLoading, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     conversation: activeConversation,
+    source,
     onConversationChanged: (id) => void syncConversations({ preferredId: id, silent: true }),
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
@@ -156,7 +156,7 @@ export default function ChatPage(props: ChatPageProps) {
   // that machine being down and the composer locked.
   const serverState = useServerState(modelId ?? -1);
   const isServerRunning =
-    remote || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
+    remote || far || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
@@ -181,75 +181,12 @@ export default function ChatPage(props: ChatPageProps) {
     prevStatusRef.current = next;
   }, [remote, serverState?.status, showToast]);
 
-  // Sync conversations
-  const syncConversations = useCallback(
-    async (options: { preferredId?: number | null; silent?: boolean } = {}) => {
-      if (!options.silent) {
-        setConversationLoading(true);
-      }
-      try {
-        const askedAt = Date.now();
-        let list = await getTransport().listConversations();
-        let preferredId = options.preferredId ?? null;
-
-        // Create default conversation if none exist
-        if (!list.length) {
-          preferredId = await getTransport().createConversation({
-            title: DEFAULT_CONVERSATION_TITLE,
-            modelId: null,
-            systemPrompt: DEFAULT_SYSTEM_PROMPT,
-          });
-          list = await getTransport().listConversations();
-        }
-
-        setConversations(list);
-        setFetched({ ids: list.map((c) => c.id), askedAt });
-        setActiveConversationId((prev) => {
-          if (preferredId && list.some((c) => c.id === preferredId)) {
-            return preferredId;
-          }
-          if (prev && list.some((c) => c.id === prev)) {
-            return prev;
-          }
-          return list[0]?.id ?? null;
-        });
-      } catch (error) {
-        setChatError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!options.silent) {
-          setConversationLoading(false);
-        }
-      }
-    },
-    [],
-  );
-
-  // Load conversations on mount
-  useEffect(() => {
-    syncConversations();
-  }, [syncConversations]);
-
-
   // An error belongs to the conversation it happened in.
   useEffect(() => setChatError(null), [activeConversationId]);
 
-  // Conversation handlers
-  const handleDeleteConversation = async (conversationId: number) => {
-    const shouldDelete = await confirm({
-      title: 'Delete this conversation?',
-      description: 'This cannot be undone.',
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!shouldDelete) return;
-
-    try {
-      await getTransport().deleteConversation(conversationId);
-      await syncConversations();
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
+  // What changes a conversation: this machine's only, never a far chat.
+  const { handleDeleteConversation, handleRenameConversation, handleClearConversation, handleExportConversation, handleUpdateSystemPrompt } =
+    useConversationActions({ far, activeConversation, confirm, syncConversations, onError: setChatError });
 
   const handleNewConversation = () => {
     setNewConversationTitle(DEFAULT_CONVERSATION_TITLE);
@@ -258,6 +195,7 @@ export default function ChatPage(props: ChatPageProps) {
   };
 
   const handleCreateConversation = async () => {
+    if (far) return; // A chat is made on the machine that holds it.
     setCreatingConversation(true);
     try {
       const title = newConversationTitle.trim() || DEFAULT_CONVERSATION_TITLE;
@@ -290,77 +228,6 @@ export default function ChatPage(props: ChatPageProps) {
     }
   };
 
-  const handleRenameConversation = async (title: string) => {
-    if (!activeConversation) return;
-    try {
-      appLogger.debug('component.chat', 'Rename conversation called', {
-        conversationId: activeConversation.id,
-        title,
-        titleLength: title.length,
-      });
-      await getTransport().updateConversationTitle(activeConversation.id, title);
-      appLogger.debug('component.chat', 'Title update succeeded, syncing');
-      await syncConversations({ preferredId: activeConversation.id, silent: true });
-      appLogger.debug('component.chat', 'Rename conversation completed successfully');
-    } catch (error: any) {
-      appLogger.error('component.chat', 'Rename conversation failed', {
-        error,
-        conversationId: activeConversation.id,
-        title
-      });
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const handleClearConversation = async () => {
-    if (!activeConversation) return;
-    const confirmed = await confirm({
-      title: 'Start a fresh copy?',
-      description: 'The current conversation will be deleted and replaced with a new copy.',
-      confirmLabel: 'Start fresh',
-    });
-    if (!confirmed) return;
-
-    try {
-      await getTransport().deleteConversation(activeConversation.id);
-      const newId = await getTransport().createConversation({
-        title: activeConversation.title,
-        modelId: null,
-        systemPrompt: activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
-      });
-      await syncConversations({ preferredId: newId });
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const handleExportConversation = async () => {
-    if (!activeConversation) return;
-    try {
-      const messages = await getTransport().getMessages(activeConversation.id);
-      const data = { conversation: activeConversation, messages };
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `conversation-${activeConversation.id}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const handleUpdateSystemPrompt = async (prompt: string | null) => {
-    if (!activeConversation) return;
-    try {
-      await getTransport().updateConversationSystemPrompt(activeConversation.id, prompt);
-      await syncConversations({ preferredId: activeConversation.id, silent: true });
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
       <AssistantRuntimeProvider runtime={runtime}>
@@ -380,13 +247,15 @@ export default function ChatPage(props: ChatPageProps) {
             remote={remote}
             running={countOf(activity.running)}
             unread={countOf(activity.unread)}
+            source={source}
+            onSource={(next) => { setActiveTab('chat'); switchSource(next); }}
           />
           <div id={listId} hidden={!listFold.open} className={cn('w-[280px] shrink-0 flex flex-col min-h-0 border-r border-border-light', !listFold.open && 'hidden')}>
             <ConversationListPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
               onSelectConversation={setActiveConversationId}
-              onDeleteConversation={handleDeleteConversation}
+              onDeleteConversation={far ? undefined : handleDeleteConversation}
               searchQuery={conversationSearch}
               onSearchChange={setConversationSearch}
               loading={conversationLoading}
@@ -414,25 +283,26 @@ export default function ChatPage(props: ChatPageProps) {
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
-              supportsToolCalls={supportsToolCalls}
-              toolFormat={toolFormat}
-              modelName={modelName}
-              modelId={modelId}
+              supportsToolCalls={far ? null : supportsToolCalls}
+              toolFormat={far ? null : toolFormat}
+              modelName={far ? 'The other machine picks the model' : modelName}
+              modelId={far ? undefined : modelId}
+              source={source}
               onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
-                conversationId: activeConversationIdRef.current,
+                conversationId: landingConversationId(),
                 draft: runtime.thread.composer.getState().text,
               })))}
               startingModel={startingModel}
-              quantization={quantization}
+              quantization={far ? null : quantization}
               headMargin={
-                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote} onClose={onClose} />
+                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote || far} onClose={onClose} />
               }
               headOnly={activeTab === 'console'}
             />
             {/* Console - always mounted, hidden when not active. Absent
                 entirely for a remote chat: the process it reports on is on the
                 other machine, so there is no id, port or log to hand it. */}
-            {!props.remote && (
+            {!props.remote && !far && (
               <TwoPanelLayout
                 ref={activeTab === 'console' ? layoutRef : undefined}
                 isHidden={activeTab !== 'console'}

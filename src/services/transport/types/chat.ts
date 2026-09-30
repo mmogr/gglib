@@ -30,6 +30,12 @@ export interface ConversationSettings {
 }
 
 /**
+ * Whose chats the chat page shows: this machine's, or those of the machine
+ * it is joined to, read through this machine's daemon and never copied.
+ */
+export type ChatSource = 'this' | 'far';
+
+/**
  * Summary of a conversation for listing.
  */
 export interface ConversationSummary {

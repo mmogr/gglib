@@ -1,11 +1,13 @@
 /**
  * What the page asks the daemon about a conversation it shows: its saved
  * rows as thread messages, the run live in it, and the row a message is.
+ * A far chat's rows and live run are the far machine's, asked through this
+ * machine's daemon; its rows head themselves with its own prompt.
  *
  * @module savedRows
  */
 
-import { getTransport } from '../../services/transport';
+import { getTransport, type ChatSource } from '../../services/transport';
 import type { GglibMessage } from '../../types/messages';
 import type { RunInfo } from '../../types/generated/RunInfo';
 import {
@@ -17,7 +19,12 @@ import {
 export async function loadSavedThread(
   conversationId: number,
   conversation: ThreadConversation | null,
+  source: ChatSource = 'this',
 ): Promise<GglibMessage[]> {
+  if (source === 'far') {
+    const open = await getTransport().openFarChat(conversationId);
+    return buildThreadMessages(open.messages, open.conversation, conversationId) as GglibMessage[];
+  }
   const rows = await getTransport().getMessages(conversationId);
   // Another conversation's prompt must not head this one.
   const own = conversation?.id === conversationId ? conversation : null;
@@ -25,7 +32,14 @@ export async function loadSavedThread(
 }
 
 /** The agent run still going in `conversationId`, if there is one. */
-export async function liveRunFor(conversationId: number): Promise<RunInfo | undefined> {
+export async function liveRunFor(
+  conversationId: number,
+  source: ChatSource = 'this',
+): Promise<Pick<RunInfo, 'id'> | undefined> {
+  if (source === 'far') {
+    const chat = (await getTransport().listFarChats()).find((c) => c.id === conversationId);
+    return chat?.live_run ? { id: chat.live_run } : undefined;
+  }
   const runs = await getTransport().listRuns();
   return runs.find(
     (run) =>

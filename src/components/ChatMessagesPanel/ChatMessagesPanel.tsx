@@ -26,7 +26,7 @@ import {
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
-import type { ConversationSummary } from '../../services/transport';
+import type { ChatSource, ConversationSummary } from '../../services/transport';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -71,6 +71,11 @@ interface ChatMessagesPanelProps {
    * beneath it. The thread and composer stay mounted, hidden.
    */
   headOnly?: boolean;
+  /**
+   * Whose chat it is. A far chat is read and continued here, never changed:
+   * no rename, restart, export or prompt edit, and no turn edited or deleted.
+   */
+  source?: ChatSource;
 }
 
 /** The notebook's column: the width its rows are laid out in. */
@@ -104,6 +109,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   quantization,
   headMargin,
   headOnly = false,
+  source = 'this',
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -154,12 +160,13 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     activeConversation,
     syncConversations,
     showToast,
+    readOnly: source === 'far',
   });
 
   // Context value for message actions
   const messageActionsValue = useMemo<MessageActionsContextValue>(
-    () => ({ onDeleteMessage: initiateDelete }),
-    [initiateDelete]
+    () => ({ onDeleteMessage: initiateDelete, source }),
+    [initiateDelete, source]
   );
 
   // Stable components map (component references don't change)
@@ -196,8 +203,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         onClearConversation={onClearConversation}
         onExportConversation={onExportConversation}
         margin={headMargin}
+        readOnly={source === 'far'}
       >
-        <SystemPromptSection conversation={activeConversation} onSave={onUpdateSystemPrompt} />
+        {source === 'this' && <SystemPromptSection conversation={activeConversation} onSave={onUpdateSystemPrompt} />}
       </ChatPanelHeader>
       <ChatStatusBanners chatError={chatError} isServerConnected={isServerConnected} onClose={onClose} />
     </>

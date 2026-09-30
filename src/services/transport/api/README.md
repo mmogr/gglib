@@ -42,6 +42,7 @@ Axum backend (HTTP response) → typed result
 | `setup.ts` | First-run setup and dependency probes |
 | `sse.ts` | The server-sent-events endpoint this transport subscribes to |
 | `runs.ts` | Runs (`/api/runs`): start an agent run under a minted id, list, cancel, and read its events from any point |
+| `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text only, and read, list and cancel its runs |
 | `sseEvents.ts` | Reading SSE events, with their `id:` and `event:` fields, off a `fetch` response |
 | `version.ts` | Which build of gglib the daemon is running |
 

@@ -69,9 +69,9 @@ pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
 pub use proxy::ProxyOps;
 pub use remote::{
-    EnableRequest, Enabled, JoinRequest, Joined, OfferedPairing, RemoteConnection, RemoteDevice,
-    RemoteEnableBody, RemoteEnableResponse, RemoteForgotten, RemoteGateway, RemoteJoinBody,
-    RemoteJoinResponse, RemoteOps, RemotePeer, RemoteStatus,
+    EnableRequest, Enabled, FarChats, JoinRequest, Joined, OfferedPairing, RemoteConnection,
+    RemoteDevice, RemoteEnableBody, RemoteEnableResponse, RemoteForgotten, RemoteGateway,
+    RemoteJoinBody, RemoteJoinResponse, RemoteOps, RemotePeer, RemoteStatus,
 };
 pub use runs::{Reservation, Reserved, RunEnded, RunLog, RunRegistry, RunSpec, RunWork, Stopped};
 pub use sampling_explain::{

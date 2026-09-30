@@ -35,6 +35,13 @@ the page never deletes. The live run is looked up before the rows load, so
 a run that ends during the opening is shown once. Nothing about a run is kept in browser storage; its
 id lives in memory while it is read.
 
+A far chat (`source: 'far'`) is the machine this one is joined to, read
+through this daemon's `/api/remote/*`: its rows from `/api/remote/chats/{id}`,
+its live run from the far listing, its events and Stop from
+`/api/remote/runs/{id}/…`. A send is `PUT /api/remote/chats/{id}/turns/{run}`
+with the new text alone; the far machine runs and saves the reply. A far chat
+offers no edit, no regenerate and no new chat, and nothing of it is kept here.
+
 All loop orchestration (context pruning, tool execution, stagnation detection,
 loop detection) lives in the Rust `gglib-agent` crate.
 
@@ -48,7 +55,8 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
 | `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; carries `remote` plus the model name the Remote panel named, refusing the turn when it asked for the far machine and named none |
-| `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is |
+| `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, its live run from the far listing's `live_run` |
+| `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events), and the text a far turn carries |
 | `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `drawRun` runs per event |
 | `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages |
 | `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion |

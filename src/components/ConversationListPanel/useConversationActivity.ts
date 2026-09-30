@@ -1,22 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getTransport } from '../../services/transport';
+import type { ChatSource } from '../../services/transport';
+import { runsOf } from '../../hooks/useGglibRuntime/chatSource';
 import type { RunInfo } from '../../types/generated/RunInfo';
 
 /** How often the page asks which runs are going. */
 export const ACTIVITY_POLL_MS = 3000;
 
 /**
- * Where the New marks are kept: this browser only, a JSON object of
- * conversation id to when the reply it marks ended (ms since the epoch).
+ * Where this machine's New marks are kept: this browser only, a JSON object
+ * of conversation id to when the reply it marks ended (ms since the epoch).
  */
 export const UNREAD_STORAGE_KEY = 'gglib.chat.unread';
+
+/**
+ * Where a source's marks are kept. The far machine's ids are its own, so
+ * its marks are apart: an id there is never read as one here. Only ids and
+ * times are kept, never a title or a row.
+ */
+export function unreadStorageKey(source: ChatSource): string {
+  return source === 'far' ? `${UNREAD_STORAGE_KEY}.far` : UNREAD_STORAGE_KEY;
+}
 
 type Marks = Record<string, number>;
 
 /** The marks as stored now; `null` when storage cannot be read. */
-function readStored(): Marks | null {
+function readStored(key: string): Marks | null {
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(UNREAD_STORAGE_KEY) ?? '{}');
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '{}');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     return Object.fromEntries(
       Object.entries(parsed).filter(([id, at]) => /^\d+$/.test(id) && typeof at === 'number'),
@@ -26,11 +36,9 @@ function readStored(): Marks | null {
   }
 }
 
-const readMarks = (): Marks => readStored() ?? {};
-
-function writeMarks(marks: Marks): void {
+function writeMarks(key: string, marks: Marks): void {
   try {
-    window.localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify(marks));
+    window.localStorage.setItem(key, JSON.stringify(marks));
   } catch {
     // Storage unavailable: the marks last this visit only.
   }
@@ -46,6 +54,8 @@ export interface FetchedList {
   ids: readonly number[];
   /** When the fetch was sent, in ms since the epoch. */
   askedAt: number;
+  /** Whose list it is; this machine's when absent. */
+  source?: ChatSource;
 }
 
 export interface ConversationActivity {
@@ -62,15 +72,26 @@ export interface ConversationActivity {
  * ended, seen here, while it was not the conversation on screen; showing
  * it clears the mark. A run that had already ended when the page first
  * asked marks nothing: it may have been read anywhere.
+ *
+ * Of one source at a time: its runs are polled and its marks kept under
+ * its own key, so switching keeps the other's marks as they were.
  */
 export function useConversationActivity(
   activeId: number | null,
   fetched: FetchedList | null = null,
   pollMs: number = ACTIVITY_POLL_MS,
+  source: ChatSource = 'this',
 ): ConversationActivity {
+  const key = unreadStorageKey(source);
   const [running, setRunning] = useState<ReadonlySet<number>>(() => new Set());
-  const [marks, setMarks] = useState<Marks>(readMarks);
+  const [marks, setMarks] = useState<Marks>(() => readStored(key) ?? {});
   const marksRef = useRef(marks);
+  const keyRef = useRef(key);
+  const activeRef = useRef(activeId);
+  /** The source `activeRef` was shown in. */
+  const activeKeyRef = useRef(key);
+  /** When each conversation was last left: a reply ended before that was seen. */
+  const leftAt = useRef(new Map<number, number>());
 
   /**
    * Change the marks as another tab may have left them: read what is
@@ -78,18 +99,30 @@ export function useConversationActivity(
    * wrote from its own copy would restore a mark another tab had cleared.
    */
   const change = useCallback((edit: (marks: Marks) => Marks) => {
-    const current = readStored() ?? marksRef.current;
+    const current = readStored(keyRef.current) ?? marksRef.current;
     const next = edit(current);
-    if (JSON.stringify(next) !== JSON.stringify(current)) writeMarks(next);
+    if (JSON.stringify(next) !== JSON.stringify(current)) writeMarks(keyRef.current, next);
     marksRef.current = next;
     setMarks(next);
   }, []);
 
+  // Another source: its own marks, as stored. Before any other effect
+  // here, so each changes the marks of the source now shown.
+  useEffect(() => {
+    if (keyRef.current === key) return;
+    keyRef.current = key;
+    const stored = readStored(key) ?? {};
+    marksRef.current = stored;
+    setMarks(stored);
+    setRunning(new Set());
+    leftAt.current.clear();
+  }, [key]);
+
   // Another tab's change: take it as it stands.
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== UNREAD_STORAGE_KEY && event.key !== null) return;
-      const stored = readStored();
+      if (event.key !== keyRef.current && event.key !== null) return;
+      const stored = readStored(keyRef.current);
       if (!stored) return;
       marksRef.current = stored;
       setMarks(stored);
@@ -102,7 +135,8 @@ export function useConversationActivity(
   // from a list the daemon just sent, and the mark predates the asking (a
   // conversation this tab has not heard of is not a deleted one).
   useEffect(() => {
-    if (!fetched) return;
+    // A list of the other source says nothing about this one's marks.
+    if (!fetched || unreadStorageKey(fetched.source ?? 'this') !== keyRef.current) return;
     const listed = new Set(fetched.ids.map(String));
     change((current) =>
       Object.fromEntries(
@@ -110,14 +144,13 @@ export function useConversationActivity(
       ),
     );
   }, [fetched, change]);
-  const activeRef = useRef(activeId);
-  /** When each conversation was last left: a reply ended before that was seen. */
-  const leftAt = useRef(new Map<number, number>());
 
   useEffect(() => {
     const previous = activeRef.current;
-    if (previous !== null && previous !== activeId) leftAt.current.set(previous, Date.now());
+    const sameSource = activeKeyRef.current === keyRef.current;
+    if (previous !== null && previous !== activeId && sameSource) leftAt.current.set(previous, Date.now());
     activeRef.current = activeId;
+    activeKeyRef.current = keyRef.current;
     if (activeId === null) return;
     change((current) => {
       const next = { ...current };
@@ -134,7 +167,7 @@ export function useConversationActivity(
     const poll = async () => {
       let runs: RunInfo[];
       try {
-        runs = await getTransport().listRuns();
+        runs = await runsOf(source).listRuns();
       } catch {
         return;
       }
@@ -170,7 +203,7 @@ export function useConversationActivity(
       cancelled = true;
       clearInterval(timer);
     };
-  }, [pollMs, change]);
+  }, [pollMs, change, source]);
 
   const unread = new Set(Object.keys(marks).map(Number));
   return { running, unread };

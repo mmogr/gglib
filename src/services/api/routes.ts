@@ -24,3 +24,9 @@ export const REMOTE_DISCONNECT_PATH = '/api/remote/disconnect';
 export const REMOTE_KILL_PATH = '/api/remote/kill';
 export const REMOTE_INVITE_PATH = '/api/remote/invite';
 export const REMOTE_DEVICES_PATH = '/api/remote/devices';
+
+// The far machine's chats and runs, forwarded through the tunnel for the chat
+// page (mirrors REMOTE_CHATS_PATH and REMOTE_RUNS_PATH and the path functions
+// beside them in gglib_core::contracts::http::daemon)
+export const REMOTE_CHATS_PATH = '/api/remote/chats';
+export const REMOTE_RUNS_PATH = '/api/remote/runs';

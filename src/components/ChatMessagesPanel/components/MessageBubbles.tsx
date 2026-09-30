@@ -18,6 +18,7 @@ import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import { extractReasoningText } from '../../../utils/messages';
+import type { GglibMessageCustom } from '../../../types/messages';
 
 import { cn } from '../../../utils/cn';
 
@@ -63,6 +64,7 @@ export const AssistantMessageBubble: React.FC = () => {
   const thinkingText = extractReasoningText(contentArray);
   const contentText = textOf(message.content);
   const facts = replyFacts(message);
+  const far = useContext(MessageActionsContext)?.source === 'far';
 
   const isStreaming = timing?.currentStreamingAssistantMessageId === message.id;
   const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
@@ -95,7 +97,14 @@ export const AssistantMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className="group">
       <TurnRow
-        who={<TurnWho name={replyName(facts)} at={facts.savedAt} quantization={facts.made?.modelQuantization} />}
+        who={
+          <TurnWho
+            name={replyName(facts)}
+            at={facts.savedAt}
+            quantization={facts.made?.modelQuantization}
+            device={facts.made?.device}
+          />
+        }
         made={made}
         body={
           <>
@@ -130,9 +139,11 @@ export const AssistantMessageBubble: React.FC = () => {
               <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
                 <Icon icon={Copy} size={14} />
               </ActionBarPrimitive.Copy>
-              <ActionBarPrimitive.Reload className={ACTION_BTN} title="Regenerate reply" aria-label="Regenerate reply">
-                <Icon icon={RefreshCw} size={14} />
-              </ActionBarPrimitive.Reload>
+              {!far && (
+                <ActionBarPrimitive.Reload className={ACTION_BTN} title="Regenerate reply" aria-label="Regenerate reply">
+                  <Icon icon={RefreshCw} size={14} />
+                </ActionBarPrimitive.Reload>
+              )}
             </ActionBarPrimitive.Root>
           </>
         }
@@ -142,11 +153,25 @@ export const AssistantMessageBubble: React.FC = () => {
 };
 
 /**
- * A turn of the user's. Includes copy, edit, and delete actions.
+ * Who sent a user's turn: the paired device its saved row names, on either
+ * machine. Otherwise "You" on this machine, and on a far chat for a turn
+ * just sent from here and not yet read back; a far row that names no
+ * device was typed at the other machine.
+ */
+function userName(message: { id: string; metadata?: unknown }, far: boolean): string {
+  const device = (message.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.device;
+  if (device) return device;
+  return far && message.id.startsWith('db-') ? 'Other machine' : 'You';
+}
+
+/**
+ * A turn of the user's. Includes copy, edit, and delete actions, but on a
+ * far chat only copy.
  */
 export const UserMessageBubble: React.FC = () => {
   const message = useMessage();
   const messageActions = useContext(MessageActionsContext);
+  const far = messageActions?.source === 'far';
 
   const handleDelete = () => {
     if (messageActions && message.id) {
@@ -157,7 +182,7 @@ export const UserMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className="group">
       <TurnRow
-        who={<TurnWho name="You" at={message.createdAt} />}
+        who={<TurnWho name={userName(message, far)} at={message.createdAt} />}
         body={
           <>
             <div className="text-base leading-relaxed text-text-secondary">
@@ -167,10 +192,12 @@ export const UserMessageBubble: React.FC = () => {
               <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
                 <Icon icon={Copy} size={14} />
               </ActionBarPrimitive.Copy>
-              <ActionBarPrimitive.Edit className={ACTION_BTN} title="Edit message" aria-label="Edit message">
-                <Icon icon={Pencil} size={14} />
-              </ActionBarPrimitive.Edit>
-              <Button
+              {!far && (
+                <ActionBarPrimitive.Edit className={ACTION_BTN} title="Edit message" aria-label="Edit message">
+                  <Icon icon={Pencil} size={14} />
+                </ActionBarPrimitive.Edit>
+              )}
+              {!far && <Button
                 variant="dangerGhost"
                 size="sm"
                 className={cn(ACTION_BTN, 'hover:opacity-100')}
@@ -180,7 +207,7 @@ export const UserMessageBubble: React.FC = () => {
                 iconOnly
               >
                 <Icon icon={Trash2} size={14} />
-              </Button>
+              </Button>}
             </ActionBarPrimitive.Root>
           </>
         }

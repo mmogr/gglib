@@ -399,6 +399,13 @@ and the uptime belong to a process on the desktop — and closing it leaves
 both the desktop's server and the tunnel up, unlike closing a local chat,
 which stops the server it was talking to.
 
+**The desktop's own chats** are on the chat page too, once joined: *Other
+machine*, at the foot of the rail, lists, opens and carries on the desktop's
+chats live through this machine's daemon, which adds the key, and the
+desktop runs and saves each reply, so nothing of them is kept here but
+their "New" marks. A chat there is started, renamed, edited or deleted only
+on the desktop, and the margin names the device behind each turn.
+
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `join` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
 device key as its API key. The port does not add the key for you — that is

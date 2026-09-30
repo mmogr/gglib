@@ -1,8 +1,10 @@
 #![doc = include_str!("README.md")]
 
+mod chats;
 mod devices;
 mod join;
 
+pub(crate) use chats::{add_turn, cancel_run, list_chats, list_runs, open_chat, run_events};
 pub(crate) use devices::{forget, invite, list};
 pub(crate) use join::{disconnect, join, kill};
 

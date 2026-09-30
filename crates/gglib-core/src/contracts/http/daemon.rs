@@ -65,6 +65,59 @@ pub const REMOTE_INVITE_PATH: &str = "/api/remote/invite";
 /// Every device this machine has issued a key to.
 pub const REMOTE_DEVICES_PATH: &str = "/api/remote/devices";
 
+/// The far machine's chats, read through the tunnel for this machine's chat
+/// page: `GET` lists them. Not called by the CLI.
+pub const REMOTE_CHATS_PATH: &str = "/api/remote/chats";
+
+/// One far chat, interpolating `id` into [`REMOTE_CHATS_PATH`]: `GET` opens it.
+#[must_use]
+pub fn remote_chat_path(id: i64) -> String {
+    format!("{REMOTE_CHATS_PATH}/{id}")
+}
+
+/// The verbs [`remote_chat_path`] is called with.
+pub const REMOTE_CHAT_METHODS: &[&str] = &["GET"];
+
+/// A turn on a far chat under run `run_id`: `PUT` adds it. The caller owes
+/// the run id's charset, as for [`run_path`].
+#[must_use]
+pub fn remote_turn_path(id: i64, run_id: &str) -> String {
+    format!("{REMOTE_CHATS_PATH}/{id}/turns/{run_id}")
+}
+
+/// The verbs [`remote_turn_path`] is called with.
+pub const REMOTE_TURN_METHODS: &[&str] = &["PUT"];
+
+/// The far machine's runs this device may see: `GET` lists them.
+pub const REMOTE_RUNS_PATH: &str = "/api/remote/runs";
+
+/// A far run's events after `after`, as server-sent events.
+#[must_use]
+pub fn remote_run_events_path(id: &str, after: u32) -> String {
+    format!("{REMOTE_RUNS_PATH}/{id}/events?after={after}")
+}
+
+/// Cancel a far run.
+#[must_use]
+pub fn remote_run_cancel_path(id: &str) -> String {
+    format!("{REMOTE_RUNS_PATH}/{id}/cancel")
+}
+
+/// The chat page's routes to the far machine, each with the verbs it sends,
+/// the parameterized ones instantiated. Beside [`CLI_ROUTE_CONTRACT`], for
+/// the same sweep.
+#[must_use]
+pub fn remote_chat_route_contract() -> Vec<(&'static [&'static str], String)> {
+    vec![
+        (&["GET"], REMOTE_CHATS_PATH.to_owned()),
+        (REMOTE_CHAT_METHODS, remote_chat_path(12)),
+        (REMOTE_TURN_METHODS, remote_turn_path(12, "chat-1")),
+        (&["GET"], REMOTE_RUNS_PATH.to_owned()),
+        (RUN_EVENTS_METHODS, remote_run_events_path("chat-1", 0)),
+        (RUN_CANCEL_METHODS, remote_run_cancel_path("chat-1")),
+    ]
+}
+
 /// Download queue: `POST` enqueues, `GET` returns the snapshot.
 ///
 /// One path for both verbs. The snapshot handler was once double-mounted at

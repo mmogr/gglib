@@ -27,6 +27,10 @@ export function askTheRemote(): { remote: boolean; model?: string } {
  * page saves no turn itself. Stop cancels the run; leaving only stops
  * reading it.
  *
+ * A far chat (`source: 'far'`) is the far machine's: a send there is its
+ * text alone, which that machine runs and saves, and it offers no edit, no
+ * regenerate and no new chat.
+ *
  * @module useGglibRuntime
  */
 
@@ -39,7 +43,7 @@ import {
 } from '@assistant-ui/react';
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage } from '../../types/messages';
-import { getTransport } from '../../services/transport';
+import { getTransport, type ChatSource } from '../../services/transport';
 import { getRemoteState } from '../../services/remoteRegistry';
 import { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
 import {
@@ -48,11 +52,14 @@ import {
 } from '../useChatPersistence/buildThreadMessages';
 import type { ReasoningTimingTracker } from './reasoningTiming';
 import { buildRunRequest, mintRunId } from './runRequest';
+import { runsOf, turnText } from './chatSource';
 import { savedRowId } from './savedRows';
 import { useRunReader } from './useRunReader';
 
 export interface UseGglibRuntimeOptions {
   conversationId?: number;
+  /** Whose chat it is; this machine's when absent. */
+  source?: ChatSource;
   /** The open conversation, whose system prompt heads its thread. */
   conversation?: ThreadConversation | null;
   selectedServerPort?: number;
@@ -89,6 +96,8 @@ export interface UseGglibRuntimeReturn {
 
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
   const { conversationId, selectedServerPort, maxToolIterations, onError, supportsToolCalls } = options;
+  const source = options.source ?? 'this';
+  const far = source === 'far';
   const reader = useRunReader(conversationId, options);
   const { messages, setMessages, messagesRef, isRunning } = reader;
 
@@ -128,9 +137,14 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     // Read once: the guard and the body must agree about where this goes.
     const destination = askTheRemote();
     // A remote turn has no local server to select; the daemon takes the
-    // tunnel's port and the stored key.
-    if (!selectedServerPort && !destination.remote) {
+    // tunnel's port and the stored key. A far chat's model is chosen there.
+    if (!far && !selectedServerPort && !destination.remote) {
       onError?.(new Error('No server selected. Please serve a model first.'));
+      return;
+    }
+    if (far && conversationId === undefined) {
+      onError?.(new Error('A chat on the other machine is started there.'));
+      if (giveBack) giveTextBack(content);
       return;
     }
     // Never from a conversation that is not loaded, or into a run that may
@@ -140,7 +154,12 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       return;
     }
     const signal = reader.beginSend();
-    if (!signal) return;
+    if (!signal) {
+      // A run is live, or opening has not learned whether one is: nothing
+      // is sent, and the text goes back rather than being lost.
+      if (giveBack) giveTextBack(content);
+      return;
+    }
     stopAskedRef.current = false;
     let cid = conversationId;
     try {
@@ -156,7 +175,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         options.onConversationChanged?.(cid);
       }
       const history = [...base, mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() })];
-      const request = buildRunRequest({
+      const request = far ? null : buildRunRequest({
         messages: history,
         conversationId: cid,
         replaceFrom,
@@ -173,9 +192,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       messagesRef.current = history;
       setMessages(history);
       const runId = mintRunId();
-      await getTransport().startAgentRun(runId, request);
+      if (request) await getTransport().startAgentRun(runId, request);
+      else await getTransport().addFarTurn(cid, runId, turnText(content));
       if (stopAskedRef.current) {
-        await getTransport().cancelRun(runId).catch((error: Error) => onError?.(error));
+        await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       }
       if (!signal.aborted) await reader.follow(cid, runId, signal);
     } catch (error) {
@@ -205,8 +225,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     },
 
     // Edit and resend: the run replaces the edited row and everything after
-    // it with the new message.
-    onEdit: async (msg: AppendMessage) => {
+    // it with the new message. Not on a far chat.
+    onEdit: far ? undefined : async (msg: AppendMessage) => {
       const current = messagesRef.current;
       const parent = msg.parentId === null ? -1 : current.findIndex((m) => m.id === msg.parentId);
       if (msg.parentId !== null && parent === -1) return;
@@ -217,8 +237,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     },
 
     // Regenerate: the run replaces the question and its reply with the
-    // question again, so it is held once.
-    onReload: async (parentId: string | null) => {
+    // question again, so it is held once. Not on a far chat.
+    onReload: far ? undefined : async (parentId: string | null) => {
       const current = messagesRef.current;
       let at = parentId === null ? -1 : current.findIndex((m) => m.id === parentId);
       while (at >= 0 && current[at].role !== 'user') at--;
@@ -239,7 +259,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         return;
       }
       try {
-        await getTransport().cancelRun(runId);
+        await runsOf(source).cancelRun(runId);
       } catch (error) {
         onError?.(error as Error);
       }

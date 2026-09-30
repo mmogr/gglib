@@ -14,7 +14,8 @@ interface ConversationListPanelProps {
   conversations: ConversationSummary[];
   activeConversationId: number | null;
   onSelectConversation: (id: number) => void;
-  onDeleteConversation: (id: number) => void;
+  /** Absent where a conversation is not this page's to delete. */
+  onDeleteConversation?: (id: number) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   loading: boolean;
@@ -133,7 +134,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                     />
                   </span>
                 </Stack>
-                <IconButton
+                {onDeleteConversation && <IconButton
                   label="Delete conversation"
                   size="sm"
                   variant="dangerGhost"
@@ -144,7 +145,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                   }}
                 >
                   <Icon icon={X} size={12} />
-                </IconButton>
+                </IconButton>}
               </div>
             ))}
           </div>
