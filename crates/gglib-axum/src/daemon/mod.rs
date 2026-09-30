@@ -83,8 +83,10 @@ impl Default for DaemonOptions {
 /// 3. [`bootstrap`] the one `AxumContext` —
 ///    and with it the one `ProcessManager` on this machine.
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
-///    non-loopback binds — then bind `{host}:{DAEMON_PORT}` and serve the
-///    management API (+ SPA when a frontend build is found).
+///    non-loopback binds, the daemon token (read, or minted the first time)
+///    on the routes that change who is trusted — then bind
+///    `{host}:{DAEMON_PORT}` and serve the management API (+ SPA when a
+///    frontend build is found).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
 ///    machine told once to be reachable is reachable again after a reboot,
@@ -131,13 +133,12 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 
     // 4. Access policy, then the router. The Host guard is always on; the
     //    bearer token exists only for non-loopback binds, where the socket
-    //    stops being the boundary.
+    //    stops being the boundary; the daemon token, on every bind.
     let api_key = resolve_daemon_api_key(&opts.host, &state).await;
-    let access = Arc::new(crate::access::DaemonAccess::new(
-        api_key,
-        &opts.host,
-        opts.allowed_hosts.clone(),
-    ));
+    let access = Arc::new(
+        crate::access::DaemonAccess::new(api_key, &opts.host, opts.allowed_hosts.clone())
+            .with_daemon_token(crate::trust::daemon_token()),
+    );
 
     // Router. The dashboard is compiled in (see `crate::ui`); a directory is
     // only ever an explicit override, never found by probing the working

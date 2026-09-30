@@ -162,6 +162,27 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], RUNS_PATH),
 ];
 
+/// The fixed routes that change who is trusted, with their verbs.
+///
+/// They answer only the daemon token (`gglib_core::access::DaemonToken`), on
+/// loopback too; [`remote_forget_path`] is the one more, parameterized.
+/// `disable` is not here: it takes trust away rather than handing any out.
+pub const TRUST_ROUTES: &[(&str, &str)] = &[
+    ("POST", REMOTE_ENABLE_PATH),
+    ("POST", REMOTE_INVITE_PATH),
+    ("POST", REMOTE_JOIN_PATH),
+    ("POST", REMOTE_DISCONNECT_PATH),
+    ("POST", REMOTE_KILL_PATH),
+];
+
+/// The `type` of a trust route's 401, so a client can tell it from the API
+/// key's `INVALID_API_KEY` and show [`DAEMON_TOKEN_REQUIRED_MESSAGE`].
+pub const DAEMON_TOKEN_REQUIRED_TYPE: &str = "DAEMON_TOKEN_REQUIRED";
+
+/// The `error` of a trust route's 401: what it wants and how to get it.
+pub const DAEMON_TOKEN_REQUIRED_MESSAGE: &str = "this route needs the daemon's token: run the \
+     command from `gglib` on this machine, or open the page from the link `gglib web` prints";
+
 /// The verbs [`benchmark_tune_apply_path`] is called with.
 pub const BENCHMARK_TUNE_APPLY_METHODS: &[&str] = &["POST"];
 

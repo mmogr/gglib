@@ -9,7 +9,8 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 
-use common::origin::{HOST, JSON, send, shipped, shipped_cors};
+use common::harness::with_test_token;
+use common::origin::{HOST, JSON, bearer_token, send, shipped, shipped_cors};
 use gglib_axum::DaemonAccess;
 use gglib_core::contracts::http::daemon::REMOTE_JOIN_PATH;
 
@@ -18,9 +19,11 @@ use gglib_core::contracts::http::daemon::REMOTE_JOIN_PATH;
 /// that makes a pairing string on the other machine.
 #[tokio::test]
 async fn an_empty_join_on_a_machine_never_paired_names_gglib_remote_invite() {
-    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
+    let app = shipped(&shipped_cors(), with_test_token(DaemonAccess::loopback())).await;
 
-    let answer = send(&app, Method::POST, REMOTE_JOIN_PATH, HOST, &[JSON]).await;
+    let token = bearer_token();
+    let auth = ("authorization", token.as_str());
+    let answer = send(&app, Method::POST, REMOTE_JOIN_PATH, HOST, &[JSON, auth]).await;
 
     assert_eq!(answer.status, StatusCode::BAD_REQUEST, "{}", answer.body);
     assert!(

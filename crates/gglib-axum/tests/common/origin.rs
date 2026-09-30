@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 use gglib_axum::{CorsConfig, DaemonAccess, DaemonOptions};
 
-use super::harness::test_state;
+use super::harness::{test_state, test_token};
 
 /// The daemon's `Host` on its default loopback bind.
 pub(crate) const HOST: &str = "127.0.0.1:9887";
@@ -21,6 +21,12 @@ pub(crate) const ELSEWHERE: &str = "https://evil.example";
 pub(crate) const JSON: (&str, &str) = ("content-type", "application/json");
 /// What a form post sends, which no preflight is asked for.
 pub(crate) const FORM: (&str, &str) = ("content-type", "text/plain");
+
+/// `Authorization: Bearer <test_token()>`, the value a client holding the
+/// daemon token sends.
+pub(crate) fn bearer_token() -> String {
+    format!("Bearer {}", test_token().as_str())
+}
 
 /// The CORS config `gglib daemon run` and the desktop app start the daemon
 /// with.

@@ -23,6 +23,7 @@ use std::sync::{Arc, LazyLock};
 use axum::Router;
 use gglib_axum::{AxumContext, DaemonAccess, ServerConfig, bootstrap, create_router};
 use gglib_core::CorsConfig;
+use gglib_core::access::DaemonToken;
 
 use super::ports::TEST_BASE_PORT;
 
@@ -132,9 +133,24 @@ pub(crate) async fn test_state(cors: CorsConfig) -> Arc<AxumContext> {
     Arc::new(ctx)
 }
 
-/// The access policy most tests here run under: loopback, no token.
+/// The daemon token every router here is built with, minted once per test
+/// binary so no test can pass by knowing it in advance.
+pub(crate) fn test_token() -> DaemonToken {
+    static TOKEN: LazyLock<DaemonToken> =
+        LazyLock::new(|| DaemonToken::mint().expect("mint a test token"));
+    TOKEN.clone()
+}
+
+/// `access`, with the routes that change who is trusted asking
+/// [`test_token`].
+pub(crate) fn with_test_token(access: DaemonAccess) -> DaemonAccess {
+    access.with_daemon_token(Some(test_token()))
+}
+
+/// The access policy most tests here run under: loopback, no API key, and
+/// [`test_token`] on the routes that change who is trusted.
 pub(crate) fn test_access() -> Arc<DaemonAccess> {
-    Arc::new(DaemonAccess::loopback())
+    Arc::new(with_test_token(DaemonAccess::loopback()))
 }
 
 /// [`test_state`] plus the router over it, for tests that assert on both.

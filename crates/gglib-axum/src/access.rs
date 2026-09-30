@@ -29,7 +29,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{BearerPolicy, is_loopback_host, may_change, normalize_host};
+use gglib_core::access::{BearerPolicy, DaemonToken, is_loopback_host, may_change, normalize_host};
 use gglib_core::services::SettingsCache;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use serde_json::json;
@@ -45,6 +45,9 @@ pub struct DaemonAccess {
     /// only for non-loopback binds; see the module docs for why this is
     /// safe against rebinding.
     allow_ip_literal_hosts: bool,
+    /// What the routes that change who is trusted ask for; `crate::trust`
+    /// says why. `None` shuts them to everybody.
+    daemon_token: Option<DaemonToken>,
 }
 
 impl DaemonAccess {
@@ -54,19 +57,31 @@ impl DaemonAccess {
     /// for loopback, where the socket itself is the boundary. Callers that
     /// bind anything else are expected to resolve or mint a key first.
     ///
-    /// That boundary is the machine, not the user. Any local process, another
-    /// account's included, can reach `/api/remote/enable` and
-    /// `/api/remote/invite`, and with them mint itself a device key that
-    /// outlives it. A page in a browser cannot, unless it is the daemon's own
-    /// page (its `Origin` names the `Host` it was sent to) or one the router's
-    /// CORS lets read: [`origin_guard`] refuses the rest. `docs/remote.md`,
-    /// "How it stays private", says so.
+    /// That boundary is the machine, not the user, so the routes that change
+    /// who is trusted ask the daemon token besides ([`Self::with_daemon_token`]).
+    /// A page in a browser that is not the daemon's own, nor one the router's
+    /// CORS lets read, changes nothing: [`origin_guard`] refuses it.
+    /// `docs/remote.md`, "How it stays private", says so.
     #[must_use]
     pub fn new(api_key: Option<String>, bind_host: &str, extra_hosts: Vec<String>) -> Self {
         Self {
             policy: ProxyAccessConfig::new(CorsConfig::default(), api_key, bind_host, extra_hosts),
             allow_ip_literal_hosts: !is_loopback_host(bind_host),
+            daemon_token: None,
         }
+    }
+
+    /// Ask `token` on the routes that change who is trusted.
+    #[must_use]
+    pub fn with_daemon_token(mut self, token: Option<DaemonToken>) -> Self {
+        self.daemon_token = token;
+        self
+    }
+
+    /// The token those routes ask for, or `None` while they are shut.
+    #[must_use]
+    pub const fn daemon_token(&self) -> Option<&DaemonToken> {
+        self.daemon_token.as_ref()
     }
 
     /// The policy for a plain loopback daemon: loopback hosts only, no token.
@@ -222,43 +237,6 @@ pub(crate) async fn origin_guard(
                       and from programs, which send no Origin.",
             "status": StatusCode::FORBIDDEN.as_u16(),
             "type": "ORIGIN_NOT_ALLOWED",
-        })),
-    )
-        .into_response()
-}
-
-/// Require `Authorization: Bearer <token>` before a request reaches `/api/*`.
-///
-/// Installed unconditionally, and reading the token it requires from
-/// [`BearerPolicy`] rather than from a value frozen at bind. The proxy's twin
-/// guard uses the same type for the same reasons: the two doors have to agree
-/// about what a valid credential looks like, and about which credential is
-/// valid right now.
-pub(crate) async fn bearer_guard(
-    State(policy): State<BearerPolicy>,
-    req: Request,
-    next: Next,
-) -> Response {
-    let presented = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok());
-
-    if policy.admits(presented).await {
-        return next.run(req).await;
-    }
-
-    warn!(
-        path = %req.uri().path(),
-        "rejected management API request with a missing or invalid bearer token"
-    );
-    (
-        StatusCode::UNAUTHORIZED,
-        [(header::WWW_AUTHENTICATE, "Bearer")],
-        Json(json!({
-            "error": "Missing or invalid API key. Send it as 'Authorization: Bearer <key>'.",
-            "status": StatusCode::UNAUTHORIZED.as_u16(),
-            "type": "INVALID_API_KEY",
         })),
     )
         .into_response()

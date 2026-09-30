@@ -14,11 +14,13 @@ use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::access::{DaemonAccess, bearer_guard, host_guard, origin_guard};
+use crate::access::{DaemonAccess, host_guard, origin_guard};
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
+use crate::trust::{ApiCredentials, bearer_guard};
 use gglib_core::CorsConfig;
+use gglib_core::access::DaemonToken;
 use gglib_core::services::SettingsCache;
 
 /// Build CORS layer from configuration. It lets an origin read exactly when
@@ -50,12 +52,13 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 /// Routes are organized into domain groups:
 /// - `/models/*`  — CRUD, tags, verification, downloads, `HuggingFace` discovery
 /// - `/config/*`  — settings, system setup
-/// - `/remote/*`  — the tunnel and the devices it admits (ADR 0012)
-pub(crate) fn api_routes() -> Router<AppState> {
+/// - `/remote/*`  — the tunnel and the devices it admits (ADR 0012); the
+///   routes among them that change who is trusted ask for `token`
+pub(crate) fn api_routes(token: Option<DaemonToken>) -> Router<AppState> {
     Router::new()
         .nest("/models", model_routes())
         .nest("/config", config_routes())
-        .nest("/remote", crate::routes_remote::remote_routes())
+        .nest("/remote", crate::routes_remote::remote_routes(token))
         .nest("/runs", crate::routes_runs::run_routes())
         .route("/version", get(handlers::version::get_version))
         // Servers API
@@ -318,7 +321,10 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
     let cors = build_cors_layer(cfg);
 
     let settings = Arc::new(SettingsCache::new(state.core.settings().repo()));
-    let policy = access.bearer_policy(settings);
+    let credentials = ApiCredentials {
+        policy: access.bearer_policy(settings),
+        token: access.daemon_token().cloned(),
+    };
     // Always installed: a daemon that bound *with* a key follows a later
     // rotation of it, and one that bound without demands nothing and keeps
     // demanding nothing — `DaemonAccess::bearer_policy` says why that asymmetry
@@ -326,9 +332,9 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
     // credentials. The origin guard reads the same config CORS does. CORS is
     // layered outside both guards so preflight OPTIONS requests, which never
     // carry Authorization, are answered by the CORS layer instead of a 401.
-    let api = api_routes()
+    let api = api_routes(credentials.token.clone())
         .with_state(state)
-        .layer(middleware::from_fn_with_state(policy, bearer_guard))
+        .layer(middleware::from_fn_with_state(credentials, bearer_guard))
         .layer(middleware::from_fn_with_state(
             Arc::new(cfg.clone()),
             origin_guard,
