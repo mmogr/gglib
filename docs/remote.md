@@ -490,26 +490,29 @@ the desktop. Any other status is reported without blaming a version: 404 is
 the only one anyone has traced to a mechanism, and sending an operator after a
 desktop that may already be current wastes their time.
 
-**The daemon's own API trusts the machine, not the person.** A daemon bound
-on loopback, the default, asks nothing of a request to `127.0.0.1:9887`: the
-socket is the boundary, so any process that can open it can do whatever
-`gglib` itself can. Several of those things reach past this machine. `POST
-/api/remote/enable` switches the tunnel on, and `POST /api/remote/invite`
-answers with the pairing string, code included. A process that calls both and
-redeems the code from anywhere the ticket reaches holds a device key of its
-own, on a roster row it named itself, and the edge admits that key after the
-process has gone and across restarts, until `gglib remote forget` retires it.
-`POST /api/remote/join` points this machine's `--remote` turns at whatever
-machine a pairing string names, `disconnect` ends that connection, and `kill`
-stops the daemon at the other end. Code running as you gains little by this,
-since it can already read gglib's data directory. Another account on the same
-machine cannot read `<data root>/data`, where the keys and the database are,
-since it is private to its owner, but it can reach loopback, so on a shared
-machine these routes are a way off it; a credential on loopback would close
-that, and [#1039](https://github.com/mmogr/gglib/issues/1039) tracks it.
-`gglib remote list` shows every row, one a process named itself included. A
-daemon started with `--share-lan` already demands its own token on every
-`/api/*` route, these among them.
+**The routes that change who is trusted ask for the daemon's token.** A
+daemon bound on loopback, the default, asks no key of a request to
+`127.0.0.1:9887`: the socket is the boundary, and it is the machine's, not
+yours, so any process on the machine can open it, another account's included.
+Six routes change who this machine trusts or reaches. `POST
+/api/remote/enable` switches the tunnel on; `invite` answers with a pairing
+string whose code buys a device key the edge admits until `gglib remote
+forget` retires it; `DELETE /api/remote/devices/{device}` retires one; `join`
+points this machine's `--remote` turns at another machine, `disconnect` ends
+that, and `kill` stops the daemon at the other end. Those answer only the
+daemon's token, on loopback too, and refuse anything else with `401` and a
+sentence that says how to get it. The token is a random secret the daemon
+mints the first time it starts, in `<data root>/data/daemon_token`, readable
+only by its owner. `gglib` on this machine reads the file and sends it; the
+desktop app reads it for itself and for its window; the dashboard gets it from
+the link `gglib web` prints, `http://127.0.0.1:9887/#token=…`, keeps it for
+the tab and takes it out of the address bar. That closes these routes to
+another account on the machine, which can read neither the file nor the
+database. It does not close them to code running as you, which can read the
+file as it can read the rest of gglib's data directory. The API key cannot
+stand in for the token: `GET /api/config/settings` returns it, and on a daemon
+started with `--share-lan`, which still asks that key, or the token, on every
+other `/api/*` route, it is the key the LAN holds.
 
 **A web page is not such a process.** Your browser opens that socket for any
 site you visit, but it says which site is asking, in `Origin`. Any request to
@@ -704,6 +707,7 @@ here is one the desktop can retire on its own.
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |
+| `this route needs the daemon's token` | Pairing, forgetting a device or joining was asked of the daemon without its token. Run the command from `gglib` on this machine, as the account that runs the daemon, or open the dashboard from the link `gglib web` prints. |
 | `403 mcp_not_allowed_over_tunnel` | `/mcp` is closed over the tunnel. Re-enable on the desktop with `--allow-mcp` if you mean it. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
