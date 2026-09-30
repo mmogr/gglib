@@ -118,8 +118,8 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
  * localStorage key holding the daemon's API key.
  *
  * Only relevant when the daemon is shared over the LAN (`--share-lan`), where
- * /api/* requires a bearer token. A loopback daemon needs no key and never
- * touches this — on either surface.
+ * /api/* takes its key. A loopback daemon takes only its own token
+ * (daemonToken.ts) and never asks for this — on either surface.
  */
 const WEB_API_KEY_STORAGE = 'gglib_api_key';
 
@@ -214,8 +214,8 @@ function buildClient(config: HttpClientConfig): HttpClient {
         body: hasBody ? JSON.stringify(body) : undefined,
       });
       
-      // A 401 means a LAN-shared daemon wants its key, unless the route wants
-      // the daemon's token, which no key opens: its body says how to get one.
+      // A 401 means a LAN-shared daemon wants its key, unless it is a daemon
+      // asking for its token, which no key opens: its body says how to get it.
       // Only a newly entered key earns the retry — the desktop app used to
       // rebuild an identically tokenless client here and fail again.
       const refused = await isDaemonTokenRefusal(response);
@@ -259,13 +259,11 @@ export async function getClient(): Promise<HttpClient> {
   
   cachedClientPromise = (async () => {
     try {
-      // A loopback daemon requires no token, which is the usual case for both
-      // surfaces. The exception is a daemon started with `--share-lan`: it
-      // binds a LAN interface, so it resolves or mints a key and demands it on
-      // every `/api/*` call — including from a client on the same machine.
-      // The desktop app reaches such a daemon whenever one is already running,
-      // so it needs the same stored-key path web mode has rather than a
-      // hardcoded empty token it could never recover from.
+      // Every `/api/*` call takes the daemon's token: the desktop app reads it
+      // from the daemon's file, a page from the link `gglib web` prints. A
+      // daemon started with `--share-lan` also takes its key, which a page on
+      // another machine can only be given by hand, so the stored-key path
+      // stays for it, on both surfaces.
       const token = takeDaemonToken() ?? readStoredApiKey() ?? apiAuthToken;
 
       if (isTauri()) {

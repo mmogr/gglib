@@ -26,7 +26,7 @@ Axum backend (HTTP response) → typed result
 | File | Role |
 |------|------|
 | `client.ts` | HTTP client with auth injection, retry, and error normalization |
-| `daemonToken.ts` | The daemon's token from the link `gglib web` prints: kept for the tab, stripped from the address bar |
+| `daemonToken.ts` | The daemon's token from the link `gglib web` prints: stripped from the address bar, kept until the daemon next starts |
 | `chat.ts` | Conversations and messages |
 | `servers.ts` | llama.cpp server lifecycle and proxy |
 | `downloads.ts` | Download queue management |
