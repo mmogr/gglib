@@ -46,7 +46,7 @@ fn panicking(runs: &RunRegistry, id: &str, frames: usize) -> (Arc<AtomicUsize>, 
             Ok(())
         })
     });
-    let Ok(Reservation::New(reserved)) = runs.reserve(id, spec()) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, id, spec()) else {
         panic!("a new reservation");
     };
     reserved.start(
@@ -124,7 +124,7 @@ async fn the_end_waits_for_its_handling_and_a_failed_handling_fails_the_run() {
             })
         })
     });
-    let Ok(Reservation::New(reserved)) = runs.reserve("a1", spec()) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, "a1", spec()) else {
         panic!("a new reservation");
     };
     reserved.start(

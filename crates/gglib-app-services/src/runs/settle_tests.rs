@@ -36,7 +36,7 @@ fn held(
             outcome
         })
     });
-    let Ok(Reservation::New(reserved)) = runs.reserve("a1", spec()) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, "a1", spec()) else {
         panic!("a new reservation");
     };
     reserved.start(|_| Box::pin(async { Ok(()) }), ended);
@@ -46,7 +46,7 @@ fn held(
 /// The run as get, the list, cancel's answer, a repeated create and the
 /// id lookup each show it.
 fn every_path(runs: &RunRegistry) -> Vec<RunInfo> {
-    let repeat = match runs.reserve("a1", spec()).unwrap() {
+    let repeat = match runs.reserve(RunScope::Local, "a1", spec()).unwrap() {
         Reservation::Existing(info) => info,
         Reservation::New(_) => panic!("the run has the id"),
     };
@@ -55,7 +55,7 @@ fn every_path(runs: &RunRegistry) -> Vec<RunInfo> {
         runs.list(&LOCAL).runs.remove(0),
         runs.cancel(&LOCAL, "a1").unwrap(),
         repeat,
-        runs.existing("a1").unwrap().unwrap(),
+        runs.existing(&RunScope::Local, "a1").unwrap().unwrap(),
     ]
 }
 
@@ -116,7 +116,7 @@ async fn a_failed_handling_is_the_only_ending_anyone_sees() {
 async fn a_panic_while_handling_the_end_fails_the_run() {
     let (runs, _, _) = registry();
     let ended: RunEnded = Box::new(|_, _| Box::pin(async { panic!("the save panicked") }));
-    let Ok(Reservation::New(reserved)) = runs.reserve("a1", spec()) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, "a1", spec()) else {
         panic!("a new reservation");
     };
     reserved.start(|_| Box::pin(async { Ok(()) }), ended);

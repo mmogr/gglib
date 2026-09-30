@@ -5,7 +5,7 @@
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::ports::RunsPort as _;
 
-use super::run::{Transcript, launch};
+use super::launch::{Transcript, launch};
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, prepared, saved, settled, state,
 };
@@ -35,7 +35,7 @@ fn replacing(conversation: i64, from: i64) -> Transcript {
 async fn launch_replacing(state: &AppState, run: &str, transcript: Transcript) -> bool {
     let (p, _) = prepared(finished_reply(), End::Finish);
     let permit = super::compose::take_permit(state).expect("a free slot");
-    launch(state, run, transcript, p, permit)
+    launch(state, run, LOCAL, transcript, p, permit)
         .await
         .unwrap()
         .created
@@ -91,9 +91,16 @@ async fn a_repeated_create_replaces_nothing_the_second_time() {
 
     let (p, _) = prepared(finished_reply(), End::Finish);
     let permit = || super::compose::take_permit(&state).expect("a free slot");
-    let again = launch(&state, "e1", replacing(id, before[0].id), p, permit())
-        .await
-        .unwrap();
+    let again = launch(
+        &state,
+        "e1",
+        LOCAL,
+        replacing(id, before[0].id),
+        p,
+        permit(),
+    )
+    .await
+    .unwrap();
 
     assert!(!again.created);
     let after: Vec<i64> = saved(&state, id).await.iter().map(|r| r.id).collect();
@@ -110,7 +117,7 @@ async fn a_row_the_conversation_does_not_hold_refuses_the_run_and_changes_nothin
 
     let (p, _) = prepared(finished_reply(), End::Finish);
     let permit = || super::compose::take_permit(&state).expect("a free slot");
-    let refused = launch(&state, "e1", replacing(id, theirs[0]), p, permit()).await;
+    let refused = launch(&state, "e1", LOCAL, replacing(id, theirs[0]), p, permit()).await;
 
     let Err(crate::error::HttpError::Coded { code, .. }) = refused else {
         panic!("refused");

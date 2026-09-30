@@ -21,7 +21,7 @@ use tracing::{debug, error, info, warn};
 
 use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
-use gglib_core::ports::{HubChatsPort, RemoteGatewayPort, RunsPort};
+use gglib_core::ports::{AgentRunStarter, HubChatsPort, RemoteGatewayPort, RunsPort};
 use gglib_core::ports::{
     ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
 };
@@ -98,6 +98,8 @@ pub(crate) struct AppState {
     pub(crate) runs: Option<Arc<dyn RunsPort>>,
     /// The hub's chats, served at `/v1/chats`; `None` answers those 503.
     pub(crate) chats: Option<Arc<dyn HubChatsPort>>,
+    /// Starts a device's turn on a hub chat; `None` answers it 503.
+    pub(crate) turns: Option<Arc<dyn AgentRunStarter>>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -338,6 +340,7 @@ pub async fn serve(
         remote: access.remote.clone(),
         runs: access.devices.runs.clone(),
         chats: access.devices.chats.clone(),
+        turns: access.devices.turns.clone(),
         upstream_health,
         stream_bounds: StreamBounds::for_serve(),
         calibration: Arc::new(TokenCalibration::new()),

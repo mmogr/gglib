@@ -33,7 +33,8 @@ fn start(
             Ok(())
         })
     });
-    let Ok(Reservation::New(reserved)) = runs.reserve(id, agent(conversation)) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, id, agent(conversation))
+    else {
         panic!("a new reservation");
     };
     reserved.start(
@@ -59,7 +60,7 @@ fn busy(run: &str) -> RunsError {
 /// dropped again).
 fn admits(runs: &RunRegistry, id: &str, conversation: Option<i64>) -> bool {
     matches!(
-        runs.reserve(id, agent(conversation)),
+        runs.reserve(RunScope::Local, id, agent(conversation)),
         Ok(Reservation::New(_))
     )
 }
@@ -69,7 +70,7 @@ async fn a_second_run_is_refused_until_the_first_reply_is_saved() {
     let (runs, _, _) = registry();
     let (finish, save) = start(&runs, "a1", Some(7));
 
-    let refused = runs.reserve("a2", agent(Some(7))).err();
+    let refused = runs.reserve(RunScope::Local, "a2", agent(Some(7))).err();
     assert_eq!(refused, Some(busy("a1")));
     assert_eq!(
         refused.unwrap().to_string(),
@@ -79,8 +80,14 @@ async fn a_second_run_is_refused_until_the_first_reply_is_saved() {
     // Ended, but its reply not yet saved: still live.
     finish.send(()).unwrap();
     until(|| runs.lock().runs["a1"].ending().status.is_terminal()).await;
-    assert_eq!(runs.reserve("a2", agent(Some(7))).err(), Some(busy("a1")));
-    assert!(runs.existing("a2").unwrap().is_none(), "nothing reserved");
+    assert_eq!(
+        runs.reserve(RunScope::Local, "a2", agent(Some(7))).err(),
+        Some(busy("a1"))
+    );
+    assert!(
+        runs.existing(&RunScope::Local, "a2").unwrap().is_none(),
+        "nothing reserved"
+    );
 
     save.send(()).unwrap();
     until(|| runs.lock().runs["a1"].is_ended()).await;
@@ -93,7 +100,10 @@ async fn a_cancelled_run_frees_its_conversation_once_settled() {
     let (_finish, save) = start(&runs, "a1", Some(7));
 
     runs.cancel(&RunScope::Local, "a1").unwrap();
-    assert_eq!(runs.reserve("a2", agent(Some(7))).err(), Some(busy("a1")));
+    assert_eq!(
+        runs.reserve(RunScope::Local, "a2", agent(Some(7))).err(),
+        Some(busy("a1"))
+    );
 
     save.send(()).unwrap();
     until(|| runs.lock().runs["a1"].is_ended()).await;
@@ -115,7 +125,8 @@ async fn a_retry_of_the_live_runs_id_answers_with_that_run() {
     let (runs, _, _) = registry();
     let (_finish, _save) = start(&runs, "a1", Some(7));
 
-    let Ok(Reservation::Existing(info)) = runs.reserve("a1", agent(Some(7))) else {
+    let Ok(Reservation::Existing(info)) = runs.reserve(RunScope::Local, "a1", agent(Some(7)))
+    else {
         panic!("the existing run");
     };
     assert_eq!(info.id, "a1");

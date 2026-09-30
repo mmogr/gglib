@@ -51,7 +51,7 @@ pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,
 };
-pub use hub_chats::{HubChatsError, HubChatsPort};
+pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };

@@ -1,8 +1,9 @@
-//! A run the daemon's own routes start with work they prepared, such as an
-//! agent run, whose loop is composed where its request is read.
+//! A run the daemon starts with work it prepared, such as an agent run,
+//! whose loop is composed where its request is read.
 //!
-//! Nothing here is on `RunsPort`, which is all the proxy's door holds, so
-//! only this machine starts such a run. The id is reserved first and the
+//! Nothing here is on `RunsPort`. This machine starts such a run at its own
+//! door; a paired device only through the daemon's `AgentRunStarter`, for a
+//! turn on a hub chat, in the device's scope. The id is reserved first and the
 //! work started after, so a caller can do what must happen once per run in
 //! between (writing the user's message) without a repeat of the same id
 //! doing it twice. A reservation dropped unstarted leaves no run behind.
@@ -30,7 +31,7 @@ pub type RunEnded =
 
 /// Where a reserved id stands.
 pub enum Reservation<'a> {
-    /// This machine's run already has the id; nothing was reserved.
+    /// The caller's run already has the id; nothing was reserved.
     Existing(RunInfo),
     /// A new run holds the id, queued until it is started.
     New(Reserved<'a>),
@@ -71,24 +72,24 @@ impl Drop for Reserved<'_> {
 }
 
 impl RunRegistry {
-    /// This machine's run by `id`, if there is one.
+    /// `scope`'s run by `id`, if there is one.
     ///
     /// # Errors
     ///
-    /// [`RunsError::InvalidId`], and [`RunsError::IdTaken`] when a paired
-    /// device's run has the id.
-    pub fn existing(&self, id: &str) -> Result<Option<RunInfo>, RunsError> {
+    /// [`RunsError::InvalidId`], and [`RunsError::IdTaken`] when another
+    /// scope's run has the id.
+    pub fn existing(&self, scope: &RunScope, id: &str) -> Result<Option<RunInfo>, RunsError> {
         if !is_run_id(id) {
             return Err(RunsError::InvalidId);
         }
         match self.lock().runs.get(id) {
             None => Ok(None),
-            Some(cell) if cell.scope == RunScope::Local => Ok(Some(cell.info())),
+            Some(cell) if cell.scope == *scope => Ok(Some(cell.info())),
             Some(_) => Err(RunsError::IdTaken),
         }
     }
 
-    /// Reserve `id` for a run of this machine, or answer with the run that
+    /// Reserve `id` for a run of `scope`, or answer with `scope`'s run that
     /// already has it.
     ///
     /// # Errors
@@ -96,8 +97,13 @@ impl RunRegistry {
     /// As `RunsPort::create`, less the body check, and
     /// [`RunsError::ConversationBusy`] while another run's reply to the
     /// same conversation is not yet saved.
-    pub fn reserve(&self, id: &str, spec: RunSpec) -> Result<Reservation<'_>, RunsError> {
-        Ok(match self.admit(RunScope::Local, id, spec, true)? {
+    pub fn reserve(
+        &self,
+        scope: RunScope,
+        id: &str,
+        spec: RunSpec,
+    ) -> Result<Reservation<'_>, RunsError> {
+        Ok(match self.admit(scope, id, spec, true)? {
             Admitted::Existing(info) => Reservation::Existing(info),
             Admitted::New(cell) => Reservation::New(Reserved {
                 registry: self,

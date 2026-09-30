@@ -2,6 +2,9 @@
 mod compose;
 mod dto;
 mod guard;
+mod hub_model;
+pub(crate) mod hub_turn;
+mod launch;
 mod remote_upstream;
 mod retry_notice;
 mod run;

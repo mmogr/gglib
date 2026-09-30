@@ -24,6 +24,7 @@ gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
 gglib-sse = { path = "../gglib-sse" }
 
 # Shared deps
+async-trait = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -72,7 +73,6 @@ rust-embed = { version = "8.12", features = ["mime-guess", "debug-embed"] }
 ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-app-services/ts-bindings"]
 
 [dev-dependencies]
-async-trait = { workspace = true }
 # A test refuses one kind of row with a trigger, to see a reply saved whole or not at all.
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 # Re-declared to turn on `test-support`, which carries

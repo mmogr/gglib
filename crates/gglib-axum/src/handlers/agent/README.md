@@ -50,6 +50,18 @@ or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
 runs the same prepared loop detached from any response, so only cancel or
 shutdown stops it, and saves the transcript to the request's conversation.
 A local run holds its model until it ends (`remote_upstream::hold`), so no
-proxy request swaps it out or recycles it mid-run.
+proxy request swaps it out or recycles it mid-run. `launch` reserves the id
+in the caller's scope, saves the user's message and starts the loop.
+
+# A paired device's turn
+
+`hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
+starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
+chat's id and the device's message. The history is rebuilt from the hub's
+record (the system prompt, every row, the message), the limits and tools
+from the conversation's settings, and the reply runs on the chat's model
+(`hub_model`: its own, its settings', its last reply's, or the hub's
+default), loaded first when it is not running, as an agent run in the
+device's scope saved to the chat.
 
 <!-- module-docs:end -->

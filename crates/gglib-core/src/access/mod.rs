@@ -21,7 +21,7 @@ pub use origin::may_change;
 use std::sync::Arc;
 
 use crate::cors::CorsConfig;
-use crate::ports::{HubChatsPort, RemoteGatewayPort, RunsPort};
+use crate::ports::{AgentRunStarter, HubChatsPort, RemoteGatewayPort, RunsPort};
 
 /// Where the proxy's bearer token came from.
 ///
@@ -204,6 +204,13 @@ impl ProxyAccessConfig {
     #[must_use]
     pub fn with_chats(mut self, chats: Option<Arc<dyn HubChatsPort>>) -> Self {
         self.devices.chats = chats;
+        self
+    }
+
+    /// Attach what starts a device's turn on a hub chat, for the same reason.
+    #[must_use]
+    pub fn with_turns(mut self, turns: Option<Arc<dyn AgentRunStarter>>) -> Self {
+        self.devices.turns = turns;
         self
     }
 

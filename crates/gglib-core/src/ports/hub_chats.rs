@@ -10,7 +10,8 @@
 
 use async_trait::async_trait;
 
-use crate::domain::hub_chats::{HubChatList, HubChatOpen};
+use super::runs::Created;
+use crate::domain::hub_chats::{HubChatList, HubChatOpen, HubTurn};
 
 /// Why a chat could not be read. Fixed text only.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -60,4 +61,35 @@ pub trait HubChatsPort: Send + Sync + std::fmt::Debug {
     ///
     /// [`HubChatsError::NotFound`] and [`HubChatsError::Unreadable`].
     async fn open(&self, id: i64) -> Result<HubChatOpen, HubChatsError>;
+}
+
+/// Why a device's turn was not started: an HTTP status, a stable code and a
+/// sentence of fixed text, as the daemon's own door refuses the same run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnRefused {
+    /// The HTTP status it is answered with.
+    pub status: u16,
+    /// The stable code a client matches on.
+    pub code: String,
+    /// A sentence for a person; never a row, a title or a body.
+    pub message: String,
+}
+
+/// Starts the agent run that answers a device's turn on a hub chat.
+///
+/// The agent loop is composed where the daemon's routes are, so the daemon
+/// implements this and hands it to every proxy it starts: the proxy never
+/// depends on the daemon's crate. The run is the device's, saved to the
+/// hub's chat as the chat page's own runs are.
+#[async_trait]
+pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
+    /// Start `device`'s run `id` adding `turn` to its chat, or answer with
+    /// `device`'s run that already has the id.
+    ///
+    /// # Errors
+    ///
+    /// A [`TurnRefused`] as the daemon's door would answer: an empty
+    /// message, a missing chat, a chat with a live reply (`conflict`), no
+    /// free agent slot, a model that cannot be loaded, and the runs' own.
+    async fn start(&self, device: &str, id: &str, turn: HubTurn) -> Result<Created, TurnRefused>;
 }

@@ -50,3 +50,16 @@ pub struct HubChatOpen {
     /// Its rows, oldest first, each with the metadata the hub saved.
     pub messages: Vec<Message>,
 }
+
+/// A turn a paired device adds to one of the hub's chats: the body of
+/// `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No history travels:
+/// the hub rebuilds it from its own record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct HubTurn {
+    /// The hub's chat the turn is added to.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub conversation_id: i64,
+    /// The user's message.
+    pub content: String,
+}

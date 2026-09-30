@@ -7,6 +7,12 @@ daemon owns until they end. The same five calls, bodies and event framing as
 the daemon's `/api/runs/*`, served through the `RunsPort` the proxy was
 started with, and answered `503 runs_unavailable` without one.
 
+`PUT /v1/runs/{id}?kind=agent` with `{conversation_id, content}` is a
+paired device's turn on one of the hub's chats: handed to the daemon's
+`AgentRunStarter`, which runs the reply as an agent run in the device's
+scope and saves it to the chat. Only a named device may; anything else is
+`403 device_not_named`.
+
 A request the tunnel edge marked is served in the scope of the device it
 named, and sees only that device's runs; any other request is this
 machine's. The edge reaches the proxy as any client does, so a client
@@ -23,6 +29,7 @@ runs/
                  the proxy's shape and the registry's codes; nothing a client
                  sent is echoed
   scope.rs     — who is asking, from the `Tunnelled` marker
+  turn.rs      — a device's turn on a hub chat, to the daemon's starter
   sse.rs       — a run's events as server-sent events: `id: <seq>` and
                  `data: <frame>`, then one `event: run` with the run's final
                  state, ending early when the server stops; shared with the

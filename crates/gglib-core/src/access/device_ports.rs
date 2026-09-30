@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::ports::{HubChatsPort, RunsPort};
+use crate::ports::{AgentRunStarter, HubChatsPort, RunsPort};
 
 /// What the daemon hands every proxy it starts for its paired devices.
 ///
@@ -16,4 +16,7 @@ pub struct DevicePorts {
     pub runs: Option<Arc<dyn RunsPort>>,
     /// The hub's chats, at `/v1/chats`.
     pub chats: Option<Arc<dyn HubChatsPort>>,
+    /// What starts a device's turn on a hub chat, at
+    /// `PUT /v1/runs/{id}?kind=agent`.
+    pub turns: Option<Arc<dyn AgentRunStarter>>,
 }

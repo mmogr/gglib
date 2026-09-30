@@ -126,6 +126,8 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     // the proxy port and cannot reach `/api/daemon/shutdown` here at all.
     ctx.proxy.bind_daemon_cancel(shutdown_token.clone());
     let state: AppState = Arc::new(ctx);
+    // A paired device's turn on a hub chat runs the agent loop composed here.
+    crate::handlers::agent::hub_turn::bind(&state);
 
     // 4. Access policy, then the router. The Host guard is always on; the
     //    bearer token exists only for non-loopback binds, where the socket

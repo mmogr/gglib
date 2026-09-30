@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::domain::runs::{RunError, RunKind};
-use gglib_core::ports::{HubChatsError, HubChatsPort};
+use gglib_core::ports::{HubChatsError, HubChatsPort, RunScope};
 use serde_json::json;
 
 use super::HubChats;
@@ -34,7 +34,7 @@ async fn the_list_is_newest_first_with_each_chats_live_run() {
         model: None,
         conversation_id: Some(older),
     };
-    let Ok(Reservation::New(reserved)) = runs.reserve("a1", spec) else {
+    let Ok(Reservation::New(reserved)) = runs.reserve(RunScope::Local, "a1", spec) else {
         panic!("a new reservation");
     };
     reserved.start(

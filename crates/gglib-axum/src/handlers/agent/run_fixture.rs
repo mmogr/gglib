@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use super::compose::Prepared;
-use super::run::launch;
+use super::launch::launch;
 use crate::state::AppState;
 
 pub(super) const LOCAL: RunScope = RunScope::Local;
@@ -194,8 +194,8 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
 }
 
 /// A transcript saved to `conversation`, replacing nothing.
-pub(super) fn saving(conversation: i64) -> super::run::Transcript {
-    super::run::Transcript {
+pub(super) fn saving(conversation: i64) -> super::launch::Transcript {
+    super::launch::Transcript {
         conversation_id: Some(conversation),
         replace_from: None,
     }
@@ -210,7 +210,8 @@ pub(super) async fn start(
     let created = launch(
         state,
         id,
-        super::run::Transcript {
+        LOCAL,
+        super::launch::Transcript {
             conversation_id: conversation,
             replace_from: None,
         },

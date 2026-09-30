@@ -18,8 +18,9 @@ runs/
                     panic ends it `failed`; until its end is handled (an
                     agent run's reply saved) every reader sees `in_progress`
                     and no other run is admitted to its conversation
-  local.rs        — a run this machine starts with work it prepared (an
-                    agent run): reserve, then start; never on the port
+  local.rs        — a run the daemon starts with work it prepared (an
+                    agent run): reserve in a scope, then start; never on
+                    the port
   cell.rs         — one run: status, log, the watch its readers wait on
   reader.rs       — a run's event stream: the log by index, then live
   executor.rs     — the seam an executor writes a run's events through
