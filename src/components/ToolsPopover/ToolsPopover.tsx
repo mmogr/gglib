@@ -39,9 +39,15 @@ const getToolIcon = (name: string) => {
 interface ToolsPopoverProps {
   /** Open above the button, for a trigger near the bottom of the window. */
   opensUpward?: boolean;
+  /**
+   * Which edge of the button the popout lines up with. `right` grows it
+   * leftwards, for a trigger at the right of a header; `left` grows it
+   * rightwards, for one in a left margin, where growing left leaves the page.
+   */
+  align?: 'left' | 'right';
 }
 
-export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false }) => {
+export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false, align = 'right' }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -137,7 +143,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false 
       </Button>
 
       {isOpen && (
-        <div className={cn('absolute right-0 bg-surface-elevated', opensUpward ? 'bottom-full mb-1' : 'top-full mt-1', 'border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] z-popover overflow-hidden')} ref={popoverRef}>
+        <div className={cn('absolute bg-surface-elevated', align === 'left' ? 'left-0' : 'right-0', opensUpward ? 'bottom-full mb-1' : 'top-full mt-1', 'border border-border rounded-lg shadow-lg min-w-[300px] max-w-[400px] max-h-[70vh] z-popover overflow-y-auto')} ref={popoverRef}>
           <div className="flex items-center justify-between px-[14px] py-[10px] border-b border-border bg-surface-elevated">
             <span className="text-sm font-semibold text-text-primary">
               <Icon icon={Wrench} size={14} />

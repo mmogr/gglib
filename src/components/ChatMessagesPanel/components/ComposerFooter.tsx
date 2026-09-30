@@ -49,7 +49,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
             hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
             toolFormat={toolFormat}
           />
-          <ToolsPopover opensUpward />
+          <ToolsPopover opensUpward align="left" />
         </div>
       }
       body={
