@@ -174,9 +174,10 @@ impl DaemonHandle {
             .send()
             .await?;
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            let body = response.text().await.unwrap_or_default();
             return Err(anyhow!(
                 "daemon answered 401: {}",
-                auth::unauthorized_hint()
+                auth::unauthorized(&body)
             ));
         }
         Ok(response.status() == reqwest::StatusCode::ACCEPTED)

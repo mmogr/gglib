@@ -125,9 +125,10 @@ async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Resu
     // Checked rather than assumed: straight to `.json()`, a 401 would arrive
     // as a deserialization error about unexpected input.
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        let body = response.text().await.unwrap_or_default();
         anyhow::bail!(
             "listing models answered 401: {}",
-            crate::daemon_client::auth::unauthorized_hint()
+            crate::daemon_client::auth::unauthorized(&body)
         );
     }
     let models: Vec<GuiModel> = response.error_for_status()?.json().await?;

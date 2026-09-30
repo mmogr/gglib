@@ -2,6 +2,7 @@
 
 pub(crate) mod sse;
 
+use std::future::Future;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -155,14 +156,27 @@ pub(crate) async fn ensure_daemon(api_key: Option<String>) -> Result<DaemonHandl
     let log_path = spawn_daemon().context("could not launch the gglib daemon")?;
     eprintln!("  starting gglib daemon\u{2026}");
 
+    let prober = client.clone();
+    let probe_it = || probe(&prober);
+    wait_for_launch(client, api_key, &auth::Local::here(), &log_path, probe_it).await
+}
+
+/// Poll `probe` until the daemon this command launched answers, and hand back
+/// a handle carrying the credential `local` gives now: the daemon minted a
+/// new token as it started, after `had` was resolved.
+async fn wait_for_launch<F: Future<Output = DaemonProbe>>(
+    client: reqwest::Client,
+    had: Option<String>,
+    local: &auth::Local,
+    log_path: &std::path::Path,
+    mut probe: impl FnMut() -> F,
+) -> Result<DaemonHandle> {
     let deadline = tokio::time::Instant::now() + LAUNCH_WAIT;
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
-        match probe(&client).await {
-            // The daemon just minted its token if it had none, which this
-            // call was resolved before.
+        match probe().await {
             DaemonProbe::Running => {
-                let api_key = auth::daemon_token().or(api_key);
+                let api_key = local.credential(async { had }).await;
                 return Ok(DaemonHandle { client, api_key });
             }
             DaemonProbe::ForeignServer => {

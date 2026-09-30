@@ -9,6 +9,7 @@
 //! The URL carries the daemon's token as a fragment, `#token=…`, which the
 //! page keeps for its own calls and strips from the address bar. A fragment
 //! never leaves the browser in a request, and the URL is printed only here.
+//! The daemon mints a new token at every start, so a link outlives no restart.
 
 use anyhow::Result;
 

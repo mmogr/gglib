@@ -3,21 +3,18 @@
 //! Split from `mod.rs`, which owns the connection, because resolving the token
 //! needs the settings store and finding the daemon does not.
 //!
-//! The daemon on `127.0.0.1:9887` is unauthenticated by default — that is
-//! `DaemonAccess::new`'s contract, and the socket is the boundary. A key is
-//! only in force when the daemon bound off loopback (`--share-lan`), where
-//! `resolve_daemon_api_key` reads or mints one and stores it as
-//! `proxy_api_key`. Until this module existed the CLI never sent an
-//! `Authorization` header at all, so a `--share-lan` daemon answered 401 to
-//! its own CLI on every `/api/*` call.
+//! Every `/api` route takes the daemon's own token, which the daemon mints in
+//! a `0600` file at every start, so a CLI running as the owner reads it and
+//! needs nothing else. A daemon bound off loopback (`--share-lan`) also takes
+//! its key, which `resolve_daemon_api_key` reads or mints and stores as
+//! `proxy_api_key`; a CLI that cannot read the file, another account's among
+//! them, falls back to that key, and on loopback is refused.
 //!
-//! The daemon's own token comes first. The routes that change who is trusted
-//! answer nothing else, and every other route takes it too, so a CLI that can
-//! read the file needs no key. One that cannot, such as another account's,
-//! falls back to the key and is refused those routes.
+//! A key the operator sets in `GGLIB_API_KEY` comes first: the operator's key
+//! outranks anything read from disk, as `shared_args` documents.
 
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use gglib_core::access::{daemon_token_path, read_daemon_token};
 use gglib_core::contracts::http::daemon::DAEMON_TOKEN_REQUIRED_TYPE;
@@ -29,14 +26,12 @@ use crate::bootstrap::CliContext;
 /// `gglib proxy` subcommands take it as `--api-key`'s `env =` source, but the
 /// daemon-facing commands have no such flag, so it is read directly here. The
 /// precedence is the one `shared_args` documents: a key supplied by the
-/// operator outranks the stored setting.
+/// operator outranks anything stored.
 const API_KEY_ENV: &str = "GGLIB_API_KEY";
 
-/// The credential to present to the daemon: its token when this account can
-/// read it, else the API key [`api_key`] finds, else `None`.
+/// The credential to present to the daemon; [`Local::credential`] says which.
 pub(crate) async fn daemon_api_key(ctx: &CliContext) -> Option<String> {
-    let path = daemon_token_path().ok();
-    prefer_token(path.as_deref(), api_key(ctx)).await
+    Local::here().credential(stored_key(ctx)).await
 }
 
 /// The daemon's token, when there is one this account can read.
@@ -44,7 +39,45 @@ pub(crate) fn daemon_token() -> Option<String> {
     token_at(&daemon_token_path().ok()?)
 }
 
-/// The token in the file at `path`, when it can be read and is not blank.
+/// Where this machine's credentials for its own daemon are: the operator's
+/// key and the daemon's token file. A value, so a test can name its own.
+pub(crate) struct Local {
+    /// `GGLIB_API_KEY`, when it is set and not blank.
+    pub(crate) env: Option<String>,
+    /// The daemon's token file, when the data root resolves.
+    pub(crate) token_path: Option<PathBuf>,
+}
+
+impl Local {
+    /// This process's environment and this machine's data root.
+    pub(crate) fn here() -> Self {
+        Self {
+            env: std::env::var(API_KEY_ENV)
+                .ok()
+                .filter(|key| !key.trim().is_empty()),
+            token_path: daemon_token_path().ok(),
+        }
+    }
+
+    /// The operator's key first, then the daemon's token, then `stored`,
+    /// which is only awaited when neither is there. Read at each call: the
+    /// daemon mints a new token at every start.
+    pub(crate) async fn credential(
+        &self,
+        stored: impl Future<Output = Option<String>>,
+    ) -> Option<String> {
+        if let Some(key) = &self.env {
+            return Some(key.clone());
+        }
+        if let Some(token) = self.token_path.as_deref().and_then(token_at) {
+            return Some(token);
+        }
+        stored.await
+    }
+}
+
+/// The token in the file at `path`, when it can be read, is not blank, and
+/// is open to nobody else ([`read_daemon_token`] refuses one that is).
 fn token_at(path: &Path) -> Option<String> {
     read_daemon_token(path)
         .ok()
@@ -52,31 +85,14 @@ fn token_at(path: &Path) -> Option<String> {
         .map(|token| token.as_str().to_owned())
 }
 
-/// The token at `path` when there is one, and `fallback` only when not.
-async fn prefer_token(
-    path: Option<&Path>,
-    fallback: impl Future<Output = Option<String>>,
-) -> Option<String> {
-    if let Some(token) = path.and_then(token_at) {
-        return Some(token);
-    }
-    fallback.await
-}
-
-/// The API key to present to the daemon, or `None` when it wants none.
+/// The API key stored as `proxy_api_key`, or `None`.
 ///
 /// An unreadable settings store yields `None` rather than an error, matching
-/// `resolve_client_api_key`'s reasoning for the proxy: the daemon is very
-/// likely unauthenticated, and failing the command outright would turn a
-/// maybe-irrelevant local problem into a hard stop. A daemon that *does* want
-/// a token answers 401 with a message that names the remedy.
-async fn api_key(ctx: &CliContext) -> Option<String> {
-    if let Ok(from_env) = std::env::var(API_KEY_ENV)
-        && !from_env.trim().is_empty()
-    {
-        return Some(from_env);
-    }
-
+/// `resolve_client_api_key`'s reasoning for the proxy: failing the command
+/// outright would turn a maybe-irrelevant local problem into a hard stop. A
+/// daemon that wants something else answers 401 with a message that names the
+/// remedy.
+async fn stored_key(ctx: &CliContext) -> Option<String> {
     ctx.app
         .settings()
         .get()

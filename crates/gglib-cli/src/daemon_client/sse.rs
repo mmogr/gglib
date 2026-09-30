@@ -69,7 +69,8 @@ where
         .with_context(|| format!("connecting to {url}"))?;
 
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        anyhow::bail!("daemon answered 401: {}", super::auth::unauthorized_hint());
+        let body = response.text().await.unwrap_or_default();
+        anyhow::bail!("daemon answered 401: {}", super::auth::unauthorized(&body));
     }
     anyhow::ensure!(
         response.status().is_success(),
