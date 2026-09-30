@@ -21,8 +21,10 @@ use crate::error::HttpError;
 use crate::state::AppState;
 
 /// Body for `PUT /api/remote/chats/{id}/turns/{run_id}`: the new message
-/// and nothing else. The far machine rebuilds the history from its record.
+/// and nothing else. The far machine rebuilds the history from its record,
+/// so a body that carries more is refused rather than half read.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct RemoteTurnBody {
     /// The user's message.

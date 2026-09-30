@@ -50,3 +50,28 @@ async fn every_far_chat_route_is_a_409_when_not_joined() {
         );
     }
 }
+
+/// A turn is its text alone: a body that also carries history is refused
+/// before this machine's connection is even looked at.
+#[tokio::test]
+async fn a_turn_that_carries_history_is_refused() {
+    let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
+    let request = Request::builder()
+        .method(Method::PUT)
+        .uri(daemon::remote_turn_path(12, "chat-1"))
+        .header("host", HOST)
+        .header("content-type", "application/json")
+        .body(Body::from(
+            r#"{"content":"hi","messages":[{"role":"user","content":"old"}]}"#,
+        ))
+        .unwrap();
+
+    let answer = send_request(&app, request).await;
+
+    assert_eq!(
+        answer.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        answer.body
+    );
+}

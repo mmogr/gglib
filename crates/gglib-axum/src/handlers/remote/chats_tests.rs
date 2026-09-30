@@ -52,7 +52,7 @@ async fn answer(State(fake): State<Arc<Fake>>, request: Request) -> Response {
             .map(|v| v.to_str().unwrap().to_owned()),
         body: String::from_utf8_lossy(&body).into_owned(),
     });
-    if parts.uri.path().ends_with("/events") {
+    if parts.uri.path().ends_with("/events") && *fake.status.lock().unwrap() == 200 {
         let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(4);
         let fake = Arc::clone(&fake);
         tokio::spawn(async move {
@@ -195,68 +195,6 @@ async fn the_runs_and_a_cancel_reach_the_far_runs() {
     );
 }
 
-#[tokio::test]
-async fn a_far_refusal_keeps_its_status_and_code_in_the_daemons_shape() {
-    for (status, code) in [
-        (404, "not_found"),
-        (403, "device_not_paired"),
-        (409, "conflict"),
-        (409, "no_model"),
-        (503, "unavailable"),
-    ] {
-        let far_body = format!(
-            r#"{{"error":{{"message":"refused as {code}","type":"invalid_request_error","code":"{code}"}}}}"#
-        );
-        let (_, far) = far(status, &far_body).await;
-
-        let (shown, body) = read(open_chat_via(&far, 12).await.unwrap()).await;
-
-        assert_eq!(shown.as_u16(), status);
-        assert_eq!(
-            json(&body),
-            serde_json::json!({ "error": format!("refused as {code}"), "status": status, "type": code })
-        );
-    }
-}
-
-#[tokio::test]
-async fn a_busy_far_machine_says_when_to_come_back() {
-    let (fake, far) = far(429, r#"{"error":{"message":"busy","code":"agent_busy"}}"#).await;
-    *fake.retry_after.lock().unwrap() = Some("3");
-
-    let response = add_turn_via(
-        &far,
-        12,
-        "chat-1",
-        RemoteTurnBody {
-            content: "x".into(),
-        },
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(response.headers().get(header::RETRY_AFTER).unwrap(), "3");
-}
-
-/// A `401` from here would have the page ask for this daemon's key.
-#[tokio::test]
-async fn a_refused_key_is_a_conflict_that_says_to_pair_again() {
-    let (_, far) = far(401, r#"{"error":{"message":"Invalid API key"}}"#).await;
-
-    let (status, body) = read(list_chats_via(&far).await.unwrap()).await;
-
-    assert_eq!(status, StatusCode::CONFLICT);
-    let body = json(&body);
-    assert_eq!(body["type"], "key_refused");
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("gglib remote invite")
-    );
-}
-
 /// Frame one arrives while the far run is still writing: the stream is
 /// passed on as it comes, in order, never gathered first.
 #[tokio::test]
@@ -296,3 +234,6 @@ async fn a_runs_events_stream_through_in_order_as_they_come() {
         "id: 2\ndata: {\"n\":2}\n\nevent: run\ndata: {\"status\":\"completed\"}\n\n"
     );
 }
+
+#[path = "chats_refusal_tests.rs"]
+mod refusals;
