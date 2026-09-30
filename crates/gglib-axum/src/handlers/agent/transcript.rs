@@ -11,10 +11,11 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;
 
 use axum::http::StatusCode;
-use gglib_core::domain::agent::{AgentMessage, rows_from_timed_frames, to_new_message};
+use gglib_core::domain::agent::{AgentMessage, MADE_KEYS, rows_from_timed_frames, to_new_message};
 use gglib_core::domain::runs::{RunError, RunStatus};
 use gglib_core::ports::ChatHistoryError;
 use gglib_core::services::AppCore;
+use serde_json::{Map, Value};
 
 use gglib_app_services::RunEnded;
 
@@ -57,17 +58,26 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
 
 /// Save the request's last message, when it is the user's, to
 /// `conversation_id`; with `replace_from`, in place of that row and every
-/// later one, in one transaction.
+/// later one, in one transaction. A paired `device`'s message says which.
 pub(super) async fn save_user(
     core: &AppCore,
     conversation_id: i64,
     replace_from: Option<i64>,
     last: Option<&AgentMessage>,
+    device: Option<&str>,
 ) -> Result<(), HttpError> {
     let Some(user @ AgentMessage::User { .. }) = last else {
         return Ok(());
     };
-    let row = to_new_message(user, conversation_id);
+    let mut row = to_new_message(user, conversation_id);
+    if let Some(device) = device {
+        let mut fields = match row.metadata.take() {
+            Some(Value::Object(fields)) => fields,
+            _ => Map::new(),
+        };
+        fields.insert(MADE_KEYS.device.to_owned(), Value::from(device));
+        row.metadata = Some(Value::Object(fields));
+    }
     let saved = match replace_from {
         Some(from) => core
             .chat_history()

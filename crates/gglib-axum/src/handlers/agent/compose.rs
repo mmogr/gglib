@@ -39,11 +39,14 @@ pub(crate) struct Prepared {
     pub(crate) hold: Option<AdmissionLease>,
 }
 
-/// The model a run drives, which the loop does not know: stamped on each
-/// turn's usage before it is logged.
+/// The model a run drives, and the paired device whose turn it answers,
+/// which the loop does not know: stamped on each turn's usage before it is
+/// logged.
 pub(crate) struct MadeBy {
     pub(crate) model: String,
     pub(crate) quantization: Option<String>,
+    /// Absent for this machine's own turns.
+    pub(crate) device: Option<String>,
 }
 
 impl MadeBy {
@@ -52,6 +55,7 @@ impl MadeBy {
         if let AgentEvent::TurnUsage(usage) = event {
             usage.model = Some(self.model.clone());
             usage.quantization.clone_from(&self.quantization);
+            usage.device.clone_from(&self.device);
         }
     }
 }

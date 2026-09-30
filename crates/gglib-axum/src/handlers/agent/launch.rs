@@ -26,7 +26,8 @@ pub(super) struct Transcript {
     pub(super) replace_from: Option<i64>,
 }
 
-/// Reserve the id in `scope`, save the user's message, and start the loop,
+/// Reserve the id in `scope`, save the user's message (naming the device,
+/// for a device's run), and start the loop,
 /// in one task of its own: a request dropped part-way cannot split them, so
 /// a retry finds the run rather than saving the message, or replacing rows,
 /// again.
@@ -60,7 +61,7 @@ async fn reserve_and_start(
     id: String,
     scope: RunScope,
     transcript: Transcript,
-    prepared: Prepared,
+    mut prepared: Prepared,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
     let Transcript {
@@ -69,6 +70,9 @@ async fn reserve_and_start(
     } = transcript;
     let id = id.as_str();
     let state = &state;
+    // A device's turn says so, on its message and on each turn of the reply.
+    let device = scope.device().map(str::to_owned);
+    prepared.made_by.device.clone_from(&device);
     let spec = RunSpec {
         kind: RunKind::Agent,
         model: Some(prepared.model.clone()),
@@ -92,6 +96,7 @@ async fn reserve_and_start(
                 conversation_id,
                 replace_from,
                 prepared.messages.last(),
+                device.as_deref(),
             )
             .await?;
             save_reply(Arc::clone(&state.core), conversation_id, times.clone())

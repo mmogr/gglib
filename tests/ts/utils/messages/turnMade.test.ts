@@ -22,6 +22,14 @@ describe('turnMadeFromUsage', () => {
     >[0];
     expect(turnMadeFromUsage(odd)).toEqual({ turnDurationMs: 5 });
   });
+
+  it('names the paired device whose turn it answered, and only that', () => {
+    expect(turnMadeFromUsage({ duration_ms: 5, device: 'phone-7c2e' })).toEqual({
+      turnDurationMs: 5,
+      device: 'phone-7c2e',
+    });
+    expect(turnMadeFromMetadata({ device: '' })).toBeUndefined();
+  });
 });
 
 describe('turnMadeFromMetadata', () => {

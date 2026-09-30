@@ -57,6 +57,8 @@ describe('turn_made contract', () => {
     const custom = (m: GglibMessage) => (m.metadata as { custom?: { made?: unknown } }).custom?.made;
     expect(custom(drawn())).toBeDefined();
     expect(custom(drawn())).toEqual(custom(loaded()));
+    // Every key the daemon saved is read, the device's name among them.
+    expect(Object.keys(custom(loaded()) as object).sort()).toEqual(Object.keys(CONTRACT.metadata).sort());
   });
 
   it('says the same in the margin either way, the rate computed from what was saved', () => {

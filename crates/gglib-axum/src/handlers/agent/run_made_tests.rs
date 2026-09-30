@@ -11,7 +11,9 @@ use serde_json::{Value, json};
 use gglib_app_services::types::ServerInfo;
 
 use super::remote_upstream::local;
-use super::run_fixture::{End, LOCAL, conversation, meta, prepared, saved, settled, start, state};
+use super::run_fixture::{
+    End, LOCAL, conversation, meta, prepared, saved, saving, settled, start, state,
+};
 
 fn turn() -> Vec<AgentEvent> {
     vec![
@@ -89,5 +91,43 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     ];
     for (key, field) in pairs {
         assert_eq!(meta(reply, key), usage[field], "{key}");
+    }
+}
+
+/// A paired device's turn says so: on its message, on the logged usage, and
+/// on the saved reply. This machine's own turns name no device.
+#[tokio::test]
+async fn a_device_run_saves_its_name_and_a_hub_run_does_not() {
+    use gglib_core::ports::RunScope;
+    let (_dir, state) = state().await;
+    for (scope, run, want) in [
+        (RunScope::Device("phone".to_owned()), "d1", json!("phone")),
+        (LOCAL, "l1", Value::Null),
+    ] {
+        let id = conversation(&state).await;
+        let (p, _) = prepared(turn(), End::Finish);
+        let permit = super::compose::take_permit(&state);
+        super::launch::launch(&state, run, scope, saving(id), p, permit.unwrap())
+            .await
+            .unwrap();
+        settled(&state).await;
+
+        let mut events = state.runs.events(&LOCAL, run, 0).unwrap();
+        let mut logged = Value::Null;
+        while let Some(RunEvent::Frame { data, .. }) = events.next().await {
+            let frame: Value = serde_json::from_str(&data).unwrap();
+            if frame["type"] == "turn_usage" {
+                logged = frame["device"].clone();
+            }
+        }
+        let rows = saved(&state, id).await;
+        let of = |role| rows.iter().find(|r| r.role == role).unwrap();
+        assert_eq!(meta(of(MessageRole::User), MADE_KEYS.device), want, "{run}");
+        assert_eq!(
+            meta(of(MessageRole::Assistant), MADE_KEYS.device),
+            want,
+            "{run}"
+        );
+        assert_eq!(logged, want, "{run}");
     }
 }
