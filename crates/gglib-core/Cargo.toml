@@ -26,12 +26,23 @@ sha2 = "0.10"
 futures-core = "0.3"
 url = "2.5"
 ts-rs = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 
 [features]
 # Emit TypeScript for the domain types that cross the wire. See this crate's
 # `domain` module docs for which do and why. Enabled transitively by the
 # adapter crates' own `ts-bindings`, never on its own in an ordinary build.
 ts-bindings = ["dep:ts-rs"]
+# A data root of a test binary's own, which `data_root()` and
+# `resource_root()` answer before anything else (#955). Other crates enable it
+# from `[dev-dependencies]` only, so no ordinary build can set that root.
+test-utils = ["dep:tempfile"]
+
+# Run only with `test-utils`, which `cargo test` at the workspace root turns
+# on through gglib-runtime's dev-dependency on this crate.
+[[test]]
+name = "isolated_data_root"
+required-features = ["test-utils"]
 
 [dev-dependencies]
 mockall = { workspace = true }

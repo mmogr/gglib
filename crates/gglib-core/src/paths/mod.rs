@@ -11,6 +11,8 @@ mod private;
 mod remote;
 mod resolver;
 mod slots;
+#[cfg(feature = "test-utils")]
+mod test_root;
 
 #[cfg(test)]
 mod test_utils;
@@ -22,6 +24,10 @@ pub use error::PathError;
 
 // Platform detection and roots
 pub use platform::{data_root, is_prebuilt_binary, resource_root};
+
+// A test binary's own data root, which only the `test-utils` feature compiles
+#[cfg(feature = "test-utils")]
+pub use test_root::isolate_data_root;
 
 // Database
 pub use database::database_path;
