@@ -82,7 +82,7 @@ pub(super) async fn state() -> (tempfile::TempDir, AppState) {
     let state = crate::bootstrap::bootstrap(crate::ServerConfig {
         host: "127.0.0.1".into(),
         port: 0,
-        base_port: 19_200,
+        base_port: Some(19_200),
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent_agent_loops: 1,
         static_dir: None,

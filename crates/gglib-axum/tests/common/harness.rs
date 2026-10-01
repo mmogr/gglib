@@ -108,7 +108,7 @@ fn test_config(cors: CorsConfig) -> ServerConfig {
     ServerConfig {
         host: "127.0.0.1".into(),
         port: 0,
-        base_port: TEST_BASE_PORT,
+        base_port: Some(TEST_BASE_PORT),
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent_agent_loops: 1,
         static_dir: None,

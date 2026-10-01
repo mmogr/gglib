@@ -18,8 +18,14 @@ pub struct ServerConfig {
     pub host: String,
     /// Port for the HTTP server.
     pub port: u16,
-    /// Base port for llama-server instances.
-    pub base_port: u16,
+    /// Base port for llama-server instances, when the caller names one.
+    ///
+    /// `None` leaves it to the saved `llama_base_port` setting, then the
+    /// compiled default — see `gglib_app_services`' `resolve_llama_base_port`.
+    /// The daemon names none, so `config settings set --llama-base-port`
+    /// reaches it when it next starts (#1161); tests name one to stay off the
+    /// ports a running daemon uses.
+    pub base_port: Option<u16>,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
     /// Maximum concurrent agent loop sessions.
@@ -54,7 +60,7 @@ impl ServerConfig {
         Ok(Self {
             host: "127.0.0.1".into(),
             port: 9887,
-            base_port: 9000,
+            base_port: None,
             llama_server_path: llama_server_path()?,
             max_concurrent_agent_loops: 4,
             static_dir: None,
@@ -64,3 +70,7 @@ impl ServerConfig {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;
