@@ -1,6 +1,7 @@
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import type { ChatMessage, ConversationSummary } from '../../services/transport';
 import { buildLoadedMessage, foldToolMessages } from './buildLoadedMessage';
+import { parseDbTimestamp } from '../../utils/dbTimestamp';
 
 /** What of a conversation its thread shows besides its rows. */
 export type ThreadConversation = Pick<ConversationSummary, 'id' | 'system_prompt' | 'created_at'>;
@@ -26,7 +27,7 @@ export function buildThreadMessages(
         id: `system-${conversation.id}`,
         role: 'system',
         content: [{ type: 'text' as const, text: prompt }],
-        createdAt: new Date(conversation.created_at),
+        createdAt: parseDbTimestamp(conversation.created_at),
       }]
     : [];
 
