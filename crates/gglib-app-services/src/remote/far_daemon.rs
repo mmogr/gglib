@@ -46,11 +46,12 @@ pub(super) async fn kill(base_url: &str, api_key: &str, fingerprint: &str) -> Re
             info!("the remote daemon accepted the shutdown");
             Ok(())
         }
-        // Deliberately not "its API key has changed": `join` will dial a
-        // bare ticket for a different machine while leaving an earlier
-        // pairing's key in place, so the key can be refused by a machine
-        // whose own key never moved. The narrower claim is true in both, and
-        // is the same one the chat path's refusal makes.
+        // Deliberately not "its API key has changed": the key sent is one
+        // that machine issued (`kill_remote` sends no other), so a
+        // refusal means it no longer admits this device's key, whether
+        // because it stopped trusting the device or a rotation there has not
+        // reached the tunnel yet. That is the claim the chat path's refusal
+        // makes too.
         reqwest::StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(format!(
             "the remote machine {fingerprint} is not admitting this device's key — it has \
              either stopped trusting this device, or a key rotation there is still reaching the \

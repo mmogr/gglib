@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use gglib_core::events::AppEvent;
-use modelpipe::{ConnectHandle, PairingString};
+use modelpipe::{ConnectHandle, PairingString, Ticket};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
@@ -31,7 +31,9 @@ pub(super) const DRAIN: Duration = Duration::from_secs(5);
 /// One live connect side and the task watching it.
 pub(super) struct LiveConnect {
     handle: Arc<ConnectHandle>,
-    ticket_fingerprint: String,
+    /// The machine this is connected to, which is what `kill_remote` checks
+    /// the stored pairing against before it sends that pairing's key.
+    ticket: Ticket,
     /// Which `join` this is, so a watcher that outlives its connection
     /// cannot take down the next one.
     generation: u64,
@@ -177,10 +179,10 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Conflict` when not connected; `ValidationFailed` when no key is
-    /// stored or the far side refuses it; `Unavailable` when the request did
-    /// not get through.
+    /// stored for the machine connected to, or the far side refuses it;
+    /// `Unavailable` when the request did not get through.
     pub async fn kill_remote(&self) -> Result<(), GuiError> {
-        let (base_url, fingerprint) = {
+        let (base_url, ticket) = {
             let live = self.live_connect.lock().await;
             // A dial in flight is not a remote that can be stopped: there
             // is no port to send the shutdown through yet.
@@ -189,19 +191,10 @@ impl RemoteOps {
                     "not connected to a remote — `gglib remote join` first".to_owned(),
                 ));
             };
-            (live.handle.base_url(), live.ticket_fingerprint.clone())
+            (live.handle.base_url(), live.ticket.clone())
         };
-        let key = self
-            .settings()
-            .await?
-            .remote_pairing
-            .map(|stored| stored.api_key)
-            .ok_or_else(|| {
-                GuiError::ValidationFailed(
-                    "this machine holds no key for the remote, so it cannot stop it".to_owned(),
-                )
-            })?;
-        far_daemon::kill(&base_url, &key, &fingerprint).await?;
+        let key = stopping_key(self.settings().await?.remote_pairing, &ticket)?;
+        far_daemon::kill(&base_url, &key, &ticket.fingerprint()).await?;
         // The far side is going away; take this side down before its
         // watcher reports the closed pipe as a surprise.
         self.disconnect().await
@@ -213,7 +206,7 @@ impl RemoteOps {
         live.full().map(|live| RemoteConnection {
             port: live.handle.local_addr().port(),
             base_url: live.handle.base_url(),
-            ticket_fingerprint: live.ticket_fingerprint.clone(),
+            ticket_fingerprint: live.ticket.fingerprint(),
             path: live.handle.status().as_str().to_owned(),
             away_for_s: {
                 let since = live.away_since.load(Ordering::Relaxed);
@@ -232,6 +225,28 @@ impl RemoteOps {
             .await
             .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))
     }
+}
+
+/// The key `kill_remote` may send to the machine it is connected to: the
+/// stored one, and only when the stored pairing names that machine.
+///
+/// `join` keeps the two in agreement today, by refusing a bare ticket for a
+/// machine this one holds no key for. This makes the stop check it for
+/// itself (#1042): a key one machine issued is never shown to another.
+fn stopping_key(
+    stored: Option<gglib_core::RemotePairing>,
+    connected: &Ticket,
+) -> Result<String, GuiError> {
+    stored
+        .filter(|stored| names_the_same_machine(stored, connected))
+        .map(|stored| stored.api_key)
+        .ok_or_else(|| {
+            GuiError::ValidationFailed(format!(
+                "this machine holds no key for the remote it is connected to ({}), so it \
+                 cannot stop it",
+                connected.fingerprint()
+            ))
+        })
 }
 
 /// A connect side that is already taken, as the person who typed the

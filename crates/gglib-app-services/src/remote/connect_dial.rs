@@ -95,7 +95,7 @@ impl RemoteOps {
         let away_since = Arc::new(AtomicI64::new(-1));
         let live = LiveConnect {
             handle: Arc::clone(&handle),
-            ticket_fingerprint: ticket_fingerprint.clone(),
+            ticket: ticket.clone(),
             generation,
             watcher: watcher.clone(),
             away_since: Arc::clone(&away_since),
