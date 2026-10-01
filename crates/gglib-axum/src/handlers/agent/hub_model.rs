@@ -1,8 +1,11 @@
 //! Which model a device's turn on a hub chat runs on, and the port it is
 //! served on: found running, or loaded as `/v1/models/{name}/load` loads it.
 
+use std::cmp::Reverse;
+
 use axum::http::StatusCode;
 
+use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::agent::MADE_KEYS;
 use gglib_core::domain::chat::{Conversation, Message};
 use gglib_core::ports::{Admission, LaunchOverrides};
@@ -13,7 +16,8 @@ use crate::error::HttpError;
 use crate::state::AppState;
 
 /// The chat's model: the one it was made with, the one its settings name,
-/// the one that made its last reply, or the hub's default, in that order.
+/// the one that made its last reply, the one running on the hub, or the
+/// hub's default, in that order.
 ///
 /// # Errors
 ///
@@ -22,6 +26,17 @@ pub(super) async fn model_for(
     state: &AppState,
     conversation: &Conversation,
     rows: &[Message],
+) -> Result<String, HttpError> {
+    let running = state.servers.list_servers().await;
+    choose(state, conversation, rows, &running).await
+}
+
+/// [`model_for`], given the servers `running` on the hub.
+pub(super) async fn choose(
+    state: &AppState,
+    conversation: &Conversation,
+    rows: &[Message],
+    running: &[ServerInfo],
 ) -> Result<String, HttpError> {
     let catalogued = |id: Option<i64>| async move {
         let model = state.core.models().get_by_id(id?).await.ok().flatten()?;
@@ -44,6 +59,9 @@ pub(super) async fn model_for(
     if let Some(name) = named {
         return Ok(name);
     }
+    if let Some(name) = latest(running) {
+        return Ok(name);
+    }
     let default = state.core.settings().get().await.ok();
     if let Some(name) = catalogued(default.and_then(|s| s.default_model_id)).await {
         return Ok(name);
@@ -51,8 +69,17 @@ pub(super) async fn model_for(
     Err(coded(
         StatusCode::UNPROCESSABLE_ENTITY,
         "no_model",
-        "the chat names no model and the hub has no default; choose one on the hub",
+        "this chat has no model and nothing is running on the hub: start a model there",
     ))
+}
+
+/// The model of the server started last, the lowest port among those
+/// started together; none when nothing runs.
+fn latest(running: &[ServerInfo]) -> Option<String> {
+    let last = running
+        .iter()
+        .max_by_key(|s| (s.started_at, Reverse(s.port)))?;
+    Some(last.model_name.clone())
 }
 
 /// `chat` on the port `model` is served on, loading it first when it is not
@@ -89,3 +116,7 @@ pub(super) async fn on_model(
     chat.port = Admission::into_target(admission).port;
     Ok(chat)
 }
+
+#[cfg(test)]
+#[path = "hub_model_tests.rs"]
+mod tests;
