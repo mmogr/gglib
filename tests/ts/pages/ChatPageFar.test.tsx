@@ -172,6 +172,22 @@ describe('ChatPage, the far machine’s chats', () => {
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 
+  it('a far chat offers no Unload: its model is the other machine’s', async () => {
+    const user = userEvent.setup();
+    joined();
+    render(
+      <ChatPage modelName="qwen3" modelId={7} serverPort={4321} onSwitchModel={async () => {}} onUnloadModel={async () => {}} onClose={() => {}} />,
+      { wrapper },
+    );
+    await screen.findByText('Asked here.');
+    expect(screen.getByRole('button', { name: 'Unload' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Other machine/ }));
+    await screen.findByText('Why did the build break?');
+
+    expect(screen.queryByRole('button', { name: /Unload/ })).not.toBeInTheDocument();
+  });
+
   it('this machine’s own chat still says "You"', async () => {
     joined();
     renderPage();

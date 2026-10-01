@@ -51,7 +51,10 @@ type ChatPageProps = {
   // Move the chat to another model, keeping open the conversation (and the
   // draft) that `context` reads when the switch lands; local only.
   onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: string }) => Promise<void>;
-  onClose: () => Promise<void>; // Stops server and exits
+  // Unload the model, which every client of the proxy loses with it; the
+  // chat stays open, read-only. Local only.
+  onUnloadModel?: () => Promise<void>;
+  onClose: () => void; // Leaves the chat; the model stays loaded
 } & (
   | { remote?: false; serverPort: number; modelId: number }
   | { remote: true; serverPort?: undefined; modelId?: undefined }
@@ -72,6 +75,7 @@ export default function ChatPage(props: ChatPageProps) {
     draft,
     startingModel = null,
     onSwitchModel,
+    onUnloadModel,
     remote = false,
     onClose,
   } = props;
@@ -293,6 +297,7 @@ export default function ChatPage(props: ChatPageProps) {
                 draft: runtime.thread.composer.getState().text,
               })))}
               startingModel={startingModel}
+              onUnloadModel={onUnloadModel}
               quantization={far ? null : quantization}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote || far} onClose={onClose} />
@@ -318,7 +323,7 @@ export default function ChatPage(props: ChatPageProps) {
                     serverPort={props.serverPort}
                     contextLength={contextLength}
                     startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
-                    onStopServer={onClose}
+                    onUnload={onUnloadModel}
                   />
                 }
                 right={<ConsoleLogPanel serverPort={props.serverPort} />}

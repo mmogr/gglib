@@ -15,12 +15,13 @@ interface ConsoleInfoPanelProps {
   serverPort: number;
   contextLength?: number;
   startTime: number; // Unix timestamp in seconds
-  onStopServer: () => Promise<void>;
+  /** Unload the model; the chat stays open. No button without it. */
+  onUnload?: () => Promise<void>;
 }
 
 /**
  * Left panel in Console view: model info, live telemetry readouts, and the
- * stop button. The view switcher is the notebook head's, above it. Polling,
+ * Unload button. The view switcher is the notebook head's, above it. Polling,
  * uptime, and the section renderings live in sibling modules — this file
  * only composes them.
  */
@@ -30,9 +31,9 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   serverPort,
   contextLength,
   startTime,
-  onStopServer,
+  onUnload,
 }) => {
-  const [isStopping, setIsStopping] = useState(false);
+  const [isUnloading, setIsUnloading] = useState(false);
 
   // Server state from the registry — undefined means not running. Polling
   // resumes automatically when status returns to 'running' via `server_started`.
@@ -44,14 +45,14 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   // One server run = one history: a restart must not inherit the last run's charts.
   const runKey = `${serverPort}:${startTime}`;
 
-  const handleStopServer = useCallback(async () => {
-    setIsStopping(true);
+  const handleUnload = useCallback(async () => {
+    setIsUnloading(true);
     try {
-      await onStopServer();
+      await onUnload?.();
     } finally {
-      setIsStopping(false);
+      setIsUnloading(false);
     }
-  }, [onStopServer]);
+  }, [onUnload]);
 
   return (
     <div className="flex flex-col overflow-y-auto overflow-x-hidden relative tabular-nums flex-1 md:h-full md:min-h-0">
@@ -70,17 +71,20 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           <StatisticsSection metrics={metrics} runKey={runKey} />
           <ApiEndpointsSection />
 
-          <section className="flex flex-col gap-sm mt-auto pt-md">
-            <Button
-              variant="dangerGhost"
-              size="lg"
-              onClick={handleStopServer}
-              isLoading={isStopping}
-              leftIcon={!isStopping ? <Icon icon={StopCircle} size={18} /> : undefined}
-            >
-              {isStopping ? 'Stopping...' : 'Stop Server'}
-            </Button>
-          </section>
+          {onUnload && (
+            <section className="flex flex-col gap-sm mt-auto pt-md">
+              <Button
+                variant="dangerGhost"
+                size="lg"
+                onClick={handleUnload}
+                isLoading={isUnloading}
+                leftIcon={!isUnloading ? <Icon icon={StopCircle} size={18} /> : undefined}
+                title="Unload this model. Anything using it through the proxy, Copilot included, loses it."
+              >
+                {isUnloading ? 'Unloading...' : 'Unload model'}
+              </Button>
+            </section>
+          )}
       </div>
     </div>
   );

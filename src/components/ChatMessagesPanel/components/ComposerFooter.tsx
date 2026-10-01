@@ -20,6 +20,8 @@ interface ComposerFooterProps {
   onPickModel?: (choice: ModelChoice) => Promise<void>;
   /** The model a switch is starting; the picker is locked until it lands. */
   startingModel?: string | null;
+  /** Unload the model; offered only while its server is up. */
+  onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from the model's catalogue entry, when known. */
   quantization?: string | null;
   /** null = capability status not yet resolved. */
@@ -40,6 +42,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   modelId,
   onPickModel,
   startingModel,
+  onUnloadModel,
   quantization,
   supportsToolCalls,
   toolFormat,
@@ -54,6 +57,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
           quantization={quantization}
           onPick={onPickModel}
           starting={startingModel}
+          onUnload={isServerConnected ? onUnloadModel : undefined}
         />
       }
       made={

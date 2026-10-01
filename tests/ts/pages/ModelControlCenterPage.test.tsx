@@ -73,7 +73,8 @@ vi.mock('../../../src/services/remoteEvents', () => ({
 
 // The screen under test is "which page is showing", so the chat page is a
 // placard: it names the model, port and conversation it was given, says
-// whether it was told the session is remote, and offers its model switch.
+// whether it was told the session is remote, and offers its model switch,
+// and Unload when it was handed one.
 // The port is held as the real page holds its session, from its first
 // render, so a switch that does not remount the page shows the old one.
 vi.mock('../../../src/pages/ChatPage', () => ({
@@ -85,6 +86,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     startingModel,
     remote,
     onSwitchModel,
+    onUnloadModel,
     onClose,
   }: {
     modelName: string;
@@ -97,7 +99,8 @@ vi.mock('../../../src/pages/ChatPage', () => ({
       choice: { modelId: number; modelName: string },
       context: () => { conversationId: number | null; draft: string },
     ) => Promise<void>;
-    onClose: () => Promise<void>;
+    onUnloadModel?: () => Promise<void>;
+    onClose: () => void;
   }) => {
     const [mountedPort] = useState(serverPort);
     return (
@@ -119,7 +122,12 @@ vi.mock('../../../src/pages/ChatPage', () => ({
         >
           Switch model
         </button>
-        <button type="button" onClick={() => void onClose()}>
+        {onUnloadModel && (
+          <button type="button" onClick={() => void onUnloadModel()}>
+            Unload
+          </button>
+        )}
+        <button type="button" onClick={onClose}>
           Close chat
         </button>
       </div>
@@ -209,8 +217,9 @@ describe('ModelControlCenterPage', () => {
     const user = await askForRemoteChat('qwen3');
     await screen.findByTestId('chat-page');
 
-    // Closing a local chat stops the server it was talking to. There is no
-    // server here to stop, and the tunnel is not this page's to tear down.
+    // There is no server here to stop, and the tunnel is not this page's to
+    // tear down; nor is there a model here to unload.
+    expect(screen.queryByRole('button', { name: 'Unload' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /close chat/i }));
 
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
@@ -268,6 +277,26 @@ describe('ModelControlCenterPage', () => {
     expect(screen.queryByRole('button', { name: /open chat/i })).not.toBeInTheDocument();
   });
 
+  it('leaves the model loaded when a local chat is closed', async () => {
+    // The proxy serves it to every client, Copilot included (#1211).
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Close chat' }));
+
+    await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
+    expect(stopServer).not.toHaveBeenCalled();
+  });
+
+  it("unloads the chat's model and leaves the chat open", async () => {
+    const user = await openChatOnQwen();
+
+    await user.click(screen.getByRole('button', { name: 'Unload' }));
+
+    await waitFor(() => expect(stopServer).toHaveBeenCalledWith(7));
+    expect(stopServer).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with qwen3-8b');
+  });
+
   it('serves a model that is not running, then moves the chat to it with its conversation', async () => {
     const user = await openChatOnQwen();
 
@@ -279,7 +308,7 @@ describe('ModelControlCenterPage', () => {
     expect(chat).toHaveAttribute('data-port', '9456');
     expect(chat).toHaveAttribute('data-conversation', '2');
     expect(chat).toHaveAttribute('data-draft', 'half a thought');
-    // The model it left keeps running; only Close stops a server.
+    // The model it left keeps running; only Unload stops a server.
     expect(stopServer).not.toHaveBeenCalled();
   });
 
@@ -301,7 +330,7 @@ describe('ModelControlCenterPage', () => {
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
     await user.click(screen.getByRole('button', { name: 'Close chat' }));
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
-    expect(stopServer).toHaveBeenCalledWith(7);
+    expect(stopServer).not.toHaveBeenCalled();
 
     await answer(9456);
 

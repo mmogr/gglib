@@ -47,7 +47,7 @@ beforeEach(() => {
 describe('ChatPage, console view', () => {
   it('keeps the rail and the head margin, and shows the server and its log', async () => {
     const user = userEvent.setup();
-    render(<ChatPage modelName="qwen3" modelId={7} serverPort={4321} onClose={async () => {}} />, { wrapper });
+    render(<ChatPage modelName="qwen3" modelId={7} serverPort={4321} onUnloadModel={async () => {}} onClose={() => {}} />, { wrapper });
     // Once the saved turn is drawn, the thread has stopped remounting.
     await screen.findByText('What does KeepAlive do?');
     expect(screen.getByLabelText('Server output').closest('.hidden')).not.toBeNull();
@@ -69,7 +69,7 @@ describe('ChatPage, console view', () => {
     const log = screen.getByLabelText('Server output');
     expect(shown(log)).toBe(true);
     expect(log).toHaveTextContent('server is listening');
-    expect(screen.getByRole('button', { name: 'Stop Server' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unload model' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message', hidden: true })).toBeInTheDocument();
   });
