@@ -10,18 +10,11 @@ use gglib_core::ports::ServerConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Ids far outside anything a real catalog hands out.
+/// Ids no other test in this binary uses.
 ///
-/// `spawn` writes a pidfile keyed by model id, and in a debug build
-/// `pids_dir()` resolves into the checkout itself rather than a temp
-/// directory — so a low id here would collide with a real model's pidfile on
-/// the developer's own machine, and `delete_pidfile` would remove it, leaving
-/// a live server the startup sweep can no longer reap.
-///
-/// Redirecting `GGLIB_DATA_DIR` would isolate this properly, but setting an
-/// environment variable is `unsafe` in this edition and the workspace denies
-/// `unsafe_code`. Implausible ids plus an unconditional `kill` in every test
-/// that spawns achieve the same isolation without an exemption.
+/// `spawn` writes a pidfile keyed by model id into this binary's own data
+/// root (see [`spawnable`]), which every test here that spawns shares, so two
+/// tests on one id would race on one file.
 const ARMED_ID: u32 = 999_001;
 const DISARMED_ID: u32 = 999_002;
 const NO_RUNTIME_ID: u32 = 999_003;
@@ -30,7 +23,11 @@ const ABA_ID: u32 = 999_005;
 
 /// A core wired to a harmless binary, plus a model file that exists so
 /// `spawn`'s own existence check passes.
+///
+/// Sets this binary's own data root first: in a debug build `pids_dir()` is
+/// otherwise the checkout's, which an installed daemon may share (#955).
 fn spawnable(model_id: i64) -> (Arc<RwLock<GuiProcessCore>>, ServerConfig, tempfile::TempDir) {
+    gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().expect("temp dir");
     let model = dir.path().join("model.gguf");
     std::fs::write(&model, b"not really a gguf").expect("write model file");
@@ -79,8 +76,7 @@ async fn a_disarmed_guard_leaves_the_child_alone() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let survived = core.read().await.count();
 
-    // Always clean up: `spawn` wrote a pidfile into the checkout, and
-    // `kill` is what removes it.
+    // Always clean up: `kill` stops the child and removes its pidfile.
     core.write().await.kill(DISARMED_ID).await.ok();
 
     assert_eq!(survived, 1, "a disarmed guard must not stop the child");
