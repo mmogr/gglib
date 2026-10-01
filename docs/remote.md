@@ -396,8 +396,8 @@ of its own gets there at all: every other route into that screen starts from
 a model served here, so without it the box could be ticked and the model
 named with nowhere to type. That chat has no Console tab — the log, the port
 and the uptime belong to a process on the desktop — and closing it leaves
-both the desktop's server and the tunnel up, unlike closing a local chat,
-which stops the server it was talking to.
+both the desktop's server and the tunnel up, as closing a local chat leaves
+its model loaded.
 
 **The desktop's own chats** are on the chat page too, once joined: *Other
 machine*, at the foot of the rail, lists, opens and carries on the desktop's

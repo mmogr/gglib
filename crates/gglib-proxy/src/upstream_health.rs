@@ -134,12 +134,14 @@ pub struct UpstreamHealthSnapshot {
     /// Total proactive recycles triggered since the proxy started.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_recycles: u64,
-    /// Of those, how many could not actually be carried out because stopping
-    /// the model server failed.
+    /// Of those, how many were not carried out: stopping the model server
+    /// failed, or an agent run held the model, which defers the recycle until
+    /// the run ends and counts here each time the watchdog meets the hold.
     ///
-    /// A non-zero value here means the watchdog is firing and being ignored —
-    /// a different problem from a healthy upstream, and one that is otherwise
-    /// invisible because the request that triggered it proceeds regardless.
+    /// A count that grows while no run is going means the watchdog is firing
+    /// and being ignored — a different problem from a healthy upstream, and
+    /// one that is otherwise invisible because the request that triggered it
+    /// proceeds regardless.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_recycle_failures: u64,
 }
@@ -262,10 +264,10 @@ impl UpstreamHealth {
     ///
     /// [`Self::take_recycle_request`] clears the flag *and* zeroes the streak,
     /// on the assumption that the caller is about to act on it. When the stop
-    /// then fails, the upstream is still degraded but the evidence for that has
-    /// just been discarded — so without this the watchdog has to accumulate
-    /// [`STRIKE_THRESHOLD`] fresh strikes before it will try again, against a
-    /// server already known to be sick.
+    /// then fails, or a run's hold refuses it, the upstream is still degraded
+    /// but the evidence for that has just been discarded — so without this the
+    /// watchdog has to accumulate [`STRIKE_THRESHOLD`] fresh strikes before it
+    /// will try again, against a server already known to be sick.
     ///
     /// Deliberately does not touch `total_recycles`: that counts recycles
     /// *triggered*, which this one was. The failure is counted separately.

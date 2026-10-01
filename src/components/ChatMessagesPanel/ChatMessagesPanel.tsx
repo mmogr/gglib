@@ -62,6 +62,8 @@ interface ChatMessagesPanelProps {
   onPickModel?: (choice: ModelChoice) => Promise<void>;
   /** The model a switch is starting; the picker is locked until it lands. */
   startingModel?: string | null;
+  /** Unload the model, from beside the picker; the chat stays open. */
+  onUnloadModel?: () => Promise<void>;
   /** Its quantisation, from its catalogue entry, when known. */
   quantization?: string | null;
   /** The head's margin: the page's own controls. */
@@ -106,6 +108,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   modelId,
   onPickModel,
   startingModel,
+  onUnloadModel,
   quantization,
   headMargin,
   headOnly = false,
@@ -250,6 +253,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   modelId={modelId}
                   onPickModel={onPickModel}
                   startingModel={startingModel}
+                  onUnloadModel={onUnloadModel}
                   quantization={quantization}
                   supportsToolCalls={supportsToolCalls}
                   toolFormat={toolFormat}

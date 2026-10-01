@@ -49,10 +49,8 @@ pub struct LaunchOverrides {
     pub cache_ram: Option<CacheRamSetting>,
 }
 
-/// Target information for a running model instance.
-///
-/// This struct contains all information needed to route requests
-/// to a running llama-server instance.
+/// Target information for a running model instance: all a caller needs to
+/// route requests to a running llama-server.
 #[derive(Debug, Clone)]
 pub struct RunningTarget {
     /// Full URL to the server (e.g., <http://127.0.0.1:5500>).
@@ -283,8 +281,7 @@ pub enum ModelRuntimeError {
     #[error("Model not found: {0}")]
     ModelNotFound(String),
 
-    /// A model is currently loading; try again later.
-    /// Callers should return 503 Service Unavailable.
+    /// A model is currently loading; try again later (a 503).
     #[error("Model is loading, try again")]
     ModelLoading,
 
@@ -418,10 +415,8 @@ impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     }
 }
 
-/// Port for admitting requests to a running model.
-///
-/// This is the primary interface the proxy uses to get a running
-/// model server. Implementations handle:
+/// Port for admitting requests to a running model: the proxy's way to a
+/// running model server. Implementations handle:
 /// - Model resolution (name → file path)
 /// - Process lifecycle (start, stop, health check)
 /// - Context size management
@@ -481,9 +476,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         AdmissionSnapshot::default()
     }
 
-    /// Get information about the currently running model, if any.
-    ///
-    /// Returns `None` if no model is currently running.
+    /// The currently running model, or `None` if there is none.
     async fn current_model(&self) -> Option<RunningTarget>;
 
     /// Every llama-server process this runtime currently owns.
@@ -512,10 +505,17 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         None
     }
 
-    /// Stop the currently running model.
-    ///
-    /// This is primarily for cleanup/shutdown scenarios.
+    /// Stop the current model, even one a run holds: an explicit stop (a
+    /// person's, a benchmark's), or the proxy's restart of a dead server.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
+
+    /// Stop it for automatic recovery, which waits for a run: refused with
+    /// [`ModelRuntimeError::AdmissionTimeout`] while one holds it (see
+    /// [`Self::hold`]). Defaults to [`Self::stop_current`], for runtimes
+    /// with no holds.
+    async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
+        self.stop_current().await
+    }
 
     /// The one model this runtime is pinned to, if any.
     ///

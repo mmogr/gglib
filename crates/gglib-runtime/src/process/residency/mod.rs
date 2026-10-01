@@ -542,7 +542,7 @@ impl ResidentSet {
     }
 
     /// Stop and forget whatever is in `slot`, unless a run holds it.
-    async fn recycle(
+    pub(super) async fn recycle(
         &self,
         slot: usize,
         core: &Arc<RwLock<GuiProcessCore>>,
@@ -561,7 +561,7 @@ impl ResidentSet {
         self.queue.primary().map(target_of)
     }
 
-    /// Stop the primary resident, if there is one.
+    /// Stop the primary resident, if there is one, even one a run holds.
     pub(super) async fn stop_primary(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,

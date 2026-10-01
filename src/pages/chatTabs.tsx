@@ -25,7 +25,7 @@ export const REMOTE_CHAT_PAGE_TABS: TabItem<ChatPageTabId>[] = CHAT_PAGE_TABS.fi
 
 /**
  * The page's own controls, in the notebook head's margin: the view
- * switcher and Close, which stops the server and leaves the chat.
+ * switcher and Close, which leaves the chat; its model stays loaded.
  */
 export function ChatPageControls({
   activeTab,
@@ -51,7 +51,7 @@ export function ChatPageControls({
         variant="dangerGhost"
         size="sm"
         onClick={onClose}
-        title="Stop server and close chat"
+        title="Close chat"
         leftIcon={<Icon icon={X} size={14} />}
       >
         Close

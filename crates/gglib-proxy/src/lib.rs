@@ -153,6 +153,9 @@ pub(crate) mod upstream_read;
 
 pub use observers::ProxyObservers;
 pub use server::serve;
+// An agent run reads llama-server's reply past the proxy, under this same
+// bound (`gglib-runtime`'s completion adapter; #1212).
+pub use upstream_read::STREAM_IDLE_TIMEOUT;
 // Named by this crate's own `tests/`, which link it as an external crate and so
 // cannot see `#[cfg(test)]`. Re-exported rather than reopening
 // `cache_lifecycle`, and gated so the export exists for the test build only —

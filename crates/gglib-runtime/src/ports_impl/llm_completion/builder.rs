@@ -59,6 +59,7 @@ impl LlmCompletionAdapter {
             far_machine: None,
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
+            stream_idle_timeout: gglib_proxy::STREAM_IDLE_TIMEOUT,
             model_context: ModelContext::passthrough(),
             usage_sink: None,
             retry_policy: RetryPolicy::from_env(),

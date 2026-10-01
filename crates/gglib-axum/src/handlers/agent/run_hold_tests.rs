@@ -142,3 +142,19 @@ async fn a_completed_runs_hold_is_released_when_it_ends() {
     settled(&state).await;
     assert_eq!(runtime.released.count(), 1);
 }
+
+/// A run whose llama-server went silent ends in error, and its hold goes with
+/// it, so a silent server does not keep the model held (#1212).
+#[tokio::test]
+async fn a_stalled_runs_hold_is_released_when_it_ends() {
+    let (_dir, state) = state().await;
+    let runtime = Holding::default();
+    let (mut p, _) = prepared(reply(), End::Stalled);
+    p.hold = hold(&runtime, Some((19_555, 1))).unwrap();
+
+    start(&state, "h1", None, p).await;
+    settled(&state).await;
+    let error = state.runs.get(&LOCAL, "h1").unwrap().error.unwrap();
+    assert_eq!(error.code, "agent_error");
+    assert_eq!(runtime.released.count(), 1);
+}

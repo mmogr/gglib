@@ -20,6 +20,7 @@ use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::process::admission::PRIMARY_SLOT;
 use crate::process::residency::ResidentSet;
 
 /// Unified process manager for llama-server instances.
@@ -143,13 +144,23 @@ impl ProcessManager {
         self.residency.current_model()
     }
 
-    /// Stop the model in the primary slot.
+    /// Stop the model in the primary slot, even one a run holds.
     ///
     /// # Errors
     ///
     /// Returns `ModelRuntimeError` if the process could not be stopped.
     pub async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         self.residency.stop_primary(&self.core).await
+    }
+
+    /// Stop the model in the primary slot unless a run holds it. See
+    /// [`ModelRuntimePort::recycle_current`](gglib_core::ports::ModelRuntimePort::recycle_current).
+    ///
+    /// # Errors
+    ///
+    /// [`ModelRuntimeError::AdmissionTimeout`] while a run holds it.
+    pub async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
+        self.residency.recycle(PRIMARY_SLOT, &self.core).await
     }
 
     /// List running servers as [`ProcessHandle`]s.

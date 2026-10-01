@@ -152,8 +152,9 @@ fn terminal(failure: &Failure, far_machine: Option<&FarMachine>) -> anyhow::Erro
 
 /// One POST, bounded by the send timeout.
 ///
-/// The timeout covers TCP connect through response headers, which includes
-/// prompt pre-fill because llama-server withholds headers until pre-fill ends.
+/// The timeout covers TCP connect through response headers, which
+/// llama-server sends once a slot takes the request, before prefill: the body
+/// asks for `return_progress`.
 async fn send_once(
     client: &Client,
     url: &str,

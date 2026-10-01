@@ -13,7 +13,8 @@
 //!
 //! A person who stops reading the stalled answer does not change this: the
 //! stream still ends at the idle bound as a stall, and asks for the recycle
-//! the next request needs.
+//! the next request needs. An agent run that holds the model does: the
+//! recycle waits for it.
 
 mod fixtures;
 
@@ -232,5 +233,36 @@ async fn a_stalled_answer_its_reader_stopped_still_leaves_the_next_request_to_th
     assert!(codes.is_empty(), "{codes:?}");
     assert_eq!(*runtime.recycles.lock().unwrap(), [1]);
     assert_eq!(upstream.posts_while_wedged.load(Ordering::SeqCst), 1);
+    cancel.cancel();
+}
+
+/// A recycle that meets a run's hold is not carried out, and stays asked for:
+/// the first request after the run ends carries it out (#1212).
+#[tokio::test]
+async fn a_recycle_waits_for_the_run_that_holds_the_model() {
+    let cancel = CancellationToken::new();
+    // The cache is off, so nothing is ever saved into this directory.
+    let (port, upstream) = spawn_upstream(std::env::temp_dir(), cancel.clone()).await;
+    let runtime = Arc::new(StallRuntime::new(port, Arc::clone(&upstream), false));
+    runtime.held.store(true, Ordering::SeqCst);
+    let base = spawn_proxy(Arc::clone(&runtime), None, cancel.clone()).await;
+
+    // The first stalls and asks for a recycle; the second finds the model
+    // held, so it goes to the wedged server and gives up there.
+    read_body(ask(&base, "first").await).await;
+    status_when_idle(&base).await;
+    let (_, codes) = text_and_errors(&read_body(ask(&base, "second").await).await);
+    assert_eq!(codes, ["upstream_timeout"]);
+    assert!(
+        runtime.recycles.lock().unwrap().is_empty(),
+        "the model stays"
+    );
+
+    runtime.held.store(false, Ordering::SeqCst);
+    status_when_idle(&base).await;
+    let (answer, codes) = text_and_errors(&read_body(ask(&base, "third").await).await);
+    assert_eq!(answer, "fresh", "the recycled model answered it");
+    assert!(codes.is_empty(), "{codes:?}");
+    assert_eq!(*runtime.recycles.lock().unwrap(), [2]);
     cancel.cancel();
 }

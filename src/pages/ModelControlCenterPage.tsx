@@ -201,17 +201,10 @@ export default function ModelControlCenterPage({
     });
   };
 
-  // Handler to close chat and stop the server it was talking to. A remote
-  // session has no server here to stop; leaving the tunnel up is the point.
-  const handleCloseChat = async () => {
-    if (chatSession?.kind === 'local') {
-      await stopServer(chatSession.modelId);
-    }
-    closeChatSession();
-  };
-
   // If chat session is active, show ChatPage. Keyed by the server, so a
-  // model switch remounts it on the new one.
+  // model switch remounts it on the new one. Close only leaves the chat: the
+  // proxy serves its model to every client, Copilot included, so unloading
+  // it is a separate action, and only a model served here can be unloaded.
   if (chatSession) {
     return (
       <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden"><div className="loading-chat">Loading chat...</div></div>}>
@@ -226,10 +219,11 @@ export default function ModelControlCenterPage({
             draft={chatSession.draft}
             startingModel={startingModel}
             onSwitchModel={(choice, context) => switchChatModel(chatSession, choice, context)}
-            onClose={handleCloseChat}
+            onUnloadModel={() => stopServer(chatSession.modelId)}
+            onClose={closeChatSession}
           />
         ) : (
-          <ChatPage remote modelName={chatSession.modelName} onClose={handleCloseChat} />
+          <ChatPage remote modelName={chatSession.modelName} onClose={closeChatSession} />
         )}
       </Suspense>
     );

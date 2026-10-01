@@ -22,6 +22,8 @@ pub(super) const LOCAL: RunScope = RunScope::Local;
 pub(super) enum End {
     Finish,
     Fail,
+    /// Fails as the loop does when llama-server goes silent mid-reply.
+    Stalled,
     Hang,
     Panic,
 }
@@ -66,6 +68,9 @@ impl AgentLoopPort for Scripted {
             End::Fail => Err(AgentError::LoopDetected {
                 signature: "SIGNATURE-SECRET".to_owned(),
             }),
+            End::Stalled => Err(AgentError::Internal(
+                "stream collection error: llama-server sent nothing for 300s".to_owned(),
+            )),
             End::Hang => std::future::pending().await,
             End::Panic => panic!("the scripted loop panicked"),
         }

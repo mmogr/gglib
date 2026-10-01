@@ -51,11 +51,13 @@ total_client_aborts: number,
  */
 total_recycles: number, 
 /**
- * Of those, how many could not actually be carried out because stopping
- * the model server failed.
+ * Of those, how many were not carried out: stopping the model server
+ * failed, or an agent run held the model, which defers the recycle until
+ * the run ends and counts here each time the watchdog meets the hold.
  *
- * A non-zero value here means the watchdog is firing and being ignored —
- * a different problem from a healthy upstream, and one that is otherwise
- * invisible because the request that triggered it proceeds regardless.
+ * A count that grows while no run is going means the watchdog is firing
+ * and being ignored — a different problem from a healthy upstream, and
+ * one that is otherwise invisible because the request that triggered it
+ * proceeds regardless.
  */
 total_recycle_failures: number, };

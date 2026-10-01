@@ -1,5 +1,6 @@
 import { ChangeEvent, FC, useEffect, useState } from 'react';
 import { Select } from '../../ui/Select';
+import { Button } from '../../ui/Button';
 import { useServers } from '../../../hooks/useServers';
 import { getTransport } from '../../../services/transport';
 import { useToastContext } from '../../../contexts/ToastContext';
@@ -24,6 +25,8 @@ interface ModelPickerProps {
    * this remounts with each conversation, and must stay locked across that.
    */
   starting?: string | null;
+  /** Unload the model the chat is on; shown only where it can be picked. */
+  onUnload?: () => Promise<void>;
 }
 
 /**
@@ -31,10 +34,12 @@ interface ModelPickerProps {
  *
  * It lists the servers running here, then the registered models that are
  * not. Choosing one hands it to the page, which moves the chat there,
- * starting the model first if it is not running. A chat with another machine
- * has nothing here to pick from, so it names its model as text.
+ * starting the model first if it is not running. Unload, beside it, stops the
+ * model for every client of the proxy and leaves the chat open. A chat with
+ * another machine has nothing here to pick or unload, so it names its model
+ * as text.
  */
-export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantization, onPick, starting = null }) => {
+export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantization, onPick, starting = null, onUnload }) => {
   const { servers } = useServers();
   const { showToast } = useToastContext();
   const [models, setModels] = useState<GgufModel[]>([]);
@@ -76,6 +81,14 @@ export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantiza
     }
   };
 
+  const handleUnload = async () => {
+    try {
+      await onUnload?.();
+    } catch (error) {
+      showToast(`Could not unload ${modelName}: ${formatError(error)}`, 'error');
+    }
+  };
+
   return (
     <>
       <Select
@@ -99,6 +112,17 @@ export const ModelPicker: FC<ModelPickerProps> = ({ modelId, modelName, quantiza
         )}
       </Select>
       {starting ? <span role="status">Starting {starting}…</span> : quant}
+      {onUnload && (
+        <Button
+          variant="dangerGhost"
+          size="sm"
+          onClick={() => void handleUnload()}
+          disabled={starting !== null}
+          title="Unload this model. Anything using it through the proxy, Copilot included, loses it."
+        >
+          Unload
+        </Button>
+      )}
     </>
   );
 };

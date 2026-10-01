@@ -26,12 +26,11 @@ pub use far_machine::FarMachine;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
-/// With `return_progress: true` in the request body, llama-server sends HTTP
-/// response headers immediately (before prompt pre-fill), so `.send()`
-/// completes in well under a second for any reachable server.  This timeout
-/// is therefore a **safety net** against a truly unreachable or hung server,
-/// not a pre-fill time limit.  The generous value avoids false positives
-/// while still bounding resource usage for a dead connection.
+/// The body always asks for `return_progress`, so llama-server begins its
+/// reply, headers and then a progress frame per prompt batch, once a slot
+/// takes the request: `.send()` waits for a slot, not for prefill. This is a
+/// **safety net** against an unreachable or wedged server; once headers
+/// arrive, each read of the body is bounded instead (`stream_idle_timeout`).
 const DEFAULT_SEND_TIMEOUT_SECS: u64 = 600;
 
 // =============================================================================
@@ -72,6 +71,10 @@ pub struct LlmCompletionAdapter {
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
+    /// How long one read of the reply may wait before the run's stream ends:
+    /// the proxy's bound, [`gglib_proxy::STREAM_IDLE_TIMEOUT`], since a run
+    /// reads llama-server past the proxy. Tests shorten it.
+    stream_idle_timeout: std::time::Duration,
     /// The resolved per-model facts, from
     /// [`gglib_core::request_pipeline::resolve()`].  Drives request shaping
     /// (capabilities, inference defaults) and response-parser selection
@@ -254,10 +257,9 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         // Each attempt's connect + first-byte phase is bounded by the send
         // timeout, and the whole sequence by the policy's own deadline, so a
         // stalled llama-server can neither hang the agent task nor multiply the
-        // timeout by the attempt count. The timeout covers `.send()` — TCP
-        // connect through HTTP response headers — which includes prompt
-        // pre-fill because llama-server doesn't send headers until pre-fill
-        // finishes.
+        // timeout by the attempt count. The timeout covers `.send()`, TCP
+        // connect through response headers, which wait for a slot but not for
+        // prefill (see `DEFAULT_SEND_TIMEOUT_SECS`).
         //
         // Retrying is safe only because it all happens here, before a single
         // body byte is read: see the `retry` module docs.
@@ -277,6 +279,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             response,
             self.model_context.dialect.as_ref(),
             self.usage_sink.clone(),
+            self.stream_idle_timeout,
         ))
     }
 }

@@ -50,7 +50,11 @@ or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
 runs the same prepared loop detached from any response, so only cancel or
 shutdown stops it, and saves the transcript to the request's conversation.
 A local run holds its model until it ends (`remote_upstream::hold`), so no
-proxy request swaps it out or recycles it mid-run. `launch` reserves the id
+proxy request swaps it out or recycles it mid-run, and the proxy's stall
+watchdog waits for the run to end; a person's stop does not. A llama-server
+that goes silent mid-reply for five minutes, the proxy's own idle bound, ends
+the run with an error (one that never sends headers ends it at the ten-minute
+send timeout), so a silent server cannot keep the hold. `launch` reserves the id
 in the caller's scope, saves the user's message, names a local run's model on
 the conversation (its registry id, and its name in the settings) so the chat's
 next turn from either door runs on it, and starts the loop.
