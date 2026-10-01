@@ -20,6 +20,8 @@ export interface ConversationSettings {
   top_k?: number | null;
   max_tokens?: number | null;
   repeat_penalty?: number | null;
+  /** The inference profile the session sampled with, by name. */
+  profile?: string | null;
   ctx_size?: number | null;
   mlock?: boolean | null;
   tools?: string[] | null;

@@ -38,6 +38,12 @@ impl ConversationSettingsBuilder {
         self
     }
 
+    /// Set the inference profile the session samples with, by name.
+    pub(crate) fn profile(mut self, name: Option<String>) -> Self {
+        self.settings.profile = name;
+        self
+    }
+
     /// Set tool-related configuration.
     pub(crate) fn tools(mut self, tools: Vec<String>, no_tools: bool) -> Self {
         self.settings.tools = tools;

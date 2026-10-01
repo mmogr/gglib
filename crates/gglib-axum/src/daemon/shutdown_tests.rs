@@ -53,7 +53,7 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         crate::bootstrap::bootstrap(crate::ServerConfig {
             host: "127.0.0.1".into(),
             port: 0,
-            base_port: 19_000,
+            base_port: Some(19_000),
             llama_server_path: "/nonexistent/llama-server".into(),
             max_concurrent_agent_loops: 1,
             static_dir: None,
@@ -139,7 +139,7 @@ async fn teardown_drops_every_run() {
         crate::bootstrap::bootstrap(crate::ServerConfig {
             host: "127.0.0.1".into(),
             port: 0,
-            base_port: 19_100,
+            base_port: Some(19_100),
             llama_server_path: "/nonexistent/llama-server".into(),
             max_concurrent_agent_loops: 1,
             static_dir: None,
@@ -193,7 +193,7 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
         crate::bootstrap::bootstrap(crate::ServerConfig {
             host: "127.0.0.1".into(),
             port: 0,
-            base_port: 19_300,
+            base_port: Some(19_300),
             llama_server_path: "/nonexistent/llama-server".into(),
             max_concurrent_agent_loops: 1,
             static_dir: None,

@@ -2,6 +2,7 @@ import { FC } from 'react';
 import { ChevronRight, Copy, ExternalLink } from 'lucide-react';
 import type { GgufModel, InferenceProfile, ModelDetail } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
+import { parseDbTimestamp } from '../../../utils/dbTimestamp';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
@@ -115,12 +116,12 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
         )}
 
         {detail?.downloadDate && (
-          <InfoRow label="Downloaded">{new Date(detail.downloadDate).toLocaleString()}</InfoRow>
+          <InfoRow label="Downloaded">{parseDbTimestamp(detail.downloadDate).toLocaleString()}</InfoRow>
         )}
 
         {detail?.lastUpdateCheck && (
           <InfoRow label="Last checked">
-            {new Date(detail.lastUpdateCheck).toLocaleString()}
+            {parseDbTimestamp(detail.lastUpdateCheck).toLocaleString()}
           </InfoRow>
         )}
       </MetadataSection>

@@ -6,12 +6,56 @@
 //! and the jogger reprints the tail of the conversation so the first new turn
 //! has visible context. Split from `mod.rs`, which orchestrates a session —
 //! merging stored settings and formatting a recap are a different job, and the
-//! file had reached its size budget.
+//! file had reached its size budget. What a new session saves for a later
+//! resume is built here too, so the two sides are read together.
 
+use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
 
+use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
+use crate::handlers::inference::profile_selection::warn_profile_gone;
 use crate::presentation::style;
+use crate::target::Target;
+
+/// The settings a new session saves, so `--continue` can restore them: the
+/// sampling and tool flags, and the profile the session samples with.
+pub(crate) fn session_settings(
+    args: &ChatArgs,
+    profile: Option<&InferenceProfile>,
+) -> ConversationSettings {
+    ConversationSettingsBuilder::new(&args.sampling, &args.context)
+        .model_name(&args.identifier)
+        .profile(profile.map(|p| p.name.clone()))
+        .tools(args.tools.clone(), args.no_tools)
+        .agent_params(args.max_iterations, args.tool_timeout_ms, args.max_parallel)
+        .build()
+}
+
+/// The profile a resumed session samples with.
+///
+/// One this invocation selected — `--profile`, or a suffix typed or replayed —
+/// wins. Otherwise the one the conversation was saved with fills in, as a
+/// saved temperature does. A saved profile since deleted resumes without one,
+/// with the warning a deleted suffix gets, so the conversation stays
+/// resumable. Nothing is restored on the paired machine: a profile configured
+/// here does not say how that machine samples.
+pub(crate) fn restore_profile(
+    selected: Option<InferenceProfile>,
+    target: Target,
+    profiles: &[InferenceProfile],
+    saved: Option<&str>,
+) -> Option<InferenceProfile> {
+    if selected.is_some() || target == Target::Remote {
+        return selected;
+    }
+    let name = saved?;
+    let found = profiles.iter().find(|p| p.name == name).cloned();
+    if found.is_none() {
+        warn_profile_gone(name);
+    }
+    found
+}
 
 /// Merge saved [`ConversationSettings`] into [`ChatArgs`].
 ///
@@ -127,3 +171,7 @@ pub(crate) fn print_memory_jogger(db_messages: &[gglib_core::domain::chat::Messa
     }
     println!();
 }
+
+#[cfg(test)]
+#[path = "resume_settings_tests.rs"]
+mod tests;

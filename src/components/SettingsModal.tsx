@@ -4,7 +4,7 @@ import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
 import { useModels } from "../hooks/useModels";
-import { UpdateSettingsRequest, SparseInferenceConfig } from "../types";
+import { UpdateSettingsRequest, SparseInferenceConfig, type AppSettings } from "../types";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
@@ -13,6 +13,7 @@ import { SystemSettings } from "./SettingsModal/SystemSettings";
 import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
 import { useNetworkSettings } from './SettingsModal/useNetworkSettings';
 import { useAgentGuardSettings } from './SettingsModal/useAgentGuardSettings';
+import { changedFields, generalInputs, generalRequest } from './SettingsModal/settingsRequest';
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { Tabs, type TabItem } from "./ui/Tabs";
@@ -31,6 +32,9 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+/** What the form compares against before any settings have loaded. */
+const NO_SETTINGS = {} as AppSettings;
 
 const sourceLabels: Record<string, string> = {
   explicit: "Custom path (CLI/UI override)",
@@ -84,18 +88,19 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (settings) {
-      setContextSizeInput(settings.defaultContextSize?.toString() || "");
-      setProxyPortInput(settings.proxyPort?.toString() || "");
-      setServerPortInput(settings.llamaBasePort?.toString() || "");
-      setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "");
-      setProxyApiKeyInput(settings.proxyApiKey || "");
-      setDownloadPathInput(settings.defaultDownloadPath || "");
-      setTitlePromptInput(settings.titleGenerationPrompt || "");
-      setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
-      setShowFitIndicators(settings.showMemoryFitIndicators !== false);
-      setTrustClientSampling(settings.trustClientSampling === true);
-      setDefaultModelInput(settings.defaultModelId?.toString() || "");
-      setInferenceDefaultsInput(settings.inferenceDefaults || undefined);
+      const loaded = generalInputs(settings);
+      setContextSizeInput(loaded.contextSize);
+      setProxyPortInput(loaded.proxyPort);
+      setServerPortInput(loaded.serverPort);
+      setMaxQueueSizeInput(loaded.maxQueueSize);
+      setProxyApiKeyInput(loaded.proxyApiKey);
+      setDownloadPathInput(loaded.downloadPath);
+      setTitlePromptInput(loaded.titlePrompt);
+      setMaxToolIterationsInput(loaded.maxToolIterations);
+      setShowFitIndicators(loaded.showFitIndicators);
+      setTrustClientSampling(loaded.trustClientSampling);
+      setDefaultModelInput(loaded.defaultModel);
+      setInferenceDefaultsInput(loaded.inferenceDefaults);
     }
   }, [settings]);
 
@@ -110,59 +115,30 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           await saveDir(pathInput.trim());
         }
 
-        // Helper function to parse numeric input
-        const parseNumericInput = (input: string): number | null => {
-          if (!input.trim()) return null;
-          const parsed = parseInt(input.trim(), 10);
-          return isNaN(parsed) ? null : parsed;
-        };
-
-        // Update other settings
-        const updates: UpdateSettingsRequest = {
-          defaultContextSize: parseNumericInput(contextSizeInput),
-          proxyPort: parseNumericInput(proxyPortInput),
-          llamaBasePort: parseNumericInput(serverPortInput),
-          maxDownloadQueueSize: parseNumericInput(maxQueueSizeInput),
-          // An emptied field means "turn authentication off", which is a
-          // `null` (clear the row) rather than a blank string — the backend
-          // rejects a blank key precisely so it cannot mean both.
-          proxyApiKey: proxyApiKeyInput.trim() || null,
-          titleGenerationPrompt: titlePromptInput.trim() || null,
-          maxToolIterations: parseNumericInput(maxToolIterationsInput),
-          showMemoryFitIndicators: showFitIndicators,
-          defaultModelId: parseNumericInput(defaultModelInput),
-          inferenceDefaults: inferenceDefaultsInput,
+        // Only what the person changed: a field left alone must not put back
+        // a value written elsewhere while the dialog was open (#1059).
+        const onScreen = generalRequest({
+          contextSize: contextSizeInput,
+          proxyPort: proxyPortInput,
+          serverPort: serverPortInput,
+          maxQueueSize: maxQueueSizeInput,
+          proxyApiKey: proxyApiKeyInput,
+          downloadPath: downloadPathInput,
+          titlePrompt: titlePromptInput,
+          maxToolIterations: maxToolIterationsInput,
+          showFitIndicators,
           trustClientSampling,
-          defaultDownloadPath: downloadPathInput.trim() || null,
+          defaultModel: defaultModelInput,
+          inferenceDefaults: inferenceDefaultsInput,
+        });
+        const updates: UpdateSettingsRequest = {
+          ...changedFields(onScreen, generalRequest(generalInputs(settings ?? NO_SETTINGS))),
           ...network.updates,
           ...agentGuards.updates,
           ...desktopUpdates,
         };
 
-        // Check if any updates were made
-        const hasUpdates =
-          updates.defaultContextSize !== undefined ||
-          updates.proxyPort !== undefined ||
-          updates.llamaBasePort !== undefined ||
-          updates.maxDownloadQueueSize !== undefined ||
-          updates.proxyApiKey !== undefined ||
-          updates.titleGenerationPrompt !== undefined ||
-          updates.maxToolIterations !== undefined ||
-          updates.showMemoryFitIndicators !== undefined ||
-          updates.defaultModelId !== undefined ||
-          updates.inferenceDefaults !== undefined ||
-          updates.trustClientSampling !== undefined ||
-          updates.defaultDownloadPath !== undefined ||
-          updates.bindHost !== undefined ||
-          updates.shareLan !== undefined ||
-          updates.loopGuardMode !== undefined ||
-          updates.agenticSampling !== undefined ||
-          updates.maxStagnationSteps !== undefined ||
-          updates.proxyAutostart !== undefined ||
-          updates.closeToTray !== undefined ||
-          updates.startAtLogin !== undefined;
-
-        if (hasUpdates) {
+        if (Object.keys(updates).length > 0) {
           await saveSettings(updates);
         }
 
@@ -189,6 +165,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       network.updates,
       agentGuards.updates,
       info,
+      settings,
       saveDir,
       saveSettings,
     ]
