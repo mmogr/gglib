@@ -6,6 +6,8 @@
 //! `status.rs`'s status surface asks the same question of the same record
 //! as `join` does, and asking it in two places is how the two drift.
 
+use std::sync::{Mutex, PoisonError};
+
 use gglib_core::services::AppCore;
 use gglib_core::{RemotePairing, Settings, validate_settings};
 use modelpipe::Ticket;
@@ -43,6 +45,30 @@ pub(super) fn names_the_same_machine(stored: &RemotePairing, ticket: &Ticket) ->
     fingerprint(stored).is_some_and(|stored| stored == ticket.fingerprint())
 }
 
+/// What a dial that has come up did to the stored record.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Settled {
+    /// No code was redeemed: the record already held this machine's key.
+    Redialled,
+    /// A code was redeemed and its key stored. `replaced` is
+    /// [`store_redeemed`]'s answer: the other machine whose pairing that
+    /// overwrote, if one did.
+    Paired { replaced: Option<String> },
+}
+
+impl Settled {
+    /// Whether the dial paired, and the machine whose pairing it replaced:
+    /// the two things `join` answers with. A plain function, so each arm is
+    /// tested without a pipe; `join_key_pipe_tests` checks that `dial` passes
+    /// it on.
+    pub(super) fn paired_and_replaced(self) -> (bool, Option<String>) {
+        match self {
+            Self::Paired { replaced } => (true, replaced),
+            Self::Redialled => (false, None),
+        }
+    }
+}
+
 /// What a dial that has just come up owes the stored record, and whether it
 /// paired.
 ///
@@ -75,12 +101,12 @@ pub(super) async fn settle(
     code: Option<String>,
     port: u16,
     redeem: impl AsyncFnOnce(String) -> Result<String, GuiError>,
-) -> Result<bool, GuiError> {
+) -> Result<Settled, GuiError> {
     match code {
         Some(code) => {
             let key = redeem(code).await?;
-            store_redeemed(core, key, ticket, port).await?;
-            Ok(true)
+            let replaced = store_redeemed(core, key, ticket, port).await?;
+            Ok(Settled::Paired { replaced })
         }
         None => {
             // The caller refused a codeless dial with no key for this
@@ -95,7 +121,7 @@ pub(super) async fn settle(
             {
                 remember(core, |stored| follow(stored, ticket, port)).await?;
             }
-            Ok(false)
+            Ok(Settled::Redialled)
         }
     }
 }
@@ -151,6 +177,13 @@ fn follow(stored: &mut Option<RemotePairing>, ticket: &Ticket, port: u16) {
 /// name in that machine's catalogue, whenever it was remembered; a pairing
 /// with any other machine starts with nothing remembered.
 ///
+/// Settings keep one pairing, so one with another machine drops that
+/// machine's key, and the fingerprint of that machine is returned for `join`
+/// to say so (#1042). `None` when nothing was stored, or when the record named
+/// the machine just paired with: that re-pairing replaces a key, not a
+/// machine. A stored ticket this build cannot read names no machine, and is
+/// `None` too.
+///
 /// Its failure says more than [`remember`]'s, and that is the point: by the
 /// time this runs the code is gone, so "could not store the pairing" is the
 /// one reading a person must not be left with.
@@ -163,21 +196,29 @@ pub(super) async fn store_redeemed(
     api_key: String,
     ticket: &Ticket,
     port: u16,
-) -> Result<(), GuiError> {
+) -> Result<Option<String>, GuiError> {
+    // Read off the record the write replaces, inside the write, rather than
+    // off the one `join` read before its dial.
+    let replaced = Mutex::new(None);
     remember(core, |stored| {
-        let default_model = stored
-            .take()
-            .filter(|stored| names_the_same_machine(stored, ticket))
-            .and_then(|stored| stored.default_model);
+        let (kept, gone) = match stored.take() {
+            Some(earlier) if names_the_same_machine(&earlier, ticket) => (Some(earlier), None),
+            other => (None, other),
+        };
+        *replaced.lock().unwrap_or_else(PoisonError::into_inner) =
+            gone.as_ref().and_then(fingerprint);
         *stored = Some(RemotePairing {
             ticket: ticket.to_string(),
             api_key: api_key.clone(),
-            default_model,
+            default_model: kept.and_then(|kept| kept.default_model),
             port: Some(port),
         });
     })
     .await
-    .map_err(spent_code)
+    .map_err(spent_code)?;
+    Ok(replaced
+        .into_inner()
+        .unwrap_or_else(PoisonError::into_inner))
 }
 
 /// A failure to store a pairing whose code has already been spent.

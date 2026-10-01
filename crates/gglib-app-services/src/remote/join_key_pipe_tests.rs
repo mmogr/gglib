@@ -238,3 +238,43 @@ async fn a_joining_machine_is_one_endpoint_across_a_disconnect_and_a_restart() {
     );
     stopped.expect("disable");
 }
+
+/// A join with a code over a stored pairing for another machine answers with
+/// that machine's fingerprint, through `join` and `dial` over the in-process
+/// pipe: the link between `settle` and what `gglib remote join` prints.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_join_over_another_machines_pairing_names_the_one_it_replaced() {
+    use crate::test_support_remote::{KEY_B, TICKET_B, paired_with, ticket};
+    let (_core, _proxy, _events, serving, _arming) = ops_with_key().await;
+    let (joiner_core, joiner, _) = test_remote_ops_joining_from(scratch_join_keys()).await;
+    joiner_core
+        .settings()
+        .update(paired_with(TICKET_B, KEY_B))
+        .await
+        .expect("machine B's pairing is stored");
+    let enabled = serving
+        .enable(EnableRequest {
+            invite: true,
+            ..offline()
+        })
+        .await;
+    let offered = enabled.as_ref().ok().and_then(|e| e.pairing.clone());
+    let answer = match &offered {
+        Some(offered) => Some(joiner.join(request(Some(offered.pairing.clone()))).await),
+        None => None,
+    };
+    let _ = joiner.disconnect().await;
+    if let Some(offered) = &offered {
+        let _ = serving.forget(&offered.device).await;
+    }
+    let _ = serving.disable().await;
+    let answer = answer
+        .expect("an invite was offered")
+        .expect("the join went through");
+    assert!(answer.paired, "a code was redeemed");
+    assert_eq!(
+        answer.replaced,
+        Some(ticket(TICKET_B).fingerprint()),
+        "dial dropped the pairing it replaced"
+    );
+}

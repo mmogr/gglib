@@ -78,8 +78,8 @@ impl RemoteOps {
             Ok(key)
         })
         .await;
-        let paired = match settled {
-            Ok(paired) => paired,
+        let (paired, replaced) = match settled {
+            Ok(settled) => settled.paired_and_replaced(),
             Err(e) => {
                 // `DRAIN`, like every other teardown here. The pipe reached
                 // the far machine, but a third-party client may already be
@@ -124,6 +124,7 @@ impl RemoteOps {
             ticket_fingerprint,
             paired,
             moved_from,
+            replaced,
         })
     }
 }

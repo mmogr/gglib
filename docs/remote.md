@@ -24,6 +24,11 @@ ticket and the key it received, so the next session is
 `gglib remote join` with nothing after it — and it stays that way across
 restarts on both machines, because the desktop keeps its endpoint key.
 
+The laptop stores one pairing. Joining a second desktop with its
+`<ticket>-<code>` replaces the first, and `join` names the fingerprint it
+replaced; reaching the first desktop again takes a fresh
+`gglib remote invite` there.
+
 To pair a second device later, `gglib remote invite` on the desktop: it
 offers another code against the tunnel that is already up, so nobody else
 loses their connection. `gglib remote list` shows what is paired and

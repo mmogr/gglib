@@ -24,4 +24,10 @@ paired: boolean,
  * The port this machine wanted and could not have, when it had to take
  * another; `None` when the address stayed put.
  */
-moved_from: number | null, };
+moved_from: number | null, 
+/**
+ * Fingerprint of the other machine whose pairing this one replaced,
+ * since one pairing is stored; `None` when there was none to replace,
+ * or when the stored ticket could not be read to name one.
+ */
+replaced: string | null, };
