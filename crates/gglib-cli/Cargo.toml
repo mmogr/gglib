@@ -55,6 +55,8 @@ mdns-sd = "0.20"
 # `image` renderer would pull an image stack in for a code drawn as Unicode
 # half-blocks; the `unicode` renderer needs nothing.
 qrcode = { version = "0.14", default-features = false }
+# Hands the `gglib web` link to the system's launcher (open, xdg-open, start).
+open.workspace = true
 
 [dev-dependencies]
 async-trait = { workspace = true }
