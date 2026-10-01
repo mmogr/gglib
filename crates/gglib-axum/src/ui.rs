@@ -41,10 +41,13 @@ mod embed {
     ///
     /// `allow_missing` is load-bearing: without it a missing folder is a hard
     /// compile error, and `web_ui/` is gitignored and absent from a fresh
-    /// checkout. `cargo test -p gglib-cli --no-run` (ci.yml's `cli-cross-os`)
-    /// and `cargo doc --workspace --exclude gglib-app` (docs.yml) both build
-    /// this crate with no frontend, and must keep working. With the attribute
-    /// the asset set is simply empty and the daemon serves the API alone.
+    /// checkout. The rule: `gglib-app` is the one member whose build can need
+    /// the frontend (its `tauri::generate_context!()` embeds it when
+    /// `custom-protocol` is on), so any build that leaves `gglib-app` out can
+    /// compile without `npm run build` (the binary then carries no
+    /// dashboard), and every workflow job that skips it relies on this
+    /// attribute. With it the asset set is simply empty and the daemon serves
+    /// the API alone.
     #[derive(RustEmbed)]
     #[folder = "../../web_ui"]
     #[allow_missing = true]
