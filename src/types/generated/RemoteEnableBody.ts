@@ -3,6 +3,9 @@
 /**
  * Body for `POST /api/remote/enable`. Every field optional; an empty body
  * is the default: no `/mcp`, public relays, discovery on.
+ *
+ * A field this does not name is ignored, so an older client that still
+ * sends `keep_identity` is answered as if it had not (#1043).
  */
 export type RemoteEnableBody = { 
 /**
@@ -17,13 +20,6 @@ relay: string | null,
  * Publish to and resolve through n0's discovery service. Omitted is on.
  */
 discovery: boolean | null, 
-/**
- * Accepted and ignored.
- *
- * The identity is always kept, so this asks for what it already gets.
- * Its removal is #1043.
- */
-keep_identity: boolean, 
 /**
  * Offer a pairing code as well as bringing the tunnel up.
  *
