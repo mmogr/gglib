@@ -162,9 +162,10 @@ impl AdmissionQueue {
 
     /// Empty a slot on an explicit instruction, returning what was there.
     ///
-    /// Unconditional by design: this is a user or supervisor decision (a stop
-    /// request, a degraded-model recycle), not a scheduling one, so it is not
-    /// subject to the fairness rules.
+    /// Unconditional by design: an explicit stop (a person's, a benchmark's,
+    /// the proxy's restart of a dead server) is not a scheduling decision, so
+    /// neither the fairness rules nor a run's hold apply. A recycle uses
+    /// [`Self::evict_unheld`].
     pub fn evict(&self, slot: usize) -> Option<Resident> {
         let previous = self.lock().evict(slot);
         self.notify();

@@ -481,7 +481,8 @@ configurable.
 A stall after the first generated token (content, reasoning or a tool call)
 asks for the model to be recycled at once, and the stalled stream ends, freeing
 the model. The recycle is carried out by the next request that finds nothing in
-flight, including one that was waiting in admission behind the stalled stream.
+flight and no agent run holding the model, including one that was waiting in
+admission behind the stalled stream.
 A stall before the first token only strikes, like an empty response: prefill
 sends a progress frame after each 2048-token batch, and a host that prefills
 slower than about 6.8 tokens a second can take longer than the idle bound

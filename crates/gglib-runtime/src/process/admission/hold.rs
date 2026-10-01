@@ -4,7 +4,9 @@
 //! lease, and without one nothing stops a swap or a recycle from taking its
 //! model mid-run. A hold is counted apart from `inflight`: the model stays
 //! resident and unrecycled, but none of its `SERVER_PARALLEL` capacity is
-//! taken, so proxy requests for it are still served beside the run.
+//! taken, so proxy requests for it are still served beside the run. An
+//! explicit stop, or the proxy's restart of a dead server, still takes a held
+//! model ([`AdmissionQueue::evict`]).
 
 use std::sync::Arc;
 

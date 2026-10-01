@@ -30,8 +30,9 @@ impl ModelRuntimePort for MinimalRuntime {
         None
     }
 
+    /// Refused, so a test can tell its answer from a default's own.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        Ok(())
+        Err(ModelRuntimeError::Internal("stop refused".to_owned()))
     }
 }
 
@@ -115,6 +116,18 @@ fn pinned_model_defaults_to_unpinned() {
 #[test]
 fn hold_defaults_to_none() {
     assert!(MinimalRuntime.hold(5500, 1).is_none());
+}
+
+/// A runtime with no holds recycles by stopping, and passes on the stop's
+/// answer: the benchmark's pinned target refuses its stop so the watchdog
+/// re-arms.
+#[tokio::test]
+async fn recycle_current_defaults_to_stop_current() {
+    let refused = MinimalRuntime.recycle_current().await.unwrap_err();
+    assert!(
+        matches!(&refused, ModelRuntimeError::Internal(m) if m == "stop refused"),
+        "{refused}"
+    );
 }
 
 #[tokio::test]

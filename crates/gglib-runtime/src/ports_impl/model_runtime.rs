@@ -107,6 +107,10 @@ impl ModelRuntimePort for RuntimePortImpl {
         self.mgr.stop_current().await
     }
 
+    async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
+        self.mgr.recycle_current().await
+    }
+
     fn pinned_model(&self) -> Option<String> {
         self.mgr.pinned_model()
     }
