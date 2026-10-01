@@ -17,7 +17,8 @@ pub use daemon_token::{
     DaemonToken, daemon_token_path, mint_and_store as mint_daemon_token, read as read_daemon_token,
 };
 pub use device_keys::{
-    DeviceKeys, device_keys_path, load as load_device_keys, store as store_device_keys,
+    DeviceKeys, device_keys_location, device_keys_path, load as load_device_keys,
+    store as store_device_keys,
 };
 pub use device_ports::DevicePorts;
 pub use host::{is_loopback_host, is_wildcard_host, normalize_host};
