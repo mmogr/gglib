@@ -4,6 +4,7 @@
 use std::time::Duration;
 
 use super::*;
+use crate::forward::FIRST_BYTE_DEADLINE_SECS;
 use crate::upstream_read::StreamBounds;
 
 #[test]
@@ -12,6 +13,11 @@ fn the_production_bounds_equal_the_twins_they_are_sized_from() {
 
     // The client is given as long to take a frame as the upstream to send one.
     assert_eq!(bounds.send, STREAM_IDLE_TIMEOUT);
+    // A request that does not stream gets what a streamed reply gets to
+    // begin, and 25 minutes to generate its answer.
+    let to_begin = Duration::from_secs(FIRST_BYTE_DEADLINE_SECS);
+    assert_eq!(bounds.unary, to_begin + Duration::from_mins(25));
+    assert_eq!(bounds.unary, Duration::from_mins(30));
 }
 
 #[tokio::test(start_paused = true)]

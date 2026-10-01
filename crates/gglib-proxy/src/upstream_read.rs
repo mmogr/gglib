@@ -47,8 +47,8 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
 /// [`StreamVerdict::Stalled`](crate::upstream_health::StreamVerdict::Stalled).
 pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 
-/// How long a streamed chat completion waits on a silent upstream, and on a
-/// client that stopped reading.
+/// How long the proxy waits on a silent upstream, on a streaming client that
+/// stopped reading, and on a request that does not stream.
 ///
 /// [`serve`](crate::serve) runs with [`StreamBounds::default`]. A test build
 /// can start it inside `TEST_STREAM_BOUNDS.scope(bounds, ..)` to run it with
@@ -64,6 +64,10 @@ pub struct StreamBounds {
     /// How long one send to a streaming client may wait for it to make room;
     /// see [`CLIENT_SEND_TIMEOUT`](crate::client_send::CLIENT_SEND_TIMEOUT).
     pub send: Duration,
+    /// How long a chat completion that does not stream, or an embeddings
+    /// request, may take in all; see
+    /// [`UNARY_TOTAL_TIMEOUT`](crate::unary_body::UNARY_TOTAL_TIMEOUT).
+    pub unary: Duration,
 }
 
 impl Default for StreamBounds {
@@ -72,6 +76,7 @@ impl Default for StreamBounds {
             first_byte: Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
             idle: STREAM_IDLE_TIMEOUT,
             send: crate::client_send::CLIENT_SEND_TIMEOUT,
+            unary: crate::unary_body::UNARY_TOTAL_TIMEOUT,
         }
     }
 }

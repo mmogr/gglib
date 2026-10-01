@@ -890,12 +890,12 @@ pub(crate) async fn forward_chat_completion(
         body,
         context.dialect.as_ref(),
         &cache_metrics,
-        metrics.as_ref(),
-        snapshot_seq,
+        (metrics.as_ref(), snapshot_seq),
         RepairTurn {
             enabled: repair_enabled,
             gglib_grammar: grammar_enforced,
         },
+        stream_bounds.unary,
     )
     .await
 }

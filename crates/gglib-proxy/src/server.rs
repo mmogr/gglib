@@ -104,9 +104,9 @@ pub(crate) struct AppState {
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
     upstream_health: Arc<UpstreamHealth>,
-    /// How long a streamed reply may wait on a silent upstream, or on a client
-    /// that stopped reading.
-    stream_bounds: StreamBounds,
+    /// How long a request may wait on a silent upstream, and a streamed reply
+    /// on a client that stopped reading.
+    pub(crate) stream_bounds: StreamBounds,
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.
     pub(crate) calibration: Arc<TokenCalibration>,
@@ -256,7 +256,9 @@ pub async fn serve(
     // of the body (`StreamBounds::idle`): a llama-server that crashes
     // mid-stream breaks the byte stream, and one that wedges with the socket
     // open is caught by that bound. `drain_events` documents what the client
-    // is then sent.
+    // is then sent. A request that does not stream is bounded as a whole
+    // (`StreamBounds::unary`), around its send and the read of its body, in
+    // `unary_body::exchange`.
     let client = crate::loopback::client_builder()
         .pool_max_idle_per_host(10)
         .connect_timeout(std::time::Duration::from_secs(10))

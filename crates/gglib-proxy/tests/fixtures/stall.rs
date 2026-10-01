@@ -36,12 +36,13 @@ use super::common::{MockSettingsRepo, TaggedCatalog, make_mcp_service};
 pub(crate) const MODEL: &str = "stall-model";
 
 /// Both upstream bounds at 300 ms: long enough that a busy runner does not cut
-/// a healthy reply, short enough that a stall ends a test quickly. The send
-/// bound is one these tests never meet.
+/// a healthy reply, short enough that a stall ends a test quickly. The other
+/// two are bounds these tests never meet.
 pub(crate) const BOUNDS: StreamBounds = StreamBounds {
     first_byte: Duration::from_millis(300),
     idle: Duration::from_millis(300),
     send: Duration::from_mins(1),
+    unary: Duration::from_mins(1),
 };
 
 /// What the stand-in upstream has seen.
@@ -240,13 +241,14 @@ pub(crate) async fn spawn_proxy(
     slot_dir: Option<PathBuf>,
     cancel: CancellationToken,
 ) -> String {
-    spawn_proxy_under(BOUNDS, runtime, slot_dir, cancel).await
+    spawn_proxy_under(BOUNDS, runtime, vec![], slot_dir, cancel).await
 }
 
-/// [`spawn_proxy`] under `bounds`, over any runtime.
+/// [`spawn_proxy`] under `bounds`, over any runtime, its model tagged `tags`.
 pub(crate) async fn spawn_proxy_under(
     bounds: StreamBounds,
     runtime: Arc<dyn ModelRuntimePort>,
+    tags: Vec<String>,
     slot_dir: Option<PathBuf>,
     cancel: CancellationToken,
 ) -> String {
@@ -254,7 +256,7 @@ pub(crate) async fn spawn_proxy_under(
     let addr = listener.local_addr().expect("bound");
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
         name: MODEL.into(),
-        tags: vec![],
+        tags,
         dialect: None,
     });
     let serve = async move {

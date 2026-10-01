@@ -121,7 +121,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
-- **`unary_body.rs`** — A non-streaming body read whole and run through the dialect parser once; shared by the chat and embeddings routes
+- **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
@@ -508,6 +508,13 @@ and once 32 frames queue for it each send waits for it to take one. A send that
 waits 300 s, as long as the idle bound gives the upstream, ends the turn as a
 departure, freeing the model; a client that reads slowly but keeps reading is
 never cut, since the wait is timed per frame.
+
+A chat completion that does not stream, and an embeddings request, are bounded
+as a whole, because llama-server sends such an answer only once it is complete:
+30 minutes, the 300 s a streamed reply gets to begin plus 25 minutes to
+generate. A request that outlasts it is dropped, freeing the model, and the
+client gets HTTP 504 with `upstream_timeout`, the code a stream's error frame
+carries.
 
 ## MCP Streamable HTTP Gateway
 
