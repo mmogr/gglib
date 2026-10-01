@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use vergen_gix::{Emitter, GixBuilder};
+use vergen_gix::{Emitter, Gix};
 
 include!("../build_common.rs");
 
@@ -72,20 +72,13 @@ fn main() {
     // and cutting it ourselves makes the width a property of this file instead
     // of a property of whoever's clone did the build.
     //
-    // `dirty(false)` leaves untracked files out of the dirty check.
-    let git = match GixBuilder::default()
-        .repo_path(Some(repo_root))
+    // `dirty(false)` turns the dirty flag on: its argument is
+    // `include_untracked`, so `false` leaves untracked files out of the check.
+    let git = Gix::builder()
+        .local_repo_path(repo_root)
         .sha(false)
         .dirty(false)
-        .build()
-    {
-        Ok(git) => git,
-        Err(err) => {
-            println!("cargo:warning=gglib-build-info: vergen-gix config failed: {err}");
-            emit_build_identity(None, false);
-            return;
-        }
-    };
+        .build();
 
     // Captured rather than emitted straight to stdout: vergen writes the
     // instructions itself, and the SHA has to be cut to width on the way past.
