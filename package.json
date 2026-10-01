@@ -74,7 +74,7 @@
   "overrides": {
     "brace-expansion": "^5.0.8",
     "minimatch@3": {
-      "brace-expansion": "^1.1.17"
+      "brace-expansion": "^1.1.21"
     }
   }
 }
