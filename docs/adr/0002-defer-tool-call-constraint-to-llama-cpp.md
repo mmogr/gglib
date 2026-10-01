@@ -288,7 +288,9 @@ unconstrained upstream, and the attempt/success ratio distinguishes that from
 - Decide whether an inert Tier A module should be actively exercised (a
   synthetic markup path in tests) or allowed to go quiet — ADR 0001 has no
   answer for this.
-- Submit the upstream issue (`upstream_issue_tool_dialect_escaping.md`); if a
+- File the upstream issue, which has not been filed, or drop it (#755). The
+  writeup is no longer in the repository; its text is at
+  `git show d7002d00:upstream_issue_tool_dialect_escaping.md`. If a
   resolution lands, revisit findings 3 and 4.
 - Record grammar-presence per model in `RuntimeCapabilities` once a third data
   point exists. Two models is a pattern, not a rule. The repair counters from
