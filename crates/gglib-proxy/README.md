@@ -485,7 +485,10 @@ flight, including one that was waiting in admission behind the stalled stream.
 A stall before the first token only strikes, like an empty response: prefill
 sends a progress frame after each 2048-token batch, and a host that prefills
 slower than about 6.8 tokens a second can take longer than the idle bound
-between two of them. Stalls are counted in `upstream_health.total_stream_stalls`
+between two of them. A client that did not ask for those frames is sent an SSE
+comment, `: prefill <processed>/<total>`, in place of each one, so a client that
+gives up when no bytes arrive stays connected through a long prefill unless one
+batch outlasts its timer. Stalls are counted in `upstream_health.total_stream_stalls`
 on the dashboard.
 
 None of these bounds a client that stops reading. A client that closes its
