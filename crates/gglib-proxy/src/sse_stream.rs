@@ -44,8 +44,8 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// it does when the client closes its connection; returning drops the request.
 ///
 /// `client_wants_progress` is passed through to [`drain_events`], which
-/// forwards `prompt_progress` frames only when the client's own request asked
-/// for them.
+/// forwards `prompt_progress` frames when the client's own request asked for
+/// them and otherwise sends an SSE comment for each.
 ///
 /// When `config` and `session_id` are both `Some` (KV cache enabled), the KV
 /// cache is saved via [`save_after_generation`] immediately after

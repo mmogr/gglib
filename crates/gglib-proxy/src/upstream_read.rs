@@ -11,7 +11,8 @@
 //! no other request was active, and the attempt was the last one or a recycle
 //! was pending.
 //! [`UpstreamStalled::notice`] and [`UpstreamStalled::error_frame`] are what
-//! it gets when a reply stops partway.
+//! it gets when a reply stops partway, and [`prefill_comment`] what a client
+//! that did not ask for progress gets after each batch of a prompt.
 
 use std::time::Duration;
 
@@ -212,6 +213,20 @@ pub(crate) fn is_generated_token(event: &LlmStreamEvent) -> bool {
             | LlmStreamEvent::ReasoningDelta { .. }
             | LlmStreamEvent::ToolCallDelta { .. }
     )
+}
+
+/// The SSE comment, `: prefill <processed>/<total>`, that a client which did
+/// not ask for progress is sent in place of a `prompt_progress` frame.
+///
+/// A long prefill would otherwise send that client nothing, and a client whose
+/// inactivity timer resets only on received bytes gives up on a prefill longer
+/// than that timer (#1213).
+///
+/// Invisible to clients: `parse_sse_frames` and every conforming SSE reader
+/// skip lines that are not `data:`, so this never puts the frame's
+/// `choices`-less chunk in front of a schema-validating client.
+pub(crate) fn prefill_comment(processed: u32, total: u32) -> Bytes {
+    Bytes::from(format!(": prefill {processed}/{total}\n\n"))
 }
 
 /// One `upstream_timeout` error frame carrying `message`: the one place the

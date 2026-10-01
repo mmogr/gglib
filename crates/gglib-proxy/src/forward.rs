@@ -87,7 +87,7 @@ use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
-use crate::upstream_read::{StreamBounds, UpstreamStalled, is_generated_token};
+use crate::upstream_read::{StreamBounds, UpstreamStalled, is_generated_token, prefill_comment};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::defects::LoopGuardTrip;
 
@@ -356,7 +356,7 @@ const REPAIR_KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from
 /// Because `return_progress` is the proxy's own override and not the client's
 /// request, the returned flag records whether the *client* asked for progress
 /// frames. It decides whether `prompt_progress` frames are forwarded
-/// downstream (see [`drain_events`]): a `prompt_progress` chunk
+/// downstream or sent as SSE comments (see [`drain_events`]): the chunk
 /// carries no `choices` key, which is a llama.cpp extension and not valid
 /// `OpenAI` streaming JSON, so clients that validate chunks against the
 /// `OpenAI` schema (anything on the Vercel AI SDK — `OpenCode`, and others)
@@ -989,12 +989,12 @@ pub(crate) async fn stream_response_to_channel(
 ///
 /// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
 /// records them on `connection` (the dashboard registry entry for this
-/// request). The frame itself is forwarded only when `client_wants_progress`
-/// — i.e. when the client's own request body carried `return_progress: true`.
-/// The proxy forces that flag on upstream for its own bookkeeping (see
-/// [`inject_streaming_body_overrides`]), and a `prompt_progress` chunk has no
-/// `choices` key, so re-emitting it unasked puts a non-`OpenAI` chunk in front
-/// of every schema-validating client.
+/// request). The frame itself is forwarded only when `client_wants_progress`,
+/// i.e. when the client's own body carried `return_progress: true`: the proxy
+/// forces that flag upstream for itself (see [`inject_streaming_body_overrides`])
+/// and the chunk has no `choices`, which stops a schema-validating client. Any
+/// other client is sent a [`prefill_comment`] in its place, so that a long
+/// prefill still sends it bytes.
 ///
 /// When the events end in an [`UpstreamStalled`], the client gets any held
 /// tool-call frames, a notice as the turn's own text, the `upstream_timeout`
@@ -1091,12 +1091,12 @@ pub(crate) async fn drain_events(
                     time_ms,
                 } => {
                     connection.update_progress(*processed, *total, *cached, *time_ms);
-                    // Dropped unless the client asked for progress: the proxy
+                    // A comment unless the client asked for progress: the proxy
                     // needed the data, the client did not order the chunk.
                     if client_wants_progress {
                         encoder.encode(&ev).map(Bytes::from)
                     } else {
-                        None
+                        Some(prefill_comment(*processed, *total))
                     }
                 }
                 LlmStreamEvent::NormalizationError { kind, raw } => {

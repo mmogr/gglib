@@ -116,7 +116,7 @@ fn assert_the_stall_ended_it(left: &Departure, idle: Duration) {
 #[tokio::test]
 async fn a_client_that_leaves_during_a_silent_prefill_ends_the_turn_at_once_as_a_departure() {
     // Prefill has begun and gone quiet; the client, which did not ask for
-    // progress frames, has been sent nothing.
+    // progress frames, has been sent one prefill comment and read nothing.
     let silent_prefill = upstream(at_once(vec![progress()]), Then::Silence);
 
     let left = leave_after(0, silent_prefill, None, LONG_IDLE).await;
