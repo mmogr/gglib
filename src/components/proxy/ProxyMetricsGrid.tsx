@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from 'react';
 import { ConnectionRow } from './ConnectionRow';
+import { ModelSignalsCard, countOf, hasSignal } from './ModelSignalsCard';
 import { RequestThroughput } from './RequestThroughput';
 import { SlotCard } from './SlotCard';
 import type { DashboardSnapshot } from '../../services/transport/types/dashboard';
@@ -64,6 +65,49 @@ export const InferenceSlotsSection: FC<SectionProps> = ({ snapshot, compact = fa
       ) : (
         <p className="text-sm text-text-muted">
           {snapshot?.slots_status ?? 'Slot metrics unavailable.'}
+        </p>
+      )}
+    </section>
+  );
+};
+
+/**
+ * Per-model signals: what failed, what went in circles, and for which model —
+ * the section `gglib proxy dashboard` prints, under the same rules (#1092).
+ *
+ * Only a model with something to report gets a card, since listing every
+ * clean one would bury the one that is not. A clean run says so over its
+ * denominator, and a run that has recorded nothing says that instead: "none"
+ * is a claim only evidence earns. Nothing at all before the first snapshot.
+ * Cards come in name order, as the CLI's do: the proxy sends a hash map, and
+ * its order can change from one frame to the next.
+ */
+export const ModelSignalsSection: FC<SectionProps> = ({ snapshot }) => {
+  if (!snapshot) return null;
+  const perModel = Object.entries(snapshot.per_model_defects).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  const reporting = perModel.filter(([, counts]) => hasSignal(counts));
+  // Agent turns are named beside requests, never added to them: one client
+  // conversation is many agent turns, and a sum would be neither.
+  const requests = perModel.reduce((sum, [, c]) => sum + c.requests, 0);
+  const turns = perModel.reduce((sum, [, c]) => sum + c.agent_guard_scanned, 0);
+  const across = `${countOf(requests, 'request')}${turns > 0 ? ` and ${countOf(turns, 'agent turn')}` : ''}`;
+
+  return (
+    <section>
+      <SectionHeading>Per-Model Signals</SectionHeading>
+      {reporting.length > 0 ? (
+        <div className="flex flex-col gap-sm">
+          {reporting.map(([model, counts]) => (
+            <ModelSignalsCard key={model} model={model} counts={counts} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-text-muted">
+          {perModel.length === 0
+            ? 'Nothing recorded yet.'
+            : `None across ${across}, ${countOf(perModel.length, 'model')}.`}
         </p>
       )}
     </section>
