@@ -1,0 +1,252 @@
+{
+  "version": 0,
+  "about": "The error codes gglib writes itself, rather than relays from llama-server, on its proxy and the daemon's runs. The proxy refuses with {\"error\":{\"message\":...,\"type\":...,\"code\":...}}, and a stream already under way can end with that object as a data: frame. A run that failed carries {\"code\":...,\"message\":...} as its error, on /v1/runs and /api/runs. The daemon's /api/runs refuses with {\"error\":...,\"status\":...,\"type\":<code>}, and the proxy answers a paired device's turn on a hub chat with the daemon's refusal of it. The daemon's guards in front of /api refuse with upper-case types of their own, such as HOST_NOT_ALLOWED, which are not listed here. Match on code. type is the type the proxy writes beside the code: null where it writes more than one, or none. status is the HTTP status of every response that carries the code: null where those responses' writers do not all fix the same one, or where no response carries it, only a stream frame or a run's error.",
+  "codes": [
+    {
+      "code": "model_loading",
+      "type": "service_unavailable",
+      "status": 503,
+      "meaning": "The model is still loading; retry shortly."
+    },
+    {
+      "code": "admission_timeout",
+      "type": "service_unavailable",
+      "status": 503,
+      "meaning": "The request waited its limit for the model without being admitted; retry shortly."
+    },
+    {
+      "code": "model_not_found",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "No model by that name is in the catalog."
+    },
+    {
+      "code": "profile_not_found",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "No model has that name, and its :suffix names no inference profile."
+    },
+    {
+      "code": "not_an_embedding_model",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "An embeddings request named a model not tagged embedding."
+    },
+    {
+      "code": "embedding_model_cannot_chat",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "A chat request named an embedding model."
+    },
+    {
+      "code": "upstream_error",
+      "type": null,
+      "status": null,
+      "meaning": "The model server (for a run, the proxy) failed, could not be reached, or ended a reply early; the type beside it may be llama-server's."
+    },
+    {
+      "code": "context_length_exceeded",
+      "type": "context_length_exceeded",
+      "status": 400,
+      "meaning": "The conversation does not fit the model's context even trimmed; start a new one."
+    },
+    {
+      "code": "loop_detected",
+      "type": "loop_detected",
+      "status": 400,
+      "meaning": "The history repeats the same tool calls with the same results, so the request was refused or the agent run stopped."
+    },
+    {
+      "code": "stagnation_detected",
+      "type": "stagnation_detected",
+      "status": 400,
+      "meaning": "The assistant gave the same reply too often, so the request was refused or the agent run stopped."
+    },
+    {
+      "code": "invalid_request",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "The request could not be read or is not valid."
+    },
+    {
+      "code": "internal_error",
+      "type": "server_error",
+      "status": null,
+      "meaning": "gglib failed on its own side; the message says where."
+    },
+    {
+      "code": "model_file_not_found",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "The model is in the catalog but its file is missing."
+    },
+    {
+      "code": "pinned_model_mismatch",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "This endpoint serves one pinned model, and the request named another."
+    },
+    {
+      "code": "host_not_allowed",
+      "type": "invalid_request_error",
+      "status": 403,
+      "meaning": "The Host is neither loopback nor a host allowed with --allowed-host."
+    },
+    {
+      "code": "origin_not_allowed",
+      "type": "invalid_request_error",
+      "status": 403,
+      "meaning": "A page on another site sent a change."
+    },
+    {
+      "code": "invalid_api_key",
+      "type": "invalid_request_error",
+      "status": 401,
+      "meaning": "The bearer token is missing or wrong."
+    },
+    {
+      "code": "device_not_paired",
+      "type": "invalid_request_error",
+      "status": 403,
+      "meaning": "A request came through the tunnel without a paired device's key."
+    },
+    {
+      "code": "mcp_not_allowed_over_tunnel",
+      "type": "invalid_request_error",
+      "status": 403,
+      "meaning": "This machine does not open its MCP gateway to the tunnel."
+    },
+    {
+      "code": "device_not_named",
+      "type": "invalid_request_error",
+      "status": 403,
+      "meaning": "The route serves a paired device through the tunnel, and the request did not name one."
+    },
+    {
+      "code": "runs_unavailable",
+      "type": "service_unavailable",
+      "status": 503,
+      "meaning": "This proxy runs outside the gglib daemon, so it holds no runs."
+    },
+    {
+      "code": "chats_unavailable",
+      "type": "service_unavailable",
+      "status": 503,
+      "meaning": "This proxy runs outside the gglib daemon, so it holds no chats."
+    },
+    {
+      "code": "not_found",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "Nothing with that id is visible to the caller."
+    },
+    {
+      "code": "conflict",
+      "type": "invalid_request_error",
+      "status": 409,
+      "meaning": "The run id is taken, or the conversation already has a live reply."
+    },
+    {
+      "code": "not_yours",
+      "type": "invalid_request_error",
+      "status": 403,
+      "meaning": "The run belongs to a paired device, so only that device may read its reply."
+    },
+    {
+      "code": "too_many_runs",
+      "type": "rate_limit_error",
+      "status": 429,
+      "meaning": "Too many runs are still going; cancel one or wait."
+    },
+    {
+      "code": "shutting_down",
+      "type": null,
+      "status": 503,
+      "meaning": "The daemon is stopping, so it starts no more runs."
+    },
+    {
+      "code": "conversation_not_found",
+      "type": "invalid_request_error",
+      "status": 404,
+      "meaning": "No conversation has that id."
+    },
+    {
+      "code": "agent_busy",
+      "type": "rate_limit_error",
+      "status": 429,
+      "meaning": "Every agent loop slot is in use; retry later."
+    },
+    {
+      "code": "no_model",
+      "type": "invalid_request_error",
+      "status": 422,
+      "meaning": "The chat names no model and nothing is running on the hub."
+    },
+    {
+      "code": "model_unavailable",
+      "type": "server_error",
+      "status": 503,
+      "meaning": "The chat's model could not be loaded on the hub."
+    },
+    {
+      "code": "unavailable",
+      "type": "server_error",
+      "status": 503,
+      "meaning": "Something the run needs is unavailable, such as a model stopped while the run was prepared; retry."
+    },
+    {
+      "code": "message_not_found",
+      "type": null,
+      "status": 404,
+      "meaning": "The message a run was to replace is not in its conversation."
+    },
+    {
+      "code": "upstream_timeout",
+      "type": "server_error",
+      "status": 504,
+      "meaning": "The model server sent nothing, or did not finish, within its time limit; retry."
+    },
+    {
+      "code": "run_panicked",
+      "type": null,
+      "status": null,
+      "meaning": "The run stopped on an internal failure."
+    },
+    {
+      "code": "proxy_not_running",
+      "type": null,
+      "status": null,
+      "meaning": "The proxy was not running, so the chat run had nowhere to go."
+    },
+    {
+      "code": "log_full",
+      "type": null,
+      "status": null,
+      "meaning": "The reply passed the 8 MB a run may hold."
+    },
+    {
+      "code": "max_iterations",
+      "type": null,
+      "status": null,
+      "meaning": "The agent reached its iteration limit without a final answer."
+    },
+    {
+      "code": "too_many_tool_calls",
+      "type": null,
+      "status": null,
+      "meaning": "The model asked for more tool calls at once than are allowed."
+    },
+    {
+      "code": "agent_error",
+      "type": null,
+      "status": null,
+      "meaning": "The agent loop failed; the run's last event says why."
+    },
+    {
+      "code": "transcript_not_saved",
+      "type": null,
+      "status": null,
+      "meaning": "The reply could not be saved to its conversation."
+    }
+  ]
+}
