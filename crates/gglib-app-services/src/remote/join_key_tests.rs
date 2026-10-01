@@ -29,6 +29,7 @@ use crate::test_support_remote::{
 /// never the file this machine serves with.
 #[tokio::test]
 async fn a_machine_keeps_one_key_whatever_address_its_ticket_carries() {
+    let root = gglib_core::paths::isolate_data_root();
     let dir = scratch_join_keys();
     let (_, ops, _) = test_remote_ops_joining_from(dir.clone()).await;
 
@@ -49,10 +50,7 @@ async fn a_machine_keeps_one_key_whatever_address_its_ticket_carries() {
     // Where `remote_identity_path` puts the serving key, named here because
     // that function makes or tightens the data root's `data/`, which a test
     // that only names paths has no call to change.
-    let serving = gglib_core::paths::data_root()
-        .expect("the data root resolves")
-        .join("data")
-        .join("remote_identity");
+    let serving = root.join("data").join("remote_identity");
     assert_ne!(here, serving, "a joining key is the serving key");
     assert_ne!(other, serving, "a joining key is the serving key");
 }
@@ -63,10 +61,10 @@ async fn a_machine_keeps_one_key_whatever_address_its_ticket_carries() {
 /// The only `RemoteOps` this crate's tests build without
 /// [`RemoteOps::with_join_keys`], so the only one that would see a daemon's
 /// joins handed a key anywhere else. It dials nothing and only names the
-/// path, which makes nothing in the checkout's `data/`, which the installed
-/// daemon may share.
+/// path, under this binary's own data root (#955).
 #[tokio::test]
 async fn a_daemon_keeps_its_joining_keys_under_the_data_root() {
+    let root = gglib_core::paths::isolate_data_root();
     let (core, proxy) = test_core_and_proxy().await;
     let emitter: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(RemoteGateway::new(Arc::clone(&emitter)));
@@ -74,7 +72,6 @@ async fn a_daemon_keeps_its_joining_keys_under_the_data_root() {
 
     let key = ops.join_key_path(&ticket(TICKET_A)).expect("named");
 
-    let root = gglib_core::paths::data_root().expect("the data root resolves");
     assert_eq!(
         key,
         root.join("data").join("remote_join").join(FINGERPRINT_A)

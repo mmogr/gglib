@@ -25,25 +25,18 @@ use crate::proxy::ProxyOps;
 
 /// Held for as long as one test has a real tunnel armed.
 ///
-/// Every `RemoteOps` in this binary is a different object, but there is only
-/// one of each of the two files an arm touches, because both resolve from a
-/// process-wide path:
-///
-/// - `data/remote_identity`, which modelpipe places with `fs::hard_link`
-///   from a temporary — two listeners starting at once is an *error* there
-///   on purpose, so that neither silently overwrites the other's key and
-///   serves a ticket nobody holds, and the link is what keeps that error
-///   while making the write atomic. On a checkout where the file does not
-///   exist yet, which is every CI run, two arms in the same instant means
-///   one of them fails with `File exists`.
-/// - `data/remote_devices`, where `forget` is a read-modify-write and each
-///   `RemoteOps` holds its own `roster` lock — so two of them are two locks
-///   over one file, and one test's write can carry back a key another test
-///   believed it had removed, leaving it in the developer's checkout for
-///   their own `enable` to seed onto their tunnel.
+/// Every `RemoteOps` in this binary is a different object, and each keeps its
+/// device keys in a file of its own, but they all arm with one endpoint key:
+/// `data/remote_identity` in the binary's own data root (#955), which
+/// modelpipe places with `fs::hard_link` from a temporary. Two listeners
+/// starting at once is an *error* there on purpose, so that neither silently
+/// overwrites the other's key and serves a ticket nobody holds, and the link
+/// is what keeps that error while making the write atomic. The file does not
+/// exist until the binary's first arm, so two arms in the same instant means
+/// one of them fails with `File exists`.
 ///
 /// Production has one daemon, one `RemoteOps` and one arm at a time, which
-/// is what makes both safe there; only a test binary has several. Rather
+/// is what makes it safe there; only a test binary has several. Rather
 /// than ask each test to remember, the fixture below hands the guard out
 /// with the ops, so a test that arms cannot fail to hold it.
 static ARMING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -257,10 +250,10 @@ async fn a_proxy_that_leaves_during_the_key_wait_does_not_outlive_its_tunnel() {
 
 /// The identity is one file, in the directory the repository already ignores.
 ///
-/// Read here rather than through `enable`: asking `enable` would bind an
-/// endpoint and write a real key into whatever data directory the test run
-/// resolves to, which is the repository itself in a debug build. The decision
-/// is the thing under test, and it is separable from acting on it.
+/// Read here rather than through `enable`, which would bind an endpoint and
+/// write a real key: the decision is the thing under test, and it is
+/// separable from acting on it. Resolved in this binary's own data root, as
+/// every arm here is (#955).
 ///
 /// There is no longer a "keep it" case to contrast with — the identity always
 /// lasts (ADR 0012 decision 4, reversed) — so what is worth pinning is *where*
@@ -268,9 +261,15 @@ async fn a_proxy_that_leaves_during_the_key_wait_does_not_outlive_its_tunnel() {
 /// person who ran `git add -A`.
 #[test]
 fn the_endpoint_key_lands_where_the_repository_ignores_it() {
+    let root = gglib_core::paths::isolate_data_root();
     let kept = super::identity::identity_path()
         .expect("the identity path did not resolve")
         .expect("the identity always names a file now");
+    assert!(
+        kept.starts_with(root),
+        "{} is outside the test root",
+        kept.display()
+    );
     assert!(kept.ends_with("remote_identity"));
     assert_eq!(
         kept.parent().and_then(|p| p.file_name()),

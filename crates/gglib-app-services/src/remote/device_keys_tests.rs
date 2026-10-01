@@ -137,8 +137,8 @@ async fn a_row_with_no_endpoint_to_pin_to_is_not_seeded() {
 }
 
 /// A `RemoteOps` built with a key file reads and writes that file and no
-/// other. That is what keeps a test's devices out of the checkout's
-/// `data/remote_devices`, which in a debug build is the installed daemon's.
+/// other. That is what keeps one test's devices out of another's: the
+/// default, `data/remote_devices`, is one file for the whole test binary.
 #[tokio::test]
 async fn the_key_file_an_ops_was_built_with_is_the_one_it_reads_and_writes() {
     let (_, ops, _) = crate::test_support_remote::test_remote_ops().await;

@@ -239,8 +239,10 @@ impl SystemProbePort for MockSystemProbePort {
 
 /// Build an `AppCore` backed by an in-memory `SQLite` database.
 ///
-/// Uses the `test-utils` feature gate from `gglib-db`.
+/// Uses the `test-utils` feature gate from `gglib-db`. Sets this binary's own
+/// data root first, as [`test_core_and_proxy_over`] does.
 pub(crate) async fn test_core() -> Arc<AppCore> {
+    gglib_core::paths::isolate_data_root();
     let pool = setup_test_database().await.expect("in-memory DB");
     Arc::new(CoreFactory::build_app_core(pool))
 }
@@ -258,6 +260,10 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
 
 /// [`test_core_and_proxy`] over repositories the caller built, so a test can
 /// put a repository of its own in place of one of them.
+///
+/// Sets this binary's own data root first, so whatever the core resolves
+/// from it, such as the endpoint key an arm writes, stays out of the
+/// checkout, where in a debug build an installed daemon keeps its own (#955).
 pub(crate) fn test_core_and_proxy_over(
     repos: &gglib_core::ports::Repos,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
@@ -268,6 +274,7 @@ pub(crate) fn test_core_and_proxy_over(
     use gglib_runtime::process::ProcessManager;
     use gglib_runtime::proxy::ProxySupervisor;
 
+    gglib_core::paths::isolate_data_root();
     let core = Arc::new(AppCore::new(repos.clone()));
 
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
