@@ -768,6 +768,25 @@ describe('RemoteControl', () => {
     expect(screen.queryByText(/aabbccddeeff/)).not.toBeInTheDocument();
   });
 
+  it('the connected half names the command that prints the key another client needs', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      connected: {
+        port: 41234,
+        base_url: 'http://127.0.0.1:41234/v1',
+        ticket_fingerprint: '3ca82708b995',
+        path: 'direct',
+        away_for_s: null,
+      },
+    });
+    await open();
+
+    // The port does not add the key, and the key is this device's own, not
+    // the far machine's proxy key: the panel points at the command, and puts
+    // no credential on screen.
+    expect(screen.getByText('gglib remote key --show')).toBeInTheDocument();
+  });
+
   it('the connected half asks which model that machine should be asked for', async () => {
     applyRemoteStatus({
       ...IDLE_STATUS,
