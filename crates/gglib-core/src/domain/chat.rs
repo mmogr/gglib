@@ -169,6 +169,8 @@ pub struct ConversationUpdate {
     pub system_prompt: Option<Option<String>>,
     /// Use `Some(Some(settings))` to set, `Some(None)` to clear, `None` to leave unchanged.
     pub settings: Option<Option<ConversationSettings>>,
+    /// Use `Some(Some(id))` to set, `Some(None)` to clear, `None` to leave unchanged.
+    pub model_id: Option<Option<i64>>,
 }
 
 /// Session parameters captured at conversation creation for resume.

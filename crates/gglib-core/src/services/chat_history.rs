@@ -74,7 +74,35 @@ impl ChatHistoryService {
                 ConversationUpdate {
                     title: new_title,
                     system_prompt,
-                    settings: None,
+                    ..ConversationUpdate::default()
+                },
+            )
+            .await
+    }
+
+    /// Name the model a run used on its conversation: `model_id` (`None`
+    /// when it is not in the registry) and the settings' `model_name`,
+    /// keeping every other setting.
+    pub async fn record_model(
+        &self,
+        id: i64,
+        model_id: Option<i64>,
+        model_name: &str,
+    ) -> Result<(), ChatHistoryError> {
+        let conversation = self
+            .repo
+            .get_conversation(id)
+            .await?
+            .ok_or(ChatHistoryError::ConversationNotFound(id))?;
+        let mut settings = conversation.settings.unwrap_or_default();
+        settings.model_name = Some(model_name.to_owned());
+        self.repo
+            .update_conversation(
+                id,
+                ConversationUpdate {
+                    settings: Some(Some(settings)),
+                    model_id: Some(model_id),
+                    ..ConversationUpdate::default()
                 },
             )
             .await

@@ -51,7 +51,9 @@ runs the same prepared loop detached from any response, so only cancel or
 shutdown stops it, and saves the transcript to the request's conversation.
 A local run holds its model until it ends (`remote_upstream::hold`), so no
 proxy request swaps it out or recycles it mid-run. `launch` reserves the id
-in the caller's scope, saves the user's message and starts the loop.
+in the caller's scope, saves the user's message, names a local run's model on
+the conversation (its registry id, and its name in the settings) so the chat's
+next turn from either door runs on it, and starts the loop.
 
 # A paired device's turn
 

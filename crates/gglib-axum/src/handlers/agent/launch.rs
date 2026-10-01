@@ -15,7 +15,7 @@ use gglib_core::ports::{Created, RunScope};
 
 use super::compose::Prepared;
 use super::run::work;
-use super::transcript::{FrameTimes, save_reply, save_user};
+use super::transcript::{FrameTimes, record_model, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -27,7 +27,7 @@ pub(super) struct Transcript {
 }
 
 /// Reserve the id in `scope`, save the user's message (naming the device,
-/// for a device's run), and start the loop,
+/// for a device's run) and the model the run uses, and start the loop,
 /// in one task of its own: a request dropped part-way cannot split them, so
 /// a retry finds the run rather than saving the message, or replacing rows,
 /// again.
@@ -99,6 +99,8 @@ async fn reserve_and_start(
                 device.as_deref(),
             )
             .await?;
+            let used = &prepared.made_by.model;
+            record_model(&state.core, conversation_id, prepared.local_model, used).await;
             save_reply(Arc::clone(&state.core), conversation_id, times.clone())
         }
         None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {

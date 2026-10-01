@@ -140,6 +140,7 @@ async fn test_update_conversation() {
             title: Some("Updated Title".to_string()),
             system_prompt: None,
             settings: None,
+            model_id: None,
         },
     )
     .await
