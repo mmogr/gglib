@@ -108,12 +108,16 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         id: i64,
         update: ConversationUpdate,
     ) -> Result<(), ChatHistoryError> {
-        if update.title.is_none() && update.system_prompt.is_none() && update.settings.is_none() {
+        if update.title.is_none()
+            && update.system_prompt.is_none()
+            && update.settings.is_none()
+            && update.model_id.is_none()
+        {
             return Ok(());
         }
 
         let row = sqlx::query(
-            "SELECT title, system_prompt, settings FROM chat_conversations WHERE id = ?",
+            "SELECT title, model_id, system_prompt, settings FROM chat_conversations WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -122,10 +126,12 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         .ok_or(ChatHistoryError::ConversationNotFound(id))?;
 
         let current_title: String = row.get("title");
+        let current_model: Option<i64> = row.get("model_id");
         let current_prompt: Option<String> = row.get("system_prompt");
         let current_settings: Option<String> = row.get("settings");
 
         let next_title = update.title.unwrap_or(current_title);
+        let next_model = update.model_id.unwrap_or(current_model);
         let next_prompt = update.system_prompt.unwrap_or(current_prompt);
         let next_settings = match update.settings {
             Some(Some(s)) => serde_json::to_string(&s).ok(),
@@ -134,9 +140,10 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         };
 
         sqlx::query(
-            "UPDATE chat_conversations SET title = ?, system_prompt = ?, settings = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE chat_conversations SET title = ?, model_id = ?, system_prompt = ?, settings = ?, updated_at = datetime('now') WHERE id = ?",
         )
         .bind(next_title)
+        .bind(next_model)
         .bind(next_prompt)
         .bind(next_settings)
         .bind(id)

@@ -51,7 +51,9 @@ runs the same prepared loop detached from any response, so only cancel or
 shutdown stops it, and saves the transcript to the request's conversation.
 A local run holds its model until it ends (`remote_upstream::hold`), so no
 proxy request swaps it out or recycles it mid-run. `launch` reserves the id
-in the caller's scope, saves the user's message and starts the loop.
+in the caller's scope, saves the user's message, names a local run's model on
+the conversation (its registry id, and its name in the settings) so the chat's
+next turn from either door runs on it, and starts the loop.
 
 # A paired device's turn
 
@@ -61,8 +63,8 @@ chat's id and the device's message. The history is rebuilt from the hub's
 record (the system prompt, every row, the message), the limits from the
 conversation's settings, no tools unless `enable --allow-mcp` opened the
 tunnel to them (then only those the settings name), and the reply runs on the chat's model
-(`hub_model`: its own, its settings', its last reply's, or the hub's
-default), loaded first when it is not running, as an agent run in the
+(`hub_model`: its own, its settings', its last reply's, the one running on
+the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.
 
 <!-- module-docs:end -->

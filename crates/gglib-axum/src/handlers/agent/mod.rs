@@ -135,6 +135,9 @@ mod run_hold_tests;
 #[path = "run_made_tests.rs"]
 mod run_made_tests;
 #[cfg(test)]
+#[path = "run_model_tests.rs"]
+mod run_model_tests;
+#[cfg(test)]
 #[path = "run_privacy_tests.rs"]
 mod run_privacy_tests;
 #[cfg(test)]

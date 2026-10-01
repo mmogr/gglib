@@ -3,7 +3,9 @@
 //! The user's message is saved once the run is accepted. When the request
 //! names a row to replace (an edit, or a regenerate), that row and every
 //! later row are deleted in the same transaction, so a refused run, or one
-//! that never got as far, changes nothing. The reply is saved when the run
+//! that never got as far, changes nothing. Once the message is saved, a
+//! local run names its model on the conversation, so the chat's next turn,
+//! from either door, runs on it. The reply is saved when the run
 //! ends, all rows or none, with how long each turn thought: from its first
 //! reasoning event to its last, as they were logged.
 
@@ -98,6 +100,32 @@ pub(super) async fn save_user(
             "the user's message could not be saved",
         ),
     })
+}
+
+/// Name the model a local run uses on `conversation_id`: the registry's id
+/// when it is there (none when it is not), and its name in the settings
+/// either way. A run on the far machine names nothing: its model is not one
+/// this machine has. Not saved is logged, not refused: the message is.
+pub(super) async fn record_model(
+    core: &AppCore,
+    conversation_id: i64,
+    local_model: Option<(u16, i64)>,
+    name: &str,
+) {
+    let Some((_, model_id)) = local_model else {
+        return;
+    };
+    let registered = core.models().get_by_id(model_id).await.ok().flatten();
+    let recorded = core
+        .chat_history()
+        .record_model(conversation_id, registered.map(|m| m.id), name)
+        .await;
+    if recorded.is_err() {
+        tracing::warn!(
+            conversation = conversation_id,
+            "an agent run's model was not recorded on its conversation"
+        );
+    }
 }
 
 /// Save the reply to `conversation_id` once the run ends, whatever the end:

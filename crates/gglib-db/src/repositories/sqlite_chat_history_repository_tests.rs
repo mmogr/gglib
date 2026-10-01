@@ -76,6 +76,32 @@ async fn update_conversation_title() {
 }
 
 #[tokio::test]
+async fn update_conversation_model_sets_and_clears_it_alone() {
+    let repo = repo().await;
+    sqlx::query(
+        "INSERT INTO models (id, name, file_path, param_count_b, added_at, model_key)
+         VALUES (7, 'm', '/tmp/m.gguf', 0.5, '2026-01-01 00:00:00', 'm')",
+    )
+    .execute(&repo.pool)
+    .await
+    .expect("seed model");
+    let id = repo.create_conversation(make_conv("Kept")).await.unwrap();
+    let set = |model_id| ConversationUpdate {
+        model_id: Some(model_id),
+        ..Default::default()
+    };
+    repo.update_conversation(id, set(Some(7))).await.unwrap();
+    let conversation = repo.get_conversation(id).await.unwrap().unwrap();
+    assert_eq!(
+        (conversation.model_id, conversation.title.as_str()),
+        (Some(7), "Kept")
+    );
+    repo.update_conversation(id, set(None)).await.unwrap();
+    let conversation = repo.get_conversation(id).await.unwrap().unwrap();
+    assert_eq!(conversation.model_id, None);
+}
+
+#[tokio::test]
 async fn delete_conversation() {
     let repo = repo().await;
     let id = repo.create_conversation(make_conv("Tmp")).await.unwrap();
