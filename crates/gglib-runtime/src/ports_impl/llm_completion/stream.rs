@@ -7,8 +7,9 @@
 
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use futures_core::Stream;
 use futures_util::StreamExt as _;
 
@@ -30,20 +31,51 @@ pub(super) type EventStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> 
 ///
 /// `dialect` selects the response parser — `None` selects the
 /// identity-passthrough parser, so models that already emit strict `OpenAI` tool
-/// calls are unaffected.
+/// calls are unaffected. `idle` bounds each read; see [`sse_events`].
 pub(super) fn normalized_event_stream(
     response: reqwest::Response,
     dialect: Option<&DialectSpec>,
     sink: Option<Arc<dyn UsageSink>>,
+    idle: Duration,
 ) -> EventStream {
-    let byte_stream = response.bytes_stream();
+    let raw = sse_events(response.bytes_stream(), idle);
+    let normalized = normalize_timed(raw, dialect, monotonic());
 
-    // Build the typed event stream from the raw SSE byte stream.
-    let raw = async_stream::stream! {
+    match sink {
+        None => normalized,
+        Some(sink) => tap_usage(normalized, sink),
+    }
+}
+
+/// Decode SSE bytes into events, waiting at most `idle` for each read.
+///
+/// A read that waits longer ends the stream with an `Err` that names the
+/// bound. A run sends to llama-server's port itself, past the proxy, and holds
+/// its model while it does, so without this a llama-server gone silent
+/// mid-answer would keep the run, and the model, for good (#1212). The adapter
+/// passes the proxy's own bound, [`gglib_proxy::STREAM_IDLE_TIMEOUT`], whose
+/// docs say what it times and why prefill sets its floor.
+fn sse_events<S, B, E>(byte_stream: S, idle: Duration) -> EventStream
+where
+    S: Stream<Item = Result<B, E>> + Send + 'static,
+    B: AsRef<[u8]> + Send,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    Box::pin(async_stream::stream! {
         let mut decoder = SseStreamDecoder::default();
         let mut byte_stream = std::pin::pin!(byte_stream);
 
-        'outer: while let Some(chunk_result) = byte_stream.next().await {
+        loop {
+            let Ok(next) = tokio::time::timeout(idle, byte_stream.next()).await else {
+                tracing::warn!(?idle, "llama-server went silent; ending the run's stream");
+                yield Err(anyhow!(
+                    "llama-server sent nothing for {idle:?}; the run's stream was ended"
+                ));
+                return;
+            };
+            let Some(chunk_result) = next else {
+                break;
+            };
             let chunk = match chunk_result {
                 Ok(c) => c,
                 Err(e) => {
@@ -60,26 +92,19 @@ pub(super) fn normalized_event_stream(
                 }
             };
 
-            let (events, stop) = decoder.feed_bytes(&chunk);
+            let (events, stop) = decoder.feed_bytes(chunk.as_ref());
             for event in events {
                 yield event;
             }
             if stop {
-                break 'outer;
+                break;
             }
         }
 
         if let Some(fallback) = decoder.finish() {
             yield Ok(fallback);
         }
-    };
-
-    let normalized = normalize_timed(Box::pin(raw), dialect, monotonic());
-
-    match sink {
-        None => normalized,
-        Some(sink) => tap_usage(normalized, sink),
-    }
+    })
 }
 
 /// Time `raw`'s writing, then normalize it: the time is taken before a
@@ -123,6 +148,10 @@ fn tap_usage(stream: EventStream, sink: Arc<dyn UsageSink>) -> EventStream {
         }
     })
 }
+
+#[cfg(test)]
+#[path = "stream_idle_tests.rs"]
+mod idle_tests;
 
 #[cfg(test)]
 mod tests {
