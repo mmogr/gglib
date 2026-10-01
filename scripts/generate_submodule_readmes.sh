@@ -3,9 +3,11 @@
 #
 # --create:
 #   Creates README stubs for every src/ subdir (Rust/TypeScript/tests) that
-#   currently lacks one. Extracts //! doc comments from mod.rs verbatim into
-#   the module-docs section, prepends #![doc = include_str!("README.md")] to
-#   mod.rs, and leaves the original //! block with a migration comment.
+#   currently lacks one, except src/types/generated/ and below (ts-rs output,
+#   which check_readmes.sh also skips). Extracts //! doc comments from mod.rs
+#   verbatim into the module-docs section, prepends
+#   #![doc = include_str!("README.md")] to mod.rs, and leaves the original //!
+#   block with a migration comment.
 #   A README that already exists is never touched.
 #
 # Usage:
@@ -124,6 +126,13 @@ update_modrs_for_migration() {
     rm -f "$tmp"
 }
 
+# Whether --create would prepend the include line to this mod.rs: it exists
+# and does not carry the line yet. The dry run asks the same question, so it
+# reports only the edits a real run would make.
+modrs_needs_include() {
+    [[ -f "$1" ]] && ! grep -q '#!\[doc = include_str!("README.md")]' "$1" 2>/dev/null
+}
+
 # ── Stub generators ────────────────────────────────────────────────────────
 
 # Generate a full README stub for a new Rust crate src/ subdir.
@@ -226,7 +235,9 @@ create_missing_readmes() {
 
             if $DRY_RUN; then
                 echo "  [create] $rel/README.md"
-                [[ -f "$modrs" ]] && echo "  [update] $rel/mod.rs"
+                if modrs_needs_include "$modrs"; then
+                    echo "  [update] $rel/mod.rs"
+                fi
                 continue
             fi
 
@@ -234,7 +245,7 @@ create_missing_readmes() {
             generate_rust_stub "$dir" > "$readme"
             (( CREATED_RUST++ )) || true
 
-            if [[ -f "$modrs" ]] && ! grep -q '#!\[doc = include_str!("README.md")]' "$modrs" 2>/dev/null; then
+            if modrs_needs_include "$modrs"; then
                 echo "  Updating: $rel/mod.rs"
                 update_modrs_for_migration "$modrs"
                 (( MODRS_UPDATED++ )) || true
@@ -261,7 +272,9 @@ create_missing_readmes() {
             echo "  Creating: $rel/README.md"
             generate_ts_stub "$dir" > "$readme"
             (( CREATED_TS++ )) || true
-        done < <(find "$TS_SRC_DIR" -mindepth 1 -type d | grep -v "node_modules" | sort)
+        # `types/generated/` is ts-rs output, which check_readmes.sh skips for
+        # the reason given there; a stub here would be a README it ignores.
+        done < <(find "$TS_SRC_DIR" -mindepth 1 -type d | grep -v "node_modules" | grep -v "types/generated" | sort)
     else
         echo "  (src/ not found — skipping)"
     fi
