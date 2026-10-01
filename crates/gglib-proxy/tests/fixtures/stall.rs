@@ -35,11 +35,13 @@ use super::common::{MockSettingsRepo, TaggedCatalog, make_mcp_service};
 /// The model every request in these tests asks for.
 pub(crate) const MODEL: &str = "stall-model";
 
-/// Both bounds at 300 ms: long enough that a busy runner does not cut a
-/// healthy reply, short enough that a stall ends a test quickly.
+/// Both upstream bounds at 300 ms: long enough that a busy runner does not cut
+/// a healthy reply, short enough that a stall ends a test quickly. The send
+/// bound is one these tests never meet.
 pub(crate) const BOUNDS: StreamBounds = StreamBounds {
     first_byte: Duration::from_millis(300),
     idle: Duration::from_millis(300),
+    send: Duration::from_mins(1),
 };
 
 /// What the stand-in upstream has seen.

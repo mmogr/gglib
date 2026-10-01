@@ -33,8 +33,8 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
 /// (`tx.send`) or on a repair re-issue, the reader is parked at its `yield` and
 /// no read is being timed, so a slow client is never mistaken for a silent
 /// upstream. The converse holds too: this bound does not notice a client that
-/// stops reading. What notices a client that leaves is described on
-/// [`drain_events`](crate::forward::drain_events).
+/// stops reading, which its twin on the client's side,
+/// [`CLIENT_SEND_TIMEOUT`](crate::client_send::CLIENT_SEND_TIMEOUT), does.
 ///
 /// Prefill sets the floor. The proxy asks llama-server for `return_progress`
 /// (see `inject_streaming_body_overrides` in [`crate::forward`]), so it sends
@@ -47,7 +47,8 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
 /// [`StreamVerdict::Stalled`](crate::upstream_health::StreamVerdict::Stalled).
 pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 
-/// How long a streamed chat completion waits on a silent upstream.
+/// How long a streamed chat completion waits on a silent upstream, and on a
+/// client that stopped reading.
 ///
 /// [`serve`](crate::serve) runs with [`StreamBounds::default`]. A test build
 /// can start it inside `TEST_STREAM_BOUNDS.scope(bounds, ..)` to run it with
@@ -60,6 +61,9 @@ pub struct StreamBounds {
     pub first_byte: Duration,
     /// How long one read of the reply may wait; see [`STREAM_IDLE_TIMEOUT`].
     pub idle: Duration,
+    /// How long one send to a streaming client may wait for it to make room;
+    /// see [`CLIENT_SEND_TIMEOUT`](crate::client_send::CLIENT_SEND_TIMEOUT).
+    pub send: Duration,
 }
 
 impl Default for StreamBounds {
@@ -67,6 +71,7 @@ impl Default for StreamBounds {
         Self {
             first_byte: Duration::from_secs(FIRST_BYTE_DEADLINE_SECS),
             idle: STREAM_IDLE_TIMEOUT,
+            send: crate::client_send::CLIENT_SEND_TIMEOUT,
         }
     }
 }

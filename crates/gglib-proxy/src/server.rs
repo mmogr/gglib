@@ -104,7 +104,8 @@ pub(crate) struct AppState {
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
     upstream_health: Arc<UpstreamHealth>,
-    /// How long a streamed reply may wait on a silent upstream.
+    /// How long a streamed reply may wait on a silent upstream, or on a client
+    /// that stopped reading.
     stream_bounds: StreamBounds,
     /// Per-model chars-per-token calibration, learned from upstream usage
     /// frames and used to size the truncation budget.

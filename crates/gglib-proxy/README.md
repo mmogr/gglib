@@ -134,6 +134,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability, plus content-hash session-id fallback derivation
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
+- **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
@@ -502,9 +503,11 @@ connection is noticed at the next frame sent to it. If llama-server has gone
 silent by then, the idle bound still ends the stream, and the stall is counted
 and asks for a recycle as above. During a tool-call repair's re-issue, the next
 frame is a keepalive sent every 15 s, or the tool call once the re-issue ends,
-at most 60 s later. A client that vanishes without a FIN is not seen to leave:
-once 32 frames queue for it, the proxy waits on the client, where the idle bound
-is not running, so its bound is TCP retransmission.
+at most 60 s later. A client that vanishes without a FIN is not seen to leave,
+and once 32 frames queue for it each send waits for it to take one. A send that
+waits 300 s, as long as the idle bound gives the upstream, ends the turn as a
+departure, freeing the model; a client that reads slowly but keeps reading is
+never cut, since the wait is timed per frame.
 
 ## MCP Streamable HTTP Gateway
 
