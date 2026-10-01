@@ -168,32 +168,9 @@ jobs:
           # on main can restore.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Cache node_modules
-        uses: actions/cache@v6
-        with:
-          path: node_modules
-          key: ubuntu-${{ runner.arch }}-node-${{ hashFiles('package.json') }}
-
-      - name: Cache Web UI
-        id: webui-cache
-        uses: actions/cache@v6
-        with:
-          path: web_ui
-          key: ubuntu-${{ runner.arch }}-webui-${{ hashFiles('src/**/*.{ts,tsx}', 'index.html', 'vite.config.ts', 'package.json') }}
-
-      - name: Setup Node.js
-        if: steps.webui-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Build Web UI
-        if: steps.webui-cache.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          npm run build
-
+      # No Node or Web UI steps: with gglib-app excluded below, nothing this
+      # job builds needs web_ui/ (see the `allow_missing` note in gglib-axum's
+      # ui.rs).
       - name: Build documentation
         # Exclude gglib-app (Tauri desktop): the one member whose build can need the Web UI
         # (its `tauri::generate_context!()` embeds `frontendDist` when `custom-protocol` is on).

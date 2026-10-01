@@ -361,10 +361,12 @@ jobs:
               ...REQUIRED_PREFIXES.map(p => `  - ${p}*`),
               ``,
               isFork
-                // Say this plainly so an external contributor isn't left thinking they
-                // did something wrong. This is check output, so it needs no write access.
-                ? `This PR is from a fork, where automatic labelling can't run (fork`
-                  + ` tokens are read-only). A maintainer will apply these labels.`
+                // Say what CONTRIBUTING.md says rather than promise labels: code from
+                // outside is not accepted yet. Check output, so it needs no write access.
+                ? `This PR is from a fork. Code from outside contributors is not accepted`
+                  + ` yet; issues, bug reports and ideas are welcome through the issue`
+                  + ` tracker. See https://github.com/${owner}/${repo}/blob/main/`
+                  + `CONTRIBUTING.md#outside-contributions`
                 : `component: auto-applies only when exactly one is touched; priority:`
                   + ` and size: are human judgements — see the bot comment on this PR.`,
             ].join('\n'));

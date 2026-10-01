@@ -99,6 +99,66 @@ fn forwarded_body(extra: serde_json::Value) -> Bytes {
     Bytes::from(serde_json::to_vec(&body).unwrap())
 }
 
+/// What the client was sent, read the way a client reads it: every tool call
+/// as its name and parsed arguments, put back together from its fragments by
+/// `index`, and the text joined across frames.
+///
+/// The tests ask this, not the raw wire, whether the bad call got through. The
+/// wire also carries a random completion id and the time, either of which can
+/// hold the bad call's digits (#1103), and the arguments travel as
+/// JSON-escaped fragments that a substring search can miss. A frame that is
+/// neither a `:` comment nor `data: ` fails the test rather than going unread.
+fn client_view(wire: &str) -> (Vec<(String, serde_json::Value)>, String) {
+    let mut calls = std::collections::BTreeMap::<u64, (String, String)>::new();
+    let mut text = String::new();
+    let payloads = wire
+        .split("\n\n")
+        .map(str::trim_start)
+        .filter(|frame| !frame.is_empty() && !frame.starts_with(':'))
+        .map(|frame| {
+            frame
+                .strip_prefix("data: ")
+                .unwrap_or_else(|| panic!("a frame is a comment or data: {frame:?}"))
+        });
+    for payload in payloads.filter(|p| *p != "[DONE]") {
+        let frame: serde_json::Value =
+            serde_json::from_str(payload).expect("every data frame is JSON");
+        let deltas = frame["choices"].as_array().into_iter().flatten();
+        for delta in deltas.map(|choice| &choice["delta"]) {
+            text.push_str(delta["content"].as_str().unwrap_or_default());
+            for part in delta["tool_calls"].as_array().into_iter().flatten() {
+                let index = part["index"]
+                    .as_u64()
+                    .expect("a call fragment has an index");
+                let (name, arguments) = calls.entry(index).or_default();
+                let function = &part["function"];
+                name.push_str(function["name"].as_str().unwrap_or_default());
+                arguments.push_str(function["arguments"].as_str().unwrap_or_default());
+            }
+        }
+    }
+    let calls = calls
+        .into_values()
+        .map(|(name, arguments)| {
+            let parsed = serde_json::from_str(&arguments).unwrap_or_else(|_| json!(arguments));
+            (name, parsed)
+        })
+        .collect();
+    (calls, text)
+}
+
+/// The one call the client must end up with: the fixed one, and nothing of
+/// the bad call's `max_lines`, as a call or as markup in the text.
+fn assert_only_the_fixed_call_reached_the_client(wire: &str) {
+    let (calls, text) = client_view(wire);
+    assert_eq!(
+        calls,
+        [("read_file".to_owned(), json!({"path": "fixed.rs"}))],
+        "the fixed call reaches the client and the bad call does not: {wire}"
+    );
+    assert!(!text.contains("max_lines"), "nor does its markup: {wire}");
+}
+
 /// One streamed turn on a Qwen model: its outcome, the requests upstream
 /// saw, and everything the client was sent.
 async fn run_turn(
@@ -171,11 +231,7 @@ async fn a_bad_call_under_gglibs_grammar_is_drawn_again_before_the_client_sees_i
     );
     assert!(requests[1]["grammar"].is_string(), "and the grammar");
     assert_eq!(requests[1]["stream"], false);
-    assert!(
-        wire.contains("fixed.rs"),
-        "the fixed call reaches the client: {wire}"
-    );
-    assert!(!wire.contains("4242"), "the bad call does not: {wire}");
+    assert_only_the_fixed_call_reached_the_client(&wire);
 }
 
 /// An `auto` turn's re-issue demands a call; when the answer is still
@@ -190,9 +246,5 @@ async fn a_re_issue_answered_in_markup_is_read_as_a_call() {
         "the re-issue replaced the call: {wire}"
     );
     assert_eq!(requests[1]["tool_choice"], "required");
-    assert!(
-        wire.contains("fixed.rs"),
-        "the fixed call reaches the client: {wire}"
-    );
-    assert!(!wire.contains("4242"), "the bad call does not: {wire}");
+    assert_only_the_fixed_call_reached_the_client(&wire);
 }

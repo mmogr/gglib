@@ -199,7 +199,9 @@ lint: ## Run clippy with warnings denied
 # Generate and open documentation
 doc: ## Generate and open documentation
 	@echo "Generating documentation..."
-	$(CARGO) doc --open
+	@# `--document-private-items` as in `doc-check` and CI, so a private
+	@# intra-doc link resolves here exactly as it does there.
+	$(CARGO) doc --document-private-items --open
 
 # `export` rather than a command-prefix assignment, for the reason spelled out
 # above the `bindings` target: `$(CARGO)` expands to `. $$HOME/.cargo/env &&
