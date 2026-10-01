@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, UpdateSettingsRequest } from '../../types';
+import { changedFields } from './settingsRequest';
 
 export interface NetworkSettingsValues {
   /** Literal IP the daemon binds; empty = compiled-in default (127.0.0.1). */
@@ -30,9 +31,19 @@ export interface UseNetworkSettingsResult {
     key: K,
     value: NetworkSettingsValues[K],
   ) => void;
-  /** The slice of the update request these fields own. */
-  updates: Pick<UpdateSettingsRequest, 'bindHost' | 'shareLan'>;
+  /** The fields changed since settings loaded, as update-request fields. */
+  updates: Partial<Pick<UpdateSettingsRequest, 'bindHost' | 'shareLan'>>;
 }
+
+const valuesFrom = (settings: AppSettings): NetworkSettingsValues => ({
+  bindHost: settings.bindHost ?? '',
+  shareLan: settings.shareLan === true,
+});
+
+const requestFrom = (values: NetworkSettingsValues) => ({
+  bindHost: values.bindHost.trim() || null,
+  shareLan: values.shareLan,
+});
 
 /**
  * Track the network-binding fields, seeded from persisted settings.
@@ -44,10 +55,7 @@ export function useNetworkSettings(settings: AppSettings | null): UseNetworkSett
 
   useEffect(() => {
     if (settings) {
-      setValues({
-        bindHost: settings.bindHost ?? '',
-        shareLan: settings.shareLan === true,
-      });
+      setValues(valuesFrom(settings));
     }
   }, [settings]);
 
@@ -60,13 +68,11 @@ export function useNetworkSettings(settings: AppSettings | null): UseNetworkSett
     [],
   );
 
+  const loaded = settings ? valuesFrom(settings) : DEFAULTS;
   return {
     values,
     setValue,
     reset,
-    updates: {
-      bindHost: values.bindHost.trim() || null,
-      shareLan: values.shareLan,
-    },
+    updates: changedFields(requestFrom(values), requestFrom(loaded)),
   };
 }

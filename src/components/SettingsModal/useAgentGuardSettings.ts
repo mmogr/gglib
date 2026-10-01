@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, UpdateSettingsRequest } from '../../types';
 import type { LoopGuardMode } from '../../types/generated/LoopGuardMode';
+import { changedFields } from './settingsRequest';
 
 export interface AgentGuardSettingsValues {
   /** What the proxy's loop guard does with a tripped history. */
@@ -37,11 +38,31 @@ export interface UseAgentGuardSettingsResult {
     key: K,
     value: AgentGuardSettingsValues[K],
   ) => void;
-  updates: Pick<
+  /** The fields changed since settings loaded, as update-request fields. */
+  updates: Partial<Pick<
     UpdateSettingsRequest,
     'loopGuardMode' | 'agenticSampling' | 'toolCallRepair' | 'maxStagnationSteps'
-  >;
+  >>;
 }
+
+const valuesFrom = (settings: AppSettings): AgentGuardSettingsValues => ({
+  // Unset means the default, which is to note rather than refuse.
+  loopGuardMode: settings.loopGuardMode ?? 'note',
+  // Unset means enabled, the same absent-means-protective rule.
+  agenticSampling: settings.agenticSampling !== false,
+  toolCallRepair: settings.toolCallRepair !== false,
+  maxStagnationSteps: settings.maxStagnationSteps?.toString() ?? '',
+});
+
+const requestFrom = (values: AgentGuardSettingsValues) => {
+  const parsed = parseInt(values.maxStagnationSteps.trim(), 10);
+  return {
+    loopGuardMode: values.loopGuardMode,
+    agenticSampling: values.agenticSampling,
+    toolCallRepair: values.toolCallRepair,
+    maxStagnationSteps: Number.isFinite(parsed) ? parsed : null,
+  };
+};
 
 /** Track the agent-guard fields, seeded from persisted settings. */
 export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGuardSettingsResult {
@@ -49,14 +70,7 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
 
   useEffect(() => {
     if (settings) {
-      setValues({
-        // Unset means the default, which is to note rather than refuse.
-        loopGuardMode: settings.loopGuardMode ?? 'note',
-        // Unset means enabled, the same absent-means-protective rule.
-        agenticSampling: settings.agenticSampling !== false,
-        toolCallRepair: settings.toolCallRepair !== false,
-        maxStagnationSteps: settings.maxStagnationSteps?.toString() ?? '',
-      });
+      setValues(valuesFrom(settings));
     }
   }, [settings]);
 
@@ -69,17 +83,11 @@ export function useAgentGuardSettings(settings: AppSettings | null): UseAgentGua
     [],
   );
 
-  const parsed = parseInt(values.maxStagnationSteps.trim(), 10);
-
+  const loaded = settings ? valuesFrom(settings) : DEFAULTS;
   return {
     values,
     setValue,
     reset,
-    updates: {
-      loopGuardMode: values.loopGuardMode,
-      agenticSampling: values.agenticSampling,
-      toolCallRepair: values.toolCallRepair,
-      maxStagnationSteps: Number.isFinite(parsed) ? parsed : null,
-    },
+    updates: changedFields(requestFrom(values), requestFrom(loaded)),
   };
 }
