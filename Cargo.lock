@@ -2502,6 +2502,7 @@ dependencies = [
  "gglib-runtime",
  "indicatif",
  "mdns-sd",
+ "open",
  "qrcode",
  "reqwest",
  "rustyline",

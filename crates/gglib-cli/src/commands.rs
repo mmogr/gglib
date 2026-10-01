@@ -264,15 +264,15 @@ pub enum Commands {
 
     /// Open the web dashboard (served by the gglib daemon)
     ///
-    /// Ensures the daemon is running and prints the dashboard URL. The
-    /// daemon serves the UI and the API from one fixed loopback port; to
-    /// expose it on the network, run `gglib daemon run --share-lan` in the
-    /// foreground instead.
+    /// Ensures the daemon is running, prints the dashboard link and opens it in your browser.
     #[command(display_order = 21)]
     Web {
         /// Shorthand for `gglib daemon run --share-lan` (foreground)
         #[arg(long)]
         share_lan: bool,
+        /// Print the link without opening a browser
+        #[arg(long)]
+        no_open: bool,
     },
 
     /// Manage the gglib daemon — the process that owns llama-server

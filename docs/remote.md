@@ -510,14 +510,23 @@ owner: a new one each time, so a token something captured while the daemon was
 down, by answering on its port, dies at the next start. `gglib` on this machine
 reads the file for each command and sends it; the desktop app reads it for
 each request of its own and hands it to its window; the dashboard gets it from
-the link `gglib web` prints, `http://127.0.0.1:9887/#token=…`, takes it out of
-the address bar and keeps it in the browser for that page's origin, so a
-bookmark works until the daemon next starts, and after that the link has to be
-opened again. That closes the API to another account on the machine, which can read
-neither the file nor the database. It does not close it to code running as
-you, which can read the file as it can read the rest of gglib's data
-directory. A daemon started with `--share-lan` also takes its API key, which
-the LAN holds; the proxy's key does not open a loopback daemon.
+the link `gglib web` prints, `http://127.0.0.1:9887/#token=…`, and opens in your
+browser (`--no-open` only prints it). The page takes it out of the address bar
+and keeps it in the browser for that page's origin, so a bookmark works until
+the daemon next starts, and after that the link has to be opened again. That
+closes the API to another account on the machine, which can read neither the
+file nor the database. It does not close it to code running as you, which can
+read the file as it can read the rest of gglib's data directory. A daemon
+started with `--share-lan` also takes its API key, which the LAN holds; the
+proxy's key does not open a loopback daemon. Opening the link puts it on the
+launcher's command line, which any account can list with `ps`, for the moment
+the launcher runs: on macOS that is
+`/usr/bin/open` until LaunchServices takes the link, after which it travels to
+the browser by Apple Event; on Linux, if the browser was not already running,
+it is the browser itself, for as long as it runs. The link then lands in the
+browser's history like any pasted link. On a machine shared with other
+accounts use `--no-open`, or accept that they could learn a token that dies at
+the next daemon start.
 
 **A web page is not such a process.** Your browser opens that socket for any
 site you visit, but it says which site is asking, in `Origin`. Any request to

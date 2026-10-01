@@ -254,7 +254,8 @@ public internet.** Optional bearer API key on loopback; auto-minted if you bind
 externally, and put on the loopback proxy — the OpenAI-compatible one on
 `:8080`, not the daemon's management API on `:9887` — the moment you enable
 remote access. The daemon's API asks its own token, minted at every start and
-readable only by your account; `gglib web` prints a link that carries it.
+readable only by your account; `gglib web` opens your browser on a link that
+carries it (`--no-open` only prints the link).
 Host-header allowlist and local-only CORS are always on. No
 multi-tenancy or rate limiting. Details in
 [gglib-proxy](crates/gglib-proxy/README.md); the tunnel's model is in

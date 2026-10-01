@@ -186,8 +186,8 @@ pub async fn dispatch(
         Commands::Gui { dev } => {
             handlers::gui::execute(dev)?;
         }
-        Commands::Web { share_lan } => {
-            handlers::web::execute(ctx, share_lan).await?;
+        Commands::Web { share_lan, no_open } => {
+            handlers::web::execute(ctx, share_lan, no_open).await?;
         }
         Commands::Daemon { command } => match command {
             crate::commands::DaemonCommand::Run {
