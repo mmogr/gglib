@@ -35,9 +35,12 @@ fn stored() -> std::future::Ready<Option<String>> {
 }
 
 /// The CLI's own credentials are this machine's: its environment and the
-/// token file beside the device keys.
+/// token file beside the device keys. Named in this binary's own data root,
+/// because naming it makes or tightens `<data root>/data`, in a debug build
+/// the checkout's (#955).
 #[test]
 fn here_is_the_daemons_token_file() {
+    gglib_core::paths::isolate_data_root();
     assert_eq!(Local::here().token_path, daemon_token_path().ok());
 }
 

@@ -5,7 +5,10 @@
 //! 1. **Isolation.** [`bootstrap`] without a `db_path` resolves through
 //!    `gglib_core::paths::database_path()`, which in a debug build is the
 //!    developer's own checkout. No suite had this. Tests were reading rows
-//!    they did not create and leaving rows behind for the next run.
+//!    they did not create and leaving rows behind for the next run. All else
+//!    a context resolves from the data root is in the binary's own root
+//!    (`isolate_data_root`, #955); left to the checkout, five binaries here
+//!    made or tightened its `data/`.
 //! 2. **Honesty.** A bootstrap failure has to fail the test. Every suite but
 //!    `daemon_route_contract` skipped instead — `Err(_) => return` in four of
 //!    them, `bootstrap(..).ok()?` behind a let-else in `daemon_access` —
@@ -92,7 +95,8 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 /// Per test rather than per binary: tests in one binary run concurrently, so
 /// a shared file both deadlocks on `SQLite`'s write lock and lets one test see
 /// another's rows. The key file is the same argument for the devices a test
-/// invites or lists, and left unnamed it would be the checkout's own.
+/// invites or lists: left unnamed it would be one file for every test in the
+/// binary, under the binary's own data root (`isolate_data_root`).
 fn isolated_paths() -> (PathBuf, PathBuf) {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -102,8 +106,10 @@ fn isolated_paths() -> (PathBuf, PathBuf) {
     )
 }
 
-/// Config for a context that binds nothing and launches nothing.
+/// Config for a context that binds nothing and launches nothing, resolving
+/// in this binary's own data root.
 fn test_config(cors: CorsConfig) -> ServerConfig {
+    gglib_core::paths::isolate_data_root();
     let (db_path, device_keys_path) = isolated_paths();
     ServerConfig {
         host: "127.0.0.1".into(),
