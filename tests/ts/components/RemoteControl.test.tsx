@@ -129,6 +129,20 @@ describe('RemoteControl', () => {
     expect(screen.getByText('This code pairs dev-5e6f7a8b.')).toBeInTheDocument();
   });
 
+  it('a reveal whose answer names no device shows the code and no device line', async () => {
+    enableRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '483920',
+      pairing: `${TICKET}-483920`,
+      expires_in_s: 120,
+    });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /enable remote access/i }));
+
+    expect(await screen.findByText('483920')).toBeInTheDocument();
+    expect(screen.queryByText(/This code pairs/)).not.toBeInTheDocument();
+  });
+
   it('shows no pairing at all when the daemon answered without a code', async () => {
     // The shape a plain `enable` returns. Rendering it would put an empty
     // code under a countdown reading 0s — a pairing that looks expired,
@@ -784,7 +798,13 @@ describe('RemoteControl', () => {
     // The port does not add the key, and the key is this device's own, not
     // the far machine's proxy key: the panel points at the command, and puts
     // no credential on screen.
-    expect(screen.getByText('gglib remote key --show')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.textContent ===
+          'That key is the one this machine was given when it paired; gglib remote key --show prints it.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('the connected half asks which model that machine should be asked for', async () => {
