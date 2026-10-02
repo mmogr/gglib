@@ -1,0 +1,176 @@
+# Updates dependencies on demand and opens one pull request, for when waiting
+# for Dependabot will not do: Dependabot proposes nothing under three days old
+# (the `cooldown` in dependabot.yml), and its "Check for updates" button keeps
+# to that. Run it from Actions -> Update dependencies -> Run workflow, or with
+# `gh workflow run update-deps.yml -R mmogr/gglib`, adding
+# `-f ecosystem=npm` (or `both`) and `-f package=<name>` as needed.
+#
+# It takes every version the ranges in Cargo.toml and package.json allow, so
+# unlike Dependabot it also takes Tauri minors; the pull request body says so
+# when Tauri moved. The pull request lists every package that moved, including
+# those `cargo update -p` re-points at another copy already in the lock
+# (#1112). When nothing is newer it opens nothing and says so in the run
+# summary.
+#
+# The checkout, push and pull request all use the GitHub App token
+# bump-version.yml uses: a branch or pull request made with GITHUB_TOKEN starts
+# no workflows, so CI would never run on it. Label Check exempts the pull
+# request three ways: its author is the app's bot, it carries `automated`, and
+# its title starts `chore(deps):`.
+
+name: Update dependencies
+
+on:
+  workflow_dispatch:
+    inputs:
+      ecosystem:
+        description: 'Which lockfile to update: Cargo.lock, package-lock.json, or both'
+        type: choice
+        options: [cargo, npm, both]
+        default: cargo
+      package:
+        description: 'One dependency to update, for example modelpipe. Leave empty to update everything the version ranges allow.'
+        type: string
+        required: false
+        default: ''
+
+# Everything that needs access uses the app token, so GITHUB_TOKEN gets none.
+permissions: {}
+
+# One run at a time: a second run waits for the first to finish. Each run
+# opens its own pull request; an older one stays open until closed by hand.
+concurrency:
+  group: update-deps
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
+jobs:
+  update:
+    name: Update dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Install Rust toolchain
+        if: inputs.ecosystem != 'npm'
+        run: rustup show
+
+      - name: Setup Node
+        if: inputs.ecosystem != 'cargo'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Update the lockfiles
+        id: update
+        env:
+          ECOSYSTEM: ${{ inputs.ecosystem }}
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          if [ "$ECOSYSTEM" = both ] && [ -n "$PACKAGE" ]; then
+            echo "::error::A package belongs to one ecosystem: run again with ecosystem cargo or npm for $PACKAGE."
+            exit 1
+          fi
+          cp Cargo.lock "$RUNNER_TEMP/Cargo.lock.before"
+          cp package-lock.json "$RUNNER_TEMP/package-lock.json.before"
+
+          if [ "$ECOSYSTEM" != npm ]; then
+            if [ -n "$PACKAGE" ]; then
+              cargo update -p "$PACKAGE"
+            else
+              cargo update
+            fi
+            cargo metadata --locked --format-version 1 > /dev/null
+          fi
+
+          if [ "$ECOSYSTEM" != cargo ]; then
+            if [ -n "$PACKAGE" ]; then
+              # npm update says "up to date" for a name it does not have.
+              if ! grep -qF "\"node_modules/$PACKAGE\"" package-lock.json; then
+                echo "::error::$PACKAGE is not in package-lock.json."
+                exit 1
+              fi
+              npm update --package-lock-only --ignore-scripts --no-audit --no-fund "$PACKAGE"
+            else
+              npm update --package-lock-only --ignore-scripts --no-audit --no-fund
+            fi
+            # npm ci refuses a package-lock.json that disagrees with package.json.
+            npm ci --dry-run --ignore-scripts --no-audit --no-fund > /dev/null
+          fi
+
+          {
+            python3 scripts/lock_changes.py cargo "$RUNNER_TEMP/Cargo.lock.before" Cargo.lock
+            python3 scripts/lock_changes.py npm "$RUNNER_TEMP/package-lock.json.before" package-lock.json
+          } > "$RUNNER_TEMP/changes.txt"
+          cat "$RUNNER_TEMP/changes.txt"
+
+          # A version change reads `name old -> new`. A line with a colon is
+          # a change in which copy of a dependency a package uses, or an edge
+          # dropped or gained, with no version of its own moving: it rides
+          # along with an update, but alone it is not one, and
+          # `cargo update -p` flips those back and forth on every run (#1112).
+          if grep -qv ': ' "$RUNNER_TEMP/changes.txt"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            case "$ECOSYSTEM" in both) eco="cargo and npm" ;; *) eco="$ECOSYSTEM" ;; esac
+            echo "Nothing to update: ${PACKAGE:-every $eco dependency} is already at the newest version its range allows." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a pull request
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ECOSYSTEM: ${{ inputs.ecosystem }}
+          PACKAGE: ${{ inputs.package }}
+          BASE: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          case "$ECOSYSTEM" in both) eco="cargo and npm" ;; *) eco="$ECOSYSTEM" ;; esac
+          if [ -n "$PACKAGE" ]; then
+            subject="chore(deps): bump $PACKAGE to the newest version its range allows"
+          else
+            subject="chore(deps): bump the $eco dependencies to the newest versions their ranges allow"
+          fi
+          changes="$RUNNER_TEMP/changes.txt"
+          branch="chore(deps)/update-run-$GITHUB_RUN_NUMBER"
+
+          { printf '%s\n\n' "$subject"; cat "$changes"; } > "$RUNNER_TEMP/message.txt"
+          git switch -c "$branch"
+          git add Cargo.lock package-lock.json
+          git -c user.name=mmogr -c user.email=172192206+mmogr@users.noreply.github.com \
+            commit --cleanup=whitespace -F "$RUNNER_TEMP/message.txt"
+          git push origin "$branch"
+
+          {
+            # Backticks keep a scoped npm name such as @tauri-apps/api from
+            # reading as a mention.
+            sed "s/.*/- \`&\`/" "$changes"
+            if grep -qE '^(tauri|@tauri-apps/)' "$changes"; then
+              cat <<'EOF'
+
+          Tauri moved. `tauri build` refuses a `tauri` crate and `@tauri-apps/api` (or a plugin and its npm twin) that differ in major.minor, and only release.yml runs it: check the pairs match, then run release.yml on this branch with test_run=true before merging.
+          EOF
+            fi
+            echo
+            echo "Opened by the Update dependencies workflow: $RUN_URL"
+          } > "$RUNNER_TEMP/body.md"
+          url=$(gh pr create --base "$BASE" --head "$branch" --title "$subject" \
+            --body-file "$RUNNER_TEMP/body.md" \
+            --label dependencies --label "type: chore" --label automated)
+          echo "Opened $url" >> "$GITHUB_STEP_SUMMARY"
