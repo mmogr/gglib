@@ -14,6 +14,7 @@ pub(crate) mod chats;
 )]
 pub(crate) mod common;
 pub(crate) mod loop_guard;
+pub(crate) mod pinned;
 pub(crate) mod profile_harness;
 pub(crate) mod profile_mocks;
 pub(crate) mod recorder;

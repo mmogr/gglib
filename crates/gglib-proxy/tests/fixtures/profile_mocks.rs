@@ -21,10 +21,14 @@ pub(crate) const MODEL: &str = "qwen";
 // ─── Mock ports ────────────────────────────────────────────────────────────
 
 /// Runtime that always reports the mock upstream as running, and records the
-/// model name it was asked to launch.
+/// name of the model it was asked to launch.
+///
+/// The proxy admits by catalog id, so the id is read back to a name through
+/// `names`, numbered from 1 as [`NamedCatalog`] numbers them.
 #[derive(Debug)]
 pub(crate) struct RecordingRuntime {
     pub(crate) port: u16,
+    pub(crate) names: Vec<String>,
     pub(crate) launched: Arc<Mutex<Vec<String>>>,
 }
 
@@ -37,9 +41,13 @@ impl ModelRuntimePort for RecordingRuntime {
         _default_ctx: Option<u64>,
         _overrides: gglib_core::ports::LaunchOverrides,
     ) -> Result<gglib_core::ports::Admission, ModelRuntimeError> {
-        self.launched.lock().unwrap().push(model_name.to_owned());
+        let (id, name) = (1..)
+            .zip(&self.names)
+            .find(|(id, name)| id.to_string() == model_name || *name == model_name)
+            .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name.to_owned()))?;
+        self.launched.lock().unwrap().push(name.clone());
         Ok(gglib_core::ports::Admission::detached(
-            RunningTarget::local(self.port, 1, model_name.to_owned(), 4096, false),
+            RunningTarget::local(self.port, id, name.clone(), 4096, false),
         ))
     }
     async fn current_model(&self) -> Option<RunningTarget> {
@@ -50,7 +58,8 @@ impl ModelRuntimePort for RecordingRuntime {
     }
 }
 
-/// Catalog resolving an explicit set of names by exact match.
+/// Catalog over an explicit set of names, numbered from 1 in order, found by
+/// id or by exact name.
 #[derive(Debug)]
 pub(crate) struct NamedCatalog {
     pub(crate) names: Vec<String>,
@@ -59,11 +68,11 @@ pub(crate) struct NamedCatalog {
 }
 
 impl NamedCatalog {
-    fn summary(&self, name: &str) -> ModelSummary {
+    fn summary(&self, id: u32, name: &str) -> ModelSummary {
         ModelSummary {
             dialect: None,
             template_caps: None,
-            id: 1,
+            id,
             name: name.to_owned(),
             tags: Vec::new(),
             capabilities: gglib_core::domain::ModelCapabilities::empty(),
@@ -83,14 +92,16 @@ impl NamedCatalog {
 #[async_trait]
 impl ModelCatalogPort for NamedCatalog {
     async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-        Ok(self.names.iter().map(|n| self.summary(n)).collect())
+        Ok((1..)
+            .zip(&self.names)
+            .map(|(id, n)| self.summary(id, n))
+            .collect())
     }
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(self
-            .names
-            .iter()
-            .any(|n| n == name)
-            .then(|| self.summary(name)))
+        Ok((1..)
+            .zip(&self.names)
+            .find(|(id, n)| id.to_string() == name || *n == name)
+            .map(|(id, n)| self.summary(id, n)))
     }
     async fn resolve_for_launch(
         &self,

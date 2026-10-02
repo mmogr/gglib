@@ -117,18 +117,19 @@ impl ResidentSet {
         default_ctx: Option<u64>,
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
-        // Refuse foreign models before touching the queue, so a rejected
-        // request neither queues behind the pinned model nor displaces it.
-        self.check_pinned(model_name)?;
-
+        // Resolve first, so a pin answers to its model's id as well as its
+        // name; then refuse a foreign model before touching the queue, so it
+        // neither queues behind the pinned model nor displaces it. A model
+        // the catalog does not hold is `ModelNotFound`, pinned or not.
         let spec = self.resolve(model_name).await?;
+        self.check_pinned(&spec)?;
         let spec_weights_bytes = spec.file_size_bytes;
 
         // A pin's launch overrides layer onto the standing template, winning
         // field-wise: they are the *output* of the caller's full cascade
         // (`UnifiedServerConfig::resolved_options`), so letting the run-wide
         // template win would undo a cascade that has already run.
-        let template = match self.pinned.read().ok().and_then(|g| g.clone()) {
+        let template = match self.pinned() {
             Some(pin) => self.launch_overrides.overlay(&pin.launch_overrides),
             None => self.launch_overrides.clone(),
         };
@@ -248,7 +249,7 @@ impl ResidentSet {
         .await
     }
 
-    /// Resolve a model name to its launch specification.
+    /// Resolve a model id or name to its launch specification.
     ///
     /// Ahead of the queue on purpose: a model nobody has should 404 straight
     /// away rather than after waiting out a swap to discover it.
@@ -561,4 +562,4 @@ fn target_of(resident: Resident) -> RunningTarget {
 mod hold_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
-mod residency_tests;
+pub(in crate::process) mod residency_tests;

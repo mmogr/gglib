@@ -10,8 +10,11 @@ use super::*;
 use async_trait::async_trait;
 use gglib_core::ports::{CatalogError, ModelSummary};
 
+/// Two models, found by id or by exact name as the real catalog finds them:
+/// `qwen2.5` is id 3 and `llama-3-8b` is id 7. Neither file exists, so an
+/// admission that gets past the pin and the queue stops at the launch.
 #[derive(Debug)]
-struct StubCatalog;
+pub(in crate::process) struct StubCatalog;
 
 #[async_trait]
 impl ModelCatalogPort for StubCatalog {
@@ -23,9 +26,39 @@ impl ModelCatalogPort for StubCatalog {
     }
     async fn resolve_for_launch(
         &self,
-        _name: &str,
+        name: &str,
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        Ok(None)
+        Ok([(3, "qwen2.5"), (7, "llama-3-8b")]
+            .into_iter()
+            .find(|(id, model)| id.to_string() == name || *model == name)
+            .map(|(id, model)| launch_spec(id, model)))
+    }
+}
+
+/// A launch spec for model `id` named `name`, whose file does not exist.
+pub(in crate::process) fn launch_spec(id: u32, name: &str) -> ModelLaunchSpec {
+    ModelLaunchSpec {
+        model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
+        id,
+        name: name.to_owned(),
+        file_path: format!("/nonexistent/{name}.gguf").into(),
+        tags: Vec::new(),
+        architecture: None,
+        quantization: None,
+        context_length: None,
+        server_defaults: None,
+        file_size_bytes: 0,
+        kv_elems_per_token: None,
+        kv_memory_is_partial: false,
+    }
+}
+
+/// A pin on model `id` named `name`, with no launch overrides of its own.
+pub(in crate::process) fn pin(id: i64, name: &str) -> PinnedSpec {
+    PinnedSpec {
+        id,
+        name: name.to_owned(),
+        launch_overrides: ServerConfigOptions::default(),
     }
 }
 
@@ -37,12 +70,9 @@ fn swapping_set() -> ResidentSet {
     )
 }
 
-fn pinned_set(model: &str) -> ResidentSet {
+fn pinned_set(id: i64, name: &str) -> ResidentSet {
     let set = swapping_set();
-    set.set_pin(Some(PinnedSpec {
-        name: model.to_string(),
-        launch_overrides: ServerConfigOptions::default(),
-    }));
+    set.set_pin(Some(pin(id, name)));
     set
 }
 
@@ -50,13 +80,14 @@ fn pinned_set(model: &str) -> ResidentSet {
 
 #[test]
 fn pinned_state_admits_its_own_model() {
-    assert!(pinned_set("qwen2.5").check_pinned("qwen2.5").is_ok());
+    let set = pinned_set(3, "qwen2.5");
+    assert!(set.check_pinned(&launch_spec(3, "qwen2.5")).is_ok());
 }
 
 #[test]
 fn pinned_state_rejects_a_foreign_model() {
-    let err = pinned_set("qwen2.5")
-        .check_pinned("llama-3-8b")
+    let err = pinned_set(3, "qwen2.5")
+        .check_pinned(&launch_spec(7, "llama-3-8b"))
         .expect_err("a foreign model must be refused");
 
     match err {
@@ -71,22 +102,28 @@ fn pinned_state_rejects_a_foreign_model() {
     }
 }
 
-/// Matching is exact: a pinned endpoint must not quietly accept a near-miss and
-/// serve a different model than the caller named.
+/// Matching is by id: a pinned endpoint must not serve a different model
+/// because it shares the pinned one's name, and its own model stays its own
+/// under whatever name the catalog now gives it.
 #[test]
-fn pinned_matching_is_exact() {
-    let set = pinned_set("qwen2.5");
-    assert!(set.check_pinned("Qwen2.5").is_err(), "case differs");
-    assert!(set.check_pinned("qwen2.5-coder").is_err(), "suffix added");
-    assert!(set.check_pinned("qwen2").is_err(), "prefix only");
+fn pinned_matching_is_by_id() {
+    let set = pinned_set(3, "qwen2.5");
+    assert!(
+        set.check_pinned(&launch_spec(7, "qwen2.5")).is_err(),
+        "another model with the same name"
+    );
+    assert!(
+        set.check_pinned(&launch_spec(3, "qwen2.5-renamed")).is_ok(),
+        "the pinned model, renamed"
+    );
 }
 
 /// The unpinned proxy must keep admitting freely — pinning is opt-in.
 #[test]
 fn unpinned_state_admits_any_model() {
     let set = swapping_set();
-    assert!(set.check_pinned("anything").is_ok());
-    assert!(set.check_pinned("something-else").is_ok());
+    assert!(set.check_pinned(&launch_spec(3, "qwen2.5")).is_ok());
+    assert!(set.check_pinned(&launch_spec(7, "llama-3-8b")).is_ok());
 }
 
 /// Pinning changes only the admission check; the standing template a pinned
@@ -103,10 +140,7 @@ fn pinning_does_not_alter_launch_configuration() {
         template.clone(),
         CacheRamSetting::ExplicitMb(4096),
     );
-    set.set_pin(Some(PinnedSpec {
-        name: "qwen2.5".to_string(),
-        launch_overrides: ServerConfigOptions::default(),
-    }));
+    set.set_pin(Some(pin(3, "qwen2.5")));
 
     assert_eq!(set.launch_overrides.mlock, template.mlock);
     assert_eq!(set.launch_overrides.cache_reuse, template.cache_reuse);
@@ -116,26 +150,23 @@ fn pinning_does_not_alter_launch_configuration() {
 /// Clearing the pin restores ordinary auto-swapping admission.
 #[test]
 fn clearing_the_pin_restores_auto_swapping() {
-    let set = pinned_set("qwen2.5");
-    assert!(set.check_pinned("llama-3-8b").is_err());
+    let set = pinned_set(3, "qwen2.5");
+    assert!(set.check_pinned(&launch_spec(7, "llama-3-8b")).is_err());
 
     set.set_pin(None);
 
-    assert!(set.check_pinned("llama-3-8b").is_ok());
-    assert_eq!(set.pinned_name(), None);
+    assert!(set.check_pinned(&launch_spec(7, "llama-3-8b")).is_ok());
+    assert!(set.pinned().is_none());
 }
 
 /// Re-pinning replaces the previous pin rather than accumulating.
 #[test]
 fn repinning_replaces_the_previous_pin() {
-    let set = pinned_set("qwen2.5");
-    set.set_pin(Some(PinnedSpec {
-        name: "llama-3-8b".to_string(),
-        launch_overrides: ServerConfigOptions::default(),
-    }));
+    let set = pinned_set(3, "qwen2.5");
+    set.set_pin(Some(pin(7, "llama-3-8b")));
 
-    assert!(set.check_pinned("llama-3-8b").is_ok());
-    assert!(set.check_pinned("qwen2.5").is_err());
+    assert!(set.check_pinned(&launch_spec(7, "llama-3-8b")).is_ok());
+    assert!(set.check_pinned(&launch_spec(3, "qwen2.5")).is_err());
 }
 
 // ── a fresh set ───────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@
       "code": "model_not_found",
       "type": "invalid_request_error",
       "status": 404,
-      "meaning": "No model by that name is in the catalog."
+      "meaning": "No model with that id or name is in the catalog."
     },
     {
       "code": "profile_not_found",

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use gglib_core::domain::mcp::{McpServer, NewMcpServer};
 use gglib_core::ports::{
     Admission, LaunchOverrides, McpRepositoryError, McpServerRepository, ModelRuntimeError,
-    ModelRuntimePort, RepositoryError, RunningTarget, SettingsRepository,
+    ModelRuntimePort, PinnedSpec, RepositoryError, RunningTarget, SettingsRepository,
 };
 use gglib_core::{LoopGuardMode, Settings};
 
@@ -26,7 +26,8 @@ impl ModelRuntimePort for PinnedTarget {
         _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
-        if model_name != self.target.model_name {
+        // The proxy admits by the catalog id it resolved the request to.
+        if model_name != self.target.model_id.to_string() {
             return Err(ModelRuntimeError::PinnedModelMismatch {
                 expected: self.target.model_name.clone(),
                 requested: model_name.to_owned(),
@@ -50,8 +51,12 @@ impl ModelRuntimePort for PinnedTarget {
         ))
     }
 
-    fn pinned_model(&self) -> Option<String> {
-        Some(self.target.model_name.clone())
+    fn pinned(&self) -> Option<PinnedSpec> {
+        Some(PinnedSpec {
+            id: i64::from(self.target.model_id),
+            name: self.target.model_name.clone(),
+            ..PinnedSpec::default()
+        })
     }
 }
 

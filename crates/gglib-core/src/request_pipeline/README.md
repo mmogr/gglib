@@ -38,7 +38,9 @@ does either.
   (capabilities, `format:*` tags, inference defaults, context length) that the
   request and response stages are built from, plus the inert
   [`ModelContext::passthrough`] fallback.
-- [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one.
+- [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one,
+  and [`resolve_summary()`], the same lookup for a caller that refuses a model
+  the catalog does not hold rather than degrade it.
 - [`request_shape`] — [`carries_tools()`], the one thing the stages need to know
   about the *request* rather than the model: whether it is asking for a tool
   call. Read by two stages for different purposes, so it lives in neither.

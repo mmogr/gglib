@@ -12,7 +12,11 @@ use super::ModelRuntimePort;
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct PinnedSpec {
-    /// Name clients must address the model by. Matched exactly.
+    /// Catalog id of the pinned model. A request is admitted when the model
+    /// it resolves to (by id or by name) has this id.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub id: i64,
+    /// The pinned model's name, for messages and status.
     pub name: String,
     /// Standing launch options for the pinned model, already resolved
     /// through the caller's cascade — layered onto the runtime's template at

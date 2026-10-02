@@ -349,8 +349,9 @@ names none uses it. Before anything is remembered, a turn that names none
 is refused here with a sentence that says so, rather than answered
 `404 Model '' not found` from the other end. `gglib model list` on the
 desktop is the list to choose from. The ID form the positional also accepts
-is local-only — `gglib chat 7 --remote` sends `"model": "7"` and comes back
-`404 Model '7' not found`.
+means the desktop's id from that list — `gglib chat 7 --remote` sends
+`"model": "7"`, and the desktop serves its own model 7 unless it is pinned to
+another.
 
 A `{model}:{profile}` suffix travels with the name and is resolved by the
 desktop against **its** profiles, which are the ones that govern how it

@@ -263,10 +263,19 @@ dashboard, cache lifecycle or request normalization. It takes the same cache
 flags (`--cache`, `--slot-dir`, `--cache-disk-gb`) as `gglib proxy`,
 opt-in on both.
 
-In pinned mode `GET /v1/models` advertises only the pinned model, so a client
-is never offered a model the endpoint would refuse. Its `{model}:{profile}`
-variants remain listed: a profile changes only the request body, never which
-model actually runs, so it never reaches the pinned guard.
+A request names its model by catalog id or by name. The proxy resolves it
+once, before the loop guard or admission, and everything after keys on the
+model it found: admission is by its id, and the connection, the loop guard's
+log, the per-model counters and the streamed `model` echo carry its name. So
+`3` and `qwen` are one model everywhere, and the pin compares ids — the pinned
+model answers to both, and a model the catalog does not hold is
+`model_not_found`, pinned or not. A bare name costs two catalog reads: that
+one and admission's launch lookup.
+
+In pinned mode `GET /v1/models` advertises only the pinned model, matched by
+id, so a client is never offered a model the endpoint would refuse. Its
+`{model}:{profile}` variants remain listed: a profile changes only the request
+body, never which model actually runs, so it never reaches the pinned guard.
 
 ### Embeddings
 
@@ -418,8 +427,8 @@ that was never in the catalog, so the error names both readings and lists the
 profiles that do exist.
 
 Everything downstream — the model launch, dashboard registration, metrics, cache
-keys — uses the base name, so a profile never launches a second llama-server or
-invalidates the KV cache.
+keys — uses the model the base resolves to, so a profile never launches a second
+llama-server or invalidates the KV cache.
 
 Profiles with `list_in_models` set are advertised in `/v1/models` as
 `{model}:{profile}`, inheriting the base model's `context_window`.  Listing is
@@ -658,12 +667,13 @@ user watching the output.
 
 ### Defence
 
-On every `/v1/chat/completions` request, before admission, the proxy walks the
-replayed `messages[]` history through the **same** `LoopDetector` and
-`StagnationDetector` the agent path uses (they live in
-`gglib_core::domain::agent` precisely so the two paths cannot drift — the same
-sharing discipline as the request pipeline). Agentic clients resend the full
-conversation every turn, so the scan is stateless: no session store, no TTL.
+On every `/v1/chat/completions` request, once the requested model has resolved
+and before admission, the proxy walks the replayed `messages[]` history through
+the **same** `LoopDetector` and `StagnationDetector` the agent path uses (they
+live in `gglib_core::domain::agent` precisely so the two paths cannot drift —
+the same sharing discipline as the request pipeline). Agentic clients resend
+the full conversation every turn, so the scan is stateless: no session store,
+no TTL.
 
 | Signal | Threshold | Source |
 |--------|-----------|--------|
@@ -684,8 +694,8 @@ user turn. See [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
 What a tripped guard does is one setting, `--loop-guard-mode`, with three
 values. The default, `note`, **forwards** the request with a fixed note
 appended to the last message's content behind a `[gglib loop guard]` marker,
-saying what repeated and how often: the request therefore pays the catalog,
-admission and model-swap cost it used to be refused ahead of, and a client with
+saying what repeated and how often: the request therefore pays the admission
+and model-swap cost it used to be refused ahead of, and a client with
 no recovery path from a 400 gets something it can act on. `refuse` is the old
 behaviour — HTTP 400 before any of that cost, `type` and `code` being
 `loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
@@ -748,17 +758,18 @@ per UTC day, model, gglib version and mode, a count of the requests it scanned
 `GET /api/proxy/loop-guard-trips`, or the panel under the setting. A row is the
 guard's decision, not a delivery — a noted request can still reach the model
 without its note (a template with no `tool` branch), or not at all (the
-context budget, an embedding model, an unknown model, a failed admission, a
-failed retry). The dashboard counts those too, except the embedding model, the
-unknown model and the failed admission, so under `note` the log can count more
+context budget, an embedding model, a failed admission, a failed retry). The
+dashboard counts those too, except the embedding model and the failed
+admission, so under `note` the log can count more
 than the dashboard's `loop_guard_trips`. It can also count fewer: a decision the
 writer could not queue is lost while its scan is kept, which reads as fewer
 trips over the same scans, and only a warning in the daemon's log says so. No
 conversation text is kept: the batch signature and the session id are stored
 as the first 16 hex digits of their SHA-256, stable correlation keys that
 anyone holding the data directory can match against a guess, not a privacy
-boundary; the model name is the client's, bounded to 256 characters. Rows are
-kept 90 days. Only this proxy's scan writes it: the agent loop runs the same
+boundary; the model name is the catalog's name for the model the request
+resolved to, bounded to 256 characters. Rows are kept 90 days. Only this
+proxy's scan writes it: the agent loop runs the same
 detectors and counts its decisions into the dashboard's `agent_guard_*`
 fields, never into this log, so a reading taken here is the proxy path's
 alone ([#1091](https://github.com/mmogr/gglib/issues/1091)).
@@ -866,7 +877,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued, with `tool_choice: "required"` or as a second draw under gglib's own grammar on a turn it constrained, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
 | `upstream_health` | `object` | Degradation watchdog counters since proxy start: empty responses, first-byte timeouts, proactive recycles |
-| `per_model_defects` | `object` | Per-model defect counts, keyed by the model name requests carry — see below |
+| `per_model_defects` | `object` | Per-model defect counts, keyed by the name of the model a request resolved to — see below |
 
 #### `per_model_defects`
 
@@ -906,9 +917,10 @@ Five shapes worth knowing before reading them:
 - **`identical_result_repeats` is not a defect, and does not bump
   `requests`.** It counts turns whose newest tool-call batch repeated the one
   before it and got an equal result back — a fact about the
-  conversation, not a fault in the model. It is recorded at the guard, before
-  the catalog round-trip that rejects an unknown model, so a request that is
-  later rejected can carry one without ever counting as a request.
+  conversation, not a fault in the model. It is recorded at the guard, after
+  the model has resolved but before admission, so a request that is later
+  refused — an embedding model, a failed admission — can carry one without
+  ever counting as a request.
 - **`repeats_not_evaluated` is the one that makes a zero above readable.** It
   counts turns that repeated a batch whose results could not be compared —
   a client that omits `id` on replayed tool calls, results that are not

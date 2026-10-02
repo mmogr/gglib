@@ -111,8 +111,8 @@ pub enum Commands {
     #[command(display_order = 11, subcommand_negates_reqs = true)]
     Chat {
         /// Name or ID of the model to chat with (optional when resuming with
-        /// --continue). With --remote it is the far machine's model name, sent
-        /// as typed; the ID form is local-only and means nothing there.
+        /// --continue). With --remote it is the far machine's name or ID for
+        /// the model, sent as typed and resolved against its catalogue.
         #[arg(default_value = "")]
         identifier: String,
         #[command(flatten)]

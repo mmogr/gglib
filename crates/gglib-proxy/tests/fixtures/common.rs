@@ -57,95 +57,6 @@ impl ModelRuntimePort for NoopRuntime {
     }
 }
 
-/// Runtime port that reports itself pinned to one model.
-///
-/// The read side of `gglib serve`: what a caller sees when the manager was
-/// pinned via `ProcessManager::set_pin`. It does not enforce the pin —
-/// that guard lives in `gglib-runtime` and is tested there — so a test can
-/// tell the difference between "not advertised" and "refused".
-#[derive(Debug)]
-pub(crate) struct PinnedRuntime(pub &'static str);
-
-#[async_trait]
-impl ModelRuntimePort for PinnedRuntime {
-    async fn admit(
-        &self,
-        _model_name: &str,
-        _num_ctx: Option<u64>,
-        _default_ctx: Option<u64>,
-        _overrides: LaunchOverrides,
-    ) -> Result<Admission, ModelRuntimeError> {
-        Ok(Admission::detached(RunningTarget::local(
-            0,
-            1,
-            self.0.into(),
-            4096,
-            false,
-        )))
-    }
-
-    async fn current_model(&self) -> Option<RunningTarget> {
-        None
-    }
-
-    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        Ok(())
-    }
-
-    fn pinned_model(&self) -> Option<String> {
-        Some(self.0.to_string())
-    }
-}
-
-/// Runtime port that *enforces* the pin, rather than only reporting it.
-///
-/// The write side of `gglib serve`: [`PinnedRuntime`] above deliberately
-/// lets a foreign request through so catalog tests can tell "not
-/// advertised" from "refused". This one refuses, so the wire contract a
-/// BYOK client actually hits — 404 plus `pinned_model_mismatch` — can be
-/// asserted end to end over HTTP, not just at the resident-set/error-mapping
-/// unit level (`gglib-runtime`'s `manager.rs`, `gglib-proxy`'s
-/// `models_tests.rs`).
-#[derive(Debug)]
-pub(crate) struct EnforcingPinnedRuntime(pub &'static str);
-
-#[async_trait]
-impl ModelRuntimePort for EnforcingPinnedRuntime {
-    async fn admit(
-        &self,
-        model_name: &str,
-        _num_ctx: Option<u64>,
-        _default_ctx: Option<u64>,
-        _overrides: LaunchOverrides,
-    ) -> Result<Admission, ModelRuntimeError> {
-        if model_name != self.0 {
-            return Err(ModelRuntimeError::PinnedModelMismatch {
-                expected: self.0.to_string(),
-                requested: model_name.to_string(),
-            });
-        }
-        Ok(Admission::detached(RunningTarget::local(
-            0,
-            1,
-            self.0.into(),
-            4096,
-            false,
-        )))
-    }
-
-    async fn current_model(&self) -> Option<RunningTarget> {
-        None
-    }
-
-    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        Ok(())
-    }
-
-    fn pinned_model(&self) -> Option<String> {
-        Some(self.0.to_string())
-    }
-}
-
 // ─── ModelCatalogPort mock ────────────────────────────────────────────────
 
 /// Catalog port with no models.
@@ -160,67 +71,6 @@ impl ModelCatalogPort for EmptyCatalog {
 
     async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok(None)
-    }
-
-    async fn resolve_for_launch(
-        &self,
-        _name: &str,
-    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        Ok(None)
-    }
-}
-
-/// Catalog port over a fixed set of model names.
-///
-/// Names are all `/v1/models` filtering cares about, so everything else is
-/// filled with plausible constants rather than made configurable.
-#[derive(Debug)]
-pub(crate) struct StaticCatalog(pub Vec<String>);
-
-impl StaticCatalog {
-    /// Build a catalog listing the given model names.
-    pub(crate) fn new(names: &[&str]) -> Self {
-        Self(names.iter().map(|n| (*n).to_string()).collect())
-    }
-
-    fn summary(id: u32, name: &str) -> ModelSummary {
-        ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id,
-            name: name.to_string(),
-            tags: vec![],
-            capabilities: Default::default(),
-            param_count: "7B".to_string(),
-            quantization: Some("Q4_K_M".to_string()),
-            architecture: Some("llama".to_string()),
-            created_at: 0,
-            file_size: 0,
-            context_length: Some(8192),
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-        }
-    }
-}
-
-#[async_trait]
-impl ModelCatalogPort for StaticCatalog {
-    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-        Ok(self
-            .0
-            .iter()
-            .enumerate()
-            .map(|(i, name)| Self::summary(u32::try_from(i).unwrap_or(0) + 1, name))
-            .collect())
-    }
-
-    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(self
-            .0
-            .iter()
-            .position(|n| n == name)
-            .map(|i| Self::summary(u32::try_from(i).unwrap_or(0) + 1, name)))
     }
 
     async fn resolve_for_launch(
@@ -342,7 +192,7 @@ pub(crate) fn make_mcp_service() -> Arc<McpService> {
 /// `slot_restore_supported` mirrors `RunningTarget::slot_restore_supported` —
 /// false models a sliding-window/hybrid/recurrent model, where the proxy must
 /// bypass the disk slot layer entirely. `pinned` only affects
-/// [`ModelRuntimePort::pinned_model`] — enforcement lives in `gglib-runtime`'s
+/// [`ModelRuntimePort::pinned`] — enforcement lives in `gglib-runtime`'s
 /// the resident set and is out of scope here.
 #[derive(Debug)]
 pub(crate) struct FixedUpstream {
@@ -375,8 +225,8 @@ impl ModelRuntimePort for FixedUpstream {
         Ok(())
     }
 
-    fn pinned_model(&self) -> Option<String> {
-        self.pinned.then(|| self.model_name.clone())
+    fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
+        self.pinned.then(|| super::pinned::pin(1, &self.model_name))
     }
 }
 
@@ -495,10 +345,15 @@ impl ModelCatalogPort for TaggedCatalog {
 pub(crate) struct MultiModelCatalog(pub Vec<(String, Vec<String>)>);
 
 impl MultiModelCatalog {
+    /// Found as the real catalog finds a model: an id first, then a name.
     fn summary_for(&self, name: &str) -> Option<ModelSummary> {
-        self.0
-            .iter()
-            .position(|(n, _)| n == name)
+        let by_id = name
+            .parse::<usize>()
+            .ok()
+            .filter(|id| (1..=self.0.len()).contains(id))
+            .map(|id| id - 1);
+        by_id
+            .or_else(|| self.0.iter().position(|(n, _)| n == name))
             .map(|index| self.summary_at(index))
     }
 
@@ -558,6 +413,10 @@ impl ModelCatalogPort for MultiModelCatalog {
 pub(crate) struct ResidentSimRuntime {
     /// Port each model's upstream listens on.
     pub ports: HashMap<String, u16>,
+    /// Each model's catalog id and name, so an admission by id — what the
+    /// proxy sends once it has resolved a request — finds the same model as
+    /// one by name.
+    models: Vec<(u32, String)>,
     slot: Arc<ResidentSimSlot>,
 }
 
@@ -587,10 +446,17 @@ impl gglib_core::ports::AdmissionRelease for ResidentSimSlot {
 }
 
 impl ResidentSimRuntime {
+    /// A runtime over the models `catalog` numbers, each listening on its
+    /// port in `ports`, by name.
     #[must_use]
-    pub(crate) fn new(ports: HashMap<String, u16>) -> Self {
+    pub(crate) fn over(catalog: &MultiModelCatalog, ports: HashMap<String, u16>) -> Self {
+        let models = (0..catalog.0.len())
+            .map(|i| catalog.summary_at(i))
+            .map(|m| (m.id, m.name))
+            .collect();
         Self {
             ports,
+            models,
             slot: Arc::new(ResidentSimSlot::default()),
         }
     }
@@ -620,10 +486,14 @@ impl ModelRuntimePort for ResidentSimRuntime {
         _default_ctx: Option<u64>,
         _overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
-        let port = *self
-            .ports
-            .get(model_name)
-            .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name.to_string()))?;
+        let not_found = || ModelRuntimeError::ModelNotFound(model_name.to_string());
+        let (id, model_name) = self
+            .models
+            .iter()
+            .find(|(id, name)| id.to_string() == model_name || name == model_name)
+            .map(|(id, name)| (*id, name.as_str()))
+            .ok_or_else(not_found)?;
+        let port = *self.ports.get(model_name).ok_or_else(not_found)?;
 
         // Wait for the slot to go idle before swapping, exactly as the real
         // queue does. Polling rather than notifying keeps the double small; the
@@ -648,7 +518,7 @@ impl ModelRuntimePort for ResidentSimRuntime {
         }
 
         Ok(Admission {
-            target: RunningTarget::local(port, 1, model_name.to_string(), 4096, false),
+            target: RunningTarget::local(port, id, model_name.to_string(), 4096, false),
             lease: gglib_core::ports::AdmissionLease::new(
                 Arc::clone(&self.slot) as Arc<dyn gglib_core::ports::AdmissionRelease>,
                 0,

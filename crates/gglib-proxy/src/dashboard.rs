@@ -329,7 +329,7 @@ pub struct DashboardSnapshot {
     /// Upstream-degradation watchdog counters (empty responses, first-byte
     /// timeouts, proactive recycles) since the proxy started.
     pub upstream_health: UpstreamHealthSnapshot,
-    /// Per-model defect counts, keyed by the model name requests carry.
+    /// Per-model defect counts, keyed by the name of the model a request resolved to.
     ///
     /// The fleet totals above answer "is something wrong"; this answers
     /// "with which model", which is the only form the answer is actionable
