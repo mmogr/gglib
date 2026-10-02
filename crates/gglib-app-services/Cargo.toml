@@ -78,6 +78,9 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
 tokio = { workspace = true, features = ["test-util"] }
 tokio-test = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }
+# A test that arms a tunnel keeps its endpoint key in a data root of this
+# binary's own, not the checkout's (#955).
+gglib-core = { path = "../gglib-core", features = ["test-utils"] }
 tempfile = { workspace = true }
 # The runs' privacy test reads every log line a run writes.
 tracing-subscriber = { workspace = true }

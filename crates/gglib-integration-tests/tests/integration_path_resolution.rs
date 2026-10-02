@@ -5,8 +5,13 @@
 //! the "models downloaded in Tauri don't appear in Web UI" class of bugs.
 //!
 //! See: <https://github.com/mmogr/gglib/issues/259>
+//!
+//! Each test resolves in this binary's own data root, set first, and checks
+//! that it did: resolving the database path makes `<data root>/data`, which
+//! in a debug build is otherwise the checkout's, and an installed daemon may
+//! share it (#955).
 
-use gglib_core::paths::ResolvedPaths;
+use gglib_core::paths::{ModelsDirSource, ResolvedPaths, isolate_data_root};
 
 /// Both adapters should resolve identical paths under the same environment.
 ///
@@ -14,10 +19,12 @@ use gglib_core::paths::ResolvedPaths;
 /// will be split between adapters.
 #[test]
 fn path_resolution_is_deterministic() {
+    let root = isolate_data_root();
     // Multiple calls should return identical results
     let first = ResolvedPaths::resolve().expect("first resolve failed");
     let second = ResolvedPaths::resolve().expect("second resolve failed");
 
+    assert_eq!(first.data_root, root);
     assert_eq!(
         first, second,
         "Path resolution should be deterministic across calls"
@@ -27,8 +34,10 @@ fn path_resolution_is_deterministic() {
 /// Database path should be inside `data_root`.
 #[test]
 fn database_path_is_under_data_root() {
+    let root = isolate_data_root();
     let paths = ResolvedPaths::resolve().expect("resolve failed");
 
+    assert_eq!(paths.data_root, root);
     assert!(
         paths.database_path.starts_with(&paths.data_root),
         "database_path ({}) should be under data_root ({})",
@@ -40,8 +49,10 @@ fn database_path_is_under_data_root() {
 /// Llama server path should be inside `resource_root`.
 #[test]
 fn llama_server_path_is_under_resource_root() {
+    let root = isolate_data_root();
     let paths = ResolvedPaths::resolve().expect("resolve failed");
 
+    assert_eq!(paths.resource_root, root);
     assert!(
         paths.llama_server_path.starts_with(&paths.resource_root),
         "llama_server_path ({}) should be under resource_root ({})",
@@ -53,8 +64,10 @@ fn llama_server_path_is_under_resource_root() {
 /// Display format should be parseable for debugging.
 #[test]
 fn display_format_contains_all_paths() {
+    let root = isolate_data_root();
     let paths = ResolvedPaths::resolve().expect("resolve failed");
     let output = paths.to_string();
+    assert_eq!(paths.data_root, root);
 
     // All keys should be present in key = value format
     assert!(output.contains("data_root = "), "missing data_root");
@@ -71,11 +84,11 @@ fn display_format_contains_all_paths() {
 /// Explicit `models_dir` override should be respected.
 #[test]
 fn explicit_models_dir_override_is_respected() {
-    use gglib_core::paths::ModelsDirSource;
-
+    let root = isolate_data_root();
     let explicit_path = "/tmp/test-models";
     let paths = ResolvedPaths::resolve_with_models_dir(Some(explicit_path))
         .expect("resolve with override failed");
+    assert_eq!(paths.data_root, root);
 
     assert_eq!(
         paths.models_dir.to_string_lossy(),
@@ -92,9 +105,9 @@ fn explicit_models_dir_override_is_respected() {
 /// Models dir should have a valid source.
 #[test]
 fn models_dir_has_valid_source() {
-    use gglib_core::paths::ModelsDirSource;
-
+    let root = isolate_data_root();
     let paths = ResolvedPaths::resolve().expect("resolve failed");
+    assert_eq!(paths.data_root, root);
 
     // Source should be one of the valid variants
     matches!(

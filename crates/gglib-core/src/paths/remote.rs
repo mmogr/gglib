@@ -62,7 +62,11 @@ mod tests {
 
     #[test]
     fn remote_identity_is_under_the_ignored_data_directory() {
+        // A root of its own: `remote_identity_path` makes or tightens
+        // `<data root>/data`, which in a debug build is the checkout's (#955).
         let _guard = ENV_LOCK.lock().unwrap();
+        let root = tempfile::tempdir().expect("tempdir");
+        let _env = EnvVarGuard::set("GGLIB_DATA_DIR", root.path().to_string_lossy().as_ref());
         let identity = remote_identity_path().expect("remote_identity_path failed");
         let data = data_root().expect("data_root failed");
 

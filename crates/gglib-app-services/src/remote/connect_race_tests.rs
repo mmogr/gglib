@@ -176,8 +176,7 @@ async fn a_dial_that_fails_gives_the_connect_side_back() {
 /// really is hanging.
 ///
 /// Still `#[ignore]`d, and now for one reason rather than two. It binds a
-/// real iroh endpoint against n0's public relays, the way `pidfile::sweep`'s
-/// real-directory test touches the real `pids_dir()` — and it *fails*,
+/// real iroh endpoint against n0's public relays, and it *fails*,
 /// rather than passing vacuously, on a machine where the dial ends by
 /// itself, which is what a runner with no IPv6 route gives. CI runs
 /// `cargo test` without `--ignored`, so as an un-ignored test this would be
