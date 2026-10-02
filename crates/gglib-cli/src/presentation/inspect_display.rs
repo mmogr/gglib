@@ -22,7 +22,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     println!("  Model: {}", dto.name);
     print_separator(SEP_WIDTH);
     println!("  ID             : {}", dto.id);
-    println!("  File           : {}", dto.file_path);
+    print_opt("  File          ", dto.file_path.as_deref());
     println!("  Parameters     : {:.1}B", dto.param_count_b);
     if let Some(arch) = &dto.architecture {
         println!("  Architecture   : {arch}");
@@ -144,17 +144,17 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
             println!();
             println!("  Inference Defaults{origin_suffix}");
             print_separator(SEP_WIDTH);
-            print_opt_f32("  temperature      ", inf.temperature);
-            print_opt_f32("  top_p            ", inf.top_p);
-            print_opt_i32("  top_k            ", inf.top_k);
-            print_opt_u32("  max_tokens       ", inf.max_tokens);
-            print_opt_f32("  repeat_penalty   ", inf.repeat_penalty);
-            print_opt_f32("  presence_penalty ", inf.presence_penalty);
-            print_opt_f32("  min_p            ", inf.min_p);
-            print_opt_f32("  dry_multiplier   ", inf.dry_multiplier);
-            print_opt_f32("  dry_base         ", inf.dry_base);
-            print_opt_i32("  dry_allowed_len  ", inf.dry_allowed_length);
-            print_opt_i32("  dry_penalty_last ", inf.dry_penalty_last_n);
+            print_opt("  temperature      ", inf.temperature);
+            print_opt("  top_p            ", inf.top_p);
+            print_opt("  top_k            ", inf.top_k);
+            print_opt("  max_tokens       ", inf.max_tokens);
+            print_opt("  repeat_penalty   ", inf.repeat_penalty);
+            print_opt("  presence_penalty ", inf.presence_penalty);
+            print_opt("  min_p            ", inf.min_p);
+            print_opt("  dry_multiplier   ", inf.dry_multiplier);
+            print_opt("  dry_base         ", inf.dry_base);
+            print_opt("  dry_allowed_len  ", inf.dry_allowed_length);
+            print_opt("  dry_penalty_last ", inf.dry_penalty_last_n);
         }
     }
 
@@ -272,19 +272,7 @@ fn flag_str(v: bool) -> &'static str {
     if v { "yes" } else { "no" }
 }
 
-fn print_opt_f32(label: &str, value: Option<f32>) {
-    if let Some(v) = value {
-        println!("{label} : {v}");
-    }
-}
-
-fn print_opt_i32(label: &str, value: Option<i32>) {
-    if let Some(v) = value {
-        println!("{label} : {v}");
-    }
-}
-
-fn print_opt_u32(label: &str, value: Option<u32>) {
+fn print_opt(label: &str, value: Option<impl std::fmt::Display>) {
     if let Some(v) = value {
         println!("{label} : {v}");
     }

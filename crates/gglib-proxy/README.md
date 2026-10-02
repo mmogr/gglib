@@ -119,7 +119,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 **Module Descriptions:**
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
-- **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries
+- **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
+- **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
@@ -208,8 +209,9 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/health` | GET | open | Health check (always 200) |
-| `/v1/models` | GET | bearer | List available models |
+| `/health` | GET | open | Health check (always 200, `{"status":"ok"}` and nothing else) |
+| `/v1/models` | GET | bearer | List available models, each with its catalog id, and this machine's name — see [The model list](#the-model-list) |
+| `/v1/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
@@ -224,6 +226,35 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 The `model` field in requests supports:
 - Exact model name: `"llama-3.2-3b-q4_k_m"`
 - Model ID: `"1"` (database ID)
+
+### The model list
+
+Each `/v1/models` entry's `id` is what a client sends back as `model`: the
+model's name, or `{name}:{profile}` for a listed profile variant. Beside it,
+gglib adds:
+
+- `gglib_id` — the model's id in this machine's catalog, which is never
+  reused. A variant carries its base model's. It means something only on
+  this machine; `id` is what a client sends.
+- `profile` — on a variant, the profile it selects; absent on a base entry.
+
+The list also carries `machine_name`, this machine's host name cut to its
+first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
+`_` (`gglib_core::domain::machine_name`). It is read on every request, and it
+is absent when the host name is unreadable or is not a plain label. `/health`
+never carries it: it answers without credentials.
+
+`GET /v1/models/{name}/detail` answers one model as a `ModelLookup`:
+`detail` is the `ModelDetailDto` the inspector reads, without `filePath` or
+`port`, with `isServing` true when the model is resident in either slot; and
+`profile` is the profile the identifier named. `{name}` is resolved as a chat
+request's `model` is — id first, then exact name, then a `:profile` suffix —
+and a name containing `/` is sent percent-encoded (`org%2Fqwen`). Unknown is
+`404 model_not_found`; so is any model but the pin on a pinned endpoint,
+whatever suffix it carries, as `/v1/models` does not list it either. A suffix
+that names no configured profile is `404 profile_not_found`, on a model the
+endpoint answers for. It sits behind the same bearer and device gate as
+`/v1/models`.
 
 ### Context Size
 
@@ -431,7 +462,8 @@ keys — uses the model the base resolves to, so a profile never launches a seco
 llama-server or invalidates the KV cache.
 
 Profiles with `list_in_models` set are advertised in `/v1/models` as
-`{model}:{profile}`, inheriting the base model's `context_window`.  Listing is
+`{model}:{profile}`, inheriting the base model's `context_window` and
+`gglib_id`, with `profile` naming the profile.  Listing is
 opt-in per profile because the full cross product would swamp a client's model
 picker; unlisted profiles remain usable by name.
 

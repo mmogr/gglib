@@ -5,8 +5,13 @@
 //! `gglib-runtime` does — resolve the admitted id or name, then compare ids —
 //! so the wire contract a client hits can be asserted over HTTP.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
+
 use async_trait::async_trait;
 
+use gglib_core::domain::Model;
 use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     ModelRuntimePort, ModelSummary, PinnedSpec, RunningTarget,
@@ -26,8 +31,8 @@ pub(crate) fn pin(id: u32, name: &str) -> PinnedSpec {
 ///
 /// Found as the real catalog finds them: a string that parses as a number is
 /// an id first, then an exact name. Names and ids are all `/v1/models`
-/// filtering and admission care about, so everything else is filled with
-/// plausible constants rather than made configurable.
+/// filtering, admission and the detail read care about, so everything else is
+/// filled with plausible constants rather than made configurable.
 #[derive(Debug, Clone)]
 pub(crate) struct StaticCatalog(pub Vec<(u32, String)>);
 
@@ -53,14 +58,50 @@ impl StaticCatalog {
         )
     }
 
-    fn find(&self, identifier: &str) -> Option<ModelSummary> {
+    fn entry(&self, identifier: &str) -> Option<&(u32, String)> {
         let by_id = identifier
             .parse::<u32>()
             .ok()
             .and_then(|id| self.0.iter().find(|(own, _)| *own == id));
-        by_id
-            .or_else(|| self.0.iter().find(|(_, name)| name == identifier))
+        by_id.or_else(|| self.0.iter().find(|(_, name)| name == identifier))
+    }
+
+    fn find(&self, identifier: &str) -> Option<ModelSummary> {
+        self.entry(identifier)
             .map(|(id, name)| Self::summary(*id, name))
+    }
+
+    /// The stored row, for the detail read: a file under `/models/`, and the
+    /// same constants [`Self::summary`] reports.
+    fn row(id: u32, name: &str) -> Model {
+        Model {
+            id: i64::from(id),
+            name: name.to_owned(),
+            model_key: format!("local:{id}"),
+            file_path: PathBuf::from(format!("/models/{name}.gguf")),
+            param_count_b: 7.0,
+            architecture: Some("llama".to_owned()),
+            quantization: Some("Q4_K_M".to_owned()),
+            context_length: Some(8192),
+            expert_count: None,
+            expert_used_count: None,
+            expert_shared_count: None,
+            metadata: HashMap::new(),
+            added_at: UNIX_EPOCH.into(),
+            hf_repo_id: None,
+            hf_commit_sha: None,
+            hf_filename: None,
+            download_date: None,
+            last_update_check: None,
+            tags: Vec::new(),
+            capabilities: gglib_core::domain::ModelCapabilities::empty(),
+            inference_defaults: None,
+            defaults_origin: None,
+            server_defaults: None,
+            dialect_spec: None,
+            template_caps: None,
+            benchmark_summary: None,
+        }
     }
 
     fn summary(id: u32, name: &str) -> ModelSummary {
@@ -103,6 +144,12 @@ impl ModelCatalogPort for StaticCatalog {
         _name: &str,
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
         Ok(None)
+    }
+
+    async fn model(&self, identifier: &str) -> Result<Option<Model>, CatalogError> {
+        Ok(self
+            .entry(identifier)
+            .map(|(id, name)| Self::row(*id, name)))
     }
 }
 

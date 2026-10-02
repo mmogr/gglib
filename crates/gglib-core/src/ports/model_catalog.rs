@@ -13,6 +13,7 @@ use crate::domain::DefaultsOrigin;
 use crate::domain::DialectSpec;
 use crate::domain::InferenceConfig;
 use crate::domain::KvElemsPerToken;
+use crate::domain::Model;
 use crate::domain::ModelCapabilities;
 use crate::domain::ModelSamplingDefaults;
 use crate::domain::ServerConfig;
@@ -225,6 +226,17 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     /// Returns `CatalogError` if the catalog cannot be queried.
     async fn resolve_for_launch(&self, name: &str)
     -> Result<Option<ModelLaunchSpec>, CatalogError>;
+
+    /// The whole stored [`Model`] `identifier` names, resolved as
+    /// [`Self::resolve_model`] does. Defaulted to `None`: only the
+    /// database-backed catalog has stored rows to read.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CatalogError` if the catalog cannot be queried.
+    async fn model(&self, _identifier: &str) -> Result<Option<Model>, CatalogError> {
+        Ok(None)
+    }
 
     /// Record llama-server's template-capability self-report for model `id`.
     ///

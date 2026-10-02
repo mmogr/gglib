@@ -667,7 +667,8 @@ readability.
 
 ## What the other machine can reach
 
-Everything the desktop's proxy serves — `/v1/models`,
+Everything the desktop's proxy serves — `/v1/models`, a model's detail at
+`/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
 `/v1/chat/completions`, `/v1/runs`, `/v1/chats`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
@@ -689,6 +690,13 @@ device_not_named`, and `gglib remote forget` takes the chats away with the key,
 though a reply the device already started still finishes and is saved. Such a
 turn calls none of the desktop's MCP tools unless the desktop ran `enable
 --allow-mcp`, the same gate as `/mcp`, and then only the tools the chat names.
+
+The model list carries each model's id in the desktop's catalog
+(`gglib_id`) and the desktop's name (`machine_name`, its host name's first
+label). A model's detail is what the desktop's own inspector shows, minus the
+file's path on the desktop's disk and the port it serves on. Reading either
+changes nothing on the desktop, and `/health`, open to anyone who can reach
+the port, carries neither.
 
 A tunnelled request the edge did not admit on a *device* key reaches no
 protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The

@@ -80,6 +80,7 @@ pub(crate) mod mcp;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod metrics;
+pub(crate) mod model_detail_endpoint;
 #[allow(
     clippy::match_same_arms,
     clippy::unreadable_literal,
