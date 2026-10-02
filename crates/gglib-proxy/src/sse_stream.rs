@@ -11,6 +11,7 @@ use bytes::Bytes;
 use tracing::{debug, error, warn};
 
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
+use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
 use crate::forward::{drain_events, visible_content_frame};
 use crate::repair::{RepairContext, RepairTurn};
@@ -41,7 +42,8 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// mid-stream failure, a silence past [`StreamBounds::idle`] among them.
 ///
 /// While it waits for the headers it also returns as soon as `tx` closes, as
-/// it does when the client closes its connection; returning drops the request.
+/// it does when the client closes its connection, or a keepalive outlasts
+/// [`StreamBounds::send`]; returning drops the request.
 ///
 /// `client_wants_progress` is passed through to [`drain_events`], which
 /// forwards `prompt_progress` frames when the client's own request asked for
@@ -57,7 +59,7 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 pub(crate) fn spawn_and_return(
     req_builder: reqwest::RequestBuilder,
     body: Bytes,
-    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    tx: ClientSender,
     rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>,
     connection: ConnectionGuard,
     model_name_owned: String,
@@ -150,13 +152,13 @@ pub(crate) fn spawn_and_return(
                         );
                         upstream_health.record_timeout();
                         let frame = first_byte_timeout_frame(&model_name_owned, bounds.first_byte);
-                        let _ = tx.send(Ok(Bytes::from(frame))).await;
+                        tx.send(Bytes::from(frame)).await;
                         return;
                     }
                     _ = keepalive_interval.tick() => {
                         debug!("slot-queue wait: sending SSE keepalive to client");
-                        if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
-                            return; // client disconnected
+                        if !tx.send(Bytes::from_static(b":\n\n")).await {
+                            return; // client disconnected or stopped reading
                         }
                     }
                 }
@@ -348,8 +350,7 @@ pub(crate) fn spawn_and_return(
                     &model_name_owned,
                     &format!("⚠️ [proxy] upstream model server error ({status}): {human}"),
                 );
-                let frame = format!("{visible}{frame}");
-                let _ = tx.send(Ok(Bytes::from(frame))).await;
+                tx.send(Bytes::from(format!("{visible}{frame}"))).await;
             }
             Err(e) => {
                 error!("upstream llama-server unreachable during slot-queue wait: {e}");
@@ -365,8 +366,7 @@ pub(crate) fn spawn_and_return(
                     &model_name_owned,
                     &format!("⚠️ [proxy] upstream llama-server unavailable: {e}"),
                 );
-                let frame = format!("{visible}{frame}");
-                let _ = tx.send(Ok(Bytes::from(frame))).await;
+                tx.send(Bytes::from(format!("{visible}{frame}"))).await;
             }
         }
     });

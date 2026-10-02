@@ -32,6 +32,11 @@ max_tokens?: number,
  */
 repeat_penalty?: number, 
 /**
+ * Name of the inference profile the session sampled with. Absent in
+ * rows saved before it was recorded.
+ */
+profile?: string, 
+/**
  * Context window size (numeric or "max").
  */
 ctx_size?: string, 

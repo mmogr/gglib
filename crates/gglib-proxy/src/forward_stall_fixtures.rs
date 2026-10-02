@@ -1,6 +1,6 @@
 //! Fixtures for the stall tests: an upstream that talks, pauses and goes
-//! silent on a schedule, a client that reads at its own pace, and the drain
-//! run between them.
+//! silent on a schedule, a client that reads at its own pace or stops, and
+//! the drain run between them.
 //!
 //! A module of its own so the stall and departure test files can use them.
 //! Real time throughout, with a short idle bound: a paused clock does not
@@ -20,6 +20,11 @@ use crate::upstream_read::upstream_events;
 /// runner does not cut a stream that sends every half of it, short enough
 /// that a silent one ends quickly.
 pub(super) const IDLE: Duration = Duration::from_millis(300);
+
+/// The send bound these tests run the drain under: longer than any reader
+/// here waits between two frames, the slowest of which waits more than an
+/// [`IDLE`], so only a client that stops reading meets it.
+pub(super) const SEND: Duration = Duration::from_millis(900);
 
 /// One SSE frame whose delta is `delta`, with `finish_reason`.
 pub(super) fn frame(delta: &Value, finish_reason: Option<&str>) -> Bytes {
@@ -90,6 +95,8 @@ pub(super) struct Reader {
     pub(super) delay: Duration,
     /// It hangs up after taking this many frames.
     pub(super) leaves_after: Option<usize>,
+    /// It stops reading after taking this many frames, and stays connected.
+    pub(super) stops_after: Option<usize>,
 }
 
 /// One turn as the client saw it, and what the drain made of it.
@@ -146,9 +153,9 @@ impl Turn {
     }
 }
 
-/// Run the drain over `bytes` at [`IDLE`], with a one-frame channel so that a
-/// client slower than the upstream holds the drain at `tx.send`, as a slow
-/// socket does.
+/// Run the drain over `bytes` at [`IDLE`] and [`SEND`], with a one-frame
+/// channel so that a client slower than the upstream holds the drain at
+/// `tx.send`, as a slow socket does.
 pub(super) async fn run_turn(
     bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
     dialect: Option<DialectSpec>,
@@ -184,6 +191,10 @@ async fn run_turn_with(
         let mut wire = String::new();
         let mut taken = 0;
         while pace.leaves_after != Some(taken) {
+            if pace.stops_after == Some(taken) {
+                // Handed back unread, so the channel stays open.
+                return (wire, Some(rx));
+            }
             tokio::time::sleep(pace.delay).await;
             let Some(Ok(chunk)) = rx.recv().await else {
                 break;
@@ -191,7 +202,7 @@ async fn run_turn_with(
             wire.push_str(&String::from_utf8_lossy(&chunk));
             taken += 1;
         }
-        wire
+        (wire, None)
     });
 
     let started = Instant::now();
@@ -200,7 +211,7 @@ async fn run_turn_with(
         events,
         "m".to_owned(),
         dialect,
-        tx,
+        ClientSender::new(tx, SEND),
         &connection,
         repair,
         false,
@@ -210,7 +221,7 @@ async fn run_turn_with(
         .await
         .expect("the drain ends");
     let took = started.elapsed();
-    let wire = client.await.expect("the client task does not panic");
+    let (wire, _unread) = client.await.expect("the client task does not panic");
     Turn {
         wire,
         outcome,

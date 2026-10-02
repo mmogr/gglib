@@ -60,16 +60,23 @@ describe('useDesktopSettings', () => {
     });
   });
 
-  it('exposes the current values as the update payload', () => {
-    const { result } = renderHook(() => useDesktopSettings(null));
+  /**
+   * Only what changed since settings loaded: a toggle left alone must not put
+   * back a value written elsewhere while the dialog was open (#1059).
+   */
+  it('puts only the toggles changed since load in the update payload', () => {
+    const settings = {
+      proxyAutostart: false,
+      closeToTray: true,
+      startAtLogin: false,
+    } as AppSettings;
+    const { result } = renderHook(() => useDesktopSettings(settings));
+
+    expect(result.current.updates).toEqual({});
 
     act(() => result.current.setValue('proxyAutostart', true));
 
-    expect(result.current.updates).toEqual({
-      proxyAutostart: true,
-      closeToTray: false,
-      startAtLogin: false,
-    });
+    expect(result.current.updates).toEqual({ proxyAutostart: true });
   });
 
   it('reset returns every toggle to off', () => {

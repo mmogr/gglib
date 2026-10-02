@@ -4,7 +4,7 @@
 //! (ADR 0013), beside the local stop.
 
 use anyhow::Result;
-use gglib_app_services::{RemoteJoinBody, RemoteStatus};
+use gglib_app_services::{RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonProbe};
@@ -49,14 +49,8 @@ pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
         .await?;
 
     eprintln!();
-    if joined.paired {
-        eprintln!(
-            "  \u{2705} Paired with {} and joined. Its API key is stored here; next time the \
-             ticket alone, or nothing, will do.",
-            joined.ticket_fingerprint
-        );
-    } else {
-        eprintln!("  \u{2705} Joined {}.", joined.ticket_fingerprint);
+    for line in joined_lines(&joined) {
+        eprintln!("{line}");
     }
     eprintln!();
     if let Some(wanted) = joined.moved_from {
@@ -79,6 +73,30 @@ pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
     eprintln!();
     eprintln!("  Close it:  gglib remote disconnect");
     Ok(())
+}
+
+/// What `join` says it did: paired or joined, and which pairing it replaced.
+///
+/// Settings keep one pairing, so a pairing with a second machine drops the
+/// first one's key, and until #1042 nothing on screen said so. A function
+/// rather than more `eprintln!`s so a test can read exactly what is printed.
+fn joined_lines(joined: &RemoteJoinResponse) -> Vec<String> {
+    let mut lines = vec![if joined.paired {
+        format!(
+            "  \u{2705} Paired with {} and joined. Its API key is stored here; next time the \
+             ticket alone, or nothing, will do.",
+            joined.ticket_fingerprint
+        )
+    } else {
+        format!("  \u{2705} Joined {}.", joined.ticket_fingerprint)
+    }];
+    if let Some(earlier) = &joined.replaced {
+        lines.push(format!(
+            "  This replaces the pairing with {earlier}: this machine keeps one pairing, so \
+             reaching {earlier} again takes a fresh `gglib remote invite` there."
+        ));
+    }
+    lines
 }
 
 /// Execute `gglib remote disconnect`.

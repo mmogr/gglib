@@ -59,15 +59,17 @@ Everything between the OpenAI request and llama-server is the product:
 
 - **Tool-call repair**: `tool_choice: "auto"` can leave llama.cpp
   unconstrained, producing malformed arguments that crash the client's
-  executor. GGLib validates every emitted tool call against the client's
-  schema and silently re-issues failures: with `tool_choice: "required"`,
-  which activates llama.cpp's own grammar, or, on a turn gglib's own grammar
-  constrained, as a second draw under it. The client only sees a call that
-  validates. Measured through a real proxy on 2026-09-20: on Llama 3.2 3B over
-  a schema-stress suite, 11 of 11 re-issues produced a conformant call, and the
-  proxy arm as a whole — repair among several things it does — scored higher on
-  8 of 15 matched pairs and lower on none; on Qwen3.8-27B nothing broke a
-  schema, so repair attempted nothing.
+  executor. GGLib validates each tool call in the answer's first choice
+  against the client's schema (no other choice is judged) and silently
+  re-issues failures: with `tool_choice: "required"`, which activates
+  llama.cpp's own grammar, or, on a turn gglib's own grammar constrained, as a
+  second draw under it. The client gets the re-issue's answer when that
+  validates, and the original when it does not. Measured through a real proxy
+  on 2026-09-20: on Llama 3.2 3B over a schema-stress suite, 11 of 11
+  re-issues produced a conformant call, and the proxy arm as a whole — repair
+  among several things it does — scored higher on 8 of 15 matched pairs and
+  lower on none; on Qwen3.8-27B nothing broke a schema, so repair attempted
+  nothing.
   [Details →](docs/tool-call-repair.md),
   [reading →](docs/adr/log-0004.md#addendum--the-first-reading-through-the-proxy-2026-09-20)
 - **Loop defense**: agentic clients replay the full conversation each turn,
@@ -77,9 +79,10 @@ Everything between the OpenAI request and llama-server is the product:
   is an agent polling for output, not a loop, and does not trip it. What happens
   to a stuck session is one setting: by default the request is **forwarded with
   a note** telling the model what it has repeated, so a client with no recovery
-  path from a refusal gets something it can act on; `--loop-guard-mode refuse`
-  restores the clean 400 before it costs a model swap or another generation,
-  and `off` stops the scan.
+  path from a refusal still gets an answer; `--loop-guard-mode refuse` answers
+  400 instead, before a model swap or another generation, and `off` stops the
+  scan. No run has measured how often it fires or what the note changes yet
+  ([#1047](https://github.com/mmogr/gglib/issues/1047)).
   [Details →](crates/gglib-proxy/README.md#loop--stagnation-defence)
 - **Sampling authority**: a 5-level hierarchy (request → profile →
   per-model → global → floor) resolves every sampling parameter server-side.

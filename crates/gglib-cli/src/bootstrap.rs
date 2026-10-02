@@ -103,14 +103,6 @@ pub struct CliContext {
 /// `AppEventEmitter` for the shared bootstrap, ignoring non-download
 /// variants), the MCP service, and the shared HTTP client.
 pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
-    // CLI terminal emitter — renders indicatif progress bars and exposes
-    // the MultiProgress handle for interactive suspend/resume. It is an
-    // `AppEventEmitter` like Axum's and Tauri's, so it plugs straight into
-    // the shared bootstrap event pipeline; non-download AppEvent variants
-    // are ignored — the CLI has no UI surface for them.
-    let download_emitter = Arc::new(CliDownloadEventEmitter::new());
-    let emitter: Arc<dyn AppEventEmitter> = Arc::clone(&download_emitter) as _;
-
     // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
     let models_resolution = resolve_models_dir(None)?;
     let bootstrap_config = BootstrapConfig {
@@ -119,6 +111,22 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         models_dir: models_resolution.path,
         hf_token: std::env::var("HF_TOKEN").ok(),
     };
+    bootstrap_with(config, bootstrap_config).await
+}
+
+/// [`bootstrap`] over the database and models directory `bootstrap_config`
+/// names, so a test can point it at a temporary directory.
+pub(crate) async fn bootstrap_with(
+    config: CliConfig,
+    bootstrap_config: BootstrapConfig,
+) -> Result<CliContext> {
+    // CLI terminal emitter — renders indicatif progress bars and exposes
+    // the MultiProgress handle for interactive suspend/resume. It is an
+    // `AppEventEmitter` like Axum's and Tauri's, so it plugs straight into
+    // the shared bootstrap event pipeline; non-download AppEvent variants
+    // are ignored — the CLI has no UI surface for them.
+    let download_emitter = Arc::new(CliDownloadEventEmitter::new());
+    let emitter: Arc<dyn AppEventEmitter> = Arc::clone(&download_emitter) as _;
 
     let BuiltCore {
         app,

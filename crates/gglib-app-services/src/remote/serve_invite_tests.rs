@@ -79,19 +79,14 @@ async fn a_plain_enable_brings_the_tunnel_up_and_offers_nothing() {
 /// The contrast, so the tests above cannot pass by arming nothing at all:
 /// asked for an invite, `enable` mints a device key and a code for it.
 ///
-/// **This one forgets what it minted, and the cleanup is not politeness.**
-/// `invite` writes a real key into `<data root>/data/remote_devices`, which a
-/// debug build resolves to the repository checkout — the same file a
-/// developer's own daemon seeds its listener from. A test that left rows
-/// behind would arm that machine's tunnel with ids nobody issued, growing by
-/// one on every run. Forgetting it here also exercises `RemoteOps::forget`
-/// on its real path: the edge, the key file and the roster, all three.
+/// **This one forgets what it minted.** `invite` writes a real key into the
+/// device key file the ops was built with, and a row into its roster.
+/// Forgetting it here also exercises `RemoteOps::forget` on its real path:
+/// the edge, the key file and the roster, all three.
 ///
-/// **Everything fallible is asserted after the cleanup**, for that reason:
-/// an assertion that fires between the mint and the forget takes the rest
-/// of the test with it and leaves a live key in the checkout — the precise
-/// outcome the cleanup exists to prevent, reached by the test failing,
-/// which is the one moment it is least likely to be noticed.
+/// **Everything fallible is asserted after the cleanup**: an assertion that
+/// fires between the mint and the forget takes the rest of the cleanup with
+/// it, `disable` included.
 #[tokio::test]
 async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
     let (_core, _proxy, _events, ops, _arming) = ops_with_key().await;
@@ -118,8 +113,8 @@ async fn an_enable_asked_to_invite_offers_a_code_for_a_new_device() {
     // Clean up. Including whatever the second invite minted: it is supposed
     // to have been refused, but if the regression the assertion below guards
     // against ever lands, it minted a device of its own — and forgetting only
-    // the first would leave exactly the row this test exists to keep out of
-    // the checkout, on the one path that is there to catch it.
+    // the first would leave that one behind, on the one path that is there
+    // to catch it.
     if let Ok(Enabled {
         pairing: Some(second),
         ..

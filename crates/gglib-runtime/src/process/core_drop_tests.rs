@@ -13,8 +13,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Duration;
 
-/// Ids far outside anything a real catalog hands out, for the reason
-/// `residency::launch_tests` gives, and used by no other test.
+/// Ids no other test in this binary uses, for the reason
+/// `residency::launch_tests` gives.
 const FIRST_ID: i64 = 999_006;
 const SECOND_ID: i64 = 999_007;
 const PIDFILE_ID: i64 = 999_008;
@@ -24,7 +24,11 @@ const PIDFILE_ID: i64 = 999_008;
 ///
 /// `exec` makes the pid the core records the sleeping process itself, so a
 /// kill sent to that pid stops the sleep rather than orphaning it.
+///
+/// Sets this binary's own data root first, so the pidfiles `spawn` writes stay
+/// out of the checkout (#955).
 fn core_of_sleepers(dir: &Path) -> GuiProcessCore {
+    gglib_core::paths::isolate_data_root();
     let script = dir.join("llama-server");
     std::fs::write(&script, "#!/bin/sh\nexec sleep 30\n").expect("write script");
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");

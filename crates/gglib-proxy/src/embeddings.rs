@@ -41,7 +41,7 @@ use crate::dashboard::CacheStatus;
 use crate::forward::should_forward_header;
 use crate::models::{EmbeddingsRoutingEnvelope, ErrorResponse};
 use crate::server::{AppState, handle_runtime_error};
-use crate::unary_body::forward_non_streaming_response;
+use crate::unary_body::{Exchange, answer_with, exchange};
 
 /// The tag that marks a model as launchable in embedding mode.
 ///
@@ -187,37 +187,22 @@ pub(crate) async fn embeddings(
         }
     }
 
-    let response = match req_builder.body(body).send().await {
-        Ok(resp) => resp,
-        Err(e) => {
+    // Within the same total bound as a chat completion that does not stream.
+    // A non-2xx is passed through verbatim, including llama-server's own 501
+    // for a server that was not started with `--embeddings`. No dialect: an
+    // embeddings body has no `choices`, so normalization is a no-op.
+    let request = req_builder.body(body);
+    let (bound, cache_metrics) = (state.stream_bounds.unary, &state.dashboard.cache_metrics);
+    match exchange(request, bound, cache_metrics, None, None).await {
+        Exchange::Answered(content_type, body) => answer_with(content_type, body),
+        Exchange::Respond(response) => response,
+        Exchange::SendFailed(e) => {
             error!("Failed to send embeddings request to llama-server: {e}");
-            return (
+            (
                 StatusCode::BAD_GATEWAY,
                 Json(ErrorResponse::upstream_error(&e.to_string())),
             )
-                .into_response();
+                .into_response()
         }
-    };
-
-    let status = response.status();
-    if !status.is_success() {
-        // Passed through verbatim, including llama-server's own 501 for a
-        // server that was not started with `--embeddings` — that message names
-        // the real cause better than anything this layer could substitute.
-        let error_bytes = response.bytes().await.unwrap_or_default();
-        tracing::warn!(
-            status = status.as_u16(),
-            body = %String::from_utf8_lossy(&error_bytes),
-            "upstream llama-server returned error for embeddings"
-        );
-        return Response::builder()
-            .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(error_bytes))
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
     }
-
-    // No tags: an embeddings body has no `choices`, so normalization is a
-    // no-op — this just satisfies the shared forwarding signature.
-    forward_non_streaming_response(response, &state.dashboard.cache_metrics, None, None).await
 }

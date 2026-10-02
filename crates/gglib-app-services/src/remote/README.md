@@ -306,8 +306,10 @@ for the person to fix or delete, and when there is none, because a first key
 could not be written, the sentence says so and names nothing to delete.
 
 `kill_remote` posts the confirmation word to the far proxy's shutdown route
-with the stored key, then disconnects. One-way: nothing here can start that
-daemon again.
+with the stored key, then disconnects. It sends the key only when the stored
+pairing names the machine it is connected to, checked with
+`stored_pairing::names_the_same_machine` as `join` checks it. One-way: nothing
+here can start that daemon again.
 
 # What the gateway is for
 

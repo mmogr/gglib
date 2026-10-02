@@ -77,7 +77,19 @@ pub fn is_prebuilt_binary() -> bool {
 /// 1. `GGLIB_DATA_DIR` environment variable (highest priority)
 /// 2. Local repository (if running from source)
 /// 3. System data directory (e.g., `~/.local/share/gglib`)
+///
+/// A test binary built with this crate's `test-utils` feature can set a root
+/// of its own with `isolate_data_root`, which comes before all three. A build
+/// without the feature neither looks for one nor can set one. One that a
+/// test run compiles with it, such as the `gglib` the CLI's tests start,
+/// looks and finds none, since only a test calls `isolate_data_root`.
 pub fn data_root() -> Result<PathBuf, PathError> {
+    // 0. A test binary's own root (#955)
+    #[cfg(feature = "test-utils")]
+    if let Some(root) = super::test_root::root() {
+        return Ok(root.to_path_buf());
+    }
+
     // 1. Runtime override (highest priority)
     if let Ok(path) = env::var("GGLIB_DATA_DIR") {
         return Ok(PathBuf::from(path));
@@ -110,7 +122,16 @@ pub fn data_root() -> Result<PathBuf, PathError> {
 /// 1. `GGLIB_RESOURCE_DIR` environment variable
 /// 2. Local repository (if running from source)
 /// 3. Falls back to data root
+///
+/// A test binary's own root comes first here too, as for [`data_root`], so a
+/// test resolves no llama-server but one it installed there itself.
 pub fn resource_root() -> Result<PathBuf, PathError> {
+    // 0. A test binary's own root (#955)
+    #[cfg(feature = "test-utils")]
+    if let Some(root) = super::test_root::root() {
+        return Ok(root.to_path_buf());
+    }
+
     // 1. Runtime override
     if let Ok(path) = env::var("GGLIB_RESOURCE_DIR") {
         return Ok(PathBuf::from(path));

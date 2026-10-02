@@ -631,6 +631,10 @@ Passing both is an error rather than a precedence rule, on the same reasoning
 as the 404 below: an ambiguous profile should fail where it is cheap to
 diagnose.
 
+A resumed chat samples with the profile it was started with, as it keeps its
+temperature, and `--profile` on the resume replaces it for that session. One
+deleted since resumes without a profile, with a warning.
+
 On `serve`, `--profile` sets a **default for the endpoint** — requests naming
 the bare pinned model resolve as if they had asked for `{model}:chat`:
 

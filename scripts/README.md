@@ -331,11 +331,13 @@ Requires [scc](https://github.com/boyter/scc) (`brew install scc`).
 Creates missing README stubs: one wherever a README is missing in a
 directory below a crate's `src/`, below `src-tauri/src/` or below the
 TypeScript `src/` (with the `module-docs` markers), and in `tests/` or a
-directory below it. A Rust stub takes its text from the `//!` block of the
-directory's `mod.rs` when it has one. For each directory it stubs whose
-`mod.rs` lacks `#![doc = include_str!("README.md")]`, the script adds that
-line and puts a `// MIGRATION` comment above any `//!` block. It never
-deletes a `//!` block; that is left to the author.
+directory below it. It skips `src/types/generated/` and the directories
+below it, which are ts-rs output that `check_readmes.sh` also skips. A
+Rust stub takes its text from the `//!` block of the directory's `mod.rs`
+when it has one. For each directory it stubs whose `mod.rs` lacks
+`#![doc = include_str!("README.md")]`, the script adds that line and puts
+a `// MIGRATION` comment above any `//!` block. It never deletes a `//!`
+block; that is left to the author.
 
 ```bash
 ./scripts/generate_submodule_readmes.sh --create [--dry-run]

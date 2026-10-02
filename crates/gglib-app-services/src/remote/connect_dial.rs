@@ -78,8 +78,8 @@ impl RemoteOps {
             Ok(key)
         })
         .await;
-        let paired = match settled {
-            Ok(paired) => paired,
+        let (paired, replaced) = match settled {
+            Ok(settled) => settled.paired_and_replaced(),
             Err(e) => {
                 // `DRAIN`, like every other teardown here. The pipe reached
                 // the far machine, but a third-party client may already be
@@ -95,7 +95,7 @@ impl RemoteOps {
         let away_since = Arc::new(AtomicI64::new(-1));
         let live = LiveConnect {
             handle: Arc::clone(&handle),
-            ticket_fingerprint: ticket_fingerprint.clone(),
+            ticket: ticket.clone(),
             generation,
             watcher: watcher.clone(),
             away_since: Arc::clone(&away_since),
@@ -124,6 +124,7 @@ impl RemoteOps {
             ticket_fingerprint,
             paired,
             moved_from,
+            replaced,
         })
     }
 }

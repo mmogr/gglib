@@ -5,6 +5,7 @@ import { IconButton } from '../ui/IconButton';
 import { Input } from '../ui/Input';
 import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
+import { parseDbTimestamp } from '../../utils/dbTimestamp';
 import { EmptyState } from '../primitives';
 import { ConversationListSkeleton } from './ConversationListSkeleton';
 import { ConversationMarks } from './ConversationMarks';
@@ -31,7 +32,7 @@ const NONE: ReadonlySet<number> = new Set();
 
 const formatRelativeTime = (iso: string) => {
   const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-  const date = new Date(iso);
+  const date = parseDbTimestamp(iso);
   const diffMinutes = Math.round((date.getTime() - Date.now()) / (1000 * 60));
 
   if (Math.abs(diffMinutes) < 60) {

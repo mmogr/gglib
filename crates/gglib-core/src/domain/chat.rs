@@ -204,6 +204,11 @@ pub struct ConversationSettings {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_penalty: Option<f32>,
+    /// Name of the inference profile the session sampled with. Absent in
+    /// rows saved before it was recorded.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     /// Context window size (numeric or "max").
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]

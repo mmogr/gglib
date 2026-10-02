@@ -57,6 +57,8 @@ nix = { version = "0.30", features = ["signal", "process"] }
 [dev-dependencies]
 tokio-test = { workspace = true }
 tempfile = { workspace = true }
+# Tests that write pidfiles do it in a data root of this binary's own (#955).
+gglib-core = { path = "../gglib-core", features = ["test-utils"] }
 
 [lints]
 workspace = true

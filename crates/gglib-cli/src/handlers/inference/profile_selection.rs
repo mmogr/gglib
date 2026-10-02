@@ -211,10 +211,7 @@ pub(crate) async fn resume_profile(
         ModelRoute::Bare(model) => (model.to_owned(), None),
         ModelRoute::Profiled { model, profile } => (model.to_owned(), Some(profile.clone())),
         ModelRoute::ProfileNotFound { requested, suffix } => {
-            eprintln!(
-                "  Warning: this conversation was started with profile '{suffix}', which no \
-                 longer exists. Resuming without it."
-            );
+            warn_profile_gone(suffix);
             let base = requested
                 .rsplit_once(':')
                 .map_or(requested, |(base, _)| base)
@@ -233,6 +230,15 @@ pub(crate) async fn resume_profile(
             .ok_or_else(|| anyhow!("{}", not_found_message(name, profiles))),
         None => Ok(stored.1),
     }
+}
+
+/// Say that a resumed conversation's profile is gone, and that it resumes
+/// without one.
+pub(crate) fn warn_profile_gone(name: &str) {
+    eprintln!(
+        "  Warning: this conversation was started with profile '{name}', which no \
+         longer exists. Resuming without it."
+    );
 }
 
 #[cfg(test)]

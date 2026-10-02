@@ -161,10 +161,9 @@ pub(crate) async fn test_remote_ops_joining_from(
 
 /// A device key file no other `RemoteOps` in this run reads or writes.
 ///
-/// Given `None`, `RemoteOps` keeps keys beside the endpoint identity, which in
-/// a debug build is the checkout's `data/remote_devices`: one file for every
-/// test in the process, and the installed daemon's own when this is the
-/// checkout it was built from.
+/// Given `None`, `RemoteOps` keeps keys beside the endpoint identity, in
+/// `data/remote_devices` under this binary's own data root (#955): one file
+/// for every test in the process.
 pub(crate) fn scratch_device_keys() -> PathBuf {
     scratch("remote_devices")
 }
@@ -172,10 +171,9 @@ pub(crate) fn scratch_device_keys() -> PathBuf {
 /// A directory for the keys a `RemoteOps` joins with that no other in this
 /// run uses, for [`RemoteOps::with_join_keys`](crate::RemoteOps::with_join_keys).
 ///
-/// Without one, `RemoteOps` keeps them in `data/remote_join`, which in a debug
-/// build is the checkout's, and the installed daemon's when this is the
-/// checkout it was built from. Named and not made: a dial makes it, and
-/// whether it does is under test.
+/// Without one, `RemoteOps` keeps them in `data/remote_join` under this
+/// binary's own data root: one directory for every test in the process.
+/// Named and not made: a dial makes it, and whether it does is under test.
 pub(crate) fn scratch_join_keys() -> PathBuf {
     scratch("remote_join")
 }

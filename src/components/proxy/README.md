@@ -17,7 +17,8 @@ The tray popover shows the same information as the in-app dashboard, so without 
 | `EndpointCopyBar.tsx` | The endpoint URL plus a copy button; exports `proxyEndpointUrl` for callers that need the string alone. Copy confirmation is delegated via `onCopied`, since the tray window has no toast host |
 | `ConnectionRow.tsx` | One in-flight request: model name, phase, and a prompt-progress bar while the prompt is being processed |
 | `SlotCard.tsx` | One llama.cpp inference slot as a context-usage donut; `size` shrinks it for the popover |
-| `ProxyMetricsGrid.tsx` | `ActiveConnectionsSection` and `InferenceSlotsSection`, plus `ProxyMetricsGrid` composing both. The modal uses the sections individually because its cache panels sit between them; the popover uses the pair. `compact` renders at popover scale |
+| `ProxyMetricsGrid.tsx` | `ActiveConnectionsSection` and `InferenceSlotsSection`, plus `ProxyMetricsGrid` composing both. The modal uses the sections individually because its cache panels sit between them; the popover uses the pair. `compact` renders at popover scale. Also `ModelSignalsSection`, which only the modal shows |
+| `ModelSignalsCard.tsx` | One model's per-model signals, under the rules `gglib proxy dashboard` prints them by: only what fired, repairs as a ratio, trips by detector, agent-path trips against their own decisions, the repeat counters under "Observed" |
 | `ProxyToggleButton.tsx` | Start/stop control, so the destructive styling always tracks the destructive action |
 | `RequestThroughput.tsx` | Requests per second as a `Readout` and a `Sparkline`, over `useMetricHistory`'s rate mode |
 

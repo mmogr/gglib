@@ -11,6 +11,8 @@ mod private;
 mod remote;
 mod resolver;
 mod slots;
+#[cfg(feature = "test-utils")]
+mod test_root;
 
 #[cfg(test)]
 mod test_utils;
@@ -22,6 +24,10 @@ pub use error::PathError;
 
 // Platform detection and roots
 pub use platform::{data_root, is_prebuilt_binary, resource_root};
+
+// A test binary's own data root, which only the `test-utils` feature compiles
+#[cfg(feature = "test-utils")]
+pub use test_root::isolate_data_root;
 
 // Database
 pub use database::database_path;
@@ -43,7 +49,7 @@ pub use models::{
 pub use pids::pids_dir;
 
 // The remote tunnel's stored endpoint keys: the serving one and the joining ones
-pub use remote::{remote_identity_path, remote_join_dir};
+pub use remote::{remote_identity_location, remote_identity_path, remote_join_dir};
 
 // Directories and files this user alone can read
 pub use private::{create_private_dir, create_private_file, make_private};

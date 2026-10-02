@@ -67,12 +67,12 @@ does either.
   line, rendered after 5b so it describes what was *sent* rather than what
   stage 4 folded. Its module docs carry the argument for that placement.
 
-Every request path calls [`apply()`]. The proxy used to run the stages by hand
-with its own truncation pass spliced between them, because that pass gated on
-the payload's size in wire bytes and could reject the request with an `axum`
-response — neither of which fits here. Measuring the serialized `Value` and
-returning a domain error removed both obstacles, so there is one implementation
-of the order and no second route to keep in sync.
+Outside tests, two paths call [`apply()`]: the proxy's forwarding path
+(`gglib-proxy`'s `forward.rs`) and the runtime's completion adapter
+(`gglib-runtime`'s `llm_completion`), and neither runs the stages in an order
+of its own. `POST /api/chat` in `gglib-axum` does not call it and runs none of
+the stages: it posts straight to llama-server, as the note in its handler,
+`proxy_chat` in `chat_api.rs`, says.
 
 ## The truncation budget
 

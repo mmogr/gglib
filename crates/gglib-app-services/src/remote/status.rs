@@ -47,14 +47,11 @@ impl RemoteOps {
         let stored_ticket_fingerprint = stored.as_ref().and_then(stored_pairing::fingerprint);
         let has_remote_key = stored.is_some();
         let connected = self.connection().await;
-        // Before the lock: this touches the filesystem — creating or
-        // tightening the data directory — and `status` is the call everything else waits
-        // behind. Nothing under the serve slot should be doing IO that has
-        // nothing to do with the slot.
-        let identity_path = identity::identity_path()
-            .ok()
-            .flatten()
-            .map(|p| p.display().to_string());
+        // Before the lock: resolving the data root can touch the filesystem,
+        // and `status` is the call everything else waits behind. Nothing under
+        // the serve slot should be doing IO that has nothing to do with the
+        // slot. Named, not created: a read leaves `data/` as it was.
+        let identity_path = identity::identity_location().map(|p| p.display().to_string());
         let live = self.live.lock().await;
         // Under the slot, like `list`'s: what the edge holds and whether the
         // tunnel is up have to be read at one instant or a row can come back
@@ -100,3 +97,7 @@ impl RemoteGateway {
         gglib_core::ports::RemoteGatewayPort::mcp_allowed(self)
     }
 }
+
+#[cfg(test)]
+#[path = "status_tests.rs"]
+mod status_tests;

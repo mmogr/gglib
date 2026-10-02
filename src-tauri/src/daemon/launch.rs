@@ -111,7 +111,7 @@ mod tests {
     /// Asserted by construction rather than by planting a file on `$PATH`:
     /// `set_var` is process-global and `unsafe` under edition 2024, so a test
     /// that rewrote `$PATH` would be both racy under the parallel harness and
-    /// a new `unsafe` block in a crate that has none.
+    /// a new `unsafe` block.
     #[test]
     fn both_lookups_share_one_name_source() {
         let name = cli_binary_name();

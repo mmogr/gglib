@@ -2,6 +2,7 @@ import type { ThreadMessageLike } from '@assistant-ui/react';
 import { reconstructContent, turnMadeFromMetadata } from '../../utils/messages';
 import type { SerializableContentPart, SerializableToolCallPart } from '../../utils/messages';
 import type { ChatMessage } from '../../services/transport';
+import { parseDbTimestamp } from '../../utils/dbTimestamp';
 
 // ============================================================================
 // Tool-row folding (CLI agent conversations store tool results as separate rows)
@@ -163,7 +164,7 @@ export function buildLoadedMessage(
     id: `db-${msg.id}`,
     role: msg.role as 'user' | 'assistant',
     content,
-    createdAt: new Date(msg.created_at),
+    createdAt: parseDbTimestamp(msg.created_at),
     ...(unfinished && { status: { type: 'incomplete' as const, reason: 'cancelled' as const } }),
     metadata: { custom },
   };

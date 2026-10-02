@@ -4,8 +4,8 @@
 //! KV-cache save sent to the silent server and no empty response counted
 //! against the model.
 //!
-//! Both stream bounds are longer than any of these tests waits, so no bound
-//! can end a request here. Before the reply's headers the proxy also sends a
+//! Every bound is longer than any of these tests waits, so no bound can end
+//! a request here. Before the reply's headers the proxy also sends a
 //! keepalive every 15 s, whose send fails once the client has gone; these
 //! tests ask for the upstream to be freed well before the first one.
 
@@ -32,6 +32,8 @@ use gglib_proxy::StreamBounds;
 const BOUNDS: StreamBounds = StreamBounds {
     first_byte: Duration::from_mins(1),
     idle: Duration::from_mins(1),
+    send: Duration::from_mins(1),
+    unary: Duration::from_mins(1),
 };
 
 /// How soon after the client leaves the upstream must be freed: well under
@@ -125,7 +127,7 @@ async fn spawn(kind: Upstream, slot_dir: Option<PathBuf>, cancel: &CancellationT
         slot_restore_supported: true,
         pinned: false,
     });
-    let base = spawn_proxy_under(BOUNDS, runtime, slot_dir, cancel.clone()).await;
+    let base = spawn_proxy_under(BOUNDS, runtime, vec![], slot_dir, cancel.clone()).await;
     Stand {
         base,
         arrivals,

@@ -20,7 +20,6 @@ use anyhow::{Result, bail};
 use gglib_core::domain::agent::AgentMessage;
 
 use crate::bootstrap::CliContext;
-use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
 
 use self::persistence::Conversation;
@@ -33,10 +32,59 @@ use self::persistence::Conversation;
 /// the user didn't explicitly provide).
 #[allow(
     clippy::default_trait_access,
-    clippy::useless_let_if_seq,
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
+    let Session {
+        args,
+        params,
+        persistence,
+        prior_messages,
+    } = prepare(ctx, args).await?;
+
+    // 2. Compose the agent with the (possibly merged) args.
+    let inference_config = args.sampling.clone().into_inference_config();
+    let sampling = if inference_config == Default::default() {
+        None
+    } else {
+        Some(inference_config)
+    };
+    let prior_chars: usize = prior_messages
+        .iter()
+        .map(gglib_core::AgentMessage::char_count)
+        .sum();
+    let banner = config::BannerInfo {
+        quiet: false,
+        sampling: sampling.clone(),
+        prior_history_chars: if prior_chars > 0 {
+            Some(prior_chars)
+        } else {
+            None
+        },
+    };
+    let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
+
+    // The llama-server belongs to the daemon and stays warm for the next
+    // session; nothing to stop here.
+    repl::run_repl_with_prior(agent, &args, persistence, prior_messages).await
+}
+
+/// A session ready to compose: the merged args, the parameters its agent is
+/// composed with, the conversation it saves to, and the messages it resumes.
+struct Session<'a> {
+    args: ChatArgs,
+    params: config::AgentSessionParams,
+    persistence: Option<Conversation<'a>>,
+    prior_messages: Vec<AgentMessage>,
+}
+
+/// Everything [`run`] does before it reaches the daemon: read the settings,
+/// create or resume the conversation, and settle the model and the profile.
+#[allow(
+    clippy::useless_let_if_seq,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
+async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>> {
     // 1. If resuming, load the conversation first and merge saved settings
     //    into args so the agent is composed with the correct parameters.
     let mut args = args.clone();
@@ -79,10 +127,10 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         selected_profile = selection.profile;
     }
 
-    let (persistence, prior_messages) = if let Some(conv_id) = args.continue_id {
-        let (merged_args, conv, prior) = resume_conversation(ctx, &args, conv_id).await?;
+    let (persistence, prior_messages, saved_profile) = if let Some(conv_id) = args.continue_id {
+        let (merged_args, conv, prior, saved) = resume_conversation(ctx, &args, conv_id).await?;
         args = merged_args;
-        (Some(conv), prior)
+        (Some(conv), prior, saved)
     } else {
         args.identifier = args
             .target
@@ -90,30 +138,10 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
                 bail!("model identifier is required (use --continue <ID> to resume a session)")
             })
             .await?;
-        let (conv, prior) = new_conversation(ctx, &args).await;
-        (conv, prior)
+        let (conv, prior) = new_conversation(ctx, &args, selected_profile.as_ref()).await;
+        (conv, prior, None)
     };
 
-    // 2. Compose the agent with the (possibly merged) args.
-    let inference_config = args.sampling.clone().into_inference_config();
-    let sampling = if inference_config == Default::default() {
-        None
-    } else {
-        Some(inference_config)
-    };
-    let prior_chars: usize = prior_messages
-        .iter()
-        .map(gglib_core::AgentMessage::char_count)
-        .sum();
-    let banner = config::BannerInfo {
-        quiet: false,
-        sampling: sampling.clone(),
-        prior_history_chars: if prior_chars > 0 {
-            Some(prior_chars)
-        } else {
-            None
-        },
-    };
     // On a resume the identifier came from storage, not from this command
     // line. An explicit `--profile` is therefore the only thing the user
     // actually typed, and it wins over any suffix an older conversation
@@ -128,29 +156,34 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         )
         .await?;
     }
+    // Then the profile the conversation was saved with, if nothing named one.
+    let selected_profile = resume_settings::restore_profile(
+        selected_profile,
+        args.target,
+        configured_profiles,
+        saved_profile.as_deref(),
+    );
 
     let params = config::AgentSessionParams {
         model_identifier: args.identifier.clone(),
         profile: selected_profile,
         ..config::AgentSessionParams::from(&args)
     };
-    let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
-
-    // The llama-server belongs to the daemon and stays warm for the next
-    // session; nothing to stop here.
-    repl::run_repl_with_prior(agent, &args, persistence, prior_messages).await
+    Ok(Session {
+        args,
+        params,
+        persistence,
+        prior_messages,
+    })
 }
 
 /// Create a new conversation for a fresh session.
 async fn new_conversation<'a>(
     ctx: &'a CliContext,
     args: &ChatArgs,
+    profile: Option<&gglib_core::domain::InferenceProfile>,
 ) -> (Option<Conversation<'a>>, Vec<AgentMessage>) {
-    let settings = ConversationSettingsBuilder::new(&args.sampling, &args.context)
-        .model_name(&args.identifier)
-        .tools(args.tools.clone(), args.no_tools)
-        .agent_params(args.max_iterations, args.tool_timeout_ms, args.max_parallel)
-        .build();
+    let settings = resume_settings::session_settings(args, profile);
 
     let persistence = match Conversation::create(
         ctx.app.chat_history(),
@@ -179,11 +212,19 @@ async fn new_conversation<'a>(
 /// ```
 /// uses `other-model` and temperature `0.9` from the CLI, but restores
 /// everything else (system prompt, `top_p`, tools, etc.) from conversation 42.
+/// The saved profile's name comes back separately: whether it applies is
+/// [`resume_settings::restore_profile`]'s to decide, once a flag or suffix
+/// has had its say.
 async fn resume_conversation<'a>(
     ctx: &'a CliContext,
     args: &ChatArgs,
     conv_id: i64,
-) -> Result<(ChatArgs, Conversation<'a>, Vec<AgentMessage>)> {
+) -> Result<(
+    ChatArgs,
+    Conversation<'a>,
+    Vec<AgentMessage>,
+    Option<String>,
+)> {
     let history = ctx.app.chat_history();
 
     let conv = history
@@ -227,6 +268,7 @@ async fn resume_conversation<'a>(
     }
 
     let persistence = Conversation::resume(history, conv_id, msg_count).await;
+    let saved_profile = conv.settings.and_then(|s| s.profile);
 
-    Ok((merged, persistence, prior_messages))
+    Ok((merged, persistence, prior_messages, saved_profile))
 }

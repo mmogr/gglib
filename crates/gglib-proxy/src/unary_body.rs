@@ -1,11 +1,14 @@
-//! A non-streaming response, read whole and normalised.
+//! A non-streaming request, sent within its bound, and its response, read
+//! whole and normalised.
 //!
 //! The streaming path runs its frames through
 //! [`gglib_core::normalize::NormalizingStream`] as they arrive; a `stream:
 //! false` body is buffered anyway, so the same parser runs over it once
 //! ([`gglib_core::normalize::normalize_chat_completion_body`]). Both
-//! `/v1/chat/completions` and `/v1/embeddings` answer through here, which is
-//! why it is not part of [`crate::forward_unary`].
+//! `/v1/chat/completions` and `/v1/embeddings` send through [`exchange`],
+//! which is why it is not part of [`crate::forward_unary`].
+
+use std::time::Duration;
 
 use axum::{
     body::Body,
@@ -18,9 +21,113 @@ use tracing::{error, warn};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::DialectSpec;
 
-use crate::forward::NORMALIZATION_NOTICE_PREFIX;
+use crate::forward::{FIRST_BYTE_DEADLINE_SECS, NORMALIZATION_NOTICE_PREFIX};
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
+
+/// What a non-streaming answer is given for its generation, on top of what a
+/// streamed reply is given to begin: 25 minutes, which is 15,000 tokens at 10
+/// tokens a second, a long reasoning answer from a large model on slow
+/// hardware.
+const GENERATION_ALLOWANCE: Duration = Duration::from_mins(25);
+
+/// How long a request that does not stream may take in all, from its send
+/// upstream to the last byte of its answer: 30 minutes.
+///
+/// llama-server sends a non-streaming answer, headers and all, only once it
+/// has generated the whole of it, so there is nothing to time in between: the
+/// request is one wait, which a wedged llama-server would never end, and the
+/// request would hold its model's slot all the while (#1125).
+///
+/// Sized from its twin on the streaming path, the time a streamed reply may
+/// take to begin, [`FIRST_BYTE_DEADLINE_SECS`] (300 s), which is sized for a
+/// long prefill on constrained hardware. A non-streaming answer cannot begin
+/// until its generation is over, so it gets that and [`GENERATION_ALLOWANCE`]
+/// besides: 300 s + 1500 s.
+pub(crate) const UNARY_TOTAL_TIMEOUT: Duration =
+    Duration::from_secs(FIRST_BYTE_DEADLINE_SECS).saturating_add(GENERATION_ALLOWANCE);
+
+/// What one request that does not stream came to.
+pub(crate) enum Exchange {
+    /// llama-server answered 2xx: the content type to answer under, and the
+    /// body, read whole and normalised.
+    Answered(HeaderValue, Bytes),
+    /// The response to send instead: llama-server's own error passed through,
+    /// a 502 for a body that could not be read, or a 504 for a request that
+    /// outlasted its bound.
+    Respond(Response),
+    /// The request failed before llama-server answered it.
+    SendFailed(reqwest::Error),
+}
+
+/// Send `request`, and read its answer whole as [`read_non_streaming_body`]
+/// does, all within `total`.
+///
+/// When `total` runs out first, the request is dropped, which closes its
+/// connection to llama-server as a departed client's does, and the answer is
+/// a 504 carrying `upstream_timeout`: the code the streaming path sends when
+/// its upstream goes quiet (see [`crate::upstream_read`]), so a client reads
+/// both the same way.
+pub(crate) async fn exchange(
+    request: reqwest::RequestBuilder,
+    total: Duration,
+    cache_metrics: &CacheMetricsStore,
+    dialect: Option<&DialectSpec>,
+    residue_sink: Option<(&ContextMetricsStore, u64)>,
+) -> Exchange {
+    let exchange = async {
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(e) => return Exchange::SendFailed(e),
+        };
+        let status = response.status();
+        if !status.is_success() {
+            return Exchange::Respond(passed_through(status, response).await);
+        }
+        match read_non_streaming_body(response, cache_metrics, dialect, residue_sink).await {
+            Ok((content_type, body)) => Exchange::Answered(content_type, body),
+            Err(e) => Exchange::Respond(unreadable_upstream(&e)),
+        }
+    };
+    tokio::time::timeout(total, exchange)
+        .await
+        .unwrap_or_else(|_| Exchange::Respond(upstream_timed_out(total)))
+}
+
+/// llama-server's own error, its status and body passed through: its
+/// diagnostic, such as the 501 of a server not started with `--embeddings`,
+/// names the cause better than anything this layer could put in its place.
+async fn passed_through(status: reqwest::StatusCode, response: reqwest::Response) -> Response {
+    let error_bytes = response.bytes().await.unwrap_or_default();
+    warn!(
+        status = status.as_u16(),
+        body = %String::from_utf8_lossy(&error_bytes),
+        "upstream llama-server returned error"
+    );
+    Response::builder()
+        .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
+        .header("content-type", "application/json")
+        .body(Body::from(error_bytes))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
+/// The 504 for a request that outlasted `total`.
+fn upstream_timed_out(total: Duration) -> Response {
+    let secs = total.as_secs();
+    warn!(
+        secs,
+        "upstream did not finish a non-streaming answer within {secs}s"
+    );
+    (
+        StatusCode::GATEWAY_TIMEOUT,
+        axum::Json(ErrorResponse::with_code(
+            format!("upstream did not finish its answer within {secs}s"),
+            "server_error",
+            "upstream_timeout",
+        )),
+    )
+        .into_response()
+}
 
 /// Extract `(prompt_tokens, cached_tokens)` from a non-streaming response body.
 ///
@@ -56,7 +163,7 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 ///
 /// The transport error, when the body could not be read; answer with
 /// [`unreadable_upstream`].
-pub(crate) async fn read_non_streaming_body(
+async fn read_non_streaming_body(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
     dialect: Option<&DialectSpec>,
@@ -99,29 +206,13 @@ pub(crate) fn answer_with(content_type: HeaderValue, body: Bytes) -> Response {
 }
 
 /// The 502 for an upstream body that could not be read.
-pub(crate) fn unreadable_upstream(e: &reqwest::Error) -> Response {
+fn unreadable_upstream(e: &reqwest::Error) -> Response {
     error!("Failed to read upstream response: {e}");
     (
         StatusCode::BAD_GATEWAY,
         axum::Json(ErrorResponse::upstream_error(&e.to_string())),
     )
         .into_response()
-}
-
-/// Forward a non-streaming JSON response from llama-server, running the same
-/// dialect normalization the streaming path applies.
-///
-/// `residue_sink` is passed through to [`read_non_streaming_body`].
-pub(crate) async fn forward_non_streaming_response(
-    response: reqwest::Response,
-    cache_metrics: &CacheMetricsStore,
-    dialect: Option<&DialectSpec>,
-    residue_sink: Option<(&ContextMetricsStore, u64)>,
-) -> Response {
-    match read_non_streaming_body(response, cache_metrics, dialect, residue_sink).await {
-        Ok((content_type, body)) => answer_with(content_type, body),
-        Err(e) => unreadable_upstream(&e),
-    }
 }
 
 /// Run dialect normalization over a buffered non-streaming body.

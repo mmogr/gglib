@@ -153,6 +153,10 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
             <Label size="xs" muted>That machine, from here</Label>
             <EndpointCopyBar host="127.0.0.1" port={connected.port} onCopied={() => onNotice('Copied.', 'success')} />
             <Label size="xs" muted>A client pointed there supplies its API key; gglib’s own chat does.</Label>
+            <Label size="xs" muted>
+              That key is the one this machine was given when it paired;{' '}
+              <code className="font-mono">gglib remote key --show</code> prints it.
+            </Label>
           </Stack>
           <Checkbox
             checked={useForChat}

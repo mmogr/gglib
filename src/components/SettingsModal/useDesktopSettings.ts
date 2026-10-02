@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettings, UpdateSettingsRequest } from '../../types';
+import { changedFields } from './settingsRequest';
 
 export interface DesktopSettingsValues {
   proxyAutostart: boolean;
@@ -34,9 +35,15 @@ export interface UseDesktopSettingsResult {
   ) => void;
   /** Restore the built-in defaults (all off), for the form's Reset action. */
   reset: () => void;
-  /** The slice of the update request these toggles own. */
-  updates: Pick<UpdateSettingsRequest, 'proxyAutostart' | 'closeToTray' | 'startAtLogin'>;
+  /** The toggles changed since settings loaded, as update-request fields. */
+  updates: Partial<Pick<UpdateSettingsRequest, 'proxyAutostart' | 'closeToTray' | 'startAtLogin'>>;
 }
+
+const valuesFrom = (settings: AppSettings): DesktopSettingsValues => ({
+  proxyAutostart: settings.proxyAutostart === true,
+  closeToTray: settings.closeToTray === true,
+  startAtLogin: settings.startAtLogin === true,
+});
 
 /**
  * Track the three always-on proxy toggles, seeded from persisted settings.
@@ -50,11 +57,7 @@ export function useDesktopSettings(settings: AppSettings | null): UseDesktopSett
 
   useEffect(() => {
     if (settings) {
-      setValues({
-        proxyAutostart: settings.proxyAutostart === true,
-        closeToTray: settings.closeToTray === true,
-        startAtLogin: settings.startAtLogin === true,
-      });
+      setValues(valuesFrom(settings));
     }
   }, [settings]);
 
@@ -67,5 +70,6 @@ export function useDesktopSettings(settings: AppSettings | null): UseDesktopSett
 
   const reset = useCallback(() => setValues(DEFAULTS), []);
 
-  return { values, setValue, reset, updates: values };
+  const loaded = settings ? valuesFrom(settings) : DEFAULTS;
+  return { values, setValue, reset, updates: changedFields(values, loaded) };
 }

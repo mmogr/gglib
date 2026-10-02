@@ -6,5 +6,6 @@ export {
   ProxyMetricsGrid,
   ActiveConnectionsSection,
   InferenceSlotsSection,
+  ModelSignalsSection,
 } from './ProxyMetricsGrid';
 export { ProxyToggleButton } from './ProxyToggleButton';

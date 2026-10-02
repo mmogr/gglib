@@ -16,10 +16,9 @@
 //!
 //! The child is chosen by name and by an environment variable this parent sets,
 //! and it is deliberately not `#[ignore]`d. An ignored child would have to be
-//! run with `--ignored`, and the only thing then keeping the other ignored tests
+//! run with `--ignored`, and the only thing then keeping any other ignored test
 //! in this binary out of the child run would be the exactness of one filter
-//! string — and those tests delete the developer's pidfiles and sweep live
-//! servers. Without `--ignored` the worst a wrong filter can do is run ordinary
+//! string. Without `--ignored` the worst a wrong filter can do is run ordinary
 //! tests twice.
 
 use std::io::{BufRead, BufReader, Read, Write};

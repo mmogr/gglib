@@ -29,6 +29,13 @@ use crate::process::shutdown::kill_pid;
 /// calling here, and its comment records that this sweep once lived in the
 /// desktop app's startup where it killed servers a concurrent CLI had just
 /// spawned.
+///
+/// An isolated data root does not make an unlocked call safe either: anything
+/// else that writes pidfiles into the same root is the live sibling the lock
+/// guards against. That is another process given the same `GGLIB_DATA_DIR`,
+/// or, under `gglib_core`'s test root, another test in the same binary. So the
+/// test that calls this without the lock is the only test in its binary
+/// (`tests/pidfile_sweep.rs`).
 pub async fn cleanup_orphaned_servers() -> io::Result<()> {
     let pidfiles = list_pidfiles()?;
 
@@ -86,52 +93,4 @@ pub async fn cleanup_orphaned_servers() -> io::Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pidfile::io::write_pidfile;
-
-    /// Drives the real sweep against the real `pids_dir()`, so it is `#[ignore]`d.
-    ///
-    /// In a debug build `detect_local_repo` returns the checkout unconditionally
-    /// (`gglib_core::paths::platform`), so `pids_dir()` is `<repo>/pids` — the
-    /// same directory a developer's installed daemon writes to. The sweep reads
-    /// *every* pidfile there, and `is_our_llama_server` matches on the canonical
-    /// exe path, which a real `<repo>/.llama/bin/llama-server` satisfies exactly.
-    /// Running this with a model resident therefore SIGTERMs it and deletes its
-    /// pidfile.
-    ///
-    /// Its sibling `list_pidfiles_filters_non_pid_files` in `io.rs` is `#[ignore]`d
-    /// for a related reason — it deletes every `.pid` in the real directory
-    /// before writing its own.
-    ///
-    /// Isolating it wants `GGLIB_DATA_DIR`. Setting an env var needs `unsafe`,
-    /// which the workspace denies, but `gglib_core::paths::test_utils` carries an
-    /// `EnvVarGuard` behind `#[allow(unsafe_code)]`, serialized by its own lock.
-    /// It is `pub(super)`, so reaching it from here means exporting it behind a
-    /// `test-utils` feature, the shape `gglib-db` is consumed with. That is the
-    /// fix (#955); the `#[ignore]` is only the stop.
-    /// A model id no real catalog hands out, and one no sibling test uses.
-    ///
-    /// Both matter. `pids_dir()` is shared with the developer's own daemon, so a
-    /// plausible id would collide with a real model's pidfile — the reason
-    /// `process::residency::launch_tests` reaches for the `999_00x` range. And
-    /// a sibling on the same id would race this test on one file under
-    /// `--ignored`.
-    const SWEEP_ID: i64 = 999_010;
-
-    #[tokio::test]
-    #[ignore = "drives the real pidfile sweep; kills a live llama-server if one is resident"]
-    async fn cleanup_removes_stale_pidfiles() {
-        // A pid nothing can own, so the unverified branch is the one exercised.
-        write_pidfile(SWEEP_ID, 999_999, 9999).expect("write failed");
-
-        cleanup_orphaned_servers().await.expect("cleanup failed");
-
-        // Should have been removed
-        let pidfiles = list_pidfiles().expect("list failed");
-        assert!(!pidfiles.iter().any(|(id, _)| *id == SWEEP_ID));
-    }
 }

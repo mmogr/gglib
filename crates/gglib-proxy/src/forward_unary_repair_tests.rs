@@ -152,9 +152,9 @@ async fn run_turn(
         body,
         dialect.as_ref(),
         &CacheMetricsStore::new(),
-        &metrics,
-        seq,
+        (&metrics, seq),
         turn,
+        crate::unary_body::UNARY_TOTAL_TIMEOUT,
     )
     .await
     .expect("mock upstream reachable");

@@ -101,8 +101,12 @@ mod tests {
     #[test]
     fn resolve_returns_consistent_paths() {
         // Lock ensures this test doesn't run concurrently with config.rs tests
-        // that modify GGLIB_DATA_DIR, preventing non-deterministic results
+        // that modify GGLIB_DATA_DIR, preventing non-deterministic results.
+        // Its own root, because `database_path` makes or tightens
+        // `<data root>/data`, which in a debug build is the checkout's (#955).
         let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempdir().unwrap();
+        let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
 
         let first = ResolvedPaths::resolve().expect("first resolve");
         let second = ResolvedPaths::resolve().expect("second resolve");

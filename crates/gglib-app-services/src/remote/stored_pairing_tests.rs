@@ -14,7 +14,8 @@
 use super::*;
 use crate::test_support::test_core;
 use crate::test_support_remote::{
-    KEY_A, KEY_B, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, remember_a_model, ticket,
+    FINGERPRINT_A, KEY_A, KEY_B, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, remember_a_model,
+    ticket,
 };
 
 /// A plausible six-digit code, never checked here: what the far machine
@@ -37,23 +38,32 @@ async fn stored(core: &AppCore) -> RemotePairing {
         .expect("a pairing is stored")
 }
 
-/// A second pairing replaces the first whole, rather than half of it, and
-/// starts with nothing remembered.
+/// A second pairing replaces the first whole, rather than half of it, starts
+/// with nothing remembered, and names the machine it replaced.
 ///
 /// The ticket and the key are one record, written together, so machine A's
 /// key has no shape to outlive machine A in. Nor does its model: that is a
-/// name in machine A's catalogue, not in machine B's.
+/// name in machine A's catalogue, not in machine B's. And since machine A is
+/// now out of reach without a fresh invite there, the write says which
+/// machine it dropped, for `join` to tell the person (#1042).
 #[tokio::test]
 async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
     let core = test_core().await;
 
-    store_redeemed(&core, KEY_A.to_owned(), &ticket(TICKET_A), 8180)
+    let first = store_redeemed(&core, KEY_A.to_owned(), &ticket(TICKET_A), 8180)
         .await
         .expect("machine A's pairing is stored");
     remember_a_model(&core, MODEL).await;
-    store_redeemed(&core, KEY_B.to_owned(), &ticket(TICKET_B), 8180)
+    let second = store_redeemed(&core, KEY_B.to_owned(), &ticket(TICKET_B), 8180)
         .await
         .expect("machine B's pairing replaces it");
+
+    assert_eq!(first, None, "a first pairing replaced nothing");
+    assert_eq!(
+        second.as_deref(),
+        Some(FINGERPRINT_A),
+        "machine A's pairing was dropped without being named"
+    );
 
     let stored = stored(&core).await;
     assert_eq!(stored.ticket, TICKET_B);
@@ -91,7 +101,11 @@ async fn pair_with_machine_a_again_during_a_turn(core: &AppCore, dialled: &str) 
     .await
     .expect("the far machine handed a key back and settings took it");
 
-    assert!(paired, "a redeemed code is a pairing");
+    assert_eq!(
+        paired,
+        Settled::Paired { replaced: None },
+        "a pairing with the machine already recorded replaces a key, not a machine"
+    );
     stored(core).await
 }
 
@@ -203,10 +217,36 @@ async fn a_redeemed_code_is_stored_under_the_ticket_that_was_dialled() {
     .await
     .expect("the far machine handed a key back and settings took it");
 
-    assert!(paired, "a redeemed code is a pairing");
+    assert_eq!(
+        paired,
+        Settled::Paired {
+            replaced: Some(FINGERPRINT_A.to_owned())
+        },
+        "the pairing it replaced did not reach the caller of `join`"
+    );
     let stored = stored(&core).await;
     assert_eq!(stored.ticket, TICKET_B);
     assert_eq!(stored.api_key, KEY_B);
+}
+
+/// What `join` answers with, read off what the write did: a pairing says it
+/// paired and names the machine it replaced, if any, and a redial says
+/// neither (#1042).
+#[test]
+fn a_settled_dial_answers_whether_it_paired_and_what_it_replaced() {
+    let replaced = Some(FINGERPRINT_A.to_owned());
+    assert_eq!(
+        Settled::Paired {
+            replaced: replaced.clone()
+        }
+        .paired_and_replaced(),
+        (true, replaced)
+    );
+    assert_eq!(
+        Settled::Paired { replaced: None }.paired_and_replaced(),
+        (true, None)
+    );
+    assert_eq!(Settled::Redialled.paired_and_replaced(), (false, None));
 }
 
 /// The failure a spent code leaves behind reaches the caller of `join`,

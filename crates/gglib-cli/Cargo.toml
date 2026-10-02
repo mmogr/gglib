@@ -61,6 +61,9 @@ open.workspace = true
 [dev-dependencies]
 async-trait = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }
+# A data root of the test binary's own, for a test that names the daemon's
+# token file (#955).
+gglib-core = { path = "../gglib-core", features = ["test-utils"] }
 tempfile = { workspace = true }
 tokio-test = { workspace = true }
 

@@ -3,6 +3,7 @@
 //! answer carries. `wire_tests.rs` has the status.
 
 use super::*;
+use crate::test_support_remote::FINGERPRINT_A;
 
 #[test]
 fn an_empty_body_is_the_safe_default() {
@@ -45,24 +46,52 @@ fn an_exchange_that_says_nothing_still_reads() {
             ticket_fingerprint: String::new(),
             paired: false,
             moved_from: None,
+            replaced: None,
         }
     );
 }
 
-/// A body that sends `keep_identity`, `true` or `false`, deserialises, and
-/// the request it becomes still has discovery on and `/mcp` off.
+/// The daemon's join answer carries the pairing the join replaced, under the
+/// name `gglib remote join` reads it by to say so (#1042).
 #[test]
-fn a_body_that_still_sends_keep_identity_is_accepted_and_the_flag_ignored() {
-    for sent in ["true", "false"] {
-        let body: RemoteEnableBody =
-            serde_json::from_str(&format!(r#"{{"keep_identity":{sent}}}"#))
-                .expect("a body from an older client still deserialises");
-        let req = body.into_request();
-        assert!(
-            req.discovery,
-            "keep_identity={sent} must not disturb anything else"
+fn the_join_answer_names_the_pairing_it_replaced() {
+    let answer = RemoteJoinResponse::from(Joined {
+        port: 8180,
+        base_url: "http://127.0.0.1:8180/v1".to_owned(),
+        ticket_fingerprint: "e5a1b0c2d3f4".to_owned(),
+        paired: true,
+        moved_from: None,
+        replaced: Some(FINGERPRINT_A.to_owned()),
+    });
+
+    let sent = serde_json::to_value(answer).expect("the answer serialises");
+    assert_eq!(sent["replaced"], FINGERPRINT_A);
+}
+
+/// The enable body does not send `keep_identity`, and a body from an older
+/// client that does, `true` or `false`, reads as the same body without it.
+#[test]
+fn keep_identity_is_off_the_wire_and_an_older_body_that_sends_it_still_reads() {
+    let sent = serde_json::to_value(RemoteEnableBody::default()).expect("serialise");
+    assert!(
+        sent.get("keep_identity").is_none(),
+        "the enable body still sends keep_identity: {sent}"
+    );
+
+    for flag in ["true", "false"] {
+        let body: RemoteEnableBody = serde_json::from_str(&format!(
+            r#"{{"allow_mcp":true,"discovery":false,"keep_identity":{flag}}}"#
+        ))
+        .expect("a body from an older client still deserialises");
+        assert_eq!(
+            body,
+            RemoteEnableBody {
+                allow_mcp: true,
+                discovery: Some(false),
+                ..RemoteEnableBody::default()
+            },
+            "keep_identity={flag} changed what the body says"
         );
-        assert!(!req.allow_mcp, "keep_identity={sent} is not a grant");
     }
 }
 

@@ -12,7 +12,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use gglib_core::access::{DeviceKeys, device_keys_path, load_device_keys, store_device_keys};
+use gglib_core::access::{
+    DeviceKeys, device_keys_location, device_keys_path, load_device_keys, store_device_keys,
+};
+use gglib_core::paths::PathError;
 use tracing::{info, warn};
 
 use super::RemoteOps;
@@ -147,7 +150,7 @@ pub(super) fn seed_into(handle: &modelpipe::ServeHandle, keys: DeviceKeys, recor
 ///
 /// `Internal` when the file exists and cannot be read or parsed.
 pub(super) fn read_keys(ops: &RemoteOps) -> Result<DeviceKeys, GuiError> {
-    load_device_keys(&keys_path(ops)?)
+    load_device_keys(&keys_path(ops, device_keys_location)?)
         .map_err(|e| GuiError::Internal(format!("could not read the device keys: {e}")))
 }
 
@@ -158,20 +161,25 @@ pub(super) fn read_keys(ops: &RemoteOps) -> Result<DeviceKeys, GuiError> {
 /// `Internal` when the directory cannot be resolved or the file cannot be
 /// written.
 pub(super) fn write_keys(ops: &RemoteOps, keys: &DeviceKeys) -> Result<(), GuiError> {
-    store_device_keys(&keys_path(ops)?, keys)
+    store_device_keys(&keys_path(ops, device_keys_path)?, keys)
         .map_err(|e| GuiError::Internal(format!("could not write the device keys: {e}")))
 }
 
 /// The file `ops` keeps its device keys in: the one it was built with, or,
-/// when it was built with none, the one beside the endpoint identity.
+/// when it was built with none, the one beside the endpoint identity, named
+/// by `resolve`. A read passes [`device_keys_location`], which creates
+/// nothing; a write passes [`device_keys_path`], which makes `data/` first.
 ///
 /// # Errors
 ///
 /// `Internal` when the data root cannot be resolved.
-fn keys_path(ops: &RemoteOps) -> Result<PathBuf, GuiError> {
+fn keys_path(
+    ops: &RemoteOps,
+    resolve: fn() -> Result<PathBuf, PathError>,
+) -> Result<PathBuf, GuiError> {
     ops.device_keys.clone().map_or_else(
         || {
-            device_keys_path()
+            resolve()
                 .map_err(|e| GuiError::Internal(format!("could not place the device keys: {e}")))
         },
         Ok,

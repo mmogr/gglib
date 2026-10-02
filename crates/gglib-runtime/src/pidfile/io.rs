@@ -124,14 +124,14 @@ fn parse_pidfile_content(content: &str) -> io::Result<PidFileData> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::paths::isolate_data_root;
     use std::fs;
 
-    /// Uses an implausible id for the reason `launch_tests` documents: this
-    /// writes into the real `pids_dir()`, and a plausible id is a rowid a
-    /// catalog can genuinely hand out — deleting that pidfile would leave a
-    /// live server the startup sweep cannot reap.
+    /// In this binary's own data root (#955), which every test here that
+    /// writes a pidfile shares, so the id is one no other test uses.
     #[test]
     fn roundtrip_pidfile() {
+        isolate_data_root();
         let model_id = 999_011;
         let pid = 98765;
         let port = 8080;
@@ -150,43 +150,32 @@ mod tests {
         delete_pidfile(model_id).expect("second delete failed");
     }
 
+    /// A file named for a model but not `.pid` is not a pidfile, even when
+    /// what it holds parses as one. Other tests' pidfiles may sit beside it,
+    /// so only this test's id is counted.
     #[test]
-    #[ignore = "deletes every .pid in the real pids_dir, which is the developer's own"]
     fn list_pidfiles_filters_non_pid_files() {
+        isolate_data_root();
         let dir = pids_dir().expect("pids_dir failed");
-        fs::create_dir_all(&dir).expect("mkdir failed");
-
-        // Clean up any existing PID files from other tests
-        if let Ok(entries) = fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("pid") {
-                    let _ = fs::remove_file(entry.path());
-                }
-            }
-        }
-
-        // Create valid PID file with unique ID
         let test_id = 99999;
         write_pidfile(test_id, 100, 8080).expect("write failed");
-
-        // Create non-PID file (should be filtered out)
-        fs::write(dir.join("not_a_pid.txt"), "garbage").expect("write failed");
+        let decoy = dir.join(format!("{test_id}.txt"));
+        fs::write(&decoy, "200\n8080\n").expect("write failed");
 
         let list = list_pidfiles().expect("list failed");
-
-        // Filter to only our test PID
-        let our_pids: Vec<_> = list.iter().filter(|(id, _)| *id == test_id).collect();
-        assert_eq!(
-            our_pids.len(),
-            1,
-            "Expected 1 PID file for test ID {}, found {} total PIDs",
-            test_id,
-            list.len()
-        );
-        assert_eq!(our_pids[0].0, test_id);
-
-        // Cleanup
         delete_pidfile(test_id).expect("cleanup failed");
-        fs::remove_file(dir.join("not_a_pid.txt")).ok();
+        fs::remove_file(&decoy).ok();
+
+        let ours: Vec<_> = list.into_iter().filter(|(id, _)| *id == test_id).collect();
+        assert_eq!(
+            ours,
+            [(
+                test_id,
+                PidFileData {
+                    pid: 100,
+                    port: 8080
+                }
+            )]
+        );
     }
 }

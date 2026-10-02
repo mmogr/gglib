@@ -13,8 +13,11 @@ mod admin;
 )]
 pub(crate) mod audit_records;
 pub(crate) mod chats;
-// Crate-internal. The seven that stay `pub` below are the ones other crates
-// name by path: dashboard, loopback, models, props, repair, slot_eviction, slots.
+pub(crate) mod client_send;
+// Crate-internal. Nine stay `pub` below. Eight are the ones other crates name by
+// path: dashboard, loopback, models, props, repair, runs, slot_eviction, slots.
+// The ninth, template_caps_read, is public because `props::fetch_props` returns
+// its `PropsReading`, which gglib-runtime reads.
 // `server` is internal too — the root re-exports `serve`, which is all
 // anyone needs from it.
 // Without `test-support` the re-export below is absent, which is the point of
@@ -45,6 +48,10 @@ pub(crate) mod canonicalization;
 pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
+// Test-only: the published error codes' table and the checks that hold it to
+// the source and to docs/error-codes.json.
+#[cfg(test)]
+mod error_codes;
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,

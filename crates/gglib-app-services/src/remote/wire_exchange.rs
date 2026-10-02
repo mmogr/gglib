@@ -13,12 +13,11 @@ use super::types::{EnableRequest, Enabled, JoinRequest, Joined};
 
 /// Body for `POST /api/remote/enable`. Every field optional; an empty body
 /// is the default: no `/mcp`, public relays, discovery on.
+///
+/// A field this does not name is ignored, so an older client that still
+/// sends `keep_identity` is answered as if it had not (#1043).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[allow(
-    clippy::pub_underscore_fields,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub struct RemoteEnableBody {
     /// Let tunnelled requests reach `/mcp`. Off unless asked for.
     #[serde(default)]
@@ -29,12 +28,6 @@ pub struct RemoteEnableBody {
     /// Publish to and resolve through n0's discovery service. Omitted is on.
     #[serde(default)]
     pub discovery: Option<bool>,
-    /// Accepted and ignored.
-    ///
-    /// The identity is always kept, so this asks for what it already gets.
-    /// Its removal is #1043.
-    #[serde(default, rename = "keep_identity")]
-    pub _keep_identity: bool,
     /// Offer a pairing code as well as bringing the tunnel up.
     ///
     /// `enable` is a switch and `invite` is what pairs a device, so a first
@@ -175,6 +168,11 @@ pub struct RemoteJoinResponse {
     /// another; `None` when the address stayed put.
     #[serde(default)]
     pub moved_from: Option<u16>,
+    /// Fingerprint of the other machine whose pairing this one replaced,
+    /// since one pairing is stored; `None` when there was none to replace,
+    /// or when the stored ticket could not be read to name one.
+    #[serde(default)]
+    pub replaced: Option<String>,
 }
 
 impl From<Joined> for RemoteJoinResponse {
@@ -185,6 +183,7 @@ impl From<Joined> for RemoteJoinResponse {
             ticket_fingerprint: j.ticket_fingerprint,
             paired: j.paired,
             moved_from: j.moved_from,
+            replaced: j.replaced,
         }
     }
 }

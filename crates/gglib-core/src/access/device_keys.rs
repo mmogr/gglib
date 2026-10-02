@@ -17,7 +17,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use super::private_file::write_private;
-use crate::paths::{PathError, remote_identity_path};
+use crate::paths::{PathError, remote_identity_location, remote_identity_path};
 
 /// Every device key this machine holds, by the id the tunnel edge knows it as.
 pub type DeviceKeys = BTreeMap<String, String>;
@@ -28,8 +28,21 @@ pub type DeviceKeys = BTreeMap<String, String>;
 ///
 /// Whatever resolving the data root returns.
 pub fn device_keys_path() -> Result<PathBuf, PathError> {
-    Ok(remote_identity_path()?.with_file_name("remote_devices"))
+    Ok(remote_identity_path()?.with_file_name(KEYS_FILE))
 }
+
+/// The file [`device_keys_path`] names, with nothing under the data root
+/// created or tightened on the way, for a caller that only reads.
+///
+/// # Errors
+///
+/// Whatever resolving the data root returns.
+pub fn device_keys_location() -> Result<PathBuf, PathError> {
+    Ok(remote_identity_location()?.with_file_name(KEYS_FILE))
+}
+
+/// The keys' file name, beside the endpoint identity.
+const KEYS_FILE: &str = "remote_devices";
 
 /// Read the roster's keys, or an empty map when nothing has been issued.
 ///

@@ -121,7 +121,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
-- **`unary_body.rs`** — A non-streaming body read whole and run through the dialect parser once; shared by the chat and embeddings routes
+- **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
 - **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
@@ -134,6 +134,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability, plus content-hash session-id fallback derivation
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
+- **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
@@ -502,9 +503,18 @@ connection is noticed at the next frame sent to it. If llama-server has gone
 silent by then, the idle bound still ends the stream, and the stall is counted
 and asks for a recycle as above. During a tool-call repair's re-issue, the next
 frame is a keepalive sent every 15 s, or the tool call once the re-issue ends,
-at most 60 s later. A client that vanishes without a FIN is not seen to leave:
-once 32 frames queue for it, the proxy waits on the client, where the idle bound
-is not running, so its bound is TCP retransmission.
+at most 60 s later. A client that vanishes without a FIN is not seen to leave,
+and once 32 frames queue for it each send waits for it to take one. A send that
+waits 300 s, as long as the idle bound gives the upstream, ends the turn as a
+departure, freeing the model; a client that reads slowly but keeps reading is
+never cut, since the wait is timed per frame.
+
+A chat completion that does not stream, and an embeddings request, are bounded
+as a whole, because llama-server sends such an answer only once it is complete:
+30 minutes, the 300 s a streamed reply gets to begin plus 25 minutes to
+generate. A request that outlasts it is dropped, freeing the model, and the
+client gets HTTP 504 with `upstream_timeout`, the code a stream's error frame
+carries.
 
 ## MCP Streamable HTTP Gateway
 
@@ -556,6 +566,11 @@ curl -X POST http://localhost:8080/mcp \
 | 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit, in any mode) |
 | 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 500 | Internal error |
+
+Every `code` this proxy writes, its runs' included, is listed with its type,
+status and meaning in [`docs/error-codes.json`](../../docs/error-codes.json).
+The table it is rendered from, `src/error_codes.rs`, is checked by its tests
+against the codes the crates write.
 
 ## History Truncation
 
