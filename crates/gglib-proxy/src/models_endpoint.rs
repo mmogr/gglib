@@ -122,9 +122,7 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
 
             // Read per request, so a rename shows on the next listing. Here and
             // never on `/health`, which answers before any credential does.
-            response.machine_name = sysinfo::System::host_name()
-                .as_deref()
-                .and_then(gglib_core::domain::machine_name);
+            response.machine_name = crate::models::this_machine_name();
 
             Json(response).into_response()
         }

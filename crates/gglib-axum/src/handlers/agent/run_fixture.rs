@@ -133,7 +133,7 @@ pub(super) fn paced(
             "http://127.0.0.1:9000".to_owned(),
             gglib_runtime::FarMachine {
                 key: "key".to_owned(),
-                fingerprint: "fp".to_owned(),
+                name: "desk".to_owned(),
             },
         )
         .made_by,

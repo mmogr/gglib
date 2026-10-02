@@ -1,6 +1,8 @@
 import { FC, useState } from 'react';
 import { getTransport } from '../../services/transport';
 import {
+  UNNAMED_PAIRED,
+  pairedName,
   requestRemoteChat,
   setRemoteChatModel,
   setUseRemoteForChat,
@@ -55,9 +57,12 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
   const [busy, setBusy] = useState(false);
 
   const connected = status?.connected ?? null;
-  const storedFingerprint = status?.stored_ticket_fingerprint ?? null;
+  // The fingerprint says whether a pairing is stored; the name is what is
+  // shown of it. A fingerprint is never rendered.
+  const stored = (status?.stored_ticket_fingerprint ?? null) !== null;
+  const machine = pairedName(status);
   const hasKey = status?.has_remote_key ?? false;
-  const canReuse = storedFingerprint !== null && hasKey;
+  const canReuse = stored && hasKey;
 
   const handleJoin = async () => {
     setBusy(true);
@@ -66,10 +71,9 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
       const answer = await getTransport().joinRemote(trimmed ? { pairing: trimmed } : {});
       setPairing('');
       refreshRemoteStatus();
+      const joined = answer.name ?? UNNAMED_PAIRED;
       onNotice(
-        answer.paired
-          ? `Paired with ${answer.ticket_fingerprint}. Its key is stored here.`
-          : `Joined ${answer.ticket_fingerprint}.`,
+        answer.paired ? `Joined ${joined}, and paired with it. Its key is stored here.` : `Joined ${joined}.`,
         'success',
       );
     } catch (err) {
@@ -132,15 +136,15 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
       {connected ? (
         <Stack gap="sm">
           {/*
-            The fingerprint is empty until the status read lands — the join
-            event carries a port and nothing else. Naming nobody is the honest
-            reading of that; "Connected to  (idle)." reads as a bug.
+            The connection names nobody until the status read lands — the
+            join event carries a port and nothing else, so neither the peer
+            nor its name is known yet. Naming nobody is the honest reading of
+            that; "Connected to  (idle)." reads as a bug.
           */}
           <p className="text-xs text-text-muted m-0">
             {connected.ticket_fingerprint ? (
               <>
-                Connected to{' '}
-                <span className="font-mono text-text-secondary">{connected.ticket_fingerprint}</span>{' '}
+                Connected to <span className="font-medium text-text-secondary">{machine}</span>{' '}
                 {connected.away_for_s === null
                   ? `(${connected.path}).`
                   : `— away ${awayFor(connected.away_for_s)}; the address stays, and it reconnects when that machine is back.`}
@@ -209,7 +213,7 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
               className="font-mono"
               value={pairing}
               placeholder={
-                canReuse ? `Leave empty to dial ${storedFingerprint} again` : '<ticket>-<code> from the other machine'
+                canReuse ? `Leave empty to dial ${machine} again` : '<ticket>-<code> from the other machine'
               }
               onChange={(e) => setPairing(e.target.value)}
             />
@@ -222,9 +226,9 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
           >
             {busy ? 'Reaching it…' : 'Join'}
           </Button>
-          {storedFingerprint && !hasKey && (
+          {stored && !hasKey && (
             <Label size="xs" muted>
-              Last dialled {storedFingerprint}, but no key is stored — pair again with the full string.
+              Last dialled {machine}, but no key is stored — pair again with the full string.
             </Label>
           )}
         </Stack>

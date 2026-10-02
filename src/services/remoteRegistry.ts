@@ -31,12 +31,13 @@
 import { createEventStore } from './createEventStore';
 import type { RemoteEvent } from './transport/types/events';
 import type { RemoteStatus } from './transport/types/remote';
-import { IDLE_STATUS, INITIAL, type RemoteState } from './remoteRegistryState';
+import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, type RemoteState } from './remoteRegistryState';
 
-// The shape moved to `remoteRegistryState.ts`; the registry stays the seam
-// every caller already imports from, so it hands both on rather than making
-// eight components learn a second module name.
-export { IDLE_STATUS, type RemoteState };
+// The shape lives in `remoteRegistryState.ts`; the registry stays the seam
+// every caller imports from, so it hands the shape, the idle status and the
+// paired machine's name on rather than making eight components learn a
+// second module name.
+export { IDLE_STATUS, UNNAMED_PAIRED, pairedName, type RemoteState };
 
 const store = createEventStore<RemoteState>(INITIAL);
 
@@ -165,6 +166,10 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
             path: 'idle',
             away_for_s: null,
           },
+          // The name held is the last status read's, which on a join to
+          // another machine is the one this join replaced. Like the
+          // connection, the name is left to the read that follows.
+          paired_name: null,
         },
         // Only a fresh dial emits this, so anything already armed was armed
         // for the connection this one replaces, and the status read cannot be

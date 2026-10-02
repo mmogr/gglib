@@ -47,6 +47,7 @@ fn held_for_a() -> RemotePairing {
         api_key: KEY_A.to_owned(),
         default_model: None,
         port: None,
+        name: None,
     }
 }
 
@@ -79,6 +80,7 @@ async fn the_same_machine_at_a_new_address_carries_its_key_forward() {
         api_key: KEY_A.to_owned(),
         default_model: None,
         port: None,
+        name: None,
     };
     let moved = ticket(TICKET_A_MOVED);
     assert_eq!(
@@ -133,6 +135,7 @@ async fn a_dial_to_the_machine_already_recorded_writes_nothing() {
         api_key: KEY_A.to_owned(),
         default_model: None,
         port: Some(8180),
+        name: None,
     };
 
     let paired = settle(

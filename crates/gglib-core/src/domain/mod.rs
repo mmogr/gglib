@@ -39,7 +39,7 @@ pub mod slot_eviction;
 pub(crate) mod template_caps;
 
 // Re-export model types at the domain level for convenience
-pub use machine::{Machine, ModelAction, ModelRef, machine_name};
+pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
 pub use model::{Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile};
 pub use model_detail::{ModelDetailDto, ModelLookup};
 

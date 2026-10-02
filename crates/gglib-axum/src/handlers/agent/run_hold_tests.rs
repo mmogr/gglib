@@ -116,7 +116,7 @@ async fn a_local_upstream_names_its_model_and_a_remote_one_none() {
         "http://127.0.0.1:9000".to_owned(),
         gglib_runtime::FarMachine {
             key: "key".to_owned(),
-            fingerprint: "fp".to_owned(),
+            name: "desk".to_owned(),
         },
     );
     assert_eq!(far.local_model, None);

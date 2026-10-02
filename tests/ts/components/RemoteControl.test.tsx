@@ -19,7 +19,11 @@ import '@testing-library/jest-dom';
 import { FC, ReactNode } from 'react';
 
 import RemoteControl from '../../../src/components/RemoteControl';
-import type { RemoteDevice } from '../../../src/services/transport/types/remote';
+import type {
+  RemoteConnection,
+  RemoteDevice,
+  RemoteJoinResponse,
+} from '../../../src/services/transport/types/remote';
 import { ToastProvider, useToastContext } from '../../../src/contexts/ToastContext';
 import { ToastContainer } from '../../../src/components/Toast';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
@@ -64,6 +68,36 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 );
 
 const TICKET = 'pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na';
+
+/** The paired machine's fingerprint: its identity, and never on screen. */
+const FINGERPRINT = '3ca82708b995';
+
+/** The connect side up, as the daemon reports it. */
+const CONNECTED: RemoteConnection = {
+  port: 41234,
+  base_url: 'http://127.0.0.1:41234/v1',
+  ticket_fingerprint: FINGERPRINT,
+  path: 'direct',
+  away_for_s: null,
+};
+
+/** The daemon's join answer, every field as it sends them. */
+function joinedAnswer(paired: boolean, name: string | null): RemoteJoinResponse {
+  return {
+    port: 41234,
+    base_url: 'http://127.0.0.1:41234/v1',
+    ticket_fingerprint: FINGERPRINT,
+    name,
+    paired,
+    moved_from: null,
+    replaced: null,
+  };
+}
+
+/** Whether the fingerprint appears anywhere in the page: text or attribute. */
+function fingerprintShown(): boolean {
+  return document.body.innerHTML.includes(FINGERPRINT);
+}
 
 /** A device that redeemed its invite and has made requests since. */
 function paired(): RemoteDevice {
@@ -743,21 +777,53 @@ describe('RemoteControl', () => {
     await user.type(screen.getByLabelText(/pairing string/i), `${TICKET}-483920`);
     expect(join).toBeEnabled();
 
-    joinRemote.mockResolvedValue({
-      port: 41234,
-      base_url: 'http://127.0.0.1:41234/v1',
-      ticket_fingerprint: '3ca82708b995',
-      paired: true,
-    });
+    joinRemote.mockResolvedValue(joinedAnswer(true, 'desk'));
     await user.click(join);
     expect(joinRemote).toHaveBeenCalledWith({ pairing: `${TICKET}-483920` });
+    expect(await screen.findByText('Joined desk, and paired with it. Its key is stored here.')).toBeInTheDocument();
+    expect(fingerprintShown()).toBe(false);
   });
 
-  it('a remembered ticket without a key is named as the problem', async () => {
-    applyRemoteStatus({ ...IDLE_STATUS, stored_ticket_fingerprint: '3ca82708b995', has_remote_key: false });
+  it('a remembered ticket without a key is named as the problem, by the machine it names', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      stored_ticket_fingerprint: FINGERPRINT,
+      paired_name: 'desk',
+      has_remote_key: false,
+    });
     await open();
-    expect(screen.getByText(/no key is stored/i)).toBeInTheDocument();
+    expect(screen.getByText(/Last dialled desk, but no key is stored/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^join$/i })).toBeDisabled();
+    expect(fingerprintShown()).toBe(false);
+  });
+
+  it('the connected machine is shown by its name, and never by its fingerprint', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      stored_ticket_fingerprint: FINGERPRINT,
+      paired_name: 'desk',
+      has_remote_key: true,
+      connected: CONNECTED,
+    });
+    await open();
+
+    expect(screen.getByText((_, el) => el?.textContent === 'Connected to desk (direct).')).toBeInTheDocument();
+    expect(fingerprintShown()).toBe(false);
+  });
+
+  it('a machine that gave no name is shown in words, not by its fingerprint', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      stored_ticket_fingerprint: FINGERPRINT,
+      has_remote_key: true,
+      connected: CONNECTED,
+    });
+    await open();
+
+    expect(
+      screen.getByText((_, el) => el?.textContent === 'Connected to the paired machine (direct).'),
+    ).toBeInTheDocument();
+    expect(fingerprintShown()).toBe(false);
   });
 
   it('a connection that has not named its peer yet does not name one', async () => {
@@ -860,17 +926,19 @@ describe('RemoteControl', () => {
   });
 
   it('a remembered pairing lets join dial it with an empty box, and says it joined', async () => {
-    applyRemoteStatus({ ...IDLE_STATUS, stored_ticket_fingerprint: '3ca82708b995', has_remote_key: true });
-    joinRemote.mockResolvedValue({
-      port: 41234,
-      base_url: 'http://127.0.0.1:41234/v1',
-      ticket_fingerprint: '3ca82708b995',
-      paired: false,
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      stored_ticket_fingerprint: FINGERPRINT,
+      paired_name: 'desk',
+      has_remote_key: true,
     });
+    joinRemote.mockResolvedValue(joinedAnswer(false, 'desk'));
     const user = await open();
+    expect(screen.getByPlaceholderText('Leave empty to dial desk again')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^join$/i }));
     expect(joinRemote).toHaveBeenCalledWith({});
-    expect(await screen.findByText('Joined 3ca82708b995.')).toBeInTheDocument();
+    expect(await screen.findByText('Joined desk.')).toBeInTheDocument();
+    expect(fingerprintShown()).toBe(false);
   });
 
   it('a join the daemon refuses says it could not join, and why', async () => {

@@ -18,6 +18,6 @@ The `RemoteControl` popover's sections ([ADR 0012](../../../docs/adr/0012-the-re
 
 ## What is deliberately not here
 
-The connected port does not inject the key (decision 7), so the copy bar is shown with the reminder that a client supplies it. The status shows fingerprints and never a ticket, because the status is what a `GET` returns. There is no device-list fetch here either: the roster is a settings field the daemon reads to answer `status` anyway, so a second request would only be a second answer that can disagree.
+The connected port does not inject the key (decision 7), so the copy bar is shown with the reminder that a client supplies it. The status shows fingerprints and never a ticket, because the status is what a `GET` returns; of those, only this machine's own ticket and its peers are rendered. The machine this one has joined is shown by its name (`paired_name`, or "the paired machine" when it gave none), never by its fingerprint, which is its identity and is only compared. There is no device-list fetch here either: the roster is a settings field the daemon reads to answer `status` anyway, so a second request would only be a second answer that can disagree.
 
 <!-- module-docs:end -->

@@ -130,6 +130,11 @@ pub fn machine_name(raw: &str) -> Option<String> {
     plain.then(|| label.to_owned())
 }
 
+/// What the paired machine is shown as when it has given no name, or none
+/// [`machine_name`] keeps. Never its fingerprint, which is identity and is
+/// not shown.
+pub const UNNAMED_PAIRED: &str = "the paired machine";
+
 #[cfg(test)]
 #[path = "machine_tests.rs"]
 mod machine_tests;

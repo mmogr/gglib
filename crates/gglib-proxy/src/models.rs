@@ -252,7 +252,7 @@ pub struct Usage {
 
 #[path = "models_list.rs"]
 mod models_list;
-pub use models_list::{ModelInfo, ModelsResponse};
+pub use models_list::{ModelInfo, ModelsResponse, this_machine_name};
 
 // =============================================================================
 // Error Response Types

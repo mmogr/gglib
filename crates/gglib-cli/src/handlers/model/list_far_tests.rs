@@ -3,7 +3,7 @@
 
 use gglib_proxy::models::ModelInfo;
 
-use super::{footer, render, rows};
+use super::{footer, heading, render, rows};
 
 /// Entries as the far proxy lists them, `(id, gglib_id, profile, context)`.
 fn listed(entries: &[(&str, i64, Option<&str>, Option<u64>)]) -> Vec<ModelInfo> {
@@ -100,5 +100,20 @@ fn the_footer_says_how_to_chat_with_one_by_id() {
     assert!(
         with.contains("gglib chat <id>:<profile> --remote"),
         "{with}"
+    );
+}
+
+/// The list is headed by the name the paired machine is shown by, with or
+/// without models on it; its fingerprint is identity and never printed.
+#[test]
+fn the_heading_names_the_machine_and_no_fingerprint() {
+    assert_eq!(
+        heading(2, "desk", "direct"),
+        "2 model(s) on desk (direct):\n\n"
+    );
+    assert_eq!(heading(0, "desk", "direct"), "No models on desk.\n");
+    assert_eq!(
+        heading(0, gglib_core::domain::UNNAMED_PAIRED, "relayed"),
+        "No models on the paired machine.\n"
     );
 }

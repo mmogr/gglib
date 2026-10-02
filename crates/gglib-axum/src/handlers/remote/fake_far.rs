@@ -93,6 +93,7 @@ pub(super) async fn far(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
     let credentials = FarCredentials {
         key: KEY.to_owned(),
         fingerprint: FINGERPRINT.to_owned(),
+        name: None,
     };
     let client = FarProxy::new(&format!("http://127.0.0.1:{port}/v1"), &credentials).unwrap();
     (fake, client)

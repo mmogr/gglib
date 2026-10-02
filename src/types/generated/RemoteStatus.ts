@@ -55,9 +55,16 @@ last_peer: string | null,
 connected: RemoteConnection | null, 
 /**
  * Fingerprint of the ticket a bare `join` would dial, from the stored
- * pairing. Never the ticket.
+ * pairing. Never the ticket, and never shown: it is the identity.
  */
 stored_ticket_fingerprint: string | null, 
+/**
+ * The name the stored pairing has for the paired machine, which is what
+ * a surface shows it as. `None` when nothing is stored or that machine
+ * has given no name; a surface then shows its own words for it, never
+ * the fingerprint.
+ */
+paired_name: string | null, 
 /**
  * Whether this machine holds a key from an earlier pairing.
  */

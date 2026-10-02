@@ -136,11 +136,11 @@ fn terminal(failure: &Failure, far_machine: Option<&FarMachine>) -> anyhow::Erro
     let explained = far_machine.and_then(|far| Some((far, far.refusal(failure.code())?)));
     match explained {
         Some((far, message)) => {
-            // The fingerprint is not a credential — `gglib remote status` and
-            // the CLI's pre-turn banner both print it — so a log reader gets
-            // the same name the user is being shown.
+            // The name is not a credential — `gglib remote status` and the
+            // CLI's pre-turn banner both print it — so a log reader gets the
+            // same name the user is being shown.
             tracing::warn!(
-                fingerprint = %far.fingerprint,
+                machine = %far.name,
                 reason = %failure.reason(),
                 "the far machine refused the stored key"
             );

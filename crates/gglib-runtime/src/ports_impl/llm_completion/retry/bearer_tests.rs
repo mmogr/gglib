@@ -19,7 +19,7 @@ use super::test_server::{TestServer, sse};
 fn machine_holding(key: &str) -> FarMachine {
     FarMachine {
         key: key.to_owned(),
-        fingerprint: "3ca82708b995".to_owned(),
+        name: "desk".to_owned(),
     }
 }
 

@@ -1,5 +1,6 @@
-//! A status read leaves the data root as it was: it names the endpoint key and
-//! reads the device keys without creating `data/` or tightening its mode.
+//! A status read names the paired machine by its stored name, and leaves the
+//! data root as it was: it names the endpoint key and reads the device keys
+//! without creating `data/` or tightening its mode.
 //!
 //! The data root is this binary's test root (`isolate_data_root`), one per
 //! process and shared by every test in it, so another test can make `data/`
@@ -14,11 +15,14 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
+use gglib_core::domain::UNNAMED_PAIRED;
 use gglib_core::ports::AppEventEmitter;
 
 use super::super::{RemoteGateway, RemoteOps};
 use crate::test_support::test_core_and_proxy;
-use crate::test_support_remote::RecordingEmitter;
+use crate::test_support_remote::{
+    FINGERPRINT_A, KEY_A, RecordingEmitter, TICKET_A, paired_with, test_remote_ops,
+};
 
 /// The child's path in this test binary.
 const CHILD: &str = "remote::status::status_tests::the_child_reads_status_over_a_fresh_root";
@@ -90,4 +94,35 @@ async fn the_child_reads_status_over_a_fresh_root() {
     }
 
     println!("{MARKER}");
+}
+
+/// The status names the paired machine by the name its stored pairing holds,
+/// beside the fingerprint it is compared by, and by nothing when none is
+/// held: a surface then shows its own words, never the fingerprint.
+#[tokio::test]
+async fn the_status_names_the_paired_machine_by_its_stored_name() {
+    let (core, ops, _) = test_remote_ops().await;
+    let mut pairing = paired_with(TICKET_A, KEY_A);
+    core.settings()
+        .update(pairing.clone())
+        .await
+        .expect("machine A's pairing is stored");
+    let unnamed = ops.status().await;
+    assert_eq!(unnamed.paired_name, None);
+    assert_eq!(unnamed.paired_shown(), UNNAMED_PAIRED);
+
+    if let Some(Some(stored)) = pairing.remote_pairing.as_mut() {
+        stored.name = Some("desk".to_owned());
+    }
+    core.settings()
+        .update(pairing)
+        .await
+        .expect("machine A's name is stored");
+    let named = ops.status().await;
+    assert_eq!(named.paired_name.as_deref(), Some("desk"));
+    assert_eq!(named.paired_shown(), "desk");
+    assert_eq!(
+        named.stored_ticket_fingerprint.as_deref(),
+        Some(FINGERPRINT_A)
+    );
 }

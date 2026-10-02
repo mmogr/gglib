@@ -21,12 +21,15 @@ use crate::handlers::agent_chat::upstream;
 use crate::presentation::style;
 
 /// This machine's daemon, connected to the paired machine: the handle a
-/// command asks the daemon through, and the connection it reported.
+/// command asks the daemon through, the connection it reported, and the
+/// name that machine is shown by.
 pub(crate) struct Paired {
     /// The daemon, ready to be asked.
     pub handle: DaemonHandle,
     /// The connect side as the daemon reported it.
     pub connection: RemoteConnection,
+    /// What a sentence calls that machine: its name, never its fingerprint.
+    pub name: String,
 }
 
 /// The paired machine, as this machine can reach it directly: the tunnel's
@@ -39,8 +42,8 @@ pub(crate) struct Far {
     pub port: u16,
     /// The key this machine received when it paired.
     pub key: String,
-    /// The ticket fingerprint — the only name this side has for that one.
-    pub fingerprint: String,
+    /// What a sentence calls that machine: its name, never its fingerprint.
+    pub name: String,
     /// How the far side is being reached: `direct`, `relayed`, `idle`.
     pub path: String,
 }
@@ -70,12 +73,17 @@ impl super::Target {
             api_key: daemon_client::auth::daemon_api_key(ctx).await,
         };
         let status = handle.remote_status().await?;
+        let name = status.paired_shown().to_owned();
         let Some(connection) = status.connected else {
             bail!(
                 "not connected to a remote machine — `gglib remote join [<ticket>-<code>]` first"
             );
         };
-        Ok(Paired { handle, connection })
+        Ok(Paired {
+            handle,
+            connection,
+            name,
+        })
     }
 
     /// The paired machine, ready to be asked directly, with the key this
@@ -86,7 +94,9 @@ impl super::Target {
     /// As [`paired`](Self::paired), and a pairing this machine holds no key
     /// for — in the sentence that names the command to run.
     pub(crate) async fn far(self, ctx: &CliContext) -> Result<Far> {
-        let Paired { connection, .. } = self.paired(ctx).await?;
+        let Paired {
+            connection, name, ..
+        } = self.paired(ctx).await?;
         let stored = ctx
             .app
             .settings()
@@ -113,7 +123,7 @@ impl super::Target {
             base_url: connection.base_url,
             port,
             key,
-            fingerprint: connection.ticket_fingerprint,
+            name,
             path: connection.path,
         })
     }
@@ -124,10 +134,7 @@ pub(super) async fn remote_upstream(ctx: &CliContext, banner: &BannerInfo) -> Re
     let far = super::Target::Remote.far(ctx).await?;
     if !banner.quiet {
         style::print_info_banner("Info", "\u{2139}\u{fe0f}");
-        eprintln!(
-            "  Asking the remote machine {} at {} ({})",
-            far.fingerprint, far.base_url, far.path
-        );
+        eprintln!("  Asking {} at {} ({})", far.name, far.base_url, far.path);
         if let Some(ref s) = banner.sampling {
             upstream::print_sampling_lines(s);
         }
@@ -140,7 +147,7 @@ pub(super) async fn remote_upstream(ctx: &CliContext, banner: &BannerInfo) -> Re
         // machine, which by then nothing downstream could look up.
         far_machine: Some(FarMachine {
             key: far.key,
-            fingerprint: far.fingerprint,
+            name: far.name,
         }),
     })
 }

@@ -174,6 +174,7 @@ fn machine_a() -> RemotePairing {
         api_key: KEY_A.to_owned(),
         default_model: None,
         port: None,
+        name: None,
     }
 }
 
@@ -192,8 +193,8 @@ fn no_request_takes_the_key_of_a_machine_it_is_not_connected_to() {
         panic!("holding no key for that machine is what a pairing fixes: {err:?}");
     };
     assert!(
-        message.contains(&connected),
-        "the refusal names the machine it holds no key for: {message}"
+        !message.contains(&connected),
+        "the refusal shows a fingerprint, which is never shown: {message}"
     );
     assert!(!message.contains(KEY_A), "{message}");
 }

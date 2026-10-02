@@ -184,6 +184,7 @@ fn pairing(ticket: &str, api_key: &str) -> Option<RemotePairing> {
         api_key: api_key.to_owned(),
         default_model: None,
         port: Some(8180),
+        name: None,
     })
 }
 

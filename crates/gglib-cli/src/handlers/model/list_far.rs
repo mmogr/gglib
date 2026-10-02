@@ -21,20 +21,27 @@ use crate::target::Target;
 pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
     let paired = target.paired(ctx).await?;
     let listed = paired.handle.paired_models().await?;
-    let machine = &paired.connection.ticket_fingerprint;
     let rows = rows(&listed.models);
+    print!(
+        "{}",
+        heading(rows.len(), &paired.name, &paired.connection.path)
+    );
     if rows.is_empty() {
-        println!("The machine {machine} serves no models.");
         return Ok(());
     }
-    println!(
-        "{} model(s) on {machine} ({}):\n",
-        rows.len(),
-        paired.connection.path
-    );
     print!("{}", render(&rows));
     print!("{}", footer(&rows));
     Ok(())
+}
+
+/// The line above the table, naming the machine by the name every surface
+/// shows it by, or the line that stands in for an empty one.
+fn heading(count: usize, machine: &str, path: &str) -> String {
+    if count == 0 {
+        format!("No models on {machine}.\n")
+    } else {
+        format!("{count} model(s) on {machine} ({path}):\n\n")
+    }
 }
 
 /// One model on the far machine, with its profile variants folded in.

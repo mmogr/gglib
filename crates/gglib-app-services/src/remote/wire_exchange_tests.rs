@@ -3,7 +3,6 @@
 //! answer carries. `wire_tests.rs` has the status.
 
 use super::*;
-use crate::test_support_remote::FINGERPRINT_A;
 
 #[test]
 fn an_empty_body_is_the_safe_default() {
@@ -44,6 +43,7 @@ fn an_exchange_that_says_nothing_still_reads() {
             port: 0,
             base_url: String::new(),
             ticket_fingerprint: String::new(),
+            name: None,
             paired: false,
             moved_from: None,
             replaced: None,
@@ -51,21 +51,24 @@ fn an_exchange_that_says_nothing_still_reads() {
     );
 }
 
-/// The daemon's join answer carries the pairing the join replaced, under the
-/// name `gglib remote join` reads it by to say so (#1042).
+/// The daemon's join answer carries the name of the machine joined and of
+/// the pairing the join replaced, under the names `gglib remote join` reads
+/// them by to say so (#1042).
 #[test]
-fn the_join_answer_names_the_pairing_it_replaced() {
+fn the_join_answer_names_the_machine_joined_and_the_pairing_it_replaced() {
     let answer = RemoteJoinResponse::from(Joined {
         port: 8180,
         base_url: "http://127.0.0.1:8180/v1".to_owned(),
         ticket_fingerprint: "e5a1b0c2d3f4".to_owned(),
+        name: Some("desk".to_owned()),
         paired: true,
         moved_from: None,
-        replaced: Some(FINGERPRINT_A.to_owned()),
+        replaced: Some("laptop".to_owned()),
     });
 
     let sent = serde_json::to_value(answer).expect("the answer serialises");
-    assert_eq!(sent["replaced"], FINGERPRINT_A);
+    assert_eq!(sent["name"], "desk");
+    assert_eq!(sent["replaced"], "laptop");
 }
 
 /// The enable body does not send `keep_identity`, and a body from an older

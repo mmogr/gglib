@@ -18,8 +18,9 @@ use tracing::{info, warn};
 
 use super::RemoteOps;
 use super::far_proxy::FarProxy;
+use super::paired_machine::far_credentials;
 use super::slot::{Busy, Taken};
-use super::stored_pairing::{far_credentials, names_the_same_machine};
+use super::stored_pairing::names_the_same_machine;
 use super::types::{JoinRequest, Joined};
 use super::wire::RemoteConnection;
 use crate::error::GuiError;

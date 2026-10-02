@@ -27,6 +27,7 @@ fn pairing() -> RemotePairing {
         api_key: "far-key".to_owned(),
         default_model: Some("qwen3".to_owned()),
         port: Some(8181),
+        name: Some("desk".to_owned()),
     }
 }
 

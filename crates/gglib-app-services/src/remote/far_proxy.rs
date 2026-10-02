@@ -2,7 +2,7 @@
 //! for this machine's chat page, its models, and the route that stops it.
 //!
 //! Each request goes to the far proxy over the local listener with the key
-//! `join` stored, which [`far_credentials`](super::stored_pairing::far_credentials)
+//! `join` stored, which [`far_credentials`](super::paired_machine::far_credentials)
 //! hands out only for the machine connected to: the listener adds no
 //! credential (ADR 0012, decision 7), so this side attaches it. Chat and run
 //! answers are handed back whole for the daemon to pass on; the models are
@@ -18,12 +18,12 @@ use std::fmt;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use gglib_core::domain::Machine;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::runs::is_run_id;
+use gglib_core::domain::{Machine, UNNAMED_PAIRED};
 use gglib_runtime::FarMachine;
 
-use super::stored_pairing::FarCredentials;
+use super::paired_machine::FarCredentials;
 use crate::error::GuiError;
 
 #[path = "far_read.rs"]
@@ -52,15 +52,17 @@ pub(super) const STREAM_TOTAL_TIMEOUT: Option<Duration> = None;
 pub(super) const NO_ANSWER: &str = "the other machine did not answer";
 
 /// The far machine's proxy: its base URL through the tunnel, the key it
-/// admits this device by, and which machine it is.
+/// admits this device by, which machine it is, and the name it goes by.
 #[derive(Clone)]
 pub struct FarProxy {
     base_url: String,
     key: String,
     /// The ticket fingerprint of the machine connected to. Always a paired
     /// machine, so it is kept as the fingerprint and handed out as a
-    /// [`Machine`] by [`FarProxy::machine`].
+    /// [`Machine`] by [`FarProxy::machine`]. Compared, never shown.
     fingerprint: String,
+    /// The name the stored pairing has for it, which is what is shown.
+    name: Option<String>,
     bounded: reqwest::Client,
     streaming: reqwest::Client,
 }
@@ -113,6 +115,7 @@ impl FarProxy {
             base_url: base_url.trim_end_matches('/').to_owned(),
             key: credentials.key.clone(),
             fingerprint: credentials.fingerprint.clone(),
+            name: credentials.name.clone(),
             bounded,
             streaming,
         }
@@ -126,6 +129,13 @@ impl FarProxy {
         }
     }
 
+    /// What a sentence about this machine calls it: its name, or
+    /// [`UNNAMED_PAIRED`] when it has given none. Never its fingerprint.
+    #[must_use]
+    pub fn shown_name(&self) -> &str {
+        self.name.as_deref().unwrap_or(UNNAMED_PAIRED)
+    }
+
     /// `http://127.0.0.1:<port>`, the far proxy without the `/v1`: where an
     /// agent turn's completion adapter points, since it adds the `/v1` itself.
     #[must_use]
@@ -136,13 +146,13 @@ impl FarProxy {
             .to_owned()
     }
 
-    /// The key and the fingerprint the completion adapter carries, so a
-    /// refusal of the key names the machine that refused it.
+    /// The key and the name the completion adapter carries, so a refusal of
+    /// the key names the machine that refused it.
     #[must_use]
     pub fn far_machine(&self) -> FarMachine {
         FarMachine {
             key: self.key.clone(),
-            fingerprint: self.fingerprint.clone(),
+            name: self.shown_name().to_owned(),
         }
     }
 

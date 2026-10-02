@@ -66,11 +66,24 @@ export const IDLE_STATUS: RemoteStatus = {
   last_peer: null,
   connected: null,
   stored_ticket_fingerprint: null,
+  paired_name: null,
   has_remote_key: false,
   remote_enabled: false,
   identity_path: null,
   devices: [],
 };
+
+/**
+ * What the paired machine is shown as when it has given no name: the words
+ * the daemon and the CLI use (`UNNAMED_PAIRED` in gglib-core). Never its
+ * fingerprint, which is its identity and is not shown.
+ */
+export const UNNAMED_PAIRED = 'the paired machine';
+
+/** The name the paired machine is shown by, from the stored pairing. */
+export function pairedName(status: RemoteStatus | null): string {
+  return status?.paired_name || UNNAMED_PAIRED;
+}
 
 export const INITIAL: RemoteState = {
   status: null,
