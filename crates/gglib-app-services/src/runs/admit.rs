@@ -18,13 +18,11 @@ use super::cell::{RunCell, RunSpec};
 use super::local::{RunEnded, RunWork};
 use super::registry::RunRegistry;
 
-/// A run whose work, or the handling of its end, panicked.
-const PANICKED: (&str, &str) = ("run_panicked", "The run stopped on an internal error.");
-
-fn fixed((code, message): (&str, &str)) -> RunError {
+/// The error of a run whose work, or the handling of its end, panicked.
+fn panicked() -> RunError {
     RunError {
-        code: code.to_owned(),
-        message: message.to_owned(),
+        code: "run_panicked".to_owned(),
+        message: "The run stopped on an internal error.".to_owned(),
     }
 }
 
@@ -139,7 +137,7 @@ impl RunRegistry {
             Some(Ok(Err(error))) => cell.finish(RunStatus::Failed, Some(error)),
             Some(Err(_)) => {
                 tracing::warn!(run = %cell.id, "a run's work panicked");
-                cell.finish(RunStatus::Failed, Some(fixed(PANICKED)))
+                cell.finish(RunStatus::Failed, Some(panicked()))
             }
             None => cell.finish(RunStatus::Cancelled, None),
         };
@@ -166,7 +164,7 @@ impl RunRegistry {
         handled
             .unwrap_or_else(|_| {
                 tracing::warn!(run = %cell.id, "handling a run's end panicked");
-                Err(fixed(PANICKED))
+                Err(panicked())
             })
             .err()
     }
