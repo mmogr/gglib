@@ -168,6 +168,11 @@ pub struct RemoteJoinResponse {
     /// another; `None` when the address stayed put.
     #[serde(default)]
     pub moved_from: Option<u16>,
+    /// Fingerprint of the other machine whose pairing this one replaced,
+    /// since one pairing is stored; `None` when there was none to replace,
+    /// or when the stored ticket could not be read to name one.
+    #[serde(default)]
+    pub replaced: Option<String>,
 }
 
 impl From<Joined> for RemoteJoinResponse {
@@ -178,6 +183,7 @@ impl From<Joined> for RemoteJoinResponse {
             ticket_fingerprint: j.ticket_fingerprint,
             paired: j.paired,
             moved_from: j.moved_from,
+            replaced: j.replaced,
         }
     }
 }

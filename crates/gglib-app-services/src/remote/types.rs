@@ -110,4 +110,9 @@ pub struct Joined {
     /// one, or the default — when it had to take another. `None` when the
     /// address stayed put.
     pub moved_from: Option<u16>,
+    /// Fingerprint of the other machine whose pairing this one replaced.
+    /// Settings keep one pairing, so pairing with a second machine drops
+    /// the first one's key. `None` when there was no other to replace, or
+    /// when the stored ticket could not be read to name one.
+    pub replaced: Option<String>,
 }

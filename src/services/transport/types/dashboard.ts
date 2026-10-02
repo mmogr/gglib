@@ -150,6 +150,13 @@ export type {
 } from './admission';
 
 // ============================================================================
+// Per-model signals
+// ============================================================================
+
+/** One model's counters, as `per_model_defects` carries them by model name. */
+export type { ModelDefectCounts } from '../../../types/generated/ModelDefectCounts';
+
+// ============================================================================
 // The snapshot itself
 // ============================================================================
 

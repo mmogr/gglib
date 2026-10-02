@@ -26,7 +26,7 @@ import { CacheUsageRows, ProxyCachePanel } from './ProxyCachePanel';
 import { TuneActivityCard } from './TuneActivityCard';
 import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ProxySamplingPanel } from './ProxySamplingPanel';
-import { ActiveConnectionsSection, InferenceSlotsSection } from './proxy';
+import { ActiveConnectionsSection, InferenceSlotsSection, ModelSignalsSection } from './proxy';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
 
 export interface ProxyDashboardModalProps {
@@ -125,6 +125,9 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
           */}
           <CacheUsageRows usage={snapshot?.agent_usage} />
         </section>
+
+        {/* After the caches, where `gglib proxy dashboard` prints it. */}
+        <ModelSignalsSection snapshot={snapshot} />
 
         <InferenceSlotsSection snapshot={snapshot} />
       </div>

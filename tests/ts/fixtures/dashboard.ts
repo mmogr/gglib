@@ -15,6 +15,7 @@
 import type {
   ActiveConnectionSnapshot,
   DashboardSnapshot,
+  ModelDefectCounts,
   SamplingAuditSnapshot,
   SamplingReasoningReadback,
   SlotSnapshot,
@@ -57,6 +58,37 @@ export function activeConnection(
   overrides: Partial<ActiveConnectionSnapshot> = {},
 ): ActiveConnectionSnapshot {
   return { ...CONNECTION, ...overrides };
+}
+
+const DEFECTS: ModelDefectCounts = {
+  requests: 0,
+  loop_guard_trips: 0,
+  loop_guard_loops: 0,
+  loop_guard_stagnations: 0,
+  agent_guard_scanned: 0,
+  agent_guard_trips: 0,
+  agent_guard_loops: 0,
+  agent_guard_stagnations: 0,
+  repairs_attempted: 0,
+  repairs_succeeded: 0,
+  stream_errors: 0,
+  truncated_generations: 0,
+  empty_responses: 0,
+  reasoning_only: 0,
+  dialect_residue: 0,
+  unvalidatable_schemas: 0,
+  normalization_errors: 0,
+  identical_result_repeats: 0,
+  repeats_not_evaluated: 0,
+  repeats_rescued: 0,
+};
+
+/**
+ * One model's counters with nothing counted, with `overrides` applied. All
+ * twenty, since `gglib-core`'s struct skips none of them on the wire.
+ */
+export function modelDefectCounts(overrides: Partial<ModelDefectCounts> = {}): ModelDefectCounts {
+  return { ...DEFECTS, ...overrides };
 }
 
 const READBACK: SamplingReasoningReadback = {

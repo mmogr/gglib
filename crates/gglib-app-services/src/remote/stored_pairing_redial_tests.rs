@@ -91,7 +91,7 @@ async fn the_same_machine_at_a_new_address_carries_its_key_forward() {
         .await
         .expect("a dial with no code still owes the record the new ticket");
 
-    assert!(!paired, "no code was redeemed, so nothing was paired");
+    assert_eq!(paired, Settled::Redialled, "no code, so nothing paired");
     let stored = core
         .settings()
         .get()
@@ -146,7 +146,7 @@ async fn a_dial_to_the_machine_already_recorded_writes_nothing() {
     .await
     .expect("a dial that needs no write does not fail on a store that refuses one");
 
-    assert!(!paired, "no code was redeemed, so nothing was paired");
+    assert_eq!(paired, Settled::Redialled, "no code, so nothing paired");
 }
 
 /// A record that names no port learns the one this dial bound.
@@ -175,7 +175,7 @@ async fn a_record_without_a_port_learns_the_port_this_dial_bound() {
     .await
     .expect("re-dialling the stored ticket is not a failure");
 
-    assert!(!paired, "no code was redeemed, so nothing was paired");
+    assert_eq!(paired, Settled::Redialled, "no code, so nothing paired");
     let stored = core
         .settings()
         .get()
