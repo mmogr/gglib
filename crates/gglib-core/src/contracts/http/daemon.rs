@@ -126,9 +126,7 @@ pub fn remote_chat_route_contract() -> Vec<(&'static [&'static str], String)> {
 /// whose `i64` extractor answers `400 text/plain`.
 pub const DOWNLOADS_QUEUE_PATH: &str = "/api/models/downloads/queue";
 
-/// Model list. `gglib model list` reaches this on the *detected* daemon port
-/// rather than the compile-time one, so it builds its own base — the path is
-/// still the daemon's.
+/// Model list: the library, sorted and filtered as its query parameters ask.
 pub const MODELS_LIST_PATH: &str = "/api/models";
 
 /// Benchmark comparison run (SSE).

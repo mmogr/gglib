@@ -8,14 +8,14 @@ use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort};
 use gglib_core::services::AppCore;
 use gglib_core::{
     ModelCapabilities, ModelFilterOptions,
-    domain::{ModelListQuery, apply_query},
+    domain::{ModelDetailDto, ModelListQuery, apply_query},
 };
 
 use crate::error::GuiError;
 use crate::sampling_explain::{self, SamplingExplanationDto};
 use crate::types::{
-    AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, RetagResponse,
-    SetCapabilitiesRequest, UpdateModelRequest, UpgradeCheck, UpgradeOutcome,
+    AddModelRequest, GuiModel, RemoveModelRequest, RetagResponse, SetCapabilitiesRequest,
+    UpdateModelRequest, UpgradeCheck, UpgradeOutcome,
 };
 
 /// Dependencies for model operations.

@@ -22,6 +22,7 @@ pub(crate) mod launch_narration;
 pub mod loop_guard_log;
 pub mod mcp;
 mod model;
+mod model_detail;
 pub(crate) mod model_naming;
 pub(crate) mod model_sampling;
 pub(crate) mod query;
@@ -38,6 +39,7 @@ pub(crate) mod template_caps;
 
 // Re-export model types at the domain level for convenience
 pub use model::{Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile};
+pub use model_detail::ModelDetailDto;
 
 // Re-export query types at the domain level for convenience
 pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};

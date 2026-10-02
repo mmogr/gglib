@@ -1,19 +1,10 @@
 //! List command handler.
 //!
-//! Fetches and displays GGUF models with optional sort / filter flags.
-//! Two code paths are supported:
-//!
-//! * **Proxy mode** – when a live daemon is detected on the configured port,
-//!   the request is forwarded to `GET /api/models?...` so filtering happens
-//!   on the backend using the exact same canonical logic.
-//! * **Direct mode** – models are loaded from the local `SQLite` database and
-//!   filtered in-process via [`gglib_core::domain::apply_query`].
-//!
-//! Both paths produce a `Vec<GuiModel>` that is rendered by a single table
-//! function.  A speed column (`⚡ t/s`) is shown only when at least one
-//! returned model has benchmark data.
-
-use std::time::Duration;
+//! Fetches and displays GGUF models with optional sort / filter flags. Models
+//! are loaded from the local `SQLite` database and filtered in-process via
+//! [`gglib_core::domain::apply_query`], into a `Vec<GuiModel>` that is
+//! rendered by a single table function. A speed column (`⚡ t/s`) is shown
+//! only when at least one returned model has benchmark data.
 
 use anyhow::Result;
 use gglib_app_services::types::GuiModel;
@@ -73,66 +64,10 @@ async fn list_here(ctx: &CliContext, args: ListArgs) -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>> {
-    // Prefer the live daemon so both CLI and GUI use the same HTTP path.
-    if let Some(port) = detect_daemon(ctx).await {
-        return fetch_from_daemon(ctx, port, args).await;
-    }
-
-    // Direct mode: query local DB and filter in-process.
     let query = build_query(args);
     let all = ctx.app.models().list().await?;
     let filtered = apply_query(all, &query);
     Ok(filtered.into_iter().map(GuiModel::from_domain).collect())
-}
-
-#[allow(
-    clippy::format_push_string,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> {
-    let mut url = format!(
-        "http://127.0.0.1:{port}{}?sort={}&order={}",
-        crate::daemon_client::paths::MODELS_LIST_PATH,
-        args.sort.api_value(),
-        args.order.api_value(),
-    );
-    if let Some(v) = args.min_params {
-        url.push_str(&format!("&min_params={v}"));
-    }
-    if let Some(v) = args.max_params {
-        url.push_str(&format!("&max_params={v}"));
-    }
-    if let Some(v) = args.min_speed {
-        url.push_str(&format!("&min_speed={v}"));
-    }
-    if let Some(v) = args.max_speed {
-        url.push_str(&format!("&max_speed={v}"));
-    }
-    if !args.tags.is_empty() {
-        url.push_str(&format!("&tags={}", args.tags.join(",")));
-    }
-
-    let client = gglib_proxy::loopback::client_builder()
-        .timeout(Duration::from_secs(5))
-        .build()?;
-
-    let request = client.get(&url);
-    let request = match crate::daemon_client::auth::daemon_api_key(ctx).await {
-        Some(key) => request.bearer_auth(key),
-        None => request,
-    };
-    let response = request.send().await?;
-    // Checked rather than assumed: straight to `.json()`, a 401 would arrive
-    // as a deserialization error about unexpected input.
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!(
-            "listing models answered 401: {}",
-            crate::daemon_client::auth::unauthorized(&body)
-        );
-    }
-    let models: Vec<GuiModel> = response.error_for_status()?.json().await?;
-    Ok(models)
 }
 
 fn build_query(args: &ListArgs) -> ModelListQuery {
@@ -149,39 +84,6 @@ fn build_query(args: &ListArgs) -> ModelListQuery {
             Some(args.tags.clone())
         },
         ..Default::default()
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Daemon detection (same pattern as benchmark handler)
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[derive(serde::Deserialize)]
-struct HealthResponse {
-    service: String,
-    status: String,
-}
-
-async fn detect_daemon(ctx: &CliContext) -> Option<u16> {
-    let settings = ctx.app.settings().get().await.ok()?;
-    let port = settings.effective_proxy_port();
-    let client = gglib_proxy::loopback::client_builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .ok()?;
-    let resp = client
-        .get(format!("http://127.0.0.1:{port}/health"))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let health: HealthResponse = resp.json().await.ok()?;
-    if health.service == "gglib-daemon" && health.status == "ok" {
-        Some(port)
-    } else {
-        None
     }
 }
 

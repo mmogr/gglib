@@ -1,13 +1,12 @@
 //! `gglib model list --remote`: the paired machine's catalogue, as its proxy
 //! publishes it.
 //!
-//! A `#[path]` child of `list.rs`, which sits near its size budget. What is
-//! listed is `GET /v1/models` through the tunnel — the same answer any
-//! client of that machine gets — so the columns are the ones that answer
-//! carries: the name a turn is asked for by, and the context it would be
-//! served with. The sort and filter flags describe this machine's
-//! catalogue and are not applied; the far list is short and arrives sorted
-//! as that machine sorts it.
+//! A `#[path]` child of `list.rs`. What is listed is `GET /v1/models` through
+//! the tunnel — the same answer any client of that machine gets — so the
+//! columns are the ones that answer carries: the name a turn is asked for by,
+//! and the context it would be served with. The sort and filter flags describe
+//! this machine's catalogue and are not applied; the far list is short and
+//! arrives sorted as that machine sorts it.
 
 use anyhow::Result;
 use serde::Deserialize;
