@@ -4,7 +4,7 @@ import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Label, Stack } from '../primitives';
 /**
- * The three fields this needs, all present.
+ * The three fields this needs, all present, and the device the code is for.
  *
  * Not `RemoteEnableResponse`: on that type they are optional, because an
  * `enable` that was not asked to invite carries none of them. Narrowing here
@@ -18,6 +18,8 @@ export interface Pairing {
   code: string;
   /** Seconds the code lives unused, counted down from here. */
   expires_in_s: number;
+  /** The device the code will issue a key to: the id Devices lists it under. */
+  device?: string;
 }
 
 interface PairingRevealProps {
@@ -92,6 +94,9 @@ export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onExpired, onCop
           {reveal.code}
         </Button>
       </div>
+      {reveal.device && (
+        <p className="text-xs text-text-muted m-0">This code pairs {reveal.device}.</p>
+      )}
       <p className="text-xs text-text-muted m-0">
         Waiting for a device… the code expires in{' '}
         <span className="font-mono tabular-nums">{left}s</span>. It works once.

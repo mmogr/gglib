@@ -44,7 +44,6 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
             relay: args.relay,
             discovery: Some(!args.no_discovery),
             invite: args.invite,
-            ..RemoteEnableBody::default()
         })
         .await?;
 

@@ -28,6 +28,7 @@ use super::private::create_private_dir;
 ///
 /// The directory is created if it is not there; the file is not. modelpipe
 /// mints it `0600` on first use and refuses to read one that others can read.
+/// A caller that only reads uses [`remote_identity_location`].
 pub fn remote_identity_path() -> Result<PathBuf, PathError> {
     let data_dir = data_root()?.join("data");
 
@@ -36,8 +37,17 @@ pub fn remote_identity_path() -> Result<PathBuf, PathError> {
         reason: e.to_string(),
     })?;
 
-    Ok(data_dir.join("remote_identity"))
+    Ok(data_dir.join(IDENTITY_FILE))
 }
+
+/// The file [`remote_identity_path`] names, with nothing under the data root
+/// created or tightened on the way, for a caller that only reads.
+pub fn remote_identity_location() -> Result<PathBuf, PathError> {
+    Ok(data_root()?.join("data").join(IDENTITY_FILE))
+}
+
+/// The endpoint key's file name, inside `data/`.
+const IDENTITY_FILE: &str = "remote_identity";
 
 /// The directory for the endpoint keys this machine joins other machines
 /// with, one file for each machine it joins: `<data root>/data/remote_join`.
@@ -78,6 +88,28 @@ mod tests {
             identity.parent().and_then(|p| p.file_name()),
             Some(std::ffi::OsStr::new("data")),
             "the identity file must sit inside the ignored data directory"
+        );
+    }
+
+    /// Naming the identity for a read names the same file and creates
+    /// nothing: the data root is a directory this test made, so nothing was
+    /// there before the call.
+    #[test]
+    fn naming_the_identity_for_a_read_creates_nothing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = tempfile::tempdir().expect("tempdir");
+        let _env = EnvVarGuard::set("GGLIB_DATA_DIR", root.path().to_string_lossy().as_ref());
+
+        let named = remote_identity_location().expect("remote_identity_location");
+
+        assert!(
+            !root.path().join("data").exists(),
+            "naming the identity for a read made data/"
+        );
+        assert_eq!(
+            named,
+            remote_identity_path().expect("remote_identity_path"),
+            "the read and the write name different files"
         );
     }
 

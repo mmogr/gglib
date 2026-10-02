@@ -45,8 +45,9 @@ pub struct RemotePairing {
     /// the key, which is what makes the ticket the mutable half.
     pub ticket: String,
 
-    /// That machine's API key: its `proxy_api_key`, received by redeeming
-    /// its one-time pairing code through the tunnel.
+    /// The device key that machine issued to this one, received by redeeming
+    /// its one-time pairing code through the tunnel. Not that machine's
+    /// `proxy_api_key`, which never leaves it and which its tunnel refuses.
     ///
     /// Not optional, deliberately. A record that could hold a ticket with no
     /// key is the shape the desync above lived in — the half-write that lost

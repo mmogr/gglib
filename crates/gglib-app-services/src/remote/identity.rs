@@ -44,6 +44,12 @@ pub(super) fn identity_path() -> Result<Option<std::path::PathBuf>, GuiError> {
         .map_err(|e| GuiError::Internal(format!("could not place the stored endpoint key: {e}")))
 }
 
+/// The file [`identity_path`] names, for a read: nothing under the data root
+/// is created or tightened, so a status read leaves `data/` as it was.
+pub(super) fn identity_location() -> Option<PathBuf> {
+    gglib_core::paths::remote_identity_location().ok()
+}
+
 /// Discard a stored endpoint key with nothing in it, so the daemon can arm.
 ///
 /// modelpipe refuses an empty identity file rather than minting over it, and

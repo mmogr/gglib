@@ -106,12 +106,13 @@ describe('RemoteControl', () => {
     expect(screen.getByRole('checkbox', { name: /reach \/mcp/i })).not.toBeChecked();
   });
 
-  it('enable reveals the code and the pairing string exactly as the daemon answered', async () => {
+  it('enable reveals the code, the pairing string and the device exactly as the daemon answered', async () => {
     enableRemote.mockResolvedValue({
       ticket: TICKET,
       code: '483920',
       pairing: `${TICKET}-483920`,
       expires_in_s: 120,
+      device: 'dev-5e6f7a8b',
     });
     const user = await open();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
@@ -123,6 +124,23 @@ describe('RemoteControl', () => {
     expect(enableRemote).toHaveBeenCalledWith({ allow_mcp: false, invite: true });
     expect(await screen.findByText('483920')).toBeInTheDocument();
     expect(screen.getByText(`gglib remote join ${TICKET}-483920`)).toBeInTheDocument();
+    // The id Devices lists the new row under, so a code that went to the
+    // wrong place can be withdrawn by forgetting that row.
+    expect(screen.getByText('This code pairs dev-5e6f7a8b.')).toBeInTheDocument();
+  });
+
+  it('a reveal whose answer names no device shows the code and no device line', async () => {
+    enableRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '483920',
+      pairing: `${TICKET}-483920`,
+      expires_in_s: 120,
+    });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /enable remote access/i }));
+
+    expect(await screen.findByText('483920')).toBeInTheDocument();
+    expect(screen.queryByText(/This code pairs/)).not.toBeInTheDocument();
   });
 
   it('shows no pairing at all when the daemon answered without a code', async () => {
@@ -166,6 +184,7 @@ describe('RemoteControl', () => {
       code: '119284',
       pairing: `${TICKET}-119284`,
       expires_in_s: 120,
+      device: 'dev-9c0d1e2f',
     });
     const user = await open();
 
@@ -178,6 +197,7 @@ describe('RemoteControl', () => {
     expect(enableRemote).not.toHaveBeenCalled();
     expect(await screen.findByText('119284')).toBeInTheDocument();
     expect(screen.getByText(`gglib remote join ${TICKET}-119284`)).toBeInTheDocument();
+    expect(screen.getByText('This code pairs dev-9c0d1e2f.')).toBeInTheDocument();
   });
 
   it('a daemon whose status has no device list does not take the panel down', async () => {
@@ -760,6 +780,31 @@ describe('RemoteControl', () => {
 
     expect(screen.getByText(/reading which machine/i)).toBeInTheDocument();
     expect(screen.queryByText(/aabbccddeeff/)).not.toBeInTheDocument();
+  });
+
+  it('the connected half names the command that prints the key another client needs', async () => {
+    applyRemoteStatus({
+      ...IDLE_STATUS,
+      connected: {
+        port: 41234,
+        base_url: 'http://127.0.0.1:41234/v1',
+        ticket_fingerprint: '3ca82708b995',
+        path: 'direct',
+        away_for_s: null,
+      },
+    });
+    await open();
+
+    // The port does not add the key, and the key is this device's own, not
+    // the far machine's proxy key: the panel points at the command, and puts
+    // no credential on screen.
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.textContent ===
+          'That key is the one this machine was given when it paired; gglib remote key --show prints it.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('the connected half asks which model that machine should be asked for', async () => {

@@ -130,6 +130,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
               pairing: answer.pairing,
               code: answer.code,
               expires_in_s: answer.expires_in_s,
+              device: answer.device,
             }
           : null,
       );
@@ -171,6 +172,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
               pairing: answer.pairing,
               code: answer.code,
               expires_in_s: answer.expires_in_s,
+              device: answer.device,
             }
           : null,
       );
