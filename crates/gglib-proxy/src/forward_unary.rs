@@ -18,13 +18,14 @@
 //! repaired turn it would have accepted unrepaired. `docs/tool-call-repair.md`
 //! says so under "Cost".
 
+use std::time::Duration;
+
 use axum::{
-    body::Body,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::DialectSpec;
@@ -33,7 +34,7 @@ use crate::forward::{ForwardError, REPAIR_REISSUE_TIMEOUT};
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
 use crate::repair::{Decision, RepairTurn, Skipped, choose, decide, read_second_draw};
-use crate::unary_body::{answer_with, read_non_streaming_body, unreadable_upstream};
+use crate::unary_body::{Exchange, answer_with, exchange};
 
 /// Send one shaped, non-streaming chat completion upstream and answer with
 /// its body, drawn again when its tool call did not validate.
@@ -42,7 +43,9 @@ use crate::unary_body::{answer_with, read_non_streaming_body, unreadable_upstrea
 /// connect failure or timeout is [`ForwardError::UpstreamDead`], so the caller
 /// can recycle the server and answer a retriable 503; any other send error is
 /// a terminal 502; and a non-2xx upstream status is passed through with its
-/// body, since llama-server's own diagnostic is the useful one.
+/// body, since llama-server's own diagnostic is the useful one. A first answer
+/// that takes longer than `total` is a 504 (see [`exchange`]); a re-issue has
+/// its own bound.
 ///
 /// # Errors
 ///
@@ -52,69 +55,39 @@ pub(crate) async fn forward_unary(
     body: Bytes,
     dialect: Option<&DialectSpec>,
     cache_metrics: &CacheMetricsStore,
-    metrics: &ContextMetricsStore,
-    snapshot_seq: u64,
+    (metrics, snapshot_seq): (&ContextMetricsStore, u64),
     turn: RepairTurn,
+    total: Duration,
 ) -> Result<Response, ForwardError> {
     // A re-issue needs the same endpoint, headers and body the original goes
     // out with. Cloned before the body is attached, because `send` consumes
     // the builder. Nothing streams into the request, so the clone cannot
     // fail; a `None` only means the turn falls open to its first answer.
     let again = req_builder.try_clone();
-    let response = match req_builder.body(body.clone()).send().await {
-        Ok(resp) => resp,
-        Err(e) if e.is_connect() || e.is_timeout() => {
-            // Connection refused or timed out — the llama-server process is dead
-            // or hung.  Signal the caller so it can clear stale state and return
-            // a retriable 503 rather than a terminal 502.
-            error!("Upstream llama-server unreachable (connect/timeout): {e}");
-            return Err(ForwardError::UpstreamDead);
-        }
-        Err(e) => {
-            error!("Failed to send request to llama-server: {e}");
-            return Ok((
-                StatusCode::BAD_GATEWAY,
-                axum::Json(ErrorResponse::upstream_error(&e.to_string())),
-            )
-                .into_response());
-        }
-    };
-
-    let status = response.status();
-
-    // For errors, return the error body directly
-    if !status.is_success() {
-        let error_bytes = response.bytes().await.unwrap_or_default();
-        let error_body = String::from_utf8_lossy(&error_bytes);
-        warn!(
-            status = status.as_u16(),
-            body = %error_body,
-            "upstream llama-server returned error"
-        );
-        return Ok(Response::builder()
-            .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-            .header("content-type", "application/json")
-            .body(Body::from(error_bytes))
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()));
-    }
-
-    debug!(
-        status = status.as_u16(),
-        "upstream llama-server accepted request"
-    );
-
-    // Read the full response and run it through the same dialect
-    // normalization the streaming path applies, then judge what it says.
-    let read = read_non_streaming_body(
-        response,
-        cache_metrics,
-        dialect,
-        Some((metrics, snapshot_seq)),
-    );
-    let (content_type, answer) = match read.await {
-        Ok(read) => read,
-        Err(e) => return Ok(unreadable_upstream(&e)),
-    };
+    // Read through the same dialect normalization the streaming path applies,
+    // so what is judged below is what the client would be sent.
+    let request = req_builder.body(body.clone());
+    let residue_sink = Some((metrics, snapshot_seq));
+    let (content_type, answer) =
+        match exchange(request, total, cache_metrics, dialect, residue_sink).await {
+            Exchange::Answered(content_type, answer) => (content_type, answer),
+            Exchange::Respond(response) => return Ok(response),
+            Exchange::SendFailed(e) if e.is_connect() || e.is_timeout() => {
+                // Connection refused or timed out — the llama-server process
+                // is dead or hung. Signal the caller so it can clear stale
+                // state and return a retriable 503 rather than a terminal 502.
+                error!("Upstream llama-server unreachable (connect/timeout): {e}");
+                return Err(ForwardError::UpstreamDead);
+            }
+            Exchange::SendFailed(e) => {
+                error!("Failed to send request to llama-server: {e}");
+                return Ok((
+                    StatusCode::BAD_GATEWAY,
+                    axum::Json(ErrorResponse::upstream_error(&e.to_string())),
+                )
+                    .into_response());
+            }
+        };
     let answer = repair(again, &body, answer, dialect, metrics, snapshot_seq, turn).await;
     Ok(answer_with(content_type, answer))
 }

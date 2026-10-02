@@ -80,6 +80,7 @@ use gglib_core::request_pipeline::{
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
 
+use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
@@ -860,7 +861,7 @@ pub(crate) async fn forward_chat_completion(
         return Ok(crate::sse_stream::spawn_and_return(
             req_builder,
             body,
-            tx,
+            ClientSender::new(tx, stream_bounds.send),
             rx,
             connection,
             model_name_owned,
@@ -889,12 +890,12 @@ pub(crate) async fn forward_chat_completion(
         body,
         context.dialect.as_ref(),
         &cache_metrics,
-        metrics.as_ref(),
-        snapshot_seq,
+        (metrics.as_ref(), snapshot_seq),
         RepairTurn {
             enabled: repair_enabled,
             gglib_grammar: grammar_enforced,
         },
+        stream_bounds.unary,
     )
     .await
 }
@@ -950,9 +951,9 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
     format!("data: {value}\n\n")
 }
 
-/// [`drain_events`] over a whole upstream response, read at the production
-/// idle bound: the entry point for tests that drive the drain with a real
-/// HTTP response rather than chosen chunks.
+/// [`drain_events`] over a whole upstream response, under the production idle
+/// and send bounds: the entry point for tests that drive the drain with a
+/// real HTTP response rather than chosen chunks.
 #[cfg(test)]
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
@@ -971,7 +972,7 @@ pub(crate) async fn stream_response_to_channel(
         events,
         model_name,
         dialect,
-        tx,
+        ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         connection,
         repair,
         client_wants_progress,
@@ -1009,14 +1010,14 @@ pub(crate) async fn stream_response_to_channel(
 /// token a departure is seen only when a frame sent to the client fails, so a
 /// silence still ends in a stall at the idle bound, and the stall asks for the
 /// recycle the next request needs. A client that vanishes without a FIN
-/// leaves `tx` open: the drain blocks in `tx.send` once 32 frames queue (the
-/// channel's capacity in [`forward_chat_completion`]), where the per-read
-/// timer is parked, so its bound is TCP retransmission.
+/// leaves `tx` open, and once it is full a send waits for the client to make
+/// room, with the per-read timer parked. [`ClientSender`] bounds that wait,
+/// and a send that outlasts it ends the turn as a departure.
 pub(crate) async fn drain_events(
     events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     model_name: String,
     dialect: Option<DialectSpec>,
-    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    tx: ClientSender,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
     client_wants_progress: bool,
@@ -1253,11 +1254,11 @@ pub(crate) async fn drain_events(
         };
 
         if let Some(bytes) = frame
-            && tx.send(Ok(bytes)).await.is_err()
+            && !tx.send(bytes).await
         {
-            // Client disconnected; stop draining the upstream. Recorded so the
-            // watchdog can abstain rather than score a person's hang-up as an
-            // upstream defect.
+            // Client disconnected, or stopped reading for the send bound; stop
+            // draining the upstream. Recorded so the watchdog can abstain
+            // rather than score a person's hang-up as an upstream defect.
             client_connected = false;
             outcome.client_aborted = true;
             break;
@@ -1304,7 +1305,7 @@ pub(crate) async fn drain_events(
             format!("{EMPTY_STREAM_NOTICE} (finish_reason: {reason})")
         };
         if let Some(s) = encoder.encode(&LlmStreamEvent::TextDelta { content: notice }) {
-            let _ = tx.send(Ok(Bytes::from(s))).await;
+            tx.send(Bytes::from(s)).await;
         }
     }
     // Exactly one [DONE] sentinel, sent once the wire stream is truly
@@ -1313,9 +1314,7 @@ pub(crate) async fn drain_events(
     // `gglib_core::sse::DONE_SENTINEL` doc). Skipped if the client already
     // disconnected -- the channel is closed, nothing to send.
     if client_connected {
-        let _ = tx
-            .send(Ok(Bytes::from_static(DONE_SENTINEL.as_bytes())))
-            .await;
+        tx.send(Bytes::from_static(DONE_SENTINEL.as_bytes())).await;
     }
 
     outcome.left_before_first_token = outcome.client_aborted && !generated.load(Ordering::Relaxed);
@@ -1326,10 +1325,7 @@ pub(crate) async fn drain_events(
 /// Resolves once the client has gone, if the upstream had sent no generated
 /// token by then; otherwise never. It checks on departure, not when the wait
 /// began, because a token the normalizer holds back arrives mid-wait.
-async fn left_before_first_token(
-    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
-    generated: &AtomicBool,
-) {
+async fn left_before_first_token(tx: &ClientSender, generated: &AtomicBool) {
     tx.closed().await;
     if generated.load(Ordering::Relaxed) {
         std::future::pending::<()>().await;
@@ -1345,11 +1341,11 @@ async fn left_before_first_token(
 /// progress. A comment every [`REPAIR_KEEPALIVE_INTERVAL`] keeps the
 /// connection observably alive without showing the client anything.
 ///
-/// Returns `None` if the client disconnected mid-flight — there is then no
-/// one left to repair for, and the caller falls open to the original frames.
+/// Returns `None` if the client went away mid-flight — there is then no one
+/// left to repair for, and the caller falls open to the original frames.
 async fn send_reissue_keeping_the_wire_warm(
     builder: reqwest::RequestBuilder,
-    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    tx: &ClientSender,
 ) -> Option<reqwest::Result<reqwest::Response>> {
     let send = builder.timeout(REPAIR_REISSUE_TIMEOUT).send();
     tokio::pin!(send);
@@ -1363,7 +1359,7 @@ async fn send_reissue_keeping_the_wire_warm(
         tokio::select! {
             result = &mut send => return Some(result),
             _ = ticker.tick() => {
-                if tx.send(Ok(Bytes::from_static(b":\n\n"))).await.is_err() {
+                if !tx.send(Bytes::from_static(b":\n\n")).await {
                     return None;
                 }
             }
@@ -1377,12 +1373,9 @@ async fn send_reissue_keeping_the_wire_warm(
 /// Copilot executes tool calls, and a duplicate is a duplicated side effect.
 ///
 /// Returns `false` if the client went away mid-flush.
-async fn emit_held_frames(
-    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
-    held: &mut Vec<Bytes>,
-) -> bool {
+async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<Bytes>) -> bool {
     for frame in std::mem::take(held) {
-        if tx.send(Ok(frame)).await.is_err() {
+        if !tx.send(frame).await {
             return false;
         }
     }
@@ -1402,7 +1395,7 @@ async fn resolve_held_tool_calls(
     original_frames: Vec<Bytes>,
     encoder: &SseEncoder,
     outcome: &mut StreamOutcome,
-    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+    tx: &ClientSender,
 ) -> Vec<Bytes> {
     let Some(ctx) = repair else {
         return original_frames;

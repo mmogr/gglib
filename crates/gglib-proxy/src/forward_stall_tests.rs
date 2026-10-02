@@ -143,7 +143,7 @@ async fn a_client_slower_than_the_bound_is_not_mistaken_for_a_silent_upstream() 
         .collect();
     let slow = Reader {
         delay: IDLE + IDLE / 3,
-        leaves_after: None,
+        ..Reader::default()
     };
 
     let turn = run_turn(upstream(chunks, Then::Close), None, slow).await;

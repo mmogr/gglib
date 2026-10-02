@@ -4,14 +4,16 @@
 //! and is saved. After that token, be it text, reasoning or a tool call, a
 //! departure is seen at the next frame sent, so a reply still being written
 //! ends there and is saved, and a silence still ends in a stall at the idle
-//! bound.
+//! bound. A client that stops reading without leaving is let go once a send
+//! has waited the send bound for it, as a departure; one that reads slowly
+//! but keeps reading never is.
 
 use std::time::{Duration, Instant};
 
 use serde_json::json;
 
 use super::forward_stall_fixtures::{
-    Reader, Then, at_once, done, finish, frame, progress, run_turn, text, upstream,
+    Reader, SEND, Then, at_once, done, finish, frame, progress, run_turn, text, upstream,
 };
 use super::*;
 use crate::upstream_read::upstream_events;
@@ -64,7 +66,7 @@ async fn leave_after(
         upstream_events(bytes, idle),
         "m".to_owned(),
         dialect,
-        tx,
+        ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         &connection,
         None,
         false,
@@ -229,4 +231,49 @@ async fn a_client_that_leaves_a_reply_silent_after_a_native_tool_call_still_wait
     // The frame the client took was the reply's, not the stall's notice.
     assert!(left.wire.contains("read_file"), "{}", left.wire);
     assert_the_stall_ended_it(&left, idle);
+}
+
+#[tokio::test]
+async fn a_client_that_stops_reading_mid_reply_is_let_go_at_the_send_bound_as_a_departure() {
+    // The upstream would talk for as long as anyone listened. The client takes
+    // two frames, then reads nothing more and stays connected.
+    let talking = (0..1000).map(|_| (Duration::ZERO, text("word "))).collect();
+    let stops = Reader {
+        stops_after: Some(2),
+        ..Reader::default()
+    };
+
+    let turn = run_turn(upstream(talking, Then::Silence), None, stops).await;
+
+    assert!(turn.took >= SEND, "let go after {:?}", turn.took);
+    assert!(turn.took < SEND * 2, "let go after {:?}", turn.took);
+    assert_eq!(turn.text(), "word word ");
+    assert!(turn.outcome.client_aborted);
+    assert!(!turn.outcome.left_before_first_token);
+    assert!(!turn.outcome.upstream_errored);
+    assert_eq!(turn.outcome.upstream_stalled, None);
+    // What a client that left after the first token gets: its turn is saved,
+    // and the output it was sent counts for the model.
+    assert!(turn.outcome.worth_saving());
+    assert_eq!(turn.outcome.health_verdict(), StreamVerdict::Healthy);
+}
+
+#[tokio::test]
+async fn a_client_that_reads_slowly_but_keeps_reading_is_never_let_go() {
+    // Every frame waits most of a send bound for the client, and the reply
+    // outlasts the bound several times over.
+    let words = ["one ", "two ", "three ", "four ", "five "];
+    let mut chunks: Vec<_> = words.iter().map(|w| text(w)).collect();
+    chunks.extend([finish(), done()]);
+    let slow = Reader {
+        delay: SEND * 2 / 3,
+        ..Reader::default()
+    };
+
+    let turn = run_turn(upstream(at_once(chunks), Then::Close), None, slow).await;
+
+    assert!(turn.took > SEND * 3, "took {:?}", turn.took);
+    assert!(!turn.outcome.client_aborted, "{}", turn.wire);
+    assert_eq!(turn.text(), words.concat());
+    assert_eq!(turn.dones(), 1);
 }
