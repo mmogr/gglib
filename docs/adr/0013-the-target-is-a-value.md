@@ -1,10 +1,15 @@
 # ADR 0013 — The target is a value: one `--remote`, decided in one place
 
-- **Status:** Accepted
+- **Status:** Accepted; superseded in part by
+  [ADR 0014](0014-a-model-is-named-by-its-machine.md)
 - **Date:** 2026-09-10
 - **Depends on:** [ADR 0012](0012-the-remote-tunnel.md)
 - **Supersedes:** nothing
-- **Superseded by:** nothing
+- **Superseded by:** [ADR 0014](0014-a-model-is-named-by-its-machine.md), in
+  part: decision 2's placement of every which-machine question in
+  `crates/gglib-cli/src/target.rs` alone, decision 3's model rows of the reach
+  table, and decision 4's statement that the remembered model is a name in
+  that machine's catalogue
 
 ## Context
 
