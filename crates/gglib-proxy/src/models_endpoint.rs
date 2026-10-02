@@ -59,6 +59,9 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 /// Both are shaved by [`CONTEXT_WINDOW_SAFETY_MARGIN_PCT`] before being
 /// advertised, reserving headroom for tool-schema JSON and chat-template
 /// tokens that a client's own char→token budget does not account for.
+///
+/// The list also names this machine (`machine_name`), for a paired machine
+/// that shows these models beside its own.
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -116,6 +119,12 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
                     .unwrap_or_default(),
             );
             response.data.extend(variants);
+
+            // Read per request, so a rename shows on the next listing. Here and
+            // never on `/health`, which answers before any credential does.
+            response.machine_name = sysinfo::System::host_name()
+                .as_deref()
+                .and_then(gglib_core::domain::machine_name);
 
             Json(response).into_response()
         }

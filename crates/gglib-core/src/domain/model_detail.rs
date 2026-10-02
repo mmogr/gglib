@@ -1,5 +1,5 @@
 //! [`ModelDetailDto`]: every stored field of one model, as the inspector
-//! reads it.
+//! reads it; and [`ModelLookup`], one model as a paired machine reads it.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,8 @@ use crate as gglib_core;
 /// - CLI: `gglib model inspect` (human-readable or `--json`)
 /// - Axum: `GET /api/models/:id/detail`
 /// - GUI frontend: model detail panel
+/// - Proxy: `GET /v1/models/{name}/detail`, inside a [`ModelLookup`], with
+///   [`Self::file_path`] and [`Self::port`] left out
 ///
 /// # Not a superset of `GuiModel`
 ///
@@ -33,8 +35,11 @@ pub struct ModelDetailDto {
     pub id: i64,
     /// Human-readable name.
     pub name: String,
-    /// Absolute path to the GGUF file on disk.
-    pub file_path: String,
+    /// Absolute path to the GGUF file on disk. `None` where the reader is on
+    /// another machine, to which this machine's file layout means nothing.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
     /// Parameter count in billions.
     pub param_count_b: f64,
     /// Model architecture (e.g. `"llama"`, `"mistral"`).
@@ -166,7 +171,7 @@ impl ModelDetailDto {
         Self {
             id: model.id,
             name: model.name,
-            file_path: model.file_path.to_string_lossy().to_string(),
+            file_path: Some(model.file_path.to_string_lossy().to_string()),
             param_count_b: model.param_count_b,
             architecture: model.architecture,
             quantization: model.quantization,
@@ -200,4 +205,23 @@ impl ModelDetailDto {
             metadata: model.metadata,
         }
     }
+}
+
+/// One model as `GET /v1/models/{name}/detail` answers it: what the
+/// identifier resolved to, and the profile it named.
+///
+/// The identifier is resolved as a chat request's is — catalogue id first,
+/// then exact name, and a `:profile` suffix routed to a configured profile —
+/// so a caller that reads this before a turn sends the turn to the same model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ModelLookup {
+    /// The inference profile the identifier named, as `name:profile` does.
+    /// `None` for an identifier that named the model alone.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// The model, without its file path or port.
+    pub detail: ModelDetailDto,
 }

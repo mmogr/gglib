@@ -157,3 +157,48 @@ fn an_embedding_models_capabilities_survive_serialization() {
     let json = serde_json::to_value(&resp.data[0]).unwrap();
     assert_eq!(json["capabilities"], serde_json::json!(["embeddings"]));
 }
+
+// =========================================================================
+// Catalogue ids and the reading side
+// =========================================================================
+
+/// The entry carries the catalogue id beside the name a client sends; a
+/// base entry names no profile, and the machine is named by the endpoint.
+#[test]
+fn an_entry_carries_its_catalogue_id() {
+    let mut summary = summary_with_tags("qwen3", &[]);
+    summary.id = 42;
+    let resp = ModelsResponse::from_summaries(vec![summary], Some(DEFAULT_CONTEXT_SIZE), true);
+
+    assert_eq!(resp.data[0].id, "qwen3");
+    assert_eq!(resp.data[0].gglib_id, 42);
+    assert_eq!(resp.data[0].profile, None);
+    assert_eq!(resp.machine_name, None);
+
+    let json = serde_json::to_value(&resp).unwrap();
+    assert_eq!(json["data"][0]["gglib_id"], 42);
+    assert!(json["data"][0].get("profile").is_none(), "{json}");
+    assert!(json.get("machine_name").is_none(), "{json}");
+}
+
+/// The list reads back into the type it was written from, and a list with
+/// no catalogue ids — an older build — does not read as one.
+#[test]
+fn the_list_reads_back_and_an_entry_without_an_id_does_not() {
+    let mut resp = ModelsResponse::from_summaries(
+        vec![summary_with_tags("qwen3", &[])],
+        Some(DEFAULT_CONTEXT_SIZE),
+        true,
+    );
+    resp.machine_name = Some("desk".to_owned());
+    let read: ModelsResponse = serde_json::from_value(serde_json::to_value(&resp).unwrap())
+        .expect("the list deserializes");
+    assert_eq!(read.machine_name.as_deref(), Some("desk"));
+    assert_eq!(read.data[0].gglib_id, 1);
+
+    let older = serde_json::json!({
+        "object": "list",
+        "data": [{ "id": "qwen3", "object": "model", "created": 0, "owned_by": "gglib" }],
+    });
+    assert!(serde_json::from_value::<ModelsResponse>(older).is_err());
+}

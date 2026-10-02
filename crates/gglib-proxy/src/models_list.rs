@@ -4,18 +4,30 @@
 //! from the catalogue's summaries; `models_endpoint.rs` serves it, and
 //! `profiles.rs` adds a `{model}:{profile}` entry for each profile listed in
 //! models.
+//!
+//! Both types also deserialize, for a reader of this list on another machine,
+//! into the same shape it was written from.
 
 use gglib_core::ports::ModelSummary;
 use gglib_core::server_config::{
     ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Response from /v1/models endpoint.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelsResponse {
     pub object: String,
     pub data: Vec<ModelInfo>,
+    /// This machine's name: the first label of its host name, read on every
+    /// request and kept only when it is a plain host label
+    /// ([`gglib_core::domain::machine_name`]). `None` when the host name is
+    /// unreadable or is not one. Not part of `OpenAI`'s shape; a client that
+    /// does not know it ignores it.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine_name: Option<String>,
 }
 
 impl ModelsResponse {
@@ -53,6 +65,8 @@ impl ModelsResponse {
                     });
                 ModelInfo {
                     id: summary.name.clone(),
+                    gglib_id: i64::from(summary.id),
+                    profile: None,
                     object: "model".to_string(),
                     created: summary.created_at,
                     owned_by: "gglib".to_string(),
@@ -74,6 +88,7 @@ impl ModelsResponse {
         Self {
             object: "list".to_string(),
             data,
+            machine_name: None,
         }
     }
 }
@@ -93,12 +108,29 @@ fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
 }
 
 /// Information about a single model (`OpenAI` format).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelInfo {
+    /// What a client sends back as `model`: the model's name, or
+    /// `{name}:{profile}` for a profile variant.
     pub id: String,
+    /// The model's id in this machine's catalogue, which is never reused.
+    /// A profile variant carries its base model's.
+    ///
+    /// Not the `id` above, which is what a client sends: a catalogue id means
+    /// something only on the machine that issued it.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub gglib_id: i64,
+    /// The inference profile a `{name}:{profile}` variant selects; `None` on
+    /// a base entry.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     pub object: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub created: i64,
     pub owned_by: String,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Model's context window size, in tokens (llama.cpp's `/v1/models`
@@ -110,6 +142,7 @@ pub struct ModelInfo {
     /// the advertisement's safety margin. Clients that auto-detect context
     /// size read this once at picker-build time — usually before any model
     /// runs — so the pre-launch value must already be honest.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
     /// Non-OpenAI endpoints this model can serve, beyond
@@ -124,6 +157,7 @@ pub struct ModelInfo {
     /// An array rather than a `type` discriminant because capability is not
     /// exclusive: a future entry may serve both chat and embeddings, and
     /// vision or tool support could join the same list without a second field.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Vec<String>>,
 }

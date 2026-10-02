@@ -20,6 +20,7 @@ pub(crate) mod kv_estimate;
 pub(crate) mod kv_memory;
 pub(crate) mod launch_narration;
 pub mod loop_guard_log;
+mod machine;
 pub mod mcp;
 mod model;
 mod model_detail;
@@ -38,8 +39,9 @@ pub mod slot_eviction;
 pub(crate) mod template_caps;
 
 // Re-export model types at the domain level for convenience
+pub use machine::machine_name;
 pub use model::{Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile};
-pub use model_detail::ModelDetailDto;
+pub use model_detail::{ModelDetailDto, ModelLookup};
 
 // Re-export query types at the domain level for convenience
 pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};

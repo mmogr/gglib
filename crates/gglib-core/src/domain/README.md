@@ -11,7 +11,9 @@ infrastructure concerns (database, filesystem, etc.).
 
 - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
 - `model` - Model types (`Model`, `NewModel`)
-- `model_detail` - Every stored field of one model, as the inspector reads it (`ModelDetailDto`)
+- `model_detail` - Every stored field of one model, as the inspector reads it
+  (`ModelDetailDto`), and one model as a paired machine reads it (`ModelLookup`)
+- `machine` - The name a machine is shown by, sanitised from its host name (`machine_name`)
 - `model_naming` - Shared model-naming policy (`resolve_model_name`, `NameSource`)
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types

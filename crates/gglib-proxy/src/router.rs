@@ -68,6 +68,10 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             "/v1/models/{name}/load",
             post(crate::load_endpoint::load_model),
         )
+        .route(
+            "/v1/models/{name}/detail",
+            get(crate::model_detail_endpoint::model_detail),
+        )
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))

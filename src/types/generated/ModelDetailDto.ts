@@ -13,6 +13,8 @@ import type { Support } from "./Support";
  * - CLI: `gglib model inspect` (human-readable or `--json`)
  * - Axum: `GET /api/models/:id/detail`
  * - GUI frontend: model detail panel
+ * - Proxy: `GET /v1/models/{name}/detail`, inside a [`ModelLookup`], with
+ *   [`Self::file_path`] and [`Self::port`] left out
  *
  * # Not a superset of `GuiModel`
  *
@@ -30,9 +32,10 @@ id: number,
  */
 name: string, 
 /**
- * Absolute path to the GGUF file on disk.
+ * Absolute path to the GGUF file on disk. `None` where the reader is on
+ * another machine, to which this machine's file layout means nothing.
  */
-filePath: string, 
+filePath?: string, 
 /**
  * Parameter count in billions.
  */
