@@ -18,6 +18,7 @@ pub mod model_catalog;
 pub(crate) mod model_registrar;
 pub(crate) mod model_repository;
 pub mod model_runtime;
+pub(crate) mod pinned;
 pub(crate) mod process_runner;
 pub(crate) mod remote_gateway;
 pub(crate) mod retry_observer;

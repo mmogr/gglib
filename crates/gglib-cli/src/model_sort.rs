@@ -25,18 +25,6 @@ pub enum CliModelSortBy {
     Speed,
 }
 
-impl CliModelSortBy {
-    /// The `snake_case` name expected by the HTTP query parameter `sort=`.
-    pub fn api_value(self) -> &'static str {
-        match self {
-            Self::Added => "added_at",
-            Self::Name => "name",
-            Self::Params => "param_count",
-            Self::Speed => "latest_tg_tps",
-        }
-    }
-}
-
 impl From<CliModelSortBy> for ModelSortBy {
     fn from(v: CliModelSortBy) -> Self {
         match v {
@@ -56,16 +44,6 @@ pub enum CliSortOrder {
     Desc,
     /// Smallest / oldest first.
     Asc,
-}
-
-impl CliSortOrder {
-    /// The value expected by the HTTP query parameter `order=`.
-    pub fn api_value(self) -> &'static str {
-        match self {
-            Self::Asc => "asc",
-            Self::Desc => "desc",
-        }
-    }
 }
 
 impl From<CliSortOrder> for SortOrder {

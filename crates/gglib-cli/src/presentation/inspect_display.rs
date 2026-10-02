@@ -4,9 +4,8 @@
 //! `handlers/model/inspect.rs` is kept thin — it only fetches the model,
 //! branches on `--json`, and delegates to [`print_model_detail`].
 
-use gglib_app_services::types::ModelDetailDto;
 use gglib_core::ModelCapabilities;
-use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS};
+use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS, ModelDetailDto};
 
 use crate::presentation::{format_relative_time, print_separator};
 

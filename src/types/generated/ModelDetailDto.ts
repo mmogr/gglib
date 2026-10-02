@@ -14,7 +14,7 @@ import type { Support } from "./Support";
  * - Axum: `GET /api/models/:id/detail`
  * - GUI frontend: model detail panel
  *
- * # Not a superset of [`GuiModel`]
+ * # Not a superset of `GuiModel`
  *
  * The two shapes overlap; neither contains the other. A TypeScript mirror
  * that extended the list row would advertise `server_defaults` and
@@ -89,7 +89,7 @@ tags: Array<string>,
  * Capability flags serialized as a `u32` bit-field.
  *
  * A `bitflags` newtype, so it crosses the wire as a bare number and
- * cannot derive `TS` itself — see [`GuiModel::capabilities`].
+ * cannot derive `TS` itself — see `GuiModel::capabilities`.
  */
 capabilities: number, 
 /**

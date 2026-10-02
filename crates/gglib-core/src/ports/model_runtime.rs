@@ -25,6 +25,7 @@ use thiserror::Error;
 use crate::cache_config::CacheRamSetting;
 use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults};
 use crate::ports::ProcessHandle;
+pub use crate::ports::pinned::PinnedSpec;
 use crate::server_config::ServerConfigOptions;
 
 /// Per-call launch overrides layered on a runtime's standing configuration.
@@ -557,23 +558,6 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
             "this runtime does not support pinning".to_string(),
         ))
     }
-}
-
-/// A runtime pin: the one model a runtime will serve, plus how to launch it.
-///
-/// Carried by [`ModelRuntimePort::set_pin`] and serialized inside the
-/// daemon's `POST /api/proxy/start` body, which is why it derives serde.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct PinnedSpec {
-    /// Name clients must address the model by. Matched exactly.
-    pub name: String,
-    /// Standing launch options for the pinned model, already resolved
-    /// through the caller's cascade — layered onto the runtime's template at
-    /// launch, winning field-wise (the cascade has already run; the template
-    /// must not undo it).
-    #[serde(default)]
-    pub launch_overrides: ServerConfigOptions,
 }
 
 /// A [`ModelRuntimePort`] that never has anything running.

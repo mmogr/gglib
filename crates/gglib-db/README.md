@@ -63,6 +63,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`factory.rs`** — Database connection factory and pooling
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
+- **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, and its indexes
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features

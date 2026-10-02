@@ -7,11 +7,10 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::SamplingExplanationDto;
 use gglib_app_services::types::{
-    AddModelRequest, GuiModel, ModelDetailDto, RemoveModelRequest, SetCapabilitiesRequest,
-    UpdateModelRequest,
+    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
 };
 use gglib_core::ModelFilterOptions;
-use gglib_core::domain::{ModelListQuery, ModelSortBy, SortOrder};
+use gglib_core::domain::{ModelDetailDto, ModelListQuery, ModelSortBy, SortOrder};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Query-parameter struct for GET /api/models

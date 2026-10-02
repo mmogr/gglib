@@ -118,7 +118,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 **Module Descriptions:**
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
-- **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
+- **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
+- **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes

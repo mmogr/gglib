@@ -384,7 +384,7 @@ fn every_surface_spells_an_origin_the_same_way() {
             ),
             (
                 "the model inspector",
-                serde_json::to_value(crate::types::ModelDetailDto::from_model(
+                serde_json::to_value(gglib_core::domain::ModelDetailDto::from_model(
                     stored.clone(),
                     false,
                     None,
