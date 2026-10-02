@@ -21,6 +21,7 @@ fn a_reset_keeps_the_pairing_the_device_roster_and_the_proxy_key() {
             api_key: "far-key".to_owned(),
             default_model: Some("qwen3".to_owned()),
             port: Some(8181),
+            name: Some("desk".to_owned()),
         });
         settings.remote_enabled = Some(true);
         settings.remote_serve = Some(RemoteServe {

@@ -2,13 +2,15 @@
 //!
 //! Reading it, writing it, what a write that fails after the code has been
 //! spent has to say, and — in [`settle`] — which of those a dial that has
-//! come up owes; and [`far_credentials`], the check its key passes on every
-//! request to that machine. A sibling rather than more of `connect.rs`, because
-//! `status.rs`'s status surface asks the same question of the same record
-//! as `join` does, and asking it in two places is how the two drift.
+//! come up owes. The check its key passes on every request to that machine,
+//! and the name that machine is shown by, are `paired_machine.rs`'s. A
+//! sibling rather than more of `connect.rs`, because `status.rs`'s status
+//! surface asks the same question of the same record as `join` does, and
+//! asking it in two places is how the two drift.
 
 use std::sync::{Mutex, PoisonError};
 
+use gglib_core::domain::UNNAMED_PAIRED;
 use gglib_core::services::AppCore;
 use gglib_core::{RemotePairing, Settings, validate_settings};
 use modelpipe::Ticket;
@@ -46,55 +48,14 @@ pub(super) fn names_the_same_machine(stored: &RemotePairing, ticket: &Ticket) ->
     fingerprint(stored).is_some_and(|stored| stored == ticket.fingerprint())
 }
 
-/// What this machine may send to the machine it is connected to: the key it
-/// holds for that machine, and that machine's fingerprint. No `Debug`, so the
-/// key cannot be formatted into a log line by accident.
-pub struct FarCredentials {
-    /// The key that machine issued this one when they paired.
-    pub key: String,
-    /// The ticket fingerprint of the machine connected to.
-    pub fingerprint: String,
-}
-
-/// The one check every request to the far machine passes: the stored key,
-/// only when the stored pairing names the machine connected to.
-///
-/// `join` keeps the two in agreement, by refusing a bare ticket for a machine
-/// this one holds no key for. This checks it again where the key leaves, so a
-/// key one machine issued is never shown to another (#1042), whichever
-/// surface is sending it.
-///
-/// # Errors
-///
-/// `Conflict` when nothing is stored, or what is stored is another machine's
-/// pairing: both are what a fresh pairing fixes, and the message says so.
-pub fn far_credentials(
-    stored: Option<&RemotePairing>,
-    connected_fingerprint: &str,
-) -> Result<FarCredentials, GuiError> {
-    stored
-        .filter(|stored| fingerprint(stored).as_deref() == Some(connected_fingerprint))
-        .map(|stored| FarCredentials {
-            key: stored.api_key.clone(),
-            fingerprint: connected_fingerprint.to_owned(),
-        })
-        .ok_or_else(|| {
-            GuiError::Conflict(format!(
-                "connected to the remote machine {connected_fingerprint}, but this one holds no \
-                 key for it — pair again with the full `<ticket>-<code>` string from \
-                 `gglib remote invite` there, then `gglib remote join` with it"
-            ))
-        })
-}
-
 /// What a dial that has come up did to the stored record.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Settled {
     /// No code was redeemed: the record already held this machine's key.
     Redialled,
     /// A code was redeemed and its key stored. `replaced` is
-    /// [`store_redeemed`]'s answer: the other machine whose pairing that
-    /// overwrote, if one did.
+    /// [`store_redeemed`]'s answer: the name of the other machine whose
+    /// pairing that overwrote, if one did.
     Paired { replaced: Option<String> },
 }
 
@@ -214,17 +175,18 @@ fn follow(stored: &mut Option<RemotePairing>, ticket: &Ticket, port: u16) {
 
 /// Store a pairing whose code has just been redeemed.
 ///
-/// The ticket, the key and the port are this dial's. The model is kept when
-/// the record already names the machine just paired with, since it is a
-/// name in that machine's catalogue, whenever it was remembered; a pairing
-/// with any other machine starts with nothing remembered.
+/// The ticket, the key and the port are this dial's. The model and the name
+/// are kept when the record already names the machine just paired with,
+/// since both are that machine's, whenever they were remembered; a pairing
+/// with any other machine starts with neither.
 ///
 /// Settings keep one pairing, so one with another machine drops that
-/// machine's key, and the fingerprint of that machine is returned for `join`
-/// to say so (#1042). `None` when nothing was stored, or when the record named
-/// the machine just paired with: that re-pairing replaces a key, not a
-/// machine. A stored ticket this build cannot read names no machine, and is
-/// `None` too.
+/// machine's key, and the name that machine was shown by
+/// ([`UNNAMED_PAIRED`] when it had none) is returned for `join` to say so
+/// (#1042). `None` when nothing was stored, or when the record named the
+/// machine just paired with: that re-pairing replaces a key, not a machine.
+/// A stored ticket this build cannot read names no machine, and is `None`
+/// too.
 ///
 /// Its failure says more than [`remember`]'s, and that is the point: by the
 /// time this runs the code is gone, so "could not store the pairing" is the
@@ -247,13 +209,16 @@ pub(super) async fn store_redeemed(
             Some(earlier) if names_the_same_machine(&earlier, ticket) => (Some(earlier), None),
             other => (None, other),
         };
-        *replaced.lock().unwrap_or_else(PoisonError::into_inner) =
-            gone.as_ref().and_then(fingerprint);
+        *replaced.lock().unwrap_or_else(PoisonError::into_inner) = gone
+            .filter(|gone| fingerprint(gone).is_some())
+            .map(|gone| gone.name.unwrap_or_else(|| UNNAMED_PAIRED.to_owned()));
+        let (default_model, name) = kept.map(|k| (k.default_model, k.name)).unwrap_or_default();
         *stored = Some(RemotePairing {
             ticket: ticket.to_string(),
             api_key: api_key.clone(),
-            default_model: kept.and_then(|kept| kept.default_model),
+            default_model,
             port: Some(port),
+            name,
         });
     })
     .await

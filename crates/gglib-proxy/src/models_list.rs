@@ -93,6 +93,18 @@ impl ModelsResponse {
     }
 }
 
+/// This machine's name, the first label of its host name.
+///
+/// `None` when [`gglib_core::domain::machine_name`] does not keep it. What
+/// [`ModelsResponse::machine_name`] publishes, and what a pairing tells the
+/// machine it pairs with this one is called.
+#[must_use]
+pub fn this_machine_name() -> Option<String> {
+    sysinfo::System::host_name()
+        .as_deref()
+        .and_then(gglib_core::domain::machine_name)
+}
+
 /// The extra endpoints a catalogued model can serve, for
 /// [`ModelInfo::capabilities`].
 ///

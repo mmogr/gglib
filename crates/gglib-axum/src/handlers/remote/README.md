@@ -67,8 +67,11 @@ The status is the response anything on this machine can ask for twice, so
 what it leaves out is as much the contract as what it carries: the ticket's
 fingerprint and never the ticket, peers by fingerprint, the connect side's
 port and path, what settings remember of the last pairing (again by
-fingerprint), the counters the tunnel's owner keeps, and device rows with no
-field a key could live in. Each row carries the daemon's own description of
-it, for a surface to print.
+fingerprint, and by the name the paired machine gave), the counters the
+tunnel's owner keeps, and device rows with no field a key could live in. Each
+row carries the daemon's own description of it, for a surface to print. The
+paired machine's fingerprint is its identity, which a surface compares;
+what a surface shows it as is that name, and the join answer carries the same
+name for the machine joined and for the pairing it replaced.
 
 <!-- module-docs:end -->

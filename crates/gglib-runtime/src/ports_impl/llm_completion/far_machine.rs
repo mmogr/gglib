@@ -38,14 +38,14 @@ pub struct FarMachine {
     ///
     /// Sent as `Authorization: Bearer …`, and read nowhere else.
     pub key: String,
-    /// The paired ticket's fingerprint.
+    /// The name the far machine is shown by: its own name, or the fallback
+    /// for one that gave none.
     ///
-    /// The only name this side has for the other side, and the one every
-    /// other remote surface already prints: `gglib remote status`, the CLI's
-    /// pre-turn banner and the join confirmation all name the far machine
-    /// this way, so a message built from it names something the user has
-    /// already been shown.
-    pub fingerprint: String,
+    /// The name every other remote surface prints: `gglib remote status`,
+    /// the CLI's pre-turn banner and the join confirmation all name the far
+    /// machine this way, so a message built from it names something the user
+    /// has already been shown. For a sentence only; nothing compares it.
+    pub name: String,
 }
 
 /// The `error.code` for a bearer that was not accepted.
@@ -92,11 +92,11 @@ impl FarMachine {
     pub(super) fn refusal(&self, code: Option<&str>) -> Option<String> {
         (code == Some(INVALID_API_KEY)).then(|| {
             format!(
-                "the remote machine {} is not admitting this device's key — it has either \
+                "{} is not admitting this device's key — it has either \
                  stopped trusting this device, or a key rotation there is still reaching the \
                  tunnel, which clears itself within a few seconds. If waiting does not fix it, \
                  pair again with a fresh `gglib remote invite` there",
-                self.fingerprint
+                self.name
             )
         })
     }

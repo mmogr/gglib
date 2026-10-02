@@ -22,8 +22,8 @@ use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppSta
 pub(super) struct Upstream {
     /// `http://127.0.0.1:<port>`, without the `/v1`.
     pub base_url: String,
-    /// The far machine on the remote path — its key and the fingerprint it
-    /// is known by; nothing locally.
+    /// The far machine on the remote path — its key and the name it is
+    /// shown by; nothing locally.
     pub far_machine: Option<FarMachine>,
     /// Resolved locally; passthrough for the remote, whose proxy resolves.
     pub model_context: ModelContext,
@@ -188,10 +188,10 @@ pub(super) fn hold(
 pub(super) fn remote(model: String, base_url: String, far_machine: FarMachine) -> Upstream {
     Upstream {
         base_url,
-        // The fingerprint travels with the key because only the `FarProxy`
-        // this was built from holds both: the request that fails on a rotated
-        // key comes back to the adapter, which by then has no way to ask who
-        // was asked.
+        // The name travels with the key because only the `FarProxy` this was
+        // built from holds both: the request that fails on a rotated key
+        // comes back to the adapter, which by then has no way to ask who was
+        // asked.
         far_machine: Some(far_machine),
         model_context: ModelContext::passthrough(),
         // The far machine counts its own guard decisions under this name, in

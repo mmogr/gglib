@@ -13,7 +13,7 @@ port: number,
  */
 base_url: string, 
 /**
- * Fingerprint of the ticket dialled.
+ * Fingerprint of the ticket dialled: the identity, never shown.
  */
 ticket_fingerprint: string, 
 /**

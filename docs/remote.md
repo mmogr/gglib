@@ -25,9 +25,20 @@ ticket and the key it received, so the next session is
 restarts on both machines, because the desktop keeps its endpoint key.
 
 The laptop stores one pairing. Joining a second desktop with its
-`<ticket>-<code>` replaces the first, and `join` names the fingerprint it
+`<ticket>-<code>` replaces the first, and `join` names the machine it
 replaced; reaching the first desktop again takes a fresh
 `gglib remote invite` there.
+
+Every surface on the laptop shows the desktop by its name: the first label of
+the desktop's host name (`desk` for `desk.local`), which the desktop gives on
+its `/v1/models` and the laptop reads each time it connects, so a desktop
+renamed to another plain label is shown by its new name from the next `join`.
+The ticket's fingerprint stays the desktop's identity, which is what is
+compared, and is not shown. A desktop that gives no name, or gives a host name
+that is not a plain label, keeps the last name it gave; one that has never
+given one is shown as "the paired machine". Pairing tells the desktop the
+laptop's own name the same way, as the name `gglib remote list` shows the
+device by there.
 
 To pair a second device later, `gglib remote invite` on the desktop: it
 offers another code against the tunnel that is already up, so nobody else
@@ -182,17 +193,17 @@ without it the ticket carries only the paths it was minted with, and now that
 the ticket lasts, "stops resolving" means for good rather than until the next
 `enable`. Paired devices then need a new pairing.
 
-`gglib remote status` shows both sides: whether the tunnel is up, the
-ticket's fingerprint (never the ticket), whether the code is still live,
-which peers are connected and by what path, and how many requests this machine
-has *served* through the tunnel. That last number is counted where the requests
-arrive, so it is printed only on the machine that is serving; the connecting
-side has nothing to count and is told to read the number over there rather than
-shown a zero of its own. `gglib remote disable` takes the tunnel down;
-nothing answers the ticket until the next `enable`, which brings the same one
-back. With no daemon running, `disable` switches remote access off in
-settings instead, so the next start does not put the tunnel back, and says
-so.
+`gglib remote status` shows both sides: whether the tunnel is up, the ticket's
+fingerprint (never the ticket), the machine this one has joined by its name,
+whether the code is still live, which peers are connected and by what path,
+and how many requests this machine has *served* through the tunnel. That last
+number is counted where the requests arrive, so it is printed only on the
+machine that is serving; the connecting side has nothing to count and is told
+to read the number over there rather than shown a zero of its own.
+`gglib remote disable` takes the tunnel down; nothing answers the ticket until
+the next `enable`, which brings the same one back. With no daemon running,
+`disable` switches remote access off in settings instead, so the next start
+does not put the tunnel back, and says so.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
@@ -405,12 +416,12 @@ and the uptime belong to a process on the desktop — and closing it leaves
 both the desktop's server and the tunnel up, as closing a local chat leaves
 its model loaded.
 
-**The desktop's own chats** are on the chat page too, once joined: *Other
-machine*, at the foot of the rail, lists, opens and carries on the desktop's
-chats live through this machine's daemon, which adds the key, and the
-desktop runs and saves each reply, so nothing of them is kept here but
-their "New" marks. A chat there is started, renamed, edited or deleted only
-on the desktop, and the margin names the device behind each turn.
+**The desktop's own chats** are on the chat page too, once joined: *desk's
+chats*, by the desktop's name, at the foot of the rail, lists, opens and
+carries on the desktop's chats live through this machine's daemon, which adds
+the key, and the desktop runs and saves each reply, so nothing of them is kept
+here but their "New" marks. A chat there is started, renamed, edited or
+deleted only on the desktop, and the margin names the device behind each turn.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `join` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
@@ -730,9 +741,9 @@ here is one the desktop can retire on its own.
 | `could not use the key this machine joins that remote with` | The laptop's endpoint key for that desktop, whose path the message names, is not a key, can be read by other accounts, or is not a regular file; the message gives the reason. It was not replaced. Do what the reason says — `chmod 600` a key others can read — or delete the file and run `gglib remote join` again: a new key is minted, and the desktop sees this laptop as a new endpoint. |
 | `could not make the key this machine joins that remote with` | The laptop had no key for that desktop, and could not write its first one at the path the message names: a full disk, a folder this user cannot write to, or a filesystem with no hard links, for example; the message gives the reason. There is no file to delete. Fix what the reason names and run `gglib remote join` again. |
 | `could not make …, where the key this machine joins with is kept` | The folder for the laptop's endpoint keys, which the message names, could not be made: a file is in its way, or this user cannot create a folder there. Move the file aside or fix the permissions, and run `gglib remote join` again. |
-| `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
-| `connected to the remote machine <fingerprint>, but this one holds no key for it` | The laptop is connected to a desktop whose key it does not hold: the stored pairing is another machine's, or there is none. Every request through the tunnel, `gglib daemon stop --remote` included, is refused here before anything is sent, so another machine's key never reaches this one. Run `gglib remote invite` on the desktop and `gglib remote join` with the full `<ticket>-<code>` string. |
-| `the paired machine runs an older gglib that publishes no model ids — update it` | `gglib model list --remote`, or the daemon's `/api/remote/models` route or one model's detail under it, asked the desktop for its models, and its gglib is from before models carried ids. Update gglib on the desktop; there is no fallback that lists them without ids. |
+| `<name> is not admitting this device's key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
+| `connected to a machine this one holds no key for` | The laptop is connected to a desktop whose key it does not hold: the stored pairing is another machine's, or there is none. Every request through the tunnel, `gglib daemon stop --remote` included, is refused here before anything is sent, so another machine's key never reaches this one. Run `gglib remote invite` on the desktop and `gglib remote join` with the full `<ticket>-<code>` string. |
+| `<name> runs an older gglib that publishes no model ids — update it` | `gglib model list --remote`, or the daemon's `/api/remote/models` route or one model's detail under it, asked the desktop for its models, and its gglib is from before models carried ids. Update gglib on the desktop; there is no fallback that lists them without ids. |
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |

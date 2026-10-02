@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 
 use super::FarProxy;
 use crate::error::GuiError;
-use crate::remote::stored_pairing::FarCredentials;
+use crate::remote::paired_machine::FarCredentials;
 
 /// Nothing listens here: a request that got as far as sending would fail as
 /// `Unavailable`, so a `ValidationFailed` proves it was never sent.
@@ -19,6 +19,7 @@ fn credentials() -> FarCredentials {
     FarCredentials {
         key: "sk-the-key".to_owned(),
         fingerprint: "0a1b2c3d4e5f".to_owned(),
+        name: None,
     }
 }
 
@@ -59,8 +60,9 @@ fn its_debug_form_never_prints_the_key() {
     assert!(shown.contains(NOWHERE), "{shown}");
 }
 
-/// It is always the paired machine it was built for, and the completion
-/// adapter is pointed at its root, where it adds the `/v1` itself.
+/// It is always the paired machine it was built for, shown by a name and
+/// never by its fingerprint, and the completion adapter is pointed at its
+/// root, where it adds the `/v1` itself.
 #[test]
 fn it_names_its_machine_and_its_root() {
     let far = FarProxy::new(NOWHERE, &credentials()).unwrap();
@@ -71,7 +73,8 @@ fn it_names_its_machine_and_its_root() {
         }
     );
     assert_eq!(far.server_root(), "http://127.0.0.1:9");
-    assert_eq!(far.far_machine().fingerprint, "0a1b2c3d4e5f");
+    assert_eq!(far.shown_name(), gglib_core::domain::UNNAMED_PAIRED);
+    assert_eq!(far.far_machine().name, gglib_core::domain::UNNAMED_PAIRED);
 }
 
 /// A far proxy on a loopback port that reads the request head, then answers

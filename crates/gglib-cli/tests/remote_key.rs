@@ -30,6 +30,7 @@ fn seeded(paired: bool) -> tempfile::TempDir {
             api_key: DEVICE_KEY.to_owned(),
             default_model: None,
             port: Some(8180),
+            name: None,
         });
     });
     root

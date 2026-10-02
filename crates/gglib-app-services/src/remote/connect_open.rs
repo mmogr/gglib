@@ -35,9 +35,11 @@ const FIRST_CONTACT: Duration = Duration::from_secs(30);
 /// allows `gglib remote join` sixty seconds in all, at
 /// `daemon_client/remote.rs`. After this wait `modelpipe::pair` gives the
 /// exchange up to thirty seconds of its own, which gglib cannot change, so
-/// twenty-five here makes fifty-five for the pairing, and a slow one ends in
-/// a sentence saying what happened rather than in the CLI's own timeout. A dial with no
-/// code has no exchange after its wait, so it keeps the full thirty.
+/// twenty-five here makes fifty-five for the pairing, and the three seconds
+/// the far machine's name may take to read after it make fifty-eight: a slow
+/// one ends in a sentence saying what happened rather than in the CLI's own
+/// timeout. A dial with no code has no exchange after its wait, so it keeps
+/// the full thirty.
 const REACH_WITHIN: Duration = Duration::from_secs(25);
 
 /// A pairing string as somebody pasted it, or as it was stored.
@@ -239,9 +241,10 @@ pub(super) async fn open(
     opts.discovery = request.discovery;
     opts.identity = Some(key.to_path_buf());
     if pairing.code().is_some() {
-        // No label: `gglib remote join` has never sent the far side a name
-        // for this machine, and the row there reads the same as it did.
-        let paired = modelpipe::pair(pairing, None, opts, REACH_WITHIN)
+        // This machine's name, as its own `/v1/models` publishes it, is the
+        // label the far side's device roster shows this device by.
+        let label = gglib_proxy::models::this_machine_name();
+        let paired = modelpipe::pair(pairing, label.as_deref(), opts, REACH_WITHIN)
             .await
             .map_err(NotOpened::Pair)?;
         return Ok(Opened {

@@ -37,10 +37,6 @@ const LIST_TIMEOUT: Duration = Duration::from_secs(3);
 /// tunnel and the load itself.
 const LOAD_TIMEOUT: Duration = Duration::from_mins(4);
 
-/// What a far machine on a build that publishes no model ids is told.
-const OLDER_FAR: &str =
-    "the paired machine runs an older gglib that publishes no model ids — update it";
-
 /// Why a read of the far proxy came back with no answer.
 #[derive(Debug)]
 pub enum FarError {
@@ -80,7 +76,7 @@ impl FarProxy {
         let body = accepted(self.send(request).await?).await?;
         serde_json::from_slice(&body).map_err(|e| {
             if e.to_string().contains("`gglib_id`") {
-                FarError::Failed(GuiError::Conflict(OLDER_FAR.to_owned()))
+                FarError::Failed(self.older())
             } else {
                 unreadable(&e)
             }
@@ -103,7 +99,7 @@ impl FarProxy {
             Err(FarError::Refused { status, body, .. })
                 if status == StatusCode::NOT_FOUND && !names_a_code(&body) =>
             {
-                Err(FarError::Failed(GuiError::Conflict(OLDER_FAR.to_owned())))
+                Err(FarError::Failed(self.older()))
             }
             read => decode(&read?),
         }
@@ -155,11 +151,11 @@ impl FarProxy {
             // a rotation there has not reached the tunnel yet. That is the
             // claim the chat path's refusal makes too.
             StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(format!(
-                "the remote machine {} is not admitting this device's key — it has either \
+                "{} is not admitting this device's key — it has either \
                  stopped trusting this device, or a key rotation there is still reaching the \
                  tunnel, which clears itself within a few seconds. If waiting does not fix it, \
                  pair again with a fresh `gglib remote invite` there",
-                self.fingerprint
+                self.shown_name()
             ))),
             StatusCode::CONFLICT => Err(GuiError::Conflict(
                 "the far proxy is not running under a daemon, so there is nothing to stop from \
@@ -170,6 +166,15 @@ impl FarProxy {
                 "the shutdown request was answered with {s}"
             ))),
         }
+    }
+
+    /// What a far machine on a build that publishes no model ids is told,
+    /// by the name it is shown by.
+    fn older(&self) -> GuiError {
+        GuiError::Conflict(format!(
+            "{} runs an older gglib that publishes no model ids — update it",
+            self.shown_name()
+        ))
     }
 }
 

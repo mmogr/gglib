@@ -2,7 +2,7 @@ import { FC } from 'react';
 import { List, Loader2, Plus, Search } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
-import { useRemoteState } from '../../services/remoteRegistry';
+import { pairedName, useRemoteState } from '../../services/remoteRegistry';
 import { cn } from '../../utils/cn';
 import type { ChatSource } from '../../services/transport';
 import { conversationsLabel } from './ConversationMarks';
@@ -29,25 +29,31 @@ interface ConversationRailProps {
   onSource: (source: ChatSource) => void;
 }
 
-/** Which machine answers, and how this page reaches it, in words. */
+/**
+ * Which machine answers, and how this page reaches it, in words. The paired
+ * machine is named as every surface names it: by its name, never its
+ * fingerprint.
+ */
 function useMachine(remote: boolean): { name: string; how: string; tone: 'ok' | 'away' | 'off'; title: string } {
-  const connection = useRemoteState().status?.connected ?? null;
+  const status = useRemoteState().status;
+  const connection = status?.connected ?? null;
+  const name = pairedName(status);
   if (!remote) {
     return { name: 'This machine', how: 'local', tone: 'ok', title: 'The model is served on this machine' };
   }
   if (!connection) {
-    return { name: 'Other machine', how: 'not connected', tone: 'off', title: 'The other machine is not connected' };
+    return { name, how: 'not connected', tone: 'off', title: `${name} is not connected` };
   }
   if (connection.away_for_s != null) {
     return {
-      name: 'Other machine',
+      name,
       how: `away ${connection.away_for_s}s`,
       tone: 'away',
-      title: `The other machine has been away for ${connection.away_for_s} seconds`,
+      title: `${name} has been away for ${connection.away_for_s} seconds`,
     };
   }
   const how = connection.path === 'relayed' ? 'relayed' : connection.path === 'direct' ? 'direct' : connection.path;
-  return { name: 'Other machine', how, tone: 'ok', title: `The other machine, reached ${how}` };
+  return { name, how, tone: 'ok', title: `${name}, reached ${how}` };
 }
 
 const TONE: Record<'ok' | 'away' | 'off', string> = {
@@ -76,7 +82,8 @@ export const ConversationRail: FC<ConversationRailProps> = ({
   onSource,
 }) => {
   const machine = useMachine(remote);
-  const connection = useRemoteState().status?.connected ?? null;
+  const status = useRemoteState().status;
+  const connection = status?.connected ?? null;
   return (
     <nav
       aria-label="Chat"
@@ -114,14 +121,14 @@ export const ConversationRail: FC<ConversationRailProps> = ({
       )}
       <div className="flex-1" />
       {connection || source === 'far' ? (
-        <SourceSwitch source={source} onSource={onSource} connection={connection} />
+        <SourceSwitch source={source} onSource={onSource} connection={connection} machine={pairedName(status)} />
       ) : (
         <div
           className="flex flex-col items-center gap-xs px-xs text-center text-2xs text-text-secondary"
           title={machine.title}
         >
           <span aria-hidden className={cn('w-[7px] h-[7px] rounded-full', TONE[machine.tone])} />
-          <span className="leading-tight">{machine.name}</span>
+          <span className="leading-tight wrap-anywhere">{machine.name}</span>
           <span className="font-mono tabular-nums">{machine.how}</span>
         </div>
       )}

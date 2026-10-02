@@ -12,6 +12,7 @@ fn pairing() -> RemotePairing {
         api_key: KEY.to_owned(),
         default_model: None,
         port: Some(8180),
+        name: None,
     }
 }
 

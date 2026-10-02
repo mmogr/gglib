@@ -66,6 +66,7 @@ pub(crate) fn paired_with(ticket: &str, api_key: &str) -> SettingsUpdate {
             api_key: api_key.to_owned(),
             default_model: None,
             port: None,
+            name: None,
         })),
         ..SettingsUpdate::default()
     }

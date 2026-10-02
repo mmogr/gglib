@@ -181,28 +181,35 @@ async fn stop_far(ctx: &CliContext, yes: bool) -> Result<()> {
         api_key: daemon_client::auth::daemon_api_key(ctx).await,
     };
     let status = handle.remote_status().await?;
-    let Some(connection) = status.connected.as_ref() else {
+    if status.connected.is_none() {
         anyhow::bail!("not connected to a remote \u{2014} `gglib remote join` first");
-    };
+    }
 
-    if !yes && std::io::stdin().is_terminal() && !confirm(&connection.ticket_fingerprint)? {
+    if !yes && std::io::stdin().is_terminal() && !confirm(status.paired_shown())? {
         eprintln!("  Left it running.");
         return Ok(());
     }
     handle.remote_kill().await?;
-    eprintln!(
-        "  \u{1f6d1} The remote daemon ({}) is stopping, and this side is disconnected.",
-        connection.ticket_fingerprint
-    );
+    eprintln!("{}", stopping_line(status.paired_shown()));
     eprintln!("  Nothing brings it back except someone at that machine.");
     Ok(())
 }
 
+/// What a stop of the paired machine's daemon says once it is under way,
+/// naming that machine as every other surface does: by its name, never its
+/// fingerprint.
+fn stopping_line(machine: &str) -> String {
+    format!("  \u{1f6d1} The gglib daemon on {machine} is stopping, and this side is disconnected.")
+}
+
+/// What the question says the stop will take down, and on which machine.
+fn question(machine: &str) -> String {
+    format!("  This stops the gglib daemon on {machine}: its proxy, its models, its downloads.")
+}
+
 /// The question, and the one answer that means yes.
-fn confirm(fingerprint: &str) -> Result<bool> {
-    eprintln!(
-        "  This stops the gglib daemon on {fingerprint}: its proxy, its models, its downloads."
-    );
+fn confirm(machine: &str) -> Result<bool> {
+    eprintln!("{}", question(machine));
     eprintln!("  It cannot be started again from here.");
     eprint!("  Type `shutdown` to go ahead: ");
     std::io::stderr().flush()?;
@@ -210,3 +217,7 @@ fn confirm(fingerprint: &str) -> Result<bool> {
     std::io::stdin().read_line(&mut input)?;
     Ok(input.trim() == "shutdown")
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod mod_tests;

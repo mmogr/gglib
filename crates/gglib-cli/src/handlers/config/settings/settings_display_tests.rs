@@ -150,6 +150,7 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
             api_key: "this-devices-key".to_owned(),
             default_model: None,
             port: None,
+            name: None,
         }),
         ..Default::default()
     };

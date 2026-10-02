@@ -14,6 +14,7 @@ mod gateway;
 mod identity;
 mod invite_watch;
 pub(crate) mod key;
+mod paired_machine;
 mod pairing;
 mod resume_wait;
 mod roster;
@@ -32,7 +33,7 @@ mod wire_exchange;
 
 pub use far_proxy::{FarError, FarProxy};
 pub use gateway::RemoteGateway;
-pub use stored_pairing::{FarCredentials, far_credentials};
+pub use paired_machine::{FarCredentials, far_credentials};
 pub use types::{EnableRequest, Enabled, JoinRequest, Joined, OfferedPairing};
 pub use wire::{
     PairedModels, RemoteConnection, RemoteDevice, RemoteForgotten, RemotePeer, RemoteStatus,

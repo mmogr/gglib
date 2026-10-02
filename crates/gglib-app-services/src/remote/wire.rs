@@ -13,7 +13,7 @@
 //! [`RemoteStatus::enabled`] and [`RemoteDevice::id`] is `#[serde(default)]`:
 //! an answer that lacks one still reads, with that field at its default.
 
-use gglib_core::domain::{Machine, ModelAction};
+use gglib_core::domain::{Machine, ModelAction, UNNAMED_PAIRED};
 use gglib_proxy::models::ModelInfo;
 use serde::{Deserialize, Serialize};
 
@@ -62,9 +62,15 @@ pub struct RemoteStatus {
     #[serde(default)]
     pub connected: Option<RemoteConnection>,
     /// Fingerprint of the ticket a bare `join` would dial, from the stored
-    /// pairing. Never the ticket.
+    /// pairing. Never the ticket, and never shown: it is the identity.
     #[serde(default)]
     pub stored_ticket_fingerprint: Option<String>,
+    /// The name the stored pairing has for the paired machine, which is what
+    /// a surface shows it as. `None` when nothing is stored or that machine
+    /// has given no name; a surface then shows its own words for it, never
+    /// the fingerprint.
+    #[serde(default)]
+    pub paired_name: Option<String>,
     /// Whether this machine holds a key from an earlier pairing.
     #[serde(default)]
     pub has_remote_key: bool,
@@ -91,6 +97,15 @@ pub struct RemoteStatus {
     pub devices: Vec<RemoteDevice>,
 }
 
+impl RemoteStatus {
+    /// What a sentence calls the paired machine: [`Self::paired_name`], or
+    /// [`UNNAMED_PAIRED`] when there is none.
+    #[must_use]
+    pub fn paired_shown(&self) -> &str {
+        self.paired_name.as_deref().unwrap_or(UNNAMED_PAIRED)
+    }
+}
+
 /// One connected peer, by fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -113,7 +128,7 @@ pub struct RemoteConnection {
     /// `http://127.0.0.1:<port>/v1`.
     #[serde(default)]
     pub base_url: String,
-    /// Fingerprint of the ticket dialled.
+    /// Fingerprint of the ticket dialled: the identity, never shown.
     #[serde(default)]
     pub ticket_fingerprint: String,
     /// How this side is reaching the peer: `idle`, `direct`, `relayed`.

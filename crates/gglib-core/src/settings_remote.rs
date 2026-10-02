@@ -80,6 +80,13 @@ pub struct RemotePairing {
     /// gives.
     #[serde(default)]
     pub port: Option<u16>,
+
+    /// The name that machine goes by, as its `/v1/models` last gave it: what
+    /// every surface shows it as, refreshed on each connect. Shown, never
+    /// compared — the ticket is the machine — and it goes with the record
+    /// when the pairing does. `#[serde(default)]` for the reason above.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// How this machine was told to put its proxy on the tunnel, kept so a

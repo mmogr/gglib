@@ -101,8 +101,11 @@ pub struct Joined {
     pub port: u16,
     /// `http://127.0.0.1:<port>/v1`, ready to paste into a client.
     pub base_url: String,
-    /// Fingerprint of the ticket dialled.
+    /// Fingerprint of the ticket dialled: the machine's identity, not shown.
     pub ticket_fingerprint: String,
+    /// The name that machine goes by, as the stored pairing holds it once
+    /// this connect has read it; `None` when it has given none.
+    pub name: Option<String>,
     /// Whether this call redeemed a pairing code and stored the key, as
     /// opposed to reusing a key from an earlier pairing.
     pub paired: bool,
@@ -110,9 +113,10 @@ pub struct Joined {
     /// one, or the default — when it had to take another. `None` when the
     /// address stayed put.
     pub moved_from: Option<u16>,
-    /// Fingerprint of the other machine whose pairing this one replaced.
-    /// Settings keep one pairing, so pairing with a second machine drops
-    /// the first one's key. `None` when there was no other to replace, or
-    /// when the stored ticket could not be read to name one.
+    /// The name of the other machine whose pairing this one replaced, or
+    /// [`UNNAMED_PAIRED`](gglib_core::domain::UNNAMED_PAIRED) when it had
+    /// none. Settings keep one pairing, so pairing with a second machine
+    /// drops the first one's key. `None` when there was no other to replace,
+    /// or when the stored ticket could not be read to name one.
     pub replaced: Option<String>,
 }

@@ -31,7 +31,7 @@ pub(super) async fn serve_far(
         })?),
     };
     let paired = target.paired(ctx).await?;
-    let machine = &paired.connection.ticket_fingerprint;
+    let machine = &paired.name;
     eprintln!("  Asking {machine} to load '{identifier}'\u{2026}");
     let loaded = paired.handle.paired_load(identifier, num_ctx).await?;
     eprintln!(

@@ -235,8 +235,8 @@ impl Target {
 pub(crate) struct Upstream {
     /// `http://127.0.0.1:<port>`, without the `/v1` — the adapter adds it.
     pub base_url: String,
-    /// The far machine on the remote path — its key and the fingerprint it
-    /// is known by; nothing for a local server.
+    /// The far machine on the remote path — its key and the name it is
+    /// shown by; nothing for a local server.
     pub far_machine: Option<FarMachine>,
 }
 

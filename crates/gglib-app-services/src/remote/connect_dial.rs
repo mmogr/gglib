@@ -116,12 +116,17 @@ impl RemoteOps {
             away_since,
             port,
         ));
+        // Here and not before the install: the name is read through the
+        // connection, which `far` finds only once it is installed. Every
+        // connect passes this point, so the name follows a renamed machine.
+        let name = self.learn_name(&ticket_fingerprint).await;
         info!(ticket = %ticket_fingerprint, port, paired, ?moved_from, "connected to a remote");
         self.emitter.emit(AppEvent::remote_joined(port));
         Ok(Joined {
             port,
             base_url,
             ticket_fingerprint,
+            name,
             paired,
             moved_from,
             replaced,
@@ -175,6 +180,7 @@ mod tests {
             api_key: "key".to_owned(),
             default_model: None,
             port,
+            name: None,
         }
     }
 

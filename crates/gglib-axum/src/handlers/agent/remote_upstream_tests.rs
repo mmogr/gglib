@@ -150,7 +150,7 @@ fn a_remote_run_is_made_by_the_named_model_with_no_quantisation() {
         "http://127.0.0.1:7000".to_owned(),
         FarMachine {
             key: "key".to_owned(),
-            fingerprint: "fp".to_owned(),
+            name: "desk".to_owned(),
         },
     );
     assert_eq!(upstream.made_by.model, "qwen3");
