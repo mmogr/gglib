@@ -60,6 +60,13 @@ prints it. The port does not add it for you, on purpose — see
 `gglib q --remote` and `gglib chat --remote` need neither: they attach the
 key themselves.
 
+## Error codes
+
+Every error code gglib's proxy writes, in a refusal, in a stream's error frame
+or in a failed run, is listed with its type, HTTP status and meaning in
+[error-codes.json](error-codes.json). Match on `code`. gglib's tests check
+the file against the source.
+
 ## Sampling profiles
 
 Append `:coding` to a model name (e.g. `qwen3.6:coding`) to select a sampling

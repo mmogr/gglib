@@ -48,6 +48,10 @@ pub(crate) mod canonicalization;
 pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
+// Test-only: the published error codes' table and the checks that hold it to
+// the source and to docs/error-codes.json.
+#[cfg(test)]
+mod error_codes;
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,

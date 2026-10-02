@@ -567,6 +567,11 @@ curl -X POST http://localhost:8080/mcp \
 | 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 500 | Internal error |
 
+Every `code` this proxy writes, its runs' included, is listed with its type,
+status and meaning in [`docs/error-codes.json`](../../docs/error-codes.json).
+The table it is rendered from, `src/error_codes.rs`, is checked by its tests
+against the codes the crates write.
+
 ## History Truncation
 
 ### Problem
