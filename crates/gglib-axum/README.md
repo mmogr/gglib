@@ -92,6 +92,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
 | `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
+| `GET` | `/api/remote/models` | The paired machine's models, read through the tunnel, with what may be done to them there |
+| `GET` | `/api/remote/models/:model` | One of the paired machine's models, read in full |
+| `POST` | `/api/remote/models/:model/load` | Have one of the paired machine's models resident now |
 
 ## Usage
 

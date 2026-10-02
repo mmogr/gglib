@@ -2,7 +2,7 @@
 //!
 //! Two sides, as the tunnel has: `enable`/`disable`/`status` and the device
 //! routes are this machine serving, `join`/`disconnect`/`kill` and the far
-//! machine's chats and runs are this machine reaching another one.
+//! machine's chats, runs and models are this machine reaching another one.
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
@@ -43,4 +43,9 @@ pub(crate) fn remote_routes() -> Router<AppState> {
         .route("/runs", get(handlers::remote::list_runs))
         .route("/runs/{run_id}/events", get(handlers::remote::run_events))
         .route("/runs/{run_id}/cancel", post(handlers::remote::cancel_run))
+        // The far machine's models: read through the tunnel with the stored
+        // key, and loaded, never changed.
+        .route("/models", get(handlers::remote::list_models))
+        .route("/models/{model}", get(handlers::remote::model_detail))
+        .route("/models/{model}/load", post(handlers::remote::load_model))
 }

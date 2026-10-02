@@ -2,7 +2,8 @@
 //!
 //! Reading it, writing it, what a write that fails after the code has been
 //! spent has to say, and — in [`settle`] — which of those a dial that has
-//! come up owes. A sibling rather than more of `connect.rs`, because
+//! come up owes; and [`far_credentials`], the check its key passes on every
+//! request to that machine. A sibling rather than more of `connect.rs`, because
 //! `status.rs`'s status surface asks the same question of the same record
 //! as `join` does, and asking it in two places is how the two drift.
 
@@ -43,6 +44,47 @@ pub(super) fn fingerprint(stored: &RemotePairing) -> Option<String> {
 /// cannot be shown to have issued it.
 pub(super) fn names_the_same_machine(stored: &RemotePairing, ticket: &Ticket) -> bool {
     fingerprint(stored).is_some_and(|stored| stored == ticket.fingerprint())
+}
+
+/// What this machine may send to the machine it is connected to: the key it
+/// holds for that machine, and that machine's fingerprint. No `Debug`, so the
+/// key cannot be formatted into a log line by accident.
+pub struct FarCredentials {
+    /// The key that machine issued this one when they paired.
+    pub key: String,
+    /// The ticket fingerprint of the machine connected to.
+    pub fingerprint: String,
+}
+
+/// The one check every request to the far machine passes: the stored key,
+/// only when the stored pairing names the machine connected to.
+///
+/// `join` keeps the two in agreement, by refusing a bare ticket for a machine
+/// this one holds no key for. This checks it again where the key leaves, so a
+/// key one machine issued is never shown to another (#1042), whichever
+/// surface is sending it.
+///
+/// # Errors
+///
+/// `Conflict` when nothing is stored, or what is stored is another machine's
+/// pairing: both are what a fresh pairing fixes, and the message says so.
+pub fn far_credentials(
+    stored: Option<&RemotePairing>,
+    connected_fingerprint: &str,
+) -> Result<FarCredentials, GuiError> {
+    stored
+        .filter(|stored| fingerprint(stored).as_deref() == Some(connected_fingerprint))
+        .map(|stored| FarCredentials {
+            key: stored.api_key.clone(),
+            fingerprint: connected_fingerprint.to_owned(),
+        })
+        .ok_or_else(|| {
+            GuiError::Conflict(format!(
+                "connected to the remote machine {connected_fingerprint}, but this one holds no \
+                 key for it — pair again with the full `<ticket>-<code>` string from \
+                 `gglib remote invite` there, then `gglib remote join` with it"
+            ))
+        })
 }
 
 /// What a dial that has come up did to the stored record.

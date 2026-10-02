@@ -347,11 +347,11 @@ and profiles, not this machine's. Name it the first time; after that
 pairing, because it is a name in that machine's catalogue — and a turn that
 names none uses it. Before anything is remembered, a turn that names none
 is refused here with a sentence that says so, rather than answered
-`404 Model '' not found` from the other end. `gglib model list` on the
-desktop is the list to choose from. The ID form the positional also accepts
-means the desktop's id from that list — `gglib chat 7 --remote` sends
-`"model": "7"`, and the desktop serves its own model 7 unless it is pinned to
-another.
+`404 Model '' not found` from the other end. `gglib model list --remote` on
+the laptop is the list to choose from: each of the desktop's models by its id
+there. The ID form the positional also accepts means the desktop's id from
+that list — `gglib chat 7 --remote` sends `"model": "7"`, and the desktop
+serves its own model 7 unless it is pinned to another.
 
 A `{model}:{profile}` suffix travels with the name and is resolved by the
 desktop against **its** profiles, which are the ones that govern how it
@@ -367,8 +367,8 @@ it.
 | Command | With `--remote` |
 |---|---|
 | `chat`, `q` | A turn on the desktop, as above. |
-| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the name and a numeric `--ctx-size` travel. |
-| `model list` | The desktop's catalogue as its proxy publishes it — the names a turn can ask for, and the context each would be served with. |
+| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the model's id or name and a numeric `--ctx-size` travel. |
+| `model list` | The desktop's catalogue as its proxy publishes it, one row per model: its id on the desktop, its name, the context it would be served with, and the profiles it can be asked for with. A turn names one as `<id>` or `<id>:<profile>`. |
 | `proxy dashboard` | The desktop proxy's live dashboard, through the tunnel. |
 | `proxy cache-clear` | Clear the desktop proxy's prompt cache. |
 | `daemon stop` | Stop the desktop's daemon. Asks you to type `shutdown`; `--yes` for scripts. |
@@ -731,6 +731,8 @@ here is one the desktop can retire on its own.
 | `could not make the key this machine joins that remote with` | The laptop had no key for that desktop, and could not write its first one at the path the message names: a full disk, a folder this user cannot write to, or a filesystem with no hard links, for example; the message gives the reason. There is no file to delete. Fix what the reason names and run `gglib remote join` again. |
 | `could not make …, where the key this machine joins with is kept` | The folder for the laptop's endpoint keys, which the message names, could not be made: a file is in its way, or this user cannot create a folder there. Move the file aside or fix the permissions, and run `gglib remote join` again. |
 | `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
+| `connected to the remote machine <fingerprint>, but this one holds no key for it` | The laptop is connected to a desktop whose key it does not hold: the stored pairing is another machine's, or there is none. Every request through the tunnel, `gglib daemon stop --remote` included, is refused here before anything is sent, so another machine's key never reaches this one. Run `gglib remote invite` on the desktop and `gglib remote join` with the full `<ticket>-<code>` string. |
+| `the paired machine runs an older gglib that publishes no model ids — update it` | `gglib model list --remote`, or the daemon's `/api/remote/models` route or one model's detail under it, asked the desktop for its models, and its gglib is from before models carried ids. Update gglib on the desktop; there is no fallback that lists them without ids. |
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |

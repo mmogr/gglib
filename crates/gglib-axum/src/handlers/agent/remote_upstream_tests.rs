@@ -145,7 +145,14 @@ async fn a_local_model_without_a_quantisation_has_none() {
 /// the model it named, and has no quantisation.
 #[test]
 fn a_remote_run_is_made_by_the_named_model_with_no_quantisation() {
-    let upstream = remote("qwen3".to_owned(), 7000, "fp".to_owned(), "key".to_owned());
+    let upstream = remote(
+        "qwen3".to_owned(),
+        "http://127.0.0.1:7000".to_owned(),
+        FarMachine {
+            key: "key".to_owned(),
+            fingerprint: "fp".to_owned(),
+        },
+    );
     assert_eq!(upstream.made_by.model, "qwen3");
     assert_eq!(upstream.made_by.quantization, None);
 }

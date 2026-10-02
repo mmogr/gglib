@@ -21,9 +21,10 @@ gglib-mcp = { path = "../gglib-mcp" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
 # For `loopback`, the one builder of an HTTP client for a server on this machine
-# (the far daemon's shutdown route over the pipe's local port, the benchmark's
-# llama-server; see #1085), and for `serve`, which the agentic eval's proxy arm
-# starts in-process in front of the model it holds (#1047).
+# (the far proxy over the pipe's local port, the benchmark's llama-server; see
+# #1085), for `serve`, which the agentic eval's proxy arm starts in-process in
+# front of the model it holds (#1047), and for the shapes the far proxy's model
+# list and load answer with, which this side reads them into.
 gglib-proxy = { path = "../gglib-proxy" }
 # Pure-domain agentic loop (no HTTP/infra deps of its own — see its own
 # Cargo.toml). Used only by the tune service to drive AgentLoop::build()
@@ -67,8 +68,9 @@ futures-util = "0.3"
 #
 # Forwards to `gglib-core`: the DTOs here embed domain types (`InferenceConfig`,
 # `DefaultsOrigin`, …), and ts-rs needs `TS` on the whole reachable graph, not
-# just the outermost struct.
-ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
+# just the outermost struct. Forwards to `gglib-proxy` for the same reason:
+# `PairedModels` embeds the proxy's `ModelInfo`.
+ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-proxy/ts-bindings"]
 
 [dev-dependencies]
 # The same tokio as above, plus the virtual clock. Declared rather than left

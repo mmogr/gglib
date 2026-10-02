@@ -111,9 +111,9 @@ fn remote_model(req: &AgentChatRequest) -> Result<String, HttpError> {
 /// # Errors
 ///
 /// Locally, whatever `validate_port` says. Remotely, `409` when this machine
-/// is not connected, or is connected but holds no key — both are things
-/// `gglib remote join` fixes, and the message says so — and `400` when the
-/// body named no model, which nothing downstream can fix.
+/// is not connected, or holds no key for the machine it is connected to —
+/// `RemoteOps::far` refuses both, in words that name the fix — and `400` when
+/// the body named no model, which nothing downstream can fix.
 pub(super) async fn resolve(
     state: &AppState,
     req: &AgentChatRequest,
@@ -128,34 +128,8 @@ pub(super) async fn resolve(
     // `400` whether or not a tunnel happens to be up.
     let model = remote_model(req)?;
 
-    let Some(connection) = state.remote.status().await.connected else {
-        return Err(HttpError::Conflict(
-            "not connected to a remote machine — `gglib remote join` first".to_owned(),
-        ));
-    };
-    // The core settings, not the GUI's `AppSettings`: the key is deliberately
-    // absent from the shapes the settings panel reads.
-    let key = state
-        .core
-        .settings()
-        .get()
-        .await
-        .map_err(|e| HttpError::Internal(format!("could not read settings: {e}")))?
-        .remote_pairing
-        .map(|stored| stored.api_key)
-        .ok_or_else(|| {
-            HttpError::Conflict(
-                "connected to a remote machine, but this one holds no key for it — pair again \
-                 with the full `<ticket>-<code>` string"
-                    .to_owned(),
-            )
-        })?;
-    Ok(remote(
-        model,
-        connection.port,
-        connection.ticket_fingerprint,
-        key,
-    ))
+    let far = state.remote.far().await?;
+    Ok(remote(model, far.server_root(), far.far_machine()))
 }
 
 /// A local request's upstream, once its port is known to serve `server`.
@@ -209,15 +183,16 @@ pub(super) fn hold(
     })
 }
 
-/// A remote request's upstream: the tunnel's `port`, the far machine's key
-/// and the fingerprint it is known by, and the `model` named there.
-pub(super) fn remote(model: String, port: u16, fingerprint: String, key: String) -> Upstream {
+/// A remote request's upstream: the far proxy's root through the tunnel,
+/// the far machine as the adapter carries it, and the `model` named there.
+pub(super) fn remote(model: String, base_url: String, far_machine: FarMachine) -> Upstream {
     Upstream {
-        base_url: format!("http://127.0.0.1:{port}"),
-        // The fingerprint travels with the key because only this function
-        // knows both: the request that fails on a rotated key comes back to
-        // the adapter, which by then has no way to ask who was asked.
-        far_machine: Some(FarMachine { key, fingerprint }),
+        base_url,
+        // The fingerprint travels with the key because only the `FarProxy`
+        // this was built from holds both: the request that fails on a rotated
+        // key comes back to the adapter, which by then has no way to ask who
+        // was asked.
+        far_machine: Some(far_machine),
         model_context: ModelContext::passthrough(),
         // The far machine counts its own guard decisions under this name, in
         // its own ledger; this one counts what it composed here.

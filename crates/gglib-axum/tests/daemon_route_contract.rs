@@ -158,7 +158,7 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
             broken.push(format!("  {complaint}"));
         }
     }
-    for (methods, path) in daemon::remote_chat_route_contract() {
+    for (methods, path) in daemon::remote_route_contract() {
         if let Some(complaint) = check(&app, methods, &path).await {
             broken.push(format!("  {complaint}"));
         }

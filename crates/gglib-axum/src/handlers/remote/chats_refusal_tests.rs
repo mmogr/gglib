@@ -5,8 +5,8 @@
 
 use axum::http::{StatusCode, header};
 
+use super::super::super::fake_far::{far, json, read};
 use super::super::{RemoteTurnBody, add_turn_via, list_chats_via, open_chat_via, run_events_via};
-use super::{far, json, read};
 
 #[tokio::test]
 async fn a_far_refusal_keeps_its_status_and_code_in_the_daemons_shape() {

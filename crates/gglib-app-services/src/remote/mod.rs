@@ -9,8 +9,7 @@ mod device_runs;
 mod device_view;
 mod devices;
 mod enrolment;
-mod far_chats;
-mod far_daemon;
+mod far_proxy;
 mod gateway;
 mod identity;
 mod invite_watch;
@@ -31,10 +30,13 @@ mod types;
 mod wire;
 mod wire_exchange;
 
-pub use far_chats::FarChats;
+pub use far_proxy::{FarError, FarProxy};
 pub use gateway::RemoteGateway;
+pub use stored_pairing::{FarCredentials, far_credentials};
 pub use types::{EnableRequest, Enabled, JoinRequest, Joined, OfferedPairing};
-pub use wire::{RemoteConnection, RemoteDevice, RemoteForgotten, RemotePeer, RemoteStatus};
+pub use wire::{
+    PairedModels, RemoteConnection, RemoteDevice, RemoteForgotten, RemotePeer, RemoteStatus,
+};
 pub use wire_exchange::{
     RemoteEnableBody, RemoteEnableResponse, RemoteJoinBody, RemoteJoinResponse,
 };
