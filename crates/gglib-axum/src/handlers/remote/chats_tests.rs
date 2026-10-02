@@ -1,122 +1,16 @@
 //! Each forward against a fake far proxy on a loopback port: the path it
 //! reaches, the key it carries, the body it sends, and what comes back.
 
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::Router;
-use axum::body::{Body, Bytes, to_bytes};
-use axum::extract::{Request, State};
 use axum::http::{StatusCode, header};
-use axum::response::Response;
-use gglib_app_services::FarChats;
 use http_body_util::BodyExt;
-use tokio::sync::{Notify, mpsc};
-use tokio_stream::wrappers::ReceiverStream;
 
+use super::super::fake_far::{KEY, carries_key, far, json, only, read};
 use super::{
     RemoteTurnBody, add_turn_via, cancel_run_via, list_chats_via, list_runs_via, open_chat_via,
     run_events_via,
 };
-
-const KEY: &str = "sk-far-key-for-this-device";
-
-/// One request the far proxy saw.
-#[derive(Debug, Clone)]
-struct Seen {
-    method: String,
-    uri: String,
-    bearer: Option<String>,
-    body: String,
-}
-
-/// What the far proxy answers, and what it saw.
-struct Fake {
-    seen: Mutex<Vec<Seen>>,
-    status: Mutex<u16>,
-    body: Mutex<String>,
-    retry_after: Mutex<Option<&'static str>>,
-    /// Holds a run's stream after its first frame until notified.
-    release: Notify,
-}
-
-async fn answer(State(fake): State<Arc<Fake>>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
-    let body = to_bytes(body, usize::MAX).await.unwrap();
-    fake.seen.lock().unwrap().push(Seen {
-        method: parts.method.to_string(),
-        uri: parts.uri.to_string(),
-        bearer: parts
-            .headers
-            .get(header::AUTHORIZATION)
-            .map(|v| v.to_str().unwrap().to_owned()),
-        body: String::from_utf8_lossy(&body).into_owned(),
-    });
-    if parts.uri.path().ends_with("/events") && *fake.status.lock().unwrap() == 200 {
-        let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(4);
-        let fake = Arc::clone(&fake);
-        tokio::spawn(async move {
-            let frame = |text: &str| Ok(Bytes::from(text.to_owned()));
-            tx.send(frame("id: 1\ndata: {\"n\":1}\n\n")).await.unwrap();
-            fake.release.notified().await;
-            tx.send(frame("id: 2\ndata: {\"n\":2}\n\n")).await.unwrap();
-            tx.send(frame("event: run\ndata: {\"status\":\"completed\"}\n\n"))
-                .await
-                .unwrap();
-        });
-        return Response::builder()
-            .header(header::CONTENT_TYPE, "text/event-stream")
-            .body(Body::from_stream(ReceiverStream::new(rx)))
-            .unwrap();
-    }
-    let mut response = Response::builder()
-        .status(*fake.status.lock().unwrap())
-        .header(header::CONTENT_TYPE, "application/json");
-    if let Some(value) = *fake.retry_after.lock().unwrap() {
-        response = response.header(header::RETRY_AFTER, value);
-    }
-    response
-        .body(Body::from(fake.body.lock().unwrap().clone()))
-        .unwrap()
-}
-
-/// A fake far proxy answering `status` with `body`, and a `FarChats` at it.
-async fn far(status: u16, body: &str) -> (Arc<Fake>, FarChats) {
-    let fake = Arc::new(Fake {
-        seen: Mutex::new(Vec::new()),
-        status: Mutex::new(status),
-        body: Mutex::new(body.to_owned()),
-        retry_after: Mutex::new(None),
-        release: Notify::new(),
-    });
-    let app = Router::new().fallback(answer).with_state(Arc::clone(&fake));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let client = FarChats::new(&format!("http://127.0.0.1:{port}/v1"), KEY).unwrap();
-    (fake, client)
-}
-
-/// Whether a request carried this device's key as its bearer.
-fn carries_key(seen: &Seen) -> bool {
-    seen.bearer.as_deref() == Some(format!("Bearer {KEY}").as_str())
-}
-
-fn only(fake: &Fake) -> Seen {
-    let seen = fake.seen.lock().unwrap();
-    assert_eq!(seen.len(), 1, "{seen:?}");
-    seen[0].clone()
-}
-
-async fn read(response: Response) -> (StatusCode, String) {
-    let status = response.status();
-    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, String::from_utf8_lossy(&bytes).into_owned())
-}
-
-fn json(text: &str) -> serde_json::Value {
-    serde_json::from_str(text).unwrap()
-}
 
 #[tokio::test]
 async fn a_listing_reaches_the_far_chats_with_the_key_and_comes_back_as_it_was() {

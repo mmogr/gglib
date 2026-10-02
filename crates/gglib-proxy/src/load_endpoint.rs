@@ -30,14 +30,17 @@ pub(crate) struct LoadRequest {
     pub num_ctx: Option<u64>,
 }
 
-/// What it answers once the model is resident.
-#[derive(Debug, Serialize)]
-pub(crate) struct LoadResponse {
-    /// The model, by the name it was asked for.
+/// What it answers once the model is resident. It also deserializes, for a
+/// paired machine that reads the answer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct LoadResponse {
+    /// The model, by the name it resolved to.
     pub model: String,
     /// Whether this call started it, as opposed to finding it running.
     pub started: bool,
     /// The context it is serving with.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub context: u64,
 }
 

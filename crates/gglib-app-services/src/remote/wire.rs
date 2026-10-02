@@ -1,18 +1,20 @@
 //! The remote tunnel's daemon API as one set of shapes, which `ts-rs`
 //! exports for the GUI. This file has what the tunnel reports, which the
-//! daemon serialises and the CLI reads: the status, its device rows, and what
-//! a `forget` did. [`wire_exchange`](super::wire_exchange) has the enable and
-//! join exchanges.
+//! daemon serialises and the CLI reads: the status, its device rows, what
+//! a `forget` did, and the paired machine's models.
+//! [`wire_exchange`](super::wire_exchange) has the enable and join exchanges.
 //!
 //! What is absent is the point. The ticket and the pairing code appear in one
 //! response, the enable answer, which `invite` answers with too. The status is
 //! a `GET`, the verb anything can call twice, so it carries fingerprints and
 //! never a ticket, and its device rows have no field a key could live in.
 //!
-//! Every field but [`RemoteStatus::enabled`] and [`RemoteDevice::id`] is
-//! `#[serde(default)]`: an answer that lacks one still reads, with that field
-//! at its default.
+//! Every field of the status, its rows and a `forget`'s answer but
+//! [`RemoteStatus::enabled`] and [`RemoteDevice::id`] is `#[serde(default)]`:
+//! an answer that lacks one still reads, with that field at its default.
 
+use gglib_core::domain::{Machine, ModelAction};
+use gglib_proxy::models::ModelInfo;
 use serde::{Deserialize, Serialize};
 
 /// `GET /api/remote/status`, and the answer to `disable`, `disconnect` and
@@ -197,6 +199,25 @@ pub struct RemoteForgotten {
     /// can ignore it.
     #[serde(default)]
     pub forgotten: bool,
+}
+
+/// `GET /api/remote/models`: the paired machine's models, read through the
+/// tunnel, with what may be done to them.
+///
+/// `models` is every entry that machine's `/v1/models` publishes, in its
+/// order, profile variants included: a variant is `{name}:{profile}`, names
+/// its profile and shares its base model's `gglib_id`. A surface that shows
+/// one row per model folds the variants into their base.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct PairedModels {
+    /// The machine the models are on.
+    pub machine: Machine,
+    /// What may be done to a model there: [`Machine::actions`], so a surface
+    /// renders the table rather than restating it.
+    pub actions: Vec<ModelAction>,
+    /// Every entry its `/v1/models` lists.
+    pub models: Vec<ModelInfo>,
 }
 
 #[cfg(test)]

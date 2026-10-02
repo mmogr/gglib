@@ -130,9 +130,11 @@ pub(super) fn paced(
         // a local run is made by resolves one (see `run_made_tests`).
         made_by: super::remote_upstream::remote(
             "qwen".to_owned(),
-            9000,
-            "fp".to_owned(),
-            "key".to_owned(),
+            "http://127.0.0.1:9000".to_owned(),
+            gglib_runtime::FarMachine {
+                key: "key".to_owned(),
+                fingerprint: "fp".to_owned(),
+            },
         )
         .made_by,
         local_model: None,

@@ -111,7 +111,14 @@ async fn a_local_upstream_names_its_model_and_a_remote_one_none() {
         Some((19_555, 3))
     );
 
-    let far = remote("qwen".to_owned(), 9000, "fp".to_owned(), "key".to_owned());
+    let far = remote(
+        "qwen".to_owned(),
+        "http://127.0.0.1:9000".to_owned(),
+        gglib_runtime::FarMachine {
+            key: "key".to_owned(),
+            fingerprint: "fp".to_owned(),
+        },
+    );
     assert_eq!(far.local_model, None);
 }
 

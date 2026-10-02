@@ -11,11 +11,23 @@ maps one `RemoteOps` call onto the wire.
 machine's chat page (`/api/remote/chats`, `/chats/{id}`,
 `/chats/{id}/turns/{run_id}`, `/runs`, `/runs/{run_id}/events`,
 `/runs/{run_id}/cancel`), each forwarded through the tunnel with the stored
-key by `gglib_app_services::FarChats`. A turn sends only `{content}`; the
-far machine adds the chat's history itself. Bodies pass through and events
-stream through as they come; nothing is kept. A far refusal keeps its status
-and code, but a refused key is a `409`, since a `401` would have the page ask
-for this daemon's own key.
+key by the `gglib_app_services::FarProxy` that `RemoteOps::far` builds. A
+turn sends only `{content}`; the far machine adds the chat's history itself.
+Bodies pass through and events stream through as they come; nothing is kept.
+A far refusal keeps its status and code, but a refused key is a `409`, since
+a `401` would have the page ask for this daemon's own key.
+
+`models.rs` is the far machine's models, through the same `FarProxy`:
+`GET /api/remote/models` answers `PairedModels` (the machine, what may be
+done to a model there, and every entry its `/v1/models` lists, profile
+variants included), `GET /api/remote/models/{model}` one model as a
+`ModelLookup`, and `POST /api/remote/models/{model}/load` a `LoadResponse`.
+`{model}` is an identifier that machine resolves, sent as one encoded path
+segment. These are read rather than passed through, so the CLI and the page
+parse far rows in one place; a refusal is handed on as the chats' are, and a
+far build too old to publish model ids is a `409` that asks for an update.
+Every far route is a `409` that says `gglib remote join` while this machine is
+joined to nothing.
 
 Two decisions live here rather than in `RemoteOps`:
 
@@ -47,8 +59,9 @@ no second shape to decode.
 The shapes are not here. They are `gglib-app-services`' (`remote/wire.rs` and
 `remote/wire_exchange.rs`): the daemon reads the enable and join bodies and
 answers with the rest, the CLI sends those bodies and reads the answers, and
-`ts-rs` exports them for the Remote panel. Only the kill body is this crate's,
-beside its handler in `join`.
+`ts-rs` exports them for the Remote panel. Only two bodies are this crate's:
+the kill body beside its handler in `join`, and the load body beside its
+handler in `models`.
 
 The status is the response anything on this machine can ask for twice, so
 what it leaves out is as much the contract as what it carries: the ticket's
