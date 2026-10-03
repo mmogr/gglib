@@ -6,6 +6,7 @@ mod enable;
 mod invite;
 mod join;
 mod key;
+mod pairing_layout;
 mod pairing_tui;
 
 use devices::{forget, list};
