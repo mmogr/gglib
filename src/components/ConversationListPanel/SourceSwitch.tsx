@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { Button } from '../ui/Button';
 import type { ChatSource, RemoteConnection } from '../../services/transport';
 import { cn } from '../../utils/cn';
 
@@ -41,24 +42,25 @@ export const SourceSwitch: FC<SourceSwitchProps> = ({ source, onSource, connecti
   return (
     <div role="group" aria-label="Whose chats" className="flex flex-col items-stretch gap-xs w-full px-xs">
       {choices.map((choice) => (
-        // Not the shared Button: it lays its children in a row, and here the
-        // name sits over how the machine is reached in a 56px column.
-        <button
+        <Button
           key={choice.id}
-          type="button"
+          variant="ghost"
+          size="sm"
           aria-pressed={source === choice.id}
           title={choice.title}
           onClick={() => onSource(choice.id)}
           className={cn(
-            'flex flex-col items-center gap-[2px] w-full rounded-base px-xs py-xs text-center text-2xs leading-tight',
-            'text-text-secondary cursor-pointer transition-colors duration-200 hover:text-text hover:bg-surface-elevated',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+            'h-auto px-xs py-xs text-2xs leading-tight',
             source === choice.id && 'bg-surface-elevated text-text',
           )}
         >
-          <span className="wrap-anywhere">{choice.name}</span>
-          <span className="font-mono tabular-nums text-text-muted">{choice.how}</span>
-        </button>
+          {/* One child, because Button lays its children in a row: the name
+              sits over how the machine is reached in a 56px column. */}
+          <span className="flex flex-col items-center gap-[2px] min-w-0 text-center">
+            <span className="wrap-anywhere">{choice.name}</span>
+            <span className="font-mono tabular-nums text-text-muted">{choice.how}</span>
+          </span>
+        </Button>
       ))}
     </div>
   );
