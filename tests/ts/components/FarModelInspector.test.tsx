@@ -35,8 +35,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function paired(reach: PairedReach = 'reached', actions?: ModelAction[]): PairedModelsState {
-  const group = pairedModels([farEntry('qwen3', 3)]);
+function paired(
+  reach: PairedReach = 'reached',
+  actions?: ModelAction[],
+  capabilities?: string[],
+): PairedModelsState {
+  const group = pairedModels([farEntry('qwen3', 3, { capabilities }), farEntry('llava', 4, { capabilities: ['vision'] })]);
   return { group: actions ? { ...group, actions } : group, name: 'desk', reach, refetch: vi.fn() };
 }
 
@@ -59,20 +63,25 @@ describe('FarModelInspector', () => {
   });
 
   it('marks a model that reads images, without a path or a picker for its projector', async () => {
-    daemons.models[3] = farDetail(3, 'qwen3', { imageInput: true });
-    render(<FarModelInspector model={model} paired={paired()} onChat={vi.fn()} />);
+    // What that machine lists decides it, as for the row: the detail here says otherwise.
+    daemons.models[3] = farDetail(3, 'qwen3', { imageInput: false });
+    render(<FarModelInspector model={model} paired={paired('reached', undefined, ['vision'])} onChat={vi.fn()} />);
 
     await screen.findByRole('heading', { name: 'qwen3' });
     expect(screen.getByText('Vision')).toBeInTheDocument();
     expect(screen.queryByText('Projector')).not.toBeInTheDocument();
   });
 
-  it('does not mark a model that does not read images', async () => {
-    render(<FarModelInspector model={model} paired={paired()} onChat={vi.fn()} />);
+  it.each([[undefined], [['embeddings']]])(
+    'does not mark a model its machine lists with capabilities %j, whatever another model or its detail has',
+    async (capabilities) => {
+      daemons.models[3] = farDetail(3, 'qwen3', { imageInput: true });
+      render(<FarModelInspector model={model} paired={paired('reached', undefined, capabilities)} onChat={vi.fn()} />);
 
-    await screen.findByRole('heading', { name: 'qwen3' });
-    expect(screen.queryByText('Vision')).not.toBeInTheDocument();
-  });
+      await screen.findByRole('heading', { name: 'qwen3' });
+      expect(screen.queryByText('Vision')).not.toBeInTheDocument();
+    },
+  );
 
   it('Load loads it there, reads it again, and then says it is serving and offers no Load', async () => {
     const state = paired();

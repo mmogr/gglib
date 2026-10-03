@@ -35,17 +35,16 @@ profile?: string, object: string, created: number, owned_by: string, description
  */
 context_window?: number, 
 /**
- * Non-OpenAI endpoints this model can serve, beyond
- * `/v1/chat/completions`.
+ * What this model can do beyond text chat.
  *
- * `Some(["embeddings"])` for a model tagged `embedding`; `None` — and so
- * absent from the JSON entirely — for everything else. A chat client's
- * picker is therefore byte-identical to what it saw before this field
- * existed, while a RAG client has something to filter on other than
- * guessing from the model's name.
+ * `"embeddings"` for a model tagged `embedding`, which serves
+ * `/v1/embeddings`; `"vision"` for a model linked to a projector, which
+ * reads `image_url` parts. `None` — and so absent from the JSON
+ * entirely — for a model that is neither, so a plain chat model's entry
+ * is byte-identical to what it was before this field existed.
  *
  * An array rather than a `type` discriminant because capability is not
  * exclusive: a future entry may serve both chat and embeddings, and
- * vision or tool support could join the same list without a second field.
+ * tool support could join the same list without a second field.
  */
 capabilities?: Array<string>, };

@@ -125,15 +125,17 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
-- **`truncation.rs`** — Stateless history truncation pass (Step 3 of the request pipeline)
-- **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget
+- **`image_refusal.rs`** — The pre-swap refusal of a chat completion that carries an image for a model with no projector (`model_cannot_read_images`); the rule and the words are `gglib_core::request_pipeline`'s — see [Images](#images)
+- **`body_limit.rs`** — The 32 MiB body limit of `POST /v1/chat/completions` and `PUT /v1/runs/{id}`, and the coded 413 (`request_too_large`) a larger body gets
+- **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget; a request that carried an image teaches it nothing
 - **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout / stalled) llama-server; feeds `DashboardSnapshot.upstream_health`
 - **`loopback.rs`** — The one builder of an HTTP client for a server on this machine: `no_proxy()` applied, so a request to `127.0.0.1` never goes through `HTTP_PROXY` or the system proxy (#1085); used by this crate's upstream client and by every other crate that talks to the daemon or llama-server
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
 - **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting, or, on a turn gglib's own grammar constrained, as a second draw under that same grammar. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
 - **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
 - **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`) and background LRU eviction
-- **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability, plus content-hash session-id fallback derivation
+- **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability
+- **`fallback_session.rs`** — The session id of a request that names none: a hash of its system prompt and its first user message, that message's images included
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
 - **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
@@ -320,8 +322,9 @@ grows later, because the proxy reads only `model` out of the body and forwards
 the rest as raw bytes.
 
 Which models can serve it is advertised by `/v1/models`: an embedding model's
-entry carries `"capabilities": ["embeddings"]`.  A chat model's entry is
-unchanged — the field is omitted entirely rather than sent as an empty array.
+entry carries `"capabilities": ["embeddings"]`.  A plain chat model's entry is
+unchanged — the field is omitted entirely rather than sent as an empty array —
+and one that reads images lists `"vision"` there (see [Images](#images)).
 
 #### Embedding mode is exclusive, and that has a cost
 
@@ -352,6 +355,34 @@ Two consequences follow, both deliberate:
 
 If a genuine embedding model is missing the tag, `gglib model retag <id>`
 re-derives it from the persisted GGUF metadata without re-reading the file.
+
+### Images
+
+A message may carry images as `image_url` parts, and the proxy forwards them
+to llama-server as the client sent them. Three things are the proxy's own:
+
+- **Which models read them.** A model linked to a projector
+  (`gglib model update <model> --projector <path>`) is launched with
+  `--mmproj`, and its `/v1/models` entry carries `"capabilities": ["vision"]`.
+- **A refusal by name.** A chat completion with an image anywhere in its
+  messages, history included, for a model with no projector is refused with
+  400 (`model_cannot_read_images`) *before* `admit` is called, beside the
+  embedding refusal and for the same reason: forwarded, it would load the
+  model, evicting whatever was serving, to collect llama-server's HTTP 500
+  "image input is not supported". The message names the model and the command
+  that links a projector.
+- **What an image costs.** llama-server turns an image into prompt tokens by
+  its pixels. [History truncation](#history-truncation) therefore counts each
+  image at its estimated tokens (one per 32x32 pixels, at most 4,096; the cap
+  when the size cannot be read from a PNG or JPEG header) times the
+  chars-per-token ratio in use, in place of the length of its base64. A
+  request that carried an image does not update that ratio, and the
+  content-hash session id of a chat covers the images in its first user
+  message, so the same words about two screenshots are two sessions.
+
+Both routes that take images, `POST /v1/chat/completions` and
+`PUT /v1/runs/{id}`, take a body of up to 32 MiB; a larger one is refused with
+413 (`request_too_large`).
 
 ### Inference Defaults Auto-Injection
 
@@ -607,6 +638,8 @@ curl -X POST http://localhost:8080/mcp \
 | 404 | Model not found |
 | 400 | Context window budget exceeded after truncation (also the answer when a *tripped* conversation cannot be trimmed to fit, in any mode) |
 | 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
+| 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
+| 413 | The body of a chat completion or a run is over 32 MiB (`request_too_large`) |
 | 500 | Internal error |
 
 Every `code` this proxy writes, its runs' included, is listed with its type,
@@ -656,7 +689,9 @@ model's nominal `context_length` instead.
 **Algorithm:**
 
 1. **Budget gate** — while the whole payload fits within budget it is
-   forwarded **unchanged**; no history is elided while there is room.
+   forwarded **unchanged**; no history is elided while there is room. The
+   payload is measured in wire bytes, except that an image counts as its
+   estimated tokens times `chars_per_token` (see [Images](#images)).
 2. **Oldest-first trim** — only when over budget, unprotected `role: "tool"` /
    `role: "assistant"` messages whose text exceeds 2,000 characters, in
    either content shape, are replaced **from oldest to newest**, stopping once the

@@ -5,10 +5,10 @@
 //! `GET /v1/models`, read through the tunnel by this machine's daemon — the
 //! same answer any client of that machine gets — so the columns are the ones
 //! that answer carries: the model's id there, the name it goes by, the
-//! context it would be served with, and the profiles it can be asked for
-//! with. The sort and filter flags describe this machine's catalogue and are
-//! not applied; the far list is short and arrives sorted as that machine
-//! sorts it.
+//! context it would be served with, whether it reads images, and the
+//! profiles it can be asked for with. The sort and filter flags describe
+//! this machine's catalogue and are not applied; the far list is short and
+//! arrives sorted as that machine sorts it.
 //!
 //! Without `--remote`, the local list ends with [`summary`]'s one line about
 //! the paired machine, which asks that machine nothing.
@@ -18,7 +18,7 @@ use std::fmt::Write as _;
 use anyhow::Result;
 use gglib_app_services::RemoteConnection;
 use gglib_core::domain::UNNAMED_PAIRED;
-use gglib_proxy::models::ModelInfo;
+use gglib_proxy::models::{ModelInfo, VISION_CAPABILITY};
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonHandle, DaemonProbe};
@@ -130,11 +130,14 @@ struct Row<'a> {
     id: i64,
     name: &'a str,
     context: Option<u64>,
+    /// Whether that machine lists it with the `vision` capability.
+    images: bool,
     profiles: Vec<&'a str>,
 }
 
 /// One row per `gglib_id`, in the order the far machine listed them: the
-/// base entry's name and context, and each variant's profile.
+/// base entry's name and context, each variant's profile, and image input
+/// when any of its entries lists it.
 fn rows(models: &[ModelInfo]) -> Vec<Row<'_>> {
     let mut rows: Vec<Row<'_>> = Vec::new();
     for model in models {
@@ -143,12 +146,14 @@ fn rows(models: &[ModelInfo]) -> Vec<Row<'_>> {
                 id: model.gglib_id,
                 name: base_name(model),
                 context: None,
+                images: false,
                 profiles: Vec::new(),
             });
         }
         let Some(row) = rows.iter_mut().find(|row| row.id == model.gglib_id) else {
             continue;
         };
+        row.images |= sees(model);
         if let Some(profile) = model.profile.as_deref() {
             row.profiles.push(profile);
         } else {
@@ -157,6 +162,15 @@ fn rows(models: &[ModelInfo]) -> Vec<Row<'_>> {
         }
     }
     rows
+}
+
+/// Whether the far machine lists `model` as reading images: the far spelling
+/// of the local list's `Images` column.
+fn sees(model: &ModelInfo) -> bool {
+    model
+        .capabilities
+        .as_deref()
+        .is_some_and(|all| all.iter().any(|c| c == VISION_CAPABILITY))
 }
 
 /// The name a variant's base goes by: its `id` without the `:{profile}`.
@@ -180,10 +194,10 @@ fn render(rows: &[Row<'_>]) -> String {
         .unwrap_or(0)
         .max(4);
     let mut out = format!(
-        "{:>id_width$}  {:<name_width$}  {:>9}  PROFILES\n",
-        "ID", "NAME", "CONTEXT"
+        "{:>id_width$}  {:<name_width$}  {:>9}  {:<6}  PROFILES\n",
+        "ID", "NAME", "CONTEXT", "IMAGES"
     );
-    out.push_str(&"-".repeat(id_width + name_width + 23));
+    out.push_str(&"-".repeat(id_width + name_width + 31));
     out.push('\n');
     for (row, id) in rows.iter().zip(&ids) {
         let context = row
@@ -194,9 +208,10 @@ fn render(rows: &[Row<'_>]) -> String {
         } else {
             row.profiles.join(", ")
         };
+        let images = if row.images { "yes" } else { "-" };
         let _ = writeln!(
             out,
-            "{id:>id_width$}  {:<name_width$}  {context:>9}  {profiles}",
+            "{id:>id_width$}  {:<name_width$}  {context:>9}  {images:<6}  {profiles}",
             row.name
         );
     }

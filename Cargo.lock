@@ -2479,6 +2479,7 @@ version = "0.22.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "bitflags 2.13.2",
  "chrono",
  "dirs 6.0.0",

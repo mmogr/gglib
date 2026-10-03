@@ -70,7 +70,7 @@ pub(crate) fn spawn_and_return(
     cache_metrics: Arc<CacheMetricsStore>,
     context_metrics: Arc<crate::metrics::ContextMetricsStore>,
     snapshot_seq: u64,
-    forwarded_chars: usize,
+    forwarded_chars: Option<usize>,
     client_wants_progress: bool,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,

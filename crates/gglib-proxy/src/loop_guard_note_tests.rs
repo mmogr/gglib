@@ -269,7 +269,11 @@ fn the_note_survives_a_truncation_that_trims_the_history_around_it() {
     // Half the payload: enough to force a trim of the unprotected head, and
     // still room for the protected tail, which truncation may not touch and
     // which is where the note lives.
-    let report = gglib_core::request_pipeline::truncate_history(&mut value, before / 2)
+    let budget = gglib_core::request_pipeline::ContextBudget {
+        chars: before / 2,
+        tokens: before / 8,
+    };
+    let report = gglib_core::request_pipeline::truncate_history(&mut value, budget)
         .expect("a conversation this shape can be trimmed to fit");
     assert!(
         report.messages_truncated > 0,

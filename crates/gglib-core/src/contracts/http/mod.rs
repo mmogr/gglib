@@ -8,6 +8,11 @@ pub use hf::*;
 // generic enough that a glob would make the call site ambiguous about which
 // surface's contract it means.
 
+/// The most bytes a request body may be on a route that takes images: the
+/// proxy's `POST /v1/chat/completions` and `PUT /v1/runs/{id}`. An image
+/// rides in the body as base64, a third larger than its file.
+pub const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
+
 /// `raw` as one URL path segment: every byte but an RFC 3986 unreserved one
 /// (`A-Z a-z 0-9 - . _ ~`) percent-encoded.
 ///

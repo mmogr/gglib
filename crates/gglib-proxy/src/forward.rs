@@ -75,8 +75,8 @@ use gglib_core::LlmStreamEvent;
 use gglib_core::domain::DialectSpec;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
-    self, ModelContext, SamplingDecision, SamplingLayers, SuppressedEffort, TruncationError,
-    TruncationReport,
+    self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, SuppressedEffort,
+    TruncationError, TruncationReport,
 };
 use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
 
@@ -417,6 +417,8 @@ struct ShapedRequest {
     body: Bytes,
     /// Zeroed when nothing was measured.
     truncation: TruncationReport,
+    /// Whether any message carries an image; `false` for a body never read.
+    carries_images: bool,
     /// Whether the pipeline originated a decode-time tool-call grammar.
     grammar_enforced: bool,
     /// What the sampling stage resolved, when it ran at all.
@@ -459,17 +461,18 @@ struct ShapedRequest {
 /// # Errors
 ///
 /// [`TruncationError`] when the conversation cannot be made to fit
-/// `budget_chars`.  The caller maps it to the wire contract.
+/// `budget`.  The caller maps it to the wire contract.
 fn shape_request_body(
     body: Bytes,
     ctx: &ModelContext,
     layers: &SamplingLayers,
-    budget_chars: Option<usize>,
+    budget: Option<ContextBudget>,
 ) -> Result<ShapedRequest, TruncationError> {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return Ok(ShapedRequest {
             body,
             truncation: TruncationReport::default(),
+            carries_images: false,
             grammar_enforced: false,
             sampling: None,
             // The pipeline never ran, so no stage could have suppressed
@@ -482,13 +485,15 @@ fn shape_request_body(
     // The constrain stage never engages over a client-sent grammar, so
     // before-absent + after-present is exactly "the pipeline originated one".
     let grammar_before = value.get("grammar").is_some();
-    let report = request_pipeline::apply(&mut value, ctx, layers, budget_chars)?;
+    let report = request_pipeline::apply(&mut value, ctx, layers, budget)?;
     let grammar_enforced = !grammar_before && value.get("grammar").is_some();
+    let carries_images = request_pipeline::has_images(&value);
 
     match serde_json::to_vec(&value) {
         Ok(v) => Ok(ShapedRequest {
             body: Bytes::from(v),
             truncation: report.truncation,
+            carries_images,
             grammar_enforced,
             sampling: Some(report.sampling),
             effort_suppressed: report.effort_suppressed,
@@ -504,6 +509,7 @@ fn shape_request_body(
             Ok(ShapedRequest {
                 body,
                 truncation: TruncationReport::default(),
+                carries_images,
                 grammar_enforced: false,
                 sampling: Some(sampling),
                 // Reported even though the shaped body was discarded, and
@@ -539,10 +545,7 @@ pub(crate) struct ForwardRequest<'a> {
     /// Model name to advertise to the client (used in the SSE envelope).
     pub model_name: &'a str,
     /// Live context size (tokens) the target llama-server was launched
-    /// with. Converted to a character budget (`× CHARS_PER_TOKEN_APPROX`)
-    /// for the history-truncation hard-abort; floored at the historical
-    /// default inside
-    /// [`truncate_history`](gglib_core::request_pipeline::truncate_history).
+    /// with: the history-truncation budget, at the calibrated ratio.
     pub effective_ctx: u64,
     /// This model's stored capabilities and tags, resolved once by
     /// `chat_completions` before admission.
@@ -678,7 +681,7 @@ pub(crate) async fn forward_chat_completion(
     // live serving context scaled by this model's calibrated chars-per-token
     // ratio, learned from prior usage frames and falling back to the static
     // approximation until the first observation lands. That is strictly better
-    // information than `ModelContext::context_budget_chars()` — which is what
+    // information than `ModelContext::context_budget()` — which is what
     // the agent path uses — so the proxy passes its own.
     //
     // When a session id is available, the ratio is frozen per-session rather
@@ -692,9 +695,12 @@ pub(crate) async fn forward_chat_completion(
         || calibration.chars_per_token(model_name),
         |sid| calibration.session_chars_per_token(model_name, sid, std::time::Instant::now()),
     );
-    let budget_chars = Some((effective_ctx as f64 * chars_per_token) as usize);
+    let budget = Some(ContextBudget {
+        chars: (effective_ctx as f64 * chars_per_token) as usize,
+        tokens: effective_ctx as usize,
+    });
 
-    let shaped = match shape_request_body(body, &context, &sampling, budget_chars) {
+    let shaped = match shape_request_body(body, &context, &sampling, budget) {
         Ok(shaped) => shaped,
         Err(e) => {
             // Hard abort: the conversation cannot be trimmed to fit. Record a
@@ -727,6 +733,7 @@ pub(crate) async fn forward_chat_completion(
     let ShapedRequest {
         body,
         truncation: report,
+        carries_images,
         grammar_enforced,
         sampling: decision,
         effort_suppressed,
@@ -825,10 +832,10 @@ pub(crate) async fn forward_chat_completion(
         // doc comment for why each is needed.
         let (body, client_wants_progress) = inject_streaming_body_overrides(body);
 
-        // Byte count of the payload actually forwarded upstream, paired with
-        // the usage frame's prompt-token count after streaming to calibrate
-        // this model's chars-per-token ratio.
-        let forwarded_chars = body.len();
+        // Bytes forwarded upstream, paired with the usage frame's prompt-token
+        // count to calibrate this model's chars-per-token ratio. `None` with
+        // an image aboard, whose tokens come from its pixels, not its length.
+        let forwarded_chars = (!carries_images).then_some(body.len());
 
         // Phase 1 — TCP probe (1 s timeout).
         let probe_addr = host_port_from_url(upstream_url);

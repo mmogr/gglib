@@ -14,8 +14,7 @@ import { guiModel } from '../fixtures/model';
 function header(imageInput: boolean, isEditMode = false) {
   render(
     <InspectorHeader
-      modelName="X"
-      imageInput={imageInput}
+      model={{ name: 'X', imageInput }}
       hasHfRepo={false}
       isEditMode={isEditMode}
       editedName="X"

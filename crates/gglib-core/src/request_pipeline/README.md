@@ -46,7 +46,16 @@ does either.
   call. Read by two stages for different purposes, so it lives in neither.
 - [`content`] — [`text_len()`] and [`for_each_text_mut()`], the two shapes a
   message's `content` takes (a string, or an array of parts), read and
-  rewritten in one place for every stage that handles message text.
+  rewritten in one place for every stage that handles message text; and
+  [`image_urls()`], the one walk over a message's `image_url` parts.
+- [`images`] — the one image policy. [`estimate_image_tokens()`] prices an
+  image by its pixels (one token per 32x32 square, at most 4,096), and
+  [`image_url_tokens()`] prices a URL, at the cap when its size cannot be
+  read. [`refuse_unless_can_see()`] refuses an image for a model with no
+  projector, and holds the error code and the remedy for every surface.
+- [`mod@image_size`] — [`image_size()`] and [`data_url_image_size()`]: a PNG's or
+  a JPEG's width and height from its header alone, decoding only a bounded
+  prefix of a base64 payload. Input cut short or not an image is `None`.
 
 **Shaping — what happens to the request**
 
@@ -59,6 +68,10 @@ does either.
   rejecting the request when it cannot be made to fit.
 - [`truncation_parts`] — `elide()`, the elision of one message in either
   content shape; kept beside `truncation`, which is at its file budget.
+- [`measure`] — [`ContextBudget`], the characters a request may measure and
+  the context in tokens they stand for, and the measurement stage 3 takes: a
+  request's serialized length, with each image counted at its estimated
+  tokens in place of the length of its URL.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stages 4–5: the
   sampling hierarchy, the floor selection (neutral / reasoning / tool-call), and
   the `cache_prompt` pin. Everything that touches top-level keys.
@@ -78,9 +91,10 @@ the stages: it posts straight to llama-server, as the note in its handler,
 
 ## The truncation budget
 
-Stage 3 needs a character budget, and it comes from the model:
-[`ModelContext::context_budget_chars`] converts the model's context length at
-[`CHARS_PER_TOKEN_APPROX`]. There is no floor — a 4,096-token model gets a
+Stage 3 needs a [`ContextBudget`], and it comes from the model:
+[`ModelContext::context_budget`] converts the model's context length at
+[`CHARS_PER_TOKEN_APPROX`], and keeps the token count beside the characters
+so an image's tokens can be counted at the same ratio. There is no floor — a 4,096-token model gets a
 ~16,000-character budget and a 262,144-token model gets a ~1,000,000-character
 one — so the same conversation is treated differently on different models,
 which is the point.

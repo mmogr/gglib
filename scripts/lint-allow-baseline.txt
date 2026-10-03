@@ -9,7 +9,7 @@ crates/gglib-app-services 51 16
 crates/gglib-hf 3 3
 crates/gglib-build-info 0 0
 crates/gglib-mcp 9 9
-crates/gglib-proxy 77 9
+crates/gglib-proxy 76 9
 crates/gglib-runtime 90 17
 crates/gglib-agent 5 5
 crates/gglib-sse 0 0

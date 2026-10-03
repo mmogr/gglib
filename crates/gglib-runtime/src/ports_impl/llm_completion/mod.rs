@@ -221,7 +221,7 @@ impl LlmCompletionAdapter {
                 agentic_adjustments: true,
                 ..Default::default()
             },
-            self.model_context.context_budget_chars(),
+            self.model_context.context_budget(),
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 
