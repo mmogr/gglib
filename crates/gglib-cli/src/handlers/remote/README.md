@@ -24,6 +24,8 @@ remote/
   pairing_tui.rs  — the pairing screen: QR + code in the alternate buffer,
                     gone the moment a device pairs, the code expires, or
                     the invite is withdrawn
+  pairing_layout.rs — what that screen shows in a window of a given size,
+                    painted without scrolling or erasing it
   join.rs         — `join`: this machine as the laptop, plus `disconnect`
   key.rs          — `gglib remote key`: this device's key, printed on
                     stdout alone under `--show`, for a client that is not
@@ -77,7 +79,16 @@ the same question first.
 `enable` is the one moment the ticket and the pairing code exist on a screen.
 They are drawn in the terminal's **alternate screen buffer**, the way `less`
 draws, so leaving it restores whatever was there and nothing is left in the
-scrollback for a later screenshot or `tmux` history to find. The screen polls
+scrollback for a later screenshot or `tmux` history to find. That second half
+needs more than the buffer: a terminal may keep what scrolls off it or is
+erased from it, so the screen is laid out to fit the window, whose size is
+read each second, and is never erased whole. A window made smaller in the
+moment between that read and the paint can still scroll once. Each second
+only the countdown is rewritten, which also leaves the join command
+selectable. A window too small for everything keeps the QR and drops the text
+around it; one too small for the QR shows the join command, with the size the
+QR needs when there is room to say it; and one too small for the join command
+says only that. The screen polls
 `GET /api/remote/status` once a second and leaves as soon as the daemon
 reports a device paired or the code gone, or when the code expires — an
 unattended terminal showing a credential indefinitely is the case this exists

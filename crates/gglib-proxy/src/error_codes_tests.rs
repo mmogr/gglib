@@ -45,7 +45,7 @@ const RELAYS: [(&str, &str, &str, &str); 26] = [
     ("gglib-axum/src/handlers/attachments.rs", "unfetched", "code", "an `AttachmentError`'s, from the `From` above"),
     ("gglib-axum/src/handlers/agent/image_gate.rs", "readable_by", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-cli/src/handlers/remote/pairing_tui.rs", "qr", "QrCode::new(pairing.to_uppercase()).ok()?", "a QR code, not an error's"),
-    ("gglib-cli/src/handlers/remote/pairing_tui.rs", "draw", "enabled.code.as_deref().unwrap_or_default()", "a pairing code, not an error's"),
+    ("gglib-cli/src/handlers/remote/pairing_layout.rs", "layout", r#"Line::plain(format!("  code    {}",clean(offer.code.as_deref().unwrap_or_default())))"#, "a pairing code, not an error's"),
     ("gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs", "classify", "err.error.code", "an upstream body's, kept to retry by, not written"),
     ("gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs", "describe", "error.code.as_deref().unwrap_or_default()", "an upstream body's, printed beside its type, not written"),
 ];
