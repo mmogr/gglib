@@ -1,10 +1,16 @@
 #![doc = include_str!("README.md")]
+mod enqueue;
+mod group_completion;
 mod paths;
 mod shard_group_tracker;
 mod worker;
 
 #[cfg(test)]
 mod duplicate_guard_tests;
+#[cfg(test)]
+mod group_registration_tests;
+#[cfg(test)]
+mod projector_group_tests;
 
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
@@ -15,7 +21,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 
-use gglib_core::utils::shard_filename::base_shard_filename;
 use tokio::sync::{Mutex, Notify, RwLock, watch};
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
@@ -490,9 +495,11 @@ impl DownloadManagerImpl {
         self.event_emitter.emit(app_event(event));
     }
 
-    /// Emit a `DownloadStarted` event, including shard info when available.
+    /// Emit a `DownloadStarted` event, with the shard's number for a weights
+    /// shard. A projector is not a shard and starts without one.
     fn emit_started_event(&self, item: &QueuedItem) {
-        if let Some(shard) = &item.shard_info {
+        let shard = item.shard_info.as_ref();
+        if let Some(shard) = shard.filter(|s| !s.role.is_projector()) {
             self.emit(DownloadEvent::started_shard(
                 item.id.to_string(),
                 shard.shard_index,
@@ -712,26 +719,14 @@ impl DownloadManagerImpl {
         shard_info: &ShardInfo,
         completed: CompletedJob,
     ) {
-        // Use stable base filename so all shards compute the same identity
-        let base_filename = completed
-            .files
-            .first()
-            .map_or_else(|| "unknown".to_string(), |f| base_shard_filename(f));
-
-        // Retrieve file entries with OIDs from map
+        // Retrieve the group's file entries, with OIDs and roles, from map
         let file_entries = {
             let map = self.file_entries_map.lock().await;
             map.get(&item.id.to_string()).cloned().unwrap_or_default()
         };
 
-        let metadata = GroupMetadata {
-            repo_id: completed.repo_id.clone(),
-            commit_sha: completed.commit_sha.clone(),
-            quantization: completed.quantization,
-            primary_filename: base_filename,
-            hf_tags: vec![],
-            file_entries,
-        };
+        // The same identity for every file of the group, the projector's too
+        let metadata = GroupMetadata::of(&completed, file_entries);
 
         let group_complete = {
             let mut tracker = self.shard_tracker.lock().await;
@@ -739,7 +734,7 @@ impl DownloadManagerImpl {
                 group_id,
                 shard_info.shard_index,
                 completed.primary_path.clone(),
-                shard_info.total_shards,
+                metadata.expected_files(shard_info),
                 &metadata,
             )
         };
@@ -748,8 +743,8 @@ impl DownloadManagerImpl {
         if let Some(complete) = group_complete {
             tracing::info!(
                 id = %item.id,
-                shard_count = complete.ordered_paths.len(),
-                "All shards downloaded, registering model"
+                file_count = complete.ordered_paths.len(),
+                "All files downloaded, registering model"
             );
             // Record completion ONCE per group (not per shard)
             self.record_completion_in_run(item, CompletionKind::Downloaded)
@@ -774,21 +769,9 @@ impl DownloadManagerImpl {
             map.get(&item.id.to_string()).cloned().unwrap_or_default()
         };
 
-        let metadata = GroupMetadata {
-            repo_id: completed.repo_id.clone(),
-            commit_sha: completed.commit_sha.clone(),
-            quantization: completed.quantization,
-            primary_filename: completed
-                .files
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "unknown".to_string()),
-            hf_tags: vec![],
-            file_entries,
-        };
         let complete = shard_group_tracker::GroupComplete {
             ordered_paths: completed.all_paths.clone(),
-            metadata,
+            metadata: GroupMetadata::of(&completed, file_entries),
         };
         // Record completion before registering
         self.record_completion_in_run(item, CompletionKind::Downloaded)
@@ -839,13 +822,6 @@ impl DownloadManagerImpl {
     /// This is the single point of model registration, called only when
     /// all shards in a group are complete (or for single-file downloads).
     async fn register_completed_model(&self, complete: shard_group_tracker::GroupComplete) {
-        use gglib_core::ports::CompletedDownload;
-
-        let primary_path = complete
-            .ordered_paths
-            .first()
-            .expect("GroupComplete should have at least one path");
-
         // Canonical event ID matches the one used for progress / completion.
         let event_id = format!(
             "{}:{}",
@@ -888,21 +864,9 @@ impl DownloadManagerImpl {
             }
         };
 
-        let completed = CompletedDownload {
-            primary_path: primary_path.clone(),
-            all_paths: complete.ordered_paths.clone(),
-            quantization: complete.metadata.quantization,
-            repo_id: complete.metadata.repo_id.clone(),
-            commit_sha: complete.metadata.commit_sha.clone(),
-            is_sharded: complete.ordered_paths.len() > 1,
-            file_paths: if complete.ordered_paths.len() > 1 {
-                Some(complete.ordered_paths.clone())
-            } else {
-                None
-            },
-            hf_tags,
-            hf_file_entries: complete.metadata.file_entries,
-        };
+        // The weights are the model's files; a projector is handed over
+        // apart, to be linked.
+        let completed = complete.into_completed_download(hf_tags);
 
         // Phase 2 of finalization: writing the model row to the database.
         self.emit(DownloadEvent::DownloadStatusChanged {
@@ -912,32 +876,32 @@ impl DownloadManagerImpl {
 
         // Register model (soft-fail)
         match self.model_registrar.register_model(&completed).await {
-            Ok(model) => {
+            Ok(registered) => {
                 tracing::info!(
-                    model_id = model.id,
-                    model_name = %model.name,
-                    shard_count = complete.ordered_paths.len(),
+                    model_id = registered.model.id,
+                    model_name = %registered.model.name,
+                    shard_count = group_completion::shard_count(&completed),
                     "Model registered successfully"
                 );
+                let refusal = registered.projector_refusal.as_deref();
+                if let Some(reason) = refusal {
+                    tracing::warn!(
+                        model_id = registered.model.id,
+                        reason,
+                        "Projector not linked"
+                    );
+                }
 
-                // Emit completion event
+                // Emit completion event; it says so when the projector was not linked
                 self.emit(DownloadEvent::DownloadCompleted {
                     id: event_id,
-                    message: Some(format!(
-                        "Downloaded {} to {}",
-                        if completed.is_sharded {
-                            format!("{} shards", complete.ordered_paths.len())
-                        } else {
-                            "model".to_string()
-                        },
-                        primary_path.display()
-                    )),
+                    message: Some(group_completion::completion_message(&completed, refusal)),
                 });
             }
             Err(e) => {
                 tracing::warn!(
                     error = %e,
-                    path = %primary_path.display(),
+                    path = %completed.primary_path.display(),
                     "Failed to register model - files downloaded but won't appear in library"
                 );
                 // Surface the failure as a terminal event so the UI doesn't
@@ -1384,7 +1348,9 @@ fn build_active_dto(
 
 /// Emit a progress event.
 ///
-/// Emits `ShardProgress` if `shard_info` is present, otherwise `DownloadProgress`.
+/// Emits `ShardProgress` for a weights shard. A projector is no shard: its
+/// bytes are emitted as `DownloadProgress` of the whole group, as are those of
+/// a download with no `shard_info`.
 fn emit_progress(
     emitter: &Arc<dyn AppEventEmitter>,
     id: &str,
@@ -1393,10 +1359,11 @@ fn emit_progress(
     speed_bps: Option<f64>,
     eta_seconds: Option<f64>,
 ) {
-    if let Some(shard) = shard_info {
-        let (aggregate_downloaded, aggregate_total) =
-            aggregate_progress(shard, progress.downloaded, progress.total);
-
+    let (aggregate_downloaded, aggregate_total) = shard_info
+        .map_or((progress.downloaded, progress.total), |shard| {
+            aggregate_progress(shard, progress.downloaded, progress.total)
+        });
+    if let Some(shard) = shard_info.filter(|shard| !shard.role.is_projector()) {
         emitter.emit(app_event(DownloadEvent::shard_progress(
             id,
             shard.shard_index,
@@ -1410,11 +1377,10 @@ fn emit_progress(
             eta_seconds,
         )));
     } else {
-        // Non-sharded download: emit regular progress
         emitter.emit(app_event(DownloadEvent::progress(
             id,
-            progress.downloaded,
-            progress.total,
+            aggregate_downloaded,
+            aggregate_total,
             speed_bps,
             eta_seconds,
         )));
@@ -1477,42 +1443,9 @@ impl DownloadManagerPort for DownloadManagerImpl {
             .resolve(&request.repo_id, request.quantization)
             .await?;
 
-        let has_active = self.has_active().await;
-
-        // Build shard files list (outside lock)
-        let shard_files: Vec<_> = resolution
-            .files
-            .iter()
-            .map(|f| (f.path.clone(), f.size))
-            .collect();
-
-        // Compute completion key from first file (canonical base for shards)
-        let first_path = resolution
-            .files
-            .first()
-            .ok_or_else(|| DownloadError::resolution_failed("no files resolved".to_string()))?
-            .path
-            .as_str();
-        let filename = std::path::Path::new(first_path)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(first_path);
-        let filename_canon = base_shard_filename(filename);
-        let completion_key = gglib_core::download::CompletionKey::HfFile {
-            repo_id: request.repo_id.clone(),
-            revision: request
-                .revision
-                .clone()
-                .unwrap_or_else(|| "unspecified".to_string()),
-            filename_canon,
-            quantization: Some(request.quantization.to_string()),
-        };
-
-        // Minimal lock scope: mutate queue and get snapshot
-        let position = {
-            let mut queue = self.queue.write().await;
-            queue.queue_sharded(&id, &completion_key, shard_files, has_active)?
-        };
+        let position = self
+            .enqueue_group(&id, request.revision.as_deref(), &resolution)
+            .await?;
 
         tracing::info!(
             id = %id,
@@ -1699,7 +1632,8 @@ impl DownloadManagerPort for DownloadManagerImpl {
 pub struct QueueAutoResult {
     /// The root download ID for this request.
     pub root_id: DownloadId,
-    /// Number of items queued (1 for single file, N for sharded).
+    /// Number of weights shards queued (1 for a single file). A projector
+    /// fetched with them is not counted.
     pub queued: u32,
     /// Group ID if this is a sharded download.
     pub group_id: Option<String>,
@@ -1736,10 +1670,8 @@ impl DownloadManagerImpl {
             .resolve(&repo_id, selection.quantization)
             .await?;
 
-        let has_active = self.has_active().await;
-        let shard_count = resolution.files.len();
         #[allow(clippy::cast_possible_truncation)]
-        let queued = shard_count as u32;
+        let queued = resolution.shard_count() as u32;
 
         // A repeat request for a download already in flight attaches to it
         // instead of enqueueing a second copy. `Queue::is_queued` scans only
@@ -1773,43 +1705,7 @@ impl DownloadManagerImpl {
             });
         }
 
-        // Build shard files outside lock
-        let shard_files: Vec<_> = resolution
-            .files
-            .iter()
-            .map(|f| (f.path.clone(), f.size))
-            .collect();
-
-        // Compute completion key from first file (canonical base for shards)
-        let first_path = resolution
-            .files
-            .first()
-            .ok_or_else(|| DownloadError::resolution_failed("no files resolved".to_string()))?
-            .path
-            .as_str();
-        let filename = std::path::Path::new(first_path)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(first_path);
-        let filename_canon = base_shard_filename(filename);
-        let completion_key = gglib_core::download::CompletionKey::HfFile {
-            repo_id: repo_id.clone(),
-            revision: "unspecified".to_string(),
-            filename_canon,
-            quantization: Some(selection.quantization.to_string()),
-        };
-
-        // Minimal lock scope
-        let position = {
-            let mut queue = self.queue.write().await;
-            queue.queue_sharded(&id, &completion_key, shard_files, has_active)?
-        };
-
-        // Store file entries with OIDs for later model registration
-        {
-            let mut file_entries = self.file_entries_map.lock().await;
-            file_entries.insert(id.to_string(), resolution.files.clone());
-        }
+        let position = self.enqueue_group(&id, None, &resolution).await?;
 
         let group_id = Some(id.to_string());
 
@@ -1817,7 +1713,7 @@ impl DownloadManagerImpl {
             id = %id,
             position = position,
             sharded = resolution.is_sharded,
-            files = shard_count,
+            files = resolution.files.len(),
             "Download queued via queue_download_smart"
         );
 

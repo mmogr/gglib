@@ -61,3 +61,5 @@ tempfile.workspace = true
 tokio-test.workspace = true
 mockall.workspace = true
 tempfile.workspace = true
+# `Model::stored`, the row a recording registrar answers.
+gglib-core = { path = "../gglib-core", features = ["test-utils"] }

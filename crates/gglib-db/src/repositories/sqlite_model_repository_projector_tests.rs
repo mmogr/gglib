@@ -100,3 +100,81 @@ async fn update_stores_the_projector_path_resolved() {
         Some(std::fs::canonicalize(&file).unwrap())
     );
 }
+
+/// A download registered through the real repository, by a path that is not
+/// the resolved one the repository stores.
+#[cfg(unix)]
+mod through_a_symlink {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use gglib_core::download::Quantization;
+    use gglib_core::ports::{CompletedDownload, GgufParserPort, ModelRegistrarPort};
+    use gglib_core::{GgufCapabilities, GgufFileRole, GgufMetadata, GgufParseError};
+
+    use super::super::*;
+    use crate::CoreFactory;
+    use crate::setup::setup_test_database;
+
+    /// Reads every header as a projector's.
+    struct ProjectorHeader;
+
+    impl GgufParserPort for ProjectorHeader {
+        fn parse(&self, _file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
+            Ok(GgufMetadata {
+                role: GgufFileRole::Projector,
+                ..Default::default()
+            })
+        }
+        fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
+            GgufCapabilities::empty()
+        }
+    }
+
+    /// The models directory is reached through a symlink. The model's owner
+    /// linked another projector by hand; downloading the model again, as a
+    /// repair does, finds the model it already holds and keeps that link.
+    #[tokio::test]
+    async fn a_model_downloaded_again_through_a_symlink_keeps_its_chosen_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let models = dir.path().join("models");
+        std::os::unix::fs::symlink(&real, &models).unwrap();
+        let weights = models.join("zeta.Q8_0.gguf");
+        let projector = models.join("mmproj-F16.gguf");
+        std::fs::write(&weights, b"x").unwrap();
+        std::fs::write(&projector, b"x").unwrap();
+        let download = CompletedDownload {
+            primary_path: weights.clone(),
+            all_paths: vec![weights, projector.clone()],
+            projector_path: Some(projector),
+            quantization: Quantization::Q8_0,
+            repo_id: "owner/zeta-GGUF".to_owned(),
+            commit_sha: "abc123".to_owned(),
+            is_sharded: false,
+            file_paths: None,
+            hf_tags: vec![],
+            hf_file_entries: vec![],
+        };
+        let pool = setup_test_database().await.unwrap();
+        let repo = SqliteModelRepository::new(pool.clone());
+        let registrar = CoreFactory::model_registrar_for_test(pool, Arc::new(ProjectorHeader));
+        let mut model = registrar.register_model(&download).await.unwrap().model;
+        assert_eq!(
+            model.projector_path,
+            Some(std::fs::canonicalize(real.join("mmproj-F16.gguf")).unwrap())
+        );
+        let chosen = dir.path().join("chosen").join("mmproj-BF16.gguf");
+        model.projector_path = Some(chosen.clone());
+        repo.update(&model).await.unwrap();
+
+        let again = registrar.register_model(&download).await.unwrap();
+
+        assert_eq!(again.model.id, model.id);
+        let stored = repo.get_by_id(model.id).await.unwrap();
+        assert_eq!(stored.projector_path, Some(chosen));
+        let kept = again.projector_refusal.expect("the kept link is reported");
+        assert!(kept.contains("mmproj-BF16.gguf"), "{kept}");
+    }
+}

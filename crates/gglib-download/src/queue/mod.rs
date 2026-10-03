@@ -1,12 +1,14 @@
 #![doc = include_str!("README.md")]
+mod group_items;
 mod shard_group;
 mod types;
 
 use std::collections::VecDeque;
 
 use gglib_core::download::{
-    CompletionKey, DownloadError, DownloadId, DownloadStatus, QueueSnapshot, ShardInfo,
+    CompletionKey, DownloadError, DownloadId, DownloadStatus, QueueSnapshot,
 };
+use gglib_core::ports::ResolvedFile;
 
 pub(crate) use shard_group::ShardGroupId;
 pub(crate) use types::{FailedItem, QueuedItem};
@@ -105,14 +107,15 @@ impl DownloadQueue {
         Ok(position)
     }
 
-    /// Queue a sharded download (multiple files with shared `group_id`).
+    /// Queue a download group: every file of one model, with a shared
+    /// `group_id`. The weights come first; a projector is the last file.
     ///
-    /// Returns the 1-based queue position of the first shard.
+    /// Returns the 1-based queue position of the first file.
     pub(crate) fn queue_sharded(
         &mut self,
         id: &DownloadId,
         completion_key: &CompletionKey,
-        shard_files: Vec<(String, Option<u64>)>,
+        shard_files: &[ResolvedFile],
         has_active: bool,
     ) -> Result<u32, DownloadError> {
         if shard_files.is_empty() {
@@ -129,7 +132,7 @@ impl DownloadQueue {
             usize_to_u32_saturating(self.pending.len()).saturating_add(1)
         };
 
-        let items = self.create_shard_items(id, completion_key, shard_files);
+        let items = group_items::group_items(id, completion_key, shard_files);
         self.pending.extend(items);
 
         Ok(first_position)
@@ -321,53 +324,6 @@ impl DownloadQueue {
     fn remove_from_failed(&mut self, id: &DownloadId) {
         self.failed.retain(|item| &item.item.id != id);
     }
-
-    #[allow(clippy::unused_self)]
-    fn create_shard_items(
-        &self,
-        id: &DownloadId,
-        completion_key: &CompletionKey,
-        shard_files: Vec<(String, Option<u64>)>,
-    ) -> Vec<QueuedItem> {
-        let group_id = ShardGroupId::generate(id);
-        let total_shards = usize_to_u32_saturating(shard_files.len());
-
-        // Exact byte offsets, but only when HuggingFace gave us a size for
-        // every shard. A partial layout is worse than none: the consumer's
-        // equal-size fallback is at least self-consistent.
-        let group_total: Option<u64> = shard_files
-            .iter()
-            .map(|(_, size)| *size)
-            .sum::<Option<u64>>();
-
-        let mut preceding: u64 = 0;
-
-        shard_files
-            .into_iter()
-            .enumerate()
-            .map(|(idx, (filename, size))| {
-                let index = usize_to_u32_saturating(idx);
-                let shard_info = match size {
-                    Some(s) => ShardInfo::with_size(index, total_shards, filename, s),
-                    None => ShardInfo::new(index, total_shards, filename),
-                };
-                let shard_info = match group_total {
-                    Some(total) => {
-                        let info = shard_info.with_group_offsets(preceding, total);
-                        preceding = preceding.saturating_add(size.unwrap_or(0));
-                        info
-                    }
-                    None => shard_info,
-                };
-                QueuedItem::new_shard(
-                    id.clone(),
-                    group_id.clone(),
-                    shard_info,
-                    completion_key.clone(),
-                )
-            })
-            .collect()
-    }
 }
 
 impl Default for DownloadQueue {
@@ -519,12 +475,12 @@ mod tests {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("model/x", Some("Q4_K_M"));
         let shards = vec![
-            ("shard-001.gguf".to_string(), Some(1000u64)),
-            ("shard-002.gguf".to_string(), Some(2000u64)),
+            ResolvedFile::with_size("shard-001.gguf", 1000),
+            ResolvedFile::with_size("shard-002.gguf", 2000),
         ];
 
         let key = test_completion_key(&id);
-        let pos = queue.queue_sharded(&id, &key, shards, false).unwrap();
+        let pos = queue.queue_sharded(&id, &key, &shards, false).unwrap();
         assert_eq!(pos, 1);
         assert_eq!(queue.pending_len(), 2);
 
@@ -538,9 +494,9 @@ mod tests {
     fn test_remove_group() {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("model/x", Some("Q4_K_M"));
-        let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
+        let shards = vec![ResolvedFile::new("s1.gguf"), ResolvedFile::new("s2.gguf")];
         let key = test_completion_key(&id);
-        queue.queue_sharded(&id, &key, shards, false).unwrap();
+        queue.queue_sharded(&id, &key, &shards, false).unwrap();
 
         let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
         let removed = queue.remove_group(&group_id);
@@ -687,12 +643,12 @@ mod tests {
             .unwrap();
 
         let id_sharded = test_id("sharded", Some("Q4"));
-        let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
+        let shards = vec![ResolvedFile::new("s1.gguf"), ResolvedFile::new("s2.gguf")];
         queue
             .queue_sharded(
                 &id_sharded.clone(),
                 &test_completion_key(&id_sharded),
-                shards,
+                &shards,
                 false,
             )
             .unwrap();

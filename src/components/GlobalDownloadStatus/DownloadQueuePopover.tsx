@@ -7,22 +7,7 @@ import { Icon } from '../ui/Icon';
 import { Chip } from '../ui/Chip';
 import { IconButton } from '../ui/IconButton';
 import { getTransport } from '../../services/transport';
-
-/**
- * Grouped queue item for display - sharded downloads are collapsed into one entry
- */
-interface GroupedQueueItem {
-  /** Canonical ID string for the group (or single item) */
-  id: string;
-  /** Human-readable display name */
-  display_name: string;
-  /** group_id for sharded models, undefined for single items */
-  group_id?: string;
-  /** Number of shards in this group (1 for non-sharded) */
-  shard_count: number;
-  /** Position of the first item in this group */
-  position: number;
-}
+import { groupPendingItems, type GroupedQueueItem } from './groupPendingItems';
 
 interface DownloadQueuePopoverProps {
   /** Whether the popover is open */
@@ -36,43 +21,9 @@ interface DownloadQueuePopoverProps {
 }
 
 /**
- * Groups pending queue items by group_id (for sharded models) or model_id.
- * Sharded downloads appear as a single entry with shard count indicator.
- */
-function groupPendingItems(items: DownloadQueueItem[]): GroupedQueueItem[] {
-  const groups = new Map<string, GroupedQueueItem>();
-  
-  for (const item of items) {
-    // Use group_id for sharded, id for single items
-    const key = item.group_id || item.id;
-    
-    if (!groups.has(key)) {
-      groups.set(key, {
-        id: item.id,
-        display_name: item.display_name,
-        group_id: item.group_id || undefined,
-        shard_count: 1,
-        position: item.position,
-      });
-    } else {
-      // Increment shard count for existing group
-      const existing = groups.get(key)!;
-      existing.shard_count += 1;
-      // Keep the lowest position (first shard)
-      if (item.position < existing.position) {
-        existing.position = item.position;
-      }
-    }
-  }
-  
-  // Sort by position
-  return Array.from(groups.values()).sort((a, b) => a.position - b.position);
-}
-
-/**
  * Popover component showing queued downloads with reorder and cancel functionality.
  * Uses up/down buttons for reordering (works in both Tauri WebKit and web browsers).
- * Sharded models are grouped and displayed as a single entry.
+ * A model's files are grouped and displayed as a single entry.
  */
 const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   isOpen,

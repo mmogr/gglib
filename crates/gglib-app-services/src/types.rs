@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 #[path = "types_hf.rs"]
 mod types_hf;
 pub use types_hf::{
-    HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    HfSortField, ToolSupportResponse,
+    HfModelSummary, HfProjector, HfQuantization, HfQuantizationsResponse, HfSearchRequest,
+    HfSearchResponse, HfSortField, ToolSupportResponse,
 };
 
 // ============================================================================

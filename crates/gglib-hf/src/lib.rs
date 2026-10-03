@@ -8,6 +8,7 @@
 mod client;
 mod config;
 mod error;
+mod file_roles;
 mod http;
 mod models;
 mod parsing;

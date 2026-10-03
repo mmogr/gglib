@@ -98,6 +98,18 @@ pub struct HfQuantization {
     pub size_mb: f64,
     pub is_sharded: bool,
     pub shard_count: Option<u32>,
+    /// The projector a download of this quantization fetches with it, when
+    /// the repository has one. `size_bytes` above is the weights alone.
+    pub projector: Option<HfProjector>,
+}
+
+/// A projector file of a `HuggingFace` repository.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct HfProjector {
+    pub file_path: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub size_bytes: u64,
 }
 
 /// Response containing available quantizations for a model.

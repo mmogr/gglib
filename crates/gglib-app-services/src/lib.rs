@@ -14,16 +14,18 @@ use tokio_test as _;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
+mod test_support_hf;
+#[cfg(test)]
 mod test_support_remote;
 
 mod error;
 mod helpers;
+mod hf_quantizations;
 mod hub_chats;
 
 pub mod benchmark;
 #[allow(
     clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod downloads;

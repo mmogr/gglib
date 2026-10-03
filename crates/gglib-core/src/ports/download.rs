@@ -6,33 +6,50 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::download::{DownloadError, Quantization};
+use crate::download::{DownloadError, GgufFileRole, Quantization};
 
 // ============================================================================
 // Resolution Types
 // ============================================================================
 
-/// Result of resolving files for a quantization.
+/// Result of resolving files for a quantization: the download group.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Resolution {
     /// The resolved quantization type.
     pub quantization: Quantization,
-    /// List of files to download (sorted for sharded files).
+    /// The files to download. The weights come first, in shard order, and
+    /// the projector fetched with them, when there is one, is last.
     pub files: Vec<ResolvedFile>,
-    /// Whether this is a sharded (multi-part) download.
+    /// Whether the weights are sharded (multi-part). A projector is not a
+    /// shard.
     pub is_sharded: bool,
 }
 
 impl Resolution {
-    /// Get total size if all file sizes are known.
+    /// Get total size of every file, if all file sizes are known.
     pub fn total_size(&self) -> Option<u64> {
         let sizes: Option<Vec<u64>> = self.files.iter().map(|f| f.size).collect();
         sizes.map(|s| s.iter().sum())
     }
 
-    /// Get the number of files.
+    /// Get the number of files, the projector included.
     pub const fn file_count(&self) -> usize {
         self.files.len()
+    }
+
+    /// The weights files, in shard order.
+    pub fn weights(&self) -> impl Iterator<Item = &ResolvedFile> {
+        self.files.iter().filter(|f| !f.role.is_projector())
+    }
+
+    /// The number of weights shards (1 for a single-file model).
+    pub fn shard_count(&self) -> usize {
+        self.weights().count()
+    }
+
+    /// The projector fetched with the weights, when the repository has one.
+    pub fn projector(&self) -> Option<&ResolvedFile> {
+        self.files.iter().find(|f| f.role.is_projector())
     }
 }
 
@@ -47,33 +64,42 @@ pub struct ResolvedFile {
     /// Git LFS OID (SHA256 hash from `HuggingFace` tree API).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oid: Option<String>,
+    /// What the file is: weights, or the projector fetched with them.
+    pub role: GgufFileRole,
 }
 
 impl ResolvedFile {
-    /// Create a new resolved file.
+    /// Create a new resolved weights file.
     pub fn new(path: impl Into<String>) -> Self {
         Self {
             path: path.into(),
             size: None,
             oid: None,
+            role: GgufFileRole::Weights,
         }
     }
 
-    /// Create a new resolved file with size.
+    /// Create a new resolved weights file with size.
     pub fn with_size(path: impl Into<String>, size: u64) -> Self {
         Self {
-            path: path.into(),
             size: Some(size),
-            oid: None,
+            ..Self::new(path)
         }
     }
 
-    /// Create a new resolved file with size and OID.
+    /// Create a new resolved weights file with size and OID.
     pub fn with_size_and_oid(path: impl Into<String>, size: u64, oid: Option<String>) -> Self {
         Self {
-            path: path.into(),
-            size: Some(size),
             oid,
+            ..Self::with_size(path, size)
+        }
+    }
+
+    /// Create a resolved projector file with size and OID.
+    pub fn projector(path: impl Into<String>, size: u64, oid: Option<String>) -> Self {
+        Self {
+            role: GgufFileRole::Projector,
+            ..Self::with_size_and_oid(path, size, oid)
         }
     }
 }
@@ -137,5 +163,47 @@ mod tests {
 
         let file_with_size = ResolvedFile::with_size("test.gguf", 1024);
         assert_eq!(file_with_size.size, Some(1024));
+        assert_eq!(file_with_size.role, GgufFileRole::Weights);
+    }
+
+    /// Shards are counted among the weights; sizes and the file count cover
+    /// the projector too.
+    #[test]
+    fn a_projector_is_a_file_of_the_group_and_not_a_shard() {
+        let resolution = Resolution {
+            quantization: Quantization::Q8_0,
+            files: vec![
+                ResolvedFile::with_size("model-Q8_0.gguf", 1000),
+                ResolvedFile::projector("mmproj-F16.gguf", 300, None),
+            ],
+            is_sharded: false,
+        };
+
+        assert_eq!(resolution.shard_count(), 1);
+        assert_eq!(resolution.file_count(), 2);
+        assert_eq!(resolution.total_size(), Some(1300));
+        assert_eq!(
+            resolution
+                .weights()
+                .map(|f| f.path.as_str())
+                .collect::<Vec<_>>(),
+            ["model-Q8_0.gguf"]
+        );
+        assert_eq!(
+            resolution.projector().map(|f| f.path.as_str()),
+            Some("mmproj-F16.gguf")
+        );
+    }
+
+    #[test]
+    fn a_group_without_a_projector_has_none() {
+        let resolution = Resolution {
+            quantization: Quantization::Q8_0,
+            files: vec![ResolvedFile::with_size("model-Q8_0.gguf", 1000)],
+            is_sharded: false,
+        };
+
+        assert_eq!(resolution.projector(), None);
+        assert_eq!(resolution.shard_count(), 1);
     }
 }

@@ -129,6 +129,28 @@ mod tests {
         assert_eq!(total_model_bytes(&first), 1500);
     }
 
+    /// A projector downloaded with the model sits in the same directory. It
+    /// matches no shard name, so the weights' total does not count it.
+    #[test]
+    fn total_model_bytes_leaves_out_a_projector_beside_the_shards() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 1..=3u32 {
+            let p = dir.path().join(format!("m-{i:05}-of-00003.gguf"));
+            std::fs::write(&p, vec![0u8; 1000]).unwrap();
+        }
+        std::fs::write(dir.path().join("mmproj-F16.gguf"), vec![0u8; 300]).unwrap();
+        std::fs::write(dir.path().join("m.mmproj-Q8_0.gguf"), vec![0u8; 300]).unwrap();
+
+        assert_eq!(
+            total_model_bytes(&dir.path().join("m-00001-of-00003.gguf")),
+            3000
+        );
+        assert_eq!(
+            total_model_bytes(&dir.path().join("m-00002-of-00003.gguf")),
+            3000
+        );
+    }
+
     #[test]
     fn total_model_bytes_is_zero_for_a_missing_file() {
         let dir = tempfile::tempdir().unwrap();

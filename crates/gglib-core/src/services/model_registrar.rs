@@ -10,11 +10,13 @@ use async_trait::async_trait;
 use chrono::Utc;
 
 use super::model_import::fetch_published_sampling;
+use super::model_projector::link_downloaded_projector;
 use super::{HfOrigin, ModelOrigin, build_new_model};
-use crate::domain::{Model, NewModelFile};
+use crate::domain::NewModelFile;
 use crate::ports::huggingface::HfClientPort;
 use crate::ports::{
-    CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RepositoryError,
+    CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RegisteredDownload,
+    RepositoryError,
 };
 
 /// Repository trait for model files metadata.
@@ -23,7 +25,7 @@ use crate::ports::{
 /// This type is re-exported from `gglib_db` for use in adapters.
 #[async_trait]
 pub trait ModelFilesRepositoryPort: Send + Sync {
-    /// Insert a new model file record.
+    /// Store a model file record, replacing the one held for that model and path.
     async fn insert(&self, model_file: &NewModelFile) -> anyhow::Result<()>;
 }
 
@@ -82,7 +84,10 @@ impl ModelRegistrar {
 
 #[async_trait]
 impl ModelRegistrarPort for ModelRegistrar {
-    async fn register_model(&self, download: &CompletedDownload) -> Result<Model, RepositoryError> {
+    async fn register_model(
+        &self,
+        download: &CompletedDownload,
+    ) -> Result<RegisteredDownload, RepositoryError> {
         let file_path = download.db_path();
 
         // Parse GGUF metadata from the downloaded file
@@ -109,7 +114,7 @@ impl ModelRegistrarPort for ModelRegistrar {
             file_paths: download.file_paths.as_deref(),
             published_sampling: published.as_ref(),
         });
-        let model = build_new_model(
+        let mut model = build_new_model(
             file_path,
             gguf_metadata.as_ref(),
             self.gguf_parser.as_ref(),
@@ -117,9 +122,19 @@ impl ModelRegistrarPort for ModelRegistrar {
             Utc::now(),
         );
 
+        // A projector that fails the link's check leaves the model registered
+        // without a link, and the reason goes back to the caller.
+        let projector_refusal = link_downloaded_projector(
+            self.model_repo.as_ref(),
+            &mut model,
+            download.projector_path.as_deref(),
+            self.gguf_parser.as_ref(),
+        )
+        .await;
+
         let registered = self.model_repo.insert(&model).await?;
 
-        // Insert model_files records with OIDs for each shard (if repo is available)
+        // One model_files record, with its OID, per file of the group (if repo is available)
         if let Some(ref repo) = self.model_files_repo {
             for (file_index, file_entry) in download.hf_file_entries.iter().enumerate() {
                 if let Some(size) = file_entry.size {
@@ -145,9 +160,16 @@ impl ModelRegistrarPort for ModelRegistrar {
             }
         }
 
-        Ok(registered)
+        Ok(RegisteredDownload {
+            model: registered,
+            projector_refusal,
+        })
     }
 }
+
+#[cfg(test)]
+#[path = "model_registrar_projector_tests.rs"]
+mod projector_tests;
 
 #[cfg(test)]
 mod tests {
@@ -256,6 +278,7 @@ mod tests {
         let download = CompletedDownload {
             primary_path: PathBuf::from("/models/test-model-q4_k_m.gguf"),
             all_paths: vec![PathBuf::from("/models/test-model-q4_k_m.gguf")],
+            projector_path: None,
             quantization: Quantization::Q4KM,
             repo_id: "test/model".to_string(),
             commit_sha: "abc123".to_string(),
@@ -268,7 +291,7 @@ mod tests {
         let result = registrar.register_model(&download).await;
         assert!(result.is_ok());
 
-        let model = result.unwrap();
+        let model = result.unwrap().model;
         assert_eq!(model.name, "model");
         assert_eq!(model.hf_repo_id, Some("test/model".to_string()));
         assert_eq!(model.hf_commit_sha, Some("abc123".to_string()));
@@ -289,6 +312,7 @@ mod tests {
                 PathBuf::from("/models/llama-00003-of-00004.gguf"),
                 PathBuf::from("/models/llama-00004-of-00004.gguf"),
             ],
+            projector_path: None,
             quantization: Quantization::Q8_0,
             repo_id: "test/llama".to_string(),
             commit_sha: "def456".to_string(),
@@ -301,7 +325,7 @@ mod tests {
         let result = registrar.register_model(&download).await;
         assert!(result.is_ok());
 
-        let model = result.unwrap();
+        let model = result.unwrap().model;
         assert_eq!(model.quantization, Some("Q8_0".to_string()));
         assert_eq!(model.name, "llama");
     }

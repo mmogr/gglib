@@ -10,7 +10,9 @@ separated from the queue-based
 
 # What lives here
 
-- [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`
+- [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`: the
+  quantizations, then the repository's projectors, each marked with the
+  quantizations whose download fetches it
 - [`check_update`] / [`update_model`] — update path for `model upgrade`
 - The optional `hf_xet` accelerator: [`ensure_fast_helper_ready`] provisions it
   (only from an explicit opt-in — never from a download),

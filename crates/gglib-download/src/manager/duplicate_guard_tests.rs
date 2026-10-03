@@ -6,12 +6,12 @@
 
 use super::*;
 use async_trait::async_trait;
+use gglib_core::RepositoryError;
 use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
-use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, NoopEmitter};
-use gglib_core::{Model, RepositoryError};
+use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, NoopEmitter, RegisteredDownload};
 
 const REPO: &str = "owner/repo";
 
@@ -42,6 +42,10 @@ impl HfClientPort for OneQuantHf {
         }])
     }
 
+    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        Ok(vec![])
+    }
+
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
         unimplemented!("not reached by queue_download_smart")
     }
@@ -56,14 +60,14 @@ impl HfClientPort for OneQuantHf {
     }
 }
 
-struct NoRegistrar;
+pub(super) struct NoRegistrar;
 
 #[async_trait]
 impl ModelRegistrarPort for NoRegistrar {
     async fn register_model(
         &self,
         _download: &CompletedDownload,
-    ) -> Result<Model, RepositoryError> {
+    ) -> Result<RegisteredDownload, RepositoryError> {
         unimplemented!("nothing completes in these tests")
     }
 }

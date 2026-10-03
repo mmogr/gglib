@@ -12,9 +12,10 @@ Page-level download progress indicator showing the active download's progress ba
 | File | Role |
 |------|------|
 | `GlobalDownloadStatus.tsx` | Active progress bar or completion summary; queue popover toggle |
-| `DownloadQueuePopover.tsx` | Pending items grouped by model/shard; up/down reorder; per-item cancel |
+| `DownloadQueuePopover.tsx` | Pending items grouped by model; up/down reorder; per-item cancel |
+| `groupPendingItems.ts` | Collapses a model's queued files into one entry |
 
-`groupPendingItems()` collapses all shard items sharing a `group_id` into one queue entry with combined progress.
+`groupPendingItems()` collapses all items sharing a `group_id` (a model's shards and the projector fetched with them) into one queue entry. Its "N parts" counts weights files; a projector is not a part.
 
 Speed and ETA are displayed exactly as the backend reports them, via
 `formatRate` / `formatDuration` from `src/utils/format.ts`. Both are optional:

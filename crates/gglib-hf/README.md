@@ -34,6 +34,7 @@ gglib-core (port definition)        gglib-hf (adapter implementation)
 **Module Descriptions:**
 - **`config.rs`** — Client configuration (tokens, base URLs)
 - **`error.rs`** — Error types for API failures
+- **`file_roles.rs`** — Telling a repository's weights files from its projectors
 - **`http.rs`** — HTTP backend abstraction for testability
 - **`models.rs`** — Response models and deserialization
 - **`parsing.rs`** — HTML/JSON parsing for model pages
@@ -71,6 +72,8 @@ async fn example() {
 - **Quantization Listing**: List available quantization variants (`Q4_K_M`, `Q5_K_S`, etc.),
   including Unsloth Dynamic ("UD-") quants (`UD-Q4_K_M`, `UD-Q6_K`, etc.) as separate,
   independently selectable entries from their plain counterparts
+- **Projector Listing**: A repository's projectors (`mmproj` files) are listed apart, with
+  their OIDs. A projector is never a quantization of the model and never a shard of one
 - **File Resolution**: Find specific GGUF files for download, including sharded models
 - **Commit SHA Lookup**: Get latest commit SHA for version tracking
 - **Authenticated Access**: Optional `HuggingFace` token for gated models

@@ -146,7 +146,8 @@ Image input is not a tag. A model reads images exactly when it is linked to a
 projector, the second GGUF llama-server loads with `--mmproj`: the link is
 `models.projector_path`, set with `gglib model update <model> --projector
 <path>` or the Projector row of the model inspector, and cleared with
-`--no-projector` or the row's "None". `gglib model list` shows it in its
+`--no-projector` or the row's "None". A download from a repository that has
+projectors fetches one with the model and links it. `gglib model list` shows it in its
 `Images` column and `gglib model inspect` on its `Projector` line.
 
 ### Overriding MTP

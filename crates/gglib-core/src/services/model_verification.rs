@@ -2,8 +2,7 @@
 //!
 //! This service provides:
 //! - Integrity verification via SHA256 hash comparison against `HuggingFace` OIDs
-//! - Update detection by comparing local OIDs with remote repository state
-//! - Model repair by re-downloading corrupt or missing shards
+//! - Update detection and repair, in `model_verification_remote`
 //! - Concurrency control to prevent conflicting operations on the same model
 
 use std::collections::HashMap;
@@ -275,15 +274,15 @@ pub trait DownloadTriggerPort: Send + Sync {
 /// Model verification service.
 pub struct ModelVerificationService {
     /// Repository for model metadata.
-    model_repo: Arc<dyn ModelRepository>,
+    pub(super) model_repo: Arc<dyn ModelRepository>,
     /// Repository for model file metadata.
     pub(super) model_files_repo: Arc<dyn ModelFilesReaderPort>,
     /// `HuggingFace` client for update checks.
-    hf_client: Arc<dyn HfClientPort>,
+    pub(super) hf_client: Arc<dyn HfClientPort>,
     /// Download trigger for repairs.
-    download_trigger: Arc<dyn DownloadTriggerPort>,
+    pub(super) download_trigger: Arc<dyn DownloadTriggerPort>,
     /// Concurrency control.
-    operation_lock: ModelOperationLock,
+    pub(super) operation_lock: ModelOperationLock,
 }
 
 impl ModelVerificationService {
@@ -446,7 +445,7 @@ impl ModelVerificationService {
 
     /// Verify a single shard by computing its SHA256 and comparing with OID.
     #[allow(clippy::cognitive_complexity)]
-    async fn verify_shard(
+    pub(super) async fn verify_shard(
         file: &ModelFile,
         resolved_path: &Path,
         model_id: i64,
@@ -571,195 +570,6 @@ impl ModelVerificationService {
                 ShardHealth::Missing
             }
         }
-    }
-
-    /// Check if updates are available for a model.
-    ///
-    /// Compares local OIDs with remote OIDs from `HuggingFace`.
-    pub async fn check_for_updates(
-        &self,
-        model_id: i64,
-    ) -> Result<UpdateCheckResult, RepositoryError> {
-        // Get model metadata
-        let model = self.model_repo.get_by_id(model_id).await?;
-
-        let Some(ref repo_id) = model.hf_repo_id else {
-            return Ok(UpdateCheckResult {
-                model_id,
-                update_available: false,
-                details: None,
-            });
-        };
-
-        let Some(ref quantization) = model.quantization else {
-            return Ok(UpdateCheckResult {
-                model_id,
-                update_available: false,
-                details: None,
-            });
-        };
-
-        // Get local file metadata
-        let local_files = self
-            .model_files_repo
-            .get_by_model_id(model_id)
-            .await
-            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-
-        if local_files.is_empty() {
-            return Ok(UpdateCheckResult {
-                model_id,
-                update_available: false,
-                details: None,
-            });
-        }
-
-        // Get remote file metadata from HuggingFace
-        let remote_files = self
-            .hf_client
-            .get_quantization_files(repo_id, quantization)
-            .await
-            .map_err(|e| RepositoryError::Storage(format!("Failed to fetch remote files: {e}")))?;
-
-        // Compare OIDs
-        let mut changes = Vec::new();
-
-        for local_file in &local_files {
-            let Some(ref local_oid) = local_file.hf_oid else {
-                continue;
-            };
-
-            // Find matching remote file by path
-            if let Some(remote_file) = remote_files.iter().find(|f| f.path == local_file.file_path)
-                && let Some(ref remote_oid) = remote_file.oid
-                && local_oid != remote_oid
-            {
-                let old_oid_str: String = local_oid.clone();
-                let new_oid_str: String = remote_oid.clone();
-                #[allow(clippy::cast_sign_loss)]
-                let index = local_file.file_index as usize;
-                changes.push(ShardUpdate {
-                    index,
-                    file_path: local_file.file_path.clone(),
-                    old_oid: old_oid_str,
-                    new_oid: new_oid_str,
-                });
-            }
-        }
-
-        let update_available = !changes.is_empty();
-        let details = if update_available {
-            Some(UpdateDetails {
-                changed_shards: changes.len(),
-                changes,
-            })
-        } else {
-            None
-        };
-
-        Ok(UpdateCheckResult {
-            model_id,
-            update_available,
-            details,
-        })
-    }
-
-    /// Repair a model by re-downloading corrupt or missing shards.
-    ///
-    /// # Arguments
-    ///
-    /// * `model_id` - ID of the model to repair
-    /// * `shard_indices` - Optional list of specific shard indices to repair.
-    ///   If `None`, all unhealthy shards will be repaired.
-    pub async fn repair_model(
-        &self,
-        model_id: i64,
-        shard_indices: Option<Vec<usize>>,
-    ) -> Result<String, String> {
-        // Acquire downloading lock
-        let _guard = self
-            .operation_lock
-            .try_acquire(model_id, OperationType::Downloading)
-            .await?;
-
-        // Get model metadata
-        let model = self
-            .model_repo
-            .get_by_id(model_id)
-            .await
-            .map_err(|e| format!("Failed to get model: {e}"))?;
-
-        let Some(ref repo_id) = model.hf_repo_id else {
-            return Err("Model does not have HuggingFace repository information".to_string());
-        };
-
-        let Some(ref quantization) = model.quantization else {
-            return Err("Model does not have quantization information".to_string());
-        };
-
-        // Get file metadata
-        let model_files = self
-            .model_files_repo
-            .get_by_model_id(model_id)
-            .await
-            .map_err(|e| format!("Failed to get model files: {e}"))?;
-
-        // Get base directory from model's file path
-        let base_dir = model
-            .file_path
-            .parent()
-            .ok_or_else(|| "Failed to get model directory".to_string())?
-            .to_path_buf();
-
-        // Determine which shards to repair
-        let shards_to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
-            #[allow(clippy::cast_sign_loss)]
-            let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
-            model_files.iter().filter(filter_fn).collect()
-        } else {
-            // Verify all shards to find unhealthy ones
-            let mut unhealthy = Vec::new();
-            for file in &model_files {
-                let (tx, _rx) = mpsc::channel(1);
-                let resolved_path = base_dir.join(&file.file_path);
-                let health = Self::verify_shard(file, &resolved_path, model_id, 0, 1, &tx).await;
-                match health {
-                    ShardHealth::Corrupt { .. } | ShardHealth::Missing => {
-                        unhealthy.push(file);
-                    }
-                    _ => {}
-                }
-            }
-            unhealthy
-        };
-
-        if shards_to_repair.is_empty() {
-            return Err("No unhealthy shards found to repair".to_string());
-        }
-
-        // Delete corrupt/missing files
-        for file in &shards_to_repair {
-            let resolved_path = base_dir.join(&file.file_path);
-            if resolved_path.exists()
-                && let Err(e) = tokio::fs::remove_file(&resolved_path).await
-            {
-                tracing::warn!(
-                    model_id = model_id,
-                    file_path = %file.file_path,
-                    error = %e,
-                    "Failed to delete corrupt file"
-                );
-            }
-        }
-
-        // Trigger re-download
-        let download_id = self
-            .download_trigger
-            .queue_download(repo_id.clone(), Some(quantization.clone()))
-            .await
-            .map_err(|e| format!("Failed to queue download: {e}"))?;
-
-        Ok(download_id)
     }
 }
 
