@@ -67,7 +67,7 @@ pub(crate) const SECONDARY_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// problem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SlotFootprint {
-    /// Model weights on disk, summed across shards. `0` when unknown.
+    /// Weights on disk, all shards, plus the projector. `0` when unknown.
     pub weights_bytes: u64,
     /// KV cache at the context this launch will use.
     pub kv_bytes: u64,

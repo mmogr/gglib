@@ -8,7 +8,8 @@ use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
 use super::row_mappers::{
-    BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model,
+    BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, path_list_json,
+    row_to_model,
 };
 
 /// Compute a canonical model key for deduplication.
@@ -208,23 +209,17 @@ impl ModelRepository for SqliteModelRepository {
         // query path against these entries, so storing them as handed in
         // would make that arm match only when the caller happened to pass
         // already-resolved siblings — which the download path does not.
-        let file_paths_json = model.file_paths.as_ref().and_then(|paths| {
-            let normalized: Vec<String> = paths
-                .iter()
-                .map(|path| normalized_file_path_string(path))
-                .collect();
-            serde_json::to_string(&normalized).ok()
-        });
+        let file_paths_json = model.file_paths.as_deref().and_then(path_list_json);
 
         // Use UPSERT to make registration idempotent. The row's own id is
         // bound when it has one, so an update takes no id from the sequence.
         let _result = sqlx::query(
             r"INSERT INTO models (
-                id, name, file_path, param_count_b, architecture, quantization,
+                id, name, file_path, projector_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha,
                 hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec
-            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 -- Coalesced, not assigned. A re-registration that carries no
@@ -234,6 +229,7 @@ impl ModelRepository for SqliteModelRepository {
                 -- model. A download always supplies the list, so it still
                 -- wins when there is one.
                 file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
+                projector_path = COALESCE(excluded.projector_path, models.projector_path),
                 quantization = COALESCE(excluded.quantization, models.quantization),
                 context_length = COALESCE(excluded.context_length, models.context_length),
                 expert_count = COALESCE(excluded.expert_count, models.expert_count),
@@ -255,6 +251,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&model_key)
         .bind(&model.name)
         .bind(&file_path_string)
+        .bind(model.projector_path.as_deref().map(normalized_file_path_string))
         .bind(model.param_count_b)
         .bind(&model.architecture)
         .bind(&model.quantization)
@@ -327,7 +324,7 @@ impl ModelRepository for SqliteModelRepository {
             .and_then(|caps| serde_json::to_string(caps).ok());
 
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ? WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -336,6 +333,7 @@ impl ModelRepository for SqliteModelRepository {
             // `PATCH /api/models/{id}` reaches this with a caller-supplied
             // `file_path`.
             .bind(normalized_file_path_string(&model.file_path))
+            .bind(model.projector_path.as_deref().map(normalized_file_path_string))
             .bind(model.param_count_b)
             .bind(&model.architecture)
             .bind(&model.quantization)
@@ -1049,3 +1047,7 @@ mod tests {
         assert_eq!(resolved.id, first.id);
     }
 }
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_projector_tests.rs"]
+mod projector_tests;

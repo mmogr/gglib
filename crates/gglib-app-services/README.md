@@ -72,11 +72,12 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`error.rs`** — `GuiError` semantic error type for all app-service operations
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`models.rs`** — `ModelOps` model CRUD and listing operations
+- **`models_projector.rs`** — The projector link on `ModelOps`: an update's `projector_path` applied through `ModelService::set_projector`, and the choices the inspector's picker offers
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
 - **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
 - **`settings.rs`** — `SettingsOps` application settings persistence
 - **`setup.rs`** — `SetupOps` first-run setup and dependency checking
-- **`types.rs`** — Shared DTOs and type definitions for the service layer. Includes `UpdateModelRequest` with triple-Option semantics for `server_defaults`: `Some(Some(cfg))` sets per-model server config, `Some(None)` clears it, and `None` (field omitted) is a no-op.
+- **`types.rs`** — Shared DTOs and type definitions for the service layer. Includes `UpdateModelRequest` with triple-Option semantics for `server_defaults`: `Some(Some(cfg))` sets per-model server config, `Some(None)` clears it, and `None` (field omitted) is a no-op. `projector_path` has the same three states: a path links the model to that projector, `null` unlinks it, and an omitted key leaves the link alone.
 
 ## Design Principles
 

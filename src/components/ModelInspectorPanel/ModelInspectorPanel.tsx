@@ -19,6 +19,7 @@ import {
 } from './hooks';
 import {
   ModelMetadataGrid,
+  ProjectorRow,
   SamplingProvenanceSection,
   ModelEditForm,
   InspectorTags,
@@ -48,12 +49,7 @@ interface ModelInspectorPanelProps {
   onStopServer: (modelId: number) => Promise<void>;
   servers: ServerViewModel[];
   onRemoveModel: (id: number, force: boolean) => void;
-  onUpdateModel: (id: number, updates: {
-    name?: string;
-    quantization?: string;
-    file_path?: string;
-    serverDefaults?: import('../../types').ServerConfig | null;
-  }) => Promise<void>;
+  onUpdateModel: (id: number, updates: import('../../hooks/useModels').ModelUpdates) => Promise<void>;
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelDetail: (modelId: number) => Promise<ModelDetail | null>;
@@ -187,6 +183,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     <div className={panelContainer}>
       <InspectorHeader
         modelName={model.name}
+        imageInput={model.imageInput}
         hasHfRepo={Boolean(model.hfRepoId)}
         isEditMode={editMode.isEditMode}
         editedName={editMode.editedName}
@@ -215,6 +212,14 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <ModelMetadataGrid
               model={model}
               detail={detail.modelDetail ?? undefined}
+              projector={
+                <ProjectorRow
+                  modelId={model.id}
+                  detail={detail.modelDetail ?? undefined}
+                  onUpdateModel={onUpdateModel}
+                  onChanged={() => void detail.reload()}
+                />
+              }
               // Resolved sampling, not the stored defaults: a stored value
               // that wins shows as `per-model defaults (user-set)`, and one
               // that loses is finally visible as having lost.

@@ -14,6 +14,7 @@ fn create_test_model() -> Model {
         name: "Original Name".to_string(),
         model_key: String::new(),
         file_path: PathBuf::from("/test/model.gguf"),
+        projector_path: None,
         param_count_b: 7.0,
         inference_defaults: None,
         defaults_origin: None,
@@ -110,6 +111,7 @@ fn bare_args() -> UpdateArgs {
         reasoning_budget_tokens: None,
         unset: Vec::new(),
         clear_inference_defaults: false,
+        projector: crate::projector_args::ProjectorArgs::default(),
     }
 }
 

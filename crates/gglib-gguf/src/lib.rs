@@ -10,6 +10,7 @@ mod error;
 mod format;
 mod parser;
 mod reader;
+mod role;
 
 // =============================================================================
 // Public API: Parser + Core Re-exports (minimal surface)

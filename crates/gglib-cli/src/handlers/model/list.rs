@@ -4,7 +4,8 @@
 //! are loaded from the local `SQLite` database and filtered in-process via
 //! [`gglib_core::domain::apply_query`], into a `Vec<GuiModel>` that is
 //! rendered by a single table function. A speed column (`⚡ t/s`) is shown
-//! only when at least one returned model has benchmark data. While this
+//! only when at least one returned model has benchmark data, and an `Images`
+//! column says which models are linked to a projector. While this
 //! machine is paired, the list ends with one line on how the paired machine
 //! stands, which asks that machine nothing.
 
@@ -15,7 +16,7 @@ use gglib_app_services::types::GuiModel;
 use gglib_core::domain::{ModelListQuery, apply_query};
 
 use crate::bootstrap::CliContext;
-use crate::model_commands::{CliModelSortBy, CliSortOrder};
+use crate::model_list_args::ListArgs;
 use crate::presentation::truncate_string;
 use crate::target::Target;
 
@@ -25,17 +26,6 @@ mod list_far;
 // ─────────────────────────────────────────────────────────────────────────────
 // Public surface
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Arguments forwarded from the `List` CLI variant.
-pub(crate) struct ListArgs {
-    pub sort: CliModelSortBy,
-    pub order: CliSortOrder,
-    pub min_params: Option<f64>,
-    pub max_params: Option<f64>,
-    pub min_speed: Option<f64>,
-    pub max_speed: Option<f64>,
-    pub tags: Vec<String>,
-}
 
 /// Execute the list command: this machine's catalogue, or the paired
 /// machine's as its proxy publishes it.
@@ -124,17 +114,17 @@ fn render_table(models: &[GuiModel]) -> String {
     if show_speed {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<20} File Path",
-            "ID", "Name", "Params", "⚡ t/s", "Arch", "Quant", "Context", "Added"
+            "{:<id_width$} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<7} {:<20} File Path",
+            "ID", "Name", "Params", "⚡ t/s", "Arch", "Quant", "Context", "Images", "Added"
         );
-        let _ = writeln!(out, "{}", "-".repeat(125 + id_width));
+        let _ = writeln!(out, "{}", "-".repeat(133 + id_width));
     } else {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<8} {:<12} {:<8} {:<10} {:<20} File Path",
-            "ID", "Name", "Params", "Arch", "Quant", "Context", "Added"
+            "{:<id_width$} {:<25} {:<8} {:<12} {:<8} {:<10} {:<7} {:<20} File Path",
+            "ID", "Name", "Params", "Arch", "Quant", "Context", "Images", "Added"
         );
-        let _ = writeln!(out, "{}", "-".repeat(112 + id_width));
+        let _ = writeln!(out, "{}", "-".repeat(120 + id_width));
     }
 
     for model in models {
@@ -143,6 +133,8 @@ fn render_table(models: &[GuiModel]) -> String {
         let context = model
             .context_length
             .map_or_else(|| "--".to_string(), |c| c.to_string());
+        // A model reads images exactly when it is linked to a projector.
+        let images = if model.image_input { "yes" } else { "--" };
 
         if show_speed {
             let speed = model
@@ -152,7 +144,7 @@ fn render_table(models: &[GuiModel]) -> String {
                 .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<20} {}",
+                "{:<id_width$} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<7} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model.param_count_b,
@@ -160,19 +152,21 @@ fn render_table(models: &[GuiModel]) -> String {
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),
                 truncate_string(&context, 9),
+                images,
                 model.added_at,
                 model.file_path,
             );
         } else {
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<20} {}",
+                "{:<id_width$} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<7} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model.param_count_b,
                 truncate_string(arch, 11),
                 truncate_string(quant, 7),
                 truncate_string(&context, 9),
+                images,
                 model.added_at,
                 model.file_path,
             );

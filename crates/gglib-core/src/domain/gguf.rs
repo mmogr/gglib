@@ -21,8 +21,6 @@ bitflags::bitflags! {
         const REASONING = 0b0000_0001;
         /// Model supports tool/function calling (e.g., Hermes, Functionary).
         const TOOL_CALLING = 0b0000_0010;
-        /// Model supports vision/image input.
-        const VISION = 0b0000_0100;
         /// Model supports code generation.
         const CODE = 0b0000_1000;
         /// Model is a mixture-of-experts architecture.
@@ -82,12 +80,6 @@ impl GgufCapabilities {
         self.flags.contains(CapabilityFlags::TOOL_CALLING)
     }
 
-    /// Check if vision is supported.
-    #[must_use]
-    pub const fn has_vision(&self) -> bool {
-        self.flags.contains(CapabilityFlags::VISION)
-    }
-
     /// Check if MTP (Multi-Token Prediction) draft heads are present.
     #[must_use]
     pub const fn has_mtp(&self) -> bool {
@@ -116,9 +108,6 @@ impl GgufCapabilities {
         if self.has_tool_calling() {
             // triggers --jinja auto-enable
             tags.push(super::capability_tags::AGENT.to_string());
-        }
-        if self.has_vision() {
-            tags.push(super::capability_tags::VISION.to_string());
         }
         if self.flags.contains(CapabilityFlags::CODE) {
             tags.push(super::capability_tags::CODE.to_string());
@@ -280,6 +269,9 @@ pub struct GgufMetadata {
     pub expert_shared_count: Option<u32>,
     /// Additional key-value metadata from the file (string representation).
     pub metadata: HashMap<String, String>,
+    /// What the header says the file is: a model's weights, or a projector
+    /// (`general.type` is `mmproj`, or `general.architecture` is `clip`).
+    pub role: crate::download::GgufFileRole,
 }
 
 /// Raw metadata from GGUF parsing (before string conversion).

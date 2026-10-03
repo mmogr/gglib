@@ -37,6 +37,16 @@ name: string,
  */
 filePath?: string, 
 /**
+ * Absolute path to the projector the model loads beside its weights.
+ * `None` when it has none, and where the reader is on another machine,
+ * as `file_path` is; [`Self::image_input`] is the answer that travels.
+ */
+projectorPath?: string, 
+/**
+ * Whether the model reads images: it is linked to a projector.
+ */
+imageInput: boolean, 
+/**
  * Parameter count in billions.
  */
 paramCountB: number, 

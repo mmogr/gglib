@@ -31,7 +31,7 @@ pub(super) const fn reach_of(action: ModelAction) -> Reach {
 /// token), and is [`ModelAction::Manage`].
 pub(super) const fn model_action(command: &ModelCommand) -> (&'static str, ModelAction) {
     match command {
-        ModelCommand::List { .. } => ("model list", ModelAction::List),
+        ModelCommand::List(_) => ("model list", ModelAction::List),
         ModelCommand::Inspect { .. } => ("model inspect", ModelAction::Detail),
         ModelCommand::Add { .. }
         | ModelCommand::Remove { .. }

@@ -2,9 +2,11 @@
 mod app_core;
 mod chat_history;
 mod model_import;
+mod model_projector;
 mod model_registrar;
 mod model_service;
 mod model_verification;
+mod projector_choices;
 mod settings_cache;
 mod settings_service;
 
@@ -13,6 +15,7 @@ pub use chat_history::ChatHistoryService;
 pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };
+pub use model_projector::ProjectorError;
 pub use model_registrar::{ModelFilesRepositoryPort, ModelRegistrar};
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
@@ -20,5 +23,6 @@ pub use model_verification::{
     ShardHealth, ShardHealthReport, ShardProgress, UpdateCheckResult, UpdateDetails,
     VerificationProgress, VerificationReport,
 };
+pub use projector_choices::projector_choices;
 pub use settings_cache::{DEFAULT_TTL as SETTINGS_CACHE_TTL, SettingsCache};
 pub use settings_service::SettingsService;

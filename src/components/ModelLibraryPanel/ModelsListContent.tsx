@@ -9,6 +9,7 @@ import { EmptyState } from '../primitives/EmptyState';
 import { ModelListSkeleton } from './ModelListSkeleton';
 import { cn } from '../../utils/cn';
 import { Chip } from '../ui/Chip';
+import { VisionChip } from '../VisionChip';
 
 interface ModelsListContentProps {
   models: GgufModel[];
@@ -99,6 +100,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                 {model.quantization && (
                   <Chip size="sm" className="font-mono">{model.quantization}</Chip>
                 )}
+                {model.imageInput && <VisionChip />}
                 {tps != null && (
                   <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="font-mono tabular-nums">
                     {tps.toFixed(0)} t/s

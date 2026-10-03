@@ -47,7 +47,7 @@ fn the_id_column_is_as_wide_as_the_widest_id() {
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(lines[0].find("Name"), lines[2].find("small"), "{table}");
     assert_eq!(lines[2].find("small"), lines[3].find("big"), "{table}");
-    assert_eq!(lines[1].len(), 112 + 4, "the rule spans the wider column");
+    assert_eq!(lines[1].len(), 120 + 4, "the rule spans the wider column");
     assert!(lines[2].starts_with("3    "), "{table}");
     assert!(lines[3].starts_with("1000 "), "{table}");
 }
@@ -58,7 +58,7 @@ fn short_ids_get_a_column_three_wide() {
     let table = render_table(&[model(3, "small")]);
 
     assert!(table.starts_with("ID  Name"), "{table}");
-    assert_eq!(table.lines().nth(1).map(str::len), Some(115));
+    assert_eq!(table.lines().nth(1).map(str::len), Some(123));
 }
 
 /// The paired machine's line follows the table.
@@ -84,4 +84,18 @@ fn an_empty_library_still_names_the_paired_machine() {
         listing(&[], None),
         "No models found.\nUse 'gglib model add <file_path>' to add your first model.\n"
     );
+}
+
+/// The `Images` column says `yes` for a model linked to a projector and `--`
+/// for one that is not, under its header.
+#[test]
+fn the_images_column_marks_the_models_that_read_images() {
+    let mut sees = model(1, "sees");
+    sees.image_input = true;
+    let table = render_table(&[sees, model(2, "blind")]);
+
+    let lines: Vec<&str> = table.lines().collect();
+    let column = lines[0].find("Images").expect("an Images header");
+    assert!(lines[2][column..].starts_with("yes "), "{table}");
+    assert!(lines[3][column..].starts_with("-- "), "{table}");
 }

@@ -28,6 +28,7 @@ mod fixture {
             name: "test-model".to_owned(),
             model_key: String::new(),
             file_path: PathBuf::from("/models/test.gguf"),
+            projector_path: None,
             param_count_b: 7.0,
             architecture: None,
             quantization: None,

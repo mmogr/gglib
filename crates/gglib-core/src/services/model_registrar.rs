@@ -214,34 +214,7 @@ mod tests {
 
         async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
             let mut id = self.next_id.lock().unwrap();
-            let persisted = Model {
-                dialect_spec: None,
-                id: *id,
-                name: model.name.clone(),
-                model_key: String::new(),
-                file_path: model.file_path.clone(),
-                param_count_b: model.param_count_b,
-                architecture: model.architecture.clone(),
-                quantization: model.quantization.clone(),
-                context_length: model.context_length,
-                expert_count: model.expert_count,
-                expert_used_count: model.expert_used_count,
-                expert_shared_count: model.expert_shared_count,
-                metadata: model.metadata.clone(),
-                added_at: model.added_at,
-                hf_repo_id: model.hf_repo_id.clone(),
-                hf_commit_sha: model.hf_commit_sha.clone(),
-                hf_filename: model.hf_filename.clone(),
-                capabilities: model.capabilities,
-                download_date: model.download_date,
-                last_update_check: model.last_update_check,
-                tags: model.tags.clone(),
-                inference_defaults: model.inference_defaults.clone(),
-                defaults_origin: model.defaults_origin,
-                server_defaults: model.server_defaults.clone(),
-                template_caps: None,
-                benchmark_summary: None,
-            };
+            let persisted = Model::stored(*id, model);
             // Mirror the `SQLite` repository: a repeat registration of the
             // same file updates that row and keeps its id. This double models
             // registration-after-download, which is the very path the trait

@@ -12,6 +12,7 @@ import type {
   AddModelParams,
   UpdateModelParams,
   ModelFilterOptions,
+  ProjectorChoice,
   SystemMemoryInfo,
   ModelsDirectoryInfo,
   RetagResponse,
@@ -110,7 +111,17 @@ export async function updateModel(params: UpdateModelParams): Promise<GgufModel>
     filePath: params.filePath,
     inferenceDefaults: params.inferenceDefaults,
     serverDefaults: params.serverDefaults,
+    projectorPath: params.projectorPath,
   });
+}
+
+/**
+ * The projector files a model's picker offers: every projector some model is
+ * linked to, and this model's own files named as projectors. "None" is the
+ * picker's own entry; the pick is sent back as `updateModel`'s `projectorPath`.
+ */
+export async function listProjectorChoices(id: ModelId): Promise<ProjectorChoice[]> {
+  return get<ProjectorChoice[]>(`/api/models/${id}/projectors`);
 }
 
 /**

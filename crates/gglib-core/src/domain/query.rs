@@ -252,41 +252,17 @@ fn cmp_tps_desc(a: Option<f64>, b: Option<f64>) -> std::cmp::Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ModelCapabilities;
+    use crate::NewModel;
     use crate::domain::benchmark::ModelBenchmarkSummary;
     use chrono::Utc;
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     fn make_model(id: i64, name: &str, params: f64) -> Model {
-        Model {
-            dialect_spec: None,
+        let path = PathBuf::from(format!("/models/{name}.gguf"));
+        Model::stored(
             id,
-            name: name.to_string(),
-            model_key: String::new(),
-            file_path: PathBuf::from(format!("/models/{name}.gguf")),
-            param_count_b: params,
-            architecture: None,
-            quantization: None,
-            context_length: None,
-            expert_count: None,
-            expert_used_count: None,
-            expert_shared_count: None,
-            metadata: HashMap::new(),
-            added_at: Utc::now(),
-            hf_repo_id: None,
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            last_update_check: None,
-            tags: vec![],
-            capabilities: ModelCapabilities::default(),
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-            template_caps: None,
-            benchmark_summary: None,
-        }
+            &NewModel::new(name.to_string(), path, params, Utc::now()),
+        )
     }
 
     fn with_quant(mut m: Model, quant: &str) -> Model {

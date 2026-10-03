@@ -119,6 +119,7 @@ mod tests {
                 name: name.to_owned(),
                 tags: Vec::new(),
                 capabilities: gglib_core::domain::ModelCapabilities::empty(),
+                image_input: false,
                 param_count: "7B".to_owned(),
                 quantization: None,
                 architecture: None,

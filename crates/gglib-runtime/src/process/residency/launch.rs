@@ -30,6 +30,9 @@ use crate::process::core::GuiProcessCore;
 use crate::process::health::wait_for_http_health;
 use crate::server_config::build_server_config_narrated;
 
+#[path = "launch_files.rs"]
+mod launch_files;
+
 /// Everything one launch needs, resolved before it is spawned.
 ///
 /// A struct rather than nine parameters because every field is decided at a
@@ -146,12 +149,7 @@ async fn launch(
     } = request;
     let mut opts = opts.clone();
 
-    let model_path = &spec.file_path;
-    if !tokio::fs::try_exists(model_path).await.unwrap_or(false) {
-        return Err(ModelRuntimeError::ModelFileNotFound(
-            model_path.display().to_string(),
-        ));
-    }
+    launch_files::ensure_present(spec).await?;
 
     // --- Stop whatever this launch is displacing ---
     //
@@ -244,11 +242,12 @@ async fn launch(
     let (config, capabilities) = build_server_config_narrated(
         i64::from(spec.id),
         spec.name.clone(),
-        model_path.clone(),
+        spec.file_path.clone(),
         0, // base_port unused — GuiProcessCore resolves the port itself
         &spec.tags,
         opts,
     );
+    let config = config.with_mmproj(spec.projector.clone());
 
     // Every decision above is now resolved, so this is the last point at which
     // they all coexist — the narration is assembled here and then carried,
@@ -376,7 +375,7 @@ async fn launch(
             model_name: spec.name.clone(),
             context_size: *resolved_ctx,
             port,
-            model_path: spec.file_path.clone(),
+            projector: spec.projector.clone(),
             slot_restore_supported: slot_restore.enabled,
             model_sampling: spec.model_sampling,
             cache_ram_health,

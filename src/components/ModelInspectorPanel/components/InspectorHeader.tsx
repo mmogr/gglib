@@ -3,9 +3,12 @@ import { CloudSync, Shield } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
+import { VisionChip } from '../../VisionChip';
 
 interface InspectorHeaderProps {
   modelName: string;
+  /** Whether the model reads images: it is linked to a projector. */
+  imageInput: boolean;
   /** Whether the model has a HuggingFace repo to check for updates against. */
   hasHfRepo: boolean;
   isEditMode: boolean;
@@ -16,11 +19,12 @@ interface InspectorHeaderProps {
 }
 
 /**
- * Inspector title bar: model name (or its edit field) plus the two
- * secondary maintenance actions.
+ * Inspector title bar: model name (or its edit field), the Vision chip on a
+ * model that reads images, plus the two secondary maintenance actions.
  */
 export const InspectorHeader: FC<InspectorHeaderProps> = ({
   modelName,
+  imageInput,
   hasHfRepo,
   isEditMode,
   editedName,
@@ -39,7 +43,10 @@ export const InspectorHeader: FC<InspectorHeaderProps> = ({
           placeholder="Model name"
         />
       ) : (
-        <h2 className="m-0 text-lg font-semibold truncate">{modelName}</h2>
+        <div className="flex items-center gap-sm min-w-0">
+          <h2 className="m-0 text-lg font-semibold truncate">{modelName}</h2>
+          {imageInput && <VisionChip />}
+        </div>
       )}
 
       {!isEditMode && (

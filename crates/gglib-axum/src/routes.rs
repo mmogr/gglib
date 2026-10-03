@@ -164,6 +164,12 @@ fn model_routes() -> Router<AppState> {
         // The resolved sampling parameters plus the layer that supplied each —
         // the HTTP form of `gglib model explain`.
         .route("/{id}/explain", get(handlers::model::models::explain))
+        // Projector picker: GET /api/models/{id}/projectors
+        // The files a PUT's `projectorPath` may name for this model.
+        .route(
+            "/{id}/projectors",
+            get(handlers::model::models::projector_choices),
+        )
         // Benchmark history for this model
         .route(
             "/{id}/benchmark",
@@ -199,6 +205,13 @@ fn model_routes() -> Router<AppState> {
             get(handlers::model::verification::check_updates),
         )
         .route("/{id}/repair", post(handlers::model::verification::repair))
+        .merge(model_fetch_routes())
+}
+
+/// The download queue and `HuggingFace` discovery, merged into
+/// [`model_routes`] and so under `/api/models` too.
+fn model_fetch_routes() -> Router<AppState> {
+    Router::new()
         // Downloads
         .route(
             // Two clients, not one: the dashboard polls this, and so does the

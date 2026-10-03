@@ -301,6 +301,7 @@ impl TaggedCatalog {
             name: self.name.clone(),
             tags: self.tags.clone(),
             capabilities: gglib_core::domain::ModelCapabilities::empty(),
+            image_input: false,
             param_count: "7B".into(),
             quantization: None,
             architecture: None,
@@ -359,22 +360,14 @@ impl MultiModelCatalog {
 
     fn summary_at(&self, index: usize) -> ModelSummary {
         let (name, tags) = &self.0[index];
-        ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id: u32::try_from(index).unwrap_or(0) + 1,
+        let tagged = TaggedCatalog {
             name: name.clone(),
             tags: tags.clone(),
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            dialect: None,
+        };
+        ModelSummary {
+            id: u32::try_from(index).unwrap_or(0) + 1,
+            ..tagged.summary()
         }
     }
 }

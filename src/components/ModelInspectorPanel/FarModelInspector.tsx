@@ -9,6 +9,7 @@ import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { Icon } from '../ui/Icon';
+import { VisionChip } from '../VisionChip';
 import { ModelMetadataGrid } from './components/ModelMetadataGrid';
 
 interface FarModelInspectorProps {
@@ -44,9 +45,10 @@ function useFarDetail(id: number) {
 
 /**
  * The paired machine's model, read-only: what that machine stores about it
- * (with no path on its disk), whether it is serving, and only the actions
- * that machine allows on its models — Chat and Load, each shown only when
- * the table the daemon sent lists it. While its rows are away or stale the
+ * (with no path on its disk), whether it reads images, whether it is serving,
+ * and only the actions that machine allows on its models — Chat and Load,
+ * each shown only when the table the daemon sent lists it. While its rows
+ * are away or stale the
  * actions are offered but disabled, since a press would not reach it. Load
  * reads the model again when it lands, which is how "Serving on" appears.
  *
@@ -83,6 +85,7 @@ export const FarModelInspector: FC<FarModelInspectorProps> = ({ model, paired, o
       <div className="p-md border-b border-border-light shrink-0 flex items-center gap-sm">
         <h2 className="m-0 text-lg font-semibold truncate">{detail?.name ?? `Model ${model.id}`}</h2>
         <Chip size="sm" leftIcon={<Icon icon={Server} size={11} />}>{paired.name}</Chip>
+        {detail?.imageInput && <VisionChip />}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-base flex flex-col gap-md">
         {error && <Banner variant="danger">{`Could not read it from ${paired.name}: ${error}`}</Banner>}

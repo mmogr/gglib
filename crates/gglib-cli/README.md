@@ -280,6 +280,11 @@ gglib model add --reimport ~/models/llama-2-7b.Q4_K_M.gguf
 # List all models
 gglib model list
 
+# Give a model image input by linking it to a projector (an mmproj GGUF),
+# and take it away again
+gglib model update 1 --projector ~/models/mmproj-F16.gguf
+gglib model update 1 --no-projector
+
 # Pin one model to an OpenAI-compatible endpoint (proxy stack, dashboard included)
 gglib serve 1 --port 8080
 

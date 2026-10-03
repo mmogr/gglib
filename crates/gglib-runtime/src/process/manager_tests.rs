@@ -171,7 +171,7 @@ fn manager_with_resident() -> Arc<ProcessManager> {
         model_name: "qwen".to_owned(),
         context_size: 4096,
         port: 8001,
-        model_path: "/models/qwen.gguf".into(),
+        projector: None,
         slot_restore_supported: true,
         cache_ram_health: gglib_core::domain::CacheRamHealth::LlamaDefault,
         narration: None,

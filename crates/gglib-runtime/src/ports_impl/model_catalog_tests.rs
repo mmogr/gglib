@@ -18,6 +18,7 @@ fn base_model() -> Model {
         name: "qwen3".to_string(),
         model_key: String::new(),
         file_path: PathBuf::from("/models/qwen3.gguf"),
+        projector_path: None,
         param_count_b: 7.0,
         architecture: None,
         quantization: None,

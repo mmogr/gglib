@@ -64,6 +64,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`format.rs`** — GGUF format types, tensor types, and quantization enums
 - **`parser.rs`** — High-level metadata extraction and port implementation
 - **`reader.rs`** — Low-level file I/O and GGUF header parsing
+- **`role.rs`** — Whether the header says the file is a model's weights or a projector
 - **`capabilities/`** — Model capability detection (context size, chat templates)
 
 ## Features
@@ -83,7 +84,6 @@ These tags drive automatic llama-server flag selection at serve time.
 | `"agent"` | Chat template contains tool-calling syntax | `--jinja` auto-enabled |
 | `"reasoning"` | Chat template contains `<think>` / `DeepSeek` reasoning tokens | `--reasoning-format deepseek` auto-enabled |
 | `"mtp"` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
-| `"vision"` | Multi-modal clip projection keys present | Informational only (future) |
 | `"moe"` | `{arch}.expert_count > 0` | Informational only |
 
 ### MTP tag details

@@ -6,7 +6,6 @@
 //! what makes that possible — and what makes `tokio::time::pause()` enough to
 //! test the two fairness bounds that are otherwise minutes long.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Instant;
 
@@ -27,7 +26,7 @@ fn resident(model_id: u32, name: &str) -> Resident {
         model_name: name.to_string(),
         context_size: 4096,
         port: 8000 + u16::try_from(model_id).unwrap_or(0),
-        model_path: PathBuf::from("/models/x.gguf"),
+        projector: None,
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
         narration: None,

@@ -8,132 +8,12 @@ use gglib_core::domain::mcp::McpLifecycle;
 use gglib_core::ports::ProcessHandle;
 use serde::{Deserialize, Serialize};
 
-// ============================================================================
-// HuggingFace Browser Types
-// ============================================================================
-
-/// Summary of a `HuggingFace` model from the search API.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct HfModelSummary {
-    /// Model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
-    pub id: String,
-    /// Human-readable model name (derived from id)
-    pub name: String,
-    /// Author/organization (e.g., "`TheBloke`")
-    pub author: Option<String>,
-    /// Total download count
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub downloads: u64,
-    /// Like count
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub likes: u64,
-    /// Last modified timestamp
-    pub last_modified: Option<String>,
-    /// Total parameter count in billions (from safetensors.total)
-    pub parameters_b: Option<f64>,
-    /// Model description/README excerpt
-    pub description: Option<String>,
-    /// Model tags
-    #[serde(default)]
-    pub tags: Vec<String>,
-}
-
-/// Sort field options for `HuggingFace` model search.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "lowercase")]
-pub enum HfSortField {
-    #[default]
-    Downloads,
-    Likes,
-    Modified,
-    Created,
-    #[serde(rename = "id")]
-    Alphabetical,
-}
-
-/// Request for searching `HuggingFace` models.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct HfSearchRequest {
-    pub query: Option<String>,
-    pub min_params_b: Option<f64>,
-    pub max_params_b: Option<f64>,
-    pub page: u32,
-    pub limit: u32,
-    #[serde(default)]
-    pub sort_by: HfSortField,
-    #[serde(default)]
-    pub sort_ascending: bool,
-}
-
-impl Default for HfSearchRequest {
-    fn default() -> Self {
-        Self {
-            query: None,
-            min_params_b: None,
-            max_params_b: None,
-            page: 0,
-            limit: 30,
-            sort_by: HfSortField::default(),
-            sort_ascending: false,
-        }
-    }
-}
-
-/// Response from `HuggingFace` model search.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct HfSearchResponse {
-    pub models: Vec<HfModelSummary>,
-    pub has_more: bool,
-    pub page: u32,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    pub total_count: Option<u64>,
-}
-
-/// Information about a specific quantization variant.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct HfQuantization {
-    pub name: String,
-    pub file_path: String,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub size_bytes: u64,
-    pub size_mb: f64,
-    pub is_sharded: bool,
-    pub shard_count: Option<u32>,
-}
-
-/// Response containing available quantizations for a model.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct HfQuantizationsResponse {
-    pub model_id: String,
-    pub quantizations: Vec<HfQuantization>,
-}
-
-/// Response for tool/function calling support detection.
-///
-/// Used for both `HuggingFace` model metadata and local running server queries.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct ToolSupportResponse {
-    pub supports_tool_calls: bool,
-    pub confidence: f32,
-    pub detected_format: Option<String>,
-}
-
-impl From<gglib_core::ports::ToolSupportDetection> for ToolSupportResponse {
-    fn from(detection: gglib_core::ports::ToolSupportDetection) -> Self {
-        Self {
-            supports_tool_calls: detection.supports_tool_calling,
-            confidence: detection.confidence,
-            detected_format: detection.detected_format.map(|f| f.to_string()),
-        }
-    }
-}
+#[path = "types_hf.rs"]
+mod types_hf;
+pub use types_hf::{
+    HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
+    HfSortField, ToolSupportResponse,
+};
 
 // ============================================================================
 // GUI Model Types
@@ -202,6 +82,9 @@ pub struct GuiModel {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     #[serde(default)]
     pub capabilities: gglib_core::ModelCapabilities,
+    /// Whether the model reads images: it is linked to a projector.
+    #[serde(default)]
+    pub image_input: bool,
     /// Denormalised benchmark summary (speed badges).
     ///
     /// `None` if the model has never been benchmarked.
@@ -214,6 +97,7 @@ impl GuiModel {
     /// Convert a domain Model to `GuiModel` format.
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         Self {
+            image_input: model.image_input(),
             id: model.id,
             name: model.name,
             file_path: model.file_path.to_string_lossy().to_string(),
@@ -365,6 +249,24 @@ pub struct UpdateModelRequest {
     )]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
+    /// The projector the model loads beside its weights, by path.
+    /// - Some(Some(path)) — link the model to the projector at `path`
+    /// - Some(None) — unlink it
+    /// - None — don't touch the link (key omitted from payload)
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<String>", optional = nullable))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub projector_path: Option<Option<String>>,
+}
+
+/// One projector file the inspector's picker offers for a model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectorChoice {
+    /// Absolute path of the file, the value an update sends back.
+    pub path: String,
+    /// The file's name, for the picker's label.
+    pub name: String,
 }
 
 /// Request body for overriding a model's capability flags.

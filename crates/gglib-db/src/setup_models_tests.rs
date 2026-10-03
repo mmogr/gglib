@@ -44,6 +44,7 @@ pub(super) fn legacy_ddl(table: &str) -> String {
 pub(super) async fn make_legacy(pool: &SqlitePool, extra: &str) {
     sqlx::raw_sql(&format!(
         "PRAGMA foreign_keys = OFF;
+         ALTER TABLE models DROP COLUMN projector_path;
          {legacy};
          INSERT INTO legacy SELECT * FROM models;
          DROP TABLE models;

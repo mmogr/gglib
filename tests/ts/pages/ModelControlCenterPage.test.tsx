@@ -29,6 +29,10 @@ import { ReactNode, useState } from 'react';
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
 // The paired machine's models, and whether reading them hangs.
 const far = vi.hoisted(() => ({ hang: false }));
+// This machine's model as its detail route answers, the projector files its
+// picker is offered, and the update the page sends.
+const here = vi.hoisted(() => ({ detail: null as unknown, projectors: null as unknown }));
+const updateModel = vi.hoisted(() => vi.fn(async (_params: { id: number; projectorPath?: string | null }) => ({})));
 const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ port: 9456 })));
 // What the stub chat page's switch button picks, and the conversation it
 // reports as open when the switch lands.
@@ -46,7 +50,8 @@ vi.mock('../../../src/services/transport', async () => {
     ...actual,
     getTransport: () => ({
       listModels: vi.fn(async () => library.models),
-      getModelDetail: vi.fn(async () => null),
+      getModelDetail: vi.fn(async () => here.detail),
+      updateModel,
       listPairedModels: vi.fn(() =>
         far.hang ? new Promise(() => {}) : Promise.resolve(pairedModels([farEntry('qwen3-8b', 7)])),
       ),
@@ -70,7 +75,13 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   // The library list the page draws is the filtered fetch, not `listModels`;
   // a model's sampling explanation is "none", which the inspector can draw.
   get: vi.fn(async (path: string) =>
-    path.startsWith('/api/models?') ? library.models : path.startsWith('/api/models/') ? null : [],
+    path.startsWith('/api/models?')
+      ? library.models
+      : path.endsWith('/projectors')
+        ? here.projectors
+        : path.startsWith('/api/models/')
+          ? null
+          : [],
   ),
   getAuthenticatedFetchConfig: vi.fn(async () => ({ baseUrl: '', headers: {} })),
 }));
@@ -198,6 +209,9 @@ async function pickFar(name: RegExp) {
 describe('ModelControlCenterPage', () => {
   beforeEach(() => {
     library.models = [];
+    here.detail = null;
+    here.projectors = null;
+    updateModel.mockClear();
     serveModel.mockClear();
     stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
     stub.conversationId = 2;
@@ -328,6 +342,34 @@ describe('ModelControlCenterPage', () => {
 
     expect(await screen.findByRole('button', { name: /start endpoint/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open chat/i })).not.toBeInTheDocument();
+  });
+
+  it("links this machine's model to the projector picked in its inspector, by the library's update", async () => {
+    library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
+    here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
+    here.projectors = [{ path: '/models/g/mmproj-gemma.gguf', name: 'mmproj-gemma.gguf' }];
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+
+    const picker = await screen.findByRole('combobox', { name: 'Projector' });
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.selectOptions(picker, await within(picker).findByRole('option', { name: 'mmproj-gemma.gguf' }));
+
+    await waitFor(() => expect(updateModel).toHaveBeenCalledTimes(1));
+    expect(updateModel.mock.calls[0][0]).toMatchObject({ id: 9, projectorPath: '/models/g/mmproj-gemma.gguf' });
+  });
+
+  it("marks this machine's model that reads images in its library row and its inspector", async () => {
+    library.models = [guiModel({ id: 9, name: 'gemma-3-12b', imageInput: true })];
+    renderPage();
+    const row = await screen.findByRole('option', { name: /gemma-3-12b/i });
+    expect(within(row).getByText('Vision')).toBeInTheDocument();
+
+    await userEvent.setup().click(row);
+
+    const heading = await screen.findByRole('heading', { name: 'gemma-3-12b' });
+    expect(within(heading.parentElement!).getByText('Vision')).toBeInTheDocument();
   });
 
   it('leaves the model loaded when a local chat is closed', async () => {
