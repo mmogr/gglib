@@ -4,7 +4,7 @@
 use gglib_core::LoopGuardMode;
 use gglib_core::ports::{LaunchOverrides, ModelRuntimeError, ModelRuntimePort, SettingsRepository};
 
-use super::super::mock_upstream::{MockUpstream, NoCatalog};
+use super::super::mock_upstream::{MockUpstream, OneModelCatalog};
 use super::*;
 
 fn target() -> RunningTarget {
@@ -18,7 +18,7 @@ async fn the_pinned_target_never_launches_or_stops_a_model() {
     let port = PinnedTarget { target: target() };
 
     let admission = port
-        .admit("held", Some(131_072), None, LaunchOverrides::default())
+        .admit("1", Some(131_072), None, LaunchOverrides::default())
         .await
         .expect("the held model is admitted");
     assert_eq!(admission.target.base_url, target().base_url);
@@ -28,7 +28,7 @@ async fn the_pinned_target_never_launches_or_stops_a_model() {
     );
 
     let refused = port
-        .admit("other", None, None, LaunchOverrides::default())
+        .admit("2", None, None, LaunchOverrides::default())
         .await
         .expect_err("another model is refused");
     assert!(matches!(
@@ -60,7 +60,7 @@ async fn the_fixed_settings_trust_client_sampling_and_add_no_defaults() {
 async fn the_report_records_the_loop_guard_mode_the_proxy_reads() {
     let upstream = MockUpstream::spawn().await;
     let held = RunningTarget::local(upstream.port, 1, "held".to_owned(), 4096, false);
-    let arm = ProxyArm::start(held, Arc::new(NoCatalog))
+    let arm = ProxyArm::start(held, Arc::new(OneModelCatalog("held")))
         .await
         .expect("starts");
     let (_, recorded) = arm.finish().await;
@@ -74,7 +74,7 @@ async fn the_report_records_the_loop_guard_mode_the_proxy_reads() {
 async fn the_proxy_stops_when_the_arm_is_dropped() {
     let upstream = MockUpstream::spawn().await;
     let held = RunningTarget::local(upstream.port, 1, "held".to_owned(), 4096, false);
-    let arm = ProxyArm::start(held, Arc::new(NoCatalog))
+    let arm = ProxyArm::start(held, Arc::new(OneModelCatalog("held")))
         .await
         .expect("starts");
     let addr = arm.base_url().trim_start_matches("http://").to_owned();

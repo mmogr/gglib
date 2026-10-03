@@ -194,18 +194,17 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     /// Returns `CatalogError` if the catalog cannot be queried.
     async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError>;
 
-    /// Resolve a model by name or alias.
+    /// Resolve a model by id or name.
     ///
-    /// This method performs model resolution:
-    /// 1. Exact name match
-    /// 2. Case-insensitive name match
-    /// 3. Fuzzy/partial match (implementation-defined)
+    /// A string that parses as a number is tried as a catalog id first; if no
+    /// model has that id, it is tried as an exact name. Nothing is matched
+    /// case-insensitively or by prefix.
     ///
     /// Returns `None` if no matching model is found.
     ///
     /// # Arguments
     ///
-    /// * `name` - Model name or alias to resolve
+    /// * `name` - Model id or exact name to resolve
     ///
     /// # Errors
     ///
@@ -219,7 +218,7 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     ///
     /// # Arguments
     ///
-    /// * `name` - Model name or alias to resolve
+    /// * `name` - Model id or exact name, resolved as [`Self::resolve_model`] does
     ///
     /// # Errors
     ///

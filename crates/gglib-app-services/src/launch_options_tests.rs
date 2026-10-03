@@ -67,6 +67,24 @@ fn context_resolves_explicit_over_model_over_settings() {
     assert_eq!(settings_tier.effective_ctx, 8192);
 }
 
+/// The pin names the model by its catalog id, which is what the runtime
+/// compares a request's resolved model against; the name is for messages.
+#[test]
+fn the_pin_carries_the_models_id() {
+    let mut m = model();
+    m.id = 42;
+    let plan = plan_pinned_launch(
+        &m,
+        &Settings::default(),
+        &request(),
+        ProxyGlobals::default(),
+    );
+    assert_eq!(
+        (plan.pinned.id, plan.pinned.name.as_str()),
+        (42, "test-model")
+    );
+}
+
 /// `mlock: false` is the flag's absence, not a request to disable — the
 /// invariant the CLI's `--mlock` handling depends on.
 #[test]

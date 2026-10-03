@@ -24,8 +24,8 @@ differ only in whether they send one:
 
 | | `gglib proxy` | `gglib serve <model>` |
 |---|---|---|
-| `pinned` | `None` — auto-swap on request | `Some(PinnedSpec)` — refuse others |
-| `/v1/models` | the whole catalog | the pinned model only |
+| `pinned` | `None` — auto-swap on request | `Some(PinnedSpec)` — refuse any model whose id is not the pin's |
+| `/v1/models` | the whole catalog | the pinned model only, matched by id |
 
 Everything else — the Axum layer, cache lifecycle, dashboard, SSE, MCP gateway
 and shutdown — is shared verbatim. `serve` is a *mode* of the

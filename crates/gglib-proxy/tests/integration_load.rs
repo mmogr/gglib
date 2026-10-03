@@ -34,11 +34,11 @@ const CHAT_STREAM: &[u8] =
 async fn loading_a_model_makes_it_resident_and_holds_nothing() {
     let upstream_cancel = tokio_util::sync::CancellationToken::new();
     let port = spawn_mock_upstream(vec![CHAT_STREAM], upstream_cancel.clone()).await;
-    let runtime = Arc::new(ResidentSimRuntime::new(HashMap::from([(
-        MODEL.to_string(),
-        port,
-    )])));
     let catalog = Arc::new(MultiModelCatalog(vec![(MODEL.to_string(), vec![])]));
+    let runtime = Arc::new(ResidentSimRuntime::over(
+        &catalog,
+        HashMap::from([(MODEL.to_string(), port)]),
+    ));
     let (base, proxy_cancel) =
         spawn_proxy_with_catalog(Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>, catalog).await;
     let client = Client::new();

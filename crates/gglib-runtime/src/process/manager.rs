@@ -186,12 +186,12 @@ impl ProcessManager {
 
     /// The single model this manager is pinned to, if any.
     ///
-    /// `Some(name)` is `gglib serve`: every other model is refused rather
-    /// than admitted. Owned because the pin is runtime-mutable state behind a
-    /// lock (see [`Self::set_pin`]).
+    /// `Some(pin)` is `gglib serve`: every model whose id is not `pin.id` is
+    /// refused rather than admitted. Owned because the pin is runtime-mutable
+    /// state behind a lock (see [`Self::set_pin`]).
     #[must_use]
-    pub fn pinned_model(&self) -> Option<String> {
-        self.residency.pinned_name()
+    pub fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
+        self.residency.pinned()
     }
 
     /// Keep model `model_id` on `port` loaded, and unrecycled, until the

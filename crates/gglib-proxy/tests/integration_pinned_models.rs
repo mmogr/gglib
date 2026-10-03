@@ -7,8 +7,8 @@
 //! from this list once, so an entry that can only come back as
 //! `PinnedModelMismatch` is worse than no entry at all.
 //!
-//! The pinned guard itself is unit-tested in `gglib-runtime`'s
-//! `manager.rs`/`swap_state.rs`. Most tests below use [`PinnedRuntime`],
+//! The pinned guard itself is unit-tested in `gglib-runtime`'s residency and
+//! process tests. Most tests below use [`PinnedRuntime`],
 //! which only *reports* pinning, so a failure there means the catalog is
 //! wrong rather than the enforcement. The enforcement test near the bottom
 //! uses [`EnforcingPinnedRuntime`] instead, to assert the actual wire
@@ -26,10 +26,8 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use fixtures::common::{
-    EnforcingPinnedRuntime, MockSettingsRepo, NoopRuntime, PinnedRuntime, ProfileSettingsRepo,
-    StaticCatalog, make_mcp_service,
-};
+use fixtures::common::{MockSettingsRepo, NoopRuntime, ProfileSettingsRepo, make_mcp_service};
+use fixtures::pinned::{EnforcingPinnedRuntime, PinnedRuntime, StaticCatalog};
 
 const PINNED: &str = "qwen2.5";
 const FOREIGN: &str = "llama-3-8b";
@@ -170,13 +168,13 @@ async fn pinned_proxy_keeps_variants_of_the_pinned_model_only() {
     cancel.cancel();
 }
 
-/// An empty catalog must not resurrect the filtered models — the pinned name
+/// An empty catalog must not resurrect the filtered models — the pinned id
 /// is a filter, not a synthesized entry.
 #[tokio::test]
 async fn pinned_proxy_advertises_nothing_when_the_model_is_absent() {
     let (base, cancel) = spawn(
         Arc::new(PinnedRuntime(PINNED)),
-        Arc::new(StaticCatalog::new(&[FOREIGN])),
+        Arc::new(StaticCatalog::numbered(&[(2, FOREIGN)])),
         Arc::new(MockSettingsRepo),
     )
     .await;
@@ -241,7 +239,7 @@ async fn pinned_proxy_serves_the_dashboard() {
 #[tokio::test]
 async fn pinned_proxy_refuses_a_foreign_model_over_http() {
     let (base, cancel) = spawn(
-        Arc::new(EnforcingPinnedRuntime(PINNED)),
+        Arc::new(EnforcingPinnedRuntime::over(PINNED, &[PINNED, FOREIGN])),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
         Arc::new(MockSettingsRepo),
     )
@@ -283,7 +281,7 @@ async fn pinned_proxy_refuses_a_foreign_model_over_http() {
 #[tokio::test]
 async fn pinned_proxy_still_admits_the_pinned_model_over_http() {
     let (base, cancel) = spawn(
-        Arc::new(EnforcingPinnedRuntime(PINNED)),
+        Arc::new(EnforcingPinnedRuntime::over(PINNED, &[PINNED, FOREIGN])),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
         Arc::new(MockSettingsRepo),
     )

@@ -153,9 +153,9 @@ impl ProxyArm {
 
 /// The one model's counts in a ledger that has only ever seen one model.
 ///
-/// Keyed by whatever name the proxy resolved, which need not be the catalog
-/// name the eval used. A second key would mean traffic this arm did not send,
-/// so it is said out loud rather than summed into the arm's numbers.
+/// Keyed by the name of the model the proxy admitted, which is the held
+/// target's. A second key would mean traffic this arm did not send, so it is
+/// said out loud rather than summed into the arm's numbers.
 fn only_model(snapshot: HashMap<String, ModelDefectCounts>) -> ModelDefectCounts {
     let mut entries = snapshot.into_iter();
     let Some((_, counts)) = entries.next() else {

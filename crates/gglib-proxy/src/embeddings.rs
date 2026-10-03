@@ -40,7 +40,7 @@ use tracing::{debug, error, info};
 use crate::dashboard::CacheStatus;
 use crate::forward::should_forward_header;
 use crate::models::{EmbeddingsRoutingEnvelope, ErrorResponse};
-use crate::server::{AppState, handle_runtime_error};
+use crate::server::{AppState, handle_runtime_error, refuse_unresolved};
 use crate::unary_body::{Exchange, answer_with, exchange};
 
 /// The tag that marks a model as launchable in embedding mode.
@@ -79,47 +79,32 @@ pub(crate) async fn embeddings(
                 .into_response();
         }
     };
-    let model_name = envelope.model;
 
-    // Resolved directly rather than through `request_pipeline::resolve`, which
-    // collapses "not in the catalog" and "in the catalog" into one pass-through
-    // context. Here the two need different answers: 404 for a model nobody has,
-    // 400 for a model that exists but cannot do this.
-    match state.catalog_port.resolve_model(&model_name).await {
-        Ok(Some(summary)) => {
-            if !summary.tags.iter().any(|t| t == EMBEDDING_TAG) {
-                info!(
-                    model = %model_name,
-                    "refusing embeddings request for a model that is not an embedding model"
-                );
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ErrorResponse::not_an_embedding_model(&model_name)),
-                )
-                    .into_response();
-            }
-        }
-        Ok(None) => {
-            // 404, matching what `handle_runtime_error` gives the chat path for
-            // `ModelNotFound` — the same missing model must not report two
-            // different statuses depending on which endpoint noticed.
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse::model_not_found(&model_name)),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            error!(model = %model_name, error = %e, "catalog lookup failed");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse::internal_error(&e.to_string())),
-            )
-                .into_response();
-        }
+    // Resolved once, by id or by name, as the chat path does — and through the
+    // same error mapping, so a model nobody has is the same 404 whichever
+    // endpoint noticed. A model that exists but cannot do this is a 400.
+    let model = match gglib_core::request_pipeline::resolve_summary(
+        state.catalog_port.as_ref(),
+        &envelope.model,
+    )
+    .await
+    {
+        Ok(model) => model,
+        Err(e) => return refuse_unresolved(&envelope.model, e),
+    };
+    if !model.tags.iter().any(|t| t == EMBEDDING_TAG) {
+        info!(
+            model = %model.name,
+            "refusing embeddings request for a model that is not an embedding model"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::not_an_embedding_model(&model.name)),
+        )
+            .into_response();
     }
 
-    info!(model = %model_name, "Processing embeddings request");
+    info!(model = %model.name, "Processing embeddings request");
 
     // The same call the chat path makes, for the same reason: a request that
     // arrives mid-swap should wait it out rather than get a fast 503. `None`
@@ -133,7 +118,7 @@ pub(crate) async fn embeddings(
     let admission = match state
         .runtime_port
         .admit(
-            &model_name,
+            &model.id.to_string(),
             None,
             state.default_ctx,
             gglib_core::ports::LaunchOverrides::default(),
@@ -165,7 +150,7 @@ pub(crate) async fn embeddings(
     let _connection = state
         .dashboard
         .connections
-        .register(model_name.clone(), false, Some(target.effective_ctx))
+        .register(target.model_name.clone(), false, Some(target.effective_ctx))
         .holding(admission.lease);
 
     let upstream_url = format!("{}/v1/embeddings", target.base_url);

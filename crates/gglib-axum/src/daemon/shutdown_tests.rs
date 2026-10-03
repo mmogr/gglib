@@ -38,10 +38,10 @@ async fn the_api_path_tolerates_a_second_cancel() {
 /// `perform_shutdown`, are outside it and are held by review: the watchdog and
 /// the pidfile audit have no place in a test.
 ///
-/// The request names a model that does not exist, so nothing is sent
-/// upstream: the step records before admission, lets the request go on under
-/// the default mode, and admission's 404 for an unknown model is what the
-/// client gets.
+/// The request names a catalogued model whose file does not exist, so nothing
+/// is sent upstream: the guard scans only a request that resolves to a model,
+/// the step records before admission, lets the request go on under the default
+/// mode, and admission's refusal for the missing file is what the client gets.
 #[tokio::test]
 async fn teardown_writes_what_the_loop_guard_recorded() {
     use gglib_core::domain::loop_guard_log::epoch_day;
@@ -64,6 +64,13 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         .await
         .expect("bootstrap an isolated context"),
     );
+    let looping = gglib_core::domain::NewModel::new(
+        "looping".to_owned(),
+        "/nonexistent/looping.gguf".into(),
+        7.0,
+        chrono::Utc::now(),
+    );
+    state.core.models().add(looping).await.unwrap();
     let addr = state
         .proxy
         .start(
@@ -94,7 +101,7 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         .unwrap()
         .post(format!("http://{addr}/v1/chat/completions"))
         .header("x-gglib-session-id", "s1")
-        .json(&json!({ "model": "no-such-model", "messages": messages }))
+        .json(&json!({ "model": "looping", "messages": messages }))
         .send()
         .await
         .expect("the proxy answers");

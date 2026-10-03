@@ -527,7 +527,8 @@ pub(crate) async fn chat_completions(
 
     // Resolve any `{model}:{profile}` suffix. Everything downstream — the
     // model launch, dashboard registration, metrics, cache keys — uses the
-    // base name, so a profile never causes a second model to be launched.
+    // model the base resolves to, so a profile never causes a second model to
+    // be launched.
     let (model_name, request_profile) = match resolve_route(
         &model_name,
         configured_profiles,
@@ -587,9 +588,27 @@ pub(crate) async fn chat_completions(
         }
     };
 
-    // The turn-level loop/stagnation guard. Under `refuse` it answers here,
-    // before any catalog/admission/model-swap cost is paid; under `note` the
-    // request goes on and carries the note and the trip with it. See
+    // The model this request is for, from here on. A client may name it by id
+    // or by name; resolving once, here, is what makes `3` and `qwen` one model
+    // to the loop guard, the pin, the dashboard, calibration and the echo. An
+    // unknown model is refused now, as `model_not_found`, before any guard or
+    // swap. A bare name costs two catalog reads in all: this one and
+    // admission's launch lookup (a `:profile` suffix adds routing's above).
+    let model = match gglib_core::request_pipeline::resolve_summary(
+        state.catalog_port.as_ref(),
+        &model_name,
+    )
+    .await
+    {
+        Ok(model) => model,
+        Err(e) => return refuse_unresolved(&model_name, e),
+    };
+    let model_context = gglib_core::request_pipeline::ModelContext::from(&model);
+
+    // The turn-level loop/stagnation guard, keyed by the model the request
+    // resolved to. Under `refuse` it answers here, after the one catalog read
+    // above but before admission or any model swap is paid for; under `note`
+    // the request goes on and carries the note and the trip with it. See
     // `loop_guard_step` for what it records and `loop_guard` for what a
     // replayed history means.
     let mut guard_note = None;
@@ -599,7 +618,7 @@ pub(crate) async fn chat_completions(
         trips: state.loop_guard_trips.as_deref(),
         session_id: sanitized_session_id.as_deref(),
     };
-    match crate::loop_guard_step::run(&settings, &body, &model_name, &guard_observers) {
+    match crate::loop_guard_step::run(&settings, &body, &model.name, &guard_observers) {
         crate::loop_guard_step::GuardStep::Forward => {}
         crate::loop_guard_step::GuardStep::Note { note, trip } => {
             guard_note = Some(note);
@@ -614,37 +633,24 @@ pub(crate) async fn chat_completions(
     // proven it is not producing output.
     recycle_if_asked_and_idle(&state).await;
 
-    // The one catalog round-trip this request pays for. Resolved here rather
-    // than inside `forward_chat_completion` — same single lookup either way,
-    // but doing it before the model is ensured running means a request the
-    // loaded model could never serve can be refused without first paying for a
-    // model swap to discover that. An unresolvable model yields a pass-through
-    // context, leaving `admit` below to report it as it always
-    // has.
-    let model_context =
-        gglib_core::request_pipeline::resolve(state.catalog_port.as_ref(), Some(&model_name)).await;
-
     // An embedding model cannot answer this. gglib launches models tagged
     // `embedding` with `--embeddings`, which llama-server reads as "restrict to
     // only the embedding use case" — that server refuses chat completions
     // outright. Forwarding anyway would evict whatever is currently serving
     // chat, load the embedding model, and collect a 501, leaving the endpoint
     // worse off than before the request arrived.
-    //
-    // An unresolvable model has an empty tag set here, so it falls through to
-    // `admit` and its ModelNotFound exactly as before.
-    if model_context
+    if model
         .tags
         .iter()
         .any(|t| t == crate::embeddings::EMBEDDING_TAG)
     {
         info!(
-            model = %model_name,
+            model = %model.name,
             "refusing chat completion for an embedding-only model"
         );
         return (
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::embedding_model_cannot_chat(&model_name)),
+            Json(ErrorResponse::embedding_model_cannot_chat(&model.name)),
         )
             .into_response();
     }
@@ -660,11 +666,15 @@ pub(crate) async fn chat_completions(
     // `admission.lease` is held for the whole of this request — moved into
     // `ForwardRequest` below — and is what stops the model being swapped out
     // from under a response that is still streaming.
+    //
+    // Admitted by id, so the runtime serves and pins the model resolved above
+    // rather than whichever row a name finds first.
+    let model_id = model.id.to_string();
     let admit = async || {
         let overrides = gglib_core::ports::LaunchOverrides::default();
         state
             .runtime_port
-            .admit(&model_name, num_ctx, state.default_ctx, overrides)
+            .admit(&model_id, num_ctx, state.default_ctx, overrides)
             .await
     };
     let mut admission = match admit().await {
@@ -689,6 +699,10 @@ pub(crate) async fn chat_completions(
     }
     let target = admission.target.clone();
     let lease = admission.lease;
+    // Every key from here on — the connection, the forward, calibration, the
+    // dashboard's per-model rows and the SSE echo — is the admitted model's
+    // own name, never the string the request happened to spell it with.
+    let model_name = target.model_name.clone();
 
     // If the model was just restarted, invalidate all pending cache slots.
     //
@@ -1015,6 +1029,16 @@ const RETRY_REASON_HEADER: &str = "x-gglib-retry-reason";
 /// Value of [`RETRY_REASON_HEADER`] when the admission queue timed the request
 /// out.
 const RETRY_REASON_ADMISSION: &str = "admission";
+
+/// Answer a request whose model did not resolve: `model_not_found` for a model
+/// the catalog does not hold, and a 500 that is also logged for a catalog that
+/// could not be read, which means something is broken.
+pub(crate) fn refuse_unresolved(model: &str, err: ModelRuntimeError) -> Response {
+    if matches!(err, ModelRuntimeError::Internal(_)) {
+        error!(model = %model, error = %err, "catalog lookup failed");
+    }
+    handle_runtime_error(err)
+}
 
 /// Convert `ModelRuntimeError` to HTTP response with appropriate status code.
 pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {

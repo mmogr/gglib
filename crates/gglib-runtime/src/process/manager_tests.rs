@@ -6,29 +6,7 @@ use super::*;
 // Pinned mode
 // ---------------------------------------------------------------
 
-#[derive(Debug)]
-struct StubCatalog;
-
-#[async_trait::async_trait]
-impl ModelCatalogPort for StubCatalog {
-    async fn list_models(
-        &self,
-    ) -> Result<Vec<gglib_core::ports::ModelSummary>, gglib_core::ports::CatalogError> {
-        Ok(Vec::new())
-    }
-    async fn resolve_model(
-        &self,
-        _name: &str,
-    ) -> Result<Option<gglib_core::ports::ModelSummary>, gglib_core::ports::CatalogError> {
-        Ok(None)
-    }
-    async fn resolve_for_launch(
-        &self,
-        _name: &str,
-    ) -> Result<Option<gglib_core::ports::ModelLaunchSpec>, gglib_core::ports::CatalogError> {
-        Ok(None)
-    }
-}
+use crate::process::residency::residency_tests::{StubCatalog, pin};
 
 fn manager() -> ProcessManager {
     ProcessManager::new(
@@ -40,23 +18,25 @@ fn manager() -> ProcessManager {
     )
 }
 
+/// Pinned to `qwen2.5`, which the stub catalog holds as id 3.
 fn pinned_manager() -> ProcessManager {
     let manager = manager();
-    manager.set_pin(Some(gglib_core::ports::PinnedSpec {
-        name: "qwen2.5".to_string(),
-        launch_overrides: ServerConfigOptions::default(),
-    }));
+    manager.set_pin(Some(pin(3, "qwen2.5")));
     manager
+}
+
+async fn admit(manager: &ProcessManager, model: &str) -> ModelRuntimeError {
+    manager
+        .admit(model, None, Some(4096), LaunchOverrides::default())
+        .await
+        .expect_err("the stub's models have no files, so nothing is admitted")
 }
 
 /// The guard has to sit on the real entry point, not just on `ResidentSet` —
 /// this is what a proxy request actually calls.
 #[tokio::test]
 async fn admit_rejects_a_foreign_model() {
-    let err = pinned_manager()
-        .admit("llama-3-8b", None, Some(4096), LaunchOverrides::default())
-        .await
-        .expect_err("a pinned manager must refuse a foreign model");
+    let err = admit(&pinned_manager(), "llama-3-8b").await;
 
     assert!(
         matches!(err, ModelRuntimeError::PinnedModelMismatch { .. }),
@@ -64,48 +44,61 @@ async fn admit_rejects_a_foreign_model() {
     );
 }
 
-/// A foreign request must be refused without the catalog ever being
-/// consulted, proving it short-circuits ahead of the admission machinery
-/// rather than failing somewhere inside it. The stub resolves every model
-/// to `None`, so reaching the catalog would surface as `ModelNotFound`.
+/// A pinned endpoint answers to its own model's id, not just its name: both
+/// get past the pin and stop only at the launch, whose file the stub lacks.
 #[tokio::test]
-async fn foreign_model_is_refused_before_catalog_lookup() {
-    let err = pinned_manager()
-        .admit("llama-3-8b", None, Some(4096), LaunchOverrides::default())
-        .await
-        .unwrap_err();
-
-    assert!(
-        !matches!(err, ModelRuntimeError::ModelNotFound(_)),
-        "request reached the catalog instead of being refused up front"
-    );
+async fn a_pinned_endpoint_admits_its_own_id() {
+    for model in ["3", "qwen2.5"] {
+        let err = admit(&pinned_manager(), model).await;
+        assert!(
+            matches!(err, ModelRuntimeError::ModelFileNotFound(_)),
+            "{model} should pass the pin and reach the launch, got {err:?}"
+        );
+    }
 }
 
-/// The pinned model itself is admitted past the guard — it fails later,
-/// at catalog resolution, which is exactly how far this stub allows.
+/// A foreign model is refused after it resolves — the refusal names the model
+/// id 7 resolved to — and before it queues, so it neither waits behind the
+/// pinned model nor displaces it.
 #[tokio::test]
-async fn admit_allows_the_pinned_model_through_to_the_catalog() {
-    let err = pinned_manager()
-        .admit("qwen2.5", None, Some(4096), LaunchOverrides::default())
-        .await
-        .unwrap_err();
+async fn a_foreign_model_is_refused_after_resolving_before_queueing() {
+    let manager = pinned_manager();
+    match admit(&manager, "7").await {
+        ModelRuntimeError::PinnedModelMismatch {
+            expected,
+            requested,
+        } => assert_eq!(
+            (expected.as_str(), requested.as_str()),
+            ("qwen2.5", "llama-3-8b")
+        ),
+        other => panic!("expected PinnedModelMismatch, got {other:?}"),
+    }
 
-    assert!(
-        matches!(err, ModelRuntimeError::ModelNotFound(_)),
-        "pinned model should pass the guard and reach the catalog, got {err:?}"
-    );
+    let snapshot = manager.admission_snapshot();
+    assert_eq!(snapshot.waiting(), 0, "nothing should be left queued");
+    assert_eq!(snapshot.total_swaps, 0);
+}
+
+/// A model the catalog does not hold is not found, pinned or not — a pinned
+/// endpoint does not call it someone else's model.
+#[tokio::test]
+async fn an_unknown_model_is_not_found_pinned_or_not() {
+    for manager in [manager(), pinned_manager()] {
+        let err = admit(&manager, "anything").await;
+        assert!(
+            matches!(err, ModelRuntimeError::ModelNotFound(_)),
+            "expected ModelNotFound, got {err:?}"
+        );
+    }
 }
 
 /// Pinning must not leak into the ordinary proxy manager.
 #[tokio::test]
 async fn an_unpinned_manager_admits_any_model() {
-    let err = manager()
-        .admit("anything", None, Some(4096), LaunchOverrides::default())
-        .await
-        .unwrap_err();
+    let err = admit(&manager(), "llama-3-8b").await;
 
     assert!(
-        matches!(err, ModelRuntimeError::ModelNotFound(_)),
+        matches!(err, ModelRuntimeError::ModelFileNotFound(_)),
         "unpinned manager must not reject on identity, got {err:?}"
     );
 }
@@ -115,9 +108,7 @@ async fn an_unpinned_manager_admits_any_model() {
 #[tokio::test]
 async fn an_unknown_model_fails_without_queueing() {
     let manager = manager();
-    let _ = manager
-        .admit("nope", None, Some(4096), LaunchOverrides::default())
-        .await;
+    let _ = admit(&manager, "nope").await;
 
     let snapshot = manager.admission_snapshot();
     assert_eq!(snapshot.waiting(), 0, "nothing should be left queued");
@@ -126,10 +117,11 @@ async fn an_unknown_model_fails_without_queueing() {
 
 /// The read side of the guard: callers that want to avoid provoking a
 /// mismatch — `/v1/models`, which should not advertise a model that can
-/// only be refused — need the name without attempting a request.
+/// only be refused — need the pin without attempting a request.
 #[test]
 fn pinned_manager_reports_its_model() {
-    assert_eq!(pinned_manager().pinned_model().as_deref(), Some("qwen2.5"));
+    let pinned = pinned_manager().pinned().expect("pinned");
+    assert_eq!((pinned.id, pinned.name.as_str()), (3, "qwen2.5"));
 }
 
 /// Reporting must agree with admission: a manager that admits any model
@@ -137,7 +129,7 @@ fn pinned_manager_reports_its_model() {
 /// reason.
 #[test]
 fn an_unpinned_manager_reports_no_pinned_model() {
-    assert_eq!(manager().pinned_model(), None);
+    assert!(manager().pinned().is_none());
 }
 
 #[tokio::test]

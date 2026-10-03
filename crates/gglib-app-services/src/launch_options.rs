@@ -52,7 +52,7 @@ pub struct PinnedLaunch {
     /// The two cascade tiers, kept whole so callers can derive the proxy
     /// config (`to_proxy_config`) without re-assembly.
     pub unified: UnifiedServerConfig,
-    /// The pin itself: model name + fully resolved launch options.
+    /// The pin itself: model id and name + fully resolved launch options.
     pub pinned: PinnedSpec,
     /// Sampling after the full merge hierarchy — what the CLI banner prints.
     pub inference: InferenceConfig,
@@ -141,6 +141,7 @@ pub fn plan_pinned_launch(
 
     PinnedLaunch {
         pinned: PinnedSpec {
+            id: model.id,
             name: model.name.clone(),
             launch_overrides,
         },

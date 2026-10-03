@@ -3,7 +3,32 @@
 use tracing::{debug, warn};
 
 use super::ModelContext;
-use crate::ports::ModelCatalogPort;
+use crate::ports::{CatalogError, ModelCatalogPort, ModelRuntimeError, ModelSummary};
+
+/// Resolve `model` to the catalog row it names: a numeric id first, then an
+/// exact name.
+///
+/// For a caller that must refuse what the catalog does not hold rather than
+/// degrade it — the proxy's chat and embeddings paths, which key everything
+/// after this on the row's own id and name. An unknown model is
+/// [`ModelRuntimeError::ModelNotFound`] carrying the string as asked; a
+/// catalog failure is [`ModelRuntimeError::Internal`].
+///
+/// # Errors
+///
+/// As above: not in the catalog, or the catalog could not be read.
+pub async fn resolve_summary(
+    catalog: &dyn ModelCatalogPort,
+    model: &str,
+) -> Result<ModelSummary, ModelRuntimeError> {
+    match catalog.resolve_model(model).await {
+        Ok(Some(summary)) => Ok(summary),
+        Ok(None) => Err(ModelRuntimeError::ModelNotFound(model.to_owned())),
+        Err(CatalogError::QueryFailed(msg) | CatalogError::Internal(msg)) => {
+            Err(ModelRuntimeError::Internal(msg))
+        }
+    }
+}
 
 /// Resolve the [`ModelContext`] for a model in one catalog round-trip.
 ///
@@ -22,9 +47,9 @@ pub async fn resolve(catalog: &dyn ModelCatalogPort, model: Option<&str>) -> Mod
         return ModelContext::passthrough();
     };
 
-    match catalog.resolve_model(model_name).await {
-        Ok(Some(summary)) => ModelContext::from(&summary),
-        Ok(None) => {
+    match resolve_summary(catalog, model_name).await {
+        Ok(summary) => ModelContext::from(&summary),
+        Err(ModelRuntimeError::ModelNotFound(_)) => {
             debug!(model = %model_name, "model not found in catalog; using pass-through context");
             ModelContext::passthrough()
         }
@@ -40,7 +65,7 @@ mod tests {
     use super::super::tests_support::summary;
     use super::*;
     use crate::domain::ModelCapabilities;
-    use crate::ports::{CatalogError, ModelLaunchSpec, ModelSummary};
+    use crate::ports::ModelLaunchSpec;
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -91,6 +116,27 @@ mod tests {
         let ctx = resolve(&catalog, Some("qwen3")).await;
         assert_eq!(ctx.tags, vec!["format:qwen".to_string()]);
         assert_eq!(ctx.capabilities, ModelCapabilities::REQUIRES_STRICT_TURNS);
+    }
+
+    /// What the proxy refuses on: an unknown model is not found under the
+    /// string it was asked by, and a broken catalog is an internal error, not
+    /// a missing model.
+    #[tokio::test]
+    async fn resolve_summary_tells_unknown_from_unreadable() {
+        let unknown = resolve_summary(&SpyCatalog::default(), "3").await;
+        assert!(
+            matches!(&unknown, Err(ModelRuntimeError::ModelNotFound(asked)) if asked == "3"),
+            "{unknown:?}"
+        );
+        let broken = SpyCatalog {
+            fails: true,
+            ..Default::default()
+        };
+        let unreadable = resolve_summary(&broken, "3").await;
+        assert!(
+            matches!(unreadable, Err(ModelRuntimeError::Internal(_))),
+            "{unreadable:?}"
+        );
     }
 
     #[tokio::test]

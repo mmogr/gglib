@@ -386,8 +386,8 @@ impl ProxyOps {
     /// `Some` while a pinned proxy run (`gglib serve`) is active; surfaced in
     /// `GET /api/proxy/status` so clients can tell the two modes apart.
     #[must_use]
-    pub fn pinned_model(&self) -> Option<String> {
-        self.runtime.pinned_model()
+    pub fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
+        self.runtime.pinned()
     }
 
     /// What the running proxy was started with, for callers deciding whether a

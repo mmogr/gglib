@@ -21,8 +21,8 @@ once before the request ever joins the queue:
 
 | Step | Why up front |
 |---|---|
-| Pin check | A foreign model is refused without queueing behind, or displacing, the pinned one |
 | Catalog lookup | An unknown model 404s immediately rather than after a swap |
+| Pin check | A foreign model is refused without queueing behind, or displacing, the pinned one; it compares the resolved model's id, so the pin answers to its id and its name |
 | Context resolution | The resident-match test needs the context this request would launch with |
 | Footprint estimate | The second-slot decision needs it, and it cannot change while queued |
 

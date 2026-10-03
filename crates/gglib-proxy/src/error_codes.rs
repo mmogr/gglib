@@ -93,7 +93,7 @@ const CODES: &[ErrorCode] = &[
     // The proxy's own refusals: `ErrorResponse`'s constructors.
     row("model_loading", UNAVAILABLE, Some(503), "The model is still loading; retry shortly."),
     row("admission_timeout", UNAVAILABLE, Some(503), "The request waited its limit for the model without being admitted; retry shortly."),
-    row("model_not_found", INVALID, Some(404), "No model by that name is in the catalog."),
+    row("model_not_found", INVALID, Some(404), "No model with that id or name is in the catalog."),
     row("profile_not_found", INVALID, Some(404), "No model has that name, and its :suffix names no inference profile."),
     row("not_an_embedding_model", INVALID, Some(400), "An embeddings request named a model not tagged embedding."),
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),
