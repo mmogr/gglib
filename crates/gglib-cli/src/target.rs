@@ -19,10 +19,8 @@
 //! machine or is about this one, and a command that is about this one
 //! refuses the flag with a sentence rather than ignoring it.
 
-use anyhow::{Result, anyhow, bail};
-use gglib_core::Settings;
-use gglib_core::domain::Model;
-use gglib_core::ports::SettingsRepository;
+use anyhow::{Result, bail};
+use gglib_core::domain::{Model, ModelAction};
 use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
@@ -30,13 +28,18 @@ use crate::bootstrap::CliContext;
 use crate::commands::{Commands, DaemonCommand, ProxyCommand};
 use crate::handlers::agent_chat::config::{AgentSessionParams, BannerInfo};
 use crate::handlers::agent_chat::upstream;
-use crate::model_commands::ModelCommand;
 
+#[path = "target_model.rs"]
+mod model;
 #[path = "target_remote.rs"]
 mod remote;
+#[path = "target_turn.rs"]
+mod turn;
 #[path = "target_use.rs"]
 mod use_side;
+use model::{model_action, reach_of};
 use remote::remote_upstream;
+pub(crate) use turn::{TurnModel, far_wire};
 
 /// The machine a command runs against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -69,15 +72,14 @@ pub(crate) enum Reach {
 /// using the paired machine is opt-in per command, never inherited.
 pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
     match command {
-        Commands::Chat { .. } => ("chat", Reach::Use),
-        Commands::Question { .. } => ("q", Reach::Use),
-        // Loading a model is using the machine; everything else under
-        // `model` changes what is on it.
-        Commands::Serve { .. } => ("serve", Reach::Use),
-        Commands::Model { command } => match command {
-            ModelCommand::List { .. } => ("model list", Reach::Use),
-            _ => ("model", Reach::Local),
-        },
+        // A turn, a load and the model commands are core's table.
+        Commands::Chat { .. } => ("chat", reach_of(ModelAction::Chat)),
+        Commands::Question { .. } => ("q", reach_of(ModelAction::Chat)),
+        Commands::Serve { .. } => ("serve", reach_of(ModelAction::Load)),
+        Commands::Model { command } => {
+            let (name, action) = model_action(command);
+            (name, reach_of(action))
+        }
         // Stopping the far daemon is the one door ADR 0012 opened on purpose
         // (its `remote kill`); it lives under `daemon` now, beside the local
         // stop, and asks the same question first.
@@ -117,7 +119,8 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
 /// The commands `--remote` reaches, as the refusal names them. A list
 /// rather than derived from [`reach`], so that the sentence a person reads
 /// is written by a person and stays in the order they would say it.
-const REACHES: &str = "chat, q, serve, model list, proxy dashboard, proxy cache-clear, daemon stop";
+const REACHES: &str =
+    "chat, q, serve, model list, model inspect, proxy dashboard, proxy cache-clear, daemon stop";
 
 impl Target {
     pub(crate) const fn from_flag(remote: bool) -> Self {
@@ -146,10 +149,11 @@ impl Target {
     ///
     /// Locally the positional names a catalogue entry and `compose` looks it
     /// up, so an absent `--model` correctly leaves the wire name empty and
-    /// llama-server serves whatever it loaded. On the paired machine there
-    /// is no catalogue here to resolve the positional against, so the
-    /// positional *is* the wire name — and dropping it sends `""`, which the
-    /// far proxy answers with `404 Model '' not found`.
+    /// llama-server serves whatever it loaded. On the paired machine the
+    /// positional is what that machine resolved it to, `<id>` or
+    /// `<id>:<profile>` ([`TurnModel`]), and *is* the wire name — dropping it
+    /// would send `""`, which the far proxy answers with `404 Model '' not
+    /// found`.
     pub(crate) fn wire_model_name(self, model: Option<String>, identifier: &str) -> Option<String> {
         match self {
             Self::Local => model,
@@ -164,13 +168,14 @@ impl Target {
     /// `here` is what this machine does about an empty name — `q` looks up
     /// the default model, `chat` refuses — and runs only locally. On the
     /// paired machine the answer is the model this machine last asked it
-    /// for, remembered against the pairing; and a name that *was* typed
-    /// becomes that memory, so the next turn need not repeat it.
+    /// for, remembered against the pairing once a turn has resolved it
+    /// ([`resolve_turn`](Self::resolve_turn)), so the next turn need not
+    /// repeat it.
     ///
     /// # Errors
     ///
-    /// Whatever `here` says; on the paired machine, no pairing, nothing
-    /// remembered yet, or a settings write that failed.
+    /// Whatever `here` says; on the paired machine, no pairing, or nothing
+    /// remembered yet.
     pub(crate) async fn model_for_turn(
         self,
         ctx: &CliContext,
@@ -180,7 +185,7 @@ impl Target {
         match self {
             Self::Local if typed.is_empty() => here().await,
             Self::Local => Ok(typed),
-            Self::Remote => remembered_model(ctx.settings_repo.as_ref(), typed).await,
+            Self::Remote => turn::remembered_model(ctx.settings_repo.as_ref(), typed).await,
         }
     }
 
@@ -205,7 +210,7 @@ impl Target {
                     far_machine: None,
                 })
             }
-            Self::Remote => remote_upstream(ctx, banner).await,
+            Self::Remote => remote_upstream(ctx, params.turn.as_ref(), banner).await,
         }
     }
 
@@ -238,56 +243,6 @@ pub(crate) struct Upstream {
     /// The far machine on the remote path — its key and the name it is
     /// shown by; nothing for a local server.
     pub far_machine: Option<FarMachine>,
-}
-
-/// The paired machine's model for this turn: `typed`, remembered for next
-/// time; or what was remembered; or a refusal that says how to find one.
-async fn remembered_model(settings: &dyn SettingsRepository, typed: String) -> Result<String> {
-    let stored = settings
-        .load()
-        .await
-        .map_err(|e| anyhow!("failed to load settings: {e}"))?;
-    let Some(pairing) = stored.remote_pairing else {
-        bail!(
-            "this machine has not paired with a remote — `gglib remote join <ticket>-<code>` \
-             first"
-        );
-    };
-    if typed.is_empty() {
-        return pairing.default_model.ok_or_else(|| {
-            anyhow!(
-                "name a model the first time — `gglib model list` on that machine shows the ones \
-                 it serves; after that, --remote remembers the one you used"
-            )
-        });
-    }
-    if pairing.default_model.as_deref() != Some(typed.as_str()) {
-        settings
-            .modify(&|now: &mut Settings| {
-                remember_model(now, &pairing.ticket, &typed);
-                Ok(())
-            })
-            .await
-            .map_err(|e| anyhow!("could not remember the model for that machine: {e}"))?;
-    }
-    Ok(typed)
-}
-
-/// Write `model` into the stored pairing, and no other field of it, when
-/// that pairing still names `ticket`, the one this turn read.
-///
-/// Applied to the settings as they stand when the write lands, because the
-/// daemon writes the same record: one rebuilt from the earlier read would
-/// put back the key a re-pair replaced, or a pairing since cleared, and a
-/// model named for one machine means nothing on another.
-fn remember_model(settings: &mut Settings, ticket: &str, model: &str) {
-    if let Some(pairing) = settings
-        .remote_pairing
-        .as_mut()
-        .filter(|pairing| pairing.ticket == ticket)
-    {
-        pairing.default_model = Some(model.to_owned());
-    }
 }
 
 #[cfg(test)]

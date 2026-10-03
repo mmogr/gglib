@@ -241,7 +241,7 @@ pub(crate) async fn dispatch(
             metadata,
             json,
         } => {
-            inspect::execute(ctx, &identifier, metadata, json).await?;
+            inspect::execute(ctx, target, &identifier, metadata, json).await?;
         }
         ModelCommand::Explain {
             identifier,

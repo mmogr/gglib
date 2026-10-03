@@ -9,13 +9,20 @@
 //! with. The sort and filter flags describe this machine's catalogue and are
 //! not applied; the far list is short and arrives sorted as that machine
 //! sorts it.
+//!
+//! Without `--remote`, the local list ends with [`summary`]'s one line about
+//! the paired machine, which asks that machine nothing.
 
 use std::fmt::Write as _;
 
 use anyhow::Result;
+use gglib_app_services::RemoteConnection;
+use gglib_core::domain::UNNAMED_PAIRED;
 use gglib_proxy::models::ModelInfo;
 
 use crate::bootstrap::CliContext;
+use crate::daemon_client::{self, DaemonHandle, DaemonProbe};
+use crate::handlers::remote::for_how_long;
 use crate::target::Target;
 
 pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
@@ -32,6 +39,79 @@ pub(super) async fn execute(ctx: &CliContext, target: Target) -> Result<()> {
     print!("{}", render(&rows));
     print!("{}", footer(&rows));
     Ok(())
+}
+
+/// The one line `gglib model list` ends with while this machine is paired:
+/// how the paired machine stands, from what this machine already knows —
+/// the stored pairing and the daemon's report of its connection. Nothing is
+/// asked of the paired machine, so a local listing never waits on a tunnel;
+/// it lists none of that machine's models, and names the command that does.
+/// `None` when nothing is paired.
+pub(super) async fn summary(ctx: &CliContext) -> Option<String> {
+    let daemon = Daemon {
+        ctx,
+        client: gglib_proxy::loopback::client(),
+    };
+    summary_from(ctx, &daemon).await
+}
+
+/// What [`summary`] may ask this machine's daemon: whether it is running,
+/// and its report of the connection to the paired machine. Nothing here
+/// reaches that machine.
+trait ConnectionReport: Sync {
+    /// Whether the daemon answers its probe.
+    fn running(&self) -> impl Future<Output = bool> + Send;
+    /// The connection the daemon reports, if it reports one.
+    fn connection(&self) -> impl Future<Output = Option<RemoteConnection>> + Send;
+}
+
+/// This machine's daemon, over loopback.
+struct Daemon<'a> {
+    ctx: &'a CliContext,
+    client: reqwest::Client,
+}
+
+impl ConnectionReport for Daemon<'_> {
+    async fn running(&self) -> bool {
+        matches!(
+            daemon_client::probe(&self.client).await,
+            DaemonProbe::Running
+        )
+    }
+
+    async fn connection(&self) -> Option<RemoteConnection> {
+        let handle = DaemonHandle {
+            client: self.client.clone(),
+            api_key: daemon_client::auth::daemon_api_key(self.ctx).await,
+        };
+        handle.remote_status().await.ok().and_then(|s| s.connected)
+    }
+}
+
+/// [`summary`], asking `daemon`: the stored pairing first, and the daemon
+/// only while there is one; its report only once it is running.
+async fn summary_from(ctx: &CliContext, daemon: &impl ConnectionReport) -> Option<String> {
+    let pairing = ctx.app.settings().get().await.ok()?.remote_pairing?;
+    let connection = if daemon.running().await {
+        daemon.connection().await
+    } else {
+        None
+    };
+    Some(summary_line(pairing.name.as_deref(), connection.as_ref()))
+}
+
+/// [`summary`]'s line, given the name the stored pairing has for the paired
+/// machine and the connection the daemon reported, if it reported one. One
+/// command per sentence, each to type as it stands.
+fn summary_line(name: Option<&str>, connection: Option<&RemoteConnection>) -> String {
+    let name = name.unwrap_or(UNNAMED_PAIRED);
+    match connection.map(|c| (c.away_for_s, &c.path)) {
+        None => format!("{name}: not connected"),
+        Some((Some(secs), _)) => format!("{name}: away {}", for_how_long(secs)),
+        Some((None, path)) => {
+            format!("Paired with {name} ({path}). Its models: gglib model list --remote")
+        }
+    }
 }
 
 /// The line above the table, naming the machine by the name every surface

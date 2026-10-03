@@ -1,21 +1,22 @@
-//! A resumed chat samples with the profile it was started with (#886).
+//! A resumed chat samples with the profile it was started with (#886), on
+//! the model it stored. Which machine it resumes on is
+//! `resume_machine_tests`'.
 //!
 //! Most tests go through the JSON a conversation row stores, because that is
 //! where the profile was lost: the sampling values beside it survived the
 //! round trip and the profile had no field to survive in. The last ones run
 //! `prepare` over a database, the code that saves the row and reads it back.
 
-use gglib_bootstrap::BootstrapConfig;
 use gglib_core::Settings;
-use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::chat::NewConversation;
+use gglib_core::domain::{InferenceConfig, ModelRef};
 
 use super::super::prepare;
 use super::*;
-use crate::bootstrap::{CliConfig, CliContext, bootstrap_with};
+use crate::bootstrap::{CliContext, test_context};
 
 /// A `ChatArgs` with every knob at rest.
-fn chat_args() -> ChatArgs {
+pub(super) fn chat_args() -> ChatArgs {
     ChatArgs {
         identifier: "qwen".to_owned(),
         context: crate::shared_args::ContextArgs::default(),
@@ -39,6 +40,11 @@ fn chat_args() -> ChatArgs {
     }
 }
 
+/// A turn on `qwen`, which this catalogue does not hold.
+fn here() -> TurnModel {
+    TurnModel::here("qwen".to_owned(), None)
+}
+
 fn profile(name: &str) -> InferenceProfile {
     InferenceProfile {
         name: name.to_owned(),
@@ -60,7 +66,11 @@ fn stored(settings: &ConversationSettings) -> ConversationSettings {
 
 #[test]
 fn a_chat_started_with_a_profile_resumes_with_it() {
-    let saved = stored(&session_settings(&chat_args(), Some(&profile("coding"))));
+    let saved = stored(&session_settings(
+        &chat_args(),
+        Some(&profile("coding")),
+        &here(),
+    ));
 
     let resumed = restore_profile(None, Target::Local, &profiles(), saved.profile.as_deref());
 
@@ -69,7 +79,11 @@ fn a_chat_started_with_a_profile_resumes_with_it() {
 
 #[test]
 fn a_profile_named_on_resume_beats_the_saved_one() {
-    let saved = stored(&session_settings(&chat_args(), Some(&profile("coding"))));
+    let saved = stored(&session_settings(
+        &chat_args(),
+        Some(&profile("coding")),
+        &here(),
+    ));
 
     let resumed = restore_profile(
         Some(profile("chat")),
@@ -99,7 +113,11 @@ fn an_old_row_without_the_field_resumes_unprofiled() {
 /// call `resume_profile` makes for a deleted suffix.
 #[test]
 fn a_saved_profile_since_deleted_resumes_unprofiled() {
-    let saved = stored(&session_settings(&chat_args(), Some(&profile("gone"))));
+    let saved = stored(&session_settings(
+        &chat_args(),
+        Some(&profile("gone")),
+        &here(),
+    ));
 
     let resumed = restore_profile(None, Target::Local, &profiles(), saved.profile.as_deref());
 
@@ -116,7 +134,7 @@ fn a_remote_resume_restores_no_profile_from_this_machine() {
 
 #[test]
 fn a_chat_started_without_a_profile_saves_none() {
-    let saved = stored(&session_settings(&chat_args(), None));
+    let saved = stored(&session_settings(&chat_args(), None, &here()));
 
     assert_eq!(saved.profile, None);
     assert!(!serde_json::to_string(&saved).unwrap().contains("profile"));
@@ -125,22 +143,7 @@ fn a_chat_started_without_a_profile_saves_none() {
 /// The CLI's context over `dir`'s database, with `coding` and `chat`
 /// configured.
 async fn context(dir: &tempfile::TempDir) -> CliContext {
-    let models_dir = dir.path().join("models");
-    std::fs::create_dir_all(&models_dir).expect("models dir");
-    let ctx = bootstrap_with(
-        CliConfig {
-            base_port: gglib_core::settings::DEFAULT_LLAMA_BASE_PORT,
-            llama_server_path: "/nonexistent/llama-server".into(),
-        },
-        BootstrapConfig {
-            db_path: dir.path().join("gglib.db"),
-            llama_server_path: "/nonexistent/llama-server".into(),
-            models_dir,
-            hf_token: None,
-        },
-    )
-    .await
-    .expect("the database opens");
+    let ctx = test_context(dir.path()).await;
     ctx.settings_repo
         .modify(&|settings: &mut Settings| {
             settings.inference_profiles = Some(profiles());
@@ -223,4 +226,44 @@ async fn an_old_row_without_the_field_continues_unprofiled() {
 
     assert_eq!(session.args.sampling.top_k, Some(40), "the row was read");
     assert!(session.params.profile.is_none());
+}
+
+/// A chat on a model this catalogue holds stores it by id, and resumes on
+/// that id rather than the name it was shown by.
+#[tokio::test]
+async fn a_chat_on_a_catalogued_model_resumes_on_its_id() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = context(&dir).await;
+    let id = ctx
+        .app
+        .models()
+        .add(gglib_core::domain::NewModel::new(
+            "qwen".to_owned(),
+            dir.path().join("qwen.gguf"),
+            8.0,
+            chrono::Utc::now(),
+        ))
+        .await
+        .expect("registered")
+        .id;
+    let conversation = start(&ctx, None).await;
+
+    let saved = ctx.app.chat_history().get_conversation(conversation).await;
+    let saved = saved.unwrap().unwrap().settings.unwrap();
+    assert_eq!(
+        saved.model,
+        Some(ModelRef {
+            machine: gglib_core::domain::Machine::Local,
+            id
+        })
+    );
+    assert_eq!(saved.model_name.as_deref(), Some("qwen"));
+    let args = ChatArgs {
+        identifier: String::new(),
+        continue_id: Some(conversation),
+        ..chat_args()
+    };
+    let session = prepare(&ctx, &args).await.expect("the chat resumes");
+    assert_eq!(session.params.model_identifier, id.to_string());
+    assert_eq!(session.params.target, Target::Local);
 }

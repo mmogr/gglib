@@ -18,6 +18,7 @@ pub(crate) mod upstream;
 use anyhow::{Result, bail};
 
 use gglib_core::domain::agent::AgentMessage;
+use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
@@ -101,7 +102,7 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
     }
 
     // Strip any `{model}:{profile}` suffix before a conversation is created:
-    // the identifier is persisted, and a stored suffix would come back on
+    // what it names is persisted, and a stored suffix would come back on
     // every resume as a profile the user did not type this time — colliding
     // with their `--profile` and making the session unresumable. What that
     // means on the paired machine, whose profiles these are not, is
@@ -112,6 +113,12 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         .as_deref()
         .unwrap_or_default();
     let typed_this_invocation = !args.identifier.is_empty();
+    // A conversation that stored its model resumes on that model's machine.
+    let stored = persistence::continued(ctx.app.chat_history(), args.continue_id).await?;
+    if let Some(conv) = &stored {
+        let pairing = profile_settings.remote_pairing.as_ref();
+        resume_settings::follow_stored_machine(&mut args, conv.settings.as_ref(), pairing)?;
+    }
     let mut selected_profile = None;
     if let Some(selection) = crate::handlers::inference::profile_selection::select_before_resume(
         args.target,
@@ -127,8 +134,8 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         selected_profile = selection.profile;
     }
 
-    let (persistence, prior_messages, saved_profile) = if let Some(conv_id) = args.continue_id {
-        let (merged_args, conv, prior, saved) = resume_conversation(ctx, &args, conv_id).await?;
+    let (persistence, prior_messages, saved) = if let Some(conv) = stored {
+        let (merged_args, conv, prior, saved) = resume_conversation(ctx, &args, conv).await?;
         args = merged_args;
         (Some(conv), prior, saved)
     } else {
@@ -138,8 +145,7 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
                 bail!("model identifier is required (use --continue <ID> to resume a session)")
             })
             .await?;
-        let (conv, prior) = new_conversation(ctx, &args, selected_profile.as_ref()).await;
-        (conv, prior, None)
+        (None, Vec::new(), None)
     };
 
     // On a resume the identifier came from storage, not from this command
@@ -161,12 +167,31 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         selected_profile,
         args.target,
         configured_profiles,
-        saved_profile.as_deref(),
+        saved.as_ref().and_then(|s| s.profile.as_deref()),
     );
+
+    // Resolved once, on the machine that serves the turn, before anything
+    // is saved: a far model that is not there is refused here. A resume on
+    // another model than the conversation stored then stores that one.
+    let turn = args
+        .target
+        .resolve_turn(ctx, std::mem::take(&mut args.identifier))
+        .await?;
+    args.identifier.clone_from(&turn.identifier);
+    let profile = selected_profile.as_ref();
+    let persistence = match persistence {
+        Some(conv) => {
+            let typed = typed_this_invocation;
+            let kept = resume_settings::resumed_settings(saved, &args, typed, profile, &turn)?;
+            Some(conv.record_settings(kept).await)
+        }
+        None => new_conversation(ctx, &args, profile, &turn).await,
+    };
 
     let params = config::AgentSessionParams {
         model_identifier: args.identifier.clone(),
         profile: selected_profile,
+        turn: Some(turn),
         ..config::AgentSessionParams::from(&args)
     };
     Ok(Session {
@@ -177,15 +202,16 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
     })
 }
 
-/// Create a new conversation for a fresh session.
+/// Create a new conversation for a fresh session on `turn`'s model.
 async fn new_conversation<'a>(
     ctx: &'a CliContext,
     args: &ChatArgs,
     profile: Option<&gglib_core::domain::InferenceProfile>,
-) -> (Option<Conversation<'a>>, Vec<AgentMessage>) {
-    let settings = resume_settings::session_settings(args, profile);
+    turn: &crate::target::TurnModel,
+) -> Option<Conversation<'a>> {
+    let settings = resume_settings::session_settings(args, profile, turn);
 
-    let persistence = match Conversation::create(
+    match Conversation::create(
         ctx.app.chat_history(),
         args.system_prompt.clone(),
         None,
@@ -198,9 +224,7 @@ async fn new_conversation<'a>(
             tracing::warn!("failed to create agent conversation: {e}");
             None
         }
-    };
-
-    (persistence, Vec::new())
+    }
 }
 
 /// Load a previous conversation, merge its saved settings into args, and prepare for resume.
@@ -212,25 +236,23 @@ async fn new_conversation<'a>(
 /// ```
 /// uses `other-model` and temperature `0.9` from the CLI, but restores
 /// everything else (system prompt, `top_p`, tools, etc.) from conversation 42.
-/// The saved profile's name comes back separately: whether it applies is
-/// [`resume_settings::restore_profile`]'s to decide, once a flag or suffix
-/// has had its say.
+/// Which machine it resumes on, and by which id, `prepare` has already taken
+/// from the model the conversation stored. The saved settings come back too:
+/// whether their profile applies is [`resume_settings::restore_profile`]'s
+/// to decide, and what the resume saves in their place is
+/// [`resume_settings::resumed_settings`]'s.
 async fn resume_conversation<'a>(
     ctx: &'a CliContext,
     args: &ChatArgs,
-    conv_id: i64,
+    conv: gglib_core::domain::chat::Conversation,
 ) -> Result<(
     ChatArgs,
     Conversation<'a>,
     Vec<AgentMessage>,
-    Option<String>,
+    Option<ConversationSettings>,
 )> {
     let history = ctx.app.chat_history();
-
-    let conv = history
-        .get_conversation(conv_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("conversation {conv_id} not found"))?;
+    let conv_id = conv.id;
 
     let db_messages = history.get_messages(conv_id).await?;
     let msg_count = db_messages.len();
@@ -268,7 +290,5 @@ async fn resume_conversation<'a>(
     }
 
     let persistence = Conversation::resume(history, conv_id, msg_count).await;
-    let saved_profile = conv.settings.and_then(|s| s.profile);
-
-    Ok((merged, persistence, prior_messages, saved_profile))
+    Ok((merged, persistence, prior_messages, conv.settings))
 }

@@ -99,6 +99,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         retry_policy: gglib_core::retry::RetryPolicy::from_env(),
         // Filled in below, once settings have supplied the profile list.
         profile: None,
+        turn: None,
     };
 
     // If no model was specified, look up the default from settings
@@ -121,13 +122,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         profile.as_deref(),
     )
     .await?;
-    // Both, from the stripped name: `model_name` is what goes in the request
-    // body, and a `{model}:{profile}` suffix there would ask the upstream
-    // for a model that does not exist.
-    let model_name = params.model_name.as_ref().map(|_| selection.model.clone());
-    // A turn with no model named: this machine's default here, the model
-    // last asked for there — and either way the wire name follows the
-    // target's rule.
+    // A turn with no model named: this machine's default here, by id, the
+    // model last asked for there — then resolved once, on that machine.
     let default_id = settings.default_model_id;
     let model_identifier = target
         .model_for_turn(ctx, selection.model, async || {
@@ -145,13 +141,19 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
                 .await
                 .map_err(|e| anyhow!("failed to load default model: {e}"))?
                 .ok_or_else(|| anyhow!("default model (ID: {default_id}) not found"))?;
-            Ok(model.name)
+            Ok(model.id.to_string())
         })
         .await?;
+    let turn = target.resolve_turn(ctx, model_identifier).await?;
+    // `model_name` is what goes in the request body: the stripped name here,
+    // where a `{model}:{profile}` suffix would name no model, and there the
+    // id the far machine resolved, which carries its profile.
+    let model_name = params.model_name.as_ref().map(|_| turn.identifier.clone());
     let params = AgentSessionParams {
-        model_name: target.wire_model_name(model_name, &model_identifier),
-        model_identifier,
+        model_name: target.wire_model_name(model_name, &turn.identifier),
+        model_identifier: turn.identifier.clone(),
         profile: selection.profile,
+        turn: Some(turn),
         ..params
     };
 
@@ -234,13 +236,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // conversation list and can later be resumed.  Best-effort: a
     // persistence failure must never break the interactive session.
     let mut persistence = None;
-    if completed && let Some(ref history) = history {
+    if completed
+        && let Some(ref history) = history
+        && let Some(turn) = &params.turn
+    {
         let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
         let settings = crate::conversation_settings::ConversationSettingsBuilder::new(
             &SamplingArgs::default(),
             &crate::shared_args::ContextArgs::default(),
         )
-        .model_name(params.model_identifier.clone())
+        .model_name(turn.name.clone())
+        .model(turn.model_ref.clone())
+        .profile(turn.far_profile.clone())
         .tools(tools.clone(), false)
         .agent_params(max_iterations, tool_timeout_ms, max_parallel)
         .build();

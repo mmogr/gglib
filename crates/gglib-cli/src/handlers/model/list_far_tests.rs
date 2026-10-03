@@ -1,9 +1,14 @@
 //! The far list as a person reads it: one row per model by its id there,
 //! its variants' profiles folded into that row, and how to send it a turn.
 
+use std::sync::Mutex;
+
+use gglib_app_services::RemoteConnection;
+use gglib_core::Settings;
 use gglib_proxy::models::ModelInfo;
 
-use super::{footer, heading, render, rows};
+use super::{ConnectionReport, footer, heading, render, rows, summary, summary_from, summary_line};
+use crate::bootstrap::{CliContext, test_context};
 
 /// Entries as the far proxy lists them, `(id, gglib_id, profile, context)`.
 fn listed(entries: &[(&str, i64, Option<&str>, Option<u64>)]) -> Vec<ModelInfo> {
@@ -115,5 +120,149 @@ fn the_heading_names_the_machine_and_no_fingerprint() {
     assert_eq!(
         heading(0, gglib_core::domain::UNNAMED_PAIRED, "relayed"),
         "No models on the paired machine.\n"
+    );
+}
+
+// ── The line `gglib model list` ends with ────────────────────────────────
+
+/// The daemon's report of the connection to the paired machine.
+fn connection(path: &str, away_for_s: Option<u64>) -> RemoteConnection {
+    RemoteConnection {
+        port: 41234,
+        base_url: "http://127.0.0.1:41234/v1".to_owned(),
+        ticket_fingerprint: "0123456789ab".to_owned(),
+        path: path.to_owned(),
+        away_for_s,
+    }
+}
+
+/// A daemon as [`summary`] sees it: running or not, reporting
+/// `connection`, and recording every question it is asked. It can answer
+/// nothing else, so a question to the paired machine would not compile.
+struct FakeDaemon {
+    running: bool,
+    connection: Option<RemoteConnection>,
+    asked: Mutex<Vec<&'static str>>,
+}
+
+impl FakeDaemon {
+    fn new(running: bool, connection: Option<RemoteConnection>) -> Self {
+        Self {
+            running,
+            connection,
+            asked: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn asked(&self) -> Vec<&'static str> {
+        self.asked.lock().unwrap().clone()
+    }
+}
+
+impl ConnectionReport for FakeDaemon {
+    async fn running(&self) -> bool {
+        self.asked.lock().unwrap().push("probe");
+        self.running
+    }
+
+    async fn connection(&self) -> Option<RemoteConnection> {
+        self.asked.lock().unwrap().push("status");
+        self.connection.clone()
+    }
+}
+
+/// The CLI's context over `dir`'s database, paired with a machine called
+/// `desk` when `paired`.
+async fn context(dir: &tempfile::TempDir, paired: bool) -> CliContext {
+    let ctx = test_context(dir.path()).await;
+    if paired {
+        ctx.settings_repo
+            .modify(&|settings: &mut Settings| {
+                settings.remote_pairing = Some(gglib_core::RemotePairing {
+                    ticket: "not-a-ticket".to_owned(),
+                    api_key: "key".to_owned(),
+                    default_model: None,
+                    port: None,
+                    name: Some("desk".to_owned()),
+                });
+                Ok(())
+            })
+            .await
+            .expect("paired");
+    }
+    ctx
+}
+
+/// An unpaired machine's list ends with its own table: nothing is said,
+/// and no daemon is asked.
+#[tokio::test]
+async fn an_unpaired_machine_says_nothing_of_another() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = context(&dir, false).await;
+    let daemon = FakeDaemon::new(true, Some(connection("direct", None)));
+
+    assert_eq!(summary(&ctx).await, None);
+    assert_eq!(summary_from(&ctx, &daemon).await, None);
+    assert!(daemon.asked().is_empty(), "{:?}", daemon.asked());
+}
+
+/// A daemon that is down: the pairing is named as not connected, and the
+/// daemon is asked nothing past its probe.
+#[tokio::test]
+async fn a_paired_machine_with_the_daemon_down_is_not_connected() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = context(&dir, true).await;
+    let daemon = FakeDaemon::new(false, None);
+
+    let line = summary_from(&ctx, &daemon).await;
+
+    assert_eq!(line.as_deref(), Some("desk: not connected"));
+    assert_eq!(daemon.asked(), ["probe"]);
+}
+
+/// Connected, and away: said from the daemon's status alone, the one
+/// question past its probe. Nothing is asked of the paired machine, so
+/// there is nothing to wait on while that machine is gone.
+#[tokio::test]
+async fn a_connected_or_away_machine_is_said_from_the_daemons_status() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = context(&dir, true).await;
+    let connected = FakeDaemon::new(true, Some(connection("direct", None)));
+    let away = FakeDaemon::new(true, Some(connection("relayed", Some(125))));
+
+    assert_eq!(
+        summary_from(&ctx, &connected).await.as_deref(),
+        Some("Paired with desk (direct). Its models: gglib model list --remote")
+    );
+    assert_eq!(
+        summary_from(&ctx, &away).await.as_deref(),
+        Some("desk: away 2m")
+    );
+    assert_eq!(connected.asked(), ["probe", "status"]);
+    assert_eq!(away.asked(), ["probe", "status"]);
+}
+
+/// Connected: the machine by its name, how it is reached, and the one
+/// command that lists its models. The command stands alone in its sentence.
+#[test]
+fn a_connected_machine_is_named_with_the_command_that_lists_it() {
+    let line = summary_line(Some("desk"), Some(&connection("direct", None)));
+
+    assert_eq!(
+        line,
+        "Paired with desk (direct). Its models: gglib model list --remote"
+    );
+    assert!(!line.contains(';'), "never two commands joined: {line}");
+}
+
+/// A daemon up and not connected reports no connection: the pairing is
+/// still named, so the list says whose models are missing.
+#[test]
+fn a_machine_with_no_connection_is_named_as_not_connected() {
+    assert_eq!(summary_line(Some("desk"), None), "desk: not connected");
+    assert_eq!(
+        summary_line(None, None),
+        "the paired machine: not connected",
+        "a machine that gave no name is called what every surface calls it"
     );
 }

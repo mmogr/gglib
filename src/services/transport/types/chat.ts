@@ -3,6 +3,7 @@
  * Handles conversations and messages for the chat feature.
  */
 
+import type { ModelRef } from '../../../types/generated/ModelRef';
 import type { ConversationId, MessageId, ModelId } from './ids';
 
 // ============================================================================
@@ -15,6 +16,8 @@ import type { ConversationId, MessageId, ModelId } from './ids';
  */
 export interface ConversationSettings {
   model_name?: string | null;
+  /** The session's model, named by its machine; a resume goes back to it. */
+  model?: ModelRef | null;
   temperature?: number | null;
   top_p?: number | null;
   top_k?: number | null;
