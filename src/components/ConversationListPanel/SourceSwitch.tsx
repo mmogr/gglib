@@ -50,12 +50,16 @@ export const SourceSwitch: FC<SourceSwitchProps> = ({ source, onSource, connecti
           title={choice.title}
           onClick={() => onSource(choice.id)}
           className={cn(
-            'h-auto flex-col gap-[2px] px-xs py-xs text-2xs leading-tight whitespace-normal',
+            'h-auto px-xs py-xs text-2xs leading-tight',
             source === choice.id && 'bg-surface-elevated text-text',
           )}
         >
-          <span className="wrap-anywhere">{choice.name}</span>
-          <span className="font-mono tabular-nums text-text-muted">{choice.how}</span>
+          {/* One child, because Button lays its children in a row: the name
+              sits over how the machine is reached in a 56px column. */}
+          <span className="flex flex-col items-center gap-[2px] min-w-0 text-center">
+            <span className="wrap-anywhere">{choice.name}</span>
+            <span className="font-mono tabular-nums text-text-muted">{choice.how}</span>
+          </span>
         </Button>
       ))}
     </div>
