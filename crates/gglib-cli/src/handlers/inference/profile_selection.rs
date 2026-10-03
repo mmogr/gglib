@@ -50,13 +50,14 @@ pub(crate) struct ProfileSelection {
 /// Resolve an identifier and an optional `--profile` for a session, given
 /// which machine will serve it.
 ///
-/// Locally this is [`select`]. With `--remote` nothing is resolved at all: the
-/// identifier is the *far* machine's wire name, this catalog holds none of its
-/// models, and its profile list is the only one that governs how it samples.
-/// So a `{model}:{profile}` suffix is forwarded intact — the far proxy runs
-/// the same [`resolve_route`] over its own profiles and answers a suffix it
-/// does not know with a 404 naming the ones it has, which is a truer error
-/// than this machine could invent.
+/// Locally this is [`select`]. With `--remote` nothing is resolved here: the
+/// identifier names one of the *far* machine's models, this catalog holds none
+/// of them, and its profile list is the only one that governs how it samples.
+/// So a `{model}:{profile}` suffix is passed on intact to that machine's
+/// lookup (`Target::resolve_turn`), which runs the same [`resolve_route`] over
+/// its own profiles, answers a suffix it does not know with a 404 naming the
+/// ones it has — a truer error than this machine could invent — and gives
+/// back the model's id and the profile, which the turn then sends.
 ///
 /// Resolving it here instead was silently wrong rather than loud: [`select`]
 /// stripped the suffix against the local catalog and `compose` then dropped
@@ -104,9 +105,8 @@ pub(crate) async fn select_for_upstream(
 /// storage and there is nothing to select yet — that is
 /// [`resume_profile`]'s moment. On the paired machine the selection runs
 /// regardless, so a `--profile` cannot be silently dropped on a resume
-/// there: the far machine owns both the model name and the profile list,
-/// and the whole identifier is its wire name, stored, replayed and forwarded
-/// verbatim.
+/// there: the far machine owns both the model and the profile list, and the
+/// whole identifier is resolved there.
 ///
 /// # Errors
 ///

@@ -1,10 +1,12 @@
 //! A run names the model it uses on its conversation, from either door, so
 //! the chat's next turn runs on it.
 
-use gglib_core::domain::chat::{Conversation, NewConversation};
+use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::RunScope;
 
 use super::compose::{Prepared, take_permit};
+use super::hub_model::choose;
 use super::launch::launch;
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, prepared, saving, settled, state,
@@ -87,7 +89,7 @@ async fn a_run_on_another_model_replaces_the_chats_and_keeps_its_settings() {
     let (_dir, state) = state().await;
     let old = registered(&state, "old-model").await;
     let used = registered(&state, "new-model").await;
-    let settings = gglib_core::domain::chat::ConversationSettings {
+    let settings = ConversationSettings {
         model_name: Some("old-model".to_owned()),
         max_iterations: Some(4),
         ..Default::default()
@@ -112,8 +114,8 @@ async fn a_run_on_another_model_replaces_the_chats_and_keeps_its_settings() {
     assert_eq!(after.settings.and_then(|s| s.max_iterations), Some(4));
 }
 
-/// A model the registry does not have clears the chat's id, which would
-/// name another, and is named in the settings.
+/// A model the registry does not have clears the chat's id and its stored
+/// model, which would name another, and is named in the settings.
 #[tokio::test]
 async fn a_model_not_in_the_registry_is_named_in_the_settings_alone() {
     let (_dir, state) = state().await;
@@ -123,6 +125,7 @@ async fn a_model_not_in_the_registry_is_named_in_the_settings_alone() {
     run(&state, LOCAL, "m2", id, on(4242, "loose-model")).await;
     let after = read(&state, id).await;
     assert_eq!((after.model_id, named(&after)), (None, Some("loose-model")));
+    assert_eq!(after.settings.and_then(|s| s.model), None);
 }
 
 /// A run on the far machine names nothing here.
@@ -134,4 +137,53 @@ async fn a_run_on_the_far_machine_names_nothing() {
     run(&state, LOCAL, "m1", id, far).await;
     let after = read(&state, id).await;
     assert_eq!((after.model_id, after.settings), (None, None));
+}
+
+const fn here(id: i64) -> ModelRef {
+    ModelRef {
+        machine: Machine::Local,
+        id,
+    }
+}
+
+/// A chat the CLI started on one model, which stored it by id, and a run
+/// here then continued on another: the stored model is the one the run
+/// used, so the chat's next turn runs on it, and its id, model and name
+/// all say the same model.
+#[tokio::test]
+async fn a_run_on_another_model_replaces_the_stored_model_too() {
+    let (_dir, state) = state().await;
+    let old = registered(&state, "old-model").await;
+    let used = registered(&state, "new-model").await;
+    let settings = ConversationSettings {
+        model_name: Some("old-model".to_owned()),
+        model: Some(here(old)),
+        ..Default::default()
+    };
+    let id = state
+        .core
+        .chat_history()
+        .create_conversation_with_settings(NewConversation {
+            title: "t".to_owned(),
+            model_id: None,
+            system_prompt: None,
+            settings: Some(settings),
+        })
+        .await
+        .unwrap();
+
+    run(&state, LOCAL, "m1", id, on(used, "new-model")).await;
+
+    let after = read(&state, id).await;
+    let stored = after.settings.as_ref().and_then(|s| s.model.clone());
+    assert_eq!(
+        (after.model_id, stored, named(&after)),
+        (Some(used), Some(here(used)), Some("new-model"))
+    );
+    let next = choose(&state, &after, &[], &[]).await.unwrap();
+    assert_eq!(
+        next,
+        used.to_string(),
+        "the next turn runs on the new model"
+    );
 }

@@ -167,8 +167,9 @@ fn connection_line(status: &RemoteStatus) -> String {
     )
 }
 
-/// Seconds as a person reads them: `40s`, `3m`, `2h`.
-fn for_how_long(secs: u64) -> String {
+/// Seconds as a person reads them: `40s`, `3m`, `2h`. Also how `gglib model
+/// list` says the paired machine is away.
+pub(crate) fn for_how_long(secs: u64) -> String {
     match secs {
         s if s < 60 => format!("{s}s"),
         s if s < 3600 => format!("{}m", s / 60),
@@ -182,11 +183,12 @@ mod tests {
 
     /// The away line reads in the unit a person would have used.
     ///
-    /// The status line is the only place this machine says how long the far
-    /// one has been gone, and it is read at a glance: seconds while it could
-    /// still be a blip, minutes for a lid that is closed, hours for a desktop
-    /// that is off. Truncation, not rounding — "away 1m" at sixty-one seconds
-    /// is the honest half of a figure that is about to change anyway.
+    /// The status line, and the line `gglib model list` ends with, are where
+    /// this machine says how long the far one has been gone, and each is read
+    /// at a glance: seconds while it could still be a blip, minutes for a lid
+    /// that is closed, hours for a desktop that is off. Truncation, not
+    /// rounding — "away 1m" at sixty-one seconds is the honest half of a
+    /// figure that is about to change anyway.
     #[test]
     fn how_long_a_machine_has_been_away_reads_in_the_unit_that_fits() {
         assert_eq!(for_how_long(0), "0s");

@@ -160,3 +160,25 @@ pub(crate) async fn bootstrap_with(
         download_emitter,
     })
 }
+
+/// [`bootstrap_with`] over a fresh database and models directory in `dir`,
+/// for a test.
+#[cfg(test)]
+pub(crate) async fn test_context(dir: &std::path::Path) -> CliContext {
+    let models_dir = dir.join("models");
+    std::fs::create_dir_all(&models_dir).expect("models dir");
+    bootstrap_with(
+        CliConfig {
+            base_port: gglib_core::settings::DEFAULT_LLAMA_BASE_PORT,
+            llama_server_path: "/nonexistent/llama-server".into(),
+        },
+        BootstrapConfig {
+            db_path: dir.join("gglib.db"),
+            llama_server_path: "/nonexistent/llama-server".into(),
+            models_dir,
+            hf_token: None,
+        },
+    )
+    .await
+    .expect("the database opens")
+}

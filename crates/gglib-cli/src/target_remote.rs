@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow, bail};
 use gglib_app_services::{GuiError, RemoteConnection, far_credentials};
 use gglib_runtime::FarMachine;
 
-use super::Upstream;
+use super::{TurnModel, Upstream};
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonHandle, DaemonProbe};
 use crate::handlers::agent_chat::config::BannerInfo;
@@ -64,7 +64,7 @@ impl super::Target {
         let client = gglib_proxy::loopback::client();
         if !matches!(daemon_client::probe(&client).await, DaemonProbe::Running) {
             bail!(
-                "--remote needs the daemon running and connected to the other machine: \
+                "reaching the paired machine needs the daemon running and connected to it: \
                  `gglib remote join` first"
             );
         }
@@ -129,12 +129,18 @@ impl super::Target {
     }
 }
 
-/// The machine on the other end of the tunnel, as a turn's upstream.
-pub(super) async fn remote_upstream(ctx: &CliContext, banner: &BannerInfo) -> Result<Upstream> {
+/// The machine on the other end of the tunnel, as a turn's upstream. The
+/// banner names the model as that machine resolved it, `turn`.
+pub(super) async fn remote_upstream(
+    ctx: &CliContext,
+    turn: Option<&TurnModel>,
+    banner: &BannerInfo,
+) -> Result<Upstream> {
     let far = super::Target::Remote.far(ctx).await?;
     if !banner.quiet {
         style::print_info_banner("Info", "\u{2139}\u{fe0f}");
-        eprintln!("  Asking {} at {} ({})", far.name, far.base_url, far.path);
+        let asked = turn.map_or_else(|| far.name.clone(), TurnModel::shown);
+        eprintln!("  Asking {asked} at {} ({})", far.base_url, far.path);
         if let Some(ref s) = banner.sampling {
             upstream::print_sampling_lines(s);
         }

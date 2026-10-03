@@ -3,6 +3,10 @@
 //! Lists past chat conversations with message counts and relative timestamps.
 
 use anyhow::Result;
+use gglib_app_services::far_credentials;
+use gglib_core::RemotePairing;
+use gglib_core::domain::chat::ConversationSettings;
+use gglib_core::domain::{Machine, UNNAMED_PAIRED};
 
 use crate::bootstrap::CliContext;
 use crate::presentation::{format_relative_time, print_separator, truncate_string};
@@ -21,6 +25,7 @@ pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
     }
 
     let conversations: Vec<_> = conversations.into_iter().take(limit).collect();
+    let pairing = ctx.app.settings().get().await?.remote_pairing;
 
     // Fetch message counts in parallel (repo already has get_message_count)
     let mut rows = Vec::with_capacity(conversations.len());
@@ -30,29 +35,64 @@ pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
     }
 
     println!(
-        "{:<5} {:<35} {:<6} {:<15} {:<15}",
+        "{:<5} {:<35} {:<6} {:<40} {:<15}",
         "ID", "Title", "Msgs", "Model", "Updated"
     );
-    print_separator(80);
+    print_separator(105);
 
     for (conv, msg_count) in &rows {
-        let model_label = conv
-            .settings
-            .as_ref()
-            .and_then(|s| s.model_name.as_deref())
-            .unwrap_or("--");
+        let model_label = conv.settings.as_ref().map_or_else(
+            || "--".to_owned(),
+            |s| model_label(s, pairing.as_ref(), MODEL_WIDTH),
+        );
 
         println!(
-            "{:<5} {:<35} {:<6} {:<15} {:<15}",
+            "{:<5} {:<35} {:<6} {:<40} {:<15}",
             conv.id,
             truncate_string(&conv.title, 34),
             msg_count,
-            truncate_string(model_label, 14),
+            model_label,
             format_relative_time(&conv.updated_at),
         );
     }
 
-    println!("\nResume with: gglib chat <model> --continue <ID>");
+    println!("\nResume with: gglib chat --continue <ID>");
 
     Ok(())
 }
+
+/// The most a Model cell shows, one short of its column.
+const MODEL_WIDTH: usize = 39;
+
+/// The model a conversation ran on, as a person reads it, in at most `width`
+/// characters: `qwen3 (3) on desk`, `qwen3 (3) on this machine`, or the bare
+/// name a row that stores no model was saved with. A long name is shortened,
+/// never the `(id) on machine` after it, which says where the chat resumes.
+/// A machine named by a pairing this one no longer holds is shown as
+/// another machine; its fingerprint is never shown.
+fn model_label(
+    settings: &ConversationSettings,
+    pairing: Option<&RemotePairing>,
+    width: usize,
+) -> String {
+    let name = settings.model_name.as_deref().unwrap_or("--");
+    let Some(model) = &settings.model else {
+        return truncate_string(name, width);
+    };
+    let machine = match &model.machine {
+        Machine::Local => "this machine",
+        Machine::Paired { fingerprint } => match pairing {
+            Some(stored) if far_credentials(Some(stored), fingerprint).is_ok() => {
+                stored.name.as_deref().unwrap_or(UNNAMED_PAIRED)
+            }
+            _ => "another machine",
+        },
+    };
+    let place = format!(" ({}) on {machine}", model.id);
+    let room = width.saturating_sub(place.chars().count()).max(1);
+    format!("{}{place}", truncate_string(name, room))
+}
+
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;

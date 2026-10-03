@@ -357,7 +357,7 @@ pub enum ModelCommand {
     ///
     /// Shows every piece of stored information: architecture, quantization,
     /// context length, `MoE` topology, `HuggingFace` provenance, capability flags,
-    /// inference defaults, and timestamps.
+    /// inference defaults, and timestamps; with --remote, of the paired machine's.
     ///
     /// # Examples
     ///
@@ -366,7 +366,7 @@ pub enum ModelCommand {
     ///   gglib model inspect 3 --metadata   # include raw GGUF key-value pairs
     ///   gglib model inspect 3 --json       # machine-readable JSON output
     Inspect {
-        /// Name or ID of the model to inspect
+        /// Name or ID of the model to inspect (with --remote, the paired machine's)
         identifier: String,
         /// Include raw GGUF key-value metadata in the output
         #[arg(long)]

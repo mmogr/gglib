@@ -103,9 +103,10 @@ pub(super) async fn save_user(
 }
 
 /// Name the model a local run uses on `conversation_id`: the registry's id
-/// when it is there (none when it is not), and its name in the settings
-/// either way. A run on the far machine names nothing: its model is not one
-/// this machine has. Not saved is logged, not refused: the message is.
+/// when it is there (none when it is not), stored as the settings' model
+/// too, and its name in the settings either way. A run on the far machine
+/// names nothing: its model is not one this machine has. Not saved is
+/// logged, not refused: the message is.
 pub(super) async fn record_model(
     core: &AppCore,
     conversation_id: i64,

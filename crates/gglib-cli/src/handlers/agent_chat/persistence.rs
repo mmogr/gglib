@@ -3,12 +3,30 @@
 //! Saves agent messages to the `chat_conversations` / `chat_messages` tables
 //! so they appear in the GUI conversation list and can later be resumed.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use chrono::Local;
 
 use gglib_core::domain::agent::{AgentMessage, to_new_message};
-use gglib_core::domain::chat::{ConversationSettings, NewConversation};
+use gglib_core::domain::chat::{self, ConversationSettings, NewConversation};
 use gglib_core::services::ChatHistoryService;
+
+/// The conversation `--continue` names, when it names one.
+///
+/// # Errors
+///
+/// An id no conversation has, and a read that failed.
+pub(crate) async fn continued(
+    service: &ChatHistoryService,
+    id: Option<i64>,
+) -> Result<Option<chat::Conversation>> {
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    let found = service.get_conversation(id).await?;
+    found
+        .map(Some)
+        .ok_or_else(|| anyhow!("conversation {id} not found"))
+}
 
 /// Tracks a persisted conversation and the number of messages already saved,
 /// so subsequent calls to [`Conversation::save_new`] only write the delta.
@@ -60,6 +78,19 @@ impl<'a> Conversation<'a> {
             id,
             saved: existing_message_count,
         }
+    }
+
+    /// Replace the conversation's settings with `settings`, when there are
+    /// new ones: the model a resumed session moved it to. Logged and
+    /// swallowed, as a message that is not saved is.
+    pub(crate) async fn record_settings(self, settings: Option<ConversationSettings>) -> Self {
+        let Some(settings) = settings else {
+            return self;
+        };
+        if let Err(e) = self.service.record_settings(self.id, settings).await {
+            tracing::warn!("failed to record the session's model on its conversation: {e}");
+        }
+        self
     }
 
     /// Persist any messages added since the last call.

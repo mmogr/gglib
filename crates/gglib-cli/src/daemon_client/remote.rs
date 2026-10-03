@@ -7,6 +7,7 @@ use gglib_app_services::{
     PairedModels, RemoteDevice, RemoteEnableBody, RemoteEnableResponse, RemoteForgotten,
     RemoteJoinBody, RemoteJoinResponse, RemoteStatus,
 };
+use gglib_core::domain::ModelLookup;
 use gglib_proxy::LoadResponse;
 
 use super::{DaemonHandle, paths};
@@ -139,6 +140,18 @@ impl DaemonHandle {
     pub(crate) async fn paired_models(&self) -> Result<PairedModels> {
         let response = self
             .get(paths::REMOTE_MODELS_PATH)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// One of the paired machine's models, by an identifier that machine
+    /// resolves as it resolves a turn's: what it resolved to, and the profile
+    /// it named. The identifier travels as one encoded path segment.
+    pub(crate) async fn paired_model(&self, identifier: &str) -> Result<ModelLookup> {
+        let response = self
+            .get(&paths::remote_model_path(identifier))
             .timeout(Duration::from_secs(10))
             .send()
             .await?;

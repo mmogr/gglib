@@ -32,9 +32,16 @@ impl ConversationSettingsBuilder {
         }
     }
 
-    /// Set the model name used for this session.
+    /// Set the name the session's model is shown by.
     pub(crate) fn model_name(mut self, name: impl Into<String>) -> Self {
         self.settings.model_name = Some(name.into());
+        self
+    }
+
+    /// Set the session's model, named by its machine, so a resume goes back
+    /// to it. `None` for a model the catalogue did not hold.
+    pub(crate) fn model(mut self, model: Option<gglib_core::domain::ModelRef>) -> Self {
+        self.settings.model = model;
         self
     }
 

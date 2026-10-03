@@ -5,7 +5,10 @@
 
 use std::sync::Arc;
 
-use crate::domain::chat::{Conversation, ConversationUpdate, Message, NewConversation, NewMessage};
+use crate::domain::chat::{
+    Conversation, ConversationSettings, ConversationUpdate, Message, NewConversation, NewMessage,
+};
+use crate::domain::{Machine, ModelRef};
 use crate::ports::chat_history::{ChatHistoryError, ChatHistoryRepository};
 
 /// Service for managing chat history.
@@ -80,9 +83,9 @@ impl ChatHistoryService {
             .await
     }
 
-    /// Name the model a run used on its conversation: `model_id` (`None`
-    /// when it is not in the registry) and the settings' `model_name`,
-    /// keeping every other setting.
+    /// Name the model a run used on its conversation: this machine's model
+    /// `model_id` (`None` when it is not in the registry) and the settings'
+    /// `model_name`, keeping every other setting.
     pub async fn record_model(
         &self,
         id: i64,
@@ -96,6 +99,26 @@ impl ChatHistoryService {
             .ok_or(ChatHistoryError::ConversationNotFound(id))?;
         let mut settings = conversation.settings.unwrap_or_default();
         settings.model_name = Some(model_name.to_owned());
+        settings.model = model_id.map(|id| ModelRef {
+            machine: Machine::Local,
+            id,
+        });
+        self.record_settings(id, settings).await
+    }
+
+    /// Replace a conversation's settings with `settings`, which name the
+    /// model its session uses. `model_id` names the same model when it is
+    /// this machine's, and nothing otherwise, so the two never disagree.
+    pub async fn record_settings(
+        &self,
+        id: i64,
+        settings: ConversationSettings,
+    ) -> Result<(), ChatHistoryError> {
+        let model_id = settings
+            .model
+            .as_ref()
+            .filter(|model| model.machine == Machine::Local)
+            .map(|model| model.id);
         self.repo
             .update_conversation(
                 id,
