@@ -40,7 +40,7 @@ const RELAYS: [(&str, &str, &str, &str); 20] = [
     ("gglib-axum/src/handlers/agent/hub_turn.rs", "refusal", "code.to_owned()", "a `Coded` refusal's"),
     ("gglib-axum/src/error.rs", "from", "e.code()", "`RunsError::code`"),
     ("gglib-cli/src/handlers/remote/pairing_tui.rs", "qr", "QrCode::new(pairing.to_uppercase()).ok()?", "a QR code, not an error's"),
-    ("gglib-cli/src/handlers/remote/pairing_tui.rs", "draw", "enabled.code.as_deref().unwrap_or_default()", "a pairing code, not an error's"),
+    ("gglib-cli/src/handlers/remote/pairing_layout.rs", "layout", r#"Line::plain(format!("  code    {}",clean(offer.code.as_deref().unwrap_or_default())))"#, "a pairing code, not an error's"),
     ("gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs", "classify", "err.error.code", "an upstream body's, kept to retry by, not written"),
 ];
 
