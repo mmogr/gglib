@@ -406,7 +406,7 @@ it.
 | `chat`, `q` | A turn on the desktop, as above: the model resolved there once, then sent by its id. |
 | `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the model's id or name and a numeric `--ctx-size` travel. |
 | `model list` | The desktop's catalogue as its proxy publishes it, one row per model: its id on the desktop, its name, the context it would be served with, and the profiles it can be asked for with. A turn names one as `<id>` or `<id>:<profile>`. |
-| `model inspect <model>` | Everything the desktop stores about one of its models, as its own inspector shows it, but for the file's path on its disk; then the command that chats with it. `--json` prints the same detail. |
+| `model inspect <model>` | Everything the desktop stores about one of its models, as its own inspector shows it, but for the paths of its file and its projector on its disk; then the command that chats with it. `--json` prints the same detail. |
 | `proxy dashboard` | The desktop proxy's live dashboard, through the tunnel. |
 | `proxy cache-clear` | Clear the desktop proxy's prompt cache. |
 | `daemon stop` | Stop the desktop's daemon. Asks you to type `shutdown`; `--yes` for scripts. |
@@ -437,9 +437,9 @@ answered; a disconnection clears them. A read that is slow or fails never
 holds up or empties this machine's rows.
 
 Picking a desktop row opens its inspector instead of this machine's: what the
-desktop stores about the model, without the file's path on its disk, and
-only what `--remote` allows on a model there — *Chat* and *Load*. Nothing
-that changes it (edit, tags, delete, Start or Stop here) is offered, and the
+desktop stores about the model, without the paths of its file and its
+projector on its disk, and only what `--remote` allows on a model there —
+*Chat* and *Load*. Nothing that changes it (edit, tags, delete, Start or Stop here) is offered, and the
 native menu's Start, Stop and Remove have nothing selected while a desktop
 row is, so they cannot act on a model here that shares its number. A model
 the desktop is serving says *Serving on desk*, in place of *Load*, which has
@@ -758,9 +758,10 @@ tools the chat names.
 The model list carries each model's id in the desktop's catalog
 (`gglib_id`) and the desktop's name (`machine_name`, its host name's first
 label). A model's detail is what the desktop's own inspector shows, minus the
-file's path on the desktop's disk and the port it serves on. Reading either
-changes nothing on the desktop, and `/health`, open to anyone who can reach
-the port, carries neither.
+paths of the file and its projector on the desktop's disk and the port it
+serves on; whether the model reads images is sent (`imageInput`). Reading
+either changes nothing on the desktop, and `/health`, open to anyone who can
+reach the port, carries neither.
 
 A tunnelled request the edge did not admit on a *device* key reaches no
 protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The

@@ -40,6 +40,15 @@ pub struct ModelDetailDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_path: Option<String>,
+    /// Absolute path to the projector the model loads beside its weights.
+    /// `None` when it has none, and where the reader is on another machine,
+    /// as `file_path` is; [`Self::image_input`] is the answer that travels.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projector_path: Option<String>,
+    /// Whether the model reads images: it is linked to a projector.
+    #[serde(default)]
+    pub image_input: bool,
     /// Parameter count in billions.
     pub param_count_b: f64,
     /// Model architecture (e.g. `"llama"`, `"mistral"`).
@@ -168,10 +177,15 @@ impl ModelDetailDto {
     /// access to the running-process list.  Pass `false` / `None` from
     /// contexts where serving state is not relevant (e.g. the CLI).
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
+        let image_input = model.image_input();
         Self {
             id: model.id,
             name: model.name,
             file_path: Some(model.file_path.to_string_lossy().to_string()),
+            image_input,
+            projector_path: model
+                .projector_path
+                .map(|path| path.to_string_lossy().to_string()),
             param_count_b: model.param_count_b,
             architecture: model.architecture,
             quantization: model.quantization,

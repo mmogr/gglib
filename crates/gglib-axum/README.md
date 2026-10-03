@@ -80,6 +80,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `GET` | `/api/models` | List all models |
 | `POST` | `/api/models` | Add a new model |
 | `DELETE` | `/api/models/:id` | Remove a model |
+| `PUT` | `/api/models/:id` | Update a model; `projectorPath` links it to a projector, `null` unlinks it |
+| `GET` | `/api/models/:id/projectors` | The projector files the inspector's picker offers for a model |
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
 | `POST` | `/api/models/hf/search` | Search `HuggingFace` |

@@ -15,4 +15,11 @@ export type UpdateModelRequest = { name: string | null, quantization: string | n
  * ts-rs cannot read a nested `Option`, so the three states are spelled
  * out by hand: absent, `null`, or a value.
  */
-serverDefaults?: ServerConfig | null, };
+serverDefaults?: ServerConfig | null, 
+/**
+ * The projector the model loads beside its weights, by path.
+ * - Some(Some(path)) — link the model to the projector at `path`
+ * - Some(None) — unlink it
+ * - None — don't touch the link (key omitted from payload)
+ */
+projectorPath?: string | null, };

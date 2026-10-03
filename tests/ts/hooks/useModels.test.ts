@@ -231,6 +231,23 @@ describe('useModels', () => {
     expect(listModels).toHaveBeenCalledTimes(2);
   });
 
+  it('passes a projector link and an unlink through to the update, and reloads the list', async () => {
+    vi.mocked(updateModel).mockResolvedValue(mockModels[0]);
+    const { result } = renderHook(() => useModels());
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.updateModel(1, { projectorPath: '/models/mmproj.gguf' });
+      await result.current.updateModel(1, { projectorPath: null });
+    });
+
+    const sent = vi.mocked(updateModel).mock.calls.map(([params]) => params.projectorPath);
+    expect(sent).toEqual(['/models/mmproj.gguf', null]);
+    expect(listModels).toHaveBeenCalledTimes(3);
+  });
+
   it('can force remove a model', async () => {
     vi.mocked(removeModel).mockResolvedValue(undefined);
 

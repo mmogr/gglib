@@ -5,7 +5,6 @@
 //! the scheduling rules that file covers. Helpers are duplicated for the same
 //! reason.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_core::domain::{CacheRamHealth, SecondarySlotDecision};
@@ -29,7 +28,7 @@ fn resident(model_id: u32, name: &str) -> Resident {
         model_name: name.to_string(),
         context_size: 4096,
         port: 8000 + u16::try_from(model_id).unwrap_or(0),
-        model_path: PathBuf::from("/models/x.gguf"),
+        projector: None,
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
         narration: None,

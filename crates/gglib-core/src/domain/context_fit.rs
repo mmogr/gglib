@@ -103,7 +103,7 @@ pub fn fit_context(
 pub struct FitInputs {
     /// Device memory the fit was allowed to spend against.
     pub budget_bytes: Option<u64>,
-    /// The model's weights, as summed across shards.
+    /// The model's weights, summed across shards, plus its projector.
     pub weights_bytes: Option<u64>,
     /// Bytes of KV cache each token of context costs at the resolved types.
     pub kv_bytes_per_token: Option<u64>,

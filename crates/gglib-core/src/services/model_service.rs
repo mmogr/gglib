@@ -69,7 +69,7 @@ impl RetagDiff {
 /// to the injected `ModelRepository`. It adds no business logic
 /// beyond what the repository provides - it's a thin facade.
 pub struct ModelService {
-    repo: Arc<dyn ModelRepository>,
+    pub(super) repo: Arc<dyn ModelRepository>,
 }
 
 impl ModelService {
@@ -701,34 +701,7 @@ mod tests {
             // every test written against it.
             let existing = models.iter().position(|m| m.file_path == model.file_path);
             let id = existing.map_or(models.len() as i64 + 1, |i| models[i].id);
-            let created = Model {
-                dialect_spec: model.dialect_spec.clone(),
-                id,
-                name: model.name.clone(),
-                model_key: String::new(),
-                file_path: model.file_path.clone(),
-                param_count_b: model.param_count_b,
-                architecture: model.architecture.clone(),
-                quantization: model.quantization.clone(),
-                context_length: model.context_length,
-                expert_count: model.expert_count,
-                expert_used_count: model.expert_used_count,
-                expert_shared_count: model.expert_shared_count,
-                metadata: model.metadata.clone(),
-                added_at: model.added_at,
-                hf_repo_id: model.hf_repo_id.clone(),
-                hf_commit_sha: model.hf_commit_sha.clone(),
-                hf_filename: model.hf_filename.clone(),
-                download_date: model.download_date,
-                last_update_check: model.last_update_check,
-                tags: model.tags.clone(),
-                capabilities: model.capabilities,
-                inference_defaults: model.inference_defaults.clone(),
-                defaults_origin: model.defaults_origin,
-                server_defaults: model.server_defaults.clone(),
-                template_caps: None,
-                benchmark_summary: None,
-            };
+            let created = Model::stored(id, model);
             if let Some(index) = existing {
                 models[index] = created.clone();
             } else {

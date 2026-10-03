@@ -8,8 +8,8 @@
 //! - Flexible identifier resolution via [`resolver::resolve_for`] (name **or** ID)
 //! - Serving-status-aware DTO via `ModelOps::get_detail()` (same path as the Axum route)
 //! - With `--remote`, the paired machine's own answer for the identifier,
-//!   read through the daemon, with no file path: that machine's layout means
-//!   nothing here
+//!   read through the daemon, with no file or projector path: that machine's
+//!   layout means nothing here
 //! - `--json` → serialize `ModelDetailDto` to stdout
 //! - human mode → delegate to [`inspect_display::print_model_detail`]
 //!

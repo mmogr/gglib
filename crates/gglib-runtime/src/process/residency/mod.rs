@@ -3,9 +3,11 @@ mod context;
 pub mod explain;
 mod launch;
 mod pin;
+mod resident_match;
 mod spawned_child;
 mod vram;
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,7 +18,7 @@ use gglib_core::ports::{
 };
 use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::process::admission::{
     AdmissionDecision, AdmissionQueue, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
@@ -272,7 +274,6 @@ impl ResidentSet {
         request: LaunchRequest,
     ) -> Result<Admission, ModelRuntimeError> {
         let model_name = request.spec.name.clone();
-        let resolved_ctx = request.context.0;
         let mut queued = QueuedTicket {
             queue: Arc::clone(&self.queue),
             ticket: self.queue.enqueue(&model_name),
@@ -291,7 +292,8 @@ impl ResidentSet {
                 .poll(&queued.ticket, self.secondary_verdict(&request))
             {
                 AdmissionDecision::Serve { slot } => {
-                    if let Some(admission) = self.serve(slot, resolved_ctx, core).await? {
+                    let launched_as = (request.context.0, request.spec.projector.as_deref());
+                    if let Some(admission) = self.serve(slot, launched_as, core).await? {
                         return Ok(admission);
                     }
                     // The resident turned out to be unusable and has been
@@ -361,14 +363,14 @@ impl ResidentSet {
     /// Serve from a model already resident in `slot`.
     ///
     /// Returns `None` when the resident cannot serve this request after all —
-    /// it was launched with a different context size, or it has stopped
-    /// answering its health check. Both cases evict it, so the caller's next
-    /// pass launches a fresh instance — unless a run holds it: then it is
-    /// kept, and this request refused.
+    /// it was launched with a different context size or projector, or it has
+    /// stopped answering its health check. Each of these evicts it, so the
+    /// caller's next pass launches a fresh instance — unless a run holds it:
+    /// then it is kept, and this request refused.
     async fn serve(
         &self,
         slot: usize,
-        resolved_ctx: u64,
+        request: (u64, Option<&Path>),
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<Option<Admission>, ModelRuntimeError> {
         // `poll` has already counted this request against the slot, so the
@@ -379,13 +381,7 @@ impl ResidentSet {
             return Ok(None);
         };
 
-        if resident.context_size != resolved_ctx {
-            info!(
-                model_name = %resident.model_name,
-                running_context = %resident.context_size,
-                requested_context = %resolved_ctx,
-                "resident model was launched with a different context — recycling"
-            );
+        if resident_match::launched_differently(&resident, request) {
             drop(lease);
             self.recycle(slot, core).await?;
             return Ok(None);

@@ -10,7 +10,10 @@ infrastructure concerns (database, filesystem, etc.).
 # Structure
 
 - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
-- `model` - Model types (`Model`, `NewModel`)
+- `model` - Model types (`Model`, `NewModel`). A model reads images exactly when
+  it has a projector (`Model::image_input`)
+- `model_file` - The files a model is made of, as the library records them
+  (`ModelFile`, `NewModelFile`)
 - `model_detail` - Every stored field of one model, as the inspector reads it
   (`ModelDetailDto`), and one model as a paired machine reads it (`ModelLookup`)
 - `machine` - Which machine a model is on (`Machine`), a model named by its

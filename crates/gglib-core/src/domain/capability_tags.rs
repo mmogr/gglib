@@ -56,9 +56,6 @@ pub const MTP: &str = "mtp";
 /// Embedding model rather than a generative one. Auto-enables `--embeddings`.
 pub const EMBEDDING: &str = "embedding";
 
-/// Vision-capable model.
-pub const VISION: &str = "vision";
-
 /// Code-specialised model.
 pub const CODE: &str = "code";
 
@@ -74,7 +71,7 @@ pub const MOE: &str = "moe";
 /// which is a silent wrong answer rather than a visible failure.
 ///
 /// [`GgufCapabilities::to_tags`]: crate::domain::GgufCapabilities::to_tags
-pub const ALL: &[&str] = &[REASONING, AGENT, VISION, CODE, MOE, MTP, EMBEDDING];
+pub const ALL: &[&str] = &[REASONING, AGENT, CODE, MOE, MTP, EMBEDDING];
 
 /// Whether `tags` contains `tag`, case-insensitively.
 ///

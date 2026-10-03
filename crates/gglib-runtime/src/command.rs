@@ -233,6 +233,12 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("--embeddings");
     }
 
+    // The projector, which is what gives the model image input. Without it
+    // llama-server answers an image request with a 500.
+    if let Some(ref projector) = config.mmproj {
+        cmd.arg("--mmproj").arg(projector);
+    }
+
     // Add reasoning format if specified
     if let Some(ref format) = config.reasoning_format {
         cmd.arg("--reasoning-format").arg(format);
@@ -377,6 +383,7 @@ mod tests {
             model_id: 1,
             model_name: "test-model".to_string(),
             model_path: PathBuf::from("/tmp/test.gguf"),
+            mmproj: None,
             base_port: 9000,
             port: None,
             context_size: None,
@@ -639,26 +646,8 @@ mod tests {
         fs::set_permissions(&binary_path, fs::Permissions::from_mode(0o755)).unwrap();
 
         let config = ServerConfig {
-            model_id: 1,
-            model_name: "test-model".to_string(),
-            model_path: PathBuf::from("/tmp/test.gguf"),
-            base_port: 9000,
             port: Some(8080),
-            context_size: None,
-            gpu_layers: None,
-            jinja: JinjaMode::Defer,
-            reasoning_format: None,
-            spec_draft_n_max: None,
-            spec_draft_p_min: None,
-            inference_config: None,
-            extra_args: vec![],
-            slot_save_path: None,
-            cache_ram_mb: None,
-            cache_reuse: None,
-            cache_type_k: None,
-            cache_type_v: None,
-            mlock: false,
-            embeddings: false,
+            ..minimal_config()
         };
 
         // Should use the bootstrap path (will spawn then immediately exit)
@@ -734,3 +723,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "command_projector_tests.rs"]
+mod projector_tests;

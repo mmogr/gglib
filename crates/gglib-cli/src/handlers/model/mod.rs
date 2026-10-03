@@ -19,6 +19,7 @@ pub(crate) mod retag;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod update;
+mod update_projector;
 pub(crate) mod verification;
 
 use std::sync::Arc;
@@ -67,29 +68,8 @@ pub(crate) async fn dispatch(
         } => {
             add::execute(ctx, &file_path, reimport).await?;
         }
-        ModelCommand::List {
-            sort,
-            order,
-            min_params,
-            max_params,
-            min_speed,
-            max_speed,
-            tags,
-        } => {
-            list::execute(
-                target,
-                ctx,
-                list::ListArgs {
-                    sort,
-                    order,
-                    min_params,
-                    max_params,
-                    min_speed,
-                    max_speed,
-                    tags,
-                },
-            )
-            .await?;
+        ModelCommand::List(args) => {
+            list::execute(target, ctx, args).await?;
         }
         ModelCommand::Remove { identifier, force } => {
             remove::execute(ctx, &identifier, force).await?;
@@ -125,6 +105,7 @@ pub(crate) async fn dispatch(
             clear_inference_defaults,
             dry_run,
             force,
+            projector,
         } => {
             let args = update::UpdateArgs {
                 identifier,
@@ -157,6 +138,7 @@ pub(crate) async fn dispatch(
                 clear_inference_defaults,
                 dry_run,
                 force,
+                projector,
             };
             update::execute(ctx, args).await?;
         }

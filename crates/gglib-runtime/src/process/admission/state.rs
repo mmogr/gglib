@@ -52,8 +52,8 @@ pub struct Resident {
     pub context_size: u64,
     /// Port its llama-server is listening on.
     pub port: u16,
-    /// Path to the model file on disk.
-    pub model_path: PathBuf,
+    /// The projector this instance was launched with, if any.
+    pub projector: Option<PathBuf>,
     /// Whether disk slot restore can resume this model.
     pub slot_restore_supported: bool,
     /// What this model's GGUF declares about sampler defaults.
@@ -66,7 +66,7 @@ pub struct Resident {
     pub cache_ram_health: CacheRamHealth,
     /// What this instance's launch decided.
     pub narration: Option<LaunchNarration>,
-    /// On-disk size of this model's weights, all shards.
+    /// On-disk size of this model's weights, all shards, plus its projector.
     ///
     /// Carried so a second launch can budget against what is *left* rather than
     /// against the whole machine — see

@@ -200,7 +200,6 @@ pub(super) const fn secondary_cache_ram() -> CacheRamSetting {
 mod tests {
     use super::*;
     use gglib_core::domain::CacheRamHealth;
-    use std::path::PathBuf;
     use tokio::time::Instant;
 
     const MIB: u64 = 1024 * 1024;
@@ -302,7 +301,7 @@ mod tests {
             model_name: "m".to_string(),
             context_size: 4096,
             port: 8080,
-            model_path: PathBuf::new(),
+            projector: None,
             slot_restore_supported: true,
             cache_ram_health,
             narration: None,

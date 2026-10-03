@@ -7,6 +7,7 @@ fn model() -> Model {
         name: "test-model".to_string(),
         model_key: String::new(),
         file_path: std::path::PathBuf::from("/tmp/model.gguf"),
+        projector_path: None,
         param_count_b: 7.0,
         architecture: None,
         quantization: None,

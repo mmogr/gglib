@@ -17,7 +17,7 @@ use gglib_core::ports::{
 use std::fmt;
 use std::sync::Arc;
 
-use super::model_shards::total_model_bytes;
+use super::model_shards::resident_bytes;
 
 /// Format param count (in billions) as a human-readable string.
 fn format_param_count(param_b: f64) -> String {
@@ -45,6 +45,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         name: m.name.clone(),
         tags: m.tags.clone(),
         capabilities: m.capabilities,
+        image_input: m.image_input(),
         param_count: format_param_count(m.param_count_b),
         quantization: m.quantization.clone(),
         architecture: m.architecture.clone(),
@@ -58,13 +59,14 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 }
 
 /// Helper to convert Model to `ModelLaunchSpec` (for launching).
+#[must_use]
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
-    let file_size_bytes = total_model_bytes(&m.file_path);
+pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
+    let file_size_bytes = resident_bytes(&m);
     let kv_elems_per_token =
         gglib_core::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
     let kv_memory_is_partial =
@@ -77,6 +79,7 @@ fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         id: m.id as u32,
         name: m.name,
         file_path: m.file_path,
+        projector: m.projector_path,
         tags: m.tags,
         architecture: m.architecture,
         quantization: m.quantization,
@@ -184,3 +187,6 @@ impl ModelCatalogPort for CatalogPortImpl {
 #[cfg(test)]
 #[path = "model_catalog_tests.rs"]
 mod model_catalog_tests;
+#[cfg(test)]
+#[path = "model_catalog_projector_tests.rs"]
+mod projector_tests;

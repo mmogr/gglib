@@ -12,6 +12,7 @@ Right-hand detail panel for viewing, editing, and serving a selected GGUF model.
 ```
 ModelInspectorPanel
     ├── ModelMetadataGrid      ← read-only metadata display
+    │     ├── ProjectorRow     ← link or unlink the projector that lets the model read images
     │     └── SamplingProvenanceSection ← resolved sampling + which layer won, handed in by the panel
     ├── TagChips + TagAddInput ← tag management
     ├── InferenceParametersForm ← per-model inference defaults
@@ -38,8 +39,8 @@ when there is nothing running to read.
 | Directory | Contents |
 |-----------|----------|
 | `ModelInspectorPanel.tsx` | The panel itself: composes the sections below and owns the selected model |
-| `FarModelInspector.tsx` | The paired machine's model, read-only: its detail from that machine through `ModelMetadataGrid` (no path, no sampling section), "Serving on" that machine, Chat and Load only where that machine's actions list them and disabled while its rows are away or stale, the `gglib chat <id> --remote` that does the same from a terminal, and a re-read after Load |
-| `components/` | `ModelMetadataGrid`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorFooter` |
+| `FarModelInspector.tsx` | The paired machine's model, read-only: its detail from that machine through `ModelMetadataGrid` (no path, no projector row, no sampling section), the Vision chip when it reads images, "Serving on" that machine, Chat and Load only where that machine's actions list them and disabled while its rows are away or stale, the `gglib chat <id> --remote` that does the same from a terminal, and a re-read after Load |
+| `components/` | `ModelMetadataGrid`, `ProjectorRow`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorFooter` |
 | `hooks/` | `useEditMode`, `useModelDetail`, `useSamplingExplanation`, `useServeModal`, `useDeleteModal`, `useServerActions`, `useRetagModel` |
 
 <!-- module-docs:end -->

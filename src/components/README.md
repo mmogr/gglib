@@ -57,6 +57,7 @@ When a model is served, the view transitions to a Chat layout with tab switching
   - "Add Models" tab: Add local files or download from HuggingFace
 - **`ModelInspectorPanel/`**: Detailed model view with serve/stop controls
 - **`AddModel.tsx`**: Add model from local file
+- **`VisionChip.tsx`**: The neutral "Vision" chip on a model that reads images, shared by the library rows and both inspectors
 - **`HuggingFaceBrowser/`**: Browse and search GGUF models on HuggingFace Hub
 
 ### Chat Interface

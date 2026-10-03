@@ -8,7 +8,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -87,6 +87,10 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
             .try_get::<String, _>("file_path")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?
             .into(),
+        projector_path: row
+            .try_get::<Option<String>, _>("projector_path")
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?
+            .map(Into::into),
         param_count_b: row
             .try_get("param_count_b")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?,
@@ -225,6 +229,16 @@ pub(crate) fn normalized_file_path_string(path: &Path) -> String {
     gglib_core::paths::canonical_model_path_string(path)
 }
 
+/// A shard path list as the `file_paths_json` column stores it: each path
+/// normalised as [`normalized_file_path_string`] does.
+pub(crate) fn path_list_json(paths: &[std::path::PathBuf]) -> Option<String> {
+    let normalized: Vec<String> = paths
+        .iter()
+        .map(|path| normalized_file_path_string(path))
+        .collect();
+    serde_json::to_string(&normalized).ok()
+}
+
 /// Parse a database row into a `ModelFile`.
 pub(crate) fn map_model_file_row(
     row: &sqlx::sqlite::SqliteRow,
@@ -244,74 +258,5 @@ pub(crate) fn map_model_file_row(
 }
 
 #[cfg(test)]
-mod defaults_origin_tests {
-    use super::*;
-
-    #[test]
-    fn stored_value_wins_when_present() {
-        let origin = resolve_defaults_origin(
-            Some("user".to_owned()),
-            Some(&InferenceConfig::reasoning_profile()),
-        );
-        assert_eq!(
-            origin,
-            Some(DefaultsOrigin::User),
-            "explicit column value must not be second-guessed, even though \
-             this inference_defaults matches the auto-detected recipe \
-             exactly — a user is free to set the same values by hand"
-        );
-    }
-
-    #[test]
-    fn legacy_row_matching_the_reasoning_recipe_backfills_to_auto_detected() {
-        let origin = resolve_defaults_origin(None, Some(&InferenceConfig::reasoning_profile()));
-        assert_eq!(origin, Some(DefaultsOrigin::AutoDetected));
-    }
-
-    /// The measured origin round-trips through the same TEXT column with no
-    /// schema change — `Display` writes `"measured"`, `FromStr` reads it, and
-    /// the legacy backfill never manufactures it: a `Measured` row is always
-    /// explicitly written by an apply, so an unlabelled row can only be a
-    /// guess or a person's work.
-    #[test]
-    fn a_measured_origin_round_trips_and_is_never_backfilled() {
-        let origin = resolve_defaults_origin(
-            Some(DefaultsOrigin::Measured.to_string()),
-            Some(&InferenceConfig::reasoning_profile()),
-        );
-        assert_eq!(origin, Some(DefaultsOrigin::Measured));
-
-        // A legacy NULL beside any recipe backfills to a guess or to user —
-        // never to measured.
-        let backfilled = resolve_defaults_origin(None, Some(&InferenceConfig::reasoning_profile()));
-        assert_ne!(backfilled, Some(DefaultsOrigin::Measured));
-    }
-
-    #[test]
-    fn legacy_row_not_matching_the_reasoning_recipe_backfills_to_user() {
-        let custom = InferenceConfig {
-            temperature: Some(0.3),
-            ..Default::default()
-        };
-        let origin = resolve_defaults_origin(None, Some(&custom));
-        assert_eq!(origin, Some(DefaultsOrigin::User));
-    }
-
-    #[test]
-    fn no_inference_defaults_means_no_origin_regardless_of_the_column() {
-        assert_eq!(resolve_defaults_origin(Some("user".to_owned()), None), None);
-        assert_eq!(resolve_defaults_origin(None, None), None);
-    }
-
-    #[test]
-    fn unparseable_stored_value_falls_back_to_the_recipe_match() {
-        // A column value from some future, unrecognised variant must not
-        // panic or silently become `None` — it falls through to the same
-        // backfill a legacy NULL would get.
-        let origin = resolve_defaults_origin(
-            Some("not_a_real_variant".to_owned()),
-            Some(&InferenceConfig::reasoning_profile()),
-        );
-        assert_eq!(origin, Some(DefaultsOrigin::AutoDetected));
-    }
-}
+#[path = "row_mappers_tests.rs"]
+mod defaults_origin_tests;

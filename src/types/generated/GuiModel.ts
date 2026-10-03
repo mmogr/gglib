@@ -42,6 +42,10 @@ serverDefaults?: ServerConfig,
  */
 capabilities: number, 
 /**
+ * Whether the model reads images: it is linked to a projector.
+ */
+imageInput: boolean, 
+/**
  * Denormalised benchmark summary (speed badges).
  *
  * `None` if the model has never been benchmarked.

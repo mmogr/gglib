@@ -31,6 +31,11 @@ interface ModelMetadataGridProps {
    * machine's daemon by the model's id here.
    */
   sampling?: ReactNode;
+  /**
+   * The projector row, after the path. Only a model of this machine's has
+   * one: the link is a path on this machine's disk.
+   */
+  projector?: ReactNode;
 }
 
 /**
@@ -62,6 +67,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
   model,
   detail,
   sampling,
+  projector,
 }) => {
   const metadataEntries = detail ? Object.entries(detail.metadata) : [];
 
@@ -99,6 +105,8 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
             </span>
           </InfoRow>
         )}
+
+        {projector}
 
         {model.hfRepoId && (
           <InfoRow label="HuggingFace">

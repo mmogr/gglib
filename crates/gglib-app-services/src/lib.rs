@@ -30,6 +30,7 @@ mod downloads;
 pub mod launch_options;
 mod mcp;
 mod models;
+mod models_projector;
 mod proxy;
 mod proxy_guard;
 mod proxy_port;

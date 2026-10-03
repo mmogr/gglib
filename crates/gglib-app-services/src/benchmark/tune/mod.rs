@@ -1323,33 +1323,10 @@ mod tests {
     }
 
     fn test_model(name: &str) -> Model {
-        Model {
-            dialect_spec: None,
-            id: 1,
-            name: name.to_string(),
-            model_key: String::new(),
-            file_path: std::path::PathBuf::from("/tmp/model.gguf"),
-            param_count_b: 7.0,
-            architecture: None,
-            quantization: None,
-            context_length: None,
-            expert_count: None,
-            expert_used_count: None,
-            expert_shared_count: None,
-            metadata: std::collections::HashMap::new(),
-            added_at: chrono::Utc::now(),
-            hf_repo_id: None,
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            last_update_check: None,
-            tags: vec![],
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-            capabilities: gglib_core::domain::capabilities::ModelCapabilities::default(),
-            template_caps: None,
-            benchmark_summary: None,
-        }
+        let path = std::path::PathBuf::from("/tmp/model.gguf");
+        Model::stored(
+            1,
+            &gglib_core::NewModel::new(name.to_string(), path, 7.0, chrono::Utc::now()),
+        )
     }
 }
