@@ -63,7 +63,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`factory.rs`** — Database connection factory and pooling
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
-- **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, and its indexes
+- **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, its indexes, and the one-time rebuild that stops it reusing ids
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features
@@ -137,6 +137,33 @@ setting's row at setup, the one place this crate deletes rows on its own is the
 loop guard's log, which its writer prunes by age (90 days, today included) and
 by a row cap, whole days at a time.
 
+**A model id is never reused.** `models.id` is `INTEGER PRIMARY KEY
+AUTOINCREMENT`, so removing a model never frees its id for the next one: an id
+kept in a conversation, a benchmark run, the default-model setting or on
+another machine names that model or none. Registering a model that is already
+there binds the row's own id, so an update takes no id from the sequence
+either.
+
+`SQLite` cannot add `AUTOINCREMENT` to a table in place, so a library whose
+`models` table was made without it is rebuilt once, at the end of
+`create_schema()`, after every table the rebuild reads exists:
+
+- Foreign keys are off for the rebuild, set on one connection outside its
+  transaction, so dropping the old table cascades into nothing and nulls no
+  conversation's model. That connection is detached on any error, so none goes
+  back to the pool with foreign keys off.
+- `BEGIN IMMEDIATE`, then the shape is asked again, so of two processes opening
+  one old library at once the second finds the work done.
+- Every column the two tables share is copied by name, ids and
+  `file_paths_json` included, and the indexes are made again.
+- `PRAGMA foreign_key_check`, counted once the lock is held, must report no
+  more rows than before. A row that already referenced no model does not stop
+  a library booting; one the rebuild orphaned would.
+- The sequence starts above the highest id anything holds: the models
+  themselves, the `model_id` of every table that references them (a row that
+  already referenced no model included, which a new model would otherwise take
+  over), every benchmark run's `model_ids` and the `default_model_id` setting.
+
 There is deliberately no `PRAGMA user_version` ladder over the column set.
 `CANONICAL_PATH_SCHEMA_VERSION` is already load-bearing for the canonical-path
 backfill (a blocking syscall per row, paid once per library), and the
@@ -180,7 +207,7 @@ mod tests {
 
 | Repository | Tests |
 |---|---|
-| `SqliteModelRepository` | insert/list, get_by_id, get_by_name, update, delete, not-found errors, upsert dedup |
+| `SqliteModelRepository` | insert/list, get_by_id, get_by_name, update, delete, not-found errors, upsert dedup, an upsert takes no id |
 | `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
 | `SqliteMcpRepository` | insert/get/list/update/delete servers, SSE server, duplicate name conflict |
 | `SqliteSettingsRepository` | load empty, save and load, clear individual fields |

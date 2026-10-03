@@ -180,7 +180,7 @@ pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
 /// It is safe to call multiple times as all operations use IF NOT EXISTS.
 async fn create_schema(pool: &SqlitePool) -> Result<()> {
     models::create_models_table(pool).await?;
-    models::create_model_indexes(pool).await?;
+    models::create_model_indexes(&mut *pool.acquire().await?).await?;
 
     // The path/key backfills below resolve every stored path, which is a
     // blocking syscall per row and per shard entry — on Windows that opens a
@@ -581,6 +581,9 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Last, after every table it reads exists, however old the library.
+    models::rebuild_models_if_needed(pool).await?;
+
     Ok(())
 }
 
@@ -735,3 +738,11 @@ mod tests;
 #[cfg(test)]
 #[path = "setup_backfill_tests.rs"]
 mod backfill_tests;
+
+#[cfg(test)]
+#[path = "setup_models_tests.rs"]
+mod models_tests;
+
+#[cfg(test)]
+#[path = "setup_models_pool_tests.rs"]
+mod models_pool_tests;

@@ -216,14 +216,15 @@ impl ModelRepository for SqliteModelRepository {
             serde_json::to_string(&normalized).ok()
         });
 
-        // Use UPSERT to make registration idempotent
+        // Use UPSERT to make registration idempotent. The row's own id is
+        // bound when it has one, so an update takes no id from the sequence.
         let _result = sqlx::query(
             r"INSERT INTO models (
-                name, file_path, param_count_b, architecture, quantization,
+                id, name, file_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha,
                 hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 -- Coalesced, not assigned. A re-registration that carries no
@@ -251,6 +252,7 @@ impl ModelRepository for SqliteModelRepository {
                 defaults_origin = COALESCE(models.defaults_origin, excluded.defaults_origin)
             ",
         )
+        .bind(&model_key)
         .bind(&model.name)
         .bind(&file_path_string)
         .bind(model.param_count_b)
