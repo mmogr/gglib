@@ -13,6 +13,7 @@ pub(crate) mod chats;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod common;
+pub(crate) mod images;
 pub(crate) mod loop_guard;
 pub(crate) mod pinned;
 pub(crate) mod profile_harness;

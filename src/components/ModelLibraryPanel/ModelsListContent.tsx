@@ -7,6 +7,7 @@ import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../primitives/EmptyState';
 import { ModelListSkeleton } from './ModelListSkeleton';
+import { canSee } from '../../utils/canSee';
 import { cn } from '../../utils/cn';
 import { Chip } from '../ui/Chip';
 import { VisionChip } from '../VisionChip';
@@ -100,7 +101,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                 {model.quantization && (
                   <Chip size="sm" className="font-mono">{model.quantization}</Chip>
                 )}
-                {model.imageInput && <VisionChip />}
+                {canSee(model) && <VisionChip />}
                 {tps != null && (
                   <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="font-mono tabular-nums">
                     {tps.toFixed(0)} t/s

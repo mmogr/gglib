@@ -70,7 +70,7 @@ fn a_reasoning_only_turn_is_still_empty() {
 #[test]
 fn session_aware_budget_falls_back_to_live_ratio_without_a_session_id() {
     let cal = TokenCalibration::new();
-    cal.record("m", 40_000, 10_000);
+    cal.record("m", Some(40_000), 10_000);
     let live = cal.chars_per_token("m");
     // Mirrors the exact fallback expression used in
     // forward_chat_completion's budget computation above.

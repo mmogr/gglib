@@ -1,14 +1,15 @@
 import { FC } from 'react';
 import { CloudSync, Shield } from 'lucide-react';
+import type { GgufModel } from '../../../types';
+import { canSee } from '../../../utils/canSee';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
 import { VisionChip } from '../../VisionChip';
 
 interface InspectorHeaderProps {
-  modelName: string;
-  /** Whether the model reads images: it is linked to a projector. */
-  imageInput: boolean;
+  /** The model shown: its name, and whether it reads images. */
+  model: Pick<GgufModel, 'name' | 'imageInput'>;
   /** Whether the model has a HuggingFace repo to check for updates against. */
   hasHfRepo: boolean;
   isEditMode: boolean;
@@ -23,8 +24,7 @@ interface InspectorHeaderProps {
  * model that reads images, plus the two secondary maintenance actions.
  */
 export const InspectorHeader: FC<InspectorHeaderProps> = ({
-  modelName,
-  imageInput,
+  model,
   hasHfRepo,
   isEditMode,
   editedName,
@@ -44,8 +44,8 @@ export const InspectorHeader: FC<InspectorHeaderProps> = ({
         />
       ) : (
         <div className="flex items-center gap-sm min-w-0">
-          <h2 className="m-0 text-lg font-semibold truncate">{modelName}</h2>
-          {imageInput && <VisionChip />}
+          <h2 className="m-0 text-lg font-semibold truncate">{model.name}</h2>
+          {canSee(model) && <VisionChip />}
         </div>
       )}
 

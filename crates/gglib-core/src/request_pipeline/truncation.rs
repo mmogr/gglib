@@ -11,10 +11,10 @@
 //!
 //! [`truncate_history`] is a stateless pass over the request body:
 //!
-//! 1. **Budget gate** — if the serialized payload already fits within
-//!    `limit_chars` the body is left **completely untouched**. No history is
-//!    elided while there is room, so the model keeps maximum context on every
-//!    turn that does not actually need trimming.
+//! 1. **Budget gate** — if the payload, as `measure` measures it (an image
+//!    at its estimated tokens, not its base64), already fits within the
+//!    budget the body is left **completely untouched**. No history is elided
+//!    while there is room, so the model keeps maximum context on every turn.
 //!
 //! 2. **Oldest-first trim to a low watermark** — only when the payload exceeds
 //!    the budget are messages elided: unprotected `role: "tool"` /
@@ -59,17 +59,19 @@
 //!
 //! ## The budget is the model's, and only the model's
 //!
-//! `limit_chars` is a **character** budget, derived from the model's context
+//! The budget is a **character** budget, derived from the model's context
 //! size in tokens via [`CHARS_PER_TOKEN_APPROX`]. There is no floor: a
 //! 4096-token model gets a ~16,000-character budget and a 262,144-token model
 //! gets a ~1,000,000-character one. Callers that know the *live* serving
 //! context and a better chars-per-token ratio (the proxy learns one per model
 //! from observed usage frames) pass their own number;
-//! [`ModelContext::context_budget_chars`] is the answer for everyone else.
+//! [`ModelContext::context_budget`] is the answer for everyone else.
 //!
-//! [`ModelContext::context_budget_chars`]: super::ModelContext::context_budget_chars
+//! [`ModelContext::context_budget`]: super::ModelContext::context_budget
 
 use serde_json::Value;
+
+use super::measure::{ContextBudget, measured_len};
 
 // =============================================================================
 // Constants
@@ -123,9 +125,10 @@ pub(crate) const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by p
 /// that was never measured at all, which is what a caller with no budget gets.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TruncationReport {
-    /// Serialized payload size in bytes before truncation.
+    /// Measured payload size before truncation: its serialized bytes, with
+    /// each image at its estimated tokens rather than its base64.
     pub payload_chars_before: usize,
-    /// Serialized payload size in bytes after truncation. Equal to
+    /// Measured payload size after truncation. Equal to
     /// `payload_chars_before` when nothing was changed.
     pub payload_chars_after: usize,
     /// Number of messages whose `content` was replaced with
@@ -157,7 +160,7 @@ pub enum TruncationError {
          {limit_chars}-character context budget"
     )]
     ExceedsBudgetAfterTruncation {
-        /// Serialized payload size once trimming could do no more.
+        /// Measured payload size once trimming could do no more.
         payload_chars: usize,
         /// The budget it still exceeds.
         limit_chars: usize,
@@ -168,12 +171,12 @@ pub enum TruncationError {
 // The stage
 // =============================================================================
 
-/// Trim stale history in place so the request fits within `limit_chars`,
-/// aiming past the budget for the [`LOW_WATERMARK_PCT`] watermark once
-/// triggered.
+/// Trim stale history in place so the request fits within `budget`, aiming
+/// past the budget for the [`LOW_WATERMARK_PCT`] watermark once triggered.
 ///
-/// `limit_chars` is the total payload character budget for this request. See
-/// the [module documentation](self) for the full algorithm.
+/// `budget.chars` is the total payload character budget for this request,
+/// measured by [`measured_len`]: wire bytes, with each image at its estimated
+/// tokens. See the [module documentation](self) for the full algorithm.
 ///
 /// # Errors
 ///
@@ -182,9 +185,10 @@ pub enum TruncationError {
 /// left in its trimmed state; callers reject the request rather than forward it.
 pub fn truncate_history(
     body: &mut Value,
-    limit_chars: usize,
+    budget: ContextBudget,
 ) -> Result<TruncationReport, TruncationError> {
-    let payload_chars_before = serialized_len(body);
+    let limit_chars = budget.chars;
+    let payload_chars_before = measured_len(body, budget);
 
     // ── Budget gate ──────────────────────────────────────────────────────────
     // While the whole payload fits there is nothing to do: leave it alone and
@@ -238,7 +242,7 @@ pub fn truncate_history(
     let payload_chars_after = if messages_truncated == 0 {
         payload_chars_before
     } else {
-        serialized_len(body)
+        measured_len(body, budget)
     };
 
     if payload_chars_after > limit_chars {
@@ -283,37 +287,6 @@ const fn target_savings_chars(payload_chars: usize, limit_chars: usize) -> usize
     };
     let needed = payload_chars.saturating_sub(watermark);
     needed.div_ceil(margin).saturating_mul(margin)
-}
-
-/// Byte length of `body` once serialized, without allocating a copy of it.
-///
-/// The budget is denominated in wire bytes, and a [`Value`] has none until it
-/// is serialized — but a 200 KB conversation does not need to be materialized
-/// twice just to be measured.
-fn serialized_len(body: &Value) -> usize {
-    let mut counter = CountingWriter::default();
-    // Serializing a `Value` cannot fail: it holds no non-string map keys and no
-    // non-finite numbers, and the sink never errors. Reporting zero on that
-    // unreachable branch degrades to "under budget", i.e. passthrough.
-    if serde_json::to_writer(&mut counter, body).is_err() {
-        return 0;
-    }
-    counter.0
-}
-
-/// An [`std::io::Write`] sink that keeps the byte count and discards the bytes.
-#[derive(Default)]
-struct CountingWriter(usize);
-
-impl std::io::Write for CountingWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0 += buf.len();
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
 }
 
 /// Returns `true` if the message at `index` (in a list of `total` messages)

@@ -5,6 +5,8 @@ import type { ModelInfo } from '../../types/generated/ModelInfo';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import { Icon } from '../ui/Icon';
 import { Chip, type ChipVariant } from '../ui/Chip';
+import { VisionChip } from '../VisionChip';
+import { canSee } from '../../utils/canSee';
 import { cn } from '../../utils/cn';
 
 interface PairedModelRowsProps {
@@ -33,8 +35,9 @@ function matches(model: ModelInfo, query: string): boolean {
 /**
  * The paired machine's models, after this machine's: a group headed by
  * that machine's name and whether it is reached, then one row per model,
- * each badged with the machine. A row is read-only here; picking it opens
- * the far inspector, which offers what may be done there.
+ * each badged with the machine and, when it reads images, with the same
+ * Vision chip this machine's rows carry. A row is read-only here; picking
+ * it opens the far inspector, which offers what may be done there.
  *
  * Rows are keyed by the machine's fingerprint and the model's id there, so
  * the same model on both machines is two rows that cannot be confused.
@@ -88,6 +91,7 @@ export const PairedModelRows: FC<PairedModelRowsProps> = ({ paired, searchQuery,
                   </div>
                   <div className="flex items-center gap-md text-xs text-text-muted flex-wrap">
                     {model.description && <span className="inline-flex items-center">{model.description}</span>}
+                    {canSee(model) && <VisionChip />}
                     {model.context_window != null && (
                       <Chip size="sm" className="font-mono tabular-nums">
                         {model.context_window.toLocaleString()} ctx

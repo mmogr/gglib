@@ -88,10 +88,15 @@ pub(crate) async fn put_run(
     let Ok(Query(query)) = query else {
         return Err(invalid("`kind` is `chat` or `agent`"));
     };
-    let Ok(Json(body)) = body else {
-        return Err(invalid(
-            "a run's request body must be a JSON object, sent as application/json",
-        ));
+    let body = match body {
+        Ok(Json(body)) => body,
+        Err(rejection) => {
+            return Err(
+                crate::body_limit::too_large(rejection.status()).unwrap_or_else(|| {
+                    invalid("a run's request body must be a JSON object, sent as application/json")
+                }),
+            );
+        }
     };
     if query.kind == Some(RunKind::Agent) {
         return super::turn::put(&state, scope, &id, body).await;

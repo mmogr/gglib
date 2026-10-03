@@ -162,6 +162,34 @@ fn an_embedding_models_capabilities_survive_serialization() {
     assert_eq!(json["capabilities"], serde_json::json!(["embeddings"]));
 }
 
+/// A model linked to a projector says so, in the one spelling a client reads.
+#[test]
+fn a_model_that_reads_images_advertises_vision() {
+    let sees = ModelSummary {
+        image_input: true,
+        ..summary_with_tags("qwen3-vl", &["agent"])
+    };
+    let resp = ModelsResponse::from_summaries(vec![sees], Some(DEFAULT_CONTEXT_SIZE), true);
+    assert_eq!(VISION_CAPABILITY, "vision");
+    let json = serde_json::to_value(&resp.data[0]).unwrap();
+    assert_eq!(json["capabilities"], serde_json::json!(["vision"]));
+}
+
+/// Neither capability hides the other.
+#[test]
+fn an_embedding_model_linked_to_a_projector_advertises_both() {
+    let both = ModelSummary {
+        image_input: true,
+        ..summary_with_tags("colpali", &["embedding"])
+    };
+    let resp = ModelsResponse::from_summaries(vec![both], Some(DEFAULT_CONTEXT_SIZE), true);
+    let json = serde_json::to_value(&resp.data[0]).unwrap();
+    assert_eq!(
+        json["capabilities"],
+        serde_json::json!(["embeddings", "vision"])
+    );
+}
+
 // =========================================================================
 // Catalogue ids and the reading side
 // =========================================================================

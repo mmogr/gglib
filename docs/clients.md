@@ -61,6 +61,43 @@ prints it. The port does not add it for you, on purpose — see
 `gglib q --remote` and `gglib chat --remote` need neither: they attach the
 key themselves.
 
+## Images
+
+A client that sends images in the `OpenAI` shape, as GitHub Copilot does when
+a screenshot is pasted, works with a model that is linked to a projector
+(`gglib model update <model> --projector <path>`). The image is an `image_url`
+part of a message's `content`, as a `data:image/png;base64,…` or
+`data:image/jpeg;base64,…` URL:
+
+```json
+{"role": "user", "content": [
+  {"type": "text", "text": "What is the error?"},
+  {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0…"}}
+]}
+```
+
+Which models read images is in `/v1/models`: such a model's entry carries
+`"capabilities": ["vision"]`.
+
+- **What an image costs.** gglib counts an image against the model's context
+  by its pixels, not by the length of its base64: about one token per 32x32
+  pixels, at most 4,096 an image. A 2560x1440 screenshot is about 3,600
+  tokens. An image whose size gglib cannot read from its header (a PNG or a
+  JPEG can be read; an `http(s)` URL or another format cannot) is counted at
+  4,096.
+- **A model that cannot read images refuses them by name.** A request with an
+  image anywhere in its messages, earlier turns included, for a model with no
+  projector is answered with HTTP 400 before anything is loaded:
+
+  ```json
+  {"error": {"message": "Model 'qwen3.6' cannot read images: it has no projector linked. Link one with `gglib model update qwen3.6 --projector <path>`, or name a model that has one.",
+             "type": "invalid_request_error", "code": "model_cannot_read_images"}}
+  ```
+
+- **The body limit is 32 MiB** on `POST /v1/chat/completions` and
+  `PUT /v1/runs/{id}`. A larger body is answered with HTTP 413 and the code
+  `request_too_large`.
+
 ## Error codes
 
 Every error code gglib's proxy writes, in a refusal, in a stream's error frame

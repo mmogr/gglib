@@ -1,5 +1,6 @@
 //! The resolved per-model context every request pipeline is built from.
 
+use super::measure::ContextBudget;
 use super::truncation::CHARS_PER_TOKEN_APPROX;
 use crate::domain::{
     DefaultsOrigin, DialectSpec, InferenceConfig, ModelCapabilities, TemplateCaps,
@@ -80,7 +81,7 @@ impl ModelContext {
         Self::default()
     }
 
-    /// The history-truncation budget in characters, from the model's own
+    /// The history-truncation budget, from the model's own
     /// capacity: [`context_length`](Self::context_length) tokens converted at
     /// [`CHARS_PER_TOKEN_APPROX`].
     ///
@@ -95,9 +96,12 @@ impl ModelContext {
     /// compute a better number and pass that instead. This is the answer for
     /// everyone else.
     #[must_use]
-    pub fn context_budget_chars(&self) -> Option<usize> {
+    pub fn context_budget(&self) -> Option<ContextBudget> {
         let tokens = usize::try_from(self.context_length?).ok()?;
-        Some(tokens.saturating_mul(CHARS_PER_TOKEN_APPROX))
+        Some(ContextBudget {
+            chars: tokens.saturating_mul(CHARS_PER_TOKEN_APPROX),
+            tokens,
+        })
     }
 }
 
@@ -216,14 +220,14 @@ mod tests {
             ..ModelContext::passthrough()
         };
 
-        assert_eq!(small.context_budget_chars(), Some(16_384));
-        assert_eq!(large.context_budget_chars(), Some(1_048_576));
+        assert_eq!(small.context_budget().map(|b| b.chars), Some(16_384));
+        assert_eq!(large.context_budget().map(|b| b.chars), Some(1_048_576));
     }
 
     /// An unresolvable model must not be handed a guessed budget — `None` means
     /// "do not truncate", not "truncate at zero".
     #[test]
     fn an_unknown_context_length_yields_no_budget() {
-        assert_eq!(ModelContext::passthrough().context_budget_chars(), None);
+        assert_eq!(ModelContext::passthrough().context_budget(), None);
     }
 }

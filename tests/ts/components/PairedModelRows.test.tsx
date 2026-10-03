@@ -39,6 +39,17 @@ describe('PairedModelRows', () => {
     ]);
   });
 
+  it('marks a row whose model reads images, from the capabilities its machine lists', () => {
+    const group = pairedModels([
+      farEntry('qwen3-vl', 3, { capabilities: ['vision'] }),
+      farEntry('bge', 4, { capabilities: ['embeddings'] }),
+      farEntry('llama-3.1', 1000),
+    ]);
+    rows({ paired: { group, name: 'desk', reach: 'reached', refetch: vi.fn() } });
+    const marked = screen.getAllByRole('option').map((o) => within(o).queryByText('Vision') !== null);
+    expect(marked).toEqual([true, false, false]);
+  });
+
   it('picks a row as that machine’s model, by its id there', async () => {
     const onPick = rows();
     await userEvent.setup().click(screen.getByRole('option', { name: /llama-3.1/ }));

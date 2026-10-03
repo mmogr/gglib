@@ -21,10 +21,8 @@
 use std::sync::LazyLock;
 
 use bytes::Bytes;
-use gglib_core::domain::ChatMessage;
 use gglib_core::request_pipeline::for_each_text_mut;
 use regex::Regex;
-use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
 
 /// Environment kill switch. Truthy values (case-insensitive `1`, `true`,
@@ -42,16 +40,6 @@ pub(crate) const DISABLE_CANONICALIZATION_ENV: &str = "GGLIB_DISABLE_PROMPT_CANO
 fn canonicalization_disabled_via_env() -> bool {
     gglib_core::debug_switches::enabled(DISABLE_CANONICALIZATION_ENV)
 }
-
-/// Matches dynamic IDE-injected lines at the start of a line (multiline mode).
-///
-/// The pattern captures the trailing newline (`\r?\n`) so `replace_all` removes
-/// the entire line including its line ending.  Without consuming the newline a
-/// matched line in the middle of the prompt would leave a double `\n\n`.
-static DYNAMIC_LINE_PATTERNS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^(Current date:|Current time:|Current terminal line count)[^\n]*(?:\r?\n|$)")
-        .expect("hardcoded regex should always compile")
-});
 
 /// Matches a whole `Current terminal line count …` line, newline included.
 ///
@@ -258,88 +246,6 @@ fn tool_name(tool: &serde_json::Value) -> Option<&str> {
     tool.get("function")?.get("name")?.as_str()
 }
 
-/// Number of leading digest bytes kept in [`derive_fallback_session_id`]'s
-/// identifier (16 bytes = 128 bits — ample collision resistance for a cache
-/// bucketing key that only needs fail-open behaviour on collision, not
-/// cryptographic guarantees).
-const FALLBACK_ID_DIGEST_BYTES: usize = 16;
-
-/// Derive a stable, content-based session identifier for KV cache
-/// save/restore when the caller did not supply an `X-Gglib-Session-Id`
-/// header.
-///
-/// Hashes the system prompt together with the first user message. Both are
-/// stable for the entire life of one agent's conversation: `truncate_history`
-/// (see `truncation.rs`) never modifies `system` messages or `user`-role
-/// content, so this fingerprint doesn't drift as history grows. Different
-/// agents (different system prompt) or different task instances of the same
-/// agent (different first user message) land in different buckets without
-/// any client cooperation.
-///
-/// # Preconditions
-///
-/// None. It strips the dynamic lines itself, so the id is stable whether or
-/// not canonicalisation ran, including when it is switched off via
-/// [`DISABLE_CANONICALIZATION_ENV`].
-///
-/// Returns `None` when the body has no usable `messages` array, or neither
-/// a system nor a first user message is present — callers should treat that
-/// the same as "no session available".
-///
-/// # Fail-open
-///
-/// A hash collision (two distinct conversations sharing an identical system
-/// prompt *and* identical first user message) just means one restores the
-/// other's cache; llama-server still re-syncs against whatever prefix
-/// actually matches the incoming prompt, so the worst case is a wasted
-/// restore/save, never a wrong answer.
-pub(crate) fn derive_fallback_session_id(body: &Bytes) -> Option<String> {
-    let mut value: serde_json::Value = serde_json::from_slice(body).ok()?;
-    let messages_raw = value.get_mut("messages")?.take();
-    let messages: Vec<ChatMessage> = serde_json::from_value(messages_raw).ok()?;
-
-    // Every dynamic line is stripped before hashing, not just coarsened.
-    // `canonicalize_system_prompt` rounds the clock to the hour and leaves the
-    // date alone, both of which still turn over eventually — and a fingerprint
-    // that turns over costs the session its KV slot and its
-    // `TokenCalibration` snapshot at the boundary. Removing them here
-    // decouples the identity of a conversation from the clock entirely.
-    let system_text = messages
-        .iter()
-        .find(|m| m.role == "system")
-        .and_then(|m| m.content.clone())
-        .map(|c| {
-            DYNAMIC_LINE_PATTERNS
-                .replace_all(&c.into_string(), "")
-                .into_owned()
-        })
-        .unwrap_or_default();
-
-    let first_user_text = messages
-        .iter()
-        .find(|m| m.role == "user")
-        .and_then(|m| m.content.clone())
-        .map(gglib_core::MessageContent::into_string)
-        .unwrap_or_default();
-
-    if system_text.is_empty() && first_user_text.is_empty() {
-        return None;
-    }
-
-    let mut hasher = Sha256::new();
-    hasher.update(system_text.as_bytes());
-    // Separator byte so ("ab", "c") and ("a", "bc") don't collide.
-    hasher.update([0u8]);
-    hasher.update(first_user_text.as_bytes());
-    let digest = hasher.finalize();
-
-    let hex: String = digest[..FALLBACK_ID_DIGEST_BYTES]
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    Some(format!("auto-{hex}"))
-}
-
 /// Diagnostic only: log the request's `tools` array — function names in
 /// their original order — tagged with the resolved cache session id.
 ///
@@ -533,118 +439,6 @@ mod tests {
         let body = Bytes::from(b"not json".to_vec());
         let result = canonicalize_system_prompt(body.clone());
         assert_eq!(result, body);
-    }
-
-    fn body_with(system: &str, user: &str) -> Bytes {
-        Bytes::from(
-            serde_json::to_vec(&serde_json::json!({
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user}
-                ]
-            }))
-            .unwrap(),
-        )
-    }
-
-    #[test]
-    fn fallback_session_id_stable_across_turns() {
-        let turn1 = body_with("You are the Planner.", "Design a login flow");
-        let turn2 = Bytes::from(
-            serde_json::to_vec(&serde_json::json!({
-                "messages": [
-                    {"role": "system", "content": "You are the Planner."},
-                    {"role": "user", "content": "Design a login flow"},
-                    {"role": "assistant", "content": "Here's a plan..."},
-                    {"role": "user", "content": "Now refine step 2"}
-                ]
-            }))
-            .unwrap(),
-        );
-        let id1 = derive_fallback_session_id(&turn1).unwrap();
-        let id2 = derive_fallback_session_id(&turn2).unwrap();
-        assert_eq!(
-            id1, id2,
-            "same agent/task should map to the same bucket across turns"
-        );
-    }
-
-    #[test]
-    fn fallback_session_id_differs_by_role() {
-        let planner = body_with("You are the Planner.", "Design a login flow");
-        let coder = body_with("You are the Coder.", "Design a login flow");
-        assert_ne!(
-            derive_fallback_session_id(&planner).unwrap(),
-            derive_fallback_session_id(&coder).unwrap()
-        );
-    }
-
-    #[test]
-    fn fallback_session_id_differs_by_task() {
-        let task_a = body_with("You are the Coder.", "Implement login");
-        let task_b = body_with("You are the Coder.", "Implement logout");
-        assert_ne!(
-            derive_fallback_session_id(&task_a).unwrap(),
-            derive_fallback_session_id(&task_b).unwrap()
-        );
-    }
-
-    #[test]
-    fn fallback_session_id_ignores_dynamic_lines() {
-        // derive_fallback_session_id requires pre-canonicalized input (see its
-        // doc comment) — the caller (chat_completions) canonicalizes once up
-        // front. Mirror that contract here rather than passing raw bodies.
-        let with_timestamp = canonicalize_system_prompt(body_with(
-            "You are an assistant.\nCurrent date: 2026-07-15\nMore instructions.",
-            "Hello",
-        ));
-        let without_timestamp = canonicalize_system_prompt(body_with(
-            "You are an assistant.\nMore instructions.",
-            "Hello",
-        ));
-        assert_eq!(
-            derive_fallback_session_id(&with_timestamp).unwrap(),
-            derive_fallback_session_id(&without_timestamp).unwrap(),
-            "dynamic IDE-injected lines must not change the fingerprint turn to turn"
-        );
-    }
-
-    #[test]
-    fn fallback_session_id_handles_array_form_content() {
-        let string_form = body_with("You are the Coder.", "Implement login");
-        let array_form = Bytes::from(
-            serde_json::to_vec(&serde_json::json!({
-                "messages": [
-                    {"role": "system", "content": [{"type": "text", "text": "You are the Coder."}]},
-                    {"role": "user", "content": [{"type": "text", "text": "Implement login"}]}
-                ]
-            }))
-            .unwrap(),
-        );
-        assert_eq!(
-            derive_fallback_session_id(&string_form).unwrap(),
-            derive_fallback_session_id(&array_form).unwrap(),
-            "string and array content forms carrying the same text must fingerprint identically"
-        );
-    }
-
-    #[test]
-    fn fallback_session_id_none_without_messages() {
-        let body = Bytes::from(serde_json::to_vec(&serde_json::json!({"foo": "bar"})).unwrap());
-        assert!(derive_fallback_session_id(&body).is_none());
-    }
-
-    #[test]
-    fn fallback_session_id_none_on_invalid_json() {
-        let body = Bytes::from(b"not json".to_vec());
-        assert!(derive_fallback_session_id(&body).is_none());
-    }
-
-    #[test]
-    fn fallback_session_id_is_valid_for_sanitize() {
-        let body = body_with("You are the Coder.", "Implement login");
-        let id = derive_fallback_session_id(&body).unwrap();
-        crate::slots::sanitize_session_id(&id).expect("derived id must pass sanitize_session_id");
     }
 
     #[test]

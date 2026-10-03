@@ -182,8 +182,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   return (
     <div className={panelContainer}>
       <InspectorHeader
-        modelName={model.name}
-        imageInput={model.imageInput}
+        model={model}
         hasHfRepo={Boolean(model.hfRepoId)}
         isEditMode={editMode.isEditMode}
         editedName={editMode.editedName}

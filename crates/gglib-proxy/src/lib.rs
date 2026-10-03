@@ -12,6 +12,7 @@ mod admin;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod audit_records;
+pub(crate) mod body_limit;
 pub(crate) mod chats;
 pub(crate) mod client_send;
 // Crate-internal. Nine stay `pub` below. Eight are the ones other crates name by
@@ -34,10 +35,6 @@ pub(crate) mod client_send;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod cache_lifecycle;
-#[allow(
-    clippy::format_collect,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) mod canonicalization;
 #[allow(
     clippy::items_after_statements,
@@ -48,6 +45,7 @@ pub(crate) mod canonicalization;
 pub(crate) mod connections;
 pub mod dashboard;
 pub(crate) mod embeddings;
+pub(crate) mod fallback_session;
 // Test-only: the published error codes' table and the checks that hold it to
 // the source and to docs/error-codes.json.
 #[cfg(test)]
@@ -64,6 +62,7 @@ mod error_codes;
 )]
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
+pub(crate) mod image_refusal;
 pub(crate) mod load_endpoint;
 #[allow(
     clippy::option_if_let_else,

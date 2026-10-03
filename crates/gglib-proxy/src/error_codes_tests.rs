@@ -21,8 +21,9 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// three hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 20] = [
+const RELAYS: [(&str, &str, &str, &str); 21] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
+    ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/runs/handlers.rs", "error", "code", "`error`'s parameter"),
     ("gglib-proxy/src/runs/handlers.rs", "refused", "err.code()", "`RunsError::code`"),
     ("gglib-proxy/src/chats/handlers.rs", "refused", "err.code()", "`HubChatsError::code`"),

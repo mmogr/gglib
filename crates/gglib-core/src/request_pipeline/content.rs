@@ -46,6 +46,19 @@ pub fn text_parts(content: &Value) -> usize {
     }
 }
 
+/// Every image URL `content` carries, in order: the one walk over image
+/// parts, for every stage that measures, identifies or refuses by them.
+///
+/// A string carries none. In an array, a part's `image_url` is the object
+/// `{"url": …}` or the URL itself as a bare string; a part with neither, and
+/// a `content` of any other shape, carries none.
+pub fn image_urls(content: &Value) -> impl Iterator<Item = &str> {
+    content.as_array().into_iter().flatten().filter_map(|part| {
+        let image = part.get("image_url")?;
+        image.as_str().or_else(|| image.get("url")?.as_str())
+    })
+}
+
 /// Append `text` to `content` as a trailing piece of text, in either shape,
 /// and say whether it could be.
 ///

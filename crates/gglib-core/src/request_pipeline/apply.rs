@@ -79,6 +79,7 @@
 use serde_json::Value;
 
 use super::effort_gate::SuppressedEffort;
+use super::measure::ContextBudget;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
 use super::{
@@ -91,7 +92,7 @@ use super::{
 /// Bundled so there is one return value as stages gain things worth saying.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PipelineReport {
-    /// Stage 3. Zeroed when `budget_chars` was `None` — the request was
+    /// Stage 3. Zeroed when `budget` was `None` — the request was
     /// shaped but never measured.
     pub truncation: TruncationReport,
     /// Stages 4–5. See [`SamplingDecision`].
@@ -117,8 +118,8 @@ pub struct PipelineReport {
 /// This is the whole pipeline as one call. See the [module docs](self) for the
 /// stage order and why it is fixed.
 ///
-/// `budget_chars` is the history-truncation budget in characters.
-/// [`ModelContext::context_budget_chars`] is the answer for callers with no
+/// `budget` is the history-truncation budget.
+/// [`ModelContext::context_budget`] is the answer for callers with no
 /// live serving context to measure; the proxy passes its own, computed from the
 /// running server's context size and a learned chars-per-token ratio. `None`
 /// skips stage 3 entirely and reports zeroes — the request is shaped but never
@@ -129,19 +130,19 @@ pub struct PipelineReport {
 /// # Errors
 ///
 /// [`TruncationError`] when the conversation cannot be made to fit
-/// `budget_chars`. `body` is left shaped and trimmed; callers reject the
+/// `budget`. `body` is left shaped and trimmed; callers reject the
 /// request rather than forward it.
 pub fn apply(
     body: &mut Value,
     ctx: &ModelContext,
     layers: &SamplingLayers,
-    budget_chars: Option<usize>,
+    budget: Option<ContextBudget>,
 ) -> Result<PipelineReport, TruncationError> {
     messages::shape_messages(body, ctx);
     tools::strip_unsupported_tools(body, ctx);
 
-    let truncation = match budget_chars {
-        Some(limit) => truncation::truncate_history(body, limit)?,
+    let truncation = match budget {
+        Some(budget) => truncation::truncate_history(body, budget)?,
         None => TruncationReport::default(),
     };
 

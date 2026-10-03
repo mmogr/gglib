@@ -4,6 +4,7 @@ import type { PairedModelsState } from '../../hooks/usePairedModels';
 import { getTransport } from '../../services/transport';
 import type { ModelLookup } from '../../types/generated/ModelLookup';
 import type { ModelRef } from '../../types/generated/ModelRef';
+import { canSee } from '../../utils/canSee';
 import { formatError } from '../../utils/errors';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
@@ -45,11 +46,11 @@ function useFarDetail(id: number) {
 
 /**
  * The paired machine's model, read-only: what that machine stores about it
- * (with no path on its disk), whether it reads images, whether it is serving,
- * and only the actions that machine allows on its models — Chat and Load,
- * each shown only when the table the daemon sent lists it. While its rows
- * are away or stale the
- * actions are offered but disabled, since a press would not reach it. Load
+ * (with no path on its disk), whether it reads images (the Vision chip its
+ * row carries, from the same listing), whether it is serving, and only the
+ * actions that machine allows on its models — Chat and Load, each shown only
+ * when the table the daemon sent lists it. While its rows are away or stale
+ * the actions are offered but disabled, since a press would not reach it. Load
  * reads the model again when it lands, which is how "Serving on" appears.
  *
  * The command that does the same from a terminal is shown as it is typed,
@@ -65,6 +66,8 @@ export const FarModelInspector: FC<FarModelInspectorProps> = ({ model, paired, o
   const actions = paired.group?.actions ?? [];
   const reached = paired.reach === 'reached';
   const detail = lookup?.detail ?? null;
+  // As its row in the library says it: from what that machine lists, under any of the model's names.
+  const sees = paired.group?.models.some((m) => m.gglib_id === model.id && canSee(m)) ?? false;
 
   const handleLoad = async () => {
     const id = model.id;
@@ -85,7 +88,7 @@ export const FarModelInspector: FC<FarModelInspectorProps> = ({ model, paired, o
       <div className="p-md border-b border-border-light shrink-0 flex items-center gap-sm">
         <h2 className="m-0 text-lg font-semibold truncate">{detail?.name ?? `Model ${model.id}`}</h2>
         <Chip size="sm" leftIcon={<Icon icon={Server} size={11} />}>{paired.name}</Chip>
-        {detail?.imageInput && <VisionChip />}
+        {sees && <VisionChip />}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-base flex flex-col gap-md">
         {error && <Banner variant="danger">{`Could not read it from ${paired.name}: ${error}`}</Banner>}
