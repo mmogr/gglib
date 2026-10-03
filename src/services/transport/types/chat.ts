@@ -84,6 +84,8 @@ export interface CreateConversationParams {
   title: string;
   modelId?: ModelId | null;
   systemPrompt?: string | null;
+  /** The model it is for, by its machine: kept as its settings' model, so its machine is fixed. */
+  model?: ModelRef | null;
 }
 
 /**

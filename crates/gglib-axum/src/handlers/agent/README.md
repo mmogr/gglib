@@ -19,25 +19,29 @@ handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::Ag
 
 An agent run stamps each turn's `turn_usage` event with the model it drove
 (`compose::MadeBy`: locally the model on the port and its catalogue
-quantisation, remotely the name the request gave) before logging it, so the
+quantisation, on the paired machine the name and quantisation that machine
+has for the model) before logging it, so the
 frame a page draws and the row the reply is saved as say the same.
 
 # Which upstream
 
 `remote_upstream` decides, before anything else, whether the loop drives a
 llama-server this daemon started (the request's `port`, validated against
-the servers it owns, the model resolved against this catalog) or the machine
-on the other end of the remote tunnel (`"remote": true`: the port the tunnel
-bound, the key from the pairing as the bearer, and no shaping, because the
-far proxy runs its own pipeline). Not connected, or connected without a key,
-is a `409` that names `gglib remote join`.
+the servers it owns, the model resolved against this catalog) or a model of
+the machine on the other end of the remote tunnel (`far`, that machine and
+the model's id there: the port the tunnel bound, the key from the pairing as
+the bearer, and no shaping, because the far proxy runs its own pipeline). A
+`far` naming this machine is a `400`. Not connected, connected without a key,
+or connected to another machine than the ref's is a `409`
+(`RemoteOps::far_for`), the last because that machine's same id is another
+model.
 
-It also settles the request's `model`, because the two paths mean opposite
-things by an absent one. Locally an absence is the ordinary case and means
-"whatever llama-server loaded". Remotely it is a `400`: there is no catalog
-here for the far machine's names and this machine's default is not
-substituted, so an unnamed model would reach that machine as `""` and come
-back `404 Model '' not found` — a real answer through a working tunnel.
+On the far path the id is looked up there first (`FarProxy::lookup`), so a
+model that machine does not have is its `404` before any turn starts; the
+turns are sent with the id as the model, so no other model of its name
+answers, and the run is counted under, and its turns made by, the name and
+quantisation that machine has for it. Locally an absent `model` is the
+ordinary case and means "whatever llama-server loaded".
 
 # Cancellation
 
@@ -55,9 +59,14 @@ watchdog waits for the run to end; a person's stop does not. A llama-server
 that goes silent mid-reply for five minutes, the proxy's own idle bound, ends
 the run with an error (one that never sends headers ends it at the ten-minute
 send timeout), so a silent server cannot keep the hold. `launch` reserves the id
-in the caller's scope, saves the user's message, names a local run's model on
-the conversation (its registry id, and its name in the settings) so the chat's
-next turn from either door runs on it, and starts the loop.
+in the caller's scope, refuses a run on another machine than the one its
+conversation ran on (a `409`: a chat's machine is fixed for its life, and a
+paired machine is told apart by its fingerprint), saves the user's message,
+names the run's model on the
+conversation by its machine (a local run's registry id, a far run's id on the
+paired machine, and its name in the settings) so the chat's next turn from
+either door runs on it, or is refused for being the paired machine's, and
+starts the loop.
 
 # A paired device's turn
 

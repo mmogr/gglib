@@ -18,6 +18,7 @@ import * as version from './version';
 import * as remote from './remote';
 import * as runs from './runs';
 import * as farChats from './farChats';
+import * as farModels from './farModels';
 
 /**
  * Create unified API transport.
@@ -40,5 +41,6 @@ export function createApiTransport() {
     ...remote,
     ...runs,
     ...farChats,
+    ...farModels,
   };
 }

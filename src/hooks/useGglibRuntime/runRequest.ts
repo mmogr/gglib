@@ -10,6 +10,7 @@ import type { GglibMessage } from '../../types/messages';
 import type { AgentMessage } from '../../types/generated/AgentMessage';
 import type { AgentRequestConfig } from '../../types/generated/AgentRequestConfig';
 import type { AgentRunRequest } from '../../types/generated/AgentRunRequest';
+import type { ModelRef } from '../../types/generated/ModelRef';
 import type { ReasoningEffort } from '../../types/generated/ReasoningEffort';
 import { convertToWireMessages } from './wireMessages';
 
@@ -50,9 +51,9 @@ export interface RunRequestOptions {
    */
   replaceFrom?: number;
   /**
-   * The local server this turn is for. Absent for a remote turn, which has
-   * none: the body still carries a `port` because the wire type requires a
-   * number, and the backend does not consult it on that branch.
+   * The local server this turn is for. Absent for a turn on a far model,
+   * which has none: the body still carries a `port` because the wire type
+   * requires a number, and the backend does not consult it on that branch.
    */
   selectedServerPort?: number;
   /** Optional partial `AgentConfig` overrides; omitted fields use backend defaults. */
@@ -67,17 +68,11 @@ export interface RunRequestOptions {
   /** `false` exposes no tools (an empty `tool_filter`); otherwise permissive. */
   supportsToolCalls?: boolean | null;
   /**
-   * Send this turn to the machine on the other end of the remote tunnel
-   * (ADR 0012) instead of the server on `selectedServerPort`.
+   * The paired machine's model this turn is for, by that machine and its id
+   * there, instead of the server on `selectedServerPort` (ADR 0012). The
+   * daemon sends the id, so no other model of its name answers.
    */
-  remote?: boolean;
-  /**
-   * The model name, spelled as the machine that serves it spells it. Omitted
-   * locally, which lets llama-server serve whatever it loaded. **Required
-   * with `remote`**: this machine's default is deliberately not substituted,
-   * because the far machine may not have it (`docs/remote.md`).
-   */
-  model?: string;
+  far?: ModelRef;
 }
 
 /** A run id the hub accepts: 1–64 of `[A-Za-z0-9_-]`. */
@@ -114,32 +109,19 @@ function toolFilter(supportsToolCalls: boolean | null | undefined): string[] | n
 }
 
 /**
- * Build the run's body.
- *
- * @throws when the turn is for the far machine and names no model there,
- *   before anything is sent. Sent empty, the name reaches the far proxy as
- *   `"model": ""` and comes back `404 Model '' not found`: a real answer
- *   through a working tunnel that reads as transport.
+ * Build the run's body. Locally its `model` is left empty, which lets
+ * llama-server serve whatever it loaded; a far model is named by `far`.
  */
 export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
-  const { remote = false } = options;
-  const model = options.model?.trim() || null;
-  if (remote && !model) {
-    throw new Error(
-      'Chat is set to go to the other machine, but no model there is named. ' +
-        'Name one in the Remote panel — this machine’s default is not sent, ' +
-        'because the other machine may not have it.',
-    );
-  }
   return {
     conversation_id: options.conversationId,
     replace_from: options.replaceFrom ?? null,
     port: options.selectedServerPort ?? 0,
-    remote,
+    far: options.far ?? null,
     messages: convertToWireMessages(options.messages) as AgentMessage[],
     config: wireConfig(options.config),
     tool_filter: toolFilter(options.supportsToolCalls),
-    model,
+    model: null,
     reasoning_effort: (options.reasoning?.reasoning_effort as ReasoningEffort | undefined) ?? null,
     reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
   };

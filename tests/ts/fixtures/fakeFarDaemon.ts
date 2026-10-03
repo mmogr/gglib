@@ -7,10 +7,68 @@
  * of `{content}` that the hub starts as its own run and saves. Every other
  * path goes to this machine's `FakeDaemon` (`here`). What the page sent to
  * the far routes is recorded in `farRequests`, as it sent it.
+ *
+ * `/api/remote/models*` is answered as `handlers/remote/models.rs` reads it:
+ * `PairedModels` with the machine, the paired row of the actions table
+ * (`list`, `detail`, `chat`, `load`) and every entry the far `/v1/models`
+ * lists, variants included; one model's `ModelLookup`, with no `filePath`
+ * and no `port`, as the far detail route strips them; a model it does not
+ * have as its `404` with `model_not_found`; and a load, after which that
+ * model is serving.
  */
 
 import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
+import type { LoadResponse } from '../../../src/types/generated/LoadResponse';
+import type { ModelDetailDto } from '../../../src/types/generated/ModelDetailDto';
+import type { ModelInfo } from '../../../src/types/generated/ModelInfo';
+import type { ModelLookup } from '../../../src/types/generated/ModelLookup';
+import type { PairedModels } from '../../../src/types/generated/PairedModels';
 import { FakeDaemon, type Recorded } from './fakeDaemon';
+
+/** The fingerprint of the far machine these models are on. */
+export const FAR_FINGERPRINT = '3ca82708b995';
+
+/** A far `/v1/models` entry: a base entry unless `profile` is given. */
+export function farEntry(name: string, gglibId: number, extra: Partial<ModelInfo> = {}): ModelInfo {
+  return {
+    id: extra.profile ? `${name}:${extra.profile}` : name,
+    gglib_id: gglibId,
+    object: 'model',
+    created: 1_727_000_000,
+    owned_by: 'gglib',
+    description: 'qwen3 - 8B parameters, Q4_K_M',
+    context_window: 30_000,
+    ...extra,
+  };
+}
+
+/** `GET /api/remote/models` as the daemon answers it. */
+export function pairedModels(models: ModelInfo[]): PairedModels {
+  return {
+    machine: { kind: 'paired', fingerprint: FAR_FINGERPRINT },
+    actions: ['list', 'detail', 'chat', 'load'],
+    models,
+  };
+}
+
+/** One far model's detail, as the far detail route strips it: no path, no port. */
+export function farDetail(id: number, name: string, extra: Partial<ModelDetailDto> = {}): ModelDetailDto {
+  return {
+    id,
+    name,
+    paramCountB: 8,
+    architecture: 'qwen3',
+    quantization: 'Q4_K_M',
+    contextLength: 40_960,
+    tags: [],
+    capabilities: 0,
+    reasoningEffortSupport: 'unknown',
+    addedAt: '2026-09-30 09:12:30',
+    isServing: false,
+    metadata: {},
+    ...extra,
+  };
+}
 
 const LIVE = new Set(['queued', 'in_progress']);
 
@@ -28,6 +86,12 @@ export class FakeFarDaemon {
   titles: Record<number, string> = { 1: 'Why the build broke', 2: 'Parsing GGUF' };
   /** How many more listings of the far chats fail, as a dropped tunnel would. */
   listFails = 0;
+  /** The far machine's models, by its id there. */
+  models: Record<number, ModelDetailDto> = { 3: farDetail(3, 'qwen3') };
+  /** What its `/v1/models` lists, in its order. */
+  entries: ModelInfo[] = [farEntry('qwen3', 3), farEntry('qwen3', 3, { profile: 'coding' })];
+  /** How many more readings of the far models fail. */
+  modelsFail = 0;
 
   /** How many far requests went to `method` on a path starting `prefix`. */
   farCount(method: string, prefix: string): number {
@@ -85,6 +149,25 @@ export class FakeFarDaemon {
         messages: [{ role: 'user', content: (body as { content: string }).content }],
       } as unknown as AgentRunRequest;
       return this.hub.fetch(`/api/runs/${m[2]}?kind=agent`, { method: 'PUT', body: JSON.stringify(request) });
+    }
+    if (method === 'GET' && path === '/api/remote/models') {
+      if (this.modelsFail > 0) {
+        this.modelsFail--;
+        return json({ error: 'the other machine did not answer', status: 503 }, 503);
+      }
+      return json(pairedModels(this.entries));
+    }
+    if ((m = /^\/api\/remote\/models\/([^/]+)(\/load)?$/.exec(path))) {
+      const model = this.models[Number(decodeURIComponent(m[1]))];
+      if (!model) {
+        const error = `No model with that id or name is in the catalog: ${decodeURIComponent(m[1])}`;
+        return json({ error, status: 404, type: 'model_not_found' }, 404);
+      }
+      if (method === 'GET' && !m[2]) return json({ detail: model } satisfies ModelLookup);
+      if (method === 'POST' && m[2]) {
+        model.isServing = true;
+        return json({ model: model.name, started: true, context: 30_000 } satisfies LoadResponse);
+      }
     }
     if (path === '/api/remote/runs') return hub('/api/runs');
     if ((m = /^\/api\/remote\/runs\/([^/]+)\/(events|cancel)$/.exec(path))) {

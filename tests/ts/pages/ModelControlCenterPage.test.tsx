@@ -1,17 +1,17 @@
 /**
  * The Model Control Center as the thing that decides which screen is up.
  *
- * The defect this pins was that a laptop with no local models could tick
- * "use it for chat", name the far machine's model, and then have no way to
- * reach a chat screen at all: every route into `ChatPage` started from a
- * server running here, and `openChatSession` silently did nothing when the
- * model id matched no server.
+ * A laptop with no local models must reach a chat with the paired machine's
+ * model: every other route into `ChatPage` starts from a server running
+ * here, and `openChatSession` does nothing when the model id matches no
+ * server. So the paired machine's models are rows of the library, after this
+ * machine's, and a far row's inspector opens the chat.
  *
  * It has to be tested at the page and not at the hook. The hook can be
- * correct and the page still never call it — which is exactly the shape the
- * old bug had — so the assertion is on the rendered screen, reached the way
- * a user reaches it: open the Remote popover in the library header, name the
- * model, press the button.
+ * correct and the page still never call it, so the assertion is on the
+ * rendered screen, reached the way a user reaches it: pick the far row, press
+ * Chat. The one selection across both machines is pinned here too, and that
+ * a far read that never answers leaves this machine's rows working.
  *
  * `ChatPage` itself is stubbed. It is lazily imported and drags in the whole
  * assistant-ui runtime; what is under test here is which screen the page
@@ -19,14 +19,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ReactNode, useState } from 'react';
 
-// The library the page loads. Empty for the remote cases; one model for the
+// The library the page loads. Empty for the paired cases; one model for the
 // case about a model already running here.
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
+// The paired machine's models, and whether reading them hangs.
+const far = vi.hoisted(() => ({ hang: false }));
 const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ port: 9456 })));
 // What the stub chat page's switch button picks, and the conversation it
 // reports as open when the switch lands.
@@ -45,6 +47,11 @@ vi.mock('../../../src/services/transport', async () => {
     getTransport: () => ({
       listModels: vi.fn(async () => library.models),
       getModelDetail: vi.fn(async () => null),
+      listPairedModels: vi.fn(() =>
+        far.hang ? new Promise(() => {}) : Promise.resolve(pairedModels([farEntry('qwen3-8b', 7)])),
+      ),
+      getPairedModel: vi.fn(async (id: number) => ({ detail: farDetail(id, 'qwen3-8b') })),
+      loadPairedModel: vi.fn(async () => ({ model: 'qwen3-8b', started: true, context: 30000 })),
       serveModel,
       listTags: vi.fn(async () => []),
       getModelFilterOptions: vi.fn(async () => ({
@@ -73,8 +80,8 @@ vi.mock('../../../src/services/remoteEvents', () => ({
 
 // The screen under test is "which page is showing", so the chat page is a
 // placard: it names the model, port and conversation it was given, says
-// whether it was told the session is remote, and offers its model switch,
-// and Unload when it was handed one.
+// which machine a paired session is on, and offers its model switch, and
+// Unload when it was handed one.
 // The port is held as the real page holds its session, from its first
 // render, so a switch that does not remount the page shows the old one.
 vi.mock('../../../src/pages/ChatPage', () => ({
@@ -84,7 +91,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     conversationId,
     draft,
     startingModel,
-    remote,
+    paired,
     onSwitchModel,
     onUnloadModel,
     onClose,
@@ -94,7 +101,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     conversationId?: number | null;
     draft?: string;
     startingModel?: string | null;
-    remote?: boolean;
+    paired?: { far: { id: number }; machineName: string };
     onSwitchModel?: (
       choice: { modelId: number; modelName: string },
       context: () => { conversationId: number | null; draft: string },
@@ -106,7 +113,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     return (
       <div
         data-testid="chat-page"
-        data-remote={remote ? 'yes' : 'no'}
+        data-paired={paired ? `${paired.machineName}:${paired.far.id}` : ''}
         data-port={mountedPort}
         data-conversation={conversationId ?? ''}
         data-draft={draft ?? ''}
@@ -138,6 +145,7 @@ vi.mock('../../../src/pages/ChatPage', () => ({
 import ModelControlCenterPage from '../../../src/pages/ModelControlCenterPage';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { guiModel } from '../fixtures/model';
+import { farDetail, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import {
@@ -164,6 +172,7 @@ const CONNECTED = {
     away_for_s: null,
   },
   stored_ticket_fingerprint: '3ca82708b995',
+  paired_name: 'desk',
   has_remote_key: true,
 };
 
@@ -178,12 +187,11 @@ function renderPage() {
   );
 }
 
-/** Open the Remote popover in the library header and name a model there. */
-async function askForRemoteChat(modelName: string) {
+/** Pick the paired machine's row for `name`, under that machine's group. */
+async function pickFar(name: RegExp) {
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: /remote/i }));
-  await user.type(await screen.findByLabelText(/model on that machine/i), modelName);
-  await user.click(screen.getByRole('button', { name: /chat on that machine/i }));
+  const group = await screen.findByRole('listbox', { name: "desk's models" });
+  await user.click(within(group).getByRole('option', { name }));
   return user;
 }
 
@@ -193,28 +201,31 @@ describe('ModelControlCenterPage', () => {
     serveModel.mockClear();
     stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
     stub.conversationId = 2;
+    far.hang = false;
     resetRemoteState();
     stopServer.mockClear();
     loadServers.mockClear();
   });
 
-  it('opens the chat screen on the far machine with nothing served here', async () => {
+  it("opens a chat with the paired machine's model with nothing served here", async () => {
     applyRemoteStatus(CONNECTED);
     renderPage();
 
-    // The library is empty and the Remote popover is still reachable: the
-    // header renders whatever the model count is.
-    await askForRemoteChat('qwen3');
+    // The library is empty here; the paired machine's rows follow it.
+    const user = await pickFar(/qwen3-8b/);
+    expect(await screen.findByText('gglib chat 7 --remote')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Chat' }));
 
     const chat = await screen.findByTestId('chat-page');
-    expect(chat).toHaveTextContent('Chatting with qwen3');
-    expect(chat).toHaveAttribute('data-remote', 'yes');
+    expect(chat).toHaveTextContent('Chatting with qwen3-8b');
+    expect(chat).toHaveAttribute('data-paired', 'desk:7');
   });
 
   it('leaves the far machine running when its chat is closed', async () => {
     applyRemoteStatus(CONNECTED);
     renderPage();
-    const user = await askForRemoteChat('qwen3');
+    const user = await pickFar(/qwen3-8b/);
+    await user.click(await screen.findByRole('button', { name: 'Chat' }));
     await screen.findByTestId('chat-page');
 
     // There is no server here to stop, and the tunnel is not this page's to
@@ -224,6 +235,48 @@ describe('ModelControlCenterPage', () => {
 
     await waitFor(() => expect(screen.queryByTestId('chat-page')).not.toBeInTheDocument());
     expect(stopServer).not.toHaveBeenCalled();
+  });
+
+  it('the same model on both machines is two rows, and picking one clears the other', async () => {
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b' })];
+    applyRemoteStatus(CONNECTED);
+    const keys = vi.spyOn(console, 'error');
+    renderPage();
+    const user = userEvent.setup();
+
+    const here = await screen.findByRole('listbox', { name: 'Model library' });
+    await user.click(within(here).getByRole('option', { name: /qwen3-8b/ }));
+    expect(within(here).getByRole('option', { name: /qwen3-8b/ })).toHaveAttribute('aria-selected', 'true');
+
+    // The far row is its own row, badged with its machine.
+    const there = await screen.findByRole('listbox', { name: "desk's models" });
+    const farRow = within(there).getByRole('option', { name: /qwen3-8b/ });
+    expect(farRow).toHaveTextContent('desk');
+    await user.click(farRow);
+    expect(farRow).toHaveAttribute('aria-selected', 'true');
+    expect(within(here).getByRole('option', { name: /qwen3-8b/ })).toHaveAttribute('aria-selected', 'false');
+    // The far inspector offers what that machine allows and nothing that changes it.
+    expect(await screen.findByRole('button', { name: 'Chat' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+
+    await user.click(within(here).getByRole('option', { name: /qwen3-8b/ }));
+    expect(farRow).toHaveAttribute('aria-selected', 'false');
+    expect(screen.queryByText('gglib chat 7 --remote')).not.toBeInTheDocument();
+    expect(keys.mock.calls.flat().join(' ')).not.toMatch(/same key/);
+    keys.mockRestore();
+  });
+
+  it("a far read that never answers leaves this machine's rows working", async () => {
+    library.models = [guiModel({ id: 7, name: 'qwen3-8b' })];
+    far.hang = true;
+    applyRemoteStatus(CONNECTED);
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('option', { name: /qwen3-8b/ }));
+
+    expect(screen.getByRole('option', { name: /qwen3-8b/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('listbox', { name: "desk's models" })).not.toBeInTheDocument();
   });
 
   it("an already-running model's Open chat opens the chat page", async () => {
@@ -242,7 +295,7 @@ describe('ModelControlCenterPage', () => {
 
     const chat = await screen.findByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
-    expect(chat).toHaveAttribute('data-remote', 'no');
+    expect(chat).toHaveAttribute('data-paired', '');
   });
 
   /** One model running here, one not, and the chat open on the running one. */

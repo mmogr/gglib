@@ -12,7 +12,7 @@ use gglib_core::ports::{
 
 use gglib_app_services::types::ServerInfo;
 
-use super::remote_upstream::{hold, local, remote};
+use super::remote_upstream::{hold, local};
 use super::run_fixture::{
     End, LOCAL, finished_reply, logged, prepared, reply, settled, start, state,
 };
@@ -95,8 +95,9 @@ fn a_run_whose_model_left_its_port_is_refused() {
     assert_eq!((status.as_u16(), code), (503, "unavailable"));
 }
 
+/// A far upstream names none, which `remote_upstream_tests` shows.
 #[tokio::test]
-async fn a_local_upstream_names_its_model_and_a_remote_one_none() {
+async fn a_local_upstream_names_the_model_it_holds() {
     let (_dir, state) = state().await;
     let req = serde_json::from_str(r#"{"port":19555,"messages":[]}"#).unwrap();
     let server = ServerInfo {
@@ -110,16 +111,6 @@ async fn a_local_upstream_names_its_model_and_a_remote_one_none() {
         local(&state, &req, server).await.local_model,
         Some((19_555, 3))
     );
-
-    let far = remote(
-        "qwen".to_owned(),
-        "http://127.0.0.1:9000".to_owned(),
-        gglib_runtime::FarMachine {
-            key: "key".to_owned(),
-            name: "desk".to_owned(),
-        },
-    );
-    assert_eq!(far.local_model, None);
 }
 
 #[tokio::test]

@@ -216,22 +216,15 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Conflict` when `machine` is this one, or a paired machine this one is
-    /// not connected to now; otherwise as [`far`](Self::far).
+    /// not connected to now ([`FarProxy::serving`]); otherwise as
+    /// [`far`](Self::far).
     pub async fn far_for(&self, machine: &Machine) -> Result<FarProxy, GuiError> {
         if *machine == Machine::Local {
             return Err(GuiError::Conflict(
                 "that model is on this machine, not the paired one".to_owned(),
             ));
         }
-        let far = self.far().await?;
-        if far.machine() != *machine {
-            return Err(GuiError::Conflict(
-                "that model is on a machine this one is not connected to now — pick one of the \
-                 paired machine's models, or `gglib remote join` the machine it is on"
-                    .to_owned(),
-            ));
-        }
-        Ok(far)
+        self.far().await?.serving(machine)
     }
 
     /// The connect side for the status surface.

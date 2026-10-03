@@ -1,23 +1,4 @@
 /**
- * Whether the Remote panel asked for chat to go to the connected machine,
- * and the name it gave for the model there.
- *
- * Returned together because they travel together: the far machine resolves
- * its own model names and this one has no catalog for them, so the name is
- * part of the routing decision rather than a detail of it. A blank field
- * reads as no name at all, which the send path refuses rather than turning
- * into the empty model the far proxy answers `404 Model '' not found`.
- *
- * Exported for the tests: it is the whole link between the Remote panel and
- * the request body, and the defect it exists for was that link being absent.
- */
-export function askTheRemote(): { remote: boolean; model?: string } {
-  const remote = getRemoteState();
-  if (!remote.useForChat || remote.status?.connected == null) return { remote: false };
-  return { remote: true, model: remote.chatModel.trim() || undefined };
-}
-
-/**
  * The chat runtime: an `ExternalStoreRuntime` over the messages
  * `useRunReader` holds, drawn from runs the daemon owns.
  *
@@ -29,7 +10,9 @@ export function askTheRemote(): { remote: boolean; model?: string } {
  *
  * A far chat (`source: 'far'`) is the far machine's: a send there is its
  * text alone, which that machine runs and saves, and it offers no edit, no
- * regenerate and no new chat.
+ * regenerate and no new chat. A chat with a far model (`pairedModel`) is
+ * this machine's, run here on that machine's model: its runs name the model
+ * by its machine, and a conversation made for it keeps that model.
  *
  * @module useGglibRuntime
  */
@@ -44,7 +27,7 @@ import {
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage } from '../../types/messages';
 import { getTransport, type ChatSource } from '../../services/transport';
-import { getRemoteState } from '../../services/remoteRegistry';
+import type { ModelRef } from '../../types/generated/ModelRef';
 import { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
 import {
   buildThreadMessages,
@@ -63,6 +46,8 @@ export interface UseGglibRuntimeOptions {
   /** The open conversation, whose system prompt heads its thread. */
   conversation?: ThreadConversation | null;
   selectedServerPort?: number;
+  /** The paired machine's model the chat is with, in place of a server here. */
+  pairedModel?: ModelRef;
   maxToolIterations?: number;
   onError?: (error: Error) => void;
   /**
@@ -95,7 +80,7 @@ export interface UseGglibRuntimeReturn {
 }
 
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
-  const { conversationId, selectedServerPort, maxToolIterations, onError, supportsToolCalls } = options;
+  const { conversationId, selectedServerPort, pairedModel, maxToolIterations, onError, supportsToolCalls } = options;
   const source = options.source ?? 'this';
   const far = source === 'far';
   const reader = useRunReader(conversationId, options);
@@ -134,11 +119,9 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     content: GglibContent,
     { replaceFrom, giveBack = true }: { replaceFrom?: number; giveBack?: boolean } = {},
   ) => {
-    // Read once: the guard and the body must agree about where this goes.
-    const destination = askTheRemote();
-    // A remote turn has no local server to select; the daemon takes the
+    // A far model's turn has no local server to select; the daemon takes the
     // tunnel's port and the stored key. A far chat's model is chosen there.
-    if (!far && !selectedServerPort && !destination.remote) {
+    if (!far && !selectedServerPort && !pairedModel) {
       onError?.(new Error('No server selected. Please serve a model first.'));
       return;
     }
@@ -168,6 +151,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
           title: 'New Chat',
           modelId: null,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
+          model: pairedModel ?? null,
         });
         reader.adopt(cid);
         const created = { id: cid, system_prompt: DEFAULT_SYSTEM_PROMPT, created_at: new Date().toISOString() };
@@ -187,7 +171,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         },
         reasoning: reasoningOverridesToWire(),
         supportsToolCalls,
-        ...destination,
+        far: pairedModel,
       });
       messagesRef.current = history;
       setMessages(history);

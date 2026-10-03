@@ -77,6 +77,29 @@ fn it_names_its_machine_and_its_root() {
     assert_eq!(far.far_machine().name, gglib_core::domain::UNNAMED_PAIRED);
 }
 
+/// A model picked from one paired machine's list is sent to that machine
+/// alone: once the pairing names another, its same id is another model.
+#[test]
+fn it_serves_only_the_machine_it_is_on() {
+    use gglib_core::domain::Machine;
+    let paired = |fingerprint: &str| Machine::Paired {
+        fingerprint: fingerprint.to_owned(),
+    };
+    let far = || FarProxy::new(NOWHERE, &credentials()).unwrap();
+
+    assert!(far().serving(&paired("0a1b2c3d4e5f")).is_ok());
+    for other in [paired("ffeeddccbbaa"), Machine::Local] {
+        let Err(GuiError::Conflict(message)) = far().serving(&other) else {
+            panic!("{other:?} was served by another machine's proxy");
+        };
+        assert!(
+            message.contains("changed since this model was picked"),
+            "{message}"
+        );
+        assert!(!message.contains("0a1b2c3d4e5f"), "{message}");
+    }
+}
+
 /// A far proxy on a loopback port that reads the request head, then answers
 /// a chunked event stream: `frames` frames `gap` apart, then silence for
 /// `hold` before the end.

@@ -31,6 +31,9 @@ pub(crate) struct CreateConversationRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub model_id: Option<i64>,
     pub system_prompt: Option<String>,
+    /// The model it is for, by its machine, kept as its settings' model.
+    #[serde(default)]
+    pub model: Option<gglib_core::domain::ModelRef>,
 }
 
 /// Request body for updating a conversation.
@@ -199,10 +202,6 @@ pub(crate) struct ChatUsage {
 /// - `/api/messages/{id}` - Update/delete message
 /// - `/api/chat` - Proxy chat completions to llama-server (streaming supported)
 ///
-/// # Arguments
-///
-/// * `state` - Shared chat API context
-///
 /// # Returns
 ///
 /// An Axum router with all chat endpoints configured.
@@ -261,7 +260,7 @@ pub(crate) async fn create_conversation(
     let id = state
         .core
         .chat_history()
-        .create_conversation(title, req.model_id, req.system_prompt)
+        .create_conversation_on(title, req.model_id, req.model, req.system_prompt)
         .await?;
     Ok(Json(id))
 }

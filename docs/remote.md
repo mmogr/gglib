@@ -416,32 +416,53 @@ change what is on a machine, and that is done at the machine; `config`
 writes settings; `remote` manages the pairing itself — and refuses the flag
 with a sentence naming what it does reach, rather than ignoring it.
 `proxy stop --remote` is refused with its own sentence, because the far
-proxy is what carries the request. `--remote` and `--port` are exclusive:
+proxy is what carries the request; so are `web --remote` and `gui --remote`,
+because the page they open already lists the desktop's models beside this
+machine's. `--remote` and `--port` are exclusive:
 they name different machines. [ADR 0013](adr/0013-the-target-is-a-value.md)
 has the reasoning.
 
-**The GUI's chat** goes to the desktop when the Remote popover's *Use it for
-chat* box is checked. The choice is per window and is cleared the moment the
-connection goes, so a later turn cannot silently land on a machine you
-stopped thinking about. Name the desktop's model in *Model on that machine*
-beside the box: the same rule as `--remote` applies for the same reason, so
-a turn sent without one is refused here rather than answered `404 Model ''
-not found` from the other end. That name is remembered across a
-disconnection — the usual reconnection is the same desktop again — but it
-is only ever sent while the box is on, and it belongs to the ticket it was
-typed against: connect to a *different* desktop and the field is empty
-again, because a name in one machine's catalog is not a name in another's.
-A desktop that ran `remote disable`/`enable` is the same machine with the
-same ticket, so nothing has to be re-entered there either.
+**The GUI's library** lists the desktop's models after this machine's, in a
+group headed by the desktop's name and whether it is reached right now. Each
+row carries a badge with that name, so a model both machines have is two rows
+that cannot be confused, and the library's search matches them as it matches
+this machine's. The filters are this machine's library's (its tags, sizes and
+quantisations, applied by this daemon), so while one is on the desktop's
+group is set aside with a note saying so. The rows are read through this machine's daemon,
+which adds the key, while the desktop is connected and answering: again when
+it comes back, on each new connection, and when the window regains focus.
+While it is away, or a read fails, the last rows stay, marked *away* or
+*stale*, as they are while a new connection has not yet said which machine
+answered; a disconnection clears them. A read that is slow or fails never
+holds up or empties this machine's rows.
 
-*Chat on that machine*, under the model field, opens the chat screen against
-the desktop and ticks the box as it goes. It is how a laptop with no models
-of its own gets there at all: every other route into that screen starts from
-a model served here, so without it the box could be ticked and the model
-named with nowhere to type. That chat has no Console tab — the log, the port
-and the uptime belong to a process on the desktop — and closing it leaves
-both the desktop's server and the tunnel up, as closing a local chat leaves
-its model loaded.
+Picking a desktop row opens its inspector instead of this machine's: what the
+desktop stores about the model, without the file's path on its disk, and
+only what `--remote` allows on a model there — *Chat* and *Load*. Nothing
+that changes it (edit, tags, delete, Start or Stop here) is offered, and the
+native menu's Start, Stop and Remove have nothing selected while a desktop
+row is, so they cannot act on a model here that shares its number. A model
+the desktop is serving says *Serving on desk*, in place of *Load*, which has
+the desktop load it now so the first turn does not wait, and reads it again
+when it lands. While the rows are away or stale, both buttons are disabled.
+The inspector also shows the command that does the same from a terminal here,
+`gglib chat <id> --remote`, since that id without the flag is this machine's.
+
+*Chat* opens a chat with the desktop's model: the conversation is this
+machine's, the agent loop runs here, and each turn is sent to the desktop by
+the model's id there, so no other model of its name answers. The head reads
+`qwen3 on desk`; there is no Console tab (the log, the port and the uptime
+belong to a process on the desktop) and no model picker, because a chat's
+machine is fixed. The conversation is made for that model, and every run
+keeps it on the conversation by its machine, so a paired device's turn on it
+is refused rather than answered by a model here, and `gglib chat --continue`
+goes back to the desktop. The list beside it holds the desktop's chats and
+those that have not run yet, and a chat with a model here lists only this
+machine's: a run on another machine than its chat's is refused, `409
+conflict`. Pair with a different desktop and a chat, a pick or
+a row held for the first one is dropped, because its ids name other models
+on the second. Closing the chat leaves the desktop's model and the tunnel
+up, as closing a local chat leaves its model loaded.
 
 **The desktop's own chats** are on the chat page too, once joined: *desk's
 chats*, by the desktop's name, at the foot of the rail, lists, opens and

@@ -30,7 +30,6 @@ import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import {
   IDLE_STATUS,
   applyRemoteStatus,
-  getRemoteState,
   resetRemoteState,
 } from '../../../src/services/remoteRegistry';
 
@@ -873,7 +872,7 @@ describe('RemoteControl', () => {
     ).toBeInTheDocument();
   });
 
-  it('the connected half asks which model that machine should be asked for', async () => {
+  it('the connected half sends that machine\'s models to the library and asks for no name', async () => {
     applyRemoteStatus({
       ...IDLE_STATUS,
       connected: {
@@ -883,46 +882,16 @@ describe('RemoteControl', () => {
         path: 'direct',
         away_for_s: null,
       },
+      paired_name: 'desk',
     });
-    const user = await open();
+    await open();
 
-    // Checking the box with no name says so, rather than letting the turn go
-    // and come back `404 Model '' not found` from two machines away.
-    await user.click(screen.getByRole('checkbox', { name: /use it for chat/i }));
-    expect(screen.getByText(/name one before sending/i)).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText(/model on that machine/i), 'qwen3');
-    expect(getRemoteState().chatModel).toBe('qwen3');
-    expect(screen.queryByText(/name one before sending/i)).not.toBeInTheDocument();
-  });
-
-  it('chat on that machine is dead until a model is named, then routes and asks', async () => {
-    applyRemoteStatus({
-      ...IDLE_STATUS,
-      connected: {
-        port: 41234,
-        base_url: 'http://127.0.0.1:41234/v1',
-        ticket_fingerprint: '3ca82708b995',
-        path: 'direct',
-        away_for_s: null,
-      },
-    });
-    const user = await open();
-
-    // Nothing named, nothing to open: the far machine answers to its own
-    // names and this side has no catalog to guess one from.
-    const openChat = screen.getByRole('button', { name: /chat on that machine/i });
-    expect(openChat).toBeDisabled();
-    expect(getRemoteState().chatRequestedAt).toBeNull();
-
-    await user.type(screen.getByLabelText(/model on that machine/i), 'qwen3');
-    expect(openChat).toBeEnabled();
-    await user.click(openChat);
-
-    // Both halves of the one decision: the turns are routed there and the
-    // page is asked for the screen to type them into.
-    expect(getRemoteState().useForChat).toBe(true);
-    expect(getRemoteState().chatRequestedAt).toEqual(expect.any(Number));
+    // A far model is picked from its row in the library, by its id there,
+    // never typed here as a name another of its models could share.
+    expect(screen.getByText(/its models are in the library, under its name/i)).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /use it for chat/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/model on that machine/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /chat on that machine/i })).not.toBeInTheDocument();
   });
 
   it('a remembered pairing lets join dial it with an empty box, and says it joined', async () => {
