@@ -25,12 +25,12 @@ use super::test_server::{
 
 /// As `gglib remote status` prints it, and as the CLI's pre-turn banner has
 /// just shown the user.
-const FINGERPRINT: &str = "3ca82708b995";
+const NAME: &str = "desk";
 
 fn paired_machine() -> FarMachine {
     FarMachine {
         key: "the-key-stored-at-pairing".to_owned(),
-        fingerprint: FINGERPRINT.to_owned(),
+        name: NAME.to_owned(),
     }
 }
 
@@ -58,7 +58,7 @@ async fn refused(status: u16, reason: &str, body: &str, far: Option<&FarMachine>
 /// `401 Unauthorized invalid_api_key: invalid or missing bearer token`: a
 /// sentence with no machine in it and nothing to do about it. Both halves of
 /// the remedy are asserted, because either alone leaves the reader stuck —
-/// the fingerprint says *which* machine to go to, `gglib remote enable` says
+/// the name says *which* machine to go to, `gglib remote enable` says
 /// what to do once there.
 #[tokio::test]
 async fn a_far_machines_refused_key_names_the_machine_and_the_remedy() {
@@ -71,7 +71,7 @@ async fn a_far_machines_refused_key_names_the_machine_and_the_remedy() {
     .await;
 
     assert!(
-        message.contains(FINGERPRINT),
+        message.starts_with(&format!("{NAME} is not admitting")),
         "the message must name the machine that refused: {message}"
     );
     assert!(

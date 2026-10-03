@@ -19,7 +19,7 @@ use wire::{to_api_status, to_runtime_config};
 /// Fetch current proxy status from backend.
 async fn fetch_status(state: &AppState) -> ProxyStatus {
     let s = state.proxy.status().await;
-    let pinned = state.proxy.pinned_model();
+    let pinned = state.proxy.pinned().map(|pin| pin.name);
     to_api_status(s, pinned)
 }
 
@@ -170,12 +170,16 @@ pub(crate) async fn start(
                 ));
             }
 
-            let requested = cfg.pinned.as_ref().map(|p| p.name.clone());
-            if requested.is_some() && state.proxy.pinned_model() != requested {
+            // The same pin is the same model id, as the runtime enforces it;
+            // the refusal names the model.
+            let running = state.proxy.pinned();
+            if let Some(requested) = &cfg.pinned
+                && running.as_ref().map(|pin| pin.id) != Some(requested.id)
+            {
                 return Err(HttpError::Conflict(format!(
                     "the proxy is already running {} — stop it first (`gglib proxy stop`)",
-                    match state.proxy.pinned_model() {
-                        Some(name) => format!("pinned to '{name}'"),
+                    match running {
+                        Some(pin) => format!("pinned to '{}'", pin.name),
                         None => "unpinned".to_string(),
                     }
                 )));

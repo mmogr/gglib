@@ -11,12 +11,12 @@ reasoning; this page has the commands.
 # On the desktop (the machine with the models):
 gglib remote enable --invite
 #   → shows a ticket and a six-digit code, once, for two minutes
-gglib model list
-#   → the names this machine serves; the laptop needs one of them
 
 # On the laptop, within those two minutes:
 gglib remote join <ticket>-<code>
-gglib q --remote -m <a name from that list> "What does this error mean?"
+gglib model list --remote
+#   → the desktop's models, each by its id there
+gglib q --remote -m <an id from that list> "What does this error mean?"
 ```
 
 That is the whole first pairing. Afterwards the laptop remembers both the
@@ -25,9 +25,20 @@ ticket and the key it received, so the next session is
 restarts on both machines, because the desktop keeps its endpoint key.
 
 The laptop stores one pairing. Joining a second desktop with its
-`<ticket>-<code>` replaces the first, and `join` names the fingerprint it
+`<ticket>-<code>` replaces the first, and `join` names the machine it
 replaced; reaching the first desktop again takes a fresh
 `gglib remote invite` there.
+
+Every surface on the laptop shows the desktop by its name: the first label of
+the desktop's host name (`desk` for `desk.local`), which the desktop gives on
+its `/v1/models` and the laptop reads each time it connects, so a desktop
+renamed to another plain label is shown by its new name from the next `join`.
+The ticket's fingerprint stays the desktop's identity, which is what is
+compared, and is not shown. A desktop that gives no name, or gives a host name
+that is not a plain label, keeps the last name it gave; one that has never
+given one is shown as "the paired machine". Pairing tells the desktop the
+laptop's own name the same way, as the name `gglib remote list` shows the
+device by there.
 
 To pair a second device later, `gglib remote invite` on the desktop: it
 offers another code against the tunnel that is already up, so nobody else
@@ -182,17 +193,17 @@ without it the ticket carries only the paths it was minted with, and now that
 the ticket lasts, "stops resolving" means for good rather than until the next
 `enable`. Paired devices then need a new pairing.
 
-`gglib remote status` shows both sides: whether the tunnel is up, the
-ticket's fingerprint (never the ticket), whether the code is still live,
-which peers are connected and by what path, and how many requests this machine
-has *served* through the tunnel. That last number is counted where the requests
-arrive, so it is printed only on the machine that is serving; the connecting
-side has nothing to count and is told to read the number over there rather than
-shown a zero of its own. `gglib remote disable` takes the tunnel down;
-nothing answers the ticket until the next `enable`, which brings the same one
-back. With no daemon running, `disable` switches remote access off in
-settings instead, so the next start does not put the tunnel back, and says
-so.
+`gglib remote status` shows both sides: whether the tunnel is up, the ticket's
+fingerprint (never the ticket), the machine this one has joined by its name,
+whether the code is still live, which peers are connected and by what path,
+and how many requests this machine has *served* through the tunnel. That last
+number is counted where the requests arrive, so it is printed only on the
+machine that is serving; the connecting side has nothing to count and is told
+to read the number over there rather than shown a zero of its own.
+`gglib remote disable` takes the tunnel down; nothing answers the ticket until
+the next `enable`, which brings the same one back. With no daemon running,
+`disable` switches remote access off in settings instead, so the next start
+does not put the tunnel back, and says so.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
@@ -334,30 +345,57 @@ with. It is declared once, on `gglib` itself, so it goes before the
 subcommand or after it:
 
 ```bash
-gglib q --remote -m qwen3 "Summarise this" < notes.md
+gglib q --remote -m 7 "Summarise this" < notes.md
 gglib chat --remote qwen3
 gglib chat --remote            # the same machine, the same model, remembered
 ```
 
 `q` names the model with `-m`; `chat` names it as the positional and has no
-short flag for it. With `--remote` the name is forwarded to the desktop
-rather than looked up here, and resolved against the desktop's catalogue
-and profiles, not this machine's. Name it the first time; after that
-`--remote` remembers the model you last asked that machine for — per
-pairing, because it is a name in that machine's catalogue — and a turn that
-names none uses it. Before anything is remembered, a turn that names none
-is refused here with a sentence that says so, rather than answered
-`404 Model '' not found` from the other end. `gglib model list` on the
-desktop is the list to choose from. The ID form the positional also accepts
-is local-only — `gglib chat 7 --remote` sends `"model": "7"` and comes back
-`404 Model '7' not found`.
+short flag for it. With `--remote` the model is looked up on the desktop,
+not here: by its id there — `gglib model list --remote` on the laptop is the
+list to choose from — or by its name, against the desktop's catalogue and
+profiles. The desktop answers once, before the turn starts, with the model it
+means. The banner names it as `qwen3 (7) on desk`, and the turn sends its id,
+`"model": "7"`, so another model of the same name there cannot answer it. A
+model the desktop does not have is refused then, before any turn. Name it the
+first time; after that `--remote` remembers the model you last asked that
+machine for — per pairing, by its id there — and a turn that names none uses
+it. Before anything is remembered, a turn that names none is refused here
+with a sentence that says so, rather than answered `404 Model '' not found`
+from the other end.
+
+A bare id always means this machine, and is never sent anywhere else. While
+the laptop is paired, an id or name it does not hold says where to look
+instead: `gglib chat 7` with no model 7 on the laptop answers `no model 7 here;
+desk's models need --remote (gglib model list --remote)`. `serve` and `model
+inspect` say the same.
 
 A `{model}:{profile}` suffix travels with the name and is resolved by the
 desktop against **its** profiles, which are the ones that govern how it
-samples — `gglib chat qwen3:coding --remote`. A suffix the desktop does not
-know comes back as a 404 listing the profiles it has. `--profile` is refused
-with `--remote` for the same reason: it names a profile configured on the
-laptop, and there is no way for it to reach the machine that would apply it.
+samples — `gglib chat qwen3:coding --remote` sends `"7:coding"`. A suffix the
+desktop does not know comes back as a 404 listing the profiles it has.
+`--profile` is refused with `--remote` for the same reason: it names a
+profile configured on the laptop, and there is no way for it to reach the
+machine that would apply it.
+
+**A chat resumes on the machine it ran on.** Each conversation stores its
+model by machine and by id there, and `gglib chat --continue <id>` goes back
+to it: a chat that ran on the desktop resumes on the desktop without
+`--remote`, and says so, and refuses `--port`, which names a server on the
+laptop; one that ran on the laptop refuses `--remote`. After joining a
+different desktop, a chat that ran on the first one is refused, rather than
+sent to whatever has its id on the new one. A model named on the command line
+follows the flag, as does a conversation that stored no model, and the
+conversation then stores that model; a chat whose model has left the laptop's
+library says so, and continues once another is named. `gglib chat history`
+shows each as `qwen3 (7) on desk` or `qwen3 (3) on this machine`.
+
+**`gglib model list`** without `--remote` ends, while the laptop is paired,
+with one line on the desktop: `Paired with desk (direct). Its models: gglib
+model list --remote`, `desk: away 2m`, or `desk: not connected`. It is said
+from what the laptop already knows, the stored pairing and its daemon's
+connection; nothing is asked of the desktop, so the list never waits on the
+tunnel. It prints on an empty library too, which is a laptop's usual case.
 
 **What `--remote` reaches** is the *use* side of the desktop, and the line
 is: you can use what is on that machine, and you cannot change what is on
@@ -365,9 +403,10 @@ it.
 
 | Command | With `--remote` |
 |---|---|
-| `chat`, `q` | A turn on the desktop, as above. |
-| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the name and a numeric `--ctx-size` travel. |
-| `model list` | The desktop's catalogue as its proxy publishes it — the names a turn can ask for, and the context each would be served with. |
+| `chat`, `q` | A turn on the desktop, as above: the model resolved there once, then sent by its id. |
+| `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the model's id or name and a numeric `--ctx-size` travel. |
+| `model list` | The desktop's catalogue as its proxy publishes it, one row per model: its id on the desktop, its name, the context it would be served with, and the profiles it can be asked for with. A turn names one as `<id>` or `<id>:<profile>`. |
+| `model inspect <model>` | Everything the desktop stores about one of its models, as its own inspector shows it, but for the file's path on its disk; then the command that chats with it. `--json` prints the same detail. |
 | `proxy dashboard` | The desktop proxy's live dashboard, through the tunnel. |
 | `proxy cache-clear` | Clear the desktop proxy's prompt cache. |
 | `daemon stop` | Stop the desktop's daemon. Asks you to type `shutdown`; `--yes` for scripts. |
@@ -377,39 +416,60 @@ change what is on a machine, and that is done at the machine; `config`
 writes settings; `remote` manages the pairing itself — and refuses the flag
 with a sentence naming what it does reach, rather than ignoring it.
 `proxy stop --remote` is refused with its own sentence, because the far
-proxy is what carries the request. `--remote` and `--port` are exclusive:
+proxy is what carries the request; so are `web --remote` and `gui --remote`,
+because the page they open already lists the desktop's models beside this
+machine's. `--remote` and `--port` are exclusive:
 they name different machines. [ADR 0013](adr/0013-the-target-is-a-value.md)
 has the reasoning.
 
-**The GUI's chat** goes to the desktop when the Remote popover's *Use it for
-chat* box is checked. The choice is per window and is cleared the moment the
-connection goes, so a later turn cannot silently land on a machine you
-stopped thinking about. Name the desktop's model in *Model on that machine*
-beside the box: the same rule as `--remote` applies for the same reason, so
-a turn sent without one is refused here rather than answered `404 Model ''
-not found` from the other end. That name is remembered across a
-disconnection — the usual reconnection is the same desktop again — but it
-is only ever sent while the box is on, and it belongs to the ticket it was
-typed against: connect to a *different* desktop and the field is empty
-again, because a name in one machine's catalog is not a name in another's.
-A desktop that ran `remote disable`/`enable` is the same machine with the
-same ticket, so nothing has to be re-entered there either.
+**The GUI's library** lists the desktop's models after this machine's, in a
+group headed by the desktop's name and whether it is reached right now. Each
+row carries a badge with that name, so a model both machines have is two rows
+that cannot be confused, and the library's search matches them as it matches
+this machine's. The filters are this machine's library's (its tags, sizes and
+quantisations, applied by this daemon), so while one is on the desktop's
+group is set aside with a note saying so. The rows are read through this machine's daemon,
+which adds the key, while the desktop is connected and answering: again when
+it comes back, on each new connection, and when the window regains focus.
+While it is away, or a read fails, the last rows stay, marked *away* or
+*stale*, as they are while a new connection has not yet said which machine
+answered; a disconnection clears them. A read that is slow or fails never
+holds up or empties this machine's rows.
 
-*Chat on that machine*, under the model field, opens the chat screen against
-the desktop and ticks the box as it goes. It is how a laptop with no models
-of its own gets there at all: every other route into that screen starts from
-a model served here, so without it the box could be ticked and the model
-named with nowhere to type. That chat has no Console tab — the log, the port
-and the uptime belong to a process on the desktop — and closing it leaves
-both the desktop's server and the tunnel up, as closing a local chat leaves
-its model loaded.
+Picking a desktop row opens its inspector instead of this machine's: what the
+desktop stores about the model, without the file's path on its disk, and
+only what `--remote` allows on a model there — *Chat* and *Load*. Nothing
+that changes it (edit, tags, delete, Start or Stop here) is offered, and the
+native menu's Start, Stop and Remove have nothing selected while a desktop
+row is, so they cannot act on a model here that shares its number. A model
+the desktop is serving says *Serving on desk*, in place of *Load*, which has
+the desktop load it now so the first turn does not wait, and reads it again
+when it lands. While the rows are away or stale, both buttons are disabled.
+The inspector also shows the command that does the same from a terminal here,
+`gglib chat <id> --remote`, since that id without the flag is this machine's.
 
-**The desktop's own chats** are on the chat page too, once joined: *Other
-machine*, at the foot of the rail, lists, opens and carries on the desktop's
-chats live through this machine's daemon, which adds the key, and the
-desktop runs and saves each reply, so nothing of them is kept here but
-their "New" marks. A chat there is started, renamed, edited or deleted only
-on the desktop, and the margin names the device behind each turn.
+*Chat* opens a chat with the desktop's model: the conversation is this
+machine's, the agent loop runs here, and each turn is sent to the desktop by
+the model's id there, so no other model of its name answers. The head reads
+`qwen3 on desk`; there is no Console tab (the log, the port and the uptime
+belong to a process on the desktop) and no model picker, because a chat's
+machine is fixed. The conversation is made for that model, and every run
+keeps it on the conversation by its machine, so a paired device's turn on it
+is refused rather than answered by a model here, and `gglib chat --continue`
+goes back to the desktop. The list beside it holds the desktop's chats and
+those that have not run yet, and a chat with a model here lists only this
+machine's: a run on another machine than its chat's is refused, `409
+conflict`. Pair with a different desktop and a chat, a pick or
+a row held for the first one is dropped, because its ids name other models
+on the second. Closing the chat leaves the desktop's model and the tunnel
+up, as closing a local chat leaves its model loaded.
+
+**The desktop's own chats** are on the chat page too, once joined: *desk's
+chats*, by the desktop's name, at the foot of the rail, lists, opens and
+carries on the desktop's chats live through this machine's daemon, which adds
+the key, and the desktop runs and saves each reply, so nothing of them is kept
+here but their "New" marks. A chat there is started, renamed, edited or
+deleted only on the desktop, and the margin names the device behind each turn.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `join` printed, `http://127.0.0.1:<port>/v1`, with this laptop's
@@ -666,7 +726,8 @@ readability.
 
 ## What the other machine can reach
 
-Everything the desktop's proxy serves — `/v1/models`,
+Everything the desktop's proxy serves — `/v1/models`, a model's detail at
+`/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
 `/v1/chat/completions`, `/v1/runs`, `/v1/chats`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
@@ -683,11 +744,23 @@ A paired device may read the desktop's chats at `/v1/chats` and carry one on
 with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
-run. Nothing is copied to the device, only a named device gets past `403
-device_not_named`, and `gglib remote forget` takes the chats away with the key,
-though a reply the device already started still finishes and is saved. Such a
-turn calls none of the desktop's MCP tools unless the desktop ran `enable
---allow-mcp`, the same gate as `/mcp`, and then only the tools the chat names.
+run. A chat that stored its model runs on that model by its id, the one its
+last turn on the desktop used, so another of the same name cannot answer it;
+one that ran on the machine the desktop is itself paired with is refused,
+`409 conflict`, in a sentence that does not name that machine, and its model
+is never looked up as a name in the desktop's catalogue. Nothing is copied to the device, only a named device
+gets past `403 device_not_named`, and `gglib remote forget` takes the chats
+away with the key, though a reply the device already started still finishes
+and is saved. Such a turn calls none of the desktop's MCP tools unless the
+desktop ran `enable --allow-mcp`, the same gate as `/mcp`, and then only the
+tools the chat names.
+
+The model list carries each model's id in the desktop's catalog
+(`gglib_id`) and the desktop's name (`machine_name`, its host name's first
+label). A model's detail is what the desktop's own inspector shows, minus the
+file's path on the desktop's disk and the port it serves on. Reading either
+changes nothing on the desktop, and `/health`, open to anyone who can reach
+the port, carries neither.
 
 A tunnelled request the edge did not admit on a *device* key reaches no
 protected route: `403 device_not_paired`, before the `/mcp` gate is consulted. The
@@ -721,7 +794,14 @@ here is one the desktop can retire on its own.
 | `could not use the key this machine joins that remote with` | The laptop's endpoint key for that desktop, whose path the message names, is not a key, can be read by other accounts, or is not a regular file; the message gives the reason. It was not replaced. Do what the reason says — `chmod 600` a key others can read — or delete the file and run `gglib remote join` again: a new key is minted, and the desktop sees this laptop as a new endpoint. |
 | `could not make the key this machine joins that remote with` | The laptop had no key for that desktop, and could not write its first one at the path the message names: a full disk, a folder this user cannot write to, or a filesystem with no hard links, for example; the message gives the reason. There is no file to delete. Fix what the reason names and run `gglib remote join` again. |
 | `could not make …, where the key this machine joins with is kept` | The folder for the laptop's endpoint keys, which the message names, could not be made: a file is in its way, or this user cannot create a folder there. Move the file aside or fix the permissions, and run `gglib remote join` again. |
-| `the remote machine <fingerprint> refused the stored key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
+| `<name> is not admitting this device's key` | That machine is not admitting this device's key. Either it has retired this device, or you dialled a bare ticket for a machine this laptop never paired with. A rotation is *not* a cause any more. Invite this device again on the desktop and redeem the fresh `<ticket>-<code>`. |
+| `connected to a machine this one holds no key for` | The laptop is connected to a desktop whose key it does not hold: the stored pairing is another machine's, or there is none. Every request through the tunnel, `gglib daemon stop --remote` included, is refused here before anything is sent, so another machine's key never reaches this one. Run `gglib remote invite` on the desktop and `gglib remote join` with the full `<ticket>-<code>` string. |
+| `<name> runs an older gglib that publishes no model ids — update it` | `gglib model list --remote`, or the daemon's `/api/remote/models` route or one model's detail under it, asked the desktop for its models, and its gglib is from before models carried ids. Update gglib on the desktop; there is no fallback that lists them without ids. |
+| `no model 7 here; desk's models need --remote (gglib model list --remote)` | The laptop has no model with that id or name, and is paired. An id from `gglib model list --remote` is the desktop's: add `--remote`. |
+| `looking up '7' on desk`, caused by a 404 | `chat`, `q` or `model inspect --remote` asked the desktop for a model it does not have. Nothing was sent as a turn. `gglib model list --remote` lists what it has. |
+| `this chat ran on a machine this one is no longer paired with, so it cannot be resumed here` | `gglib chat --continue` on a chat that ran on a desktop the laptop has since replaced with another pairing. Its model is that desktop's; join it again to resume the chat, or start a new one. |
+| `this chat ran on this machine and continues here; drop --remote to resume it` | `--continue` with `--remote` on a chat that ran on the laptop. Leave out `--remote`. |
+| `this chat ran on the paired machine, and --port names a server on this one; drop --port to resume it there` | `--continue` with `--port` on a chat that ran on the desktop. Leave out `--port`; the chat goes back to the desktop through the daemon. |
 | `403 device_not_paired` | The request reached the desktop's proxy marked as tunnelled but naming no device, which the tunnel edge never sends: markers forged by a client that reached the proxy directly. A pairing code used as an API key does not get this far; the edge refuses it like any key it does not hold. |
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |

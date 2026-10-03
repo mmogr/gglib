@@ -25,6 +25,7 @@ use thiserror::Error;
 use crate::cache_config::CacheRamSetting;
 use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults};
 use crate::ports::ProcessHandle;
+pub use crate::ports::pinned::PinnedSpec;
 use crate::server_config::ServerConfigOptions;
 
 /// Per-call launch overrides layered on a runtime's standing configuration.
@@ -319,7 +320,7 @@ pub enum ModelRuntimeError {
     PinnedModelMismatch {
         /// The model this server was pinned to at startup.
         expected: String,
-        /// The model the caller asked for.
+        /// The name of the model the request resolved to.
         requested: String,
     },
 
@@ -426,7 +427,8 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// Admit a request to a running model, launching or swapping if needed.
     ///
     /// This method:
-    /// 1. Resolves the model name to a database entry
+    /// 1. Resolves the model id or name to a database entry, and refuses it
+    ///    if the runtime is pinned to another (see [`Self::pinned`])
     /// 2. Admits immediately if the model is already resident
     /// 3. Otherwise queues until the model can take a VRAM slot — either by
     ///    co-loading alongside what is already there, or by swapping once the
@@ -442,7 +444,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     ///
     /// # Arguments
     ///
-    /// * `model_name` - Name or alias of the model to run
+    /// * `model_name` - Id or exact name of the model to run
     /// * `num_ctx` - Optional context size override from request
     /// * `default_ctx` - Default context size if not specified
     /// * `overrides` - Per-call launch options layered on the runtime's
@@ -466,7 +468,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
 
     /// What the admission queue and the VRAM resident set look like right now.
     ///
-    /// Synchronous for the same reason [`Self::pinned_model`] is: it is a
+    /// Synchronous for the same reason [`Self::pinned`] is: it is a
     /// single read of plain shared state, not a query against live process
     /// state. The dashboard publisher calls it on every tick.
     ///
@@ -519,10 +521,10 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
 
     /// The one model this runtime is pinned to, if any.
     ///
-    /// `Some(name)` means every other model is refused with
-    /// [`ModelRuntimeError::PinnedModelMismatch`] rather than swapped to —
-    /// the mode `gglib serve` runs in. `None` is the ordinary auto-swapping
-    /// runtime.
+    /// `Some(pin)` means a request for any model whose id is not `pin.id` is
+    /// refused with [`ModelRuntimeError::PinnedModelMismatch`] rather than
+    /// swapped to — the mode `gglib serve` runs in. `None` is the ordinary
+    /// auto-swapping runtime.
     ///
     /// Synchronous because the pin is plain shared state, unlike
     /// [`Self::current_model`], which reports live process state. Owned
@@ -532,7 +534,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// Defaults to unpinned so test doubles and remote backends need not
     /// implement it. Callers use it to avoid offering a model that would only
     /// be refused — `/v1/models` being the motivating case.
-    fn pinned_model(&self) -> Option<String> {
+    fn pinned(&self) -> Option<PinnedSpec> {
         None
     }
 
@@ -557,23 +559,6 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
             "this runtime does not support pinning".to_string(),
         ))
     }
-}
-
-/// A runtime pin: the one model a runtime will serve, plus how to launch it.
-///
-/// Carried by [`ModelRuntimePort::set_pin`] and serialized inside the
-/// daemon's `POST /api/proxy/start` body, which is why it derives serde.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct PinnedSpec {
-    /// Name clients must address the model by. Matched exactly.
-    pub name: String,
-    /// Standing launch options for the pinned model, already resolved
-    /// through the caller's cascade — layered onto the runtime's template at
-    /// launch, winning field-wise (the cascade has already run; the template
-    /// must not undo it).
-    #[serde(default)]
-    pub launch_overrides: ServerConfigOptions,
 }
 
 /// A [`ModelRuntimePort`] that never has anything running.

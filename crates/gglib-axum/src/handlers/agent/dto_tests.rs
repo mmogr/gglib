@@ -119,10 +119,22 @@ fn the_loop_config_is_unaffected() {
     assert_eq!(cfg.max_iterations, Some(3));
 }
 
-/// `remote` is opt-in: an older client that never heard of it drives a local
-/// server exactly as before.
+/// `far` is opt-in: a body that does not name one drives a local server,
+/// and one that does carries the machine as structure.
 #[test]
-fn remote_is_off_unless_the_body_says_so() {
-    assert!(!parse(MINIMAL).remote);
-    assert!(parse(r#"{"port":9000,"messages":[],"remote":true}"#).remote);
+fn far_is_absent_unless_the_body_names_a_model_there() {
+    assert_eq!(parse(MINIMAL).far, None);
+    let far = parse(
+        r#"{"port":0,"messages":[],"far":{"machine":{"kind":"paired","fingerprint":"0a1b"},"id":3}}"#,
+    )
+    .far;
+    assert_eq!(
+        far,
+        Some(gglib_core::domain::ModelRef {
+            machine: gglib_core::domain::Machine::Paired {
+                fingerprint: "0a1b".to_owned()
+            },
+            id: 3,
+        })
+    );
 }

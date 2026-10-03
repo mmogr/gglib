@@ -174,40 +174,43 @@ fn machine_a() -> RemotePairing {
         api_key: KEY_A.to_owned(),
         default_model: None,
         port: None,
+        name: None,
     }
 }
 
-/// Connected to machine B with machine A's pairing stored, a stop does not
-/// take machine A's key (#1042): a key one machine issued is not shown to
-/// another. Driven through `stopping_key`, because a live connection needs an
-/// iroh endpoint and a peer that answers.
+/// Connected to machine B with machine A's pairing stored, no request to
+/// machine B takes machine A's key (#1042): a key one machine issued is not
+/// shown to another. A stop, a chat, a model read and a load all get their
+/// key from `far_credentials`, so it is driven here, because a live
+/// connection needs an iroh endpoint and a peer that answers.
 #[test]
-fn a_stop_does_not_take_the_key_of_a_machine_it_is_not_connected_to() {
-    let err = stopping_key(Some(machine_a()), &ticket(TICKET_B))
-        .expect_err("machine A's key is not machine B's to see");
-    let GuiError::ValidationFailed(message) = err else {
-        panic!("holding no key for that machine is the caller's to fix: {err:?}");
+fn no_request_takes_the_key_of_a_machine_it_is_not_connected_to() {
+    let connected = ticket(TICKET_B).fingerprint();
+    let Err(err) = far_credentials(Some(&machine_a()), &connected) else {
+        panic!("machine A's key is not machine B's to see");
+    };
+    let GuiError::Conflict(message) = err else {
+        panic!("holding no key for that machine is what a pairing fixes: {err:?}");
     };
     assert!(
-        message.contains(&ticket(TICKET_B).fingerprint()),
-        "the refusal names the machine it could not stop: {message}"
+        !message.contains(&connected),
+        "the refusal shows a fingerprint, which is never shown: {message}"
     );
     assert!(!message.contains(KEY_A), "{message}");
 }
 
 /// Connected to the machine the stored pairing names, at the address it was
-/// paired at or one it has moved to, a stop takes that pairing's key; with
-/// nothing stored it has none to take.
+/// paired at or one it has moved to, a request takes that pairing's key and
+/// names that machine; with nothing stored it has none to take.
 #[test]
-fn a_stop_takes_the_key_of_the_machine_it_is_connected_to() {
+fn a_request_takes_the_key_of_the_machine_it_is_connected_to() {
     for connected in [TICKET_A, TICKET_A_MOVED] {
-        assert_eq!(
-            stopping_key(Some(machine_a()), &ticket(connected))
-                .as_deref()
-                .ok(),
-            Some(KEY_A),
-            "machine A's own key was withheld from machine A"
-        );
+        let fingerprint = ticket(connected).fingerprint();
+        let Ok(credentials) = far_credentials(Some(&machine_a()), &fingerprint) else {
+            panic!("machine A's own key was withheld from machine A");
+        };
+        assert_eq!(credentials.key, KEY_A);
+        assert_eq!(credentials.fingerprint, FINGERPRINT_A);
     }
-    assert!(stopping_key(None, &ticket(TICKET_A)).is_err());
+    assert!(far_credentials(None, FINGERPRINT_A).is_err());
 }

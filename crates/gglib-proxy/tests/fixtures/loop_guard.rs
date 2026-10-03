@@ -194,10 +194,6 @@ impl ModelRuntimePort for DeadThenLive {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
-
-    fn pinned_model(&self) -> Option<String> {
-        None
-    }
 }
 
 /// Read the dashboard off a running proxy.

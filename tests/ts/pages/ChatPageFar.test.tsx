@@ -69,9 +69,20 @@ function farTransport() {
   };
 }
 
+/** The paired machine as the stored pairing names it, connected or not. */
+const PAIRED = {
+  ...IDLE_STATUS,
+  stored_ticket_fingerprint: '3ca82708b995',
+  paired_name: 'desk',
+  has_remote_key: true,
+};
+
+/** The rail's switch to the paired machine's chats, by the name it shows. */
+const FAR_SWITCH = { name: /desk's chats/ };
+
 function joined() {
   applyRemoteStatus({
-    ...IDLE_STATUS,
+    ...PAIRED,
     connected: {
       port: 41234,
       base_url: 'http://127.0.0.1:41234/v1',
@@ -123,12 +134,17 @@ describe('ChatPage, the far machine’s chats', () => {
     await waitFor(() => expect(within(list()).getByText('launchd KeepAlive')).toBeInTheDocument());
     expect(within(list()).getByText('New')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Other machine/ }));
+    await user.click(screen.getByRole('button', FAR_SWITCH));
 
     await waitFor(() => expect(within(list()).getByText('Why the build broke')).toBeInTheDocument());
     expect(within(list()).getByText('Hub notes')).toBeInTheDocument();
     expect(within(list()).queryByText('launchd KeepAlive')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Other machine/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', FAR_SWITCH)).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', FAR_SWITCH)).toHaveAttribute(
+      'title',
+      'The chats kept on desk, read through the tunnel',
+    );
+    expect(document.body.innerHTML).not.toContain('3ca82708b995');
     expect(screen.queryByRole('button', { name: 'New chat' })).not.toBeInTheDocument();
     expect(within(list()).queryByRole('button', { name: 'Delete conversation' })).not.toBeInTheDocument();
     expect(window.localStorage.getItem(UNREAD_STORAGE_KEY)).toBe(marks);
@@ -144,7 +160,7 @@ describe('ChatPage, the far machine’s chats', () => {
     const user = userEvent.setup();
     joined();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: /Other machine/ }));
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
 
     const asked = rowOf(await screen.findByText('Why did the build break?'));
     expect(within(asked).getByText('phone-7c2e')).toBeInTheDocument();
@@ -160,7 +176,7 @@ describe('ChatPage, the far machine’s chats', () => {
     const user = userEvent.setup();
     joined();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: /Other machine/ }));
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
     await screen.findByText('Why did the build break?');
 
     for (const name of ['Edit message', 'Delete message', 'Regenerate reply']) {
@@ -182,7 +198,7 @@ describe('ChatPage, the far machine’s chats', () => {
     await screen.findByText('Asked here.');
     expect(screen.getByRole('button', { name: 'Unload' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Other machine/ }));
+    await user.click(screen.getByRole('button', FAR_SWITCH));
     await screen.findByText('Why did the build break?');
 
     expect(screen.queryByRole('button', { name: /Unload/ })).not.toBeInTheDocument();
@@ -213,14 +229,14 @@ describe('ChatPage, the far machine’s chats', () => {
     const user = userEvent.setup();
     joined();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: /Other machine/ }));
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
     await screen.findByText('Why did the build break?');
 
-    act(() => applyRemoteStatus({ ...IDLE_STATUS }));
+    act(() => applyRemoteStatus(PAIRED));
 
     expect(screen.getByRole('group', { name: 'Whose chats' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Other machine/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Other machine/ })).toHaveTextContent('not connected');
+    expect(screen.getByRole('button', FAR_SWITCH)).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', FAR_SWITCH)).toHaveTextContent('not connected');
     await user.click(screen.getByRole('button', { name: /This machine/ }));
     await screen.findByText('Asked here.');
   });
@@ -229,7 +245,7 @@ describe('ChatPage, the far machine’s chats', () => {
     const user = userEvent.setup();
     joined();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: /Other machine/ }));
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
     await screen.findByText('Why did the build break?');
 
     await user.type(screen.getByRole('textbox'), 'And how do I fix it?{Enter}');
@@ -262,7 +278,7 @@ describe('ChatPage, the far machine’s chats', () => {
     const context = onSwitchModel.mock.calls[0][1];
     expect(context().conversationId).toBe(1);
 
-    await user.click(screen.getByRole('button', { name: /Other machine/ }));
+    await user.click(screen.getByRole('button', FAR_SWITCH));
     await screen.findByText('Why did the build break?');
 
     expect(context().conversationId).toBeNull();

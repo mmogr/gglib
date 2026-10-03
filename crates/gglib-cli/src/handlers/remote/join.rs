@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use gglib_app_services::{RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
+use gglib_core::domain::UNNAMED_PAIRED;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, DaemonProbe};
@@ -75,25 +76,33 @@ pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
     Ok(())
 }
 
-/// What `join` says it did: paired or joined, and which pairing it replaced.
+/// What `join` says it did: which machine it joined, whether it paired, and
+/// which pairing it replaced, each machine by its name.
 ///
 /// Settings keep one pairing, so a pairing with a second machine drops the
-/// first one's key, and until #1042 nothing on screen said so. A function
-/// rather than more `eprintln!`s so a test can read exactly what is printed.
+/// first one's key, and #1042 is that the screen says so. A function rather
+/// than more `eprintln!`s so a test can read exactly what is printed.
 fn joined_lines(joined: &RemoteJoinResponse) -> Vec<String> {
+    let machine = joined.name.as_deref().unwrap_or(UNNAMED_PAIRED);
     let mut lines = vec![if joined.paired {
         format!(
-            "  \u{2705} Paired with {} and joined. Its API key is stored here; next time the \
-             ticket alone, or nothing, will do.",
-            joined.ticket_fingerprint
+            "  \u{2705} Joined {machine}, and paired with it. Its API key is stored here; next \
+             time the ticket alone, or nothing, will do."
         )
     } else {
-        format!("  \u{2705} Joined {}.", joined.ticket_fingerprint)
+        format!("  \u{2705} Joined {machine}.")
     }];
     if let Some(earlier) = &joined.replaced {
+        // Unnamed, both machines would be "the paired machine"; the one
+        // dropped is told apart by when it was paired.
+        let earlier = if earlier == UNNAMED_PAIRED {
+            "the machine paired before"
+        } else {
+            earlier.as_str()
+        };
         lines.push(format!(
             "  This replaces the pairing with {earlier}: this machine keeps one pairing, so \
-             reaching {earlier} again takes a fresh `gglib remote invite` there."
+             reaching it again takes a fresh `gglib remote invite` there."
         ));
     }
     lines
@@ -127,36 +136,40 @@ pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
 
 /// The connect side's lines of `gglib remote status`.
 pub(super) fn print_connection(status: &RemoteStatus) {
-    match &status.connected {
-        Some(c) => match c.away_for_s {
-            Some(secs) => eprintln!(
-                "  Connected: {}  at {}  \u{2014} away {}; the address stays, and it reconnects when \
-                 that machine is back",
-                c.ticket_fingerprint,
-                c.base_url,
-                for_how_long(secs)
-            ),
-            None => eprintln!(
-                "  Connected: {}  at {}  ({})",
-                c.ticket_fingerprint, c.base_url, c.path
-            ),
-        },
-        None => match (&status.stored_ticket_fingerprint, status.has_remote_key) {
-            (Some(fp), true) => {
-                eprintln!("  Connected: no \u{2014} `gglib remote join` dials {fp} again");
-            }
-            (Some(fp), false) => {
-                eprintln!(
-                    "  Connected: no \u{2014} last dialled {fp}, but no key is stored; pair again"
-                );
-            }
-            (None, _) => eprintln!("  Connected: no \u{2014} never paired with another machine"),
-        },
-    }
+    eprintln!("{}", connection_line(status));
 }
 
-/// Seconds as a person reads them: `40s`, `3m`, `2h`.
-fn for_how_long(secs: u64) -> String {
+/// The connect side's line, naming the paired machine as every surface does:
+/// by its name, never its fingerprint. A function so a test can read it.
+fn connection_line(status: &RemoteStatus) -> String {
+    let machine = status.paired_shown();
+    let Some(c) = &status.connected else {
+        return match (&status.stored_ticket_fingerprint, status.has_remote_key) {
+            (Some(_), true) => {
+                format!("  Connected: no \u{2014} `gglib remote join` dials {machine} again")
+            }
+            (Some(_), false) => format!(
+                "  Connected: no \u{2014} last dialled {machine}, but no key is stored; pair again"
+            ),
+            (None, _) => "  Connected: no \u{2014} never paired with another machine".to_owned(),
+        };
+    };
+    c.away_for_s.map_or_else(
+        || format!("  Connected: {machine}  at {}  ({})", c.base_url, c.path),
+        |secs| {
+            format!(
+                "  Connected: {machine}  at {}  \u{2014} away {}; the address stays, and it \
+                 reconnects when that machine is back",
+                c.base_url,
+                for_how_long(secs)
+            )
+        },
+    )
+}
+
+/// Seconds as a person reads them: `40s`, `3m`, `2h`. Also how `gglib model
+/// list` says the paired machine is away.
+pub(crate) fn for_how_long(secs: u64) -> String {
     match secs {
         s if s < 60 => format!("{s}s"),
         s if s < 3600 => format!("{}m", s / 60),
@@ -170,11 +183,12 @@ mod tests {
 
     /// The away line reads in the unit a person would have used.
     ///
-    /// The status line is the only place this machine says how long the far
-    /// one has been gone, and it is read at a glance: seconds while it could
-    /// still be a blip, minutes for a lid that is closed, hours for a desktop
-    /// that is off. Truncation, not rounding — "away 1m" at sixty-one seconds
-    /// is the honest half of a figure that is about to change anyway.
+    /// The status line, and the line `gglib model list` ends with, are where
+    /// this machine says how long the far one has been gone, and each is read
+    /// at a glance: seconds while it could still be a blip, minutes for a lid
+    /// that is closed, hours for a desktop that is off. Truncation, not
+    /// rounding — "away 1m" at sixty-one seconds is the honest half of a
+    /// figure that is about to change anyway.
     #[test]
     fn how_long_a_machine_has_been_away_reads_in_the_unit_that_fits() {
         assert_eq!(for_how_long(0), "0s");

@@ -21,6 +21,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use gglib_core::domain::ModelCapabilities;
 use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -76,20 +77,38 @@ impl Drop for MockUpstream {
     }
 }
 
-/// A catalog that knows no model, so the proxy resolves every request to a
-/// pass-through context and admits it by name, as it does a model the
-/// catalog has not recorded.
+/// A catalog holding the one model the arm is pinned to: id 1, by this name.
+///
+/// It can call tools and has no dialect, so the proxy neither strips a
+/// request's tools nor installs a grammar: what reaches the mock is what the
+/// arm sent, plus whatever the proxy itself adds.
 #[derive(Debug)]
-pub(crate) struct NoCatalog;
+pub(crate) struct OneModelCatalog(pub(crate) &'static str);
 
 #[async_trait::async_trait]
-impl ModelCatalogPort for NoCatalog {
+impl ModelCatalogPort for OneModelCatalog {
     async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
         Ok(Vec::new())
     }
 
-    async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(None)
+    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+        Ok((name == "1" || name == self.0).then(|| ModelSummary {
+            id: 1,
+            name: self.0.to_owned(),
+            tags: Vec::new(),
+            capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
+            dialect: None,
+            template_caps: None,
+            param_count: String::new(),
+            quantization: None,
+            architecture: None,
+            created_at: 0,
+            file_size: 0,
+            context_length: None,
+            inference_defaults: None,
+            defaults_origin: None,
+            server_defaults: None,
+        }))
     }
 
     async fn resolve_for_launch(

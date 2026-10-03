@@ -27,6 +27,7 @@ import { cn } from '../utils/cn';
 import { useServerState } from '../services/serverEvents';
 import { getTransport, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/transport';
 import type { ConversationSummary } from '../services/transport';
+import type { ModelRef } from '../types/generated/ModelRef';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -34,11 +35,13 @@ const DEFAULT_CONVERSATION_TITLE = 'New Chat';
  * Whose model is answering.
  *
  * The local arm is a server started here: a port to talk to, a model id the
- * registry knows, a console to read. The remote arm is the machine on the
- * other end of the tunnel — the daemon supplies its port and key per turn,
- * so neither exists on this side, and a union rather than optional numbers
- * is what stops the console and the health subscription being handed
- * placeholders they would report as a dead server.
+ * registry knows, a console to read. The paired arm is a model of the
+ * machine on the other end of the tunnel, by that machine and its id there —
+ * the daemon supplies its port and key per turn, so neither exists on this
+ * side, and a union rather than optional numbers is what stops the console
+ * and the health subscription being handed placeholders they would report
+ * as a dead server. A session's machine is fixed: the picker, which moves a
+ * chat between this machine's models, is not offered on the paired arm.
  */
 type ChatPageProps = {
   modelName: string;
@@ -56,13 +59,18 @@ type ChatPageProps = {
   onUnloadModel?: () => Promise<void>;
   onClose: () => void; // Leaves the chat; the model stays loaded
 } & (
-  | { remote?: false; serverPort: number; modelId: number }
-  | { remote: true; serverPort?: undefined; modelId?: undefined }
+  | { paired?: undefined; serverPort: number; modelId: number }
+  | {
+      /** The paired machine's model, and the name that machine is shown by. */
+      paired: { far: ModelRef; machineName: string };
+      serverPort?: undefined;
+      modelId?: undefined;
+    }
 );
 
 export default function ChatPage(props: ChatPageProps) {
   // Destructured for the body, but `props` is kept: the checker can narrow
-  // `props.remote` and correlate the port and id with it, and cannot do that
+  // `props.paired` and correlate the port and id with it, and cannot do that
   // for locals it has already separated.
   const {
     serverPort,
@@ -76,9 +84,10 @@ export default function ChatPage(props: ChatPageProps) {
     startingModel = null,
     onSwitchModel,
     onUnloadModel,
-    remote = false,
+    paired,
     onClose,
   } = props;
+  const pairedChat = paired !== undefined;
   // Tab state
   const [activeTab, setActiveTab] = useState<ChatPageTabId>(initialView);
   
@@ -89,7 +98,7 @@ export default function ChatPage(props: ChatPageProps) {
   const {
     source, switchSource, conversations, setConversations, conversationLoading, activeConversationId,
     setActiveConversationId, landingConversationId, fetched, syncConversations,
-  } = useChatConversations(conversationId, setChatError);
+  } = useChatConversations(conversationId, setChatError, paired?.far.machine);
   const far = source === 'far';
   
   // New conversation modal state
@@ -138,6 +147,7 @@ export default function ChatPage(props: ChatPageProps) {
     source,
     onConversationChanged: (id) => void syncConversations({ preferredId: id, silent: true }),
     selectedServerPort: serverPort,
+    pairedModel: paired?.far,
     onError: (error) => setChatError(error.message),
     // Non-fatal: the turn is still running, so this is a transient notice
     // rather than `chatError`, which renders as a failed turn.
@@ -155,25 +165,25 @@ export default function ChatPage(props: ChatPageProps) {
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
   // because ChatPage is only opened when a server is already running.
-  // A remote session subscribes to nothing — this registry only knows servers
+  // A paired session subscribes to nothing — this registry only knows servers
   // started here, so its silence about the far machine must not be read as
   // that machine being down and the composer locked.
   const serverState = useServerState(modelId ?? -1);
   const isServerRunning =
-    remote || far || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
+    pairedChat || far || (serverState?.status !== 'stopped' && serverState?.status !== 'crashed');
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
 
   // Show toast only on status transition to stopped/crashed (not on remount).
-  // Never for a remote chat: whatever this machine's registry is reporting,
+  // Never for a paired chat: whatever this machine's registry is reporting,
   // it is not the model answering, and saying the chat is read-only when it
   // is not is worse than saying nothing.
   useEffect(() => {
     const prev = prevStatusRef.current;
     const next = serverState?.status;
 
-    if (!remote && prev !== next && (next === 'stopped' || next === 'crashed')) {
+    if (!pairedChat && prev !== next && (next === 'stopped' || next === 'crashed')) {
       showToast(
         next === 'crashed'
           ? 'Server crashed. Chat is now read-only.'
@@ -183,7 +193,7 @@ export default function ChatPage(props: ChatPageProps) {
     }
 
     prevStatusRef.current = next;
-  }, [remote, serverState?.status, showToast]);
+  }, [pairedChat, serverState?.status, showToast]);
 
   // An error belongs to the conversation it happened in.
   useEffect(() => setChatError(null), [activeConversationId]);
@@ -204,7 +214,8 @@ export default function ChatPage(props: ChatPageProps) {
     try {
       const title = newConversationTitle.trim() || DEFAULT_CONVERSATION_TITLE;
       const systemPrompt = newConversationPrompt.trim() || DEFAULT_SYSTEM_PROMPT;
-      const newId = await getTransport().createConversation({ title, modelId: null, systemPrompt });
+      // A chat with a far model is made for it, so it stays that machine's.
+      const newId = await getTransport().createConversation({ title, modelId: null, systemPrompt, model: paired?.far ?? null });
 
       // Insert new conversation locally before selecting it
       const newConversation: ConversationSummary = {
@@ -248,7 +259,7 @@ export default function ChatPage(props: ChatPageProps) {
             canFold={listFold.canFold}
             onToggleList={listFold.toggle}
             listId={listId}
-            remote={remote}
+            remote={pairedChat}
             running={countOf(activity.running)}
             unread={countOf(activity.unread)}
             source={source}
@@ -289,7 +300,7 @@ export default function ChatPage(props: ChatPageProps) {
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
               supportsToolCalls={far ? null : supportsToolCalls}
               toolFormat={far ? null : toolFormat}
-              modelName={far ? 'The other machine picks the model' : modelName}
+              modelName={far ? 'The other machine picks the model' : paired ? `${modelName} on ${paired.machineName}` : modelName}
               modelId={far ? undefined : modelId}
               source={source}
               onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
@@ -300,14 +311,14 @@ export default function ChatPage(props: ChatPageProps) {
               onUnloadModel={onUnloadModel}
               quantization={far ? null : quantization}
               headMargin={
-                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={remote || far} onClose={onClose} />
+                <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={pairedChat || far} onClose={onClose} />
               }
               headOnly={activeTab === 'console'}
             />
             {/* Console - always mounted, hidden when not active. Absent
-                entirely for a remote chat: the process it reports on is on the
+                entirely for a paired chat: the process it reports on is on the
                 other machine, so there is no id, port or log to hand it. */}
-            {!props.remote && !far && (
+            {!props.paired && !far && (
               <TwoPanelLayout
                 ref={activeTab === 'console' ? layoutRef : undefined}
                 isHidden={activeTab !== 'console'}

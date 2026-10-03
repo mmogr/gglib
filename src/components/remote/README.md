@@ -14,10 +14,10 @@ The `RemoteControl` popover's sections ([ADR 0012](../../../docs/adr/0012-the-re
 | `ServeSection.tsx` | This machine as the desktop: enable (with the `/mcp` grant off by default), invite one more device, the status lines, disable |
 | `DevicesSection.tsx` | Who holds a key, and the button that retires one. Rows come off the status this panel already reads rather than a fetch of their own, so the list cannot disagree with the tunnel state beside it, and each prints the daemon's description of it rather than one worked out here |
 | `PairingReveal.tsx` | The ticket and the code, shown once: the answer to `enable --invite` or `invite` is the only time the daemon hands that code out. Counts the code down and leaves at zero; the parent drops it the moment a device pairs, or once the daemon stops holding the code |
-| `JoinSection.tsx` | This machine as the laptop: the pairing string, the connected port as an `EndpointCopyBar`, the use-for-chat choice and the far machine's model name, disconnect, and the one-way door behind a confirm |
+| `JoinSection.tsx` | This machine as the laptop: the pairing string, the connected port as an `EndpointCopyBar`, where that machine's models are (the library, under its name), disconnect, and the one-way door behind a confirm |
 
 ## What is deliberately not here
 
-The connected port does not inject the key (decision 7), so the copy bar is shown with the reminder that a client supplies it. The status shows fingerprints and never a ticket, because the status is what a `GET` returns. There is no device-list fetch here either: the roster is a settings field the daemon reads to answer `status` anyway, so a second request would only be a second answer that can disagree.
+The connected port does not inject the key (decision 7), so the copy bar is shown with the reminder that a client supplies it. The status shows fingerprints and never a ticket, because the status is what a `GET` returns; of those, only this machine's own ticket and its peers are rendered. The machine this one has joined is shown by its name (`paired_name`, or "the paired machine" when it gave none), never by its fingerprint, which is its identity and is only compared. There is no device-list fetch here either: the roster is a settings field the daemon reads to answer `status` anyway, so a second request would only be a second answer that can disagree.
 
 <!-- module-docs:end -->

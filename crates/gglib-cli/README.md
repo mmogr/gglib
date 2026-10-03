@@ -83,13 +83,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | Command | Description |
 |---------|-------------|
 | `add <path>` | Add a GGUF model to the library |
-| `list` | List all models with metadata |
-| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata) |
+| `list` | List all models with metadata; while paired, end with one line on the paired machine (`--remote` lists its models) |
+| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata); `--remote` reads the paired machine's |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `remove <id\|name>` | Remove a model from the library |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
 | `chat <id\|name>` | Start interactive llama-cli chat |
-| `chat <id\|name> --continue <N>` | Resume a previous conversation by ID |
+| `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `chat history` | List past conversations with message counts |

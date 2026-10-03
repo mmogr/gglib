@@ -13,6 +13,7 @@ use crate::domain::DefaultsOrigin;
 use crate::domain::DialectSpec;
 use crate::domain::InferenceConfig;
 use crate::domain::KvElemsPerToken;
+use crate::domain::Model;
 use crate::domain::ModelCapabilities;
 use crate::domain::ModelSamplingDefaults;
 use crate::domain::ServerConfig;
@@ -194,18 +195,17 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     /// Returns `CatalogError` if the catalog cannot be queried.
     async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError>;
 
-    /// Resolve a model by name or alias.
+    /// Resolve a model by id or name.
     ///
-    /// This method performs model resolution:
-    /// 1. Exact name match
-    /// 2. Case-insensitive name match
-    /// 3. Fuzzy/partial match (implementation-defined)
+    /// A string that parses as a number is tried as a catalog id first; if no
+    /// model has that id, it is tried as an exact name. Nothing is matched
+    /// case-insensitively or by prefix.
     ///
     /// Returns `None` if no matching model is found.
     ///
     /// # Arguments
     ///
-    /// * `name` - Model name or alias to resolve
+    /// * `name` - Model id or exact name to resolve
     ///
     /// # Errors
     ///
@@ -219,13 +219,24 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
     ///
     /// # Arguments
     ///
-    /// * `name` - Model name or alias to resolve
+    /// * `name` - Model id or exact name, resolved as [`Self::resolve_model`] does
     ///
     /// # Errors
     ///
     /// Returns `CatalogError` if the catalog cannot be queried.
     async fn resolve_for_launch(&self, name: &str)
     -> Result<Option<ModelLaunchSpec>, CatalogError>;
+
+    /// The whole stored [`Model`] `identifier` names, resolved as
+    /// [`Self::resolve_model`] does. Defaulted to `None`: only the
+    /// database-backed catalog has stored rows to read.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CatalogError` if the catalog cannot be queried.
+    async fn model(&self, _identifier: &str) -> Result<Option<Model>, CatalogError> {
+        Ok(None)
+    }
 
     /// Record llama-server's template-capability self-report for model `id`.
     ///

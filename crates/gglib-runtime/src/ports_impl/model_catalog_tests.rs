@@ -125,6 +125,16 @@ async fn unknown_model_resolves_to_none() {
     assert!(port().resolve_model("ghost").await.unwrap().is_none());
 }
 
+/// The detail read resolves as the others do and hands back the whole row.
+#[tokio::test]
+async fn model_reads_the_whole_row_by_id_or_name() {
+    for identifier in ["7", "qwen3"] {
+        let model = port().model(identifier).await.unwrap().unwrap();
+        assert_eq!(model.file_path, PathBuf::from("/models/qwen3.gguf"));
+    }
+    assert!(port().model("ghost").await.unwrap().is_none());
+}
+
 /// The launch spec derives what the model declares about sampling from the
 /// metadata already on the catalog row — the same trip
 /// `kv_elems_per_token` and `kv_memory_is_partial` make. Without it the

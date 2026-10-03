@@ -111,8 +111,8 @@ impl ModelRuntimePort for RuntimePortImpl {
         self.mgr.recycle_current().await
     }
 
-    fn pinned_model(&self) -> Option<String> {
-        self.mgr.pinned_model()
+    fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
+        self.mgr.pinned()
     }
 
     fn set_pin(&self, pin: Option<gglib_core::ports::PinnedSpec>) -> Result<(), ModelRuntimeError> {

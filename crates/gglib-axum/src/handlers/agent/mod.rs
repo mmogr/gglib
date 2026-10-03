@@ -132,6 +132,9 @@ mod run_fixture;
 #[path = "run_hold_tests.rs"]
 mod run_hold_tests;
 #[cfg(test)]
+#[path = "run_machine_tests.rs"]
+mod run_machine_tests;
+#[cfg(test)]
 #[path = "run_made_tests.rs"]
 mod run_made_tests;
 #[cfg(test)]

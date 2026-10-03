@@ -61,9 +61,8 @@ mod model_detail_template_caps_tests {
     //! ADR 0007 decision 3's rule, applied one layer out from the server's own
     //! suppression.
 
-    use gglib_core::domain::{Model, Support, TemplateCaps};
+    use gglib_core::domain::{Model, ModelDetailDto, Support, TemplateCaps};
 
-    use super::super::ModelDetailDto;
     use super::fixture::model;
 
     fn support_of(model: Model) -> Support {
@@ -182,9 +181,9 @@ mod gui_model_moe_tests {
     //! it existed, so the inspector was right while the list beside it was
     //! wrong about the same model.
 
-    use gglib_core::domain::Model;
+    use gglib_core::domain::{Model, ModelDetailDto};
 
-    use super::super::{GuiModel, ModelDetailDto};
+    use super::super::GuiModel;
     use super::fixture::model;
 
     /// 128 experts, 8 active — the shape that makes the two views disagree.

@@ -7,7 +7,8 @@
 //! has visible context. Split from `mod.rs`, which orchestrates a session —
 //! merging stored settings and formatting a recap are a different job, and the
 //! file had reached its size budget. What a new session saves for a later
-//! resume is built here too, so the two sides are read together.
+//! resume is built here too, so the two sides are read together. Which
+//! machine a resume goes back to, and what it saves, is `resume_machine`'s.
 
 use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
@@ -16,20 +17,36 @@ use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::handlers::inference::profile_selection::warn_profile_gone;
 use crate::presentation::style;
-use crate::target::Target;
+use crate::target::{Target, TurnModel};
+
+#[path = "resume_machine.rs"]
+mod resume_machine;
+pub(crate) use resume_machine::{follow_stored_machine, resumed_settings};
 
 /// The settings a new session saves, so `--continue` can restore them: the
-/// sampling and tool flags, and the profile the session samples with.
+/// model as its machine resolved it, the sampling and tool flags, and the
+/// profile the session samples with — one configured here, or the one the
+/// paired machine routed its suffix to.
 pub(crate) fn session_settings(
     args: &ChatArgs,
     profile: Option<&InferenceProfile>,
+    turn: &TurnModel,
 ) -> ConversationSettings {
     ConversationSettingsBuilder::new(&args.sampling, &args.context)
-        .model_name(&args.identifier)
-        .profile(profile.map(|p| p.name.clone()))
+        .model_name(&turn.name)
+        .model(turn.model_ref.clone())
+        .profile(session_profile(profile, turn))
         .tools(args.tools.clone(), args.no_tools)
         .agent_params(args.max_iterations, args.tool_timeout_ms, args.max_parallel)
         .build()
+}
+
+/// The profile a session samples with, by name: one configured here, or
+/// the one the paired machine routed its suffix to.
+fn session_profile(profile: Option<&InferenceProfile>, turn: &TurnModel) -> Option<String> {
+    profile
+        .map(|p| p.name.clone())
+        .or_else(|| turn.far_profile.clone())
 }
 
 /// The profile a resumed session samples with.

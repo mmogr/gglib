@@ -1,9 +1,17 @@
 use super::*;
 
+/// `/health` answers before any credential is checked, so it says it is up
+/// and nothing else: the machine's name is on `/v1/models`, behind the bearer.
 #[tokio::test]
 async fn test_health_check() {
     let response = health_check().await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
+    let body = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json, serde_json::json!({ "status": "ok" }));
 }
 
 #[tokio::test]

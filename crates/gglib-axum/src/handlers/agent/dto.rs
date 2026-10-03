@@ -2,6 +2,7 @@
 
 use serde::Deserialize;
 
+use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentMessage};
 
 /// User-facing configuration for a single agent chat request.
@@ -99,18 +100,20 @@ pub(crate) struct AgentChatRequest {
     ///
     /// Must match a currently-running server (the same constraint as the chat
     /// proxy endpoint). Validated by [`validate_port`](crate::handlers::port_utils::validate_port)
-    /// before the loop starts. Ignored when [`Self::remote`] is set.
+    /// before the loop starts. Ignored when [`Self::far`] is set.
     pub port: u16,
 
-    /// Drive the machine on the other end of the remote tunnel instead of a
-    /// local llama-server (ADR 0012).
+    /// A model of the paired machine to drive instead of a local
+    /// llama-server (ADR 0012): that machine, and the model's id there.
     ///
-    /// The daemon must be connected (`gglib remote join`) and hold the key
-    /// from that pairing; the loop then talks to the tunnel's loopback port
-    /// with that key, and `port` is not consulted. Absent means local, so an
-    /// older client is unchanged.
+    /// The daemon must be connected to that machine (`gglib remote join`)
+    /// and hold the key from that pairing; the loop then talks to the
+    /// tunnel's loopback port with that key and sends the id as the model,
+    /// and `port` is not consulted. A ref to this machine is refused `400`,
+    /// since a local model is driven by its port, and one to a machine this
+    /// one is no longer connected to `409`. Absent means local.
     #[serde(default)]
-    pub remote: bool,
+    pub far: Option<ModelRef>,
 
     /// Full conversation history in domain form.
     ///
@@ -144,17 +147,12 @@ pub(crate) struct AgentChatRequest {
     ///   and can be executed.
     pub tool_filter: Option<Vec<String>>,
 
-    /// The model name forwarded to whichever machine serves this turn.
+    /// The model name forwarded to the local llama-server.
     ///
-    /// Locally it is optional: `None` (or omitted) lets llama-server pick the
-    /// model it loaded, which is the normal case, and a value is only needed
-    /// when the server exposes several.
-    ///
-    /// With [`Self::remote`] it is **required**. There is no catalog here for
-    /// the far machine's names, and this machine's default is deliberately not
-    /// substituted, because the far machine may not have it — so a request
-    /// that names none is refused with a `400` rather than arriving there as
-    /// `"model": ""` and coming back `404 Model '' not found`.
+    /// Optional: `None` (or omitted) lets llama-server pick the model it
+    /// loaded, which is the normal case, and a value is only needed when the
+    /// server exposes several. Not read with [`Self::far`], which names its
+    /// model by its id.
     #[serde(default)]
     pub model: Option<String>,
 

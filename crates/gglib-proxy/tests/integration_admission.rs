@@ -62,11 +62,11 @@ async fn spawn_two_model_proxy() -> (
         (CHAT_MODEL.to_string(), chat_port),
         (EMBED_MODEL.to_string(), embed_port),
     ]);
-    let runtime = Arc::new(ResidentSimRuntime::new(ports));
     let catalog = Arc::new(MultiModelCatalog(vec![
         (CHAT_MODEL.to_string(), vec![]),
         (EMBED_MODEL.to_string(), vec!["embedding".to_string()]),
     ]));
+    let runtime = Arc::new(ResidentSimRuntime::over(&catalog, ports));
 
     let (base, proxy_cancel) =
         spawn_proxy_with_catalog(Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>, catalog).await;
@@ -218,11 +218,11 @@ async fn two_requests_for_one_model_hold_leases_concurrently() {
     let (embed_port, _) = spawn_mock_embeddings_upstream(upstream_cancel.clone(), None).await;
 
     let ports = HashMap::from([(EMBED_MODEL.to_string(), embed_port)]);
-    let runtime = Arc::new(ResidentSimRuntime::new(ports));
     let catalog = Arc::new(MultiModelCatalog(vec![(
         EMBED_MODEL.to_string(),
         vec!["embedding".to_string()],
     )]));
+    let runtime = Arc::new(ResidentSimRuntime::over(&catalog, ports));
     let (base, proxy_cancel) =
         spawn_proxy_with_catalog(Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>, catalog).await;
 

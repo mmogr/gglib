@@ -244,6 +244,7 @@ async fn a_join_that_moves_off_a_taken_port_dials_from_the_same_key() {
                 api_key: KEY_A.to_owned(),
                 default_model: None,
                 port: Some(port),
+                name: None,
             })),
             ..SettingsUpdate::default()
         })

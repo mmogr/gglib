@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::agent::messages::AgentMessage;
 use super::agent::messages::AssistantContent;
 use super::agent::tool_types::ToolCall;
+use super::machine::ModelRef;
 
 /// A chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,10 +181,19 @@ pub struct ConversationUpdate {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ConversationSettings {
-    /// Model name or identifier used for this session.
+    /// The name the session's model goes by, as it is shown. Resolved again
+    /// on resume only in a row that stores no `model`.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_name: Option<String>,
+    /// The session's model, named by its machine. A conversation resumes on
+    /// that machine, by that id. A run on another of this machine's models,
+    /// or a CLI resume that names another model, replaces it. Absent in rows
+    /// saved before it was recorded, and for a model the catalogue did not
+    /// hold.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelRef>,
     /// Sampling temperature (0.0–2.0).
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,8 +214,9 @@ pub struct ConversationSettings {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_penalty: Option<f32>,
-    /// Name of the inference profile the session sampled with. Absent in
-    /// rows saved before it was recorded.
+    /// Name of the inference profile the session sampled with, one
+    /// configured on `model`'s machine. Absent in rows saved before
+    /// it was recorded.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,

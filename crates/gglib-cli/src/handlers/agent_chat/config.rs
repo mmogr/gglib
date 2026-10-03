@@ -22,7 +22,7 @@ use gglib_runtime::compose_agent_loop_with_sampling;
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::handlers::inference::shared::resolve_inference_config;
-use crate::target::Target;
+use crate::target::{Target, TurnModel};
 
 // =============================================================================
 // Types
@@ -58,6 +58,10 @@ pub(crate) struct AgentSessionParams {
     /// must already have any suffix stripped by the time `resolve_port` asks
     /// the daemon to start it.
     pub profile: Option<gglib_core::domain::InferenceProfile>,
+    /// The model as the machine serving the turn resolved it, once
+    /// ([`Target::resolve_turn`]): what the banner names and the conversation
+    /// stores.
+    pub turn: Option<TurnModel>,
 }
 
 /// Display metadata for the server-startup info banner.
@@ -94,6 +98,7 @@ impl From<&ChatArgs> for AgentSessionParams {
                 .wire_model_name(args.model.clone(), &args.identifier),
             retry_policy: args.retry_policy,
             profile: None,
+            turn: None,
         }
     }
 }

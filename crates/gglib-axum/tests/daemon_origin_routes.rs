@@ -35,7 +35,16 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
     ] {
         changes.extend(methods.iter().map(|m| (*m, path.clone())));
     }
-    assert!(changes.len() >= 15, "the walk found only {changes:?}");
+    // The far machine's: a turn, a cancel and a load.
+    for (methods, path) in daemon::remote_route_contract() {
+        changes.extend(
+            methods
+                .iter()
+                .filter(|m| **m != "GET")
+                .map(move |m| (*m, path.clone())),
+        );
+    }
+    assert!(changes.len() >= 18, "the walk found only {changes:?}");
 
     let mut let_through = Vec::new();
     for (method, path) in &changes {

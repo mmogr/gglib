@@ -23,6 +23,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Create missing README stubs | Manual |
 | [complexity_hotspots.sh](#complexity_hotspotssh) | Find high-complexity files | Manual |
 | [sync_versions.py](#sync_versionspy) | Sync version across package files | Release |
+| [lock_changes.py](#lock_changespy) | List what moved between two copies of a lockfile | `update-deps.yml` |
 | [macos-install.command](#macos-installcommand) | macOS app installer | Release bundle |
 
 ---
@@ -368,6 +369,26 @@ Cargo crates use `version.workspace = true` so they inherit automatically.
 
 ---
 
+## Dependency Update Scripts
+
+### `lock_changes.py`
+
+Prints what moved between two copies of `Cargo.lock` or `package-lock.json`,
+one line per change, for the commit and pull request the Update dependencies
+workflow opens:
+
+```bash
+python3 ./scripts/lock_changes.py cargo OLD_Cargo.lock Cargo.lock
+python3 ./scripts/lock_changes.py npm OLD_package-lock.json package-lock.json
+```
+
+A version change prints as `name old -> new`. For cargo it also prints each
+package whose version did not change but which now builds against another copy
+of a dependency, as `package version: dependency old -> new`, since
+`cargo update -p` rewrites those too (#1112).
+
+---
+
 ## macOS Release Scripts
 
 ### `macos-install.command`
@@ -398,6 +419,7 @@ The main CI workflows that use these scripts:
 | `ci.yml` | `quality` | `check_workflow_yaml.sh` |
 | `check-issue-form.yml` | — | `check_issue_form_mapping.mjs` |
 | `bump-version.yml` | — | `sync_versions.py` |
+| `update-deps.yml` | — | `lock_changes.py` |
 | `release.yml` | — | bundles `macos-install.command` |
 
 `badges.yml` inlines its own badge generation and invokes no script here.

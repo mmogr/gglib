@@ -13,8 +13,9 @@ use gglib_core::server_config::parse_ctx_size_flag;
 use super::config::{AgentSessionParams, BannerInfo};
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
+use crate::handlers::model::resolver;
 use crate::presentation::style;
-use gglib_core::domain::InferenceConfig;
+use gglib_core::domain::{InferenceConfig, ModelAction};
 
 /// Resolve the llama-server port for this session.
 ///
@@ -33,12 +34,7 @@ pub(crate) async fn resolve_port(
     }
 
     // Look up the model so the context flag can resolve against its metadata.
-    let model = ctx
-        .app
-        .models()
-        .find_by_identifier(&params.model_identifier)
-        .await
-        .context("failed to look up model")?;
+    let model = resolver::resolve_for(ctx, &params.model_identifier, ModelAction::Chat).await?;
 
     // Resolve the per-request context tier here (this is what makes
     // `--ctx-size max` work); the daemon applies the per-model and global

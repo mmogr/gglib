@@ -12,6 +12,7 @@ fn pairing() -> RemotePairing {
         api_key: "k".to_owned(),
         default_model: None,
         port: None,
+        name: Some("desk".to_owned()),
     }
 }
 
@@ -111,15 +112,16 @@ fn the_rows_written_before_the_pairing_was_one_record_are_ignored() {
     );
 }
 
-/// A record written before `defaultModel` existed loads as nothing
-/// remembered yet, not as a record this build cannot read — a pairing is
-/// expensive to replace and a missing field is not a reason to.
+/// A record written before `defaultModel`, `port` or `name` existed loads
+/// as nothing remembered yet, not as a record this build cannot read — a
+/// pairing is expensive to replace and a missing field is not a reason to.
 #[test]
 fn a_pairing_stored_before_the_remembered_model_still_loads() {
     let row = r#"{"ticket":"pipeabc","apiKey":"k"}"#;
     let loaded: RemotePairing = serde_json::from_str(row).expect("an older record loads");
     assert_eq!(loaded.default_model, None);
     assert_eq!(loaded.port, None);
+    assert_eq!(loaded.name, None, "a record from before the name was kept");
     let with = RemotePairing {
         default_model: Some("qwen3".to_owned()),
         port: None,
@@ -128,6 +130,7 @@ fn a_pairing_stored_before_the_remembered_model_still_loads() {
     let round: RemotePairing =
         serde_json::from_str(&serde_json::to_string(&with).unwrap()).unwrap();
     assert_eq!(round.default_model.as_deref(), Some("qwen3"));
+    assert_eq!(round.name.as_deref(), Some("desk"));
 }
 
 /// The five fields a reset keeps, as the stored record names them.

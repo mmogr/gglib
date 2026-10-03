@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useModels } from '../hooks/useModels';
+import { usePairedModels } from '../hooks/usePairedModels';
+import { useLibrarySelection } from '../hooks/useLibrarySelection';
 import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
@@ -8,7 +10,7 @@ import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import { useToastContext } from '../contexts/ToastContext';
 import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
-import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
+import { FarModelInspector, ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
@@ -48,6 +50,9 @@ export default function ModelControlCenterPage({
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
+  // The paired machine's rows, and one selection across both machines.
+  const paired = usePairedModels();
+  const { farPick, pickFar, pickLocal } = useLibrarySelection(selectModel, paired.group);
   const { tags, loadTags, addTagToModel, removeTagFromModel } = useTags();
   const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
@@ -95,9 +100,8 @@ export default function ModelControlCenterPage({
   const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
   
   // Chat session state - when set, shows ChatPage instead of model panels.
-  // Local sessions come from a served model here; remote ones from the
-  // Remote panel, which is why the hook and not this page owns the wiring.
-  const { chatSession, setChatSession, openChatSession, switchChatModel, startingModel, closeChatSession } =
+  // Local sessions come from a served model here, paired ones from a far row.
+  const { chatSession, setChatSession, openChatSession, openPairedChat, switchChatModel, startingModel, closeChatSession } =
     useChatSession(servers);
 
   // Benchmark state - when set, shows BenchmarkPage instead of model panels
@@ -120,7 +124,7 @@ export default function ModelControlCenterPage({
     loadServers,
     stopServer,
     removeModel,
-    selectModel,
+    selectModel: pickLocal,
     setSidebarTab,
     setActiveSubTab: (tab: AddDownloadSubTab) => setActiveSubTab(tab),
     triggerFilePicker: () => fileInputRef.current?.click(),
@@ -153,7 +157,7 @@ export default function ModelControlCenterPage({
 
   // Handler for selecting a local model (clears HF selection)
   const handleSelectLocalModel = (id: number | null) => {
-    selectModel(id);
+    pickLocal(id);
     if (id !== null) {
       setSelectedHfModel(null); // Clear HF selection when selecting local model
     }
@@ -163,7 +167,7 @@ export default function ModelControlCenterPage({
   const handleSelectHfModel = (model: HfModelSummary | null) => {
     setSelectedHfModel(model);
     if (model !== null) {
-      selectModel(null); // Clear local model selection when selecting HF model
+      pickLocal(null); // Clear the library's selection when selecting HF model
     }
   };
 
@@ -172,8 +176,8 @@ export default function ModelControlCenterPage({
     setSidebarTab(tab);
     // Clear appropriate model selection based on tab context
     if (tab === 'add') {
-      // Clear local model selection when entering Add Models tab
-      selectModel(null);
+      // Clear the library's selection when entering Add Models tab
+      pickLocal(null);
     } else {
       // Clear HF model selection when leaving the Add Models tab
       setSelectedHfModel(null);
@@ -191,7 +195,6 @@ export default function ModelControlCenterPage({
 
   // Handler for when server starts - opens chat view
   const handleServerStarted = async (serverInfo: ServerViewModel) => {
-    // Server started, open chat
     setChatSession({
       kind: 'local',
       serverPort: serverInfo.port,
@@ -223,7 +226,7 @@ export default function ModelControlCenterPage({
             onClose={closeChatSession}
           />
         ) : (
-          <ChatPage remote modelName={chatSession.modelName} onClose={closeChatSession} />
+          <ChatPage paired={chatSession} modelName={chatSession.modelName} onClose={closeChatSession} />
         )}
       </Suspense>
     );
@@ -274,6 +277,9 @@ export default function ModelControlCenterPage({
             selectedHfModelId={selectedHfModel?.id}
             activeTab={sidebarTab}
             onTabChange={handleSidebarTabChange}
+            paired={paired}
+            farPick={farPick}
+            onPickFar={(model) => { pickFar(model); setSelectedHfModel(null); }}
           />
         }
         rightClassName="gap-0"
@@ -290,24 +296,28 @@ export default function ModelControlCenterPage({
                 onRefreshQueue={refreshQueue}
               />
             )}
-            <ModelInspectorPanel
-              model={selectedModel}
-              selectedHfModel={selectedHfModel}
-              onStartServer={loadServers}
-              onServerStarted={handleServerStarted}
-              onOpenChat={(modelId) => openChatSession(modelId, 'chat')}
-              onStopServer={stopServer}
-              servers={servers}
-              onRemoveModel={removeModel}
-              onUpdateModel={updateModel}
-              onAddTag={addTagToModel}
-              onRemoveTag={removeTagFromModel}
-              getModelDetail={(id) => getTransport().getModelDetail(id)}
-              onRefresh={handleRefreshAll}
-              queueStatus={queueStatus}
-              onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
-              onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
-            />
+            {farPick ? (
+              <FarModelInspector model={farPick} paired={paired} onChat={(far, name) => openPairedChat(far, name, paired.name)} />
+            ) : (
+              <ModelInspectorPanel
+                model={selectedModel}
+                selectedHfModel={selectedHfModel}
+                onStartServer={loadServers}
+                onServerStarted={handleServerStarted}
+                onOpenChat={(modelId) => openChatSession(modelId, 'chat')}
+                onStopServer={stopServer}
+                servers={servers}
+                onRemoveModel={removeModel}
+                onUpdateModel={updateModel}
+                onAddTag={addTagToModel}
+                onRemoveTag={removeTagFromModel}
+                getModelDetail={(id) => getTransport().getModelDetail(id)}
+                onRefresh={handleRefreshAll}
+                queueStatus={queueStatus}
+                onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
+                onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
+              />
+            )}
           </>
         }
       />

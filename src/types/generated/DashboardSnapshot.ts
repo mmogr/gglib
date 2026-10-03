@@ -74,7 +74,7 @@ tool_repairs_succeeded: number,
  */
 upstream_health: UpstreamHealthSnapshot, 
 /**
- * Per-model defect counts, keyed by the model name requests carry.
+ * Per-model defect counts, keyed by the name of the model a request resolved to.
  *
  * The fleet totals above answer "is something wrong"; this answers
  * "with which model", which is the only form the answer is actionable

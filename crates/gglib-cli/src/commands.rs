@@ -110,9 +110,9 @@ pub enum Commands {
     /// Chat with a model interactively, or manage chat history
     #[command(display_order = 11, subcommand_negates_reqs = true)]
     Chat {
-        /// Name or ID of the model to chat with (optional when resuming with
-        /// --continue). With --remote it is the far machine's model name, sent
-        /// as typed; the ID form is local-only and means nothing there.
+        /// Name or ID of the model to chat with (optional with --continue, which
+        /// resumes on the machine the chat ran on). With --remote, an ID is the
+        /// paired machine's, as `gglib model list --remote` shows it.
         #[arg(default_value = "")]
         identifier: String,
         #[command(flatten)]
@@ -150,7 +150,7 @@ pub enum Commands {
         /// Model name put in the request body, overriding the positional
         ///
         /// Omitted locally, llama-server serves whichever model it loaded;
-        /// omitted with --remote, the positional is forwarded instead.
+        /// omitted with --remote, the positional's ID there is sent instead.
         #[arg(long)]
         model: Option<String>,
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
@@ -187,9 +187,9 @@ pub enum Commands {
         /// Model ID or name
         ///
         /// Locally, omitting it falls back to the default model from settings.
-        /// With --remote it is mandatory instead — the name is forwarded as given and
-        /// this machine's default is not consulted. Name one the far machine serves, or
-        /// the request arrives there with an empty model: 404 Model '' not found.
+        /// With --remote, an ID is the paired machine's, as `gglib model list --remote`
+        /// shows it; omitting it reuses the model last asked of that machine, and this
+        /// machine's default is not consulted.
         #[arg(short, long)]
         model: Option<String>,
         /// Read context from file instead of stdin

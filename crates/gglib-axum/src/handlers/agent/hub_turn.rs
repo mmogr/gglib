@@ -90,7 +90,8 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// # Errors
 ///
 /// `invalid_request` (400) for an empty message; `conversation_not_found`
-/// (404); `conflict` (409) while the chat has a live reply; `no_model`
+/// (404); `conflict` (409) while the chat has a live reply, or for a chat
+/// that ran on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
 /// `agent_busy` (429); `model_unavailable` (503) when it cannot be loaded;
 /// and whatever the daemon's own door refuses the same run with. A refusal
@@ -207,7 +208,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     let settings = conversation.settings.unwrap_or_default();
     let chat = AgentChatRequest {
         port: 0,
-        remote: false,
+        far: None,
         messages,
         config: config_of(&settings),
         tool_filter: Some(tools_of(&settings, state.remote.gateway().mcp_allowed())),

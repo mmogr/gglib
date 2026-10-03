@@ -28,7 +28,7 @@ const request = (content: string) => ({
   conversation_id: 1,
   replace_from: null,
   port: 9000,
-  remote: false,
+  far: null,
   messages: [{ role: 'user', content }],
   config: null,
   tool_filter: null,

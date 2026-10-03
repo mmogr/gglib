@@ -108,8 +108,8 @@ fn a_detached_lease_drops_cleanly() {
 /// Unpinned is the safe default: a runtime that says nothing about
 /// pinning must not cause callers to narrow what they offer.
 #[test]
-fn pinned_model_defaults_to_unpinned() {
-    assert_eq!(MinimalRuntime.pinned_model(), None);
+fn pinned_defaults_to_unpinned() {
+    assert!(MinimalRuntime.pinned().is_none());
 }
 
 /// A runtime with no resident set holds nothing.

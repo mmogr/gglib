@@ -103,11 +103,29 @@ pub fn remote_run_cancel_path(id: &str) -> String {
     format!("{REMOTE_RUNS_PATH}/{id}/cancel")
 }
 
-/// The chat page's routes to the far machine, each with the verbs it sends,
-/// the parameterized ones instantiated. Beside [`CLI_ROUTE_CONTRACT`], for
-/// the same sweep.
+/// The paired machine's models, read through the tunnel: `GET` lists every
+/// entry its `/v1/models` publishes, profile variants included.
+pub const REMOTE_MODELS_PATH: &str = "/api/remote/models";
+
+/// One of the paired machine's models, by an identifier that machine resolves
+/// (an id or a name, either with `:<profile>`), encoded as one segment by
+/// [`super::path_segment`]: `GET` reads it.
 #[must_use]
-pub fn remote_chat_route_contract() -> Vec<(&'static [&'static str], String)> {
+pub fn remote_model_path(model: &str) -> String {
+    format!("{REMOTE_MODELS_PATH}/{}", super::path_segment(model))
+}
+
+/// Have one of the paired machine's models resident now: `POST`.
+#[must_use]
+pub fn remote_model_load_path(model: &str) -> String {
+    format!("{}/load", remote_model_path(model))
+}
+
+/// The routes to the far machine, each with the verbs the chat page or the
+/// CLI sends, the parameterized ones instantiated. Beside
+/// [`CLI_ROUTE_CONTRACT`], for the same sweep.
+#[must_use]
+pub fn remote_route_contract() -> Vec<(&'static [&'static str], String)> {
     vec![
         (&["GET"], REMOTE_CHATS_PATH.to_owned()),
         (REMOTE_CHAT_METHODS, remote_chat_path(12)),
@@ -115,6 +133,9 @@ pub fn remote_chat_route_contract() -> Vec<(&'static [&'static str], String)> {
         (&["GET"], REMOTE_RUNS_PATH.to_owned()),
         (RUN_EVENTS_METHODS, remote_run_events_path("chat-1", 0)),
         (RUN_CANCEL_METHODS, remote_run_cancel_path("chat-1")),
+        (&["GET"], REMOTE_MODELS_PATH.to_owned()),
+        (&["GET"], remote_model_path("org/qwen3:coding")),
+        (&["POST"], remote_model_load_path("org/qwen3:coding")),
     ]
 }
 
@@ -126,9 +147,7 @@ pub fn remote_chat_route_contract() -> Vec<(&'static [&'static str], String)> {
 /// whose `i64` extractor answers `400 text/plain`.
 pub const DOWNLOADS_QUEUE_PATH: &str = "/api/models/downloads/queue";
 
-/// Model list. `gglib model list` reaches this on the *detected* daemon port
-/// rather than the compile-time one, so it builds its own base — the path is
-/// still the daemon's.
+/// Model list: the library, sorted and filtered as its query parameters ask.
 pub const MODELS_LIST_PATH: &str = "/api/models";
 
 /// Benchmark comparison run (SSE).
@@ -205,6 +224,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], REMOTE_KILL_PATH),
     (&["POST"], REMOTE_INVITE_PATH),
     (&["GET"], REMOTE_DEVICES_PATH),
+    (&["GET"], REMOTE_MODELS_PATH),
     (&["GET", "POST"], DOWNLOADS_QUEUE_PATH),
     (&["GET"], MODELS_LIST_PATH),
     (&["POST"], BENCHMARK_COMPARE_PATH),

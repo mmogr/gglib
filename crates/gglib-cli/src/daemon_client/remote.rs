@@ -4,9 +4,11 @@ use std::time::Duration;
 
 use anyhow::Result;
 use gglib_app_services::{
-    RemoteDevice, RemoteEnableBody, RemoteEnableResponse, RemoteForgotten, RemoteJoinBody,
-    RemoteJoinResponse, RemoteStatus,
+    PairedModels, RemoteDevice, RemoteEnableBody, RemoteEnableResponse, RemoteForgotten,
+    RemoteJoinBody, RemoteJoinResponse, RemoteStatus,
 };
+use gglib_core::domain::ModelLookup;
+use gglib_proxy::LoadResponse;
 
 use super::{DaemonHandle, paths};
 
@@ -129,4 +131,60 @@ impl DaemonHandle {
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
     }
+
+    /// The paired machine's models, read through the tunnel by the daemon,
+    /// with what may be done to them. Profile variants included.
+    ///
+    /// The daemon gives the far machine three seconds; this gives the daemon
+    /// a little more.
+    pub(crate) async fn paired_models(&self) -> Result<PairedModels> {
+        let response = self
+            .get(paths::REMOTE_MODELS_PATH)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// One of the paired machine's models, by an identifier that machine
+    /// resolves as it resolves a turn's: what it resolved to, and the profile
+    /// it named. The identifier travels as one encoded path segment.
+    pub(crate) async fn paired_model(&self, identifier: &str) -> Result<ModelLookup> {
+        let response = self
+            .get(&paths::remote_model_path(identifier))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Have one of the paired machine's models resident now, by an
+    /// identifier that machine resolves, launched with `num_ctx` when given.
+    /// The identifier travels as one encoded path segment.
+    ///
+    /// Long timeout: the far machine's admission may queue the load for up
+    /// to three minutes, and the daemon gives the far machine four.
+    pub(crate) async fn paired_load(
+        &self,
+        identifier: &str,
+        num_ctx: Option<u64>,
+    ) -> Result<LoadResponse> {
+        let response = self.paired_load_request(identifier, num_ctx).send().await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// The request [`Self::paired_load`] sends.
+    fn paired_load_request(
+        &self,
+        identifier: &str,
+        num_ctx: Option<u64>,
+    ) -> reqwest::RequestBuilder {
+        self.post(&paths::remote_model_load_path(identifier))
+            .json(&serde_json::json!({ "num_ctx": num_ctx }))
+            .timeout(Duration::from_mins(5))
+    }
 }
+
+#[cfg(test)]
+#[path = "remote_tests.rs"]
+mod tests;

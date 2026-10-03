@@ -1,6 +1,6 @@
-//! The far machine's chats and runs, on the router a shipped daemon builds,
-//! when this machine is joined to nothing: every route is a `409` that says
-//! `gglib remote join`, and nothing is forwarded anywhere.
+//! The far machine's chats, runs and models, on the router a shipped daemon
+//! builds, when this machine is joined to nothing: every route is a `409`
+//! that says `gglib remote join`, and nothing is forwarded anywhere.
 
 mod common;
 
@@ -11,28 +11,26 @@ use common::origin::{HOST, authed, send_request, shipped, shipped_cors};
 use gglib_axum::DaemonAccess;
 use gglib_core::contracts::http::daemon;
 
+/// Every route the far-machine contract names, with every verb it is called
+/// with. Derived from the contract, so a route added there is swept here.
 #[tokio::test]
-async fn every_far_chat_route_is_a_409_when_not_joined() {
+async fn every_far_route_is_a_409_when_not_joined() {
     let app = shipped(&shipped_cors(), DaemonAccess::loopback()).await;
+    let routes: Vec<_> = daemon::remote_route_contract()
+        .into_iter()
+        .flat_map(|(methods, path)| methods.iter().map(move |m| (*m, path.clone())))
+        .collect();
+    assert!(routes.len() >= 9, "the sweep found only {routes:?}");
 
-    for (method, path, body) in [
-        (Method::GET, daemon::REMOTE_CHATS_PATH.to_owned(), ""),
-        (Method::GET, daemon::remote_chat_path(12), ""),
-        (
-            Method::PUT,
-            daemon::remote_turn_path(12, "chat-1"),
-            r#"{"content":"hi"}"#,
-        ),
-        (Method::GET, daemon::REMOTE_RUNS_PATH.to_owned(), ""),
-        (Method::GET, daemon::remote_run_events_path("chat-1", 0), ""),
-        (Method::POST, daemon::remote_run_cancel_path("chat-1"), ""),
-    ] {
+    for (method, path) in routes {
+        let method = Method::from_bytes(method.as_bytes()).unwrap();
+        // A turn's body, which every other route here reads nothing of.
         let request = authed()
             .method(method.clone())
             .uri(&path)
             .header("host", HOST)
             .header("content-type", "application/json")
-            .body(Body::from(body))
+            .body(Body::from(r#"{"content":"hi"}"#))
             .unwrap();
 
         let answer = send_request(&app, request).await;

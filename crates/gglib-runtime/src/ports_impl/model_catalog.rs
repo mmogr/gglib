@@ -4,8 +4,8 @@
 //! interface from gglib-core. It queries the database for model information
 //! and maps the results to domain types.
 //!
-//! Identifier resolution is **not** decided here — both `resolve_*` methods go
-//! through [`ModelRepository::get_by_identifier`], the workspace's single
+//! Identifier resolution is **not** decided here — every lookup by identifier
+//! goes through [`ModelRepository::get_by_identifier`], the workspace's single
 //! lookup-key policy, so this port and `ModelService` always agree on what a
 //! given string means.
 
@@ -110,7 +110,7 @@ impl CatalogPortImpl {
     /// Resolve `name` through the shared identifier policy (numeric id, then
     /// exact name), mapping storage failures into [`CatalogError`].
     ///
-    /// Both `resolve_*` methods go through here so the port cannot end up
+    /// Every lookup by identifier goes through here so the port cannot end up
     /// resolving the same string two different ways.
     async fn lookup(&self, name: &str) -> Result<Option<Model>, CatalogError> {
         self.repo
@@ -147,6 +147,10 @@ impl ModelCatalogPort for CatalogPortImpl {
         name: &str,
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
         Ok(self.lookup(name).await?.map(model_to_launch_spec))
+    }
+
+    async fn model(&self, identifier: &str) -> Result<Option<Model>, CatalogError> {
+        self.lookup(identifier).await
     }
 
     /// Persist a launch's `chat_template_caps` observation onto the model row.

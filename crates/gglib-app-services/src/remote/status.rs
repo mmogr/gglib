@@ -9,9 +9,9 @@ use super::{Live, RemoteOps, connect_watch, device_keys, device_view, identity, 
 
 impl RemoteOps {
     /// The status surface's answer: both sides, what settings remember of
-    /// the last pairing (by fingerprint, never the ticket), and the roster,
-    /// which rides this call because its read is already paid for — see
-    /// [`RemoteStatus::devices`].
+    /// the last pairing (by fingerprint and name, never the ticket), and the
+    /// roster, which rides this call because its read is already paid for —
+    /// see [`RemoteStatus::devices`].
     pub async fn status(&self) -> RemoteStatus {
         // Every settings answer below — the switch, the stored pairing and
         // the roster — comes off one record, which is what makes them agree:
@@ -45,6 +45,7 @@ impl RemoteOps {
             .map(|s| (s.remote_devices.unwrap_or_default(), s.remote_pairing))
             .unwrap_or_default();
         let stored_ticket_fingerprint = stored.as_ref().and_then(stored_pairing::fingerprint);
+        let paired_name = stored.as_ref().and_then(|stored| stored.name.clone());
         let has_remote_key = stored.is_some();
         let connected = self.connection().await;
         // Before the lock: resolving the data root can touch the filesystem,
@@ -69,6 +70,7 @@ impl RemoteOps {
             last_peer: self.gateway.last_peer(),
             connected,
             stored_ticket_fingerprint,
+            paired_name,
             has_remote_key,
             remote_enabled,
             identity_path,

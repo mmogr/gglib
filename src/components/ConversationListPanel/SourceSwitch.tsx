@@ -8,6 +8,11 @@ interface SourceSwitchProps {
   onSource: (source: ChatSource) => void;
   /** The joined machine, while it is connected. */
   connection: RemoteConnection | null;
+  /**
+   * The name the joined machine is shown by; never its fingerprint. A host
+   * label can be one long word, so it may break anywhere to stay in the rail.
+   */
+  machine: string;
 }
 
 /** How the far machine is reached, in a word or two. */
@@ -22,16 +27,16 @@ function reached(connection: RemoteConnection | null): string {
  * machine's or the far machine's, which it reads through the tunnel and
  * never copies.
  */
-export const SourceSwitch: FC<SourceSwitchProps> = ({ source, onSource, connection }) => {
+export const SourceSwitch: FC<SourceSwitchProps> = ({ source, onSource, connection, machine }) => {
   const choices: Array<{ id: ChatSource; name: string; how: string; title: string }> = [
     { id: 'this', name: 'This machine', how: 'local', title: 'The chats kept on this machine' },
     {
       id: 'far',
-      name: 'Other machine',
+      name: `${machine}'s chats`,
       how: reached(connection),
       title: connection
-        ? `The chats kept on the other machine (${connection.ticket_fingerprint}), read through the tunnel`
-        : 'The other machine is not connected',
+        ? `The chats kept on ${machine}, read through the tunnel`
+        : `${machine} is not connected`,
     },
   ];
   return (
@@ -49,7 +54,7 @@ export const SourceSwitch: FC<SourceSwitchProps> = ({ source, onSource, connecti
             source === choice.id && 'bg-surface-elevated text-text',
           )}
         >
-          <span>{choice.name}</span>
+          <span className="wrap-anywhere">{choice.name}</span>
           <span className="font-mono tabular-nums text-text-muted">{choice.how}</span>
         </Button>
       ))}

@@ -11,11 +11,12 @@
 //! The tickets and the keys are in `test_support_remote.rs`, beside the
 //! fixture, because three test modules name the same machines.
 
+use gglib_core::domain::UNNAMED_PAIRED;
+
 use super::*;
 use crate::test_support::test_core;
 use crate::test_support_remote::{
-    FINGERPRINT_A, KEY_A, KEY_B, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, remember_a_model,
-    ticket,
+    KEY_A, KEY_B, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, remember_a_model, ticket,
 };
 
 /// A plausible six-digit code, never checked here: what the far machine
@@ -61,7 +62,7 @@ async fn a_second_pairing_replaces_the_first_whole_rather_than_half_of_it() {
     assert_eq!(first, None, "a first pairing replaced nothing");
     assert_eq!(
         second.as_deref(),
-        Some(FINGERPRINT_A),
+        Some(UNNAMED_PAIRED),
         "machine A's pairing was dropped without being named"
     );
 
@@ -220,7 +221,7 @@ async fn a_redeemed_code_is_stored_under_the_ticket_that_was_dialled() {
     assert_eq!(
         paired,
         Settled::Paired {
-            replaced: Some(FINGERPRINT_A.to_owned())
+            replaced: Some(UNNAMED_PAIRED.to_owned())
         },
         "the pairing it replaced did not reach the caller of `join`"
     );
@@ -234,7 +235,7 @@ async fn a_redeemed_code_is_stored_under_the_ticket_that_was_dialled() {
 /// neither (#1042).
 #[test]
 fn a_settled_dial_answers_whether_it_paired_and_what_it_replaced() {
-    let replaced = Some(FINGERPRINT_A.to_owned());
+    let replaced = Some("desk".to_owned());
     assert_eq!(
         Settled::Paired {
             replaced: replaced.clone()

@@ -31,12 +31,11 @@
 //! the note can still fail to arrive: a chat template with no branch for the
 //! `tool` role drops the last message and the note inside it; a conversation
 //! that also exceeds the context budget is refused `context_length_exceeded`;
-//! an embedding model, an unknown model or a failed admission refuses the
-//! request before it is sent; and an upstream that dies mid-request can fail
-//! the retry. Each of those is still a row here. The dashboard's
-//! `loop_guard_trips` is bumped only by a forwarded or refused request's
-//! snapshot, so under `note` this log can count more than the dashboard does
-//! for the same run.
+//! an embedding model or a failed admission refuses the request before it is
+//! sent; and an upstream that dies mid-request can fail the retry. Each of
+//! those is still a row here. The dashboard's `loop_guard_trips` is bumped
+//! only by a forwarded or refused request's snapshot, so under `note` this log
+//! can count more than the dashboard does for the same run.
 //!
 //! The log can also count *less* than happened. A decision the writer cannot
 //! queue — a full queue, or a writer already stopped — is dropped while its
@@ -61,9 +60,9 @@
 //! table can tell "the same loop, seventeen times" from seventeen loops; the
 //! per-day summary every reader shows carries only the number of distinct
 //! sessions. They are correlation keys, not a privacy boundary — anyone
-//! holding the data directory can hash a guess and compare. The one
-//! client-chosen string kept as given is the model name, bounded to
-//! [`MODEL_NAME_LIMIT`] characters.
+//! holding the data directory can hash a guess and compare. The one free-text
+//! string kept as given is the model name — the catalog's name for the model
+//! the request resolved to — bounded to [`MODEL_NAME_LIMIT`] characters.
 
 use std::fmt::Write as _;
 
@@ -78,8 +77,8 @@ pub const LOOP_GUARD_LOG_RETENTION_DAYS: u32 = 90;
 /// The window a reader gets when it names none.
 pub const LOOP_GUARD_LOG_DEFAULT_DAYS: u32 = 30;
 
-/// The longest model name a row keeps. The client chooses the name, and the
-/// proxy sets no request-size limit of its own.
+/// The longest model name a row keeps. The catalog's name comes from the model
+/// file, and nothing limits its length on the way in.
 pub const MODEL_NAME_LIMIT: usize = 256;
 
 /// The version every row is stamped with: the workspace's, which is gglib's.
@@ -103,8 +102,8 @@ pub fn first_day_of_window(now_secs: u64, days: u32) -> i64 {
     epoch_day(now_secs) - i64::from(days) + 1
 }
 
-/// The model name a row keeps: the client's, cut at [`MODEL_NAME_LIMIT`]
-/// characters.
+/// The model name a row keeps: the name of the model the request resolved to,
+/// cut at [`MODEL_NAME_LIMIT`] characters.
 pub fn bounded_model_name(model_name: &str) -> String {
     model_name.chars().take(MODEL_NAME_LIMIT).collect()
 }

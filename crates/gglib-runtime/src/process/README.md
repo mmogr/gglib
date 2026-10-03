@@ -27,9 +27,11 @@ slot, wait, or give up.
 
 A set may be *pinned*: `ProcessManager::set_pin` restricts admission to
 exactly one model (backing `gglib serve`) and returns `PinnedModelMismatch`
-for any other, rather than swapping. Pinning changes only which models are
-admitted — startup coordination, cache handling and launch options are
-identical either way.
+for any other, rather than swapping. The request is resolved first and the pin
+compares catalog ids, so the pinned model answers to its id and to its name; a
+model the catalog does not hold is `ModelNotFound`, pinned or not. Pinning
+changes only which models are admitted — startup coordination, cache handling
+and launch options are identical either way.
 
 Every launch surface — the CLI, the proxy, both GUIs — shares one manager
 built by `build_service_graph` inside the daemon, which is what makes "gglib

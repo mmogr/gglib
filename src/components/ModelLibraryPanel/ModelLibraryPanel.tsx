@@ -8,6 +8,9 @@ import { Banner } from '../ui/Banner';
 // Legacy id union kept here after SidebarTabs was replaced by ui/Tabs.
 export type SidebarTabId = 'models' | 'add';
 import ModelsListContent from './ModelsListContent';
+import { PairedModelRows } from './PairedModelRows';
+import type { PairedModelsState } from '../../hooks/usePairedModels';
+import type { ModelRef } from '../../types/generated/ModelRef';
 import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
 import RemoteControl from '../RemoteControl';
@@ -50,6 +53,11 @@ interface ModelLibraryPanelProps {
   // Tab control (optional - can be controlled externally or internally)
   activeTab?: SidebarTabId;
   onTabChange?: (tab: SidebarTabId) => void;
+
+  // The paired machine's models, after this machine's, and the one picked
+  paired?: PairedModelsState;
+  farPick?: ModelRef | null;
+  onPickFar?: (model: ModelRef) => void;
 }
 
 const SIDEBAR_TABS: TabItem<SidebarTabId>[] = [
@@ -80,6 +88,9 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   selectedHfModelId,
   activeTab: externalActiveTab,
   onTabChange: externalOnTabChange,
+  paired,
+  farPick = null,
+  onPickFar,
 }) => {
   // Internal tab state (used if not controlled externally)
   const [internalActiveTab, setInternalActiveTab] = useState<SidebarTabId>('models');
@@ -215,14 +226,25 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         {activeTab === 'models' ? (
-          <ModelsListContent
-            models={models}
-            selectedModelId={selectedModelId}
-            onSelectModel={onSelectModel}
-            loading={loading}
-            servers={servers}
-            onSwitchToAddTab={handleSwitchToAddTab}
-          />
+          <>
+            <ModelsListContent
+              models={models}
+              selectedModelId={selectedModelId}
+              onSelectModel={onSelectModel}
+              loading={loading}
+              servers={servers}
+              onSwitchToAddTab={handleSwitchToAddTab}
+            />
+            {paired && onPickFar && (
+              <PairedModelRows
+                paired={paired}
+                searchQuery={searchQuery}
+                filtersActive={hasActiveFilters}
+                picked={farPick}
+                onPick={onPickFar}
+              />
+            )}
+          </>
         ) : (
           <AddDownloadContent
             onModelAdded={onModelAdded}

@@ -14,6 +14,7 @@ import type {
   GenerateTitleParams,
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
+import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
 
 // Re-export the constant for convenience
 export { DEFAULT_TITLE_GENERATION_PROMPT };
@@ -32,11 +33,13 @@ export async function listConversations(): Promise<ConversationSummary[]> {
 export async function createConversation(
   params: CreateConversationParams
 ): Promise<ConversationId> {
-  return post<ConversationId>('/api/conversations', {
+  const body: CreateConversationRequest = {
     title: params.title,
-    model_id: params.modelId,
-    system_prompt: params.systemPrompt,
-  });
+    model_id: params.modelId ?? null,
+    system_prompt: params.systemPrompt ?? null,
+    model: params.model ?? null,
+  };
+  return post<ConversationId>('/api/conversations', body);
 }
 
 /**

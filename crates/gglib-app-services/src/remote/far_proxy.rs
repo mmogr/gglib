@@ -1,11 +1,13 @@
-//! The far machine's chats and runs, read and carried on *through* the
-//! tunnel for this machine's chat page.
+//! The far machine's proxy, reached *through* the tunnel: its chats and runs
+//! for this machine's chat page, its models, and the route that stops it.
 //!
 //! Each request goes to the far proxy over the local listener with the key
-//! `join` stored, as [`super::far_daemon`]'s shutdown does: the listener
-//! adds no credential (ADR 0012, decision 7), so this side attaches it. The
-//! answers are handed back whole for the daemon to pass on; nothing here
-//! keeps a row, a title or a message, and nothing here logs one.
+//! `join` stored, which [`far_credentials`](super::paired_machine::far_credentials)
+//! hands out only for the machine connected to: the listener adds no
+//! credential (ADR 0012, decision 7), so this side attaches it. Chat and run
+//! answers are handed back whole for the daemon to pass on; the models are
+//! read into the far proxy's own types (`far_read.rs`). Nothing here keeps a
+//! row, a title or a message, and nothing here logs one.
 //!
 //! A run's events are a stream that lasts as long as its reply, so they go
 //! through a client with no overall timeout, only a limit on silence; every
@@ -18,12 +20,19 @@ use std::time::Duration;
 
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::runs::is_run_id;
+use gglib_core::domain::{Machine, UNNAMED_PAIRED};
+use gglib_runtime::FarMachine;
 
+use super::paired_machine::FarCredentials;
 use crate::error::GuiError;
 
-/// How long a bounded request may take end to end. Generous for the same
-/// reason as the shutdown's: a first request may still be finishing the hole
-/// punch.
+#[path = "far_read.rs"]
+mod far_read;
+pub use far_read::FarError;
+
+/// How long a bounded request may take end to end. Generous because a first
+/// request may still be finishing the hole punch; bounded because a tunnel
+/// that never answers is a failure to report, not to wait out.
 const TIMEOUT: Duration = Duration::from_secs(20);
 
 /// How long a stream may take to connect. Once it has, it lasts as long as
@@ -42,33 +51,40 @@ pub(super) const STREAM_TOTAL_TIMEOUT: Option<Duration> = None;
 /// client's own wording.
 pub(super) const NO_ANSWER: &str = "the other machine did not answer";
 
-/// The far machine's proxy, as the chat page reads it: its base URL through
-/// the tunnel and the key it admits this device by.
+/// The far machine's proxy: its base URL through the tunnel, the key it
+/// admits this device by, which machine it is, and the name it goes by.
 #[derive(Clone)]
-pub struct FarChats {
+pub struct FarProxy {
     base_url: String,
     key: String,
+    /// The ticket fingerprint of the machine connected to. Always a paired
+    /// machine, so it is kept as the fingerprint and handed out as a
+    /// [`Machine`] by [`FarProxy::machine`]. Compared, never shown.
+    fingerprint: String,
+    /// The name the stored pairing has for it, which is what is shown.
+    name: Option<String>,
     bounded: reqwest::Client,
     streaming: reqwest::Client,
 }
 
 /// Never the key.
-impl fmt::Debug for FarChats {
+impl fmt::Debug for FarProxy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FarChats")
+        f.debug_struct("FarProxy")
             .field("base_url", &self.base_url)
+            .field("fingerprint", &self.fingerprint)
             .finish_non_exhaustive()
     }
 }
 
-impl FarChats {
+impl FarProxy {
     /// The far proxy at `base_url` (`http://127.0.0.1:<port>/v1`), reached
-    /// with `key`.
+    /// with `credentials`.
     ///
     /// # Errors
     ///
     /// `Internal` when an HTTP client cannot be built.
-    pub fn new(base_url: &str, key: &str) -> Result<Self, GuiError> {
+    pub fn new(base_url: &str, credentials: &FarCredentials) -> Result<Self, GuiError> {
         static CLIENTS: OnceLock<(reqwest::Client, reqwest::Client)> = OnceLock::new();
         let (bounded, streaming) = match CLIENTS.get() {
             Some(clients) => clients.clone(),
@@ -80,21 +96,82 @@ impl FarChats {
                 CLIENTS.get_or_init(|| built).clone()
             }
         };
-        Ok(Self::with_clients(base_url, key, bounded, streaming))
+        Ok(Self::with_clients(
+            base_url,
+            credentials,
+            bounded,
+            streaming,
+        ))
     }
 
     /// The far proxy at `base_url`, through the clients given.
     pub(super) fn with_clients(
         base_url: &str,
-        key: &str,
+        credentials: &FarCredentials,
         bounded: reqwest::Client,
         streaming: reqwest::Client,
     ) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
-            key: key.to_owned(),
+            key: credentials.key.clone(),
+            fingerprint: credentials.fingerprint.clone(),
+            name: credentials.name.clone(),
             bounded,
             streaming,
+        }
+    }
+
+    /// The machine this proxy is on.
+    #[must_use]
+    pub fn machine(&self) -> Machine {
+        Machine::Paired {
+            fingerprint: self.fingerprint.clone(),
+        }
+    }
+
+    /// This proxy, when `machine` is the one it is on. A model picked from
+    /// the paired machine's list is named by that machine, and is sent
+    /// nowhere else: a pairing replaced since the pick is another machine,
+    /// whose same id is another model.
+    ///
+    /// # Errors
+    ///
+    /// `Conflict` when `machine` is not this proxy's.
+    pub fn serving(self, machine: &Machine) -> Result<Self, GuiError> {
+        if self.machine() == *machine {
+            return Ok(self);
+        }
+        Err(GuiError::Conflict(
+            "the paired machine changed since this model was picked — pick it again from the \
+             paired machine's models, or `gglib remote join` the machine it is on"
+                .to_owned(),
+        ))
+    }
+
+    /// What a sentence about this machine calls it: its name, or
+    /// [`UNNAMED_PAIRED`] when it has given none. Never its fingerprint.
+    #[must_use]
+    pub fn shown_name(&self) -> &str {
+        self.name.as_deref().unwrap_or(UNNAMED_PAIRED)
+    }
+
+    /// `http://127.0.0.1:<port>`, the far proxy without the `/v1`: where an
+    /// agent turn's completion adapter points, since it adds the `/v1` itself.
+    #[must_use]
+    pub fn server_root(&self) -> String {
+        self.base_url
+            .strip_suffix("/v1")
+            .unwrap_or(&self.base_url)
+            .to_owned()
+    }
+
+    /// The key and the name the completion adapter carries, so a refusal of
+    /// the key names the machine that refused it.
+    #[must_use]
+    pub fn far_machine(&self) -> FarMachine {
+        FarMachine {
+            key: self.key.clone(),
+            name: self.shown_name().to_owned(),
         }
     }
 
@@ -147,7 +224,7 @@ impl FarChats {
     ///
     /// # Errors
     ///
-    /// As [`FarChats::add_turn`].
+    /// As [`FarProxy::add_turn`].
     pub async fn cancel_run(&self, run_id: &str) -> Result<reqwest::Response, GuiError> {
         let path = format!("{}/cancel", run_path(run_id)?);
         self.send(self.bounded.post(self.url(&path))).await
@@ -158,7 +235,7 @@ impl FarChats {
     ///
     /// # Errors
     ///
-    /// As [`FarChats::add_turn`].
+    /// As [`FarProxy::add_turn`].
     pub async fn run_events(
         &self,
         run_id: &str,
@@ -214,5 +291,5 @@ fn run_path(run_id: &str) -> Result<String, GuiError> {
 }
 
 #[cfg(test)]
-#[path = "far_chats_tests.rs"]
-mod far_chats_tests;
+#[path = "far_proxy_tests.rs"]
+mod far_proxy_tests;

@@ -13,8 +13,10 @@ import type { Support } from "./Support";
  * - CLI: `gglib model inspect` (human-readable or `--json`)
  * - Axum: `GET /api/models/:id/detail`
  * - GUI frontend: model detail panel
+ * - Proxy: `GET /v1/models/{name}/detail`, inside a [`ModelLookup`], with
+ *   [`Self::file_path`] and [`Self::port`] left out
  *
- * # Not a superset of [`GuiModel`]
+ * # Not a superset of `GuiModel`
  *
  * The two shapes overlap; neither contains the other. A TypeScript mirror
  * that extended the list row would advertise `server_defaults` and
@@ -30,9 +32,10 @@ id: number,
  */
 name: string, 
 /**
- * Absolute path to the GGUF file on disk.
+ * Absolute path to the GGUF file on disk. `None` where the reader is on
+ * another machine, to which this machine's file layout means nothing.
  */
-filePath: string, 
+filePath?: string, 
 /**
  * Parameter count in billions.
  */
@@ -89,7 +92,7 @@ tags: Array<string>,
  * Capability flags serialized as a `u32` bit-field.
  *
  * A `bitflags` newtype, so it crosses the wire as a bare number and
- * cannot derive `TS` itself — see [`GuiModel::capabilities`].
+ * cannot derive `TS` itself — see `GuiModel::capabilities`.
  */
 capabilities: number, 
 /**

@@ -11,6 +11,12 @@ infrastructure concerns (database, filesystem, etc.).
 
 - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
 - `model` - Model types (`Model`, `NewModel`)
+- `model_detail` - Every stored field of one model, as the inspector reads it
+  (`ModelDetailDto`), and one model as a paired machine reads it (`ModelLookup`)
+- `machine` - Which machine a model is on (`Machine`), a model named by its
+  machine (`ModelRef`), what may be done to a model there (`ModelAction`,
+  ADR 0013's use-don't-change line as one table), and the name a machine is
+  shown by, sanitised from its host name (`machine_name`)
 - `model_naming` - Shared model-naming policy (`resolve_model_name`, `NameSource`)
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types

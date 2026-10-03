@@ -21,6 +21,7 @@ const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
     "/v1/models",
     "/v1/models/{name}/load",
+    "/v1/models/{name}/detail",
     "/v1/chat/completions",
     "/v1/embeddings",
     "/v1/proxy/status",

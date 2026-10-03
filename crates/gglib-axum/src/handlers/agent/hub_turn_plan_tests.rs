@@ -138,6 +138,7 @@ async fn the_chats_own_model_comes_before_the_one_it_last_used() {
     conversation.model_id = Some(model_id);
     assert_eq!(
         model_for(&state, &conversation, &rows).await.unwrap(),
-        "catalogued"
+        model_id.to_string(),
+        "the catalogued model, by its id"
     );
 }

@@ -132,12 +132,14 @@ pub(crate) async fn spawn_with_default_profile(
     let launched: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
+    let names: Vec<String> = catalog_names.iter().map(|n| (*n).to_owned()).collect();
     let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RecordingRuntime {
         port: upstream_port,
+        names: names.clone(),
         launched: Arc::clone(&launched),
     });
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(NamedCatalog {
-        names: catalog_names.iter().map(|n| (*n).to_owned()).collect(),
+        names,
         inference_defaults: model_defaults,
     });
     let mcp = make_mcp_service();

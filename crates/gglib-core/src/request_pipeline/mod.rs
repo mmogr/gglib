@@ -25,7 +25,7 @@ pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use profile_route::{ModelRoute, resolve_route};
 pub use request_shape::carries_tools;
-pub use resolve::resolve;
+pub use resolve::{resolve, resolve_summary};
 pub use sampling::{
     CLIENT_AUTHORITATIVE_KEYS, DISABLE_AGENTIC_SAMPLING_ENV, FloorClass, LADDER_RUNGS,
     SamplingDecision, SamplingLayers, resolve_sampling,

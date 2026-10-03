@@ -13,9 +13,15 @@ port: number,
  */
 base_url: string, 
 /**
- * Fingerprint of the ticket dialled.
+ * Fingerprint of the ticket dialled: the machine's identity, which is
+ * compared and never shown.
  */
 ticket_fingerprint: string, 
+/**
+ * The name that machine goes by, which is what a surface shows; `None`
+ * when it has given none.
+ */
+name: string | null, 
 /**
  * Whether this call redeemed a pairing code and stored the key.
  */
@@ -26,8 +32,9 @@ paired: boolean,
  */
 moved_from: number | null, 
 /**
- * Fingerprint of the other machine whose pairing this one replaced,
- * since one pairing is stored; `None` when there was none to replace,
- * or when the stored ticket could not be read to name one.
+ * The name of the other machine whose pairing this one replaced, or
+ * "the paired machine" when it had none, since one pairing is stored;
+ * `None` when there was none to replace, or when the stored ticket
+ * could not be read to name one.
  */
 replaced: string | null, };

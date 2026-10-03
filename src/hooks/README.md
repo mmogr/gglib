@@ -41,6 +41,8 @@ Custom React hooks for gglib GUI functionality.
 |------|-------------|
 | [`useModels.ts`](useModels.ts) | Model CRUD operations and listing |
 | [`useModelLibraryEvents.ts`](useModelLibraryEvents.ts) | Reload the library when another client changes it |
+| [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library: read while it is reached, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
+| [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; a far pick tells the native menu nothing here is selected |
 | [`useServers.ts`](useServers.ts) | Server lifecycle management (start/stop/health) |
 | [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, and quantisation |
 | [`useTags.ts`](useTags.ts) | Model tagging operations |

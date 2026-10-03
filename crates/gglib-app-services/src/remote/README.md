@@ -45,12 +45,18 @@ remote/
                       install, release, take
   stored_pairing.rs — the record settings keep of the machine this one
                       paired with: reading it, writing it, what a dial that
-                      has come up owes it, and what a write that fails after
-                      the code is spent has to say
-  far_daemon.rs     — a request made *through* the tunnel: stop the far
-                      daemon
-  far_chats.rs      — the others: the far machine's chats and runs, read
-                      and carried on for this machine's chat page
+                      has come up owes it, and what a write that fails
+                      after the code is spent has to say
+  paired_machine.rs — that machine as requests and surfaces need it:
+                      far_credentials, the one check its key passes before
+                      it is sent, and the name it is shown by, read after
+                      each connect and kept on the record
+  far_proxy.rs      — FarProxy, every request made *through* the tunnel:
+                      the far machine's chats and runs, carried on for this
+                      machine's chat page
+  far_read.rs       — the far answers this side reads rather than passes
+                      on: the model list, one model, a load, the shutdown,
+                      and the far build too old to publish model ids
   gateway.rs        — RemoteGateway: the port the proxy asks (is /mcp open,
                       a tunnelled request arrived), and the invite a session
                       holds
@@ -66,9 +72,10 @@ remote/
   rotation.rs       — following a key rotation into the running listener
   types.rs          — what the ops are asked for, and what enable, invite
                       and join hand back
-  wire.rs           — the daemon API's status, its device rows and what a
-                      forget did: the shapes the daemon answers with, the
-                      CLI reads and ts-rs exports
+  wire.rs           — the daemon API's status, its device rows, what a
+                      forget did and the paired machine's models: the
+                      shapes the daemon answers with, the CLI reads and
+                      ts-rs exports
   wire_exchange.rs  — the enable and join bodies the CLI sends, and the
                       answers the daemon gives
   device_line.rs    — the words a device row is described by, on the
@@ -305,11 +312,37 @@ read through `chain` as the serving side's is: a file at the path is left
 for the person to fix or delete, and when there is none, because a first key
 could not be written, the sentence says so and names nothing to delete.
 
-`kill_remote` posts the confirmation word to the far proxy's shutdown route
-with the stored key, then disconnects. It sends the key only when the stored
-pairing names the machine it is connected to, checked with
-`stored_pairing::names_the_same_machine` as `join` checks it. One-way: nothing
-here can start that daemon again.
+Every request to the far machine goes through one `FarProxy`, which
+`RemoteOps::far` builds from the live connection and `far_credentials`: the
+stored key, only when the stored pairing names the machine connected to, by
+fingerprint as `join` checks it. A chat, a model read, a load and the stop
+all take their key from there, so a key one machine issued is never sent to
+another. `RemoteOps::far_for` is the same proxy for a `Machine` a caller holds,
+refused when that is this machine or no longer the one connected to.
+
+The fingerprint is the paired machine's identity and is never shown. What
+every surface shows is its name: the `machine_name` its `/v1/models` gives,
+read once each connect has been installed (the read goes through the live
+connection, so it cannot happen sooner), bounded at three seconds, never a
+reason for a join to fail, and run through `machine_name` again here because
+the far side wrote it. It is kept as `RemotePairing.name`, only while the
+record still names the machine it was read from, and refreshed on every
+connect; a re-pair with the same machine keeps it and one with another drops
+it. `RemoteStatus.paired_name` carries it, the join answer names the machine
+joined and the pairing it replaced by it, and `FarProxy::shown_name` is what a
+refusal is said in. A machine with no name is shown as `UNNAMED_PAIRED`. A
+pairing tells the far side this machine's own name the same way, as the label
+its device roster shows.
+
+`kill_remote` posts the confirmation word to the far proxy's shutdown route,
+then disconnects. One-way: nothing here can start that daemon again.
+
+The far model list is read into the proxy's own `ModelsResponse` and handed
+on as `PairedModels`: the machine, its row of the use-don't-change table
+(`Machine::actions`), and every entry, profile variants included. A far build
+from before models carried ids fails that read for want of `gglib_id`, and has
+no detail route, so it answers a lookup with a 404 that names no code; both
+are a `Conflict` that asks for that machine to be updated, with no fallback.
 
 # What the gateway is for
 

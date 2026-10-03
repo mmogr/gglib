@@ -18,7 +18,7 @@
       "code": "model_not_found",
       "type": "invalid_request_error",
       "status": 404,
-      "meaning": "No model by that name is in the catalog."
+      "meaning": "No model with that id or name is in the catalog."
     },
     {
       "code": "profile_not_found",
@@ -144,7 +144,7 @@
       "code": "conflict",
       "type": "invalid_request_error",
       "status": 409,
-      "meaning": "The run id is taken, or the conversation already has a live reply."
+      "meaning": "The run id is taken, the conversation already has a live reply, or a run or a device's turn names a chat that ran on another machine."
     },
     {
       "code": "not_yours",

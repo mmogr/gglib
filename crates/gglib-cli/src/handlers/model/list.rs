@@ -1,19 +1,14 @@
 //! List command handler.
 //!
-//! Fetches and displays GGUF models with optional sort / filter flags.
-//! Two code paths are supported:
-//!
-//! * **Proxy mode** – when a live daemon is detected on the configured port,
-//!   the request is forwarded to `GET /api/models?...` so filtering happens
-//!   on the backend using the exact same canonical logic.
-//! * **Direct mode** – models are loaded from the local `SQLite` database and
-//!   filtered in-process via [`gglib_core::domain::apply_query`].
-//!
-//! Both paths produce a `Vec<GuiModel>` that is rendered by a single table
-//! function.  A speed column (`⚡ t/s`) is shown only when at least one
-//! returned model has benchmark data.
+//! Fetches and displays GGUF models with optional sort / filter flags. Models
+//! are loaded from the local `SQLite` database and filtered in-process via
+//! [`gglib_core::domain::apply_query`], into a `Vec<GuiModel>` that is
+//! rendered by a single table function. A speed column (`⚡ t/s`) is shown
+//! only when at least one returned model has benchmark data. While this
+//! machine is paired, the list ends with one line on how the paired machine
+//! stands, which asks that machine nothing.
 
-use std::time::Duration;
+use std::fmt::Write as _;
 
 use anyhow::Result;
 use gglib_app_services::types::GuiModel;
@@ -21,7 +16,7 @@ use gglib_core::domain::{ModelListQuery, apply_query};
 
 use crate::bootstrap::CliContext;
 use crate::model_commands::{CliModelSortBy, CliSortOrder};
-use crate::presentation::{print_separator, truncate_string};
+use crate::presentation::truncate_string;
 use crate::target::Target;
 
 #[path = "list_far.rs"]
@@ -53,19 +48,33 @@ pub(crate) async fn execute(target: Target, ctx: &CliContext, args: ListArgs) ->
         .await
 }
 
-/// This machine's catalogue, sorted and filtered as asked.
+/// This machine's catalogue, sorted and filtered as asked, and the paired
+/// machine's line when there is one.
 async fn list_here(ctx: &CliContext, args: ListArgs) -> Result<()> {
     let models = fetch_models(ctx, &args).await?;
-
-    if models.is_empty() {
-        println!("No models found.");
-        println!("Use 'gglib model add <file_path>' to add your first model.");
-        return Ok(());
-    }
-
-    println!("Found {} model(s):\n", models.len());
-    render_table(&models);
+    let paired = list_far::summary(ctx).await;
+    print!("{}", listing(&models, paired.as_deref()));
     Ok(())
+}
+
+/// What `gglib model list` prints: the table, or the line that stands in
+/// for an empty one, and then `paired`. An empty library still gets
+/// `paired`: a laptop with no models of its own, paired with a desktop that
+/// has them, is the case the line is for.
+fn listing(models: &[GuiModel], paired: Option<&str>) -> String {
+    let mut out = if models.is_empty() {
+        "No models found.\nUse 'gglib model add <file_path>' to add your first model.\n".to_owned()
+    } else {
+        format!(
+            "Found {} model(s):\n\n{}",
+            models.len(),
+            render_table(models)
+        )
+    };
+    if let Some(line) = paired {
+        let _ = write!(out, "\n{line}\n");
+    }
+    out
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,66 +82,10 @@ async fn list_here(ctx: &CliContext, args: ListArgs) -> Result<()> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>> {
-    // Prefer the live daemon so both CLI and GUI use the same HTTP path.
-    if let Some(port) = detect_daemon(ctx).await {
-        return fetch_from_daemon(ctx, port, args).await;
-    }
-
-    // Direct mode: query local DB and filter in-process.
     let query = build_query(args);
     let all = ctx.app.models().list().await?;
     let filtered = apply_query(all, &query);
     Ok(filtered.into_iter().map(GuiModel::from_domain).collect())
-}
-
-#[allow(
-    clippy::format_push_string,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-async fn fetch_from_daemon(ctx: &CliContext, port: u16, args: &ListArgs) -> Result<Vec<GuiModel>> {
-    let mut url = format!(
-        "http://127.0.0.1:{port}{}?sort={}&order={}",
-        crate::daemon_client::paths::MODELS_LIST_PATH,
-        args.sort.api_value(),
-        args.order.api_value(),
-    );
-    if let Some(v) = args.min_params {
-        url.push_str(&format!("&min_params={v}"));
-    }
-    if let Some(v) = args.max_params {
-        url.push_str(&format!("&max_params={v}"));
-    }
-    if let Some(v) = args.min_speed {
-        url.push_str(&format!("&min_speed={v}"));
-    }
-    if let Some(v) = args.max_speed {
-        url.push_str(&format!("&max_speed={v}"));
-    }
-    if !args.tags.is_empty() {
-        url.push_str(&format!("&tags={}", args.tags.join(",")));
-    }
-
-    let client = gglib_proxy::loopback::client_builder()
-        .timeout(Duration::from_secs(5))
-        .build()?;
-
-    let request = client.get(&url);
-    let request = match crate::daemon_client::auth::daemon_api_key(ctx).await {
-        Some(key) => request.bearer_auth(key),
-        None => request,
-    };
-    let response = request.send().await?;
-    // Checked rather than assumed: straight to `.json()`, a 401 would arrive
-    // as a deserialization error about unexpected input.
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!(
-            "listing models answered 401: {}",
-            crate::daemon_client::auth::unauthorized(&body)
-        );
-    }
-    let models: Vec<GuiModel> = response.error_for_status()?.json().await?;
-    Ok(models)
 }
 
 fn build_query(args: &ListArgs) -> ModelListQuery {
@@ -153,57 +106,35 @@ fn build_query(args: &ListArgs) -> ModelListQuery {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Daemon detection (same pattern as benchmark handler)
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[derive(serde::Deserialize)]
-struct HealthResponse {
-    service: String,
-    status: String,
-}
-
-async fn detect_daemon(ctx: &CliContext) -> Option<u16> {
-    let settings = ctx.app.settings().get().await.ok()?;
-    let port = settings.effective_proxy_port();
-    let client = gglib_proxy::loopback::client_builder()
-        .timeout(Duration::from_millis(500))
-        .build()
-        .ok()?;
-    let resp = client
-        .get(format!("http://127.0.0.1:{port}/health"))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let health: HealthResponse = resp.json().await.ok()?;
-    if health.service == "gglib-daemon" && health.status == "ok" {
-        Some(port)
-    } else {
-        None
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Table rendering
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn render_table(models: &[GuiModel]) {
+/// The table, as text. The ID column is as wide as the widest id, so a
+/// four-digit id does not push its row out of line with the rest.
+fn render_table(models: &[GuiModel]) -> String {
     let show_speed = models.iter().any(|m| m.benchmark_summary.is_some());
+    let id_width = models
+        .iter()
+        .map(|m| m.id.to_string().len())
+        .max()
+        .unwrap_or(0)
+        .max(3);
+    let mut out = String::new();
 
     if show_speed {
-        println!(
-            "{:<3} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<20} File Path",
+        let _ = writeln!(
+            out,
+            "{:<id_width$} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<20} File Path",
             "ID", "Name", "Params", "⚡ t/s", "Arch", "Quant", "Context", "Added"
         );
-        print_separator(128);
+        let _ = writeln!(out, "{}", "-".repeat(125 + id_width));
     } else {
-        println!(
-            "{:<3} {:<25} {:<8} {:<12} {:<8} {:<10} {:<20} File Path",
+        let _ = writeln!(
+            out,
+            "{:<id_width$} {:<25} {:<8} {:<12} {:<8} {:<10} {:<20} File Path",
             "ID", "Name", "Params", "Arch", "Quant", "Context", "Added"
         );
-        print_separator(115);
+        let _ = writeln!(out, "{}", "-".repeat(112 + id_width));
     }
 
     for model in models {
@@ -219,8 +150,9 @@ fn render_table(models: &[GuiModel]) {
                 .as_ref()
                 .and_then(|s| s.latest_tg_tps)
                 .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
-            println!(
-                "{:<3} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<20} {}",
+            let _ = writeln!(
+                out,
+                "{:<id_width$} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model.param_count_b,
@@ -232,8 +164,9 @@ fn render_table(models: &[GuiModel]) {
                 model.file_path,
             );
         } else {
-            println!(
-                "{:<3} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<20} {}",
+            let _ = writeln!(
+                out,
+                "{:<id_width$} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model.param_count_b,
@@ -245,28 +178,9 @@ fn render_table(models: &[GuiModel]) {
             );
         }
     }
+    out
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_truncate_string_no_truncation_needed() {
-        let result = truncate_string("short", 10);
-        assert_eq!(result, "short");
-    }
-
-    #[test]
-    fn test_truncate_string_exact_length() {
-        let result = truncate_string("exactly10c", 10);
-        assert_eq!(result, "exactly10c");
-    }
-
-    #[test]
-    fn test_truncate_string_needs_truncation() {
-        let result = truncate_string("this is a very long string", 10);
-        // 9 chars of content + single-char ellipsis = 10 chars total
-        assert_eq!(result, "this is a\u{2026}");
-    }
-}
+#[path = "list_tests.rs"]
+mod tests;

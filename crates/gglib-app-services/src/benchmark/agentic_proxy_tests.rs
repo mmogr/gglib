@@ -6,7 +6,7 @@
 //! reaches the proxy scores the fixed call, and an arm that does not scores
 //! the broken one.
 
-use super::super::mock_upstream::{MockUpstream, NoCatalog, read_lines_task};
+use super::super::mock_upstream::{MockUpstream, OneModelCatalog, read_lines_task};
 use super::*;
 use gglib_core::ports::RunningTarget;
 use serde_json::Value;
@@ -15,7 +15,7 @@ const MODEL: &str = "mock-model";
 
 async fn start_proxy(upstream: &MockUpstream) -> ProxyArm {
     let target = RunningTarget::local(upstream.port, 1, MODEL.to_owned(), 4096, false);
-    ProxyArm::start(target, Arc::new(NoCatalog))
+    ProxyArm::start(target, Arc::new(OneModelCatalog(MODEL)))
         .await
         .expect("the proxy starts")
 }

@@ -545,11 +545,11 @@ pub(crate) struct ForwardRequest<'a> {
     /// [`truncate_history`](gglib_core::request_pipeline::truncate_history).
     pub effective_ctx: u64,
     /// This model's stored capabilities and tags, resolved once by
-    /// `chat_completions` before the model was ensured running.
+    /// `chat_completions` before admission.
     ///
-    /// Passed in rather than re-resolved here so the one catalog round-trip a
-    /// request pays for is also the one that decided, ahead of any model swap,
-    /// whether the request should have been forwarded at all.
+    /// Passed in rather than re-resolved here so the catalog read that decided,
+    /// ahead of any model swap, whether the request should be forwarded at all
+    /// is also the one it is shaped by.
     pub context: ModelContext,
     /// Metrics store for recording per-request context snapshots.
     pub metrics: Arc<ContextMetricsStore>,

@@ -13,6 +13,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
+use crate::handlers::model::resolver;
 use crate::presentation::style;
 use crate::shared_args::{AccessArgs, CacheArgs, ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use crate::target::Target;
@@ -21,6 +22,7 @@ use crate::target::Target;
 mod serve_far;
 use gglib_app_services::launch_options::{ProxyGlobals, plan_pinned_launch};
 use gglib_app_services::types::StartServerRequest;
+use gglib_core::domain::ModelAction;
 use gglib_core::server_config::parse_ctx_size_flag;
 use gglib_runtime::llama::{CliPrompt, ensure_llama_initialized};
 use serve_far::serve_far;
@@ -102,21 +104,10 @@ async fn serve_here(
     )
     .await?;
 
-    let model = ctx
-        .app
-        .models()
-        .find_by_identifier(&selection.model)
-        .await
-        .map_err(|e| {
-            // Absence and failure read differently: a missing model is the
-            // user's typo, a repository error is not, and telling someone to
-            // run `gglib model list` when the pool is down wastes their time.
-            anyhow::anyhow!(
-                "could not resolve model '{}': {e}. If it is missing, \
-                 'gglib model list' shows what is available.",
-                selection.model
-            )
-        })?;
+    // Absence and failure read differently: a missing model is the user's
+    // typo, or the paired machine's id typed without --remote; a repository
+    // error is neither.
+    let model = resolver::resolve_for(ctx, &selection.model, ModelAction::Load).await?;
 
     // The raw `--ctx-size` flag is shape-validated at parse time, before the
     // model is known; resolving it here against the model's GGUF context

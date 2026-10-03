@@ -57,14 +57,17 @@ pub struct RemotePairing {
     pub api_key: String,
 
     /// The model a `--remote` turn is for when the command line names none:
-    /// the one this machine last asked that machine for.
+    /// the one this machine last asked that machine for, as that machine
+    /// resolved it — its id there, with the profile it named, `<id>` or
+    /// `<id>:<profile>`.
     ///
     /// Remembered rather than configured — there is no flag and no setting
     /// to type it into — because the alternative was naming the model on
     /// every turn, and the model a person asks a machine for is the one
-    /// they asked it for last time. Per pairing, not global: it is a name
-    /// in *that* machine's catalogue, and it goes with the record when the
-    /// pairing does. `#[serde(default)]` so a record written before the
+    /// they asked it for last time. Per pairing, not global: it is an id in
+    /// *that* machine's catalogue, and it goes with the record when the
+    /// pairing does. A name held here resolves there as any identifier does.
+    /// `#[serde(default)]` so a record written before the
     /// field existed loads as nothing remembered yet.
     #[serde(default)]
     pub default_model: Option<String>,
@@ -80,6 +83,13 @@ pub struct RemotePairing {
     /// gives.
     #[serde(default)]
     pub port: Option<u16>,
+
+    /// The name that machine goes by, as its `/v1/models` last gave it: what
+    /// every surface shows it as, refreshed on each connect. Shown, never
+    /// compared — the ticket is the machine — and it goes with the record
+    /// when the pairing does. `#[serde(default)]` for the reason above.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// How this machine was told to put its proxy on the tunnel, kept so a

@@ -118,7 +118,9 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 **Module Descriptions:**
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
-- **`models.rs`** — `/v1/models` endpoint, OpenAI-compatible error response factories
+- **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
+- **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
+- **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
 - **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
@@ -207,8 +209,9 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/health` | GET | open | Health check (always 200) |
-| `/v1/models` | GET | bearer | List available models |
+| `/health` | GET | open | Health check (always 200, `{"status":"ok"}` and nothing else) |
+| `/v1/models` | GET | bearer | List available models, each with its catalog id, and this machine's name — see [The model list](#the-model-list) |
+| `/v1/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
@@ -223,6 +226,35 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 The `model` field in requests supports:
 - Exact model name: `"llama-3.2-3b-q4_k_m"`
 - Model ID: `"1"` (database ID)
+
+### The model list
+
+Each `/v1/models` entry's `id` is what a client sends back as `model`: the
+model's name, or `{name}:{profile}` for a listed profile variant. Beside it,
+gglib adds:
+
+- `gglib_id` — the model's id in this machine's catalog, which is never
+  reused. A variant carries its base model's. It means something only on
+  this machine; `id` is what a client sends.
+- `profile` — on a variant, the profile it selects; absent on a base entry.
+
+The list also carries `machine_name`, this machine's host name cut to its
+first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
+`_` (`gglib_core::domain::machine_name`). It is read on every request, and it
+is absent when the host name is unreadable or is not a plain label. `/health`
+never carries it: it answers without credentials.
+
+`GET /v1/models/{name}/detail` answers one model as a `ModelLookup`:
+`detail` is the `ModelDetailDto` the inspector reads, without `filePath` or
+`port`, with `isServing` true when the model is resident in either slot; and
+`profile` is the profile the identifier named. `{name}` is resolved as a chat
+request's `model` is — id first, then exact name, then a `:profile` suffix —
+and a name containing `/` is sent percent-encoded (`org%2Fqwen`). Unknown is
+`404 model_not_found`; so is any model but the pin on a pinned endpoint,
+whatever suffix it carries, as `/v1/models` does not list it either. A suffix
+that names no configured profile is `404 profile_not_found`, on a model the
+endpoint answers for. It sits behind the same bearer and device gate as
+`/v1/models`.
 
 ### Context Size
 
@@ -262,10 +294,19 @@ dashboard, cache lifecycle or request normalization. It takes the same cache
 flags (`--cache`, `--slot-dir`, `--cache-disk-gb`) as `gglib proxy`,
 opt-in on both.
 
-In pinned mode `GET /v1/models` advertises only the pinned model, so a client
-is never offered a model the endpoint would refuse. Its `{model}:{profile}`
-variants remain listed: a profile changes only the request body, never which
-model actually runs, so it never reaches the pinned guard.
+A request names its model by catalog id or by name. The proxy resolves it
+once, before the loop guard or admission, and everything after keys on the
+model it found: admission is by its id, and the connection, the loop guard's
+log, the per-model counters and the streamed `model` echo carry its name. So
+`3` and `qwen` are one model everywhere, and the pin compares ids — the pinned
+model answers to both, and a model the catalog does not hold is
+`model_not_found`, pinned or not. A bare name costs two catalog reads: that
+one and admission's launch lookup.
+
+In pinned mode `GET /v1/models` advertises only the pinned model, matched by
+id, so a client is never offered a model the endpoint would refuse. Its
+`{model}:{profile}` variants remain listed: a profile changes only the request
+body, never which model actually runs, so it never reaches the pinned guard.
 
 ### Embeddings
 
@@ -417,11 +458,12 @@ that was never in the catalog, so the error names both readings and lists the
 profiles that do exist.
 
 Everything downstream — the model launch, dashboard registration, metrics, cache
-keys — uses the base name, so a profile never launches a second llama-server or
-invalidates the KV cache.
+keys — uses the model the base resolves to, so a profile never launches a second
+llama-server or invalidates the KV cache.
 
 Profiles with `list_in_models` set are advertised in `/v1/models` as
-`{model}:{profile}`, inheriting the base model's `context_window`.  Listing is
+`{model}:{profile}`, inheriting the base model's `context_window` and
+`gglib_id`, with `profile` naming the profile.  Listing is
 opt-in per profile because the full cross product would swamp a client's model
 picker; unlisted profiles remain usable by name.
 
@@ -657,12 +699,13 @@ user watching the output.
 
 ### Defence
 
-On every `/v1/chat/completions` request, before admission, the proxy walks the
-replayed `messages[]` history through the **same** `LoopDetector` and
-`StagnationDetector` the agent path uses (they live in
-`gglib_core::domain::agent` precisely so the two paths cannot drift — the same
-sharing discipline as the request pipeline). Agentic clients resend the full
-conversation every turn, so the scan is stateless: no session store, no TTL.
+On every `/v1/chat/completions` request, once the requested model has resolved
+and before admission, the proxy walks the replayed `messages[]` history through
+the **same** `LoopDetector` and `StagnationDetector` the agent path uses (they
+live in `gglib_core::domain::agent` precisely so the two paths cannot drift —
+the same sharing discipline as the request pipeline). Agentic clients resend
+the full conversation every turn, so the scan is stateless: no session store,
+no TTL.
 
 | Signal | Threshold | Source |
 |--------|-----------|--------|
@@ -683,8 +726,8 @@ user turn. See [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
 What a tripped guard does is one setting, `--loop-guard-mode`, with three
 values. The default, `note`, **forwards** the request with a fixed note
 appended to the last message's content behind a `[gglib loop guard]` marker,
-saying what repeated and how often: the request therefore pays the catalog,
-admission and model-swap cost it used to be refused ahead of, and a client with
+saying what repeated and how often: the request therefore pays the admission
+and model-swap cost it used to be refused ahead of, and a client with
 no recovery path from a 400 gets something it can act on. `refuse` is the old
 behaviour — HTTP 400 before any of that cost, `type` and `code` being
 `loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
@@ -747,17 +790,18 @@ per UTC day, model, gglib version and mode, a count of the requests it scanned
 `GET /api/proxy/loop-guard-trips`, or the panel under the setting. A row is the
 guard's decision, not a delivery — a noted request can still reach the model
 without its note (a template with no `tool` branch), or not at all (the
-context budget, an embedding model, an unknown model, a failed admission, a
-failed retry). The dashboard counts those too, except the embedding model, the
-unknown model and the failed admission, so under `note` the log can count more
+context budget, an embedding model, a failed admission, a failed retry). The
+dashboard counts those too, except the embedding model and the failed
+admission, so under `note` the log can count more
 than the dashboard's `loop_guard_trips`. It can also count fewer: a decision the
 writer could not queue is lost while its scan is kept, which reads as fewer
 trips over the same scans, and only a warning in the daemon's log says so. No
 conversation text is kept: the batch signature and the session id are stored
 as the first 16 hex digits of their SHA-256, stable correlation keys that
 anyone holding the data directory can match against a guess, not a privacy
-boundary; the model name is the client's, bounded to 256 characters. Rows are
-kept 90 days. Only this proxy's scan writes it: the agent loop runs the same
+boundary; the model name is the catalog's name for the model the request
+resolved to, bounded to 256 characters. Rows are kept 90 days. Only this
+proxy's scan writes it: the agent loop runs the same
 detectors and counts its decisions into the dashboard's `agent_guard_*`
 fields, never into this log, so a reading taken here is the proxy path's
 alone ([#1091](https://github.com/mmogr/gglib/issues/1091)).
@@ -865,7 +909,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued, with `tool_choice: "required"` or as a second draw under gglib's own grammar on a turn it constrained, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
 | `upstream_health` | `object` | Degradation watchdog counters since proxy start: empty responses, first-byte timeouts, proactive recycles |
-| `per_model_defects` | `object` | Per-model defect counts, keyed by the model name requests carry — see below |
+| `per_model_defects` | `object` | Per-model defect counts, keyed by the name of the model a request resolved to — see below |
 
 #### `per_model_defects`
 
@@ -905,9 +949,10 @@ Five shapes worth knowing before reading them:
 - **`identical_result_repeats` is not a defect, and does not bump
   `requests`.** It counts turns whose newest tool-call batch repeated the one
   before it and got an equal result back — a fact about the
-  conversation, not a fault in the model. It is recorded at the guard, before
-  the catalog round-trip that rejects an unknown model, so a request that is
-  later rejected can carry one without ever counting as a request.
+  conversation, not a fault in the model. It is recorded at the guard, after
+  the model has resolved but before admission, so a request that is later
+  refused — an embedding model, a failed admission — can carry one without
+  ever counting as a request.
 - **`repeats_not_evaluated` is the one that makes a zero above readable.** It
   counts turns that repeated a batch whose results could not be compared —
   a client that omits `id` on replayed tool calls, results that are not

@@ -133,7 +133,10 @@ Several commands flatten the same argument groups. Learning them once covers
 `gglib model <subcommand>`:
 
 **Library** — `add`, `list`, `remove`, `update`. `list` sorts by added, name,
-params, or benchmark speed.
+params, or benchmark speed. While this machine is paired it ends with one line
+on the paired machine — connected, away or not — without asking that machine
+anything; `list --remote` lists that machine's models by their ids there, and
+`inspect --remote` reads one of them.
 
 **HuggingFace** — `download`, `search`, `browse`, `check-updates`, `upgrade`.
 
@@ -167,7 +170,8 @@ a hierarchy different from the one that runs.
 
 Interactive session with tool access (filesystem plus any configured MCP
 servers). `--no-tools` for plain chat. Conversations persist: `--continue <id>`
-resumes one, and `gglib chat history` lists them.
+resumes one on the machine it ran on, and `gglib chat history` lists them, each
+model by its id and its machine.
 
 Local models need guardrails to finish a tool-calling task, so the loop carries
 iteration limits (`--max-iterations`), a tool allowlist (`--tools`, evaluated

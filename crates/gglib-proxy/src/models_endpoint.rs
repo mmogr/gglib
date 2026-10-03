@@ -59,6 +59,9 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 /// Both are shaved by [`CONTEXT_WINDOW_SAFETY_MARGIN_PCT`] before being
 /// advertised, reserving headroom for tool-schema JSON and chat-template
 /// tokens that a client's own char→token budget does not account for.
+///
+/// The list also names this machine (`machine_name`), for a paired machine
+/// that shows these models beside its own.
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -72,10 +75,18 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
             //
             // Profile variants of the pinned model stay: a profile changes
             // only the request body, never which model actually runs, so it
-            // cannot trip the guard.
-            if let Some(pinned) = state.runtime_port.pinned_model() {
-                models.retain(|m| m.name == pinned);
+            // cannot trip the guard. Kept by id, as the guard compares.
+            if let Some(pin) = state.runtime_port.pinned() {
+                models.retain(|m| i64::from(m.id) == pin.id);
             }
+
+            // The running model's entry, found by id: a name can belong to
+            // more than one model. `from_summaries` maps entry for entry, so
+            // its place among the summaries is its place in the response.
+            let running = state.runtime_port.current_model().await;
+            let running_at = running
+                .as_ref()
+                .and_then(|target| models.iter().position(|m| m.id == target.model_id));
 
             let mut response = ModelsResponse::from_summaries(
                 models,
@@ -88,8 +99,8 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
                 model.context_window = model.context_window.map(advertised_context_window);
             }
 
-            if let Some(target) = state.runtime_port.current_model().await
-                && let Some(model) = response.data.iter_mut().find(|m| m.id == target.model_name)
+            if let Some(target) = running
+                && let Some(model) = running_at.and_then(|i| response.data.get_mut(i))
             {
                 model.context_window = Some(advertised_context_window(target.effective_ctx));
             }
@@ -108,6 +119,10 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
                     .unwrap_or_default(),
             );
             response.data.extend(variants);
+
+            // Read per request, so a rename shows on the next listing. Here and
+            // never on `/health`, which answers before any credential does.
+            response.machine_name = crate::models::this_machine_name();
 
             Json(response).into_response()
         }

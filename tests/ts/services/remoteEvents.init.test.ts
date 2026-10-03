@@ -53,6 +53,7 @@ const STATUS: RemoteStatus = {
   last_peer: null,
   connected: null,
   stored_ticket_fingerprint: null,
+  paired_name: null,
   has_remote_key: false,
   remote_enabled: true,
   identity_path: '/home/matt/.gglib/remote_identity',

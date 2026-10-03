@@ -240,16 +240,23 @@ async fn a_joining_machine_is_one_endpoint_across_a_disconnect_and_a_restart() {
 }
 
 /// A join with a code over a stored pairing for another machine answers with
-/// that machine's fingerprint, through `join` and `dial` over the in-process
-/// pipe: the link between `settle` and what `gglib remote join` prints.
+/// that machine's name, and with the name of the machine it joined, read
+/// from that machine's own `/v1/models` once the connection was installed
+/// and kept on the new pairing: through `join` and `dial` over the
+/// in-process pipe, to the serving side's real proxy. That proxy runs here,
+/// so the name it gives is this host's.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_join_over_another_machines_pairing_names_the_one_it_replaced() {
-    use crate::test_support_remote::{KEY_B, TICKET_B, paired_with, ticket};
+async fn a_join_names_the_machine_it_joined_and_the_one_it_replaced() {
+    use crate::test_support_remote::{KEY_B, TICKET_B, paired_with};
     let (_core, _proxy, _events, serving, _arming) = ops_with_key().await;
     let (joiner_core, joiner, _) = test_remote_ops_joining_from(scratch_join_keys()).await;
+    let mut machine_b = paired_with(TICKET_B, KEY_B);
+    if let Some(Some(pairing)) = machine_b.remote_pairing.as_mut() {
+        pairing.name = Some("desk-b".to_owned());
+    }
     joiner_core
         .settings()
-        .update(paired_with(TICKET_B, KEY_B))
+        .update(machine_b)
         .await
         .expect("machine B's pairing is stored");
     let enabled = serving
@@ -273,8 +280,19 @@ async fn a_join_over_another_machines_pairing_names_the_one_it_replaced() {
         .expect("the join went through");
     assert!(answer.paired, "a code was redeemed");
     assert_eq!(
-        answer.replaced,
-        Some(ticket(TICKET_B).fingerprint()),
+        answer.replaced.as_deref(),
+        Some("desk-b"),
         "dial dropped the pairing it replaced"
     );
+    // Unnamed, the proxy gives no name and the comparisons below would pass
+    // whether or not the read happened.
+    let named = gglib_proxy::models::this_machine_name()
+        .expect("this host's name is not a plain label, so the proxy gives none to read");
+    assert_eq!(
+        answer.name.as_deref(),
+        Some(named.as_str()),
+        "the joined machine's name was not read"
+    );
+    let stored = joiner_core.settings().get().await.expect("settings load");
+    assert_eq!(stored.remote_pairing.and_then(|p| p.name), Some(named));
 }

@@ -158,9 +158,14 @@ pub struct RemoteJoinResponse {
     /// `http://127.0.0.1:<port>/v1`, ready for a client.
     #[serde(default)]
     pub base_url: String,
-    /// Fingerprint of the ticket dialled.
+    /// Fingerprint of the ticket dialled: the machine's identity, which is
+    /// compared and never shown.
     #[serde(default)]
     pub ticket_fingerprint: String,
+    /// The name that machine goes by, which is what a surface shows; `None`
+    /// when it has given none.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Whether this call redeemed a pairing code and stored the key.
     #[serde(default)]
     pub paired: bool,
@@ -168,9 +173,10 @@ pub struct RemoteJoinResponse {
     /// another; `None` when the address stayed put.
     #[serde(default)]
     pub moved_from: Option<u16>,
-    /// Fingerprint of the other machine whose pairing this one replaced,
-    /// since one pairing is stored; `None` when there was none to replace,
-    /// or when the stored ticket could not be read to name one.
+    /// The name of the other machine whose pairing this one replaced, or
+    /// "the paired machine" when it had none, since one pairing is stored;
+    /// `None` when there was none to replace, or when the stored ticket
+    /// could not be read to name one.
     #[serde(default)]
     pub replaced: Option<String>,
 }
@@ -181,6 +187,7 @@ impl From<Joined> for RemoteJoinResponse {
             port: j.port,
             base_url: j.base_url,
             ticket_fingerprint: j.ticket_fingerprint,
+            name: j.name,
             paired: j.paired,
             moved_from: j.moved_from,
             replaced: j.replaced,

@@ -80,6 +80,7 @@ pub(crate) mod mcp;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod metrics;
+pub(crate) mod model_detail_endpoint;
 #[allow(
     clippy::match_same_arms,
     clippy::unreadable_literal,
@@ -158,6 +159,8 @@ pub(crate) mod unary_body;
 pub(crate) mod upstream_health;
 pub(crate) mod upstream_read;
 
+// What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
+pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;
 pub use server::serve;
 // An agent run reads llama-server's reply past the proxy, under this same

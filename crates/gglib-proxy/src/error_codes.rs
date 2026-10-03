@@ -93,7 +93,7 @@ const CODES: &[ErrorCode] = &[
     // The proxy's own refusals: `ErrorResponse`'s constructors.
     row("model_loading", UNAVAILABLE, Some(503), "The model is still loading; retry shortly."),
     row("admission_timeout", UNAVAILABLE, Some(503), "The request waited its limit for the model without being admitted; retry shortly."),
-    row("model_not_found", INVALID, Some(404), "No model by that name is in the catalog."),
+    row("model_not_found", INVALID, Some(404), "No model with that id or name is in the catalog."),
     row("profile_not_found", INVALID, Some(404), "No model has that name, and its :suffix names no inference profile."),
     row("not_an_embedding_model", INVALID, Some(400), "An embeddings request named a model not tagged embedding."),
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),
@@ -116,7 +116,7 @@ const CODES: &[ErrorCode] = &[
     row("runs_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no runs."),
     row("chats_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no chats."),
     row("not_found", INVALID, Some(404), "Nothing with that id is visible to the caller."),
-    row("conflict", INVALID, Some(409), "The run id is taken, or the conversation already has a live reply."),
+    row("conflict", INVALID, Some(409), "The run id is taken, the conversation already has a live reply, or a run or a device's turn names a chat that ran on another machine."),
     row("not_yours", INVALID, Some(403), "The run belongs to a paired device, so only that device may read its reply."),
     row("too_many_runs", RATE, Some(429), "Too many runs are still going; cancel one or wait."),
     row("shutting_down", MANY, Some(503), "The daemon is stopping, so it starts no more runs."),
