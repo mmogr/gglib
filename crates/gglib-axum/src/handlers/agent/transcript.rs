@@ -3,11 +3,13 @@
 //! The user's message is saved once the run is accepted. When the request
 //! names a row to replace (an edit, or a regenerate), that row and every
 //! later row are deleted in the same transaction, so a refused run, or one
-//! that never got as far, changes nothing. Once the message is saved, a
-//! local run names its model on the conversation, so the chat's next turn,
-//! from either door, runs on it. The reply is saved when the run
-//! ends, all rows or none, with how long each turn thought: from its first
-//! reasoning event to its last, as they were logged.
+//! that never got as far, changes nothing. A conversation's machine is fixed:
+//! a run on another machine than the one it ran on is refused before its
+//! message is saved. Once the message is saved, the run names its model on
+//! the conversation by its machine, so the chat's next turn, from either
+//! door, runs on it, or is refused for being the paired machine's. The reply
+//! is saved when the run ends, all rows or none, with how long each turn
+//! thought: from its first reasoning event to its last, as they were logged.
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;
@@ -15,6 +17,7 @@ use std::time::Instant;
 use axum::http::StatusCode;
 use gglib_core::domain::agent::{AgentMessage, MADE_KEYS, rows_from_timed_frames, to_new_message};
 use gglib_core::domain::runs::{RunError, RunStatus};
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::ChatHistoryError;
 use gglib_core::services::AppCore;
 use serde_json::{Map, Value};
@@ -56,6 +59,58 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
         code,
         message: message.into(),
     }
+}
+
+/// Refuse a run on `ran_on` in `conversation_id` when the conversation ran
+/// on another machine: the one its stored model names, or this one when it
+/// stores only a `model_id`. One that names no model takes the run's. Paired
+/// machines are told apart by fingerprint, so a chat of a machine this one
+/// has since replaced is refused as well, rather than sent to whatever has
+/// its id on the new one.
+///
+/// # Errors
+///
+/// `conflict` (409) for a run on another machine; `internal_error` when the
+/// conversation cannot be read.
+pub(super) async fn keep_machine(
+    core: &AppCore,
+    conversation_id: i64,
+    ran_on: &Machine,
+) -> Result<(), HttpError> {
+    let conversation = core
+        .chat_history()
+        .get_conversation(conversation_id)
+        .await
+        .map_err(|_| {
+            coded(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "the conversation could not be read",
+            )
+        })?;
+    let Some(conversation) = conversation else {
+        return Ok(());
+    };
+    let stored = conversation
+        .settings
+        .and_then(|settings| settings.model)
+        .map(|model| model.machine)
+        .or_else(|| conversation.model_id.map(|_| Machine::Local));
+    let refusal = match (stored, ran_on) {
+        (None, _) => return Ok(()),
+        (Some(stored), ran_on) if stored == *ran_on => return Ok(()),
+        (Some(Machine::Local), _) => {
+            "this chat ran on this machine and continues here, on one of its models"
+        }
+        (Some(Machine::Paired { .. }), Machine::Local) => {
+            "this chat ran on the paired machine and continues there, on its model"
+        }
+        (Some(Machine::Paired { .. }), Machine::Paired { .. }) => {
+            "this chat ran on a machine this one is no longer paired with, so it cannot be \
+             continued here"
+        }
+    };
+    Err(coded(StatusCode::CONFLICT, "conflict", refusal))
 }
 
 /// Save the request's last message, when it is the user's, to
@@ -102,24 +157,33 @@ pub(super) async fn save_user(
     })
 }
 
-/// Name the model a local run uses on `conversation_id`: the registry's id
-/// when it is there (none when it is not), stored as the settings' model
-/// too, and its name in the settings either way. A run on the far machine
-/// names nothing: its model is not one this machine has. Not saved is
-/// logged, not refused: the message is.
+/// Name the model a run uses on `conversation_id`, by its machine, as the
+/// settings' model: a far run's id on the paired machine, so the chat stays
+/// that machine's; a local run's registry id when it is there (none when it
+/// is not, which is also the conversation's `model_id`). Its name goes in
+/// the settings either way. [`keep_machine`] has refused a run on another
+/// machine by then, so this changes the model within the chat's machine.
+/// Not saved is logged, not refused: the message is.
 pub(super) async fn record_model(
     core: &AppCore,
     conversation_id: i64,
-    local_model: Option<(u16, i64)>,
+    ran_on: (Option<(u16, i64)>, Option<&ModelRef>),
     name: &str,
 ) {
-    let Some((_, model_id)) = local_model else {
-        return;
+    let model = match ran_on {
+        (_, Some(far)) => Some(far.clone()),
+        (Some((_, model_id)), None) => {
+            let registered = core.models().get_by_id(model_id).await.ok().flatten();
+            registered.map(|m| ModelRef {
+                machine: Machine::Local,
+                id: m.id,
+            })
+        }
+        (None, None) => return,
     };
-    let registered = core.models().get_by_id(model_id).await.ok().flatten();
     let recorded = core
         .chat_history()
-        .record_model(conversation_id, registered.map(|m| m.id), name)
+        .record_model(conversation_id, model, name)
         .await;
     if recorded.is_err() {
         tracing::warn!(

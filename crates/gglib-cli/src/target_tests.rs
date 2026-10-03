@@ -112,6 +112,27 @@ fn stopping_the_far_proxy_is_refused_with_the_command_that_stops_the_machine() {
     assert!(text.contains("gglib daemon stop --remote"), "{text}");
 }
 
+/// `web` and `gui` are refused because the page already shows the paired
+/// machine, not because the page is about this machine alone.
+#[test]
+fn the_page_refuses_remote_because_it_already_shows_the_paired_machine() {
+    for command in ["web", "gui"] {
+        let err = Target::Remote
+            .admit(&parsed(&["gglib", command]))
+            .expect_err("refused");
+        let text = err.to_string();
+        assert!(
+            text.starts_with(&format!("`gglib {command}` --remote:")),
+            "{text}"
+        );
+        assert!(
+            text.contains("already lists the paired machine's models"),
+            "{text}"
+        );
+        assert!(!text.contains("is about this machine"), "{text}");
+    }
+}
+
 /// The refusal is one sentence and it names both halves: the command that
 /// stays local, and what `--remote` does reach.
 #[test]

@@ -1,15 +1,11 @@
 /**
- * What an agent run's body carries, and what it refuses to send.
+ * What an agent run's body carries.
  *
  * The body is hand-built rather than generated, so nothing but a test notices
- * a missing key. It was missing `model` entirely: a turn aimed at the machine
- * on the other end of the tunnel arrived there as `"model": ""` — the far
- * proxy answered `404 Model '' not found`, a real answer through a working
- * tunnel that reads as the tunnel being broken.
- *
- * The local half is pinned in the same file, because the two paths mean
- * opposite things by an absent model and a fix to one is a plausible
- * regression in the other.
+ * a missing key. A turn on the paired machine's model names it by `far`, that
+ * machine and the model's id there, and never by a name, which another model
+ * there could share; a local turn names no model and lets llama-server serve
+ * the one it loaded.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -27,6 +23,7 @@ import {
   type RunRequestOptions,
 } from '../../../../src/hooks/useGglibRuntime/runRequest';
 import type { GglibMessage } from '../../../../src/types/messages';
+import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 
 const hello = {
   id: 'u1',
@@ -47,36 +44,19 @@ describe('buildRunRequest', () => {
     });
   });
 
-  it('sends the far machine the model it was told to ask for', () => {
-    expect(buildRunRequest(options({ remote: true, model: 'qwen3' }))).toMatchObject({
-      remote: true,
-      model: 'qwen3',
-    });
+  it('names a far model by its machine and its id there', () => {
+    const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
+    const body = buildRunRequest(options({ selectedServerPort: undefined, far }));
+    expect(body.far).toEqual(far);
+    expect(body.model).toBeNull();
+    expect(body.port).toBe(0);
   });
 
-  it('trims the name rather than sending the spaces around it', () => {
-    expect(buildRunRequest(options({ remote: true, model: '  qwen3  ' })).model).toBe('qwen3');
-  });
-
-  it('refuses a remote turn that names no model', () => {
-    expect(() => buildRunRequest(options({ remote: true }))).toThrow(/no model there is named/);
-  });
-
-  it('treats a name of only spaces as no name at all', () => {
-    expect(() => buildRunRequest(options({ remote: true, model: '   ' }))).toThrow(
-      /no model there is named/,
-    );
-  });
-
-  it('locally an absent model is the ordinary case', () => {
+  it('locally names no model and no far one', () => {
     const body = buildRunRequest(options());
     expect(body.model).toBeNull();
-    expect(body.remote).toBe(false);
+    expect(body.far).toBeNull();
     expect(body.port).toBe(9000);
-  });
-
-  it('locally a named model still travels', () => {
-    expect(buildRunRequest(options({ model: 'llama3' })).model).toBe('llama3');
   });
 
   it('a model known not to call tools is offered none', () => {

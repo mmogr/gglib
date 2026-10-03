@@ -1,6 +1,6 @@
-import { FC } from 'react';
+import { FC, type ReactNode } from 'react';
 import { ChevronRight, Copy, ExternalLink } from 'lucide-react';
-import type { GgufModel, InferenceProfile, ModelDetail } from '../../../types';
+import type { GgufModel, ModelDetail } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { parseDbTimestamp } from '../../../utils/dbTimestamp';
 import { openUrl } from '../../../services/platform';
@@ -8,14 +8,29 @@ import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import { InfoRow } from './InfoRow';
 import { MetadataSection } from './MetadataSection';
-import { SamplingProvenanceSection } from './SamplingProvenanceSection';
+
+/**
+ * What the grid reads of a model: a row of this library, or a model's
+ * detail as the paired machine sends it, which has no path on its disk.
+ */
+export type MetadataModel = Pick<ModelDetail, 'paramCountB' | 'expertCount' | 'expertUsedCount' | 'filePath'> & {
+  architecture?: string | null;
+  quantization?: string | null;
+  contextLength?: number | null;
+  hfRepoId?: string | null;
+  serverDefaults?: GgufModel['serverDefaults'];
+};
 
 interface ModelMetadataGridProps {
-  model: GgufModel;
+  model: MetadataModel;
   /** Full model detail from GET /api/models/:id/detail. Enables HF provenance rows and GGUF metadata. */
   detail?: ModelDetail;
-  /** Configured inference profiles, for the sampling section's selector. */
-  profiles?: InferenceProfile[];
+  /**
+   * The resolved sampling section, between the information and the raw
+   * metadata. Only a model of this machine's has one: it is read from this
+   * machine's daemon by the model's id here.
+   */
+  sampling?: ReactNode;
 }
 
 /**
@@ -28,7 +43,7 @@ interface ModelMetadataGridProps {
  * falling to the floor where it cannot. See ADR 0009, and `contextPlaceholder`,
  * which is where "what will a serve actually use" is answered.
  */
-export function formatContextLength(model: GgufModel): string {
+export function formatContextLength(model: MetadataModel): string {
   if (model.serverDefaults?.contextLength) {
     return model.serverDefaults.contextLength.toLocaleString();
   }
@@ -40,12 +55,13 @@ export function formatContextLength(model: GgufModel): string {
 
 /**
  * Read-only metadata display for the model inspector.
- * Shows size, architecture, quantization, context length, path, and HuggingFace link.
+ * Shows size, architecture, quantization, context length, path (where the
+ * model has one here), and HuggingFace link.
  */
 export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
   model,
   detail,
-  profiles = [],
+  sampling,
 }) => {
   const metadataEntries = detail ? Object.entries(detail.metadata) : [];
 
@@ -66,21 +82,23 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
 
         <InfoRow label="Context Length" className="font-mono tabular-nums">{formatContextLength(model)}</InfoRow>
 
-        <InfoRow label="Path" mono>
-          <span className="inline-flex items-start gap-sm">
-            <span className="min-w-0 break-all">{model.filePath}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigator.clipboard.writeText(model.filePath)}
-              title="Copy path"
-              aria-label="Copy path"
-              iconOnly
-            >
-              <Icon icon={Copy} size={14} />
-            </Button>
-          </span>
-        </InfoRow>
+        {model.filePath && (
+          <InfoRow label="Path" mono>
+            <span className="inline-flex items-start gap-sm">
+              <span className="min-w-0 break-all">{model.filePath}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => model.filePath && navigator.clipboard.writeText(model.filePath)}
+                title="Copy path"
+                aria-label="Copy path"
+                iconOnly
+              >
+                <Icon icon={Copy} size={14} />
+              </Button>
+            </span>
+          </InfoRow>
+        )}
 
         {model.hfRepoId && (
           <InfoRow label="HuggingFace">
@@ -126,16 +144,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
         )}
       </MetadataSection>
 
-      {/* Resolved sampling, not the stored defaults: a stored value that wins
-          shows as `per-model defaults (user-set)`, and one that loses is
-          finally visible as having lost. */}
-      {model.id != null && (
-        <SamplingProvenanceSection
-          modelId={model.id}
-          profiles={profiles}
-          refreshKey={model.inferenceDefaults}
-        />
-      )}
+      {sampling}
 
       {/* Raw GGUF Metadata — stateless collapsible via native <details>.
           The native disclosure marker is suppressed in favour of a lucide

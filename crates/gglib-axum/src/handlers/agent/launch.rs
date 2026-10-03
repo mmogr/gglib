@@ -10,12 +10,13 @@ use futures_util::future::BoxFuture;
 use tokio::sync::OwnedSemaphorePermit;
 
 use gglib_app_services::{Reservation, RunSpec};
+use gglib_core::domain::Machine;
 use gglib_core::domain::runs::{RunError, RunKind};
 use gglib_core::ports::{Created, RunScope};
 
 use super::compose::Prepared;
 use super::run::work;
-use super::transcript::{FrameTimes, record_model, save_reply, save_user};
+use super::transcript::{FrameTimes, keep_machine, record_model, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -26,8 +27,9 @@ pub(super) struct Transcript {
     pub(super) replace_from: Option<i64>,
 }
 
-/// Reserve the id in `scope`, save the user's message (naming the device,
-/// for a device's run) and the model the run uses, and start the loop,
+/// Reserve the id in `scope`, refuse a run on another machine than its
+/// conversation's, save the user's message (naming the device, for a
+/// device's run) and the model the run uses, and start the loop,
 /// in one task of its own: a request dropped part-way cannot split them, so
 /// a retry finds the run rather than saving the message, or replacing rows,
 /// again.
@@ -90,7 +92,14 @@ async fn reserve_and_start(
     let times = FrameTimes::new();
     let ended = match conversation_id {
         Some(conversation_id) => {
-            // Dropping `reserved` on the way out leaves no run behind.
+            // Dropping `reserved` on the way out leaves no run behind. Held,
+            // it keeps any other run off the conversation, so the machine
+            // read here is still the conversation's when the model is named.
+            let machine = prepared
+                .far_model
+                .as_ref()
+                .map_or(Machine::Local, |far| far.machine.clone());
+            keep_machine(&state.core, conversation_id, &machine).await?;
             save_user(
                 &state.core,
                 conversation_id,
@@ -99,8 +108,14 @@ async fn reserve_and_start(
                 device.as_deref(),
             )
             .await?;
-            let used = &prepared.made_by.model;
-            record_model(&state.core, conversation_id, prepared.local_model, used).await;
+            let ran_on = (prepared.local_model, prepared.far_model.as_ref());
+            record_model(
+                &state.core,
+                conversation_id,
+                ran_on,
+                &prepared.made_by.model,
+            )
+            .await;
             save_reply(Arc::clone(&state.core), conversation_id, times.clone())
         }
         None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {

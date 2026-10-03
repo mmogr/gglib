@@ -3,8 +3,9 @@
  * conversation that exists, no turn saved by the page, and the reply shown
  * as the daemon saved it once the run ends.
  *
- * The remote half pins the hop the model-name defect lived in: a turn read
- * the remote flag off the panel and left the model name behind.
+ * A chat with the paired machine's model goes through the same door, naming
+ * that model by its machine and its id there; a conversation it makes is
+ * made for that model, so its machine is fixed from the start.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -19,13 +20,8 @@ vi.mock('../../../../src/services/tools', () => ({
 
 import { FakeDaemon } from '../../fixtures/fakeDaemon';
 import { conversation, mount, send, shown } from './runtimeHarness';
-import {
-  IDLE_STATUS,
-  applyRemoteStatus,
-  resetRemoteState,
-  setRemoteChatModel,
-  setUseRemoteForChat,
-} from '../../../../src/services/remoteRegistry';
+import { resetRemoteState } from '../../../../src/services/remoteRegistry';
+import type { ModelRef } from '../../../../src/types/generated/ModelRef';
 
 let daemon: FakeDaemon;
 
@@ -39,6 +35,7 @@ afterEach(() => {
 });
 
 const local = { conversationId: 1, conversation: conversation(1), selectedServerPort: 9000 };
+const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
 
 describe('useGglibRuntime send', () => {
   it('starts one run in the open conversation, and the page saves no turn', async () => {
@@ -104,24 +101,29 @@ describe('useGglibRuntime send', () => {
     expect(daemon.saved(1).map((r) => r.content)).toEqual(['hello']);
   });
 
-  it('a remote turn goes through the same door, with its model and no local server', async () => {
-    applyRemoteStatus({
-      ...IDLE_STATUS,
-      connected: {
-        port: 41234,
-        base_url: 'http://127.0.0.1:41234/v1',
-        ticket_fingerprint: '3ca82708b995',
-        path: 'direct',
-        away_for_s: null,
-      },
-    });
-    setRemoteChatModel('qwen3');
-    setUseRemoteForChat(true);
-
-    const hook = await mount({ conversationId: 1, conversation: conversation(1) });
+  it('a turn on a far model goes through the same door, by its ref and with no local server', async () => {
+    const hook = await mount({ conversationId: 1, conversation: conversation(1), pairedModel: far });
     send(hook, 'hello');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    expect(daemon.only().request).toMatchObject({ remote: true, model: 'qwen3', conversation_id: 1 });
+    expect(daemon.only().request).toMatchObject({ far, model: null, conversation_id: 1 });
+  });
+
+  it('the first turn on a far model makes its conversation for that model', async () => {
+    const hook = await mount({ pairedModel: far });
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    const made = daemon.requests.find((r) => r.method === 'POST' && r.url === '/api/conversations');
+    expect(made?.body).toMatchObject({ model: far, model_id: null });
+    expect(daemon.only().request).toMatchObject({ far });
+  });
+
+  it('the conversation a local turn makes is made for no model', async () => {
+    const hook = await mount({ selectedServerPort: 9000 });
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    const made = daemon.requests.find((r) => r.method === 'POST' && r.url === '/api/conversations');
+    expect(made?.body).toMatchObject({ model: null });
+    expect(daemon.only().request).toMatchObject({ far: null });
   });
 
   it('a local turn with no server selected never reaches the wire', async () => {

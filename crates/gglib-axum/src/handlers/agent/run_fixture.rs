@@ -126,18 +126,15 @@ pub(super) fn paced(
         tx,
         rx,
         model: "qwen".to_owned(),
-        // As `resolve` makes it for a run on the far machine; a test of what
-        // a local run is made by resolves one (see `run_made_tests`).
-        made_by: super::remote_upstream::remote(
-            "qwen".to_owned(),
-            "http://127.0.0.1:9000".to_owned(),
-            gglib_runtime::FarMachine {
-                key: "key".to_owned(),
-                name: "desk".to_owned(),
-            },
-        )
-        .made_by,
+        // A run on no model of this machine's; a test of what a local run
+        // is made by resolves one (see `run_made_tests`).
+        made_by: super::compose::MadeBy {
+            model: "qwen".to_owned(),
+            quantization: None,
+            device: None,
+        },
         local_model: None,
+        far_model: None,
         hold: None,
     };
     (prepared, dropped)

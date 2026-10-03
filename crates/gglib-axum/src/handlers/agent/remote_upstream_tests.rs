@@ -1,45 +1,10 @@
 //! Which upstream a request drives, and the model each turn is made by.
 
 use super::*;
+use crate::handlers::remote::fake_far::{FINGERPRINT, carries_key, far as fake_far, only};
 
 fn req(json: &str) -> AgentChatRequest {
     serde_json::from_str(json).expect("parses")
-}
-
-/// A body with `remote` and no `model` is refused here, rather than
-/// arriving at the far proxy as `"model": ""`.
-#[test]
-fn a_remote_request_naming_no_model_is_refused_here() {
-    let err = remote_model(&req(r#"{"port":9000,"messages":[],"remote":true}"#))
-        .expect_err("no model named");
-    assert!(matches!(err, HttpError::BadRequest(_)), "got {err:?}");
-    assert!(
-        err.to_string().contains("no model named"),
-        "the message has to name the real problem, got: {err}"
-    );
-}
-
-/// A field holding only spaces is the same absence, and `trim` downstream
-/// would otherwise turn it into the same empty model.
-#[test]
-fn a_model_of_only_whitespace_is_no_model_at_all() {
-    assert!(
-        remote_model(&req(
-            r#"{"port":9000,"messages":[],"remote":true,"model":"  "}"#
-        ))
-        .is_err()
-    );
-}
-
-#[test]
-fn a_named_model_is_forwarded_trimmed() {
-    assert_eq!(
-        remote_model(&req(
-            r#"{"port":9000,"messages":[],"remote":true,"model":" qwen3 "}"#
-        ))
-        .expect("a name"),
-        "qwen3"
-    );
 }
 
 /// The model the port is actually serving, for the three ways a local
@@ -66,8 +31,7 @@ fn a_request_naming_no_model_is_counted_under_the_running_one() {
     );
 }
 
-/// The same absence the remote path refuses outright, read the same way
-/// here so the two cannot drift apart.
+/// A name of only spaces is an absence, read as one.
 #[test]
 fn a_whitespace_model_name_is_no_name_at_all() {
     assert_eq!(
@@ -141,18 +105,90 @@ async fn a_local_model_without_a_quantisation_has_none() {
     assert_eq!(upstream.made_by.quantization, None);
 }
 
-/// The far machine's catalogue is not this one's: a remote run is made by
-/// the model it named, and has no quantisation.
-#[test]
-fn a_remote_run_is_made_by_the_named_model_with_no_quantisation() {
-    let upstream = remote(
-        "qwen3".to_owned(),
-        "http://127.0.0.1:7000".to_owned(),
-        FarMachine {
-            key: "key".to_owned(),
-            name: "desk".to_owned(),
+/// A model of the paired machine, by its id there.
+fn far_ref(id: i64) -> ModelRef {
+    ModelRef {
+        machine: Machine::Paired {
+            fingerprint: FINGERPRINT.to_owned(),
         },
+        id,
+    }
+}
+
+/// The far detail route's answer for model 3, as a gglib proxy writes it.
+const LOOKUP: &str = r#"{"detail":{"id":3,"name":"org/qwen3","paramCountB":8.0,
+    "quantization":"Q4_K_M","addedAt":"2026-10-01 09:00:00","isServing":false,"metadata":{}}}"#;
+
+/// A ref to this machine names a model that is driven by its port: refused
+/// before the connection is read, so with no tunnel up it is still a `400`.
+#[tokio::test]
+async fn a_far_ref_to_this_machine_is_refused() {
+    let (_dir, state) = super::super::run_fixture::state().await;
+    let body = r#"{"port":0,"messages":[],"far":{"machine":{"kind":"local"},"id":3}}"#;
+
+    let Err(err) = resolve(&state, &req(body)).await else {
+        panic!("a local ref was driven as a far model");
+    };
+
+    assert!(matches!(err, HttpError::BadRequest(_)), "got {err:?}");
+}
+
+/// The far model is looked up by its id, sent by its id, and counted and
+/// made under the name and quantisation that machine has for it.
+#[tokio::test]
+async fn a_far_run_sends_the_id_and_is_made_by_the_far_name() {
+    let (fake, far) = fake_far(200, LOOKUP).await;
+
+    let upstream = remote(&far, &far_ref(3)).await.expect("looked up");
+
+    assert_eq!(
+        upstream.model.as_deref(),
+        Some("3"),
+        "the wire carries the id"
     );
-    assert_eq!(upstream.made_by.model, "qwen3");
-    assert_eq!(upstream.made_by.quantization, None);
+    assert_eq!(upstream.counted_as, "org/qwen3");
+    assert_eq!(upstream.made_by.model, "org/qwen3");
+    assert_eq!(upstream.made_by.quantization.as_deref(), Some("Q4_K_M"));
+    assert_eq!(upstream.far_model, Some(far_ref(3)));
+    assert_eq!(upstream.local_model, None);
+    assert_eq!(upstream.base_url, far.server_root());
+    let seen = only(&fake);
+    assert_eq!(
+        (seen.method.as_str(), seen.uri.as_str()),
+        ("GET", "/v1/models/3/detail")
+    );
+    assert!(carries_key(&seen), "{seen:?}");
+}
+
+/// An id the far machine does not have is its `404`, with its words, and
+/// no turn starts.
+#[tokio::test]
+async fn a_far_id_that_machine_does_not_have_is_its_404() {
+    let refusal = r#"{"error":{"message":"No model with that id or name is in the catalog: 9","code":"model_not_found"}}"#;
+    let (_, far) = fake_far(404, refusal).await;
+
+    let Err(err) = remote(&far, &far_ref(9)).await else {
+        panic!("a missing model was driven");
+    };
+
+    let HttpError::NotFound(message) = err else {
+        panic!("got {err:?}");
+    };
+    assert!(message.ends_with("in the catalog: 9"), "{message}");
+}
+
+/// A key that machine no longer admits is a `409` that says to pair again,
+/// never a `401`, which would read as this daemon wanting a key.
+#[tokio::test]
+async fn a_far_key_refused_at_lookup_is_a_conflict() {
+    let (_, far) = fake_far(401, r#"{"error":{"message":"Invalid API key"}}"#).await;
+
+    let Err(err) = remote(&far, &far_ref(3)).await else {
+        panic!("a refused key was driven");
+    };
+
+    assert!(
+        matches!(&err, HttpError::Conflict(m) if m.contains("pair again")),
+        "got {err:?}"
+    );
 }

@@ -108,13 +108,18 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
         Commands::Config { .. } => ("config", Reach::Local),
         Commands::Mcp { .. } => ("mcp", Reach::Local),
         Commands::Benchmark { .. } => ("benchmark", Reach::Local),
-        Commands::Gui { .. } => ("gui", Reach::Local),
-        Commands::Web { .. } => ("web", Reach::Local),
+        Commands::Gui { .. } => ("gui", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
+        Commands::Web { .. } => ("web", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
         Commands::Remote { .. } => ("remote", Reach::Local),
         Commands::Run(_) => ("run", Reach::Local),
         Commands::Completions { .. } => ("completions", Reach::Local),
     }
 }
+
+/// Why `web` and `gui` refuse `--remote`: the page each opens is already
+/// both machines'.
+const THE_PAGE_SHOWS_BOTH: &str = "the page it opens already lists the paired machine's models \
+     beside this machine's, and chats with them; there is nothing for --remote to add.";
 
 /// The commands `--remote` reaches, as the refusal names them. A list
 /// rather than derived from [`reach`], so that the sentence a person reads

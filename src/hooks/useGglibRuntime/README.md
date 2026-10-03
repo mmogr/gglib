@@ -42,6 +42,12 @@ its live run from the far listing, its events and Stop from
 with the new text alone; the far machine runs and saves the reply. A far chat
 offers no edit, no regenerate and no new chat, and nothing of it is kept here.
 
+A chat with the paired machine's model (`pairedModel`) is another thing: a
+conversation of this machine's, run here, whose turns the daemon sends to that
+machine by the model's id there (`far` on the run's body). A conversation a
+send makes for it is made for that model, so its machine is fixed from its
+first turn.
+
 All loop orchestration (context pruning, tool execution, stagnation detection,
 loop detection) lives in the Rust `gglib-agent` crate.
 
@@ -54,7 +60,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs |
 | `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
-| `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; carries `remote` plus the model name the Remote panel named, refusing the turn when it asked for the far machine and named none |
+| `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name |
 | `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, its live run from the far listing's `live_run` |
 | `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events), and the text a far turn carries |
 | `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `drawRun` runs per event |

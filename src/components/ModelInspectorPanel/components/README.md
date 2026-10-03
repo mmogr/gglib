@@ -11,7 +11,7 @@ Presentational sub-components for the model inspector panel, each scoped to a si
 
 | File | Role |
 |------|------|
-| `ModelMetadataGrid.tsx` | Read-only grid: size, architecture, quantization, context window, path, HF link |
+| `ModelMetadataGrid.tsx` | Read-only grid: size, architecture, quantization, context window, path where the model has one here, HF link; for a library row or a far model's detail, with the sampling section only where the caller hands one in |
 | `ModelEditForm.tsx` | Editable quantization label, file path, and inline `InferenceParametersForm` |
 | `TagChips.tsx` | Tag pill list with individual remove buttons |
 | `TagAddInput.tsx` | Controlled text input for adding new tags (submit on Enter) |

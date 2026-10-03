@@ -2,33 +2,19 @@
  * Remote Tunnel State Registry (ADR 0012)
  *
  * Event-driven store for the tunnel, both sides, on the same
- * `createEventStore` pattern as `proxyRegistry`. Two things are kept:
+ * `createEventStore` pattern as `proxyRegistry`. It keeps `status`, the
+ * daemon's `RemoteStatus`, whole. Events move it forward the moment they
+ * arrive; `remoteEvents` then re-reads the status so the fields an event does
+ * not carry (paths, peers, counters) catch up.
  *
- * - `status` — the daemon's `RemoteStatus`, whole. Events move it forward
- *   the moment they arrive; `remoteEvents` then re-reads the status so the
- *   fields an event does not carry (paths, peers, counters) catch up.
- * - `useForChat` — this window's choice to send chat to the connected
- *   machine. Client-side only: the daemon has no opinion about which
- *   upstream a GUI turn should pick, and it is cleared when the connection
- *   goes, because a preference for a machine that is gone is a surprise on
- *   the next send.
- * - `chatModel` — the far machine's name for the model those turns ask for,
- *   and `chatModelPeer`, the peer it was typed for. Also client-side only,
- *   and mandatory on that path: this machine's default is deliberately not
- *   sent, because the far one may not have it (`docs/remote.md`).
- * - `chatRequestedAt` — a request from the Remote panel to put the chat
- *   screen on screen, aimed at the far machine. The panel is mounted in the
- *   model library's header and the chat screen replaces the whole Model
- *   Control Center, so neither can reach the other by props; this store is
- *   the seam between them. It is one-shot: the page clears it as it opens,
- *   so asking twice opens twice.
- *
- * The last three are all aimed at a particular machine, so all three are
- * reconciled against who is actually there: a different peer drops the
- * routing choice, the pending request and the model name together.
+ * What the page holds of the paired machine — its rows in the library, a far
+ * row picked, a chat open on a far model — is held by that machine's
+ * fingerprint, and `stillPaired` says, against the status now, whether it
+ * still holds.
  */
 
 import { createEventStore } from './createEventStore';
+import type { Machine } from '../types/generated/Machine';
 import type { RemoteEvent } from './transport/types/events';
 import type { RemoteStatus } from './transport/types/remote';
 import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, type RemoteState } from './remoteRegistryState';
@@ -52,52 +38,33 @@ function peerOf(status: RemoteStatus | null): string | null {
 }
 
 /**
- * The model name, reconciled against the peer now on the other end.
+ * Whether something held for `machine` — a far row, a far pick, a chat open
+ * on a far model — still holds against `status`.
  *
- * Keeping the name across the same peer's reconnection is the point of
- * keeping it at all; carrying it to a *different* one is how a pre-filled
- * field earns `404 Model 'qwen3' not found` from a working tunnel.
+ * Holding a far model past that machine's reconnection is the point of
+ * holding it at all; carrying it to a *different* machine is how an id picked
+ * from one machine's list reaches another's, where the same number is another
+ * model.
  *
- * Three cases, and only the last one clears:
+ * Three cases, and only the last one drops it:
  *
  * - Nothing connected decides nothing. A disconnection is not a new peer,
- *   and the name outlives it.
- * - A name with no peer recorded has none yet, so the first to answer adopts
- *   it. The state that reaches here in the product is a name typed against
- *   the placeholder connection, before the status read names who answered;
- *   adoption is what makes that window safe, where stamping the placeholder's
- *   fingerprint would attribute the name to whoever was dialled *last*.
- * - Anyone else is a different catalog, and the name does not follow.
+ *   and what was held for that machine outlives it.
+ * - No peer named yet is not a new peer either. The state that reaches here
+ *   in the product is the placeholder connection, before the status read
+ *   names who answered; its `''` is nobody, never a machine to compare.
+ * - Anyone else is a different catalog, and nothing follows to it. A ref to
+ *   this machine is not the paired machine's, and never holds here.
  */
-function reconcileChatModel(
-  prev: RemoteState,
-  peer: string | null,
-): Pick<RemoteState, 'chatModel' | 'chatModelPeer'> {
-  if (peer === null) return { chatModel: prev.chatModel, chatModelPeer: prev.chatModelPeer };
-  const samePeer = prev.chatModelPeer === null || prev.chatModelPeer === peer;
-  return { chatModel: samePeer ? prev.chatModel : '', chatModelPeer: peer };
+export function stillPaired(machine: Machine, status: RemoteStatus | null): boolean {
+  if (machine.kind !== 'paired') return false;
+  const peer = peerOf(status);
+  return peer === null || peer === machine.fingerprint;
 }
 
 /** Replace the status with what the daemon just said. */
 export function applyRemoteStatus(status: RemoteStatus): void {
-  const prev = store.getState();
-  const peer = peerOf(status);
-  const prevPeer = peerOf(prev.status);
-  // A different peer is as much a reason to drop the routing choice and a
-  // pending chat request as a disconnection is: neither was decided about
-  // whoever is there now. This arm covers the swap a status read is the first
-  // news of; a dial whose event arrived is caught by `remote_joined`,
-  // because the placeholder erases the peer this would have compared against.
-  // Read from the status rather than the name's attribution — the box can be
-  // ticked with the field empty, and that choice is no more transferable.
-  const stillAimed = peer !== null && (prevPeer === null || prevPeer === peer);
-  store.setState({
-    ...prev,
-    status,
-    useForChat: prev.useForChat && stillAimed,
-    chatRequestedAt: stillAimed ? prev.chatRequestedAt : null,
-    ...reconcileChatModel(prev, peer),
-  });
+  store.setState({ ...store.getState(), status });
 }
 
 /**
@@ -171,24 +138,12 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
           // connection, the name is left to the read that follows.
           paired_name: null,
         },
-        // Only a fresh dial emits this, so anything already armed was armed
-        // for the connection this one replaces, and the status read cannot be
-        // left to notice: the placeholder has erased the peer it would have
-        // compared against. `chatModel` is deliberately not in that list —
-        // these two are choices about a connection, which a new one voids,
-        // while the name is a fact about a catalog and the usual dial is the
-        // same desktop again. Clearing it here would empty the field on every
-        // reconnection; `applyRemoteStatus` reconciles it by identity instead.
-        useForChat: false,
-        chatRequestedAt: null,
       });
       break;
     case 'remote_disconnected':
       store.setState({
         ...prev,
         status: { ...status, connected: null },
-        useForChat: false,
-        chatRequestedAt: null,
       });
       break;
     // The port stays bound either way; these only change what is said
@@ -211,46 +166,6 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       }
       break;
   }
-}
-
-/** This window's choice to send chat to the connected machine. */
-export function setUseRemoteForChat(useForChat: boolean): void {
-  const prev = store.getState();
-  // Only meaningful while connected; the flag is never left armed for later.
-  store.setState({ ...prev, useForChat: useForChat && prev.status?.connected != null });
-}
-
-/**
- * The model name chat turns should ask the connected machine for.
- *
- * Stored as typed — trimming and the "you named none" refusal both live on
- * the send path, so what the field shows is what the panel was given.
- *
- * The peer is recorded with it, and `peerOf` reads the placeholder's `''` as
- * nobody: a name typed before the status read is left unattributed for that
- * read to adopt. Guessing beats not knowing only if the guess is informed,
- * and the sole fingerprint in that window is whoever was dialled last.
- */
-export function setRemoteChatModel(chatModel: string): void {
-  const prev = store.getState();
-  store.setState({ ...prev, chatModel, chatModelPeer: peerOf(prev.status) });
-}
-
-/**
- * Ask for the chat screen, pointed at the connected machine.
- *
- * Refused while nothing is connected: the screen would have no upstream and
- * the first send would be the place the user found out.
- */
-export function requestRemoteChat(): void {
-  const prev = store.getState();
-  if (prev.status?.connected == null) return;
-  store.setState({ ...prev, chatRequestedAt: Date.now() });
-}
-
-/** Served: the page has the request and the next one must be distinct. */
-export function clearRemoteChatRequest(): void {
-  store.setState({ ...store.getState(), chatRequestedAt: null });
 }
 
 /** Reset (used during cleanup / hot-reload). */

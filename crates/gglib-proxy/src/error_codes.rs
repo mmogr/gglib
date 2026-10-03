@@ -116,7 +116,7 @@ const CODES: &[ErrorCode] = &[
     row("runs_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no runs."),
     row("chats_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no chats."),
     row("not_found", INVALID, Some(404), "Nothing with that id is visible to the caller."),
-    row("conflict", INVALID, Some(409), "The run id is taken, the conversation already has a live reply, or a device's turn names a chat that ran on another machine."),
+    row("conflict", INVALID, Some(409), "The run id is taken, the conversation already has a live reply, or a run or a device's turn names a chat that ran on another machine."),
     row("not_yours", INVALID, Some(403), "The run belongs to a paired device, so only that device may read its reply."),
     row("too_many_runs", RATE, Some(429), "Too many runs are still going; cancel one or wait."),
     row("shutting_down", MANY, Some(503), "The daemon is stopping, so it starts no more runs."),

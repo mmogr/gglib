@@ -129,6 +129,25 @@ impl FarProxy {
         }
     }
 
+    /// This proxy, when `machine` is the one it is on. A model picked from
+    /// the paired machine's list is named by that machine, and is sent
+    /// nowhere else: a pairing replaced since the pick is another machine,
+    /// whose same id is another model.
+    ///
+    /// # Errors
+    ///
+    /// `Conflict` when `machine` is not this proxy's.
+    pub fn serving(self, machine: &Machine) -> Result<Self, GuiError> {
+        if self.machine() == *machine {
+            return Ok(self);
+        }
+        Err(GuiError::Conflict(
+            "the paired machine changed since this model was picked — pick it again from the \
+             paired machine's models, or `gglib remote join` the machine it is on"
+                .to_owned(),
+        ))
+    }
+
     /// What a sentence about this machine calls it: its name, or
     /// [`UNNAMED_PAIRED`] when it has given none. Never its fingerprint.
     #[must_use]

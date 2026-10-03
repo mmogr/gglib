@@ -178,8 +178,22 @@ pub(super) fn refused(
 }
 
 /// The far proxy's `{"error": {"message", "code"}}` as `{error, status,
-/// type}`, the shape the page reads. A refused key names the fix.
+/// type}`, the shape the page reads.
 fn refusal(status: StatusCode, body: &[u8]) -> Json<serde_json::Value> {
+    let (shown, message, code) = refusal_parts(status, body);
+    let mut body = serde_json::json!({ "error": message, "status": shown.as_u16() });
+    if let Some(code) = code {
+        body["type"] = serde_json::Value::String(code);
+    }
+    Json(body)
+}
+
+/// A far refusal as this daemon says it: the status it answers with, the
+/// message and the code. A refused key is a `409` that names the fix.
+pub(super) fn refusal_parts(
+    status: StatusCode,
+    body: &[u8],
+) -> (StatusCode, String, Option<String>) {
     #[derive(Deserialize)]
     struct Detail {
         message: String,
@@ -190,30 +204,19 @@ fn refusal(status: StatusCode, body: &[u8]) -> Json<serde_json::Value> {
     struct Far {
         error: Detail,
     }
-    let far = serde_json::from_slice::<Far>(body).ok().map(|f| f.error);
-    let (message, code) = if status == StatusCode::UNAUTHORIZED {
-        (
+    if status == StatusCode::UNAUTHORIZED {
+        return (
+            StatusCode::CONFLICT,
             "the other machine is not admitting this device's key — pair again with a fresh \
              `gglib remote invite` there"
                 .to_owned(),
             Some("key_refused".to_owned()),
-        )
-    } else {
-        match far {
-            Some(detail) => (detail.message, detail.code),
-            None => (format!("the other machine answered {status}"), None),
-        }
-    };
-    let shown = if status == StatusCode::UNAUTHORIZED {
-        StatusCode::CONFLICT
-    } else {
-        status
-    };
-    let mut body = serde_json::json!({ "error": message, "status": shown.as_u16() });
-    if let Some(code) = code {
-        body["type"] = serde_json::Value::String(code);
+        );
     }
-    Json(body)
+    match serde_json::from_slice::<Far>(body) {
+        Ok(Far { error }) => (status, error.message, error.code),
+        Err(_) => (status, format!("the other machine answered {status}"), None),
+    }
 }
 
 #[cfg(test)]

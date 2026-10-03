@@ -11,11 +11,12 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::{FarError, FarProxy, PairedModels};
 use serde::{Deserialize, Serialize};
 
-use super::chats::refused;
+use super::chats::{refusal_parts, refused};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -88,6 +89,25 @@ fn answer<T: Serialize>(read: Result<T, FarError>) -> Result<Response, HttpError
             body,
         }) => Ok(refused(status, retry_after, &body)),
         Err(FarError::Failed(error)) => Err(error.into()),
+    }
+}
+
+/// A far read's failure as this daemon's error, for a caller that goes on
+/// past the read rather than answering with it: a far refusal keeps its
+/// status and its message (a refused key is a `409` that says to pair
+/// again), and anything else is the error it is.
+pub(crate) fn far_error(error: FarError) -> HttpError {
+    let (status, body) = match error {
+        FarError::Refused { status, body, .. } => (status, body),
+        FarError::Failed(error) => return error.into(),
+    };
+    let (shown, message, _) = refusal_parts(status, &body);
+    match shown {
+        StatusCode::NOT_FOUND => HttpError::NotFound(message),
+        StatusCode::BAD_REQUEST => HttpError::BadRequest(message),
+        StatusCode::CONFLICT => HttpError::Conflict(message),
+        StatusCode::TOO_MANY_REQUESTS => HttpError::TooManyRequests(message),
+        _ => HttpError::ServiceUnavailable(message),
     }
 }
 

@@ -19,6 +19,7 @@ import {
 } from './hooks';
 import {
   ModelMetadataGrid,
+  SamplingProvenanceSection,
   ModelEditForm,
   InspectorTags,
   InspectorCapabilities,
@@ -214,7 +215,16 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <ModelMetadataGrid
               model={model}
               detail={detail.modelDetail ?? undefined}
-              profiles={settings?.inferenceProfiles ?? []}
+              // Resolved sampling, not the stored defaults: a stored value
+              // that wins shows as `per-model defaults (user-set)`, and one
+              // that loses is finally visible as having lost.
+              sampling={
+                <SamplingProvenanceSection
+                  modelId={model.id}
+                  profiles={settings?.inferenceProfiles ?? []}
+                  refreshKey={model.inferenceDefaults}
+                />
+              }
             />
           )}
 

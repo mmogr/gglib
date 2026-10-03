@@ -208,7 +208,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     let settings = conversation.settings.unwrap_or_default();
     let chat = AgentChatRequest {
         port: 0,
-        remote: false,
+        far: None,
         messages,
         config: config_of(&settings),
         tool_filter: Some(tools_of(&settings, state.remote.gateway().mcp_allowed())),

@@ -1,6 +1,6 @@
 //! A fake far proxy on a loopback port, and a `FarProxy` at it: what each
 //! request it saw carried, and the answer it was told to give. Shared by the
-//! chats' and the models' tests.
+//! chats', the models' and a far agent turn's tests.
 
 use std::sync::{Arc, Mutex};
 
@@ -13,25 +13,25 @@ use gglib_app_services::{FarCredentials, FarProxy};
 use tokio::sync::{Notify, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
-pub(super) const KEY: &str = "sk-far-key-for-this-device";
+pub(crate) const KEY: &str = "sk-far-key-for-this-device";
 
 /// One request the far proxy saw.
 #[derive(Debug, Clone)]
-pub(super) struct Seen {
-    pub(super) method: String,
-    pub(super) uri: String,
-    pub(super) bearer: Option<String>,
-    pub(super) body: String,
+pub(crate) struct Seen {
+    pub(crate) method: String,
+    pub(crate) uri: String,
+    pub(crate) bearer: Option<String>,
+    pub(crate) body: String,
 }
 
 /// What the far proxy answers, and what it saw.
-pub(super) struct Fake {
-    pub(super) seen: Mutex<Vec<Seen>>,
-    pub(super) status: Mutex<u16>,
-    pub(super) body: Mutex<String>,
-    pub(super) retry_after: Mutex<Option<&'static str>>,
+pub(crate) struct Fake {
+    pub(crate) seen: Mutex<Vec<Seen>>,
+    pub(crate) status: Mutex<u16>,
+    pub(crate) body: Mutex<String>,
+    pub(crate) retry_after: Mutex<Option<&'static str>>,
     /// Holds a run's stream after its first frame until notified.
-    pub(super) release: Notify,
+    pub(crate) release: Notify,
 }
 
 async fn answer(State(fake): State<Arc<Fake>>, request: Request) -> Response {
@@ -75,10 +75,10 @@ async fn answer(State(fake): State<Arc<Fake>>, request: Request) -> Response {
 }
 
 /// The fingerprint of the machine the fake far proxy stands in for.
-pub(super) const FINGERPRINT: &str = "0a1b2c3d4e5f";
+pub(crate) const FINGERPRINT: &str = "0a1b2c3d4e5f";
 
 /// A fake far proxy answering `status` with `body`, and a `FarProxy` at it.
-pub(super) async fn far(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
+pub(crate) async fn far(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
     let fake = Arc::new(Fake {
         seen: Mutex::new(Vec::new()),
         status: Mutex::new(status),
@@ -100,22 +100,22 @@ pub(super) async fn far(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
 }
 
 /// Whether a request carried this device's key as its bearer.
-pub(super) fn carries_key(seen: &Seen) -> bool {
+pub(crate) fn carries_key(seen: &Seen) -> bool {
     seen.bearer.as_deref() == Some(format!("Bearer {KEY}").as_str())
 }
 
-pub(super) fn only(fake: &Fake) -> Seen {
+pub(crate) fn only(fake: &Fake) -> Seen {
     let seen = fake.seen.lock().unwrap();
     assert_eq!(seen.len(), 1, "{seen:?}");
     seen[0].clone()
 }
 
-pub(super) async fn read(response: Response) -> (StatusCode, String) {
+pub(crate) async fn read(response: Response) -> (StatusCode, String) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
-pub(super) fn json(text: &str) -> serde_json::Value {
+pub(crate) fn json(text: &str) -> serde_json::Value {
     serde_json::from_str(text).unwrap()
 }

@@ -146,11 +146,17 @@ describe('ChatPage, Close and Unload', () => {
 
   it('a chat with another machine offers no Unload: the model is not this one’s', async () => {
     render(
-      <ChatPage remote modelName="qwen3" onSwitchModel={async () => {}} onUnloadModel={onUnloadModel} onClose={onClose} />,
+      <ChatPage
+        paired={{ far: { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 }, machineName: 'desk' }}
+        modelName="qwen3"
+        onSwitchModel={async () => {}}
+        onUnloadModel={onUnloadModel}
+        onClose={onClose}
+      />,
       { wrapper },
     );
     await head();
-    await screen.findByText('qwen3');
+    await screen.findByText('qwen3 on desk');
 
     expect(screen.queryByRole('button', { name: /Unload/ })).not.toBeInTheDocument();
   });

@@ -30,3 +30,8 @@ export const REMOTE_DEVICES_PATH = '/api/remote/devices';
 // beside them in gglib_core::contracts::http::daemon)
 export const REMOTE_CHATS_PATH = '/api/remote/chats';
 export const REMOTE_RUNS_PATH = '/api/remote/runs';
+
+// The paired machine's models, read through the tunnel for the library
+// (mirrors REMOTE_MODELS_PATH and the path functions beside it in
+// gglib_core::contracts::http::daemon)
+export const REMOTE_MODELS_PATH = '/api/remote/models';

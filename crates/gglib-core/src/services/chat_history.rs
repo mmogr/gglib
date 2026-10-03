@@ -43,6 +43,36 @@ impl ChatHistoryService {
             .await
     }
 
+    /// Create a conversation for `model`, by its machine, which its settings
+    /// keep as the model it runs on: a conversation's machine is fixed when
+    /// it is made. A model of this machine's is its `model_id` too, and one of
+    /// the paired machine's leaves that empty, as
+    /// [`record_settings`](Self::record_settings) does. With no `model`, this
+    /// is [`create_conversation`](Self::create_conversation).
+    pub async fn create_conversation_on(
+        &self,
+        title: String,
+        model_id: Option<i64>,
+        model: Option<ModelRef>,
+        system_prompt: Option<String>,
+    ) -> Result<i64, ChatHistoryError> {
+        let model_id = model.as_ref().map_or(model_id, |model| {
+            (model.machine == Machine::Local).then_some(model.id)
+        });
+        let settings = model.map(|model| ConversationSettings {
+            model: Some(model),
+            ..ConversationSettings::default()
+        });
+        self.repo
+            .create_conversation(NewConversation {
+                title,
+                model_id,
+                system_prompt,
+                settings,
+            })
+            .await
+    }
+
     /// Create a new conversation with session settings for resume.
     pub async fn create_conversation_with_settings(
         &self,
@@ -83,13 +113,14 @@ impl ChatHistoryService {
             .await
     }
 
-    /// Name the model a run used on its conversation: this machine's model
-    /// `model_id` (`None` when it is not in the registry) and the settings'
-    /// `model_name`, keeping every other setting.
+    /// Name the model a run used on its conversation: `model`, by its
+    /// machine (`None` for one of this machine's that is not in the
+    /// registry), and the settings' `model_name`, keeping every other
+    /// setting.
     pub async fn record_model(
         &self,
         id: i64,
-        model_id: Option<i64>,
+        model: Option<ModelRef>,
         model_name: &str,
     ) -> Result<(), ChatHistoryError> {
         let conversation = self
@@ -99,10 +130,7 @@ impl ChatHistoryService {
             .ok_or(ChatHistoryError::ConversationNotFound(id))?;
         let mut settings = conversation.settings.unwrap_or_default();
         settings.model_name = Some(model_name.to_owned());
-        settings.model = model_id.map(|id| ModelRef {
-            machine: Machine::Local,
-            id,
-        });
+        settings.model = model;
         self.record_settings(id, settings).await
     }
 
