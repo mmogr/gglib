@@ -691,6 +691,29 @@ Dependabot (`.github/dependabot.yml`) checks every day at 06:00 (Australia/Brisb
 - **`brace-expansion` is held by `overrides` in `package.json`**, not by a range Dependabot edits. A fix that needs a version outside `^5.0.8`, or outside `^1.1.17` under `minimatch@3`, is made there by hand; `//overrides` says why the carve-out stays.
 - **To update without waiting for Dependabot, run Update dependencies.** Actions → Update dependencies → Run workflow, or `gh workflow run update-deps.yml -R mmogr/gglib [-f ecosystem=npm|both] [-f package=<name>]`, opens one PR with the newest versions the ranges allow, even ones under three days old, listing every package that moved, or opens nothing when nothing is newer. It takes Tauri minors too, and its PR says when Tauri moved.
 
+### Stacked pull requests
+
+A change that splits into several concerns goes up as a stack: one PR per concern, one commit per PR, each PR based on the branch of the PR below it, and the bottom one on `main`. The chain is joined into a GitHub stack ([stacked pull requests](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests), a public preview). In a stack, CI runs on every PR and not only on the one into `main`, a merge lands a PR together with every PR below it, and GitHub rebases the PRs that are left.
+
+- **Join the chain into a stack when its PRs are opened.** `gh stack submit` opens the PRs and the stack together. `gh stack link <bottom> … <top>` joins PRs that already exist, by number or by branch. On the website, a new PR whose base is another PR's branch offers **Create stack**. A chain that is not joined gets none of the above: its upper PRs get no CI run, because `ci.yml` runs only for a PR into `main`, and nothing rebases them after a merge.
+- **Keep the stack one line.** A stack is a single chain, so a PR has at most one PR on top of it. Two changes that build on the same PR go one after the other.
+- **Fix a PR in the middle by amending its commit, then rebase the PRs above it.** From that branch, run `gh stack rebase --upstack` and then `gh stack push`. Without `gh stack`'s local tracking, rebase each branch above with `git rebase --onto <new head below> <old head below> '<branch>'`, and push them together with `git push --force-with-lease --atomic origin '<branch>' …`.
+- **Merge once every PR to land is green, with squash, from the highest of them.** The merge box of a stacked PR shows the whole stack. Merging a PR lands it and every unmerged PR below it in one step, as one squash commit per PR, and the next PR up becomes the bottom. From a terminal it is `gh stack merge <PR number> --squash`. If GitHub will not merge the group, merge the bottom PR alone and wait for the next one's CI.
+- **Never merge a stacked PR with the bypass.** After a merge that bypasses `main`'s ruleset, GitHub retargets the next PR and leaves it un-rebased. It did so after 21 of the 22 bypass merges counted in this account's stacks, and after 1 of the 12 merges made without the bypass.
+- **Never pass `--delete-branch` to `gh pr merge` when another PR is based on that branch.** It deletes the branch itself, and GitHub then closes the PRs based on it instead of retargeting them ([cli/cli#1168](https://github.com/cli/cli/issues/1168)). The repository deletes a merged branch on its own.
+- **Do not change a stacked PR's base, and do not set it to auto-merge.** GitHub refuses a base change on a PR that is in a stack, and moves the base itself when the PR below merges. Auto-merge is not supported for stacked PRs.
+- **A PR that GitHub left un-rebased is rebased onto `main` past its parent's old head.** That is the state after a bypass merge, for a PR outside the stack, and when GitHub's rebase conflicts. Branch names hold parentheses, so quote them.
+
+  ```bash
+  git fetch origin
+  git rebase --onto origin/main <parent's old head> '<branch>'
+  git range-diff <parent's old head>..'origin/<branch>' origin/main..HEAD
+  git push --force-with-lease origin '<branch>'
+  ```
+
+  `gh pr view <parent> --json headRefOid` gives the parent's old head, which GitHub keeps after the branch is gone. `range-diff` must mark every commit `=`: any other mark means the rebase changed a patch.
+- **A stacked PR that gets no CI run after a push is opened again as a new PR from the same branch.** Its merge ref is gone ([github/gh-stack#319](https://github.com/github/gh-stack/issues/319)), and closing and reopening the PR does not bring it back.
+
 ---
 
 ## CI Pipeline
@@ -761,3 +784,4 @@ Before requesting review, confirm each item:
 - [ ] If the change adds a new long-running operation: for Tier 1 (runtime behaviour), all three surfaces (CLI, Axum, Tauri) are wired up in this PR; for Tier 2 (management/inspection), the CLI is wired and the surface gap is tracked in a linked issue.
 - [ ] `Cargo.lock` is up to date and committed.
 - [ ] No crate has gained a dependency on a crate in a higher layer.
+- [ ] A PR based on another PR's branch is joined to it in a GitHub stack ([Stacked pull requests](#stacked-pull-requests)).
