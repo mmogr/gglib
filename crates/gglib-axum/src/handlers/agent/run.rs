@@ -64,7 +64,10 @@ pub(super) fn with_code(error: HttpError) -> HttpError {
 ///
 /// `invalid_request` for a body that is not an agent chat request, and
 /// whatever the chat route refuses, coded; `conversation_not_found` (404);
-/// `agent_busy` (429) when every agent slot is taken; `message_not_found`
+/// `attachment_not_found` (400) for an image a message names, history
+/// included, that is not stored, and `request_images_too_large` (400) when
+/// they are over 16 MiB together; `agent_busy` (429) when every agent slot
+/// is taken; `message_not_found`
 /// (404) for a `replace_from` not in the conversation; `conflict` (409)
 /// while the conversation has a live reply, or when it ran on another
 /// machine than the request's; and the runs' own. A refusal writes nothing.
@@ -122,6 +125,13 @@ pub(crate) async fn create_run(
             ));
         }
     }
+    // Before a slot is taken or a model is held, for a run on this
+    // machine's model or the paired machine's: their images are read here.
+    state
+        .core
+        .attachments()
+        .check_request(&req.chat.messages)
+        .await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,

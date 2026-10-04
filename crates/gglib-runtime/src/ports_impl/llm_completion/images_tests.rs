@@ -43,6 +43,10 @@ impl AttachmentStore for Kept {
         unreachable!("the adapter reads bytes, not facts")
     }
 
+    async fn size(&self, _id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
+        unreachable!("the adapter reads bytes, not sizes")
+    }
+
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         Ok(self.0.get(id).cloned())
     }

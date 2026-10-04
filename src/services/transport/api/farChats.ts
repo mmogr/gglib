@@ -3,9 +3,10 @@
  * daemon forwards each request through the tunnel with the key it holds, so
  * the page never does. What comes back is shown, never kept.
  *
- * A turn sends only its text: the far machine rebuilds the history from its
- * own record, runs the reply and saves it there. The body has room for
- * images by id (`RemoteTurnBody.images`), and this page names none.
+ * A turn sends only its text and its images, by the ids the far machine's
+ * store answered (`uploadAttachment(source 'far', …)`): the far machine
+ * rebuilds the history from its own record, runs the reply and saves it
+ * there.
  */
 
 import type { HubChat } from '../../../types/generated/HubChat';
@@ -32,9 +33,13 @@ export async function openFarChat(id: number): Promise<HubChatOpen> {
   return get<HubChatOpen>(`${REMOTE_CHATS_PATH}/${id}`);
 }
 
-/** Add `content` to far chat `id` as run `runId`; the far machine runs the reply. */
-export async function addFarTurn(id: number, runId: string, content: string): Promise<RunInfo> {
-  const body: RemoteTurnBody = { content };
+/**
+ * Add `content` and `images` (ids in the far machine's store) to far chat
+ * `id` as run `runId`; the far machine runs the reply. A turn with no image
+ * leaves `images` out, as a far gglib from before images reads it.
+ */
+export async function addFarTurn(id: number, runId: string, content: string, images: string[] = []): Promise<RunInfo> {
+  const body: RemoteTurnBody = images.length > 0 ? { content, images } : { content };
   return put<RunInfo>(`${REMOTE_CHATS_PATH}/${id}/turns/${encodeURIComponent(runId)}`, body);
 }
 

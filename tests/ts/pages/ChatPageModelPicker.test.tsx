@@ -26,6 +26,7 @@ import ChatPage from '../../../src/pages/ChatPage';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { useToastContext } from '../../../src/contexts/ToastContext';
 import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
+import type { ChatDraft } from '../../../src/types/messages';
 
 /** The toasts, which `ToastProvider` holds but does not draw. */
 const ToastProbe = () => {
@@ -36,10 +37,10 @@ const wrapper = ({ children }: { children: ReactNode }) =>
   pageWrapper({ children: <><ToastProbe />{children}</> });
 
 let fixture: ChatFixture;
-type SwitchContext = () => { conversationId: number | null; draft: string };
+type SwitchContext = () => { conversationId: number | null; draft: ChatDraft };
 const onSwitchModel = vi.fn(async (_choice: ModelChoice, _context: SwitchContext) => {});
 
-function renderPage(conversationId?: number, modelId = 7, draft?: string) {
+function renderPage(conversationId?: number, modelId = 7, draft?: ChatDraft) {
   return render(
     <ChatPage
       modelName="Qwen3.8-27B"
@@ -165,10 +166,10 @@ describe('ChatPage, model picker', () => {
     await screen.findByText('What is a GGUF?');
     await user.type(screen.getByRole('textbox', { name: 'Message' }), 'half a thought');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Model' }), 'llama-3.2-3b');
-    expect(onSwitchModel.mock.calls[0][1]().draft).toBe('half a thought');
+    expect(onSwitchModel.mock.calls[0][1]().draft).toEqual({ text: 'half a thought', images: [] });
     page.unmount();
 
-    renderPage(2, 7, 'half a thought');
+    renderPage(2, 7, { text: 'half a thought', images: [] });
     await screen.findByText('What is a GGUF?');
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('half a thought'));

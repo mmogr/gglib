@@ -35,3 +35,11 @@ export const REMOTE_RUNS_PATH = '/api/remote/runs';
 // (mirrors REMOTE_MODELS_PATH and the path functions beside it in
 // gglib_core::contracts::http::daemon)
 export const REMOTE_MODELS_PATH = '/api/remote/models';
+
+// The images a message carries, by the id an upload answers: this machine's
+// store, and the paired machine's through the tunnel for a far chat. `POST`
+// takes the image as the raw body; `GET` with `/{id}` answers its bytes
+// (mirrors ATTACHMENTS_PATH and REMOTE_ATTACHMENTS_PATH in
+// gglib_core::contracts::http::attachments)
+export const ATTACHMENTS_PATH = '/api/attachments';
+export const REMOTE_ATTACHMENTS_PATH = '/api/remote/attachments';

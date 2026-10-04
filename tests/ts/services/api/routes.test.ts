@@ -6,9 +6,11 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  ATTACHMENTS_PATH,
   HF_SEARCH_PATH,
   HF_QUANTIZATIONS_PATH,
   HF_TOOL_SUPPORT_PATH,
+  REMOTE_ATTACHMENTS_PATH,
   REMOTE_CHATS_PATH,
   REMOTE_JOIN_PATH,
   REMOTE_RUNS_PATH,
@@ -36,6 +38,14 @@ describe('services/api/routes', () => {
     it('REMOTE_CHATS_PATH and REMOTE_RUNS_PATH are canonical', () => {
       expect(REMOTE_CHATS_PATH).toBe('/api/remote/chats');
       expect(REMOTE_RUNS_PATH).toBe('/api/remote/runs');
+    });
+
+    // `ATTACHMENTS_PATH` and `REMOTE_ATTACHMENTS_PATH` in
+    // `gglib-core::contracts::http::attachments`: the chat page uploads and
+    // reads a chat's images under these, its own or the far machine's.
+    it('ATTACHMENTS_PATH and REMOTE_ATTACHMENTS_PATH are canonical', () => {
+      expect(ATTACHMENTS_PATH).toBe('/api/attachments');
+      expect(REMOTE_ATTACHMENTS_PATH).toBe('/api/remote/attachments');
     });
   });
 

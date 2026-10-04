@@ -56,4 +56,16 @@ describe('buildLoadedMessage', () => {
     expect(made({ metadata: { thinking: 'x' } })).toBeUndefined();
     expect(made({ role: 'user', metadata: { modelName: 'qwen3' } })).toBeUndefined();
   });
+
+  it('gives a user row its saved images as complete attachments, by id with their facts', () => {
+    const shot = { id: 'c'.repeat(64), mime: 'image/jpeg', width: 4032, height: 3024 };
+    const loaded = buildLoadedMessage(row({ role: 'user', content: 'what is this?', images: [shot] }), 1);
+    expect(loaded.attachments).toEqual([
+      { id: shot.id, type: 'image', name: 'image', contentType: 'image/jpeg', status: { type: 'complete' }, content: [], stored: shot },
+    ]);
+  });
+
+  it('gives a row with no images no attachments', () => {
+    expect(buildLoadedMessage(row({ role: 'user', content: 'hi' }), 1).attachments).toBeUndefined();
+  });
 });

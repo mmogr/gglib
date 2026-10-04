@@ -4,7 +4,10 @@
  * `/api/remote/*` is answered as `handlers/remote/chats.rs` forwards it: the
  * far machine is a second `FakeDaemon` (`hub`), whose chats are listed with
  * the run live in each, opened with their rows, and continued with a turn
- * of `{content}` that the hub starts as its own run and saves. Every other
+ * of `{content, images?}` that the hub starts as its own run and saves; its
+ * images go to the hub's store at `/api/remote/attachments`, and a far
+ * gglib from before images (`noImages`) answers that route 404 and a turn
+ * that names one `400 invalid_request`. Every other
  * path goes to this machine's `FakeDaemon` (`here`). What the page sent to
  * the far routes is recorded in `farRequests`, as it sent it.
  *
@@ -93,6 +96,8 @@ export class FakeFarDaemon {
   entries: ModelInfo[] = [farEntry('qwen3', 3), farEntry('qwen3', 3, { profile: 'coding' })];
   /** How many more readings of the far models fail. */
   modelsFail = 0;
+  /** The far machine's gglib predates images. */
+  noImages = false;
 
   /** How many far requests went to `method` on a path starting `prefix`. */
   farCount(method: string, prefix: string): number {
@@ -103,7 +108,7 @@ export class FakeFarDaemon {
     const url = String(input);
     if (!url.startsWith('/api/remote/')) return this.here.fetch(input, init);
     const method = init.method ?? 'GET';
-    const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+    const body = typeof init.body === 'string' ? JSON.parse(init.body) : (init.body ?? undefined);
     this.farRequests.push({ method, url, body });
     const [path, query] = url.split('?');
     const hub = (hubPath: string, hubInit: RequestInit = {}) =>
@@ -142,12 +147,20 @@ export class FakeFarDaemon {
       };
       return json({ conversation, messages: this.hub.saved(id) });
     }
+    if ((m = /^\/api\/remote\/attachments(\/[^/]+)?$/.exec(path))) {
+      if (this.noImages) return json({ error: `no route ${method} ${path}`, status: 404, type: 'not_found' }, 404);
+      return hub(`/api/attachments${m[1] ?? ''}`);
+    }
     if (method === 'PUT' && (m = /^\/api\/remote\/chats\/(\d+)\/turns\/([^/]+)$/.exec(path))) {
+      const { content, images } = body as { content: string; images?: string[] };
+      if (this.noImages && images) {
+        return json({ error: 'unknown field `images`', status: 400, type: 'invalid_request' }, 400);
+      }
       // As the hub takes a device's turn: the history is its own record.
       const request = {
         conversation_id: Number(m[1]),
         replace_from: null,
-        messages: [{ role: 'user', content: (body as { content: string }).content }],
+        messages: [{ role: 'user', content, ...(images && { images }) }],
       } as unknown as AgentRunRequest;
       return this.hub.fetch(`/api/runs/${m[2]}?kind=agent`, { method: 'PUT', body: JSON.stringify(request) });
     }

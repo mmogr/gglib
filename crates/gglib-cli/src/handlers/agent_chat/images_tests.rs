@@ -32,6 +32,10 @@ impl AttachmentStore for MemoryStore {
         Ok(self.kept.lock().unwrap().get(id).cloned())
     }
 
+    async fn size(&self, _id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
+        Ok(None)
+    }
+
     async fn blob(&self, _id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         Ok(None)
     }

@@ -52,6 +52,10 @@ impl AttachmentStore for Images {
         Ok(self.0.lock().unwrap().get(id).map(|held| held.0.clone()))
     }
 
+    async fn size(&self, id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
+        Ok(self.0.lock().unwrap().get(id).map(|held| held.1.len()))
+    }
+
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         let held = self.0.lock().unwrap().get(id).cloned();
         Ok(held.map(|(info, data)| AttachmentBlob {

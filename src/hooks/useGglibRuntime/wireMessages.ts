@@ -46,7 +46,10 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentMessage[] 
             .map(p => p.text)
             .join('')
         : (msg.content as string) ?? '';
-      result.push({ role: msg.role, content });
+      // A user's images by id, every time: the whole history is sent again.
+      const images = msg.role === 'user' ? (msg.attachments ?? []).map((image) => image.id) : [];
+      if (msg.role === 'user' && images.length > 0) result.push({ role: 'user', content, images });
+      else result.push({ role: msg.role, content });
 
     } else if (msg.role === 'assistant') {
       const parts = extractParts(msg.content);

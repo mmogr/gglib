@@ -96,5 +96,8 @@ impl ImageUrls {
 }
 
 #[cfg(test)]
+#[path = "far_images_tests.rs"]
+mod far_images_tests;
+#[cfg(test)]
 #[path = "images_tests.rs"]
 mod images_tests;

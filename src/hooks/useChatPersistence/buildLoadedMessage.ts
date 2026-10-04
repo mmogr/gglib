@@ -1,8 +1,9 @@
-import type { ThreadMessageLike } from '@assistant-ui/react';
+import type { CompleteAttachment, ThreadMessageLike } from '@assistant-ui/react';
 import { reconstructContent, turnMadeFromMetadata } from '../../utils/messages';
 import type { SerializableToolCallPart } from '../../utils/messages';
 import type { ChatMessage } from '../../services/transport';
 import { parseDbTimestamp } from '../../utils/dbTimestamp';
+import type { AttachmentInfo } from '../../types/generated/AttachmentInfo';
 
 // ============================================================================
 // Tool-row folding (CLI agent conversations store tool results as separate rows)
@@ -105,6 +106,9 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
  * `metadata.contentParts` so they survive the DB round-trip. Reasoning text
  * stored in `metadata.thinking` is injected as a `{type:'reasoning'}` part.
  *
+ * A user's images come back as its attachments, by id with their facts and
+ * without their bytes: the bubble reads each from its store.
+ *
  * Backwards compatibility: if the content column contains legacy `<think>` tags
  * (from before reasoning was stored in metadata), they are parsed and converted
  * to structured reasoning parts.
@@ -160,13 +164,29 @@ export function buildLoadedMessage(
   // calls incomplete.
   const unfinished = msg.role === 'assistant' && msg.metadata?.incomplete === true;
 
+  const images = msg.role === 'user' ? (msg.images ?? []) : [];
+
   return {
     id: `db-${msg.id}`,
     role: msg.role as 'user' | 'assistant',
     content,
     createdAt: parseDbTimestamp(msg.created_at),
     ...(unfinished && { status: { type: 'incomplete' as const, reason: 'cancelled' as const } }),
+    ...(images.length > 0 && { attachments: images.map(savedImage) }),
     metadata: { custom },
+  };
+}
+
+/** A saved image as the thread holds it: complete, its facts as `stored`. */
+function savedImage(image: AttachmentInfo): CompleteAttachment & { stored: AttachmentInfo } {
+  return {
+    id: image.id,
+    type: 'image',
+    name: 'image',
+    contentType: image.mime,
+    status: { type: 'complete' },
+    content: [],
+    stored: image,
   };
 }
 

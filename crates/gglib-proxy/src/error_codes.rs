@@ -103,7 +103,7 @@ const CODES: &[ErrorCode] = &[
     row("image_too_large", INVALID, Some(413), "An uploaded image is over the 8 MiB one image may be."),
     row("unsupported_image", INVALID, Some(400), "An uploaded file is not a PNG or a JPEG whose size can be read."),
     row("attachment_not_found", INVALID, None, "A message names an image id that is not stored (400), or an image was asked for by an id that is not stored (404); upload the image again."),
-    row("request_images_too_large", UNTYPED, None, "The images of one chat are over the 16 MiB one request to a model may carry; the request is not sent, and the run's last error event says so."),
+    row("request_images_too_large", INVALID, Some(400), "The images a chat's messages carry, history included, are over the 16 MiB one request to a model may carry; the run is refused before it starts. Start a new chat, or send fewer or smaller images."),
     row("upstream_error", MANY, None, "The model server (for a run, the proxy) failed, could not be reached, or ended a reply early; the type beside it may be llama-server's."),
     row("context_length_exceeded", Kind::One("context_length_exceeded"), Some(400), "The conversation does not fit the model's context even trimmed; start a new one."),
     row("loop_detected", Kind::One("loop_detected"), Some(400), "The history repeats the same tool calls with the same results, so the request was refused or the agent run stopped."),

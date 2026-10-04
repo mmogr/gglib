@@ -1,7 +1,8 @@
 /**
  * The far machine's chats, read and carried on through this machine's
- * daemon: opening reads the far rows, a send is the new text alone, the
- * far machine runs and saves the reply, and nothing of it is kept here.
+ * daemon: opening reads the far rows, a send is the new turn alone, its
+ * text and its images (the images tested in `useGglibRuntimeImages.test.ts`),
+ * the far machine runs and saves the reply, and nothing of it is kept here.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -55,7 +56,7 @@ describe('useGglibRuntime on the far machine', () => {
     nothingHere();
   });
 
-  it('a far send is the new text alone, and the reply is what the far machine saved', async () => {
+  it('a far send with no image is its new text alone, and the reply is what the far machine saved', async () => {
     daemons.hub.save(1, { role: 'user', content: 'Why did the build break?' });
     daemons.hub.save(1, { role: 'assistant', content: 'A dependency moved.' });
     const hook = await mount(far(1));

@@ -1,7 +1,7 @@
 /**
  * Which machine's chats the runtime reads: this one's, or the far machine's
- * through this machine's daemon. One source at a time; the runs of each are
- * asked of that source alone.
+ * through this machine's daemon. One source at a time; the runs and the
+ * images of each are asked of that source alone.
  *
  * @module chatSource
  */
@@ -9,6 +9,7 @@
 import { getTransport, type ChatSource } from '../../services/transport';
 import type { RunStreamItem } from '../../services/transport/api/runs';
 import type { GglibContent } from '../../types/messages';
+import type { AttachmentUpload } from '../../types/generated/AttachmentUpload';
 import type { RunInfo } from '../../types/generated/RunInfo';
 
 /** A source's runs: list, cancel, and read one's events. */
@@ -32,6 +33,21 @@ export function runsOf(source: ChatSource): SourceRuns {
     listRuns: () => transport.listRuns(),
     cancelRun: (id) => transport.cancelRun(id),
     readRunEvents: (id, after, signal) => transport.readRunEvents(id, after, signal),
+  };
+}
+
+/** A source's images: upload one, and read one's bytes by its id. */
+export interface SourceImages {
+  upload(image: Blob): Promise<AttachmentUpload>;
+  blob(id: string): Promise<Blob>;
+}
+
+/** The image store of `source`: this machine's, or the far machine's for a far chat. */
+export function imageStoreOf(source: ChatSource): SourceImages {
+  const transport = getTransport();
+  return {
+    upload: (image) => transport.uploadAttachment(source, image),
+    blob: (id) => transport.fetchAttachmentBlob(source, id),
   };
 }
 

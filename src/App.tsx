@@ -7,6 +7,7 @@ import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
 import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
+import { useFileDropGuard } from "./hooks/useFileDropGuard";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
@@ -72,6 +73,9 @@ function AppContent() {
   useEffect(() => {
     syncBuiltinTools().catch(() => void 0);
   }, []);
+
+  // A file dropped where nothing takes it must not open in place of the app
+  useFileDropGuard();
 
   // Close modal when installation completes
   useEffect(() => {

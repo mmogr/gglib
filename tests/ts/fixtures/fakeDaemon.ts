@@ -15,6 +15,10 @@
  *   only then does its status read as ended and its readers get the one
  *   `event: run`.
  * - `GET /api/runs` is newest first; absent optional fields are left out.
+ * - `/api/attachments` is the image store (`fakeImageStore.ts`): a run
+ *   whose messages name an image not stored, or over 16 MiB of images
+ *   together, is refused by its code before it starts, and a saved user row
+ *   lists its images' facts.
  *
  * A test drives a run with `emit` and `finish`, and can act at any request
  * with `before`. Every request is recorded.
@@ -23,6 +27,7 @@
 import type { ChatMessage } from '../../../src/services/transport';
 import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
 import type { RunInfo } from '../../../src/types/generated/RunInfo';
+import { FakeImageStore } from './fakeImageStore';
 
 export interface Recorded {
   method: string;
@@ -62,6 +67,7 @@ export class FakeDaemon {
   conversations = new Set<number>([1, 2]);
   runs = new Map<string, FakeRun>();
   requests: Recorded[] = [];
+  images = new FakeImageStore();
   /** The answer the next run start gets instead of a run, once. */
   refuseNext: { status: number; type: string; error: string } | null = null;
   /** The next run start never reaches the daemon: `fetch` rejects, once. */
@@ -163,12 +169,17 @@ export class FakeDaemon {
   fetch = async (input: string | URL | Request, init: RequestInit = {}): Promise<Response> => {
     const url = String(input);
     const method = init.method ?? 'GET';
-    const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+    // JSON as the page sends it; an image's raw bytes as the `Blob` it sent.
+    const body = typeof init.body === 'string' ? JSON.parse(init.body) : (init.body ?? undefined);
     this.requests.push({ method, url, body });
     const path = url.split('?')[0];
     await this.before?.(method, path);
     let m: RegExpExecArray | null;
 
+    if (method === 'POST' && path === '/api/attachments') return this.images.upload(body);
+    if (method === 'GET' && (m = /^\/api\/attachments\/([^/]+)$/.exec(path))) {
+      return this.images.read(decodeURIComponent(m[1]));
+    }
     if (method === 'POST' && path === '/api/conversations') {
       const id = this.nextConversation++;
       this.conversations.add(id);
@@ -249,6 +260,8 @@ export class FakeDaemon {
       return refusal(status, type, error);
     }
     const cid = request.conversation_id;
+    const unreadable = this.images.check(request.messages as Array<{ images?: string[] }>);
+    if (unreadable) return unreadable;
     if (cid !== null && !this.conversations.has(cid)) {
       return refusal(404, 'conversation_not_found', `no conversation has id ${cid}`);
     }
@@ -263,7 +276,10 @@ export class FakeDaemon {
     }
     const run = this.accept(id, cid);
     run.request = request;
-    if (cid !== null && last?.role === 'user') this.save(cid, { role: 'user', content: last.content });
+    if (cid !== null && last?.role === 'user') {
+      const images = last.images ?? [];
+      this.save(cid, { role: 'user', content: last.content, ...(images.length > 0 && { images: this.images.infos(images) }) });
+    }
     return json(run.info, 201);
   }
 

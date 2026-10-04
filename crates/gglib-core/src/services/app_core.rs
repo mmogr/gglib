@@ -237,6 +237,9 @@ mod tests {
         ) -> Result<Option<AttachmentInfo>, AttachmentError> {
             Ok(None)
         }
+        async fn size(&self, _id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
+            Ok(None)
+        }
         async fn blob(
             &self,
             _id: &AttachmentId,

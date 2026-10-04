@@ -23,6 +23,7 @@ import type { ModelChoice } from '../../components/ChatMessagesPanel';
 import { stillPaired, useRemoteState } from '../../services/remoteRegistry';
 import { getTransport } from '../../services/transport';
 import type { ModelRef } from '../../types/generated/ModelRef';
+import type { ChatDraft } from '../../types/messages';
 
 /**
  * An open chat screen.
@@ -40,8 +41,8 @@ export type ChatSession =
       initialView: 'chat' | 'console';
       /** The conversation to open with: the one open before a model switch. */
       conversationId?: number | null;
-      /** The unsent text to put back in the composer after a model switch. */
-      draft?: string;
+      /** The unsent text and images to put back in the composer after a model switch. */
+      draft?: ChatDraft;
     }
   | {
       kind: 'paired';
@@ -56,8 +57,8 @@ export type ChatSession =
 /** What a model switch carries to the new page, read when the switch lands. */
 export interface SwitchContext {
   conversationId: number | null;
-  /** The composer's unsent text, put back in the new page's composer. */
-  draft: string;
+  /** The composer's unsent text and images, put back in the new page's composer. */
+  draft: ChatDraft;
 }
 
 export interface UseChatSessionResult {

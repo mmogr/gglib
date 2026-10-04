@@ -84,11 +84,20 @@ export async function deleteMessage(id: MessageId): Promise<number> {
   return del<number>(`/api/messages/${id}`);
 }
 
+/** The title of a chat whose questions are images alone. */
+const IMAGE_CHAT_TITLE = 'Image chat';
+
 /**
- * Generate a chat title using the served LLM.
+ * Generate a chat title using the served LLM. A chat whose user messages
+ * are images with no text gives the model nothing to name it by (it is sent
+ * the text alone), so it is titled `IMAGE_CHAT_TITLE` without asking.
  */
 export async function generateChatTitle(params: GenerateTitleParams): Promise<string> {
   const { serverPort, messages, prompt = DEFAULT_TITLE_GENERATION_PROMPT } = params;
+  const asked = messages.filter((m) => m.role === 'user');
+  if (asked.length > 0 && asked.every((m) => !m.content.trim() && (m.images?.length ?? 0) > 0)) {
+    return IMAGE_CHAT_TITLE;
+  }
   
   const sanitizedMessages = sanitizeMessagesForLlamaServer(messages);
   const llamaMessages = [

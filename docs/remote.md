@@ -777,9 +777,11 @@ under their SHA-256, and answers that id with the image's type, its size in
 pixels and the prompt tokens it is estimated to cost; the same bytes sent
 twice are one image and the same answer. The turn then names its images,
 `{conversation_id, content, images}`, and needs text or an image. An id the
-desktop does not hold is `400 attachment_not_found`, and a chat whose model
-has no projector is `400 model_cannot_read_images`; both are answered before
-the model is loaded or a row is saved. So what crosses is the file, once;
+desktop does not hold is `400 attachment_not_found`, a chat whose images,
+the turn's and the history's, are over 16 MiB together is `400
+request_images_too_large`, and a chat whose model has no projector is `400
+model_cannot_read_images`; each is answered before the model is loaded or a
+row is saved. So what crosses is the file, once;
 after that a turn is its text and ids, and an opened chat lists each row's
 images by id, type and size, with no bytes. A device reads the bytes of one
 with `GET /v1/attachments/{id}`, which answers them as they were sent, with
@@ -795,7 +797,12 @@ adds the key as it does for the desktop's chats and keeps nothing. What it
 reads back it serves as `image/png` or `image/jpeg` when the desktop said
 so, and otherwise as `application/octet-stream`, with `nosniff` and
 `no-store`. The chat
-page does not attach images yet, so it sends none.
+page uses both for a far chat: an image pasted, dropped or picked there is
+uploaded to the desktop's store as it is added, the turn names it by the id
+the desktop answered, and a turn's image is shown by reading it back through
+this route. A desktop whose gglib predates images answers the upload `404`
+and a turn that names one `400 invalid_request`; the page says the paired
+machine's gglib cannot take images yet.
 
 The model list carries each model's id in the desktop's catalog
 (`gglib_id`) and the desktop's name (`machine_name`, its host name's first

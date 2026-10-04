@@ -41,10 +41,11 @@ Custom React hooks for gglib GUI functionality.
 |------|-------------|
 | [`useModels.ts`](useModels.ts) | Model CRUD operations and listing |
 | [`useModelLibraryEvents.ts`](useModelLibraryEvents.ts) | Reload the library when another client changes it |
-| [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library: read while it is reached, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
+| [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library and a chat on one of them: read while it is reached and the caller needs them, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
 | [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; a far pick tells the native menu nothing here is selected |
 | [`useServers.ts`](useServers.ts) | Server lifecycle management (start/stop/health) |
-| [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, and quantisation |
+| [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, quantisation, whether it reads images, and its context |
+| [`useImageInput.ts`](useImageInput.ts) | Whether the chat's composers offer images, by `canSee` (this machine's model, or the paired machine's row for it, read only for a chat on its model; always for a far chat), why not, and the context their cost is read against |
 | [`useTags.ts`](useTags.ts) | Model tagging operations |
 | [`useMcpServers.ts`](useMcpServers.ts) | MCP server configuration |
 | [`useSettings.ts`](useSettings.ts) | Application settings management |
@@ -75,6 +76,7 @@ Custom React hooks for gglib GUI functionality.
 |------|-------------|
 | [`useDebounce.ts`](useDebounce.ts) | Debounced value updates |
 | [`useClickOutside.ts`](useClickOutside.ts) | Click outside detection for dropdowns |
+| [`useFileDropGuard.ts`](useFileDropGuard.ts) | Refuses a file dragged or dropped where nothing takes it, so the desktop window never opens it in place of the app |
 | [`useModelFilterOptions.ts`](useModelFilterOptions.ts) | Model filtering and sorting |
 | [`useMetricHistory.ts`](useMetricHistory.ts) | Ring buffer of samples, either as-is or as the per-second rate of a cumulative counter |
 | [`usePanelResize.ts`](usePanelResize.ts) | Draggable split with min/max bounds, optionally persisted to `localStorage` |
