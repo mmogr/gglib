@@ -97,6 +97,8 @@ const CODES: &[ErrorCode] = &[
     row("profile_not_found", INVALID, Some(404), "No model has that name, and its :suffix names no inference profile."),
     row("not_an_embedding_model", INVALID, Some(400), "An embeddings request named a model not tagged embedding."),
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),
+    row("model_cannot_read_images", INVALID, Some(400), "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."),
+    row("request_too_large", INVALID, Some(413), "The request body is over the 32 MiB limit."),
     row("upstream_error", MANY, None, "The model server (for a run, the proxy) failed, could not be reached, or ended a reply early; the type beside it may be llama-server's."),
     row("context_length_exceeded", Kind::One("context_length_exceeded"), Some(400), "The conversation does not fit the model's context even trimmed; start a new one."),
     row("loop_detected", Kind::One("loop_detected"), Some(400), "The history repeats the same tool calls with the same results, so the request was refused or the agent run stopped."),

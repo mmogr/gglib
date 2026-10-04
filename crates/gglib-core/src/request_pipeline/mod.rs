@@ -4,6 +4,9 @@ pub(crate) mod constrain;
 pub(crate) mod content;
 pub(crate) mod effort_gate;
 pub mod explain;
+pub(crate) mod image_size;
+pub(crate) mod images;
+pub(crate) mod measure;
 pub(crate) mod messages;
 pub(crate) mod model_context;
 pub mod profile_route;
@@ -18,9 +21,15 @@ pub mod validate;
 
 pub use apply::{PipelineReport, apply};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
-pub use content::{append_text, for_each_text_mut, text_len, text_parts};
+pub use content::{append_text, for_each_text_mut, image_urls, text_len, text_parts};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
+pub use image_size::{MAX_HEADER_BYTES, data_url_image_size, image_size};
+pub use images::{
+    CannotReadImages, IMAGE_TOKEN_PX, MAX_IMAGE_TOKENS, estimate_image_tokens, has_images,
+    image_url_tokens, refuse_unless_can_see, request_image_urls,
+};
+pub use measure::ContextBudget;
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use profile_route::{ModelRoute, resolve_route};
@@ -35,6 +44,9 @@ pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, 
 pub use validate::{Verdict, Violation, ViolationKind, validate_tool_calls};
 
 #[cfg(test)]
+mod image_fixtures;
+
+#[cfg(test)]
 mod tests_support {
     use crate::ports::ModelSummary;
 
@@ -42,5 +54,14 @@ mod tests_support {
     /// about, so adding a field to `ModelSummary` doesn't touch every test.
     pub(super) fn summary() -> ModelSummary {
         ModelSummary::bare(7, "qwen3")
+    }
+
+    /// A budget of `chars` characters at the static ratio, for a test that
+    /// thinks in characters.
+    pub(super) const fn chars(chars: usize) -> super::ContextBudget {
+        super::ContextBudget {
+            chars,
+            tokens: chars / super::CHARS_PER_TOKEN_APPROX,
+        }
     }
 }

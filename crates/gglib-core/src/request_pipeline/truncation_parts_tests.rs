@@ -3,6 +3,7 @@
 
 use serde_json::{Value, json};
 
+use super::super::tests_support::chars;
 use super::super::truncation::{
     PROTECTED_TAIL_COUNT, TOOL_CONTENT_THRESHOLD_CHARS, TRUNCATION_PLACEHOLDER, truncate_history,
 };
@@ -40,7 +41,7 @@ fn an_array_form_tool_result_is_truncated_rather_than_skipped() {
     // watermark target takes the three oldest.
     let mut b = body(&with_tail(vec![part_msg(&big(100_000)); 4]));
 
-    let report = truncate_history(&mut b, ROOMY).unwrap();
+    let report = truncate_history(&mut b, chars(ROOMY)).unwrap();
 
     assert_eq!(
         report.messages_truncated, 3,
@@ -67,7 +68,7 @@ fn a_long_array_form_history_is_truncated_instead_of_refused() {
     // with nothing elided.
     let mut b = body(&with_tail(vec![part_msg(&big(100_000))]));
 
-    let report = truncate_history(&mut b, 50_000).expect("elided, not refused");
+    let report = truncate_history(&mut b, chars(50_000)).expect("elided, not refused");
 
     assert_eq!(report.messages_truncated, 1);
     assert!(report.payload_chars_after <= 50_000);

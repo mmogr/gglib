@@ -39,6 +39,18 @@
       "meaning": "A chat request named an embedding model."
     },
     {
+      "code": "model_cannot_read_images",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."
+    },
+    {
+      "code": "request_too_large",
+      "type": "invalid_request_error",
+      "status": 413,
+      "meaning": "The request body is over the 32 MiB limit."
+    },
+    {
       "code": "upstream_error",
       "type": null,
       "status": null,

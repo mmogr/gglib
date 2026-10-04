@@ -21,6 +21,7 @@ Shared TypeScript helpers used across the React frontend.
 | `samplingProvenance.ts` | Render a resolved sampling parameter and the layer that supplied it; wording mirrors `gglib model explain` |
 | `errors.ts` | `AbortError` predicate — the `DOMException` both `fetch()` and stream reads throw when a signal fires |
 | `formatPerSecond.ts` | Compact per-second count with no unit; the caller supplies "tok/s", "req/s" or whatever it counts |
+| `canSee.ts` | Whether a row's model reads images: a local row's `imageInput`, or a far row's `vision` capability |
 | `dbTimestamp.ts` | Parse a database timestamp, reading SQLite's zone-less `YYYY-MM-DD HH:MM:SS` as the UTC it is rather than as local time |
 | `messages/` | Chat message transformation helpers |
 

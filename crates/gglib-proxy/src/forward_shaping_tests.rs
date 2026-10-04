@@ -7,6 +7,14 @@
 
 use super::*;
 
+/// A budget of `chars` characters at the static ratio.
+const fn chars(chars: usize) -> ContextBudget {
+    ContextBudget {
+        chars,
+        tokens: chars / gglib_core::request_pipeline::CHARS_PER_TOKEN_APPROX,
+    }
+}
+
 fn oversized_body() -> Bytes {
     let mut messages = vec![serde_json::json!({
         "role": "tool", "tool_call_id": "c1", "content": "x".repeat(50_000)
@@ -84,7 +92,7 @@ fn shaping_leaves_non_json_bodies_alone() {
         body.clone(),
         &ModelContext::passthrough(),
         &SamplingLayers::default(),
-        Some(10),
+        Some(chars(10)),
     )
     .expect("a body we cannot read is forwarded, not rejected");
 
@@ -102,7 +110,7 @@ fn shaping_truncates_when_the_budget_binds() {
         oversized_body(),
         &ModelContext::passthrough(),
         &SamplingLayers::default(),
-        Some(20_000),
+        Some(chars(20_000)),
     )
     .expect("trimming the one oversized tool result is enough");
 
@@ -117,7 +125,7 @@ fn shaping_reports_the_error_when_the_budget_cannot_be_met() {
         oversized_body(),
         &ModelContext::passthrough(),
         &SamplingLayers::default(),
-        Some(200),
+        Some(chars(200)),
     )
     .expect_err("nothing left to trim, still over");
 
@@ -146,4 +154,29 @@ async fn the_context_length_contract_is_400_with_both_codes_set() {
         parsed["error"]["message"],
         "Context window limit reached. Please start a new conversation."
     );
+}
+
+/// What calibration is skipped by: an image anywhere in the messages.
+#[test]
+fn shaping_says_whether_the_request_carries_an_image() {
+    let shape = |body: &'static str| {
+        shape_request_body(
+            Bytes::from(body),
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            Some(chars(20_000)),
+        )
+        .expect("under the budget")
+        .carries_images
+    };
+    assert!(shape(
+        r#"{"model":"m","messages":[
+            {"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.com/a.png"}}]},
+            {"role":"assistant","content":"a cat"},
+            {"role":"user","content":"and now?"}]}"#
+    ));
+    assert!(!shape(
+        r#"{"model":"m","messages":[{"role":"user","content":"image_url"}]}"#
+    ));
+    assert!(!shape("not json"));
 }

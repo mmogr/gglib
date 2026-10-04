@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 
 use axum::{
     Json,
-    extract::State,
+    extract::{State, rejection::BytesRejection},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -430,9 +430,13 @@ pub(crate) async fn handle_proxy_status_stream(State(state): State<AppState>) ->
 pub(crate) async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     debug!("POST /v1/chat/completions");
+    let body = match body {
+        Ok(body) => body,
+        Err(rejection) => return crate::body_limit::rejected(rejection),
+    };
 
     // Canonicalize the system prompt and tool order once, up front, and
     // reuse the result for both the content-hash session id fallback below
@@ -477,7 +481,7 @@ pub(crate) async fn chat_completions(
         // actual disk save/restore activation stays independently gated on
         // `state.cache_enabled` at its own call site below, so deriving the
         // id here doesn't turn on disk caching when the feature is off.
-        crate::canonicalization::derive_fallback_session_id(&body)
+        crate::fallback_session::derive_fallback_session_id(&body)
     };
 
     if let Some(ref sid) = sanitized_session_id {
@@ -653,6 +657,12 @@ pub(crate) async fn chat_completions(
             Json(ErrorResponse::embedding_model_cannot_chat(&model.name)),
         )
             .into_response();
+    }
+
+    // Nor can a model with no projector read an image, in this turn or in
+    // the history: refused here by name, before a swap is paid for.
+    if let Some(refusal) = crate::image_refusal::refuse_images(&model, &body) {
+        return refusal;
     }
 
     // Join the admission queue.

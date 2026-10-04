@@ -105,18 +105,30 @@ pub fn this_machine_name() -> Option<String> {
         .and_then(gglib_core::domain::machine_name)
 }
 
-/// The extra endpoints a catalogued model can serve, for
-/// [`ModelInfo::capabilities`].
+/// What [`ModelInfo::capabilities`] lists for a model that reads images: one
+/// linked to a projector. The `OpenAI`-side spelling of
+/// [`ModelSummary::image_input`], and what a client reads to offer images.
+pub const VISION_CAPABILITY: &str = "vision";
+
+/// What a catalogued model can do beyond text chat, for
+/// [`ModelInfo::capabilities`]: serve embeddings, read images.
 ///
 /// `None` rather than an empty vec for an ordinary chat model, so the field
 /// disappears from the response instead of appearing as `[]` — an empty list
 /// reads as "this model can do nothing", which is the opposite of the truth.
 fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
-    summary
+    let embeddings = summary
         .tags
         .iter()
         .any(|t| t == crate::embeddings::EMBEDDING_TAG)
-        .then(|| vec!["embeddings".to_string()])
+        .then_some("embeddings");
+    let vision = summary.image_input.then_some(VISION_CAPABILITY);
+    let capabilities: Vec<String> = embeddings
+        .into_iter()
+        .chain(vision)
+        .map(str::to_owned)
+        .collect();
+    (!capabilities.is_empty()).then_some(capabilities)
 }
 
 /// Information about a single model (`OpenAI` format).
@@ -157,18 +169,17 @@ pub struct ModelInfo {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
-    /// Non-OpenAI endpoints this model can serve, beyond
-    /// `/v1/chat/completions`.
+    /// What this model can do beyond text chat.
     ///
-    /// `Some(["embeddings"])` for a model tagged `embedding`; `None` — and so
-    /// absent from the JSON entirely — for everything else. A chat client's
-    /// picker is therefore byte-identical to what it saw before this field
-    /// existed, while a RAG client has something to filter on other than
-    /// guessing from the model's name.
+    /// `"embeddings"` for a model tagged `embedding`, which serves
+    /// `/v1/embeddings`; `"vision"` for a model linked to a projector, which
+    /// reads `image_url` parts. `None` — and so absent from the JSON
+    /// entirely — for a model that is neither, so a plain chat model's entry
+    /// is byte-identical to what it was before this field existed.
     ///
     /// An array rather than a `type` discriminant because capability is not
     /// exclusive: a future entry may serve both chat and embeddings, and
-    /// vision or tool support could join the same list without a second field.
+    /// tool support could join the same list without a second field.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Vec<String>>,

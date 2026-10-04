@@ -45,18 +45,44 @@ fn a_models_variants_are_its_profiles_not_rows_of_their_own() {
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(
         lines[0].split_whitespace().collect::<Vec<_>>(),
-        ["ID", "NAME", "CONTEXT", "PROFILES"]
+        ["ID", "NAME", "CONTEXT", "IMAGES", "PROFILES"]
     );
     assert_eq!(
         lines[2].split_whitespace().collect::<Vec<_>>(),
-        ["3", "qwen3", "30000", "coding,", "fast"]
+        ["3", "qwen3", "30000", "-", "coding,", "fast"]
     );
     assert!(lines[2].ends_with("coding, fast"), "{table}");
     assert_eq!(
         lines[3].split_whitespace().collect::<Vec<_>>(),
-        ["7", "llama", "-", "-"],
-        "no context and no profiles are both a '-'"
+        ["7", "llama", "-", "-", "-"],
+        "no context, no image input and no profiles are each a '-'"
     );
+}
+
+/// A far model that reads images says so under `IMAGES`, from the `vision`
+/// capability its machine lists it with; any other capability is not one.
+#[test]
+fn a_far_model_that_reads_images_is_marked() {
+    let mut models = listed(&[
+        ("sees", 1, None, None),
+        ("embeds", 2, None, None),
+        ("plain", 3, None, None),
+        ("sees-by-variant", 4, Some("fast"), None),
+    ]);
+    models[0].capabilities = Some(vec!["vision".to_owned()]);
+    models[1].capabilities = Some(vec!["embeddings".to_owned()]);
+    models[3].capabilities = Some(vec!["embeddings".to_owned(), "vision".to_owned()]);
+
+    let table = render(&rows(&models));
+
+    let lines: Vec<&str> = table.lines().collect();
+    let column = lines[0].find("IMAGES").expect("an IMAGES header");
+    let marks: Vec<&str> = lines[2..]
+        .iter()
+        .map(|line| line[column..].split_whitespace().next().unwrap())
+        .collect();
+    assert_eq!(marks, ["yes", "-", "-", "yes"], "{table}");
+    assert_eq!(lines[1].len(), lines[0].len(), "the rule spans the header");
 }
 
 /// The ID column is as wide as the widest id, so a four-digit id does not

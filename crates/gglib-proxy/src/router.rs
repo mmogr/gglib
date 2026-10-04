@@ -72,7 +72,10 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             "/v1/models/{name}/detail",
             get(crate::model_detail_endpoint::model_detail),
         )
-        .route("/v1/chat/completions", post(chat_completions))
+        .route(
+            "/v1/chat/completions",
+            post(chat_completions).layer(crate::body_limit::layer()),
+        )
         .route("/v1/embeddings", post(crate::embeddings::embeddings))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
@@ -89,7 +92,9 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         .route("/v1/runs", get(crate::runs::list_runs))
         .route(
             "/v1/runs/{id}",
-            put(crate::runs::put_run).get(crate::runs::get_run),
+            put(crate::runs::put_run)
+                .layer(crate::body_limit::layer())
+                .get(crate::runs::get_run),
         )
         .route("/v1/runs/{id}/events", get(crate::runs::run_events))
         .route("/v1/runs/{id}/cancel", post(crate::runs::cancel_run))

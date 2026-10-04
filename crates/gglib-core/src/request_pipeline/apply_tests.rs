@@ -2,6 +2,7 @@
 //!
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
+use super::super::tests_support::chars;
 use super::*;
 use crate::domain::{InferenceConfig, ModelCapabilities};
 use serde_json::json;
@@ -55,7 +56,7 @@ fn every_stage_runs_in_one_call() {
         &mut body,
         &strict_turn_ctx(),
         &SamplingLayers::default(),
-        Some(100_000),
+        Some(chars(100_000)),
     )
     .unwrap();
 
@@ -116,7 +117,7 @@ fn an_oversized_conversation_is_trimmed() {
         &mut body,
         &ModelContext::passthrough(),
         &SamplingLayers::default(),
-        Some(20_000),
+        Some(chars(20_000)),
     )
     .unwrap();
 
@@ -155,7 +156,7 @@ fn sampling_keys_are_not_counted_against_the_budget() {
         &mut body,
         &ModelContext::passthrough(),
         &SamplingLayers::default(),
-        Some(200),
+        Some(chars(200)),
     )
     .unwrap_err();
 
