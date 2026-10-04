@@ -40,7 +40,7 @@ pub struct ModelDeps {
 
 /// Model operations handler.
 pub struct ModelOps {
-    deps: ModelDeps,
+    pub(crate) deps: ModelDeps,
 }
 
 impl ModelOps {
@@ -220,6 +220,7 @@ impl ModelOps {
 
     /// Update a model in the database.
     pub async fn update(&self, id: i64, request: UpdateModelRequest) -> Result<GuiModel, GuiError> {
+        self.link_projector(id, &request).await?;
         let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
         if let Some(name) = request.name {
@@ -238,10 +239,9 @@ impl ModelOps {
             // gglib would have guessed. See `DefaultsOrigin`.
             model.defaults_origin = Some(gglib_core::domain::DefaultsOrigin::User);
         }
-        match request.server_defaults {
-            Some(Some(config)) => model.server_defaults = Some(config),
-            Some(None) => model.server_defaults = None,
-            None => {} // don't touch
+        // `None` leaves the stored defaults alone; `Some(None)` clears them.
+        if let Some(server_defaults) = request.server_defaults {
+            model.server_defaults = server_defaults;
         }
 
         self.deps

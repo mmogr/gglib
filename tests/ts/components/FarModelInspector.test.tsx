@@ -58,6 +58,22 @@ describe('FarModelInspector', () => {
     expect(onChat).toHaveBeenCalledWith(model, 'qwen3');
   });
 
+  it('marks a model that reads images, without a path or a picker for its projector', async () => {
+    daemons.models[3] = farDetail(3, 'qwen3', { imageInput: true });
+    render(<FarModelInspector model={model} paired={paired()} onChat={vi.fn()} />);
+
+    await screen.findByRole('heading', { name: 'qwen3' });
+    expect(screen.getByText('Vision')).toBeInTheDocument();
+    expect(screen.queryByText('Projector')).not.toBeInTheDocument();
+  });
+
+  it('does not mark a model that does not read images', async () => {
+    render(<FarModelInspector model={model} paired={paired()} onChat={vi.fn()} />);
+
+    await screen.findByRole('heading', { name: 'qwen3' });
+    expect(screen.queryByText('Vision')).not.toBeInTheDocument();
+  });
+
   it('Load loads it there, reads it again, and then says it is serving and offers no Load', async () => {
     const state = paired();
     render(<FarModelInspector model={model} paired={state} onChat={vi.fn()} />);

@@ -11,40 +11,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use super::JinjaMode;
 use crate::domain::InferenceConfig;
-
-/// What position a launch takes on Jinja chat templating.
-///
-/// Three states rather than a bool because llama-server's default is jinja
-/// **on**: `use_jinja` initialises to `true` (`common/common.h:621`) and
-/// `common/arg.cpp:1394-1399` flips it off only for the completion and mtmd
-/// examples — never for the server. So "gglib emits no flag" and "gglib turns
-/// jinja off" are two different launches, and a bool could only ever name one
-/// of them. If `false` meant *emit nothing*, a user who explicitly disabled
-/// Jinja would get a server running with it anyway, silently.
-///
-/// The distinction is in the type rather than in a convention because both
-/// falsy cases are reachable and they must not be conflated — see
-/// [`Self::Defer`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JinjaMode {
-    /// Emit no jinja flag at all and let llama-server decide.
-    ///
-    /// The default, and what an untagged model with no override resolves to.
-    /// Against this pinned llama.cpp that means jinja is **on** — deferring is
-    /// not the same as turning it off, and gglib does not pretend otherwise.
-    #[default]
-    Defer,
-    /// Emit `--jinja`.
-    On,
-    /// Emit `--no-jinja`.
-    ///
-    /// Reached only from an explicit caller override. Nothing tag-derived
-    /// produces this: taking jinja away removes tool-call templating and
-    /// template kwargs, which is a decision only the user gets to make.
-    Off,
-}
 
 /// Configuration for starting a model server.
 ///
@@ -60,6 +28,11 @@ pub struct ServerConfig {
     pub model_name: String,
     /// Path to the model file.
     pub model_path: PathBuf,
+    /// Path to the projector to load beside the model (`--mmproj`).
+    ///
+    /// `None` passes no flag, and the server then answers an image request
+    /// with a 500. Set from the model's own `projector_path`.
+    pub mmproj: Option<PathBuf>,
     /// Port to listen on (if None, a free port will be assigned).
     pub port: Option<u16>,
     /// Base port for allocation when port is None.
@@ -157,6 +130,7 @@ impl ServerConfig {
             model_id,
             model_name,
             model_path,
+            mmproj: None,
             port: None,
             base_port,
             context_size: None,
@@ -188,6 +162,13 @@ impl ServerConfig {
     #[must_use]
     pub const fn with_context_size(mut self, size: u64) -> Self {
         self.context_size = Some(size);
+        self
+    }
+
+    /// Set the projector to load beside the model (`--mmproj`).
+    #[must_use]
+    pub fn with_mmproj(mut self, projector: Option<PathBuf>) -> Self {
+        self.mmproj = projector;
         self
     }
 

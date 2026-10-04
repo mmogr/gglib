@@ -11,7 +11,7 @@ use gglib_core::{
     domain::{DefaultsOrigin, InferenceConfig, ReasoningEffort},
 };
 
-use super::resolver;
+use super::{resolver, update_projector};
 use crate::bootstrap::CliContext;
 use crate::sampling_params::clear_param;
 
@@ -49,6 +49,7 @@ pub(crate) struct UpdateArgs {
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
+    pub projector: crate::projector_args::ProjectorArgs,
 }
 
 /// Execute the update command.
@@ -91,7 +92,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     let metadata_removals = parse_metadata_removals(&args.remove_metadata)?;
 
     // Create the updated model
-    let updated_model = create_updated_model(
+    let mut updated_model = create_updated_model(
         &existing_model,
         &args,
         &metadata_updates,
@@ -100,6 +101,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
 
     // Show preview of changes
     show_changes_preview(&existing_model, &updated_model);
+    if let Some(line) = update_projector::preview(&existing_model, args.projector.change()) {
+        println!("{line}");
+    }
 
     if args.dry_run {
         println!("\n🔍 Dry run mode - no changes applied");
@@ -119,6 +123,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     }
 
     // Apply the updates
+    update_projector::apply(ctx, &mut updated_model, args.projector.change()).await?;
     ctx.app.models().update(&updated_model).await?;
 
     println!("✓ Model updated successfully!");

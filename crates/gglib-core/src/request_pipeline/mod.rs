@@ -41,22 +41,6 @@ mod tests_support {
     /// A minimal, inert [`ModelSummary`]. Tests set only the fields they care
     /// about, so adding a field to `ModelSummary` doesn't touch every test.
     pub(super) fn summary() -> ModelSummary {
-        ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id: 7,
-            name: "qwen3".to_string(),
-            tags: Vec::new(),
-            capabilities: crate::domain::ModelCapabilities::empty(),
-            param_count: "7B".to_string(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-        }
+        ModelSummary::bare(7, "qwen3")
     }
 }

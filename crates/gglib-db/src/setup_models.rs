@@ -22,6 +22,7 @@ fn models_ddl(table: &str) -> String {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             file_path TEXT NOT NULL,
+            projector_path TEXT,
             param_count_b REAL NOT NULL,
             architecture TEXT,
             quantization TEXT,
@@ -51,6 +52,9 @@ fn models_ddl(table: &str) -> String {
 }
 
 /// Creates `models`, and adds the columns a library from before them lacks.
+///
+/// `projector_path` is the exception: `setup_model_files.rs` adds it, once
+/// `model_files` exists, because adding it also reads that table.
 pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
     // Create the models table
     sqlx::query(&models_ddl("models")).execute(pool).await?;

@@ -97,6 +97,7 @@ impl ModelCatalogPort for OneModelCatalog {
             name: self.0.to_owned(),
             tags: Vec::new(),
             capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
+            image_input: false,
             dialect: None,
             template_caps: None,
             param_count: String::new(),

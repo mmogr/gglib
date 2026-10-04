@@ -4,6 +4,16 @@ import { GgufModel, SparseInferenceConfig, ServerConfig } from '../types';
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
 
+/** What an update may change. `projectorPath`: a path links, `null` unlinks, absent leaves the link alone. */
+export interface ModelUpdates {
+  name?: string;
+  quantization?: string;
+  filePath?: string;
+  inferenceDefaults?: SparseInferenceConfig;
+  serverDefaults?: ServerConfig | null;
+  projectorPath?: string | null;
+}
+
 export function useModels() {
   const [models, setModels] = useState<GgufModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
@@ -65,13 +75,7 @@ export function useModels() {
     await loadModels();
   }, [loadModels, selectedModelId]);
 
-  const updateModel = useCallback(async (id: number, updates: {
-    name?: string;
-    quantization?: string;
-    filePath?: string;
-    inferenceDefaults?: SparseInferenceConfig;
-    serverDefaults?: ServerConfig | null;
-  }) => {
+  const updateModel = useCallback(async (id: number, updates: ModelUpdates) => {
     await getTransport().updateModel({ 
       id, 
       name: updates.name,
@@ -79,6 +83,7 @@ export function useModels() {
       filePath: updates.filePath,
       inferenceDefaults: updates.inferenceDefaults,
       serverDefaults: updates.serverDefaults,
+      projectorPath: updates.projectorPath,
     });
     await loadModels();
   }, [loadModels]);

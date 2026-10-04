@@ -1,10 +1,9 @@
 //! Tests for [`super`] — the wire form of a resolved sampling config.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use chrono::Utc;
-use gglib_core::ModelCapabilities;
+use gglib_core::NewModel;
 use gglib_core::domain::{DefaultsOrigin, ReasoningEffort};
 use serde_json::json;
 
@@ -13,34 +12,11 @@ use super::*;
 /// A model with nothing sampling-relevant set. `Model` has no `Default`,
 /// so the variants below build on this with struct-update syntax.
 fn model() -> Model {
-    Model {
-        dialect_spec: None,
-        id: 1,
-        name: "test-model".to_owned(),
-        model_key: String::new(),
-        file_path: PathBuf::from("/models/test.gguf"),
-        param_count_b: 7.0,
-        architecture: None,
-        quantization: None,
-        context_length: None,
-        expert_count: None,
-        expert_used_count: None,
-        expert_shared_count: None,
-        metadata: HashMap::new(),
-        added_at: Utc::now(),
-        hf_repo_id: None,
-        hf_commit_sha: None,
-        hf_filename: None,
-        download_date: None,
-        last_update_check: None,
-        tags: Vec::new(),
-        capabilities: ModelCapabilities::default(),
-        inference_defaults: None,
-        defaults_origin: None,
-        server_defaults: None,
-        template_caps: None,
-        benchmark_summary: None,
-    }
+    let path = PathBuf::from("/models/test.gguf");
+    Model::stored(
+        1,
+        &NewModel::new("test-model".to_owned(), path, 7.0, Utc::now()),
+    )
 }
 
 fn profile(name: &str, config: InferenceConfig) -> InferenceProfile {

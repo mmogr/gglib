@@ -7,7 +7,8 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::SamplingExplanationDto;
 use gglib_app_services::types::{
-    AddModelRequest, GuiModel, RemoveModelRequest, SetCapabilitiesRequest, UpdateModelRequest,
+    AddModelRequest, GuiModel, ProjectorChoice, RemoveModelRequest, SetCapabilitiesRequest,
+    UpdateModelRequest,
 };
 use gglib_core::ModelFilterOptions;
 use gglib_core::domain::{ModelDetailDto, ModelListQuery, ModelSortBy, SortOrder};
@@ -99,9 +100,12 @@ pub(crate) async fn add(
 ///
 /// Registered for both `PUT` and `PATCH` (see [`crate::routes`]): every
 /// field on [`UpdateModelRequest`] is optional and a no-op when omitted, and
-/// `server_defaults` additionally supports explicit-`null` clearing via
-/// double-`Option` semantics — i.e. this handler already behaves like a
-/// partial update regardless of which verb the caller uses.
+/// `server_defaults` and `projector_path` additionally support explicit-`null`
+/// clearing via double-`Option` semantics — i.e. this handler already behaves
+/// like a partial update regardless of which verb the caller uses.
+///
+/// A `projector_path` that is not a projector file is a 400 naming the file,
+/// and nothing else in the request is written.
 pub(crate) async fn update(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -231,6 +235,16 @@ pub(crate) async fn detail(
     Path(id): Path<i64>,
 ) -> Result<Json<ModelDetailDto>, HttpError> {
     Ok(Json(state.models.get_detail(id).await?))
+}
+
+/// The projector files the inspector's picker offers for a model: every
+/// projector some model is linked to, and this model's own files that are
+/// named as projectors. "None" is the picker's own entry.
+pub(crate) async fn projector_choices(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ProjectorChoice>>, HttpError> {
+    Ok(Json(state.models.projector_choices(id).await?))
 }
 
 /// Query parameters for `GET /api/models/{id}/explain`.

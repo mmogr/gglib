@@ -1,4 +1,4 @@
-//! Multi-part GGUF shard naming and on-disk weight sizing.
+//! Multi-part GGUF shard naming and the on-disk size of what a launch loads.
 //!
 //! Split out from [`super::model_catalog`] so that module stays a pure
 //! repository→port mapping adapter: this is filesystem arithmetic, and it has
@@ -50,6 +50,21 @@ pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
             shard.metadata().map_or(0, |md| md.len())
         })
         .sum()
+}
+
+/// On-disk size in bytes of everything a launch of `model` loads into
+/// memory: its weights, every shard, plus its projector when it has one.
+///
+/// The one figure a launch budgets with and `gglib model explain` reports, so
+/// the two cannot disagree about a model that has a projector. A projector
+/// that cannot be read adds `0`, as an unreadable shard does.
+pub fn resident_bytes(model: &gglib_core::domain::Model) -> u64 {
+    let projector = model
+        .projector_path
+        .as_deref()
+        .and_then(|path| path.metadata().ok())
+        .map_or(0, |md| md.len());
+    total_model_bytes(&model.file_path).saturating_add(projector)
 }
 
 #[cfg(test)]
@@ -118,5 +133,57 @@ mod tests {
     fn total_model_bytes_is_zero_for_a_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(total_model_bytes(&dir.path().join("nope.gguf")), 0);
+    }
+
+    // ── Weights plus projector ───────────────────────────────────────────
+
+    fn model(weights: &std::path::Path, projector: Option<&std::path::Path>) -> gglib_core::Model {
+        let mut new = gglib_core::NewModel::new(
+            "m".to_owned(),
+            weights.to_path_buf(),
+            7.0,
+            chrono::Utc::now(),
+        );
+        new.projector_path = projector.map(std::path::Path::to_path_buf);
+        gglib_core::Model::stored(1, &new)
+    }
+
+    #[test]
+    fn resident_bytes_is_the_weights_plus_the_projector() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 1..=2u32 {
+            let shard = dir.path().join(format!("m-{i:05}-of-00002.gguf"));
+            std::fs::write(&shard, vec![0u8; 1000]).unwrap();
+        }
+        let weights = dir.path().join("m-00001-of-00002.gguf");
+        let projector = dir.path().join("mmproj-F16.gguf");
+        std::fs::write(&projector, vec![0u8; 300]).unwrap();
+
+        assert_eq!(resident_bytes(&model(&weights, Some(&projector))), 2300);
+    }
+
+    #[test]
+    fn resident_bytes_without_a_projector_is_the_weights() {
+        let dir = tempfile::tempdir().unwrap();
+        let weights = dir.path().join("model.gguf");
+        std::fs::write(&weights, vec![0u8; 2048]).unwrap();
+
+        assert_eq!(resident_bytes(&model(&weights, None)), 2048);
+        assert_eq!(
+            resident_bytes(&model(&weights, None)),
+            total_model_bytes(&weights)
+        );
+    }
+
+    /// A projector that is not there adds nothing; the launch refuses it by
+    /// name before this figure is used.
+    #[test]
+    fn resident_bytes_tolerates_a_missing_projector() {
+        let dir = tempfile::tempdir().unwrap();
+        let weights = dir.path().join("model.gguf");
+        std::fs::write(&weights, vec![0u8; 2048]).unwrap();
+        let missing = dir.path().join("mmproj-F16.gguf");
+
+        assert_eq!(resident_bytes(&model(&weights, Some(&missing))), 2048);
     }
 }

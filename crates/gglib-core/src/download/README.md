@@ -13,6 +13,10 @@ system. No I/O, networking, or runtime dependencies allowed.
   `Quantization` models Unsloth Dynamic ("UD-") quants (e.g. `UD-Q6_K`) as distinct
   values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
   publish both with the same bit-depth suffix.
+- `file_role` - What a GGUF file is for (`GgufFileRole`): a model's weights or a
+  multimodal projector, read from its file name (`GgufFileRole::classify`), and which of
+  a model's own files are projectors (`GgufFileRole::projectors_among`). `gglib-gguf`
+  reports the same type from the file's header.
 - `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`).
   `DownloadEvent::DownloadNotice` is the one variant that isn't part of the
   progress/lifecycle state machine: a transient, non-persisted, free-form note

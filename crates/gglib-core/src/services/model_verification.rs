@@ -277,7 +277,7 @@ pub struct ModelVerificationService {
     /// Repository for model metadata.
     model_repo: Arc<dyn ModelRepository>,
     /// Repository for model file metadata.
-    model_files_repo: Arc<dyn ModelFilesReaderPort>,
+    pub(super) model_files_repo: Arc<dyn ModelFilesReaderPort>,
     /// `HuggingFace` client for update checks.
     hf_client: Arc<dyn HfClientPort>,
     /// Download trigger for repairs.

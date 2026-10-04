@@ -38,31 +38,35 @@ fn dead_port() -> u16 {
 }
 
 /// A set whose primary holds `qwen` (model 1) at 4096 tokens on `port`.
-fn set_with_resident(port: u16) -> ResidentSet {
+pub(super) fn set_with_resident(port: u16) -> ResidentSet {
     let set = ResidentSet::new(
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
     );
-    let resident = Resident {
+    drop(set.queue().install(PRIMARY_SLOT, resident(port)));
+    set
+}
+
+/// `qwen` (model 1) at 4096 tokens on `port`, launched with no projector.
+pub(super) fn resident(port: u16) -> Resident {
+    Resident {
         model_sampling: ModelSamplingDefaults::default(),
         model_id: 1,
         model_name: "qwen".to_owned(),
         context_size: 4096,
         port,
-        model_path: "/models/qwen.gguf".into(),
+        projector: None,
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
         narration: None,
         inflight: 0,
         resident_since: Instant::now(),
         weights_bytes: 1024,
-    };
-    drop(set.queue().install(PRIMARY_SLOT, resident));
-    set
+    }
 }
 
-fn core() -> Arc<RwLock<GuiProcessCore>> {
+pub(super) fn core() -> Arc<RwLock<GuiProcessCore>> {
     Arc::new(RwLock::new(GuiProcessCore::new(
         19_300,
         "/nonexistent/llama-server",
@@ -70,7 +74,7 @@ fn core() -> Arc<RwLock<GuiProcessCore>> {
 }
 
 /// What `wait_for_slot` does before `serve`: a request for `qwen` granted.
-fn granted(set: &ResidentSet) {
+pub(super) fn granted(set: &ResidentSet) {
     let ticket = set.queue().enqueue("qwen");
     let decision = set.queue().poll(&ticket, NEVER_FITS);
     assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
@@ -87,7 +91,10 @@ async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
     let hold = set.queue().hold(port, 1).unwrap();
 
     granted(&set);
-    let refused = set.serve(PRIMARY_SLOT, 8192, &core()).await.unwrap_err();
+    let refused = set
+        .serve(PRIMARY_SLOT, (8192, None), &core())
+        .await
+        .unwrap_err();
 
     assert!(matches!(refused, ModelRuntimeError::AdmissionTimeout(_)));
     assert_eq!(refused.suggested_status_code(), 503);
@@ -96,7 +103,10 @@ async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
 
     drop(hold);
     granted(&set);
-    let recycled = set.serve(PRIMARY_SLOT, 8192, &core()).await.unwrap();
+    let recycled = set
+        .serve(PRIMARY_SLOT, (8192, None), &core())
+        .await
+        .unwrap();
     assert!(recycled.is_none());
     assert!(
         set.queue().slot(PRIMARY_SLOT).is_none(),
@@ -111,7 +121,10 @@ async fn a_failed_health_check_does_not_recycle_a_held_model() {
     let _hold = set.queue().hold(port, 1).unwrap();
 
     granted(&set);
-    let refused = set.serve(PRIMARY_SLOT, 4096, &core()).await.unwrap_err();
+    let refused = set
+        .serve(PRIMARY_SLOT, (4096, None), &core())
+        .await
+        .unwrap_err();
 
     assert!(refused.is_retryable());
     assert!(set.queue().slot(PRIMARY_SLOT).is_some(), "the model stays");

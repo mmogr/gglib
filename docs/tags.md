@@ -139,9 +139,15 @@ from GGUF metadata, which drive automatic flag selection at serve time:
 | `mtp` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
 | `embedding` | Non-none `{arch}.pooling_type`, or an encoder-only `general.architecture` | `--embeddings` auto-enabled; the server refuses chat completions and serves `/v1/embeddings` |
 
-The taxonomy also reserves `vision`, `code`, and `moe` as recognized capability
-tags in the same auto-generated namespace; they carry no launch-flag effect
-today.
+The taxonomy also reserves `code` and `moe` as recognized capability tags in
+the same auto-generated namespace; they carry no launch-flag effect today.
+
+Image input is not a tag. A model reads images exactly when it is linked to a
+projector, the second GGUF llama-server loads with `--mmproj`: the link is
+`models.projector_path`, set with `gglib model update <model> --projector
+<path>` or the Projector row of the model inspector, and cleared with
+`--no-projector` or the row's "None". `gglib model list` shows it in its
+`Images` column and `gglib model inspect` on its `Projector` line.
 
 ### Overriding MTP
 

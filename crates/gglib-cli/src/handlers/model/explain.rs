@@ -10,11 +10,13 @@
 
 use anyhow::{Result, anyhow};
 use gglib_core::Settings;
-use gglib_core::domain::{InferenceProfile, ModelSamplingContext, ModelSamplingDefaults};
+use gglib_core::domain::{
+    FitInputs, InferenceProfile, Model, ModelSamplingContext, ModelSamplingDefaults,
+};
 use gglib_core::request_pipeline;
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size_with_source};
 use gglib_runtime::llama::args::resolve_kv_cache_types;
-use gglib_runtime::ports_impl::model_shards::total_model_bytes;
+use gglib_runtime::ports_impl::model_shards::resident_bytes;
 use gglib_runtime::process::residency::explain::explain_fit;
 
 use super::resolver;
@@ -96,20 +98,8 @@ pub(crate) async fn execute(
 /// Every value comes from [`gglib_runtime::process::residency::explain::explain_fit`]
 /// and [`resolve_context_size_with_source`] — the same calls a launch makes —
 /// so this cannot describe a chain that differs from the one that runs.
-fn print_context_explanation(model: &gglib_core::domain::Model, settings: &Settings) {
-    let kv = gglib_core::domain::estimate_kv_elems_per_token(
-        &model.metadata,
-        model.architecture.as_deref(),
-    );
-    let kv_types = resolve_kv_cache_types(None, None);
-    let weights = total_model_bytes(&model.file_path);
-    let (fitted, inputs) = explain_fit(
-        model.context_length,
-        Some(weights),
-        kv,
-        kv_types.k,
-        kv_types.v,
-    );
+fn print_context_explanation(model: &Model, settings: &Settings) {
+    let (fitted, inputs) = context_fit(model);
 
     let (resolved, source) = resolve_context_size_with_source(&ServerConfigOptions {
         model_server_ctx: model
@@ -129,7 +119,11 @@ fn print_context_explanation(model: &gglib_core::domain::Model, settings: &Setti
     // one, and a fit that refused is the fact that explains the floor.
     println!("  {:<22} {}", "fitted to hardware", opt(fitted));
     println!("  {:<22} {}", "  device budget", gib(inputs.budget_bytes));
-    println!("  {:<22} {}", "  weights", gib(inputs.weights_bytes));
+    println!(
+        "  {:<22} {}",
+        resident_label(model),
+        gib(inputs.weights_bytes)
+    );
     println!(
         "  {:<22} {}",
         "  kv bytes/token",
@@ -139,6 +133,36 @@ fn print_context_explanation(model: &gglib_core::domain::Model, settings: &Setti
     // The gap between these two is what the ladder costs, which is the whole
     // of ADR 0009's first kill criterion.
     println!("  {:<22} {}", "  before snapping", opt(inputs.unsnapped));
+}
+
+/// The context this machine would fit for `model`, and what the fit worked
+/// from.
+///
+/// Sized by [`resident_bytes`], the figure a launch of the model is sized by,
+/// so a model with a projector is fitted here as it is when it starts.
+fn context_fit(model: &Model) -> (Option<u64>, FitInputs) {
+    let kv = gglib_core::domain::estimate_kv_elems_per_token(
+        &model.metadata,
+        model.architecture.as_deref(),
+    );
+    let kv_types = resolve_kv_cache_types(None, None);
+    explain_fit(
+        model.context_length,
+        Some(resident_bytes(model)),
+        kv,
+        kv_types.k,
+        kv_types.v,
+    )
+}
+
+/// What the fit's resident figure is made of: the weights, and the projector
+/// a launch loads beside them when the model is linked to one.
+const fn resident_label(model: &Model) -> &'static str {
+    if model.image_input() {
+        "  weights + projector"
+    } else {
+        "  weights"
+    }
 }
 
 /// `None` reads as a refusal here, not as a zero — see `FitInputs`.
@@ -206,6 +230,59 @@ mod tests {
 
         assert!(err.contains("codign"), "{err}");
         assert!(err.contains("coding"), "{err}");
+    }
+
+    fn model(weights: &std::path::Path, projector: Option<&std::path::Path>) -> Model {
+        let mut new = gglib_core::NewModel::new(
+            "qwen".to_owned(),
+            weights.to_path_buf(),
+            7.0,
+            chrono::Utc::now(),
+        );
+        new.projector_path = projector.map(std::path::Path::to_path_buf);
+        Model::stored(1, &new)
+    }
+
+    /// The resident figure is labelled for what `resident_bytes` summed.
+    #[test]
+    fn the_resident_figure_names_the_projector_when_it_counts_one() {
+        let weights = std::path::Path::new("/models/qwen.gguf");
+        let projector = std::path::Path::new("/models/mmproj-F16.gguf");
+
+        assert_eq!(resident_label(&model(weights, None)), "  weights");
+        assert_eq!(
+            resident_label(&model(weights, Some(projector))),
+            "  weights + projector"
+        );
+    }
+
+    /// The figure under that label: both files, and the same number a launch
+    /// of the model is sized by.
+    #[test]
+    fn the_fit_is_sized_by_the_weights_and_the_projector_as_a_launch_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let weights = dir.path().join("qwen.Q8_0.gguf");
+        let projector = dir.path().join("mmproj-F16.gguf");
+        std::fs::write(&weights, vec![0u8; 4096]).unwrap();
+        std::fs::write(&projector, vec![0u8; 512]).unwrap();
+        let linked = model(&weights, Some(&projector));
+
+        let (_, inputs) = context_fit(&linked);
+
+        assert_eq!(inputs.weights_bytes, Some(4608));
+        let launch = gglib_runtime::ports_impl::model_catalog::model_to_launch_spec(linked);
+        assert_eq!(inputs.weights_bytes, Some(launch.file_size_bytes));
+    }
+
+    #[test]
+    fn the_fit_of_an_unlinked_model_is_sized_by_its_weights() {
+        let dir = tempfile::tempdir().unwrap();
+        let weights = dir.path().join("qwen.Q8_0.gguf");
+        std::fs::write(&weights, vec![0u8; 4096]).unwrap();
+
+        let (_, inputs) = context_fit(&model(&weights, None));
+
+        assert_eq!(inputs.weights_bytes, Some(4096));
     }
 
     /// With no profiles configured at all the message should point at the

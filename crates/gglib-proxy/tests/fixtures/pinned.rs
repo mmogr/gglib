@@ -72,13 +72,17 @@ impl StaticCatalog {
     }
 
     /// The stored row, for the detail read: a file under `/models/`, and the
-    /// same constants [`Self::summary`] reports.
+    /// same constants [`Self::summary`] reports. A model whose name ends in
+    /// `-vision` is linked to a projector there too.
     fn row(id: u32, name: &str) -> Model {
         Model {
             id: i64::from(id),
             name: name.to_owned(),
             model_key: format!("local:{id}"),
             file_path: PathBuf::from(format!("/models/{name}.gguf")),
+            projector_path: name
+                .ends_with("-vision")
+                .then(|| PathBuf::from("/models/mmproj-F16.gguf")),
             param_count_b: 7.0,
             architecture: Some("llama".to_owned()),
             quantization: Some("Q4_K_M".to_owned()),
@@ -112,6 +116,7 @@ impl StaticCatalog {
             name: name.to_string(),
             tags: vec![],
             capabilities: gglib_core::domain::ModelCapabilities::empty(),
+            image_input: name.ends_with("-vision"),
             param_count: "7B".to_string(),
             quantization: Some("Q4_K_M".to_string()),
             architecture: Some("llama".to_string()),

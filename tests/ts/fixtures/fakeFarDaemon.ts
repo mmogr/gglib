@@ -56,6 +56,7 @@ export function farDetail(id: number, name: string, extra: Partial<ModelDetailDt
   return {
     id,
     name,
+    imageInput: false,
     paramCountB: 8,
     architecture: 'qwen3',
     quantization: 'Q4_K_M',

@@ -24,6 +24,7 @@ import type {
   UpgradeCheck,
   UpgradeOutcome,
 } from '../../../types';
+import type { ProjectorChoice } from '../../../types/generated/ProjectorChoice';
 
 // Re-export existing types that clients already use
 export type {
@@ -40,6 +41,7 @@ export type {
   ToolSupportResponse,
   HfSortField,
   ModelFilterOptions,
+  ProjectorChoice,
   RangeValues,
   RetagResponse,
   SetCapabilitiesRequest,
@@ -65,4 +67,6 @@ export interface UpdateModelParams {
   filePath?: string;
   inferenceDefaults?: import('../../../types').SparseInferenceConfig;
   serverDefaults?: import('../../../types').ServerConfig | null;
+  /** A path links the model to that projector, `null` unlinks it, absent leaves the link alone. */
+  projectorPath?: string | null;
 }

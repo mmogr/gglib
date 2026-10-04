@@ -339,7 +339,6 @@ fn sampling_decision() -> LaunchDecision {
 mod tests {
     use super::*;
     use gglib_core::domain::KvElemsPerToken;
-    use std::path::PathBuf;
 
     use crate::llama::args::{MtpResolution, ReasoningFormatResolution, SlotRestoreSource};
 
@@ -348,7 +347,8 @@ mod tests {
             model_sampling: gglib_core::domain::ModelSamplingDefaults::default(),
             id: 7,
             name: "qwen3-30b-a3b".to_string(),
-            file_path: PathBuf::from("/models/q.gguf"),
+            file_path: "/models/q.gguf".into(),
+            projector: None,
             tags: tags.iter().map(|t| (*t).to_string()).collect(),
             architecture: None,
             quantization: Some("Q4_K_M".to_string()),

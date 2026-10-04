@@ -35,6 +35,27 @@ impl ModelCatalogPort for StubCatalog {
     }
 }
 
+/// Holds one model, whose launch specification is `self.0`, and answers
+/// every name with it.
+#[derive(Debug)]
+pub(in crate::process) struct OneModel(pub ModelLaunchSpec);
+
+#[async_trait]
+impl ModelCatalogPort for OneModel {
+    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+        Ok(Vec::new())
+    }
+    async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+        Ok(None)
+    }
+    async fn resolve_for_launch(
+        &self,
+        _name: &str,
+    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+        Ok(Some(self.0.clone()))
+    }
+}
+
 /// A launch spec for model `id` named `name`, whose file does not exist.
 pub(in crate::process) fn launch_spec(id: u32, name: &str) -> ModelLaunchSpec {
     ModelLaunchSpec {
@@ -42,6 +63,7 @@ pub(in crate::process) fn launch_spec(id: u32, name: &str) -> ModelLaunchSpec {
         id,
         name: name.to_owned(),
         file_path: format!("/nonexistent/{name}.gguf").into(),
+        projector: None,
         tags: Vec::new(),
         architecture: None,
         quantization: None,

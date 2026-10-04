@@ -27,7 +27,10 @@ impl ModelCatalogPort for NamedCatalog {
     }
 
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(self.names.contains(name).then(|| summary(name)))
+        Ok(self
+            .names
+            .contains(name)
+            .then(|| ModelSummary::bare(1, name)))
     }
 
     async fn resolve_for_launch(
@@ -35,27 +38,6 @@ impl ModelCatalogPort for NamedCatalog {
         _name: &str,
     ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
         Ok(None)
-    }
-}
-
-/// `ModelSummary` has no `Default`, and routing only ever reads presence.
-fn summary(name: &str) -> ModelSummary {
-    ModelSummary {
-        id: 1,
-        name: name.to_owned(),
-        tags: vec![],
-        capabilities: Default::default(),
-        param_count: String::new(),
-        quantization: None,
-        architecture: None,
-        created_at: 0,
-        file_size: 0,
-        context_length: None,
-        inference_defaults: None,
-        defaults_origin: None,
-        server_defaults: None,
-        dialect: None,
-        template_caps: None,
     }
 }
 

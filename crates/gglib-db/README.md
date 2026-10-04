@@ -64,6 +64,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
 - **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, its indexes, and the one-time rebuild that stops it reusing ids
+- **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features

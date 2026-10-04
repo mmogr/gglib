@@ -41,6 +41,9 @@ pub struct ModelSummary {
     /// The proxy uses these directly rather than inferring from tags at
     /// request time, eliminating the split-brain between tags and capabilities.
     pub capabilities: ModelCapabilities,
+    /// Whether the model reads images: it is linked to a projector (see
+    /// [`Model::image_input`]).
+    pub image_input: bool,
     /// Parameter count as string (e.g., "7B", "13B", "70B").
     pub param_count: String,
     /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").
@@ -102,6 +105,9 @@ pub struct ModelLaunchSpec {
     pub name: String,
     /// Absolute path to the GGUF file.
     pub file_path: PathBuf,
+    /// Absolute path to the projector the launch loads beside the weights
+    /// (`--mmproj`), when the model has one.
+    pub projector: Option<PathBuf>,
     /// Tags/labels associated with the model.
     pub tags: Vec<String>,
     /// Model architecture (for runtime configuration).
@@ -116,8 +122,8 @@ pub struct ModelLaunchSpec {
     pub context_length: Option<u64>,
     /// Per-model server defaults (e.g., `context_length` for launch).
     pub server_defaults: Option<ServerConfig>,
-    /// Total on-disk size of the model weights in bytes, summed across all
-    /// shards for multi-part GGUFs.
+    /// On-disk size in bytes of everything the launch loads: the weights,
+    /// summed across all shards for multi-part GGUFs, plus the projector.
     ///
     /// Read at launch to budget host memory (see
     /// [`crate::server_config::compute_auto_cache_ram_mb`]). `0` when the
@@ -263,38 +269,5 @@ pub trait ModelCatalogPort: Send + Sync + fmt::Debug {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A read-only implementor that never overrides `record_template_caps` —
-    /// the shape of every test double this port has across the workspace.
-    #[derive(Debug)]
-    struct ReadOnlyCatalog;
-
-    #[async_trait]
-    impl ModelCatalogPort for ReadOnlyCatalog {
-        async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-            Ok(Vec::new())
-        }
-        async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-            Ok(None)
-        }
-        async fn resolve_for_launch(
-            &self,
-            _name: &str,
-        ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-            Ok(None)
-        }
-    }
-
-    /// The default body is a successful no-op, so read-only implementors need
-    /// not implement persistence they do not have — and a caps observation
-    /// against one is dropped, never an error that could fail a launch.
-    #[tokio::test]
-    async fn record_template_caps_defaults_to_a_successful_no_op() {
-        let result = ReadOnlyCatalog
-            .record_template_caps(1, TemplateCaps::default())
-            .await;
-        assert!(result.is_ok());
-    }
-}
+#[path = "model_catalog_tests.rs"]
+mod tests;

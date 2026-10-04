@@ -15,6 +15,7 @@ fn summary(trained: Option<u64>) -> ModelSummary {
         name: "qwen3-8b".into(),
         tags: Vec::new(),
         capabilities: ModelCapabilities::empty(),
+        image_input: false,
         param_count: "8B".into(),
         quantization: None,
         architecture: None,

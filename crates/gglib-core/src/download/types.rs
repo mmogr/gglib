@@ -307,7 +307,7 @@ const UD_VARIANT_MAP: &[(Quantization, Quantization)] = &[
 /// like `"Q6King"` does not match the `"Q6_K"` pattern). Operates
 /// directly on byte slices with no heap allocation and no regex, since this
 /// runs on every file encountered while scanning a repository's file listing.
-fn find_boundary_match(haystack: &[u8], pattern: &[u8]) -> Option<usize> {
+pub(super) fn find_boundary_match(haystack: &[u8], pattern: &[u8]) -> Option<usize> {
     let plen = pattern.len();
     if plen == 0 || plen > haystack.len() {
         return None;

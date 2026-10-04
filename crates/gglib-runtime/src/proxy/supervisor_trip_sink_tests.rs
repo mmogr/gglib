@@ -23,6 +23,7 @@ impl ModelCatalogPort for OneModelCatalog {
             name: MODEL.to_owned(),
             tags: vec![],
             capabilities: gglib_core::domain::ModelCapabilities::empty(),
+            image_input: false,
             dialect: None,
             template_caps: None,
             param_count: String::new(),

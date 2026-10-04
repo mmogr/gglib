@@ -9,6 +9,7 @@ pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
 pub(crate) mod hub_chats;
 pub mod huggingface;
+mod jinja_mode;
 pub(crate) mod llm_completion;
 pub(crate) mod loop_guard_trips;
 pub(crate) mod mcp_dto;
@@ -18,6 +19,8 @@ pub mod model_catalog;
 pub(crate) mod model_registrar;
 pub(crate) mod model_repository;
 pub mod model_runtime;
+#[cfg(any(test, feature = "test-utils"))]
+mod model_summary_fixture;
 pub(crate) mod pinned;
 pub(crate) mod process_runner;
 pub(crate) mod remote_gateway;
@@ -56,6 +59,7 @@ pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };
+pub use jinja_mode::JinjaMode;
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};
@@ -66,7 +70,7 @@ pub use model_runtime::{
     Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelRuntimeError,
     ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget, RuntimeErrorEnvelope,
 };
-pub use process_runner::{JinjaMode, ProcessHandle, ServerConfig};
+pub use process_runner::{ProcessHandle, ServerConfig};
 pub use remote_gateway::RemoteGatewayPort;
 pub use retry_observer::RetryObserver;
 pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};

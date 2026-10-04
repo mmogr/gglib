@@ -8,10 +8,10 @@
 //! on this machine: the *use* side of ADR 0013's line.
 //!
 //! The identifier is resolved the way a chat request's is, so the answer is
-//! the model a turn sent with the same string would reach. Two fields are
-//! left out: the file path, which describes this machine's disk and nothing
-//! the reader can use, and the port, which is not reachable from the other
-//! side of the tunnel.
+//! the model a turn sent with the same string would reach. Three fields are
+//! left out: the file path and the projector path, which describe this
+//! machine's disk and nothing the reader can use, and the port, which is not
+//! reachable from the other side of the tunnel.
 
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
@@ -94,6 +94,7 @@ pub(crate) async fn model_detail(
         .any(|slot| i64::from(slot.model_id) == model.id);
     let detail = ModelDetailDto {
         file_path: None,
+        projector_path: None,
         ..ModelDetailDto::from_model(model, is_serving, None)
     };
     Json(ModelLookup { profile, detail }).into_response()

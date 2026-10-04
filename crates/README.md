@@ -214,7 +214,8 @@ Parses GGUF files to extract:
 - Model architecture
 - Quantization method
 - Context size
-- Capabilities (tool calling, vision, etc.)
+- Capabilities (tool calling, reasoning, etc.)
+- Whether the file is a model's weights or a projector
 
 #### gglib-hf
 Interacts with HuggingFace:

@@ -74,10 +74,16 @@ impl ModelRuntimePort for Resident {
     }
 }
 
-/// A proxy over `qwen` (1), a second `qwen` (2) and `org/qwen` (3), with the
-/// `coding` profile configured.
+/// A proxy over `qwen` (1), a second `qwen` (2), `org/qwen` (3) and
+/// `qwen-vision` (4), which has a projector, with the `coding` profile
+/// configured.
 async fn proxy(runtime: Resident) -> (String, tokio_util::sync::CancellationToken) {
-    let catalog = StaticCatalog::numbered(&[(1, "qwen"), (2, "qwen"), (3, "org/qwen")]);
+    let catalog = StaticCatalog::numbered(&[
+        (1, "qwen"),
+        (2, "qwen"),
+        (3, "org/qwen"),
+        (4, "qwen-vision"),
+    ]);
     spawn_proxy_with_settings(
         Arc::new(runtime),
         Arc::new(catalog),
@@ -169,6 +175,20 @@ async fn serving_is_by_id_in_either_slot_and_no_path_or_port_is_sent() {
     for key in ["filePath", "port"] {
         assert!(resident["detail"].get(key).is_none(), "{key}: {resident}");
     }
+}
+
+/// Whether a model reads images reaches the reader; where its projector sits
+/// on this machine's disk does not.
+#[tokio::test]
+async fn image_input_is_sent_and_the_projector_path_is_not() {
+    let (base, cancel) = proxy(Resident::default()).await;
+    let (_, linked) = detail(&base, "4").await;
+    let (_, unlinked) = detail(&base, "1").await;
+    cancel.cancel();
+
+    assert_eq!(linked["detail"]["imageInput"], true, "{linked}");
+    assert!(linked["detail"].get("projectorPath").is_none(), "{linked}");
+    assert_eq!(unlinked["detail"]["imageInput"], false, "{unlinked}");
 }
 
 /// Unknown is the code a chat request for it gets.

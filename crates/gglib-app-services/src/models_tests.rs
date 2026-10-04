@@ -569,13 +569,13 @@ mod every_mutation_announces {
     /// A retag that *does* move something must announce it.
     ///
     /// `full = true` drops every tag in the capability namespace before
-    /// re-deriving, and `NoopGgufParser` derives none — so a `vision` tag put
+    /// re-deriving, and `NoopGgufParser` derives none — so a `moe` tag put
     /// on the model beforehand is removed, which is a real diff without
     /// needing a parser that fabricates metadata.
     #[tokio::test]
     async fn a_retag_that_changes_something_announces_it() {
         let events = events_from(|ops, id| async move {
-            ops.add_tag(id, "vision".to_owned()).await.unwrap();
+            ops.add_tag(id, "moe".to_owned()).await.unwrap();
             ops.retag(id, true).await.unwrap();
         })
         .await;
