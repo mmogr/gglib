@@ -39,7 +39,7 @@ const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ 
 const stub = vi.hoisted(() => ({
   choice: { modelId: 9, modelName: 'gemma-3-12b' },
   conversationId: 2 as number | null,
-  draft: 'half a thought',
+  draft: { text: 'half a thought', images: [new File(['png'], 'shot.png', { type: 'image/png' })] },
 }));
 
 vi.mock('../../../src/services/transport', async () => {
@@ -110,12 +110,12 @@ vi.mock('../../../src/pages/ChatPage', () => ({
     modelName: string;
     serverPort?: number;
     conversationId?: number | null;
-    draft?: string;
+    draft?: { text: string; images: File[] };
     startingModel?: string | null;
     paired?: { far: { id: number }; machineName: string };
     onSwitchModel?: (
       choice: { modelId: number; modelName: string },
-      context: () => { conversationId: number | null; draft: string },
+      context: () => { conversationId: number | null; draft: { text: string; images: File[] } },
     ) => Promise<void>;
     onUnloadModel?: () => Promise<void>;
     onClose: () => void;
@@ -127,7 +127,8 @@ vi.mock('../../../src/pages/ChatPage', () => ({
         data-paired={paired ? `${paired.machineName}:${paired.far.id}` : ''}
         data-port={mountedPort}
         data-conversation={conversationId ?? ''}
-        data-draft={draft ?? ''}
+        data-draft={draft?.text ?? ''}
+        data-draft-images={draft?.images.map((f) => f.name).join(',') ?? ''}
         data-starting={startingModel ?? ''}
       >
         Chatting with {modelName}
@@ -403,6 +404,7 @@ describe('ModelControlCenterPage', () => {
     expect(chat).toHaveAttribute('data-port', '9456');
     expect(chat).toHaveAttribute('data-conversation', '2');
     expect(chat).toHaveAttribute('data-draft', 'half a thought');
+    expect(chat).toHaveAttribute('data-draft-images', 'shot.png');
     // The model it left keeps running; only Unload stops a server.
     expect(stopServer).not.toHaveBeenCalled();
   });

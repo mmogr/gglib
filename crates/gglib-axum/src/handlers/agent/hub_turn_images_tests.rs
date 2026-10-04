@@ -1,12 +1,14 @@
 //! A device's turn that carries an image: refused before the chat's model
-//! is loaded when that model cannot read one, or when the image was never
-//! uploaded, and a turn all the same when it is its image alone.
+//! is loaded when that model cannot read one, when the image was never
+//! uploaded, or when its images and the history's are over 16 MiB together,
+//! and a turn all the same when it is its image alone.
 
 use gglib_core::domain::AttachmentId;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::RunsPort as _;
+use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 
 use super::hub_turn_tests::{chat, device, refused};
 use super::{plan, start};
@@ -132,4 +134,56 @@ async fn a_hub_turn_naming_an_image_never_uploaded_is_refused_before_the_load() 
     assert_eq!(refusal, (400, "attachment_not_found"));
     assert_eq!(saved(&state, id).await.len(), 2);
     assert!(state.runs.list(&device("phone")).runs.is_empty());
+}
+
+/// A stored PNG of `len` bytes, its tail all `fill`.
+async fn stored(state: &crate::state::AppState, fill: u8, len: usize) -> AttachmentId {
+    let mut bytes = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    bytes.extend([0, 0, 0, 13]);
+    bytes.extend(b"IHDR");
+    bytes.extend(640_u32.to_be_bytes());
+    bytes.extend(480_u32.to_be_bytes());
+    bytes.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    bytes.resize(len.max(bytes.len()), fill);
+    state
+        .core
+        .attachments()
+        .ingest(&bytes)
+        .await
+        .unwrap()
+        .info
+        .id
+}
+
+/// The saved rows' images and the turn's add up: an 8 MiB image in the
+/// history and the same again in the turn are the 16 MiB a request may
+/// carry, and one image more is refused by its code before the model is
+/// loaded, with nothing written.
+#[tokio::test]
+async fn a_hub_turn_whose_images_and_the_historys_are_over_16_mib_is_refused_before_the_load() {
+    let (_dir, state) = state().await;
+    let big = stored(&state, 2, MAX_IMAGE_BYTES).await;
+    let small = stored(&state, 3, 64).await;
+    model(&state, CHAT_MODEL, true).await;
+    let id = chat(&state, None).await;
+    let row = NewMessage {
+        conversation_id: id,
+        role: MessageRole::User,
+        content: "an earlier screenshot".to_owned(),
+        metadata: None,
+        images: vec![big.clone()],
+    };
+    state.core.chat_history().save_message(row).await.unwrap();
+
+    let mut over = image_turn(id, "and these?", &big);
+    over.images.push(small);
+    let refusal = refused(start(&state, "phone", "d1", over).await);
+
+    assert_eq!(refusal, (400, "request_images_too_large"));
+    assert_eq!(saved(&state, id).await.len(), 3);
+    assert!(state.runs.list(&device("phone")).runs.is_empty());
+
+    let at = image_turn(id, "and this?", &big);
+    let refusal = refused(start(&state, "phone", "d1", at).await);
+    assert_eq!(refusal, (503, "model_unavailable"));
 }

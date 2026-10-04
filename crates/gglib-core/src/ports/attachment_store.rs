@@ -89,6 +89,10 @@ pub trait AttachmentStore: Send + Sync {
     /// image has that id.
     async fn info(&self, id: &AttachmentId) -> Result<Option<AttachmentInfo>, AttachmentError>;
 
+    /// How many bytes the image `id` is, read without its bytes, or `None`
+    /// when no image has that id.
+    async fn size(&self, id: &AttachmentId) -> Result<Option<usize>, AttachmentError>;
+
     /// The bytes of the image `id`, or `None` when no image has that id.
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError>;
 }

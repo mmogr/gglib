@@ -17,6 +17,7 @@ import {
   UserMessageBubble,
   SystemMessageBubble,
   EditComposer,
+  ImageInputContext,
 } from './components';
 import type { MessageActionsContextValue, ModelChoice } from './components';
 import {
@@ -27,6 +28,7 @@ import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
 import type { ChatSource, ConversationSummary } from '../../services/transport';
+import type { ImageInput } from '../../hooks/useImageInput';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -78,6 +80,8 @@ interface ChatMessagesPanelProps {
    * no rename, restart, export or prompt edit, and no turn edited or deleted.
    */
   source?: ChatSource;
+  /** Whether the model takes images, why not, and its context: for every composer in the thread. */
+  imageInput: ImageInput;
 }
 
 /** The notebook's column: the width its rows are laid out in. */
@@ -113,6 +117,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   headMargin,
   headOnly = false,
   source = 'this',
+  imageInput,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -230,36 +235,38 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           </div>
         ) : (
           <MessageActionsContext.Provider value={messageActionsValue}>
-            <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
-              <ThreadPrimitive.Root
-                key={activeConversationId ?? 'thread-root'}
-                className="flex flex-col flex-1 min-h-0"
-              >
-                <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
-                  <NotebookColumn>
-                    {head}
-                    <ThreadPrimitive.Messages components={messageComponents} />
-                  </NotebookColumn>
-                  <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
-                    Jump to latest
-                  </ThreadPrimitive.ScrollToBottom>
-                </ThreadPrimitive.Viewport>
+            <ImageInputContext.Provider value={imageInput}>
+              <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
+                <ThreadPrimitive.Root
+                  key={activeConversationId ?? 'thread-root'}
+                  className="flex flex-col flex-1 min-h-0"
+                >
+                  <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
+                    <NotebookColumn>
+                      {head}
+                      <ThreadPrimitive.Messages components={messageComponents} />
+                    </NotebookColumn>
+                    <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
+                      Jump to latest
+                    </ThreadPrimitive.ScrollToBottom>
+                  </ThreadPrimitive.Viewport>
 
-                <ComposerFooter
-                  isServerConnected={isServerConnected}
-                  isThreadRunning={isThreadRunning}
-                  onStopGeneration={() => threadRuntime?.cancelRun()}
-                  modelName={modelName}
-                  modelId={modelId}
-                  onPickModel={onPickModel}
-                  startingModel={startingModel}
-                  onUnloadModel={onUnloadModel}
-                  quantization={quantization}
-                  supportsToolCalls={supportsToolCalls}
-                  toolFormat={toolFormat}
-                />
-              </ThreadPrimitive.Root>
-            </ThinkingTimingProvider>
+                  <ComposerFooter
+                    isServerConnected={isServerConnected}
+                    isThreadRunning={isThreadRunning}
+                    onStopGeneration={() => threadRuntime?.cancelRun()}
+                    modelName={modelName}
+                    modelId={modelId}
+                    onPickModel={onPickModel}
+                    startingModel={startingModel}
+                    onUnloadModel={onUnloadModel}
+                    quantization={quantization}
+                    supportsToolCalls={supportsToolCalls}
+                    toolFormat={toolFormat}
+                  />
+                </ThreadPrimitive.Root>
+              </ThinkingTimingProvider>
+            </ImageInputContext.Provider>
           </MessageActionsContext.Provider>
         )}
       </div>

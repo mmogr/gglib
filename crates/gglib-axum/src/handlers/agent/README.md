@@ -57,6 +57,11 @@ LLM token generation and any in-flight tool calls without leaking compute
 or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
 runs the same prepared loop detached from any response, so only cancel or
 shutdown stops it, and saves the transcript to the request's conversation.
+Before it takes a slot, its messages' images, history included, are checked
+by their sizes alone (`AttachmentService::check_request`): an id not stored
+is `400 attachment_not_found`, and images over 16 MiB together `400
+request_images_too_large`, on this machine's model or the paired machine's,
+whose images are read here too.
 A local run holds its model until it ends (`remote_upstream::hold`), so no
 proxy request swaps it out or recycles it mid-run, and the proxy's stall
 watchdog waits for the run to end; a person's stop does not. A llama-server
@@ -77,9 +82,11 @@ starts the loop.
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
 starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
 chat's id and the device's message, with any image named by the id its
-upload answered; a turn may be its images alone. An image never uploaded is
-`400 attachment_not_found`, and an image for a model with no projector `400
-model_cannot_read_images`, both before the model is loaded. The history is rebuilt from the hub's
+upload answered; a turn may be its images alone. An image the turn or the
+history names that is not stored is `400 attachment_not_found`, images over
+16 MiB together `400 request_images_too_large`, and an image for a model
+with no projector `400 model_cannot_read_images`, all before the model is
+loaded. The history is rebuilt from the hub's
 record (the system prompt, every row, the message), the limits from the
 conversation's settings, no tools unless `enable --allow-mcp` opened the
 tunnel to them (then only those the settings name), and the reply runs on the chat's model

@@ -11,6 +11,8 @@ import { Button } from '../../ui/Button';
 import ThinkingBlock from './ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
 import { MessageActionsContext } from './MessageActionsContext';
+import { MessageImages } from './MessageImages';
+import { ComposerImages, ImageInputContext } from './ComposerImages';
 import { TurnRow } from './TurnRow';
 import { ReplyArriving, ReplyMade, TurnWho } from './TurnMargin';
 import { arrivingPhase, replyFacts, replyName } from './turnFigures';
@@ -165,8 +167,8 @@ function userName(message: { id: string; metadata?: unknown }, far: boolean): st
 }
 
 /**
- * A turn of the user's. Includes copy, edit, and delete actions, but on a
- * far chat only copy.
+ * A turn of the user's: its images, then its text. Includes copy, edit, and
+ * delete actions, but on a far chat only copy.
  */
 export const UserMessageBubble: React.FC = () => {
   const message = useMessage();
@@ -185,6 +187,7 @@ export const UserMessageBubble: React.FC = () => {
         who={<TurnWho name={userName(message, far)} at={message.createdAt} />}
         body={
           <>
+            <MessageImages />
             <div className="text-base leading-relaxed text-text-secondary">
               <MarkdownMessageContent />
             </div>
@@ -222,10 +225,14 @@ export const UserMessageBubble: React.FC = () => {
 export const SystemMessageBubble: React.FC = () => null;
 
 /**
- * Edit composer shown when user clicks Edit on their message.
+ * Edit composer shown when user clicks Edit on their message, with the
+ * turn's images, each of which can be removed; a paste adds one only where
+ * the model takes images. assistant-ui sends an edit only when its text
+ * changed.
  */
 export const EditComposer: React.FC = () => {
   const message = useMessage();
+  const imageInput = useContext(ImageInputContext);
 
   return (
     <MessagePrimitive.Root className="group">
@@ -233,8 +240,10 @@ export const EditComposer: React.FC = () => {
         who={<TurnWho name="You" at={message.createdAt} />}
         body={
           <ComposerPrimitive.Root className="flex flex-col gap-sm w-full">
+            <ComposerImages />
             <ComposerPrimitive.Input
               aria-label="Edit message"
+              addAttachmentOnPaste={imageInput.offered}
               className="w-full min-h-[60px] p-sm bg-background-input border border-border rounded-md text-text font-[inherit] text-base resize-y focus:outline-none focus:border-primary"
             />
             <div className="flex justify-end gap-sm">

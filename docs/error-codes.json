@@ -70,9 +70,9 @@
     },
     {
       "code": "request_images_too_large",
-      "type": null,
-      "status": null,
-      "meaning": "The images of one chat are over the 16 MiB one request to a model may carry; the request is not sent, and the run's last error event says so."
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "The images a chat's messages carry, history included, are over the 16 MiB one request to a model may carry; the run is refused before it starts. Start a new chat, or send fewer or smaller images."
     },
     {
       "code": "upstream_error",

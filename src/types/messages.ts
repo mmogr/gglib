@@ -14,6 +14,15 @@ import type { TurnMade } from '../utils/messages/turnMade';
 export type GglibMessage = ThreadMessageLike;
 
 /**
+ * A composer's unsent message: its text and the images attached to it, as
+ * the files the page holds. Carried over a model switch and put back.
+ */
+export interface ChatDraft {
+  text: string;
+  images: File[];
+}
+
+/**
  * Message content type - can be string or array of parts
  */
 export type GglibContent = ThreadMessageLike['content'];

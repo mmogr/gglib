@@ -8,11 +8,14 @@
  * page saves no turn itself. Stop cancels the run; leaving only stops
  * reading it.
  *
- * A far chat (`source: 'far'`) is the far machine's: a send there is its
- * text alone, which that machine runs and saves, and it offers no edit, no
- * regenerate and no new chat. A chat with a far model (`pairedModel`) is
- * this machine's, run here on that machine's model: its runs name the model
- * by its machine, and a conversation made for it keeps that model.
+ * A send carries the composer's images by the ids their uploads answered
+ * (`imageAttachments`), and so does every user message of the history it
+ * sends. A far chat (`source: 'far'`) is the far machine's: a send there is
+ * its text and images, uploaded to that machine, which runs and saves it,
+ * and it offers no edit, no regenerate and no new chat. A chat with a far
+ * model (`pairedModel`) is this machine's, run here on that machine's model:
+ * its runs name the model by its machine, and a conversation made for it
+ * keeps that model.
  *
  * @module useGglibRuntime
  */
@@ -35,7 +38,11 @@ import {
 } from '../useChatPersistence/buildThreadMessages';
 import type { ReasoningTimingTracker } from './reasoningTiming';
 import { buildRunRequest, mintRunId } from './runRequest';
-import { runsOf, turnText } from './chatSource';
+import { imageStoreOf, runsOf, turnText } from './chatSource';
+import { useImageAttachments, type SentImage } from './imageAttachments';
+import type { Downscale } from './imagePrep';
+import { codeOf, sendRefusal } from './imageRefusals';
+import { giveDraftBack, imagesOf, unsentImage } from './turnImages';
 import { savedRowId } from './savedRows';
 import { useRunReader } from './useRunReader';
 
@@ -66,6 +73,10 @@ export interface UseGglibRuntimeOptions {
    * in it has saved its reply: the conversation list is the caller's.
    */
   onConversationChanged?: (conversationId: number) => void;
+  /** Tell the person why an image was not added: shown at once, as a toast. */
+  onImageRefused?: (sentence: string) => void;
+  /** Makes an image too large to send smaller; the browser's canvas by default. */
+  downscaleImage?: Downscale;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -101,11 +112,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   // land on top of it.
   const skipResyncRef = useRef(false);
 
-  /** Put a plain text message back in the composer rather than lose it. */
-  const giveTextBack = (content: GglibContent) => {
-    const [only, ...more] = typeof content === 'string' ? [{ type: 'text', text: content } as const] : content;
-    if (more.length === 0 && only?.type === 'text') runtimeRef.current?.thread.composer.setText(only.text);
-  };
+  const images = useImageAttachments(source, options.onImageRefused, options.downscaleImage);
+  /** Put a draft back in the composer, text and images, rather than lose it. */
+  const giveBackDraft = (content: GglibContent, attached: readonly SentImage[]) =>
+    giveDraftBack(runtimeRef.current?.thread.composer, content, attached, imageStoreOf(source).blob);
 
   /**
    * Send `content` after `base`: create the conversation if there is none,
@@ -117,8 +127,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   const start = async (
     base: GglibMessage[],
     content: GglibContent,
+    attached: readonly SentImage[],
     { replaceFrom, giveBack = true }: { replaceFrom?: number; giveBack?: boolean } = {},
   ) => {
+    const handBack = () => giveBack && giveBackDraft(content, attached);
     // A far model's turn has no local server to select; the daemon takes the
     // tunnel's port and the stored key. A far chat's model is chosen there.
     if (!far && !selectedServerPort && !pairedModel) {
@@ -127,20 +139,27 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     }
     if (far && conversationId === undefined) {
       onError?.(new Error('A chat on the other machine is started there.'));
-      if (giveBack) giveTextBack(content);
+      handBack();
+      return;
+    }
+    // An image whose upload failed: nothing is sent, and the draft goes back.
+    const unsent = unsentImage(attached);
+    if (unsent) {
+      onError?.(new Error(unsent));
+      handBack();
       return;
     }
     // Never from a conversation that is not loaded, or into a run that may
     // still be going: the text goes back to the composer.
     if (conversationId !== undefined && !(await reader.clearToSend(conversationId))) {
-      if (giveBack) giveTextBack(content);
+      handBack();
       return;
     }
     const signal = reader.beginSend();
     if (!signal) {
       // A run is live, or opening has not learned whether one is: nothing
       // is sent, and the text goes back rather than being lost.
-      if (giveBack) giveTextBack(content);
+      handBack();
       return;
     }
     stopAskedRef.current = false;
@@ -158,7 +177,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         base = buildThreadMessages([], created, cid) as GglibMessage[];
         options.onConversationChanged?.(cid);
       }
-      const history = [...base, mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() })];
+      const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
+      const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
       const request = far ? null : buildRunRequest({
         messages: history,
         conversationId: cid,
@@ -177,7 +197,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       setMessages(history);
       const runId = mintRunId();
       if (request) await getTransport().startAgentRun(runId, request);
-      else await getTransport().addFarTurn(cid, runId, turnText(content));
+      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id));
       if (stopAskedRef.current) {
         await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       }
@@ -186,10 +206,13 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       if (signal.aborted) return;
       reader.endReading(signal);
       // Nothing was started and nothing changed: show what is saved, and
-      // hand the text of a send or an edit back to the composer.
+      // hand the text and images of a send or an edit back to the composer.
       if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
-      if (giveBack) giveTextBack(content);
-      onError?.(error as Error);
+      const refused = sendRefusal(error, far, attached.length > 0);
+      // A store that lost an image: added back, it is uploaded again.
+      if (codeOf(error) === 'attachment_not_found') images.forget(attached.flatMap((image) => image.file ?? []));
+      handBack();
+      onError?.(refused ? new Error(refused) : (error as Error));
     }
   };
 
@@ -203,9 +226,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       }
       setMessages([...newMessages] as GglibMessage[]); // Convert from readonly
     },
+    adapters: { attachments: images },
 
     onNew: async (msg: AppendMessage) => {
-      await start(messagesRef.current, msg.content as GglibContent);
+      await start(messagesRef.current, msg.content as GglibContent, imagesOf(msg));
     },
 
     // Edit and resend: the run replaces the edited row and everything after
@@ -215,7 +239,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       const parent = msg.parentId === null ? -1 : current.findIndex((m) => m.id === msg.parentId);
       if (msg.parentId !== null && parent === -1) return;
       const rowId = savedRowId(current[parent + 1]);
-      await start(current.slice(0, parent + 1), msg.content as GglibContent, {
+      await start(current.slice(0, parent + 1), msg.content as GglibContent, imagesOf(msg), {
         replaceFrom: rowId ?? undefined,
       });
     },
@@ -228,7 +252,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       while (at >= 0 && current[at].role !== 'user') at--;
       if (at < 0) return;
       const rowId = savedRowId(current[at]);
-      await start(current.slice(0, at), current[at].content as GglibContent, {
+      await start(current.slice(0, at), current[at].content as GglibContent, imagesOf(current[at]), {
         replaceFrom: rowId ?? undefined,
         giveBack: false,
       });

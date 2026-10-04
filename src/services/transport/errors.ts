@@ -143,6 +143,9 @@ export async function readData<T>(response: Response): Promise<T> {
       if (body.error) {
         errorMessage = body.error;
       }
+      // The daemon's code (`attachment_not_found`, `agent_busy`, …), for a
+      // caller that answers one refusal differently from another.
+      if (body.type) details = { status: response.status, type: body.type };
       
       // Check for llama-server not installed error
       if (body.type === 'LLAMA_SERVER_NOT_INSTALLED') {

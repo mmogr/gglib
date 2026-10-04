@@ -76,10 +76,10 @@ describe('convertToWireMessages — system/user', () => {
     ]);
   });
 
-  it('sends a user turn as its text alone, naming no image', () => {
-    // An image part is not in the GglibMessagePart union, hence the cast. The
-    // page attaches no image, so one found in UI state is dropped and the
-    // message carries no `images` key.
+  it('never sends an image part as content: a turn with no attachment names no image', () => {
+    // An image part is not in the GglibMessagePart union, hence the cast.
+    // The page's images are attachments, by id; an image part found in UI
+    // state is dropped and the message carries no `images` key.
     const wire = convertToWireMessages([
       userMsgRaw([
         { type: 'image', image: 'data:image/png;base64,abc' },
@@ -90,6 +90,24 @@ describe('convertToWireMessages — system/user', () => {
       { role: 'user', content: 'describe this' },
     ]);
     expect('images' in wire[0]).toBe(false);
+  });
+
+  it('names every user message\'s images by id, the history\'s as well as the last', () => {
+    const image = (id: string) => ({
+      id, type: 'image' as const, name: 'shot.png', contentType: 'image/png', status: { type: 'complete' as const }, content: [],
+    });
+    const wire = convertToWireMessages([
+      systemMsg('sys'),
+      { ...userMsg('this one'), attachments: [image('a1'), image('a2')] },
+      assistantMsg('seen'),
+      { ...userMsg(''), attachments: [image('b1')] },
+    ]);
+    expect(wire).toEqual<AgentMessage[]>([
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'this one', images: ['a1', 'a2'] },
+      { role: 'assistant', content: 'seen' },
+      { role: 'user', content: '', images: ['b1'] },
+    ]);
   });
 });
 

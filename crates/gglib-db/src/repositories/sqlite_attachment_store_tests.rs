@@ -37,6 +37,7 @@ async fn a_stored_image_reads_back_its_facts_and_its_bytes() {
     let blob = store.blob(&info.id).await.unwrap().unwrap();
     assert_eq!(blob.mime, "image/jpeg");
     assert_eq!(blob.data, bytes);
+    assert_eq!(store.size(&info.id).await.unwrap(), Some(256));
 }
 
 #[tokio::test]
@@ -89,6 +90,7 @@ async fn an_id_never_stored_is_none() {
     let missing = AttachmentId::of(b"never stored");
     assert_eq!(store.info(&missing).await.unwrap(), None);
     assert_eq!(store.blob(&missing).await.unwrap(), None);
+    assert_eq!(store.size(&missing).await.unwrap(), None);
 }
 
 #[tokio::test]

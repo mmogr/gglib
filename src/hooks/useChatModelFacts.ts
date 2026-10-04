@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTransport } from '../services/transport';
+import { canSee } from '../utils/canSee';
 
 export interface ChatModelFacts {
   /** null = unknown (permissive fallback - never gates tools when status is uncertain). */
@@ -7,11 +8,16 @@ export interface ChatModelFacts {
   toolFormat: string | null;
   /** The model's quantisation, from its catalogue entry; the composer says it. */
   quantization: string | null;
+  /** Whether it reads images, from its catalogue entry; null = not known yet. */
+  sees: boolean | null;
+  /** The context it is served with, from its catalogue entry, when known. */
+  contextLength: number | null;
 }
 
 /**
  * What the chat page knows about the model it is talking to: whether it
- * calls tools, in which format, and its quantisation.
+ * calls tools, in which format, its quantisation, whether it reads images,
+ * and its context (its served default, else the file's).
  *
  * Fetched once per model id. A page that moves to another model is remounted
  * with the new id (ModelControlCenterPage keys it by the session), so the
@@ -21,6 +27,8 @@ export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {
   const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
   const [toolFormat, setToolFormat] = useState<string | null>(null);
   const [quantization, setQuantization] = useState<string | null>(null);
+  const [sees, setSees] = useState<boolean | null>(null);
+  const [contextLength, setContextLength] = useState<number | null>(null);
   useEffect(() => {
     // Nothing to ask about remotely: the capability is read from this
     // machine's server registry and the model is on the other machine.
@@ -38,9 +46,14 @@ export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {
         // Permissive fallback: leave supportsToolCalls as null (unknown)
       });
     getTransport().getModel(modelId)
-      .then((model) => { if (!cancelled) setQuantization(model?.quantization ?? null); })
+      .then((model) => {
+        if (cancelled || !model) return;
+        setQuantization(model.quantization ?? null);
+        setSees(canSee(model));
+        setContextLength(model.serverDefaults?.contextLength ?? model.contextLength ?? null);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [modelId]);
-  return { supportsToolCalls, toolFormat, quantization };
+  return { supportsToolCalls, toolFormat, quantization, sees, contextLength };
 }

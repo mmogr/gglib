@@ -13,6 +13,7 @@ import type { ChatMessage } from '../../../src/services/transport';
 import type { HubChat } from '../../../src/types/generated/HubChat';
 import { chatTransport, conversation, framesThenWait, wrapper, type ChatFixture } from './chatPageHarness';
 import { UNREAD_STORAGE_KEY } from '../../../src/components/ConversationListPanel/useConversationActivity';
+import type { ChatDraft } from '../../../src/types/messages';
 import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
 import { guiModel } from '../fixtures/model';
 import { act } from '@testing-library/react';
@@ -188,6 +189,29 @@ describe('ChatPage, the far machine’s chats', () => {
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 
+  it('a far chat offers images even where this machine\'s model reads none, and shows a turn\'s from the far store', async () => {
+    const user = userEvent.setup();
+    const shot = { id: 'd'.repeat(64), mime: 'image/png', width: 640, height: 480 };
+    const far = transport.current as Record<string, unknown>;
+    far.openFarChat = vi.fn(async (id: number) => ({
+      conversation: { id, title: 'Why the build broke', model_id: null, system_prompt: 'You are the hub.', created_at: '', updated_at: '' },
+      messages: [{ ...FAR_ROWS[0], images: [shot] }],
+    }));
+    far.getModel = vi.fn(async () => ({ quantization: 'Q8_0', imageInput: false }));
+    far.fetchAttachmentBlob = vi.fn(async () => new Blob(['png'], { type: 'image/png' }));
+    const made = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:far-shot');
+    joined();
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach an image' })).toBeDisabled());
+
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
+
+    expect(await screen.findByRole('img', { name: 'Image, 640 × 480' })).toHaveAttribute('src', 'blob:far-shot');
+    expect(far.fetchAttachmentBlob).toHaveBeenCalledWith('far', shot.id);
+    expect(screen.getByRole('button', { name: 'Attach an image' })).toBeEnabled();
+    made.mockRestore();
+  });
+
   it('a far chat offers no Unload: its model is the other machine’s', async () => {
     const user = userEvent.setup();
     joined();
@@ -253,7 +277,7 @@ describe('ChatPage, the far machine’s chats', () => {
     const sent = rowOf(await screen.findByText('And how do I fix it?'));
     expect(within(sent).getByText('You')).toBeInTheDocument();
     const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
-    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?');
+    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', []);
   });
 
   it('a model switch that lands while a far chat is open opens no conversation here', async () => {
@@ -265,7 +289,7 @@ describe('ChatPage, the far machine’s chats', () => {
       guiModel({ id: 8, name: 'llama-3.2-3b' }),
     ]);
     const onSwitchModel = vi.fn(
-      async (_choice: ModelChoice, _context: () => { conversationId: number | null; draft: string }) => {},
+      async (_choice: ModelChoice, _context: () => { conversationId: number | null; draft: ChatDraft }) => {},
     );
     render(
       <ChatPage modelName="qwen3" modelId={7} serverPort={4321} onSwitchModel={onSwitchModel} onClose={async () => {}} />,

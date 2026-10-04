@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, useContext } from 'react';
 import { ComposerPrimitive } from '@assistant-ui/react';
 import { Button } from '../../ui/Button';
 import { ToolsPopover } from '../../ToolsPopover';
@@ -6,6 +6,7 @@ import { ToolSupportIndicator } from '../../ToolSupportIndicator';
 import { getToolRegistry } from '../../../services/tools';
 import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
+import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
 
 interface ComposerFooterProps {
   isServerConnected: boolean;
@@ -31,8 +32,10 @@ interface ComposerFooterProps {
 
 /**
  * The composer, on the notebook's grid: the model (a picker, on this
- * machine) and the tools in the margin, the text box and Stop or Send in
- * the body.
+ * machine) and the tools in the margin; in the body, the images attached,
+ * then the attach button, the text box and Stop or Send. An image is
+ * attached by the button, a paste or a drop, each only where the model
+ * takes images, as `ImageInputContext` says.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -46,65 +49,75 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   quantization,
   supportsToolCalls,
   toolFormat,
-}) => (
-  <div className="@container shrink-0 mx-auto w-full max-w-[1000px] px-lg">
-    <TurnRow
-      className="border-t-0 pt-md pb-lg"
-      who={
-        <ModelPicker
-          modelId={modelId}
-          modelName={modelName}
-          quantization={quantization}
-          onPick={onPickModel}
-          starting={startingModel}
-          onUnload={isServerConnected ? onUnloadModel : undefined}
-        />
-      }
-      made={
-        <div className="flex items-center gap-sm">
-          <ToolSupportIndicator
-            supports={supportsToolCalls ?? null}
-            hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
-            toolFormat={toolFormat}
+}) => {
+  const imageInput = useContext(ImageInputContext);
+  return (
+    <div className="@container shrink-0 mx-auto w-full max-w-[1000px] px-lg">
+      <TurnRow
+        className="border-t-0 pt-md pb-lg"
+        who={
+          <ModelPicker
+            modelId={modelId}
+            modelName={modelName}
+            quantization={quantization}
+            onPick={onPickModel}
+            starting={startingModel}
+            onUnload={isServerConnected ? onUnloadModel : undefined}
           />
-          <ToolsPopover opensUpward align="left" />
-        </div>
-      }
-      body={
-        <ComposerPrimitive.Root className="flex gap-sm items-end py-sm pr-sm pl-base border border-border rounded-lg bg-background-input focus-within:border-border-focus">
-          <ComposerPrimitive.Input
-            aria-label="Message"
-            className="flex-1 py-xs bg-transparent text-text text-base placeholder:text-text-disabled resize-none min-h-[40px] max-h-[150px] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-            placeholder={
-              isServerConnected
-                ? 'Type your message. Shift + Enter for newline'
-                : 'Server not connected'
-            }
-            disabled={!isServerConnected}
-          />
-          <div className="flex gap-sm shrink-0">
-            {isThreadRunning && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onStopGeneration}
-                title="Stop generation"
-              >
-                Stop
-              </Button>
-            )}
-            <ComposerPrimitive.Send asChild>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={!isServerConnected}
-              >
-                Send ↵
-              </Button>
-            </ComposerPrimitive.Send>
+        }
+        made={
+          <div className="flex items-center gap-sm">
+            <ToolSupportIndicator
+              supports={supportsToolCalls ?? null}
+              hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
+              toolFormat={toolFormat}
+            />
+            <ToolsPopover opensUpward align="left" />
           </div>
-        </ComposerPrimitive.Root>
-      }
-    />
-  </div>
-);
+        }
+        body={
+          <ComposerPrimitive.AttachmentDropzone asChild disabled={!imageInput.offered || !isServerConnected}>
+            <ComposerPrimitive.Root className="flex flex-col gap-sm py-sm pr-sm pl-base border border-border rounded-lg bg-background-input focus-within:border-border-focus data-[dragging=true]:border-border-focus">
+              <ComposerImages />
+              <div className="flex gap-sm items-end">
+                <AttachImageButton disabled={!isServerConnected} />
+                <ComposerPrimitive.Input
+                  aria-label="Message"
+                  addAttachmentOnPaste={imageInput.offered}
+                  className="flex-1 py-xs bg-transparent text-text text-base placeholder:text-text-disabled resize-none min-h-[40px] max-h-[150px] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder={
+                    isServerConnected
+                      ? 'Type your message. Shift + Enter for newline'
+                      : 'Server not connected'
+                  }
+                  disabled={!isServerConnected}
+                />
+                <div className="flex gap-sm shrink-0">
+                  {isThreadRunning && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={onStopGeneration}
+                      title="Stop generation"
+                    >
+                      Stop
+                    </Button>
+                  )}
+                  <ComposerPrimitive.Send asChild>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={!isServerConnected}
+                    >
+                      Send ↵
+                    </Button>
+                  </ComposerPrimitive.Send>
+                </div>
+              </div>
+            </ComposerPrimitive.Root>
+          </ComposerPrimitive.AttachmentDropzone>
+        }
+      />
+    </div>
+  );
+};

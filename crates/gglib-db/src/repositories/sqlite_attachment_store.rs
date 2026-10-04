@@ -67,6 +67,15 @@ impl AttachmentStore for SqliteAttachmentStore {
         Ok(row.as_ref().and_then(info_of))
     }
 
+    async fn size(&self, id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
+        let row = sqlx::query("SELECT length(data) AS size FROM attachments WHERE id = ?")
+            .bind(id.as_str())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| storage(&e))?;
+        Ok(row.and_then(|row| usize::try_from(row.get::<i64, _>("size")).ok()))
+    }
+
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         let row = sqlx::query("SELECT mime, data FROM attachments WHERE id = ?")
             .bind(id.as_str())

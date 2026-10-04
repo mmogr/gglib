@@ -1,13 +1,15 @@
 /**
- * The paired machine's models, for the library: read while that machine is
- * reached, kept when it is not.
+ * The paired machine's models, for the library and for a chat on one of
+ * them: read while that machine is reached, kept when it is not.
  *
  * Read through this machine's daemon (`/api/remote/models`) while the status
  * says a machine is connected and not away, and again when it comes back, on
  * a new connection, when the window regains focus, and when the caller asks
- * (after a Load). A read that fails, or a machine that goes away, keeps the
- * last rows, marked stale; a disconnection clears them, and so does a status
- * that names another machine than the one they came from (`stillPaired`).
+ * (after a Load). A caller that does not need them (`enabled` false) reads
+ * nothing, at none of those, and is given no rows. A read that fails, or a
+ * machine that goes away, keeps the last rows, marked stale; a disconnection
+ * clears them, and so does a status that names another machine than the one
+ * they came from (`stillPaired`).
  * A new connection that names no machine yet (the placeholder `remote_joined`
  * writes) keeps them too, marked stale: the daemon acts on whichever machine
  * answered, where their ids may be other models.
@@ -54,11 +56,11 @@ export interface PairedModelsState {
   refetch: () => void;
 }
 
-export function usePairedModels(): PairedModelsState {
+export function usePairedModels(enabled = true): PairedModelsState {
   const { status } = useRemoteState();
   const connected = status?.connected ?? null;
   const away = connected?.away_for_s != null;
-  const readable = connected !== null && !away;
+  const readable = enabled && connected !== null && !away;
   const [group, setGroup] = useState<PairedGroup | null>(null);
   const [failed, setFailed] = useState(false);
   // Which read is the newest: one that lands after a newer one, or after a
@@ -102,7 +104,7 @@ export function usePairedModels(): PairedModelsState {
     if (readable) void read();
   }, [readable, read]);
 
-  const held = group !== null && stillPaired(group.machine, status) ? group : null;
+  const held = enabled && group !== null && stillPaired(group.machine, status) ? group : null;
   const unnamed = connected !== null && connected.ticket_fingerprint === '';
   const reach: PairedReach = away ? 'away' : failed || unnamed ? 'stale' : 'reached';
   return { group: held, name: pairedName(status), reach, refetch };

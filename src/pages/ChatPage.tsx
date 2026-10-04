@@ -20,6 +20,7 @@ import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
 import { useChatModelFacts } from '../hooks/useChatModelFacts';
+import { useImageInput } from '../hooks/useImageInput';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -28,6 +29,7 @@ import { useServerState } from '../services/serverEvents';
 import { getTransport, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/transport';
 import type { ConversationSummary } from '../services/transport';
 import type { ModelRef } from '../types/generated/ModelRef';
+import type { ChatDraft } from '../types/messages';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -49,11 +51,11 @@ type ChatPageProps = {
   serverStartTime?: number; // Unix timestamp in seconds
   initialView?: 'chat' | 'console'; // Which view to show initially
   conversationId?: number | null; // The conversation to open with, e.g. after a model switch
-  draft?: string; // Unsent text to put back in the composer, e.g. after a model switch
+  draft?: ChatDraft; // Unsent text and images to put back in the composer, e.g. after a model switch
   startingModel?: string | null; // The model a switch is starting, which locks the picker
   // Move the chat to another model, keeping open the conversation (and the
   // draft) that `context` reads when the switch lands; local only.
-  onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: string }) => Promise<void>;
+  onSwitchModel?: (choice: ModelChoice, context: () => { conversationId: number | null; draft: ChatDraft }) => Promise<void>;
   // Unload the model, which every client of the proxy loses with it; the
   // chat stays open, read-only. Local only.
   onUnloadModel?: () => Promise<void>;
@@ -134,7 +136,8 @@ export default function ChatPage(props: ChatPageProps) {
   // Tool support and quantisation for the active model. The model is fixed
   // for the lifetime of ChatPage: a switch from the composer's picker
   // remounts the page on the new session, with this conversation still open.
-  const { supportsToolCalls, toolFormat, quantization } = useChatModelFacts(modelId);
+  const { supportsToolCalls, toolFormat, quantization, sees, contextLength: servedContext } = useChatModelFacts(modelId);
+  const imageInput = useImageInput({ far, paired: paired?.far, sees, contextLength: servedContext });
 
   // Get active conversation
   const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
@@ -155,11 +158,18 @@ export default function ChatPage(props: ChatPageProps) {
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
     maxToolIterations,
     supportsToolCalls,
+    // assistant-ui only logs a paste or a drop that fails; this is the person told.
+    onImageRefused: (sentence) => showToast(sentence, 'error'),
   });
 
-  // A draft carried over a model switch goes back in the composer.
+  // A draft carried over a model switch goes back in the composer, once:
+  // its images are the files already uploaded, so none is sent again.
+  const landedDraft = useRef<ChatDraft | null>(null);
   useEffect(() => {
-    if (draft) runtime.thread.composer.setText(draft);
+    if (!draft || landedDraft.current === draft) return;
+    landedDraft.current = draft;
+    if (draft.text) runtime.thread.composer.setText(draft.text);
+    for (const image of draft.images) runtime.thread.composer.addAttachment(image).catch(() => {});
   }, [draft, runtime]);
 
   // Server state from registry - derives isServerRunning reactively
@@ -305,11 +315,15 @@ export default function ChatPage(props: ChatPageProps) {
               source={source}
               onPickModel={onSwitchModel && ((choice) => onSwitchModel(choice, () => ({
                 conversationId: landingConversationId(),
-                draft: runtime.thread.composer.getState().text,
+                draft: {
+                  text: runtime.thread.composer.getState().text,
+                  images: runtime.thread.composer.getState().attachments.flatMap((a) => a.file ?? []),
+                },
               })))}
               startingModel={startingModel}
               onUnloadModel={onUnloadModel}
               quantization={far ? null : quantization}
+              imageInput={imageInput}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={pairedChat || far} onClose={onClose} />
               }

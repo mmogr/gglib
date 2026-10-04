@@ -39,7 +39,8 @@ A far chat (`source: 'far'`) is the machine this one is joined to, read
 through this daemon's `/api/remote/*`: its rows from `/api/remote/chats/{id}`,
 its live run from the far listing, its events and Stop from
 `/api/remote/runs/{id}/…`. A send is `PUT /api/remote/chats/{id}/turns/{run}`
-with the new text alone; the far machine runs and saves the reply. A far chat
+with the new text and its images, by the ids the far machine's store
+(`/api/remote/attachments`) answered; the far machine runs and saves the reply. A far chat
 offers no edit, no regenerate and no new chat, and nothing of it is kept here.
 
 A chat with the paired machine's model (`pairedModel`) is another thing: a
@@ -62,10 +63,14 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `drawRun.ts` | Reads one run's events from the first and draws them |
 | `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name |
 | `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, its live run from the far listing's `live_run` |
-| `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events), and the text a far turn carries |
+| `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events) and image store (upload, read), and the text a far turn carries |
+| `imageAttachments.ts` | The composer's image adapter: uploads an image when it is added (never when sent), says a refusal at once, turns a sent image into its stored id (only an id its own store answered: not one from the other machine's, as when the chat list moved there with images in the composer), and remembers each upload by its file so a draft handed back or carried over a model switch is not uploaded again |
+| `imagePrep.ts` | An image read as the store reads it (a PNG's or a JPEG's size from its header), kept as it is within 2560 px and 8 MiB, else redrawn smaller by a downscaler passed in (the canvas by default) |
+| `imageRefusals.ts` | The sentence for a refused image, at its upload or with its send, by the store's code; that a far gglib from before images cannot take one; and that an image was uploaded for another store than its chat's |
+| `turnImages.ts` | A turn's images: read off a message, checked before a send (an image the chat's store does not hold, its upload failed or made for another store, sends nothing), and handed back to the composer with the text |
 | `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `drawRun` runs per event |
 | `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages |
-| `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion |
+| `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion; every user message names its images by id |
 | `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
 | `clock.ts` | Monotonic clock abstraction for timing |
 | `index.ts` | Public barrel export |

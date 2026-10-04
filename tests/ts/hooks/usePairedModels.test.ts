@@ -2,7 +2,8 @@
  * The paired machine's rows, against what the status says of it: read while
  * it is reached, kept and marked while it is away, a read fails or a new
  * connection names no machine yet, cleared on a disconnection, and never
- * shown for a machine that is no longer the one answering.
+ * shown for a machine that is no longer the one answering; and never read
+ * for a caller that does not need them.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -63,6 +64,33 @@ describe('usePairedModels', () => {
     });
     expect(hook.result.current.group).toBeNull();
     expect(daemons.farCount('GET', '/api/remote/models')).toBe(0);
+  });
+
+  it('reads nothing for a caller that does not need them, not on connect, on focus or when asked, and gives it no rows', async () => {
+    act(() => applyRemoteStatus(status));
+    const unneeded = renderHook(({ enabled }) => usePairedModels(enabled), { initialProps: { enabled: false } });
+    // A caller that needs them, beside it, shows each of those happened.
+    const needed = renderHook(() => usePairedModels());
+    await waitFor(() => expect(ids(needed)).toEqual(['qwen3']));
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(daemons.farCount('GET', '/api/remote/models')).toBe(2));
+    act(() => unneeded.result.current.refetch());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(daemons.farCount('GET', '/api/remote/models')).toBe(2);
+    expect(unneeded.result.current.group).toBeNull();
+
+    unneeded.rerender({ enabled: true });
+    await waitFor(() => expect(ids(unneeded)).toEqual(['qwen3']));
+    expect(daemons.farCount('GET', '/api/remote/models')).toBe(3);
+
+    // Rows read while it needed them are not given once it does not.
+    unneeded.rerender({ enabled: false });
+    expect(unneeded.result.current.group).toBeNull();
   });
 
   it('keeps the rows, marked away, while the machine is away, and reads again when it is back', async () => {

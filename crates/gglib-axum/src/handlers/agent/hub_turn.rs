@@ -91,7 +91,9 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// # Errors
 ///
 /// `invalid_request` (400) for a message with neither text nor an image;
-/// `attachment_not_found` (400) for an image never uploaded;
+/// `attachment_not_found` (400) for an image the turn or the chat's history
+/// names that is not stored; `request_images_too_large` (400) when they are
+/// over 16 MiB together;
 /// `model_cannot_read_images` (400); `conversation_not_found` (404);
 /// `conflict` (409) while the chat has a live reply, or for a chat that ran
 /// on the machine this one is paired with; `no_model`
@@ -205,15 +207,14 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     // system row would send it twice.
     let saved = rows.iter().filter(|row| row.role != MessageRole::System);
     messages.extend(saved.map(Message::to_agent_message));
-    // Before the model is loaded: an image never uploaded, and a model
-    // that cannot read the images this turn or the history carries.
-    for image in &turn.images {
-        state.core.attachments().info(image).await?;
-    }
     messages.push(AgentMessage::User {
         content: turn.content,
         images: turn.images,
     });
+    // Before the model is loaded, over this turn and the history: an image
+    // not stored, images over the cap together, and a model that cannot
+    // read them.
+    state.core.attachments().check_request(&messages).await?;
     super::image_gate::named(state, &model, &messages).await?;
     let settings = conversation.settings.unwrap_or_default();
     let chat = AgentChatRequest {
