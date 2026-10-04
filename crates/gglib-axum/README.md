@@ -94,9 +94,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
 | `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
+| `POST` | `/api/attachments` | Store an image, the raw body (a PNG or a JPEG of at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
+| `GET` | `/api/attachments/:id` | A stored image's bytes, as they were sent |
 | `GET` | `/api/remote/models` | The paired machine's models, read through the tunnel, with what may be done to them there |
 | `GET` | `/api/remote/models/:model` | One of the paired machine's models, read in full |
 | `POST` | `/api/remote/models/:model/load` | Have one of the paired machine's models resident now |
+| `POST` | `/api/remote/attachments` | Store an image on the paired machine, through the tunnel; nothing is kept here |
+| `GET` | `/api/remote/attachments/:id` | One of the paired machine's stored images, sent `no-store` |
 
 ## Usage
 

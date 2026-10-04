@@ -109,6 +109,13 @@ Everything between the OpenAI request and llama-server is the product:
   [Details →](docs/tags.md)
 - **Admission control**: alternating models (chat + embeddings) batch swaps
   instead of thrashing. [Details →](crates/gglib-runtime/src/process/admission/README.md)
+- **Images**: a screenshot pasted into Copilot, or attached with
+  `gglib q --image` or in the chat page, goes to a model linked to its
+  projector, which a download from a repository that has one fetches and
+  links. An image is counted against the context by its pixels, not by its
+  base64, and one sent to a model with no projector is refused by name
+  before anything is loaded, where llama-server alone answers HTTP 500 once
+  the model is up. [Details →](docs/clients.md#images)
 
 ## Client configuration
 
@@ -146,6 +153,12 @@ gglib q "Explain the builder pattern in Rust"
 
 # Pipe context in
 cat error.log | gglib q "What went wrong here?"
+
+# Ask about a screenshot (the model must be linked to a projector)
+gglib q --image shot.png "what is the error?"
+
+# Link a model to its projector (an mmproj GGUF), which gives it image input
+gglib model update <model> --projector <file>
 
 # Interactive chat
 gglib chat
@@ -276,6 +289,7 @@ facades → infrastructure → `gglib-agent` → core, and
 
 ## Documentation
 
+- [Client configuration and images](docs/clients.md)
 - [Sampling resolution](docs/sampling.md)
 - [Tags & capability detection](docs/tags.md)
 - [KV cache tiering](docs/cache.md)

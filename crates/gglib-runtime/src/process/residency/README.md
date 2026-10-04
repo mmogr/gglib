@@ -42,6 +42,20 @@ where `⊕` is [`ServerConfigOptions::overlay`]. A flag added to
 `ServerConfigOptions` reaches llama-server through this path with no change
 here at all.
 
+# A projector is part of a resident's identity
+
+A model linked to a projector is launched with `--mmproj <projector>`. Like
+the context size, the projector is fixed when llama-server starts, so a
+resident launched with another projector than the request resolves to is
+recycled, and the next pass launches the model with the one it is linked to
+now: a changed link takes effect at the model's next admission (a proxy
+request or a start), with no restart asked of anyone. A resident that a run
+holds is kept, and that request refused. A run sent straight to a server
+already started is not admitted here, and keeps the projector that server
+was started with. A projector missing on disk fails the launch by name,
+before the launch stops anything it displaces; a resident recycled for its
+link was stopped before that, when the request found it.
+
 # Two residents, three budgets
 
 A co-loaded secondary must not be sized as though it had the machine to itself.
