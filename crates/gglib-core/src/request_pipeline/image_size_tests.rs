@@ -232,3 +232,18 @@ fn a_frame_header_past_the_bound_is_not_looked_for() {
         Some((3000, 2000))
     );
 }
+
+#[test]
+fn the_media_type_is_read_from_the_first_bytes_and_nothing_else_is_an_image() {
+    assert_eq!(image_mime(&png(1, 1)), Some("image/png"));
+    assert_eq!(image_mime(&jpeg(1, 1)), Some("image/jpeg"));
+    for other in [
+        b"GIF89a".as_slice(),
+        b"RIFF\x24\0\0\0WEBPVP8 ",
+        b"\x89PN",
+        b"\xFF",
+        b"",
+    ] {
+        assert_eq!(image_mime(other), None, "{other:?}");
+    }
+}

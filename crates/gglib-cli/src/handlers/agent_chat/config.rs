@@ -189,6 +189,7 @@ pub(crate) async fn compose(
         None,
         Some(params.retry_policy),
         upstream.far_machine,
+        ctx.app.attachments().store(),
     );
 
     Ok(agent)
@@ -218,6 +219,7 @@ mod tests {
             tools: Vec::new(),
             tool_timeout_ms: None,
             max_parallel: None,
+            images: Vec::new(),
             verbose: false,
             model: None,
             profile: None,

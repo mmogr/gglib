@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::attachment::AttachmentId;
 use super::chat::{Conversation, Message};
 
 /// One of the hub's chats, as `GET /v1/chats` lists it.
@@ -47,16 +48,20 @@ pub struct HubChatList {
 pub struct HubChatOpen {
     /// The conversation.
     pub conversation: Conversation,
-    /// Its rows, oldest first, each with the metadata the hub saved.
+    /// Its rows, oldest first, each with the metadata the hub saved and the
+    /// images it carries, without their bytes: a device reads an image by
+    /// its id, at `GET /v1/attachments/{id}`.
     pub messages: Vec<Message>,
 }
 
 /// A turn a paired device adds to one of the hub's chats.
 ///
 /// The body of `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No
-/// history travels: the hub rebuilds it from its own record. Any other key
-/// is refused, so a client sending `model`, `messages` or `replace_from`
-/// learns none is honoured.
+/// history travels: the hub rebuilds it from its own record. No image
+/// travels either: the device uploads each one first, at
+/// `POST /v1/attachments`, and names it here by its id. Any other key is
+/// refused, so a client sending `model`, `messages` or `replace_from` learns
+/// none is honoured.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -64,8 +69,13 @@ pub struct HubTurn {
     /// The hub's chat the turn is added to.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub conversation_id: i64,
-    /// The user's message.
+    /// The user's message. Empty when the turn is its images alone.
     pub content: String,
+    /// The images the message carries, by id, in order. Left out of the
+    /// body when there are none.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<AttachmentId>,
 }
 
 #[cfg(test)]

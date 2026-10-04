@@ -40,7 +40,9 @@ use gglib_core::ports::AgentLoopPort;
 use crate::handlers::inference::chat::ChatArgs;
 
 use super::drain::drain_event_stream;
+use super::images::TurnImages;
 use super::persistence::Conversation;
+use super::repl_line::{self, Line};
 
 // =============================================================================
 // Help text
@@ -48,6 +50,7 @@ use super::persistence::Conversation;
 
 const REPL_HELP: &str = "\
   /help     print this message
+  /image <path>  attach a PNG or JPEG to your next message
   /quit     exit the session
   /exit     exit the session
   Ctrl+C    cancel the current agent response (return to prompt)
@@ -72,6 +75,7 @@ pub(crate) async fn run_repl_with_prior(
     args: &ChatArgs,
     persistence: Option<Conversation<'_>>,
     prior_messages: Vec<AgentMessage>,
+    images: TurnImages<'_>,
 ) -> Result<()> {
     let config = AgentConfig::from_user_params(
         Some(
@@ -100,7 +104,15 @@ pub(crate) async fn run_repl_with_prior(
         prior_messages
     };
 
-    run_repl_with_history(agent_loop, messages, config, args.verbose, persistence).await
+    run_repl_with_history(
+        agent_loop,
+        messages,
+        config,
+        args.verbose,
+        persistence,
+        images,
+    )
+    .await
 }
 
 /// Run the interactive agent REPL with a pre-populated conversation history.
@@ -116,6 +128,7 @@ pub(crate) async fn run_repl_with_history(
     config: AgentConfig,
     verbose: bool,
     mut persistence: Option<Conversation<'_>>,
+    mut images: TurnImages<'_>,
 ) -> Result<()> {
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.
@@ -158,19 +171,19 @@ pub(crate) async fn run_repl_with_history(
             Err(e) => return Err(anyhow::anyhow!("readline error: {e}")),
         };
 
-        let input = input.trim().to_owned();
-
-        match input.as_str() {
-            "" => continue,
-            "/quit" | "/exit" => break,
-            "/help" => {
+        match repl_line::read(input.trim(), &mut images).await {
+            Line::Empty => continue,
+            Line::Quit => break,
+            Line::Help => {
                 println!("{REPL_HELP}");
                 continue;
             }
-            _ => {}
+            Line::Image(reply) => {
+                eprintln!("{reply}");
+                continue;
+            }
+            Line::Send(message) => messages.push(message),
         }
-
-        messages.push(AgentMessage::User { content: input });
 
         // ── 2–4. Run turn and update history ─────────
         // Context pruning is handled by the agent loop itself (`prune_for_budget`

@@ -46,9 +46,40 @@ async fn a_named_devices_turn_reaches_the_starter_in_its_name() {
     let turn = HubTurn {
         conversation_id: 7,
         content: "carry on".to_owned(),
+        images: Vec::new(),
     };
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
     assert!(runs.scopes().is_empty(), "no chat run was made");
+    cancel.cancel();
+}
+
+/// A turn's images reach the starter as their ids, in order, and a turn
+/// may be its images alone. An image that is not an id is a body that is
+/// not a turn.
+#[tokio::test]
+async fn a_turns_images_reach_the_starter_by_id() {
+    use gglib_core::domain::AttachmentId;
+
+    let turns = Arc::new(FakeTurns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::default()).await;
+    let images = vec![AttachmentId::of(b"one"), AttachmentId::of(b"two")];
+    let sent = json!({ "conversation_id": 7, "content": "", "images": images });
+
+    let (status, run) = json(from_device(put(&base, &sent)).send().await.unwrap()).await;
+
+    assert_eq!(status, StatusCode::CREATED, "{run}");
+    let turn = HubTurn {
+        conversation_id: 7,
+        content: String::new(),
+        images,
+    };
+    let started = turns.started.lock().unwrap().clone();
+    assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
+
+    let named = json!({ "conversation_id": 7, "content": "x", "images": ["shot.png"] });
+    let (status, answer) = json(from_device(put(&base, &named)).send().await.unwrap()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+    assert_eq!(code(&answer), "invalid_request");
     cancel.cancel();
 }
 

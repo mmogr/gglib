@@ -17,7 +17,7 @@ no infrastructure concerns.
 |--------|----------|
 | [`config`] | [`AgentConfig`] — loop control parameters |
 | [`tool_types`] | [`ToolDefinition`], [`ToolCall`], [`ToolResult`] |
-| [`messages`] | [`AgentMessage`] — closed conversation-turn enum |
+| [`messages`] | [`AgentMessage`] — closed conversation-turn enum; a user turn names its images by id, and each is charged [`IMAGE_CHARGE_CHARS`] against the context budget |
 | `messages_serde` | Custom `Serialize`/`Deserialize` impls for [`AssistantContent`] |
 | [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |

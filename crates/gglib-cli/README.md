@@ -92,6 +92,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
+| `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
@@ -188,6 +189,10 @@ echo "Paris, London, Tokyo" | gglib q "List these cities: {}"
 # Pipe command output
 git diff | gglib q "Explain these changes"
 
+# Attach an image (PNG or JPEG); repeat --image for more than one
+gglib q --image shot.png "What is the error on this screen?"
+gglib q --image before.png --image after.png "What changed?"
+
 # Debug: see the constructed prompt (-v is the global debug-logging flag)
 gglib q --show-prompt --file CODE.rs "Explain this"
 
@@ -200,6 +205,46 @@ gglib q "How is error handling structured in this project?"
 # Agentic mode with piped context
 git diff | gglib q "Review these changes for potential issues"
 ```
+
+### Images
+
+`--image <PATH>` attaches a PNG or JPEG to a turn, on `gglib q` and on
+`gglib chat` (where it goes with the first message). It is long-form only and
+repeatable; the images are sent in the order given. Inside a chat,
+`/image <path>` attaches a file to the next message; the path is the rest of
+the line, as typed (a `~` is not expanded).
+
+```bash
+gglib q --image shot.png "What is the error on this screen?"
+gglib chat qwen3.8 --image diagram.png
+gglib q --remote --image shot.png "What is the error?"   # the paired machine's model
+
+# In the chat REPL
+You: /image shots/error.png
+  image error.png: 2560x1440, ~3600 tokens
+You: what does the stack trace say?
+```
+
+- **Stored once, sent by id.** Each file is stored in this machine's database
+  exactly as it is on disk, under the SHA-256 of its bytes, and the message
+  names it by that id. The bytes become an `image_url` only in the request to
+  the model. The CLI does not resize: a file is at most 8 MiB, and the images
+  of one request at most 16 MiB together.
+- **The receipt.** One stderr line per image says its name, its size in pixels
+  and the prompt tokens it is estimated to cost. `gglib q -Q` suppresses it.
+- **A file that cannot be attached** — missing, not a PNG or a JPEG by its
+  first bytes, or over the cap — is an error naming the path, before any model
+  is looked up or loaded. `gglib q` still requires a question.
+- **A model that cannot see** is refused by name before anything is loaded:
+  a model of this machine needs a projector linked
+  (`gglib model update <model> --projector <path>`). The whole chat counts, so
+  resuming a chat that holds an image on a model without one is refused too.
+  With `--port`, the server on that port is asked through its `/props`
+  (`modalities.vision`); one that says `false` is refused the same way, and
+  one that does not answer, or does not say, is sent the image. With
+  `--remote`, the paired machine's proxy answers.
+- **On resume**, `gglib chat --continue <N>` shows an image of the last turn as
+  a marker, `[image 2560x1440]`, after its text.
 
 ### Rendering Modes
 

@@ -149,6 +149,7 @@ pub(super) async fn save_user(
             "message_not_found",
             format!("conversation {conversation_id} has no message {id} to replace"),
         ),
+        ChatHistoryError::Attachment(refusal) => refusal.into(),
         _ => coded(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",

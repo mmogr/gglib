@@ -20,8 +20,8 @@
 //! precedence order — [`error_is_retryable`] says what that costs — and the
 //! status decides alone whenever the body offers neither, whether because it
 //! is not this shape at all or because its author filled in neither field.
-//! Authority *is* ordered in [`describe`], which picks one of the two as the
-//! label; that ordering settles what gets printed, never what gets retried.
+//! [`describe`] prints both, the `type` first; that ordering settles what
+//! gets printed, never what gets retried.
 
 use std::time::Duration;
 
@@ -175,17 +175,21 @@ fn code_is_retryable(code: &str) -> bool {
 
 /// Render a structured error body the way someone reading a log needs it.
 ///
-/// The label is whichever discriminant the body carries: this proxy's `type`,
-/// or a modelpipe refusal's `code`, which is all it has. Both can be missing —
-/// an absent `type` deserializes as the empty string — and the empty label is
+/// The label is every discriminant the body carries: this proxy's `type`
+/// with its `code` after it in brackets, since the `type` is one of a few
+/// classes and the `code` is what names the refusal; or a modelpipe
+/// refusal's `code` alone, which is all it has. Both can be missing — an
+/// absent `type` deserializes as the empty string — and the empty label is
 /// dropped rather than printed, so a body that names neither reads as
 /// `500 Internal Server Error: boom` instead of growing a stray space before
 /// the colon.
 fn describe(status: StatusCode, error: &ErrorDetail) -> String {
-    let label = if error.r#type.is_empty() {
-        error.code.as_deref().unwrap_or_default()
-    } else {
-        error.r#type.as_str()
+    let kind = error.r#type.as_str();
+    let code = error.code.as_deref().unwrap_or_default();
+    let label = match (kind.is_empty(), code.is_empty() || code == kind) {
+        (true, _) => code.to_owned(),
+        (false, true) => kind.to_owned(),
+        (false, false) => format!("{kind} ({code})"),
     };
     if label.is_empty() {
         format!("{status}: {}", error.message)

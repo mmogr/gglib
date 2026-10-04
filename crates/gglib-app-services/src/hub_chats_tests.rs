@@ -104,6 +104,7 @@ async fn a_chat_opens_with_its_rows_and_their_metadata() {
                 role,
                 content: content.to_owned(),
                 metadata,
+                images: Vec::new(),
             })
             .await
             .unwrap();

@@ -58,6 +58,25 @@ pub fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
     }
 }
 
+/// The media type a PNG is stored and served under.
+pub const PNG_MIME: &str = "image/png";
+
+/// The media type a JPEG is stored and served under.
+pub const JPEG_MIME: &str = "image/jpeg";
+
+/// The media type of the image `bytes` starts, by its first bytes alone:
+/// [`PNG_MIME`] or [`JPEG_MIME`], and `None` for anything else.
+#[must_use]
+pub fn image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&PNG_SIGNATURE) {
+        Some(PNG_MIME)
+    } else if bytes.starts_with(&JPEG_SOI) {
+        Some(JPEG_MIME)
+    } else {
+        None
+    }
+}
+
 /// The width and height of the image in a `data:<mime>;base64,<payload>`
 /// URL, decoding only as much of the payload as its header takes, and never
 /// more than [`MAX_HEADER_BYTES`].

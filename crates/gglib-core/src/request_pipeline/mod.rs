@@ -24,10 +24,12 @@ pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use content::{append_text, for_each_text_mut, image_urls, text_len, text_parts};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
-pub use image_size::{MAX_HEADER_BYTES, data_url_image_size, image_size};
+pub use image_size::{
+    JPEG_MIME, MAX_HEADER_BYTES, PNG_MIME, data_url_image_size, image_mime, image_size,
+};
 pub use images::{
-    CannotReadImages, IMAGE_TOKEN_PX, MAX_IMAGE_TOKENS, estimate_image_tokens, has_images,
-    image_url_tokens, refuse_unless_can_see, request_image_urls,
+    CannotReadImages, IMAGE_TOKEN_PX, MAX_IMAGE_BYTES, MAX_IMAGE_TOKENS, MAX_REQUEST_IMAGE_BYTES,
+    estimate_image_tokens, has_images, image_url_tokens, refuse_unless_can_see, request_image_urls,
 };
 pub use measure::ContextBudget;
 pub use messages::shape_messages;
@@ -44,7 +46,7 @@ pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, 
 pub use validate::{Verdict, Violation, ViolationKind, validate_tool_calls};
 
 #[cfg(test)]
-mod image_fixtures;
+pub(crate) mod image_fixtures;
 
 #[cfg(test)]
 mod tests_support {

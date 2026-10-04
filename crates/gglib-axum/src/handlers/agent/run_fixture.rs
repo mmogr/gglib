@@ -98,6 +98,7 @@ pub(super) async fn state() -> (tempfile::TempDir, AppState) {
 pub(super) fn user() -> AgentMessage {
     AgentMessage::User {
         content: "PROMPT-SECRET".to_owned(),
+        images: Vec::new(),
     }
 }
 

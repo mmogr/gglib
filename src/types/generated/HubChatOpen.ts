@@ -11,6 +11,8 @@ export type HubChatOpen = {
  */
 conversation: Conversation, 
 /**
- * Its rows, oldest first, each with the metadata the hub saved.
+ * Its rows, oldest first, each with the metadata the hub saved and the
+ * images it carries, without their bytes: a device reads an image by
+ * its id, at `GET /v1/attachments/{id}`.
  */
 messages: Array<Message>, };

@@ -85,16 +85,16 @@ async fn a_far_machines_refused_key_names_the_machine_and_the_remedy() {
 /// This machine's own proxy answers a bad key with a body of its own that
 /// carries the same `invalid_api_key`. There is no far machine on that path
 /// and no pairing to redo, so the caller must keep getting the classifier's
-/// rendering — which, note, labels it by this proxy's `type` rather than by
-/// the code the two bodies share.
+/// rendering — which, note, labels it by this proxy's `type`, with the code
+/// the two bodies share after it.
 #[tokio::test]
 async fn this_proxys_own_refused_key_is_left_as_the_classifier_rendered_it() {
     let message = refused(401, "Unauthorized", &proxy_invalid_key_body(), None).await;
 
     assert_eq!(
         message,
-        "401 Unauthorized invalid_request_error: Missing or invalid API key. Send it as \
-         'Authorization: Bearer <key>'.",
+        "401 Unauthorized invalid_request_error (invalid_api_key): Missing or invalid API key. \
+         Send it as 'Authorization: Bearer <key>'.",
         "with no far machine there is nobody to name and nothing to re-pair"
     );
 }
@@ -119,5 +119,30 @@ async fn a_far_machines_other_failures_are_not_blamed_on_the_key() {
         message,
         "502 Bad Gateway backend_unreachable: the serving side could not reach its backend",
         "only a refused key is reported as a refused key"
+    );
+}
+
+/// A paired machine's model that cannot read images is refused by that
+/// machine's proxy, not here, and its refusal reaches the caller whole: the
+/// code, and the sentence with the model it names and the command that
+/// links a projector.
+#[tokio::test]
+async fn a_far_machines_refusal_of_an_image_arrives_whole() {
+    use gglib_core::request_pipeline::CannotReadImages;
+    use gglib_proxy::models::ErrorResponse;
+
+    let sentence = CannotReadImages.message("7");
+    let body = serde_json::to_string(&ErrorResponse::with_code(
+        sentence.clone(),
+        "invalid_request_error",
+        CannotReadImages.code(),
+    ))
+    .unwrap();
+
+    let message = refused(400, "Bad Request", &body, Some(&paired_machine())).await;
+
+    assert_eq!(
+        message,
+        format!("400 Bad Request invalid_request_error (model_cannot_read_images): {sentence}")
     );
 }

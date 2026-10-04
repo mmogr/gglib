@@ -320,9 +320,7 @@ async fn a_stream_that_starts_is_never_retried() {
 
     let adapter =
         LlmCompletionAdapter::new(server.base_url.clone(), None).with_retry_policy(fast_policy(4));
-    let messages = [AgentMessage::User {
-        content: "hello".to_owned(),
-    }];
+    let messages = [AgentMessage::user("hello")];
 
     let stream = adapter
         .chat_stream(&messages, &[])

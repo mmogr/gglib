@@ -10,6 +10,7 @@ use clap_complete::Shell;
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::config_commands::ConfigCommand;
+use crate::image_args::ImageArgs;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
 use crate::profile_args::ProfileArgs;
@@ -18,6 +19,7 @@ use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
 pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand};
+use crate::tool_limit_args::ToolLimitArgs;
 use crate::upstream_args::UpstreamArgs;
 
 /// Top-level commands for the GGUF library management tool.
@@ -141,12 +143,10 @@ pub enum Commands {
         /// available tools mid-session, exit and restart with a new --tools list.
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
-        /// Per-tool execution timeout in milliseconds
-        #[arg(long = "tool-timeout-ms")]
-        tool_timeout_ms: Option<u64>,
-        /// Maximum number of tools executed in parallel per iteration
-        #[arg(long = "max-parallel")]
-        max_parallel: Option<usize>,
+        #[command(flatten)]
+        limits: ToolLimitArgs,
+        #[command(flatten)]
+        images: ImageArgs,
         /// Model name put in the request body, overriding the positional
         ///
         /// Omitted locally, llama-server serves whichever model it loaded;
@@ -219,12 +219,10 @@ pub enum Commands {
         /// Tool allowlist (empty = all tools)
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
-        /// Per-tool execution timeout in milliseconds
-        #[arg(long = "tool-timeout-ms")]
-        tool_timeout_ms: Option<u64>,
-        /// Maximum number of tools executed in parallel per iteration
-        #[arg(long = "max-parallel")]
-        max_parallel: Option<usize>,
+        #[command(flatten)]
+        limits: ToolLimitArgs,
+        #[command(flatten)]
+        images: ImageArgs,
         /// Observation-only tool name patterns for the dual-threshold loop guard.
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.

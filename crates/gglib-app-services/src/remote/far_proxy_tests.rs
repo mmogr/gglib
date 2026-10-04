@@ -29,6 +29,7 @@ async fn a_run_id_that_could_name_another_route_is_refused_before_sending() {
     let turn = HubTurn {
         conversation_id: 1,
         content: "hi".to_owned(),
+        images: Vec::new(),
     };
     for id in ["..", "a/b", "", "run.1", &"x".repeat(65)] {
         assert!(

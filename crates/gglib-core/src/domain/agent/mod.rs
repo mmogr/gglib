@@ -24,7 +24,7 @@ pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_
 pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
 };
-pub use messages::{AgentMessage, AssistantContent};
+pub use messages::{AgentMessage, AssistantContent, IMAGE_CHARGE_CHARS};
 pub use replay::{
     INCOMPLETE_KEY, MADE_KEYS, MadeKeys, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL,
     rows_from_frames, rows_from_timed_frames,

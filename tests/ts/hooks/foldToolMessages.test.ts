@@ -145,9 +145,9 @@ describe('foldToolMessages', () => {
       makeMsg({
         id: 1,
         role: 'assistant',
-        content: 'here is the image',
+        content: 'here is what I found',
         metadata: {
-          contentParts: [{ type: 'image', image: 'data:image/png;base64,...' }],
+          contentParts: [{ type: 'tool-call', toolCallId: 'earlier', toolName: 'web_search' }],
           tool_calls: [
             { id: 'c', name: 'read_file', arguments: { path: 'x' } },
           ],
@@ -163,10 +163,8 @@ describe('foldToolMessages', () => {
 
     const result = foldToolMessages(msgs);
     const parts = result[0].metadata?.contentParts as any[];
-    // Existing image part + new tool-call part
-    expect(parts).toHaveLength(2);
-    expect(parts[0].type).toBe('image');
-    expect(parts[1].type).toBe('tool-call');
+    // Existing part + new tool-call part
+    expect(parts.map((p) => p.toolCallId)).toEqual(['earlier', 'c']);
   });
 
   it('passes through GUI-created messages unchanged', () => {

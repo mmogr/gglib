@@ -40,6 +40,12 @@ pub(crate) fn remote_routes() -> Router<AppState> {
             "/chats/{id}/turns/{run_id}",
             put(handlers::remote::add_turn),
         )
+        // The images those chats' turns carry, stored on the far machine.
+        .route(
+            "/attachments",
+            post(handlers::remote::upload_attachment).layer(handlers::attachments::body_limit()),
+        )
+        .route("/attachments/{id}", get(handlers::remote::fetch_attachment))
         .route("/runs", get(handlers::remote::list_runs))
         .route("/runs/{run_id}/events", get(handlers::remote::run_events))
         .route("/runs/{run_id}/cancel", post(handlers::remote::cancel_run))

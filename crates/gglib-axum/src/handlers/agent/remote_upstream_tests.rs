@@ -87,7 +87,7 @@ async fn a_local_run_is_made_by_the_model_its_port_serves() {
         ..running("served-7b")
     };
     let asked = req(r#"{"port":9000,"messages":[],"model":"asked-for"}"#);
-    let upstream = local(&state, &asked, server).await;
+    let upstream = local(&state, &asked, server).await.unwrap();
     assert_eq!(upstream.made_by.model, "served-7b");
     assert_eq!(upstream.made_by.quantization.as_deref(), Some("Q4_K_M"));
 }
@@ -101,7 +101,8 @@ async fn a_local_model_without_a_quantisation_has_none() {
         model_id: id,
         ..running("served-7b")
     };
-    let upstream = local(&state, &req(r#"{"port":9000,"messages":[]}"#), server).await;
+    let asked = req(r#"{"port":9000,"messages":[]}"#);
+    let upstream = local(&state, &asked, server).await.unwrap();
     assert_eq!(upstream.made_by.quantization, None);
 }
 

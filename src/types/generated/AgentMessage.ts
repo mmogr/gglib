@@ -27,7 +27,12 @@ content: string, } | { "role": "user",
 /**
  * Message text.
  */
-content: string, } | { "role": "assistant", 
+content: string, 
+/**
+ * The images the message carries, by id, in order. Left out of the
+ * JSON when there are none.
+ */
+images?: Array<string>, } | { "role": "assistant", 
 /**
  * Optional text content from the model.  `None` when the model produced
  * only tool calls with no text preamble.

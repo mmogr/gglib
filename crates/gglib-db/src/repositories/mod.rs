@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod message_rows;
 mod model_files_repository;
 #[allow(
     clippy::cast_sign_loss,
@@ -6,6 +7,7 @@ mod model_files_repository;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod row_mappers;
+mod sqlite_attachment_store;
 mod sqlite_benchmark_repository;
 #[allow(
     clippy::cast_possible_wrap,
@@ -27,6 +29,7 @@ pub(crate) mod sqlite_model_repository;
 mod sqlite_settings_repository;
 
 pub use model_files_repository::ModelFilesRepository;
+pub use sqlite_attachment_store::SqliteAttachmentStore;
 pub use sqlite_benchmark_repository::SqliteBenchmarkRepository;
 pub use sqlite_chat_history_repository::SqliteChatHistoryRepository;
 pub use sqlite_loop_guard_trip_log::SqliteLoopGuardTripLog;

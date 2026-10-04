@@ -56,7 +56,7 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
     };
     let req = serde_json::from_str(r#"{"port":9000,"messages":[]}"#).unwrap();
     let (mut p, _) = prepared(turn(), End::Finish);
-    p.made_by = local(&state, &req, server).await.made_by;
+    p.made_by = local(&state, &req, server).await.unwrap().made_by;
     start(&state, "a1", Some(id), p).await;
     settled(&state).await;
 

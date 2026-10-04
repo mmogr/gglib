@@ -45,6 +45,14 @@ impl ConversationSettingsBuilder {
         self
     }
 
+    /// Set what a turn's resolved model gives: its name, the model as its
+    /// machine names it, and the profile the paired machine routed to.
+    pub(crate) fn turn(self, turn: &crate::target::TurnModel) -> Self {
+        self.model_name(&turn.name)
+            .model(turn.model_ref.clone())
+            .profile(turn.far_profile.clone())
+    }
+
     /// Set the inference profile the session samples with, by name.
     pub(crate) fn profile(mut self, name: Option<String>) -> Self {
         self.settings.profile = name;

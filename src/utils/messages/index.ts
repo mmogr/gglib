@@ -8,14 +8,8 @@
 
 export { threadMessageToTranscriptMarkdown } from './threadMessageToTranscriptMarkdown';
 export {
-  extractNonTextContentParts,
   extractReasoningText,
-  hasNonTextContent,
   reconstructContent,
-  type SerializableContentPart,
   type SerializableToolCallPart,
-  type SerializableAudioPart,
-  type SerializableFilePart,
-  type SerializableImagePart,
 } from './contentParts';
 export { turnMadeFromMetadata, turnMadeFromUsage, type TurnMade, type TurnUsageWire } from './turnMade';

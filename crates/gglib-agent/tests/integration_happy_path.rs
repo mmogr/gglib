@@ -67,9 +67,7 @@ async fn test_simple_tool_call_cycle() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "Find info about Rust".into(),
-            }],
+            vec![AgentMessage::user("Find info about Rust")],
             AgentConfig::default(),
             tx,
         )
@@ -148,9 +146,7 @@ async fn test_parallel_tool_calls() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "Search three topics".into(),
-            }],
+            vec![AgentMessage::user("Search three topics")],
             common::for_test(|c| {
                 c.max_parallel_tools = 3;
             }),
@@ -210,9 +206,7 @@ async fn test_tool_timeout() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "run the slow tool".into(),
-            }],
+            vec![AgentMessage::user("run the slow tool")],
             common::for_test(|c| {
                 c.tool_timeout_ms = 100;
             }),
@@ -259,9 +253,7 @@ async fn test_reasoning_delta_emitted() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "What is the meaning of life?".into(),
-            }],
+            vec![AgentMessage::user("What is the meaning of life?")],
             AgentConfig::default(),
             tx,
         )
@@ -319,9 +311,7 @@ async fn test_both_text_and_tool_calls_in_history() {
 
     let output = agent
         .run(
-            vec![AgentMessage::User {
-                content: "Look it up".into(),
-            }],
+            vec![AgentMessage::user("Look it up")],
             AgentConfig::default(),
             tx,
         )
@@ -403,9 +393,7 @@ async fn test_tool_filter_restricts_visible_tools() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "Find info".into(),
-            }],
+            vec![AgentMessage::user("Find info")],
             AgentConfig::default(),
             tx,
         )

@@ -14,7 +14,7 @@ use gglib_core::ports::{HubChatsError, HubChatsPort};
 use crate::models::ErrorResponse;
 use crate::server::AppState;
 
-type Answer = Result<Response, Response>;
+pub(super) type Answer = Result<Response, Response>;
 
 fn refused(err: &HubChatsError) -> Response {
     let status =
@@ -36,7 +36,7 @@ fn refused(err: &HubChatsError) -> Response {
 }
 
 /// The answer when this proxy was started without the hub's chats.
-fn unavailable() -> Response {
+pub(super) fn unavailable() -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Json(ErrorResponse::with_code(
@@ -49,7 +49,7 @@ fn unavailable() -> Response {
 }
 
 /// The chats, or `None` when this proxy was started without them.
-fn chats(state: &AppState) -> Option<Arc<dyn HubChatsPort>> {
+pub(super) fn chats(state: &AppState) -> Option<Arc<dyn HubChatsPort>> {
     state.chats.clone()
 }
 

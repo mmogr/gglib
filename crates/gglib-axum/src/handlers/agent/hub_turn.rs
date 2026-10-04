@@ -2,7 +2,8 @@
 //! `PUT /v1/runs/{id}?kind=agent`, run here because the agent loop is
 //! composed here.
 //!
-//! The device sends only its message. The hub rebuilds the history from its
+//! The device sends only its message, with any image named by the id its
+//! upload answered. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
 //! with the limits the conversation's settings name. It calls no tool unless
@@ -89,9 +90,11 @@ fn refusal(error: HttpError) -> TurnRefused {
 ///
 /// # Errors
 ///
-/// `invalid_request` (400) for an empty message; `conversation_not_found`
-/// (404); `conflict` (409) while the chat has a live reply, or for a chat
-/// that ran on the machine this one is paired with; `no_model`
+/// `invalid_request` (400) for a message with neither text nor an image;
+/// `attachment_not_found` (400) for an image never uploaded;
+/// `model_cannot_read_images` (400); `conversation_not_found` (404);
+/// `conflict` (409) while the chat has a live reply, or for a chat that ran
+/// on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
 /// `agent_busy` (429); `model_unavailable` (503) when it cannot be loaded;
 /// and whatever the daemon's own door refuses the same run with. A refusal
@@ -153,11 +156,11 @@ pub(super) struct Plan {
 /// Read `turn` against the chat it names, with the tools the tunnel's owner
 /// lets a device's turn reach.
 pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
-    if turn.content.trim().is_empty() {
+    if turn.content.trim().is_empty() && turn.images.is_empty() {
         return Err(coded(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            "a turn's content is the user's message, and it is empty",
+            "a turn is the user's message, and it has neither text nor an image",
         ));
     }
     let id = turn.conversation_id;
@@ -202,9 +205,16 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     // system row would send it twice.
     let saved = rows.iter().filter(|row| row.role != MessageRole::System);
     messages.extend(saved.map(Message::to_agent_message));
+    // Before the model is loaded: an image never uploaded, and a model
+    // that cannot read the images this turn or the history carries.
+    for image in &turn.images {
+        state.core.attachments().info(image).await?;
+    }
     messages.push(AgentMessage::User {
         content: turn.content,
+        images: turn.images,
     });
+    super::image_gate::named(state, &model, &messages).await?;
     let settings = conversation.settings.unwrap_or_default();
     let chat = AgentChatRequest {
         port: 0,
@@ -252,6 +262,9 @@ pub(super) fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Ve
 #[cfg(test)]
 #[path = "hub_turn_forget_tests.rs"]
 mod hub_turn_forget_tests;
+#[cfg(test)]
+#[path = "hub_turn_images_tests.rs"]
+mod hub_turn_images_tests;
 #[cfg(test)]
 #[path = "hub_turn_plan_tests.rs"]
 mod hub_turn_plan_tests;

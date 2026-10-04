@@ -109,6 +109,7 @@ async fn what_the_chat_names_wins_over_what_is_running() {
         content: "answer".to_owned(),
         created_at: String::new(),
         metadata: Some(serde_json::json!({ "modelName": "replied-model" })),
+        images: Vec::new(),
     };
     let rows = [reply];
     let model = choose(&state, &conversation, &rows, &running).await;

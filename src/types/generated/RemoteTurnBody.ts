@@ -3,10 +3,16 @@
 /**
  * Body for `PUT /api/remote/chats/{id}/turns/{run_id}`: the new message
  * and nothing else. The far machine rebuilds the history from its record,
- * so a body that carries more is refused rather than half read.
+ * so a body that carries more is refused rather than half read. An image
+ * is named by the id `POST /api/remote/attachments` answered.
  */
 export type RemoteTurnBody = { 
 /**
- * The user's message.
+ * The user's message. Empty when the turn is its images alone.
  */
-content: string, };
+content: string, 
+/**
+ * The images the message carries, by id, in order. Left out of the
+ * body when there are none.
+ */
+images?: Array<string>, };

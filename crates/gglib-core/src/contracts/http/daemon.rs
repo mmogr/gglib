@@ -126,7 +126,7 @@ pub fn remote_model_load_path(model: &str) -> String {
 /// [`CLI_ROUTE_CONTRACT`], for the same sweep.
 #[must_use]
 pub fn remote_route_contract() -> Vec<(&'static [&'static str], String)> {
-    vec![
+    let mut routes: Vec<(&'static [&'static str], String)> = vec![
         (&["GET"], REMOTE_CHATS_PATH.to_owned()),
         (REMOTE_CHAT_METHODS, remote_chat_path(12)),
         (REMOTE_TURN_METHODS, remote_turn_path(12, "chat-1")),
@@ -136,7 +136,9 @@ pub fn remote_route_contract() -> Vec<(&'static [&'static str], String)> {
         (&["GET"], REMOTE_MODELS_PATH.to_owned()),
         (&["GET"], remote_model_path("org/qwen3:coding")),
         (&["POST"], remote_model_load_path("org/qwen3:coding")),
-    ]
+    ];
+    routes.extend(super::attachments::remote_route_contract());
+    routes
 }
 
 /// Download queue: `POST` enqueues, `GET` returns the snapshot.

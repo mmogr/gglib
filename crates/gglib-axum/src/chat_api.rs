@@ -331,7 +331,6 @@ pub(crate) async fn save_message(
 ) -> Result<Json<i64>, HttpError> {
     let role = MessageRole::parse(&req.role)
         .ok_or_else(|| HttpError::BadRequest(format!("Invalid message role: {}", req.role)))?;
-
     let id = state
         .core
         .chat_history()
@@ -340,6 +339,7 @@ pub(crate) async fn save_message(
             role,
             content: req.content,
             metadata: req.metadata,
+            images: Vec::new(),
         })
         .await?;
     Ok(Json(id))

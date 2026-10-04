@@ -26,6 +26,7 @@ pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
     HubTurn {
         conversation_id,
         content: content.to_owned(),
+        images: Vec::new(),
     }
 }
 
@@ -56,6 +57,7 @@ pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings
                 role,
                 content: content.to_owned(),
                 metadata,
+                images: Vec::new(),
             })
             .await
             .unwrap();

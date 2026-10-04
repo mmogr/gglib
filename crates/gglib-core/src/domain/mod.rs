@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod admission;
 pub mod agent;
+pub mod attachment;
 pub mod benchmark;
 pub(crate) mod cache_budget;
 pub mod capabilities;
@@ -116,6 +117,11 @@ pub use slot_eviction::{SlotFileMeta, compute_auto_disk_budget_bytes, select_evi
 pub use mcp::{
     McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
     McpToolResult, NewMcpServer, ToolIndex,
+};
+
+// Re-export attachment types at the domain level for convenience
+pub use attachment::{
+    AttachmentBlob, AttachmentId, AttachmentInfo, AttachmentUpload, InvalidAttachmentId,
 };
 
 // Re-export chat types at the domain level for convenience

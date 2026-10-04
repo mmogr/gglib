@@ -2,15 +2,13 @@
  * Unit tests for wireMessages — convertToWireMessages().
  *
  * Covers the translation from GglibMessage[] (UI representation) to the flat
- * AgentWireMessage[] wire format expected by the backend, including tool-result
+ * AgentMessage[] wire format expected by the backend, including tool-result
  * injection and content-part extraction edge-cases.
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  convertToWireMessages,
-  type AgentWireMessage,
-} from '../../../../src/hooks/useGglibRuntime/wireMessages';
+import { convertToWireMessages } from '../../../../src/hooks/useGglibRuntime/wireMessages';
+import type { AgentMessage } from '../../../../src/types/generated/AgentMessage';
 import type { GglibMessage } from '../../../../src/types/messages';
 
 // ---------------------------------------------------------------------------
@@ -31,7 +29,7 @@ function assistantMsg(content: GglibMessage['content']): GglibMessage {
 
 /**
  * Build a user message with raw part objects that may not satisfy the
- * static MessagePart union (e.g. image parts from multimodal inputs).
+ * static MessagePart union (an image part, say).
  * Concentrates the unsafe cast in one place so test cases stay clean.
  */
 function userMsgRaw(parts: ReadonlyArray<{ type: string } & Record<string, unknown>>): GglibMessage {
@@ -54,14 +52,14 @@ function assistantMsgRaw(parts: ReadonlyArray<{ type: string } & Record<string, 
 describe('convertToWireMessages — system/user', () => {
   it('passes a system string message through unchanged', () => {
     const wire = convertToWireMessages([systemMsg('You are helpful.')]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'system', content: 'You are helpful.' },
     ]);
   });
 
   it('passes a user string message through unchanged', () => {
     const wire = convertToWireMessages([userMsg('Hello!')]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'user', content: 'Hello!' },
     ]);
   });
@@ -73,24 +71,25 @@ describe('convertToWireMessages — system/user', () => {
         { type: 'text', text: 'world' },
       ]),
     ]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'user', content: 'Hello world' },
     ]);
   });
 
-  it('strips non-text parts when building user content string', () => {
-    // Cast to unknown first — image parts are not in the current GglibMessagePart
-    // union but may appear in real UI state (e.g. from multimodal inputs). The
-    // test verifies that convertToWireMessages filters them out silently.
+  it('sends a user turn as its text alone, naming no image', () => {
+    // An image part is not in the GglibMessagePart union, hence the cast. The
+    // page attaches no image, so one found in UI state is dropped and the
+    // message carries no `images` key.
     const wire = convertToWireMessages([
       userMsgRaw([
         { type: 'image', image: 'data:image/png;base64,abc' },
         { type: 'text', text: 'describe this' },
       ]),
     ]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'user', content: 'describe this' },
     ]);
+    expect('images' in wire[0]).toBe(false);
   });
 });
 
@@ -99,18 +98,17 @@ describe('convertToWireMessages — system/user', () => {
 // ---------------------------------------------------------------------------
 
 describe('convertToWireMessages — assistant text', () => {
-  it('emits content: null for an empty parts array', () => {
+  it('leaves content out for an empty parts array', () => {
     const wire = convertToWireMessages([assistantMsg([])]);
-    expect(wire).toEqual<AgentWireMessage[]>([
-      { role: 'assistant', content: null },
-    ]);
+    expect(wire).toEqual<AgentMessage[]>([{ role: 'assistant' }]);
+    expect('content' in wire[0]).toBe(false);
   });
 
   it('emits the joined text for a single text part', () => {
     const wire = convertToWireMessages([
       assistantMsg([{ type: 'text', text: 'Hi there' }]),
     ]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'assistant', content: 'Hi there' },
     ]);
   });
@@ -129,7 +127,7 @@ describe('convertToWireMessages — assistant text', () => {
     // DB-loaded messages may arrive with content as a plain string instead
     // of an array of parts.  convertToWireMessages must not lose the text.
     const wire = convertToWireMessages([assistantMsg('Hello from DB')]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'assistant', content: 'Hello from DB' },
     ]);
   });
@@ -154,14 +152,14 @@ describe('convertToWireMessages — assistant tool calls', () => {
         },
       ]),
     ]);
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       {
         role: 'assistant',
-        content: null,
         tool_calls: [{ id: 'tc1', name: 'search', arguments: { q: 'foo' } }],
       },
       { role: 'tool', tool_call_id: 'tc1', content: 'found it' },
     ]);
+    expect('content' in wire[0]).toBe(false);
   });
 
   it('excludes in-flight tool calls (no result) from the wire format', () => {
@@ -180,7 +178,7 @@ describe('convertToWireMessages — assistant tool calls', () => {
       ]),
     ]);
     expect(wire).toHaveLength(1);
-    const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
+    const msg = wire[0] as Extract<AgentMessage, { role: 'assistant' }>;
     expect('tool_calls' in msg).toBe(false);
   });
 
@@ -198,7 +196,7 @@ describe('convertToWireMessages — assistant tool calls', () => {
         },
       ]),
     ]);
-    const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
+    const msg = wire[0] as Extract<AgentMessage, { role: 'assistant' }>;
     expect(msg.tool_calls?.[0].arguments).toEqual({});
   });
 
@@ -206,7 +204,7 @@ describe('convertToWireMessages — assistant tool calls', () => {
     const wire = convertToWireMessages([
       assistantMsg([{ type: 'text', text: 'OK' }]),
     ]);
-    const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
+    const msg = wire[0] as Extract<AgentMessage, { role: 'assistant' }>;
     expect('tool_calls' in msg).toBe(false);
   });
 
@@ -225,7 +223,7 @@ describe('convertToWireMessages — assistant tool calls', () => {
       ]),
     ]);
     expect(wire).toHaveLength(1);
-    const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
+    const msg = wire[0] as Extract<AgentMessage, { role: 'assistant' }>;
     // The assistant entry must not include the in-flight call in tool_calls.
     expect('tool_calls' in msg).toBe(false);
   });
@@ -249,7 +247,7 @@ describe('convertToWireMessages — tool result injection', () => {
       ]),
     ]);
     expect(wire).toHaveLength(2);
-    expect(wire[1]).toEqual<AgentWireMessage>({
+    expect(wire[1]).toEqual<AgentMessage>({
       role: 'tool',
       tool_call_id: 'tc4',
       content: 'done',
@@ -268,7 +266,7 @@ describe('convertToWireMessages — tool result injection', () => {
         },
       ]),
     ]);
-    const toolEntry = wire[1] as Extract<AgentWireMessage, { role: 'tool' }>;
+    const toolEntry = wire[1] as Extract<AgentMessage, { role: 'tool' }>;
     expect(toolEntry.content).toBe('{"val":42}');
   });
 
@@ -283,7 +281,7 @@ describe('convertToWireMessages — tool result injection', () => {
     // 1 assistant entry + 2 tool entries (b has no result)
     expect(wire).toHaveLength(3);
     const toolIds = wire.slice(1).map(
-      m => (m as Extract<AgentWireMessage, { role: 'tool' }>).tool_call_id,
+      m => (m as Extract<AgentMessage, { role: 'tool' }>).tool_call_id,
     );
     expect(toolIds).toEqual(['a', 'c']);
   });
@@ -307,7 +305,7 @@ describe('convertToWireMessages — multi-turn', () => {
 
     const wire = convertToWireMessages(messages);
 
-    expect(wire).toEqual<AgentWireMessage[]>([
+    expect(wire).toEqual<AgentMessage[]>([
       { role: 'system',    content: 'You are an assistant.' },
       { role: 'user',      content: 'What is 2+2?' },
       { role: 'assistant', content: 'Let me calculate.', tool_calls: [{ id: 'calc1', name: 'add', arguments: { a: 2, b: 2 } }] },

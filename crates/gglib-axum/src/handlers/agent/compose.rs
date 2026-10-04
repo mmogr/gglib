@@ -122,6 +122,7 @@ pub(crate) async fn prepare(
         Some(retry_observer),
         sampling,
         upstream.far_machine,
+        state.core.attachments().store(),
     );
 
     // Stagnation threshold is a persisted server-side setting, not a request

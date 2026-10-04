@@ -3,9 +3,10 @@
  * sends.
  *
  * `contracts/chats/recorded.json` is written by `gglib-core`'s wire tests
- * from the real serialisation of `GET /v1/chats`, `GET /v1/chats/{id}` and a
- * device's turn (`PUT /v1/runs/{id}?kind=agent`), and fails there when it
- * goes stale. ggchat hand-copies the same file. Here each body must fit the
+ * from the real serialisation of `GET /v1/chats`, `GET /v1/chats/{id}`, a
+ * device's turn (`PUT /v1/runs/{id}?kind=agent`) with and without an image,
+ * and the answer to the upload that image was sent by
+ * (`POST /v1/attachments`), and fails there when it goes stale. ggchat hand-copies the same file. Here each body must fit the
  * generated types, carry the keys and value types they promise, and leave
  * out what it has no value for (never a `null`, but for the two conversation
  * fields that are always written).
@@ -13,6 +14,7 @@
 
 import { describe, it, expect } from 'vitest';
 
+import type { AttachmentUpload } from '../../../src/types/generated/AttachmentUpload';
 import type { HubChatList } from '../../../src/types/generated/HubChatList';
 import type { HubChatOpen } from '../../../src/types/generated/HubChatOpen';
 import type { HubTurn } from '../../../src/types/generated/HubTurn';
@@ -24,7 +26,13 @@ const RECORDED = JSON.parse(rust('contracts/chats/recorded.json')) as {
   list: HubChatList;
   open: HubChatOpen;
   turn: HubTurn;
+  upload: AttachmentUpload;
+  image_turn: HubTurn;
 };
+
+/** What a stored image is told as: its id and what its header says. */
+const IMAGE_KEYS = { id: 'string', mime: 'string', width: 'number', height: 'number' };
+const IMAGE_ID = /^[0-9a-f]{64}$/;
 
 /** Every key present has the type named, and every required key is present. */
 function expectKeys(body: Body, required: Record<string, string>, optional: Record<string, string>) {
@@ -78,7 +86,7 @@ describe('the recorded hub chats', () => {
       expectKeys(
         message as unknown as Body,
         { id: 'number', conversation_id: 'number', role: 'string', content: 'string', created_at: 'string' },
-        { metadata: 'object' },
+        { metadata: 'object', images: 'object' },
       );
       expect(['system', 'user', 'assistant', 'tool']).toContain(message.role);
     }
@@ -87,7 +95,31 @@ describe('the recorded hub chats', () => {
     expect(reply.metadata?.modelName).toBeTypeOf('string');
   });
 
+  it('a row carries its images without their bytes, and a row with none leaves the key out', () => {
+    const [user, reply] = RECORDED.open.messages;
+    expect(user.images).toHaveLength(1);
+    for (const image of user.images ?? []) {
+      expectKeys(image as unknown as Body, IMAGE_KEYS, {});
+      expect(image.id).toMatch(IMAGE_ID);
+    }
+    expect(reply).not.toHaveProperty('images');
+  });
+
+  it('an upload answers the stored image and the tokens it is estimated to cost', () => {
+    expectKeys(RECORDED.upload as unknown as Body, { ...IMAGE_KEYS, image_tokens: 'number' }, {});
+    expect(RECORDED.upload.id).toMatch(IMAGE_ID);
+  });
+
   it("a device's turn is the chat's id and the message, and nothing more", () => {
     expectKeys(RECORDED.turn as unknown as Body, { conversation_id: 'number', content: 'string' }, {});
+  });
+
+  it('a turn with an image names it by the id its upload answered, beside the message', () => {
+    expectKeys(
+      RECORDED.image_turn as unknown as Body,
+      { conversation_id: 'number', content: 'string' },
+      { images: 'object' },
+    );
+    expect(RECORDED.image_turn.images).toEqual([RECORDED.upload.id]);
   });
 });

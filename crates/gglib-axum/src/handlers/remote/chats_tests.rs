@@ -49,6 +49,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
     let (fake, far) = far(201, started).await;
     let body = RemoteTurnBody {
         content: "And how do I fix it?".to_owned(),
+        images: Vec::new(),
     };
 
     let (status, answer) = read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
@@ -64,6 +65,28 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         json(&seen.body),
         serde_json::json!({ "conversation_id": 12, "content": "And how do I fix it?" })
     );
+}
+
+/// A turn's images go on as their ids, in order, and a turn may be its
+/// images alone. The page's body reads with or without the key, and still
+/// refuses any other.
+#[tokio::test]
+async fn a_turn_with_images_sends_their_ids() {
+    let (fake, far) = far(201, "{}").await;
+    let ids = [b"one", b"two"].map(|bytes| gglib_core::domain::AttachmentId::of(bytes));
+    let sent = serde_json::json!({ "content": "", "images": ids });
+    let body: RemoteTurnBody = serde_json::from_value(sent).unwrap();
+
+    read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
+
+    assert_eq!(
+        json(&only(&fake).body),
+        serde_json::json!({ "conversation_id": 12, "content": "", "images": ids })
+    );
+    let bare: RemoteTurnBody = serde_json::from_str(r#"{"content":"hi"}"#).unwrap();
+    assert!(bare.images.is_empty());
+    let more = r#"{"content":"hi","images":[],"messages":[]}"#;
+    assert!(serde_json::from_str::<RemoteTurnBody>(more).is_err());
 }
 
 #[tokio::test]

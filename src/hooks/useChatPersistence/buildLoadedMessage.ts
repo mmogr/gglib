@@ -1,6 +1,6 @@
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { reconstructContent, turnMadeFromMetadata } from '../../utils/messages';
-import type { SerializableContentPart, SerializableToolCallPart } from '../../utils/messages';
+import type { SerializableToolCallPart } from '../../utils/messages';
 import type { ChatMessage } from '../../services/transport';
 import { parseDbTimestamp } from '../../utils/dbTimestamp';
 
@@ -60,9 +60,9 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
     ) {
       const toolCalls = msg.metadata!.tool_calls as CliToolCallMeta[];
       const existingParts =
-        (msg.metadata?.contentParts as SerializableContentPart[] | undefined) ?? [];
+        (msg.metadata?.contentParts as SerializableToolCallPart[] | undefined) ?? [];
 
-      const newParts: SerializableContentPart[] = [
+      const newParts: SerializableToolCallPart[] = [
         ...existingParts,
         ...toolCalls.map<SerializableToolCallPart>((tc) => {
           const toolResult = toolResultByCallId.get(tc.id);
@@ -101,7 +101,7 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
 /**
  * Convert a raw DB message into a ThreadMessageLike ready for the runtime.
  *
- * Restores structured content parts (tool-call, audio, file, image) stored in
+ * Restores the tool calls stored in
  * `metadata.contentParts` so they survive the DB round-trip. Reasoning text
  * stored in `metadata.thinking` is injected as a `{type:'reasoning'}` part.
  *
@@ -113,7 +113,7 @@ export function buildLoadedMessage(
   msg: ChatMessage,
   conversationId: number,
 ): ThreadMessageLike {
-  const storedParts = msg.metadata?.contentParts as SerializableContentPart[] | undefined;
+  const storedParts = msg.metadata?.contentParts as SerializableToolCallPart[] | undefined;
   const thinkingText = msg.metadata?.thinking as string | undefined;
   const thinkingDuration = msg.metadata?.thinkingDurationSeconds as number | null | undefined;
 

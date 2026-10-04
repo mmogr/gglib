@@ -93,6 +93,7 @@ pub(crate) async fn run_to_end(
         .run(
             vec![AgentMessage::User {
                 content: "go".into(),
+                images: Vec::new(),
             }],
             config,
             tx,

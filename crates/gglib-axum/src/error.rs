@@ -6,8 +6,8 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::GuiError;
-use gglib_core::ports::RunsError;
 use gglib_core::ports::chat_history::ChatHistoryError;
+use gglib_core::ports::{AttachmentError, RunsError};
 use gglib_core::{CoreError, RepositoryError};
 use serde::Serialize;
 use thiserror::Error;
@@ -194,7 +194,22 @@ impl From<ChatHistoryError> for HttpError {
                 Self::BadRequest(format!("Invalid message role: {role}"))
             }
             ChatHistoryError::Database(msg) => Self::Internal(format!("Database error: {msg}")),
+            ChatHistoryError::Attachment(refusal) => refusal.into(),
         }
+    }
+}
+
+impl From<AttachmentError> for HttpError {
+    fn from(err: AttachmentError) -> Self {
+        err.code().map_or_else(
+            || Self::Internal(err.to_string()),
+            |code| Self::Coded {
+                status: StatusCode::from_u16(err.http_status())
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                code,
+                message: err.to_string(),
+            },
+        )
     }
 }
 
@@ -237,5 +252,48 @@ mod tests {
             storage.into_response().status(),
             StatusCode::INTERNAL_SERVER_ERROR
         );
+    }
+
+    /// An image refusal keeps its code and status on the way out, alone or
+    /// from a save that named an image the store lacks.
+    #[test]
+    fn an_attachment_refusal_reaches_the_client_by_its_code() {
+        use gglib_core::domain::AttachmentId;
+
+        let id = AttachmentId::of(b"never uploaded");
+        let cases = [
+            (AttachmentError::TooLarge, 413, "image_too_large"),
+            (AttachmentError::Unsupported, 400, "unsupported_image"),
+            (
+                AttachmentError::NotFound(id.clone()),
+                400,
+                "attachment_not_found",
+            ),
+            (
+                AttachmentError::RequestTooLarge,
+                400,
+                "request_images_too_large",
+            ),
+        ];
+        for (refusal, want_status, want_code) in cases {
+            let HttpError::Coded { status, code, .. } = refusal.into() else {
+                panic!("{want_code} is a coded refusal");
+            };
+            assert_eq!((status.as_u16(), code), (want_status, want_code));
+        }
+
+        let from_save: HttpError =
+            ChatHistoryError::Attachment(AttachmentError::NotFound(id)).into();
+        assert!(matches!(
+            from_save,
+            HttpError::Coded {
+                status: StatusCode::BAD_REQUEST,
+                code: "attachment_not_found",
+                ..
+            }
+        ));
+
+        let storage: HttpError = AttachmentError::Storage("disk".to_string()).into();
+        assert!(matches!(storage, HttpError::Internal(_)));
     }
 }

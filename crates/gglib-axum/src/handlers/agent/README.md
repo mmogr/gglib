@@ -31,6 +31,10 @@ the servers it owns, the model resolved against this catalog) or a model of
 the machine on the other end of the remote tunnel (`far`, that machine and
 the model's id there: the port the tunnel bound, the key from the pairing as
 the bearer, and no shaping, because the far proxy runs its own pipeline). A
+local run whose messages, history included, carry an image is refused `400
+model_cannot_read_images` when the model its server serves has no projector
+(`image_gate`); a far run is not judged here, since the far proxy refuses it
+by the same code. A
 `far` naming this machine is a `400`. Not connected, connected without a key,
 or connected to another machine than the ref's is a `409`
 (`RemoteOps::far_for`), the last because that machine's same id is another
@@ -72,7 +76,10 @@ starts the loop.
 
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
 starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
-chat's id and the device's message. The history is rebuilt from the hub's
+chat's id and the device's message, with any image named by the id its
+upload answered; a turn may be its images alone. An image never uploaded is
+`400 attachment_not_found`, and an image for a model with no projector `400
+model_cannot_read_images`, both before the model is loaded. The history is rebuilt from the hub's
 record (the system prompt, every row, the message), the limits from the
 conversation's settings, no tools unless `enable --allow-mcp` opened the
 tunnel to them (then only those the settings name), and the reply runs on the chat's model

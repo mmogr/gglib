@@ -1,7 +1,9 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod config;
 pub(crate) mod drain;
+pub(crate) mod images;
 mod markdown;
+mod memory_jogger;
 pub(crate) mod persistence;
 #[allow(
     clippy::needless_pass_by_value,
@@ -9,8 +11,10 @@ pub(crate) mod persistence;
 )]
 pub(crate) mod renderer;
 pub(crate) mod repl;
+mod repl_line;
 pub(crate) mod resume_settings;
 pub(crate) mod sampling_warning;
+pub(crate) mod sight;
 mod thinking_dispatch;
 mod tool_format;
 pub(crate) mod upstream;
@@ -23,7 +27,9 @@ use gglib_core::domain::chat::ConversationSettings;
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 
+use self::images::TurnImages;
 use self::persistence::Conversation;
+use self::sight::Sight;
 
 /// Entry point: start the interactive agentic REPL.
 ///
@@ -36,12 +42,18 @@ use self::persistence::Conversation;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
+    // A file that cannot be attached ends the command before a conversation
+    // is made or a model asked for.
+    let (attachments, mut receipts) = (ctx.app.attachments(), std::io::stderr());
+    let mut images = TurnImages::attach(attachments, &args.images, false, &mut receipts).await?;
     let Session {
         args,
         params,
         persistence,
         prior_messages,
     } = prepare(ctx, args).await?;
+    let sight = Sight::of_session(ctx, &params).await;
+    images.judge(sight, &prior_messages).await?;
 
     // 2. Compose the agent with the (possibly merged) args.
     let inference_config = args.sampling.clone().into_inference_config();
@@ -67,7 +79,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
 
     // The llama-server belongs to the daemon and stays warm for the next
     // session; nothing to stop here.
-    repl::run_repl_with_prior(agent, &args, persistence, prior_messages).await
+    repl::run_repl_with_prior(agent, &args, persistence, prior_messages, images).await
 }
 
 /// A session ready to compose: the merged args, the parameters its agent is
@@ -185,7 +197,7 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
             let kept = resume_settings::resumed_settings(saved, &args, typed, profile, &turn)?;
             Some(conv.record_settings(kept).await)
         }
-        None => new_conversation(ctx, &args, profile, &turn).await,
+        None => resume_settings::new_conversation(ctx, &args, profile, &turn).await,
     };
 
     let params = config::AgentSessionParams {
@@ -200,31 +212,6 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         persistence,
         prior_messages,
     })
-}
-
-/// Create a new conversation for a fresh session on `turn`'s model.
-async fn new_conversation<'a>(
-    ctx: &'a CliContext,
-    args: &ChatArgs,
-    profile: Option<&gglib_core::domain::InferenceProfile>,
-    turn: &crate::target::TurnModel,
-) -> Option<Conversation<'a>> {
-    let settings = resume_settings::session_settings(args, profile, turn);
-
-    match Conversation::create(
-        ctx.app.chat_history(),
-        args.system_prompt.clone(),
-        None,
-        Some(settings),
-    )
-    .await
-    {
-        Ok(conv) => Some(conv),
-        Err(e) => {
-            tracing::warn!("failed to create agent conversation: {e}");
-            None
-        }
-    }
 }
 
 /// Load a previous conversation, merge its saved settings into args, and prepare for resume.
@@ -260,7 +247,10 @@ async fn resume_conversation<'a>(
     if msg_count == 0 {
         println!("Conversation #{conv_id} has no messages — starting fresh.");
     } else {
-        resume_settings::print_memory_jogger(&db_messages, &conv.title);
+        print!(
+            "{}",
+            memory_jogger::memory_jogger(&db_messages, &conv.title)
+        );
     }
 
     // Merge saved settings into a copy of the current args.

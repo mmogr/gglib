@@ -4,9 +4,11 @@
  * A turn a paired device adds to one of the hub's chats.
  *
  * The body of `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No
- * history travels: the hub rebuilds it from its own record. Any other key
- * is refused, so a client sending `model`, `messages` or `replace_from`
- * learns none is honoured.
+ * history travels: the hub rebuilds it from its own record. No image
+ * travels either: the device uploads each one first, at
+ * `POST /v1/attachments`, and names it here by its id. Any other key is
+ * refused, so a client sending `model`, `messages` or `replace_from` learns
+ * none is honoured.
  */
 export type HubTurn = { 
 /**
@@ -14,6 +16,11 @@ export type HubTurn = {
  */
 conversation_id: number, 
 /**
- * The user's message.
+ * The user's message. Empty when the turn is its images alone.
  */
-content: string, };
+content: string, 
+/**
+ * The images the message carries, by id, in order. Left out of the
+ * body when there are none.
+ */
+images?: Array<string>, };

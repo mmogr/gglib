@@ -37,7 +37,15 @@
         "created_at": "2026-09-30 09:12:31",
         "metadata": {
           "device": "phone-7c2e"
-        }
+        },
+        "images": [
+          {
+            "id": "8d5c68b0badbe2691f67bbaa4a8bfba6ff015a4c0e31860ceb388de709e6a84c",
+            "mime": "image/png",
+            "width": 1280,
+            "height": 720
+          }
+        ]
       },
       {
         "id": 41,
@@ -58,5 +66,19 @@
   "turn": {
     "conversation_id": 12,
     "content": "And how do I fix it?"
+  },
+  "upload": {
+    "id": "8d5c68b0badbe2691f67bbaa4a8bfba6ff015a4c0e31860ceb388de709e6a84c",
+    "mime": "image/png",
+    "width": 1280,
+    "height": 720,
+    "image_tokens": 920
+  },
+  "image_turn": {
+    "conversation_id": 12,
+    "content": "What does this error mean?",
+    "images": [
+      "8d5c68b0badbe2691f67bbaa4a8bfba6ff015a4c0e31860ceb388de709e6a84c"
+    ]
   }
 }

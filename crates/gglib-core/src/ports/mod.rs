@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod agent;
 pub(crate) mod agent_guard_sink;
+pub mod attachment_store;
 pub(crate) mod benchmark;
 pub mod chat_history;
 pub(crate) mod download;
@@ -47,6 +48,7 @@ pub use loop_guard_trips::{LoopGuardTripLog, LoopGuardTripSink};
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
 // Re-export repository traits for convenience
+pub use attachment_store::{AttachmentError, AttachmentStore};
 pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
@@ -110,6 +112,8 @@ pub struct Repos {
     pub mcp_servers: Arc<dyn McpServerRepository>,
     /// Chat history repository for conversations and messages.
     pub chat_history: Arc<dyn ChatHistoryRepository>,
+    /// Attachment store for the images messages carry.
+    pub attachments: Arc<dyn AttachmentStore>,
 }
 
 impl Repos {
@@ -119,12 +123,14 @@ impl Repos {
         settings: Arc<dyn SettingsRepository>,
         mcp_servers: Arc<dyn McpServerRepository>,
         chat_history: Arc<dyn ChatHistoryRepository>,
+        attachments: Arc<dyn AttachmentStore>,
     ) -> Self {
         Self {
             models,
             settings,
             mcp_servers,
             chat_history,
+            attachments,
         }
     }
 }

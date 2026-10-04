@@ -19,6 +19,7 @@ async fn seed(state: &AppState, id: i64, rows: &[(MessageRole, &str)]) -> Vec<i6
             role: *role,
             content: (*content).to_owned(),
             metadata: None,
+            images: Vec::new(),
         };
         ids.push(state.core.chat_history().save_message(row).await.unwrap());
     }

@@ -92,7 +92,9 @@ fn counted_as(req: &AgentChatRequest, server: &ServerInfo) -> String {
 ///
 /// # Errors
 ///
-/// Locally, whatever `validate_port` says. On the far path, `400` for a ref
+/// Locally, whatever `validate_port` says, and `model_cannot_read_images`
+/// (400) when a message carries an image the served model cannot read. On
+/// the far path, where that is the far proxy's to refuse, `400` for a ref
 /// to this machine; `409` when this machine is not connected, holds no key
 /// for the machine it is connected to (`RemoteOps::far` refuses both, in
 /// words that name the fix) or is connected to another machine than the
@@ -104,7 +106,7 @@ pub(super) async fn resolve(
 ) -> Result<Upstream, HttpError> {
     let Some(far) = &req.far else {
         let server = validate_port(state, req.port).await?;
-        return Ok(local(state, req, server).await);
+        return local(state, req, server).await;
     };
     // Before the connection is read: the request's own shape is settled
     // before this machine's state is, so a ref to this machine is a `400`
@@ -120,14 +122,20 @@ pub(super) async fn resolve(
 }
 
 /// A local request's upstream, once its port is known to serve `server`.
+///
+/// # Errors
+///
+/// `model_cannot_read_images` (400) when a message, history included,
+/// carries an image and the model `server` serves has no projector.
 pub(super) async fn local(
     state: &AppState,
     req: &AgentChatRequest,
     server: ServerInfo,
-) -> Upstream {
+) -> Result<Upstream, HttpError> {
+    super::image_gate::served(state, server.model_id, &req.messages).await?;
     let model_context =
         request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
-    Upstream {
+    Ok(Upstream {
         base_url: format!("http://127.0.0.1:{}", req.port),
         far_machine: None,
         model_context,
@@ -140,7 +148,7 @@ pub(super) async fn local(
         },
         local_model: Some((req.port, server.model_id)),
         far_model: None,
-    }
+    })
 }
 
 /// A local run's hold on the model it resolved, which its loop talks to past

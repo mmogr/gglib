@@ -21,18 +21,24 @@ use gglib_core::{
     domain::agent::{AgentMessage, ToolCall, ToolDefinition},
 };
 
+use super::images::ImageUrls;
+
 // =============================================================================
 // Wire-format helpers
 // =============================================================================
 
 /// Map a domain [`AgentMessage`] to the `OpenAI` `messages` array element.
-fn message_to_openai(msg: &AgentMessage) -> Value {
+/// A user message's images are written from `images`, by id.
+fn message_to_openai(msg: &AgentMessage, images: &ImageUrls) -> Value {
     match msg {
         AgentMessage::System { content } => {
             json!({ "role": "system", "content": content })
         }
-        AgentMessage::User { content } => {
-            json!({ "role": "user", "content": content })
+        AgentMessage::User {
+            content,
+            images: ids,
+        } => {
+            json!({ "role": "user", "content": images.user_content(content, ids) })
         }
         AgentMessage::Assistant { content } => {
             // When tool_calls are present but text is None, omit the
@@ -111,8 +117,12 @@ pub(super) fn build_chat_body(
     messages: &[AgentMessage],
     tools: &[ToolDefinition],
     sampling: Option<&InferenceConfig>,
+    images: &ImageUrls,
 ) -> Value {
-    let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
+    let openai_messages: Vec<Value> = messages
+        .iter()
+        .map(|message| message_to_openai(message, images))
+        .collect();
     let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
 
     let mut body = json!({
@@ -182,6 +192,7 @@ mod tests {
     fn messages() -> Vec<AgentMessage> {
         vec![AgentMessage::User {
             content: "hello".to_string(),
+            images: Vec::new(),
         }]
     }
 
@@ -192,7 +203,7 @@ mod tests {
     #[test]
     fn sampling_emits_every_openai_key() {
         let config = full_config();
-        let body = build_chat_body("m", &messages(), &[], Some(&config));
+        let body = build_chat_body("m", &messages(), &[], Some(&config), &ImageUrls::default());
 
         assert_eq!(body["temperature"], json!(0.5));
         assert_eq!(body["top_p"], json!(0.75));
@@ -217,7 +228,7 @@ mod tests {
             presence_penalty: Some(1.5),
             ..Default::default()
         };
-        let body = build_chat_body("m", &messages(), &[], Some(&config));
+        let body = build_chat_body("m", &messages(), &[], Some(&config), &ImageUrls::default());
         let obj = body.as_object().expect("body is an object");
 
         assert!(obj.contains_key("temperature"));
@@ -241,7 +252,7 @@ mod tests {
 
     #[test]
     fn sampling_absent_emits_no_sampling_keys() {
-        let body = build_chat_body("m", &messages(), &[], None);
+        let body = build_chat_body("m", &messages(), &[], None, &ImageUrls::default());
         let obj = body.as_object().expect("body is an object");
 
         for key in [
@@ -261,7 +272,13 @@ mod tests {
     fn sampling_does_not_clobber_transport_fields() {
         let config = full_config();
         let tools = vec![ToolDefinition::new("read_file")];
-        let body = build_chat_body("my-model", &messages(), &tools, Some(&config));
+        let body = build_chat_body(
+            "my-model",
+            &messages(),
+            &tools,
+            Some(&config),
+            &ImageUrls::default(),
+        );
 
         assert_eq!(body["model"], json!("my-model"));
         assert_eq!(body["stream"], json!(true));

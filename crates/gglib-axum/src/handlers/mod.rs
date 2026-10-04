@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod agent;
+pub(crate) mod attachments;
 pub(crate) mod benchmark;
 pub(crate) mod builtin;
 pub(crate) mod config;

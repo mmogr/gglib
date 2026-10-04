@@ -55,6 +55,7 @@ async fn test_iteration_complete_events() {
         .run(
             vec![AgentMessage::User {
                 content: "go".into(),
+                images: Vec::new(),
             }],
             AgentConfig::default(),
             tx,
@@ -94,6 +95,7 @@ async fn test_llm_startup_error_emits_event() {
         .run(
             vec![AgentMessage::User {
                 content: "hello".into(),
+                images: Vec::new(),
             }],
             AgentConfig::default(),
             tx,
@@ -144,6 +146,7 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         .run(
             vec![AgentMessage::User {
                 content: "give me secret data".into(),
+                images: Vec::new(),
             }],
             AgentConfig::default(),
             tx,

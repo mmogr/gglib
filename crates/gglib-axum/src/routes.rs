@@ -58,6 +58,12 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .nest("/config", config_routes())
         .nest("/remote", crate::routes_remote::remote_routes())
         .nest("/runs", crate::routes_runs::run_routes())
+        // The images a message carries: sent once, named by id afterwards.
+        .route(
+            "/attachments",
+            post(handlers::attachments::upload).layer(handlers::attachments::body_limit()),
+        )
+        .route("/attachments/{id}", get(handlers::attachments::fetch))
         .route("/version", get(handlers::version::get_version))
         // Servers API
         .route("/servers", get(handlers::servers::list))

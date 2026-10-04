@@ -22,7 +22,11 @@ infrastructure concerns (database, filesystem, etc.).
   shown by, sanitised from its host name (`machine_name`)
 - `model_naming` - Shared model-naming policy (`resolve_model_name`, `NameSource`)
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
-- `chat` - Chat conversation and message types
+- `chat` - Chat conversation and message types. A message carries its images
+  by reference: `NewMessage.images` are ids, `Message.images` are facts
+- `attachment` - An image a user message carries: its id, the SHA-256 of its
+  bytes (`AttachmentId`), what a client is told of it without the bytes
+  (`AttachmentInfo`), and the answer to an upload (`AttachmentUpload`)
 - `hub_chats` - The hub's chats as a paired device reads them (`HubChat`, `HubChatOpen`)
 - `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)
 - `gguf` - GGUF metadata and capability types

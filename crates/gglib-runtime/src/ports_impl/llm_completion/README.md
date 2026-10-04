@@ -34,12 +34,25 @@ down with the key, and the send loop can name the machine when that machine
 turns the key away. See `retry/` for what it then says, and for why nothing
 may key on the refusal code alone.
 
+# Images
+
+A user message names its images by id. Just before a request is sent, each
+is read from the [`AttachmentStore`] given by
+[`LlmCompletionAdapter::with_attachments`] and the message's `content`
+becomes an array: the text part, when there is text, then one `image_url`
+part an image. A message with no image is sent as the bare string it always
+was. An id the store lacks, or images over 16 MiB together, end the request
+before anything is sent.
+
+[`AttachmentStore`]: gglib_core::ports::AttachmentStore
+
 # Layout
 
 `mod.rs` holds the struct and its request path; `builder.rs` the two
 constructors and the `with_*` builders; `far_machine.rs` the other end of a
 remote turn; `retry/` the send loop; `body.rs` and `stream.rs` the two ends
-of the wire format; `writing_time.rs` times the model's writing on the
+of the wire format; `images.rs` reads the images a message names by id and
+writes each as an `image_url` data URL, the one place an id becomes bytes; `writing_time.rs` times the model's writing on the
 decoded stream, before a dialect parser holds tool-call markup back.
 
 # Lifetime
