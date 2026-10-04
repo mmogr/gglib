@@ -22,10 +22,18 @@ pub trait HfClientPort: Send + Sync {
 
     /// List available quantizations for a model.
     ///
+    /// A quantization is made of weights files alone: a projector in the
+    /// repository is neither a quantization nor a shard of one.
+    ///
     /// # Arguments
     ///
     /// * `model_id` - Full model ID (e.g., `TheBloke/Llama-2-7B-GGUF`)
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>>;
+
+    /// List the projector files in a model repository, by path, with OIDs.
+    ///
+    /// Empty for a repository that has none.
+    async fn list_projectors(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>>;
 
     /// List all GGUF files in a model repository.
     ///
@@ -34,7 +42,7 @@ pub trait HfClientPort: Send + Sync {
     /// * `model_id` - Full model ID
     async fn list_gguf_files(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>>;
 
-    /// Get files for a specific quantization.
+    /// Get the weights files for a specific quantization.
     ///
     /// Returns file information including OIDs for all files in the quantization,
     /// sorted for correct shard ordering.

@@ -124,14 +124,19 @@ async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
 }
 
 /// Label for a queue item: name, shard position, and — while downloading —
-/// the rate and ETA the daemon's estimator computed.
+/// the rate and ETA the daemon's estimator computed. A projector is not a
+/// shard and is labeled as what it is.
 fn item_message(item: &QueuedDownload) -> String {
     if matches!(item.status, DownloadStatus::Queued) {
         return format!("{} (queued)", item.display_name);
     }
 
     let shard = item.shard_info.as_ref().map_or_else(String::new, |shard| {
-        format!(" [shard {}/{}]", shard.shard_index + 1, shard.total_shards)
+        if shard.role.is_projector() {
+            " [projector]".to_string()
+        } else {
+            format!(" [shard {}/{}]", shard.shard_index + 1, shard.total_shards)
+        }
     });
 
     format!(
@@ -145,7 +150,7 @@ fn item_message(item: &QueuedDownload) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::download::ShardInfo;
+    use gglib_core::download::{GgufFileRole, ShardInfo};
 
     fn item(status: DownloadStatus) -> QueuedDownload {
         QueuedDownload::new("owner/repo:Q8_0", "owner/repo", "owner/repo:Q8_0", 1, 0)
@@ -180,5 +185,16 @@ mod tests {
         assert!(msg.contains("[shard 1/3]"), "{msg}");
         assert!(msg.contains("MB/s") || msg.contains("MiB/s"), "{msg}");
         assert!(msg.contains("ETA"), "{msg}");
+    }
+
+    /// The projector follows the three shards. It is not "shard 4/3".
+    #[test]
+    fn a_projector_is_labeled_as_a_projector_not_as_a_shard() {
+        let projector = ShardInfo::new(3, 3, "mmproj-F16.gguf").with_role(GgufFileRole::Projector);
+        let item = item(DownloadStatus::Downloading).with_shard_info("group".into(), projector);
+
+        let msg = item_message(&item);
+        assert!(msg.contains("[projector]"), "{msg}");
+        assert!(!msg.contains("shard"), "{msg}");
     }
 }

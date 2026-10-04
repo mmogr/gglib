@@ -19,12 +19,22 @@ pub struct ModelFilesRepository {
 // Implement the trait from gglib_core
 #[async_trait::async_trait]
 impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
+    /// A model downloaded again, by a repair or an update, already has a row
+    /// per file. That row takes the new index, size and OID, and the time it
+    /// was verified is kept only while the OID is the one verified.
     async fn insert(&self, file: &NewModelFile) -> anyhow::Result<()> {
         sqlx::query(
             r"
             INSERT INTO model_files 
                 (model_id, file_path, file_index, expected_size, hf_oid)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(model_id, file_path) DO UPDATE SET
+                file_index = excluded.file_index,
+                expected_size = excluded.expected_size,
+                last_verified_at = CASE
+                    WHEN model_files.hf_oid IS excluded.hf_oid THEN model_files.last_verified_at
+                END,
+                hf_oid = excluded.hf_oid
             ",
         )
         .bind(file.model_id)
@@ -190,5 +200,57 @@ mod tests {
         // Verify it was updated
         let file = repo.get_by_id(file_id).await.unwrap().unwrap();
         assert!(file.last_verified_at.is_some());
+    }
+
+    /// A repair or an update registers the model's files again: the row is
+    /// the same row, with the OID and size of what was fetched, and it is no
+    /// longer verified.
+    #[tokio::test]
+    async fn a_file_inserted_again_takes_the_new_oid_and_is_unverified() {
+        let pool = setup_test_database().await.unwrap();
+        let model_id = setup_test_model(&pool).await.unwrap();
+        let repo = ModelFilesRepository::new(pool);
+        let file = |index, size, oid: &str| {
+            NewModelFile::new(
+                model_id,
+                "mmproj-F16.gguf".to_string(),
+                index,
+                size,
+                Some(oid.to_string()),
+            )
+        };
+        repo.insert(&file(1, 100, "old")).await.unwrap();
+        let first = repo.get_by_model_id(model_id).await.unwrap().remove(0);
+        repo.update_verification_time(first.id, Utc::now())
+            .await
+            .unwrap();
+
+        repo.insert(&file(2, 120, "new")).await.unwrap();
+
+        let rows = repo.get_by_model_id(model_id).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, first.id);
+        assert_eq!(rows[0].hf_oid.as_deref(), Some("new"));
+        assert_eq!((rows[0].file_index, rows[0].expected_size), (2, 120));
+        assert!(rows[0].last_verified_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_file_inserted_again_unchanged_stays_verified() {
+        let pool = setup_test_database().await.unwrap();
+        let model_id = setup_test_model(&pool).await.unwrap();
+        let repo = ModelFilesRepository::new(pool);
+        let file = NewModelFile::new(model_id, "m.gguf".to_string(), 0, 100, Some("oid".into()));
+        repo.insert(&file).await.unwrap();
+        let first = repo.get_by_model_id(model_id).await.unwrap().remove(0);
+        repo.update_verification_time(first.id, Utc::now())
+            .await
+            .unwrap();
+
+        repo.insert(&file).await.unwrap();
+
+        let rows = repo.get_by_model_id(model_id).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].last_verified_at.is_some());
     }
 }

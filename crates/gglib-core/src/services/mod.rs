@@ -6,6 +6,7 @@ mod model_projector;
 mod model_registrar;
 mod model_service;
 mod model_verification;
+mod model_verification_remote;
 mod projector_choices;
 mod settings_cache;
 mod settings_service;

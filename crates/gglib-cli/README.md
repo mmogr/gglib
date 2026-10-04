@@ -281,7 +281,8 @@ gglib model add --reimport ~/models/llama-2-7b.Q4_K_M.gguf
 gglib model list
 
 # Give a model image input by linking it to a projector (an mmproj GGUF),
-# and take it away again
+# and take it away again. A download from a repository that has projectors
+# fetches one and links it; `model download <repo> --list-quants` shows which.
 gglib model update 1 --projector ~/models/mmproj-F16.gguf
 gglib model update 1 --no-projector
 

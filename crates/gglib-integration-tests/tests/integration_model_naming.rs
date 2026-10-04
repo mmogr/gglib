@@ -39,6 +39,7 @@ async fn register_from_hf(
     let download = CompletedDownload {
         primary_path: file_path.to_path_buf(),
         all_paths: vec![file_path.to_path_buf()],
+        projector_path: None,
         quantization: Quantization::from_filename(quantization),
         repo_id: repo_id.to_string(),
         commit_sha: "abc123".to_string(),
@@ -47,7 +48,7 @@ async fn register_from_hf(
         hf_tags: vec![],
         hf_file_entries: vec![],
     };
-    registrar.register_model(&download).await.unwrap()
+    registrar.register_model(&download).await.unwrap().model
 }
 
 #[tokio::test]
@@ -104,6 +105,7 @@ async fn duplicate_names_from_distinct_repos_both_persist_and_resolve() {
         let download = CompletedDownload {
             primary_path: path.clone(),
             all_paths: vec![path.clone()],
+            projector_path: None,
             quantization: Quantization::from_filename("Q4_K_M"),
             repo_id: repo_id.to_string(),
             commit_sha: "abc123".to_string(),

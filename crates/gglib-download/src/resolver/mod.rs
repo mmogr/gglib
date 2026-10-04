@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use gglib_core::download::{DownloadError, Quantization};
+use gglib_core::ports::huggingface::download_group;
 use gglib_core::ports::{HfClientPort, QuantizationResolver, Resolution, ResolvedFile};
 
 /// Resolver that uses the `HuggingFace` client port.
@@ -25,35 +26,37 @@ impl QuantizationResolver for HfQuantizationResolver {
         repo_id: &str,
         quantization: Quantization,
     ) -> Result<Resolution, DownloadError> {
-        // Get files for this quantization from HF client
-        let quant_str = quantization.to_string();
-        let files = self
-            .hf_client
-            .get_quantization_files(repo_id, &quant_str)
+        // The weights of this quantization, and the projector fetched with
+        // them when the repository has one
+        let group = download_group(self.hf_client.as_ref(), repo_id, quantization)
             .await
             .map_err(|e| {
                 DownloadError::resolution_failed(format!("Failed to get quantization files: {e}"))
             })?;
 
-        if files.is_empty() {
+        if group.weights.is_empty() {
             return Err(DownloadError::resolution_failed(format!(
                 "No files found for quantization {quantization} in {repo_id}"
             )));
         }
 
-        // Check if this is a sharded model (multiple parts)
-        let is_sharded = files.len() > 1 || files.iter().any(|f| f.path.contains("-00001-of-"));
+        // Check if this is a sharded model (multiple parts). Only the weights
+        // are shards.
+        let is_sharded =
+            group.weights.len() > 1 || group.weights.iter().any(|f| f.path.contains("-00001-of-"));
 
-        let resolved_files: Vec<_> = files
+        // Weights first, so the group's first file is always a weights file
+        let weights = group
+            .weights
             .into_iter()
-            .map(|file_info| {
-                ResolvedFile::with_size_and_oid(file_info.path, file_info.size, file_info.oid)
-            })
-            .collect();
+            .map(|file| ResolvedFile::with_size_and_oid(file.path, file.size, file.oid));
+        let projector = group
+            .projector
+            .map(|file| ResolvedFile::projector(file.path, file.size, file.oid));
 
         Ok(Resolution {
             quantization,
-            files: resolved_files,
+            files: weights.chain(projector).collect(),
             is_sharded,
         })
     }
@@ -79,6 +82,4 @@ impl QuantizationResolver for HfQuantizationResolver {
 }
 
 #[cfg(test)]
-mod tests {
-    // TODO: Add tests with mock HfClientPort
-}
+mod tests;

@@ -41,6 +41,9 @@ impl HfClientPort for Hub {
     async fn list_gguf_files(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
         unimplemented!("not reached by check_update_with")
     }
+    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        unimplemented!("not reached by check_update_with")
+    }
     async fn get_quantization_files(
         &self,
         _model_id: &str,

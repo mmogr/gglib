@@ -118,7 +118,7 @@ Download a model from `HuggingFace` Hub with interactive queue support.
 
 **Options:**
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "`Q4_K_M`")
-- `--list-quants` - List available quantizations (uses `--token` if provided)
+- `--list-quants` - List available quantizations, then the repository's projectors with their sizes, each marked with the quantizations whose download fetches it (uses `--token` if provided)
 - `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
 - `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
 
@@ -133,6 +133,8 @@ Download a model from `HuggingFace` Hub with interactive queue support.
 2. Enter the interactive monitor loop
 3. Download manager handles progress events → `CliDownloadEventEmitter` renders indicatif bars
 4. On completion, model is registered automatically (via `ModelRegistrarPort`)
+
+A repository that has projectors gets one fetched with the model, and the model is linked to it: the projector of the download's own quantization, else the `F16` one, else the first by name. There is no flag to leave it out; `gglib model update <model> --no-projector` unlinks it afterwards. The queue monitor labels its file `[projector]`.
 
 **Example:**
 ```bash

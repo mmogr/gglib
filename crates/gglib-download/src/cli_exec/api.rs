@@ -10,13 +10,15 @@ use gglib_hf::{DefaultHfClient, HfClientConfig, build_file_url};
 use reqwest::header::CONTENT_LENGTH;
 use std::time::Duration;
 
+use super::quant_listing::quant_listing;
+
 /// A Hub client that sends `token`, when there is one, as a bearer token on
 /// every request.
 pub(super) fn hub_client(token: Option<String>) -> DefaultHfClient {
     DefaultHfClient::new(&HfClientConfig::default().with_optional_token(token))
 }
 
-/// List available GGUF quantizations for a model.
+/// List a repository's GGUF quantizations, and its projectors apart.
 pub async fn list_quantizations(model_id: &str, token: Option<String>) -> Result<()> {
     println!("Finding available GGUF quantizations for {model_id}...");
 
@@ -28,28 +30,13 @@ pub async fn list_quantizations(model_id: &str, token: Option<String>) -> Result
             println!("Commit SHA: {sha}");
             println!("\nSearching for GGUF files using HuggingFace API...");
 
-            match client.list_quantizations(model_id).await {
-                Ok(quantizations) => {
-                    if quantizations.is_empty() {
-                        println!("✗ No GGUF files found in this repository.");
-                    } else {
-                        println!("✓ Found {} quantizations:", quantizations.len());
-                        for quant in &quantizations {
-                            let shard_info = if quant.shard_count > 1 {
-                                format!(" ({} shards)", quant.shard_count)
-                            } else {
-                                String::new()
-                            };
-                            #[allow(clippy::cast_precision_loss)]
-                            let size_mib = quant.total_size as f64 / 1_048_576.0;
-                            println!("  {} ({:.1} MiB){}", quant.name, size_mib, shard_info);
-                        }
-
-                        println!("\nTo download a specific quantization, use:");
-                        for quant in &quantizations {
-                            println!("  gglib model download {} -q {}", model_id, quant.name);
-                        }
-                    }
+            let listed = tokio::try_join!(
+                HfClientPort::list_quantizations(&client, model_id),
+                HfClientPort::list_projectors(&client, model_id),
+            );
+            match listed {
+                Ok((quantizations, projectors)) => {
+                    print!("{}", quant_listing(model_id, &quantizations, &projectors));
                 }
                 Err(e) => {
                     println!("Failed to fetch quantizations: {e}");

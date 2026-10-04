@@ -1,15 +1,16 @@
 //! Linking a model to the projector it loads, and unlinking it.
 //!
 //! The rule lives here once. Every surface that sets or clears
-//! `models.projector_path` calls [`ModelService::set_projector`].
+//! `models.projector_path` calls [`ModelService::set_projector`], and a
+//! download that brings a projector is registered through the same check.
 
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
 use super::ModelService;
-use crate::domain::Model;
-use crate::ports::{CoreError, GgufParserPort, RepositoryError};
+use crate::domain::{Model, NewModel};
+use crate::ports::{CoreError, GgufParserPort, ModelRepository, RepositoryError};
 
 /// Why a file was not linked as a model's projector.
 #[derive(Debug, Error)]
@@ -83,6 +84,41 @@ impl ModelService {
     }
 }
 
+/// Links `model`, a download about to be registered, to the `projector` that
+/// came with its weights. Answers why it was not linked, when it was not.
+///
+/// The file passes the check a hand-made link passes. A model the library
+/// already holds with a link keeps that link: a repair or an update of its
+/// weights does not replace the projector its owner chose, and the answer
+/// names the link kept when it is to another file.
+pub(super) async fn link_downloaded_projector(
+    repo: &dyn ModelRepository,
+    model: &mut NewModel,
+    projector: Option<&Path>,
+    gguf_parser: &dyn GgufParserPort,
+) -> Option<String> {
+    let projector = projector?;
+    // The library stores a model under its resolved path and is asked by it.
+    let stored_at = resolved_or_literal(&model.file_path);
+    let held = repo.find_by_path(&stored_at).await.ok().flatten();
+    if let Some(kept) = held.and_then(|held| held.projector_path) {
+        return (kept != resolved_or_literal(projector))
+            .then(|| format!("the model keeps its link to {}", kept.display()));
+    }
+    match checked_projector(projector, gguf_parser) {
+        Ok(checked) => {
+            model.projector_path = Some(checked);
+            None
+        }
+        Err(refused) => Some(refused.to_string()),
+    }
+}
+
+/// The canonical path of `path`, or `path` itself when it resolves to no file.
+fn resolved_or_literal(path: &Path) -> PathBuf {
+    crate::paths::canonical_model_path(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 /// The canonical path of `path`, once its header has said it is a projector.
 fn checked_projector(
     path: &Path,
@@ -108,4 +144,4 @@ fn checked_projector(
 
 #[cfg(test)]
 #[path = "model_projector_tests.rs"]
-mod tests;
+pub(super) mod tests;

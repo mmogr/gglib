@@ -12,7 +12,7 @@ use crate::download::GgufFileRole;
 use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, ModelRepository};
 
 /// Holds model 1 and nothing else.
-struct OneModelRepo(Mutex<Model>);
+pub(crate) struct OneModelRepo(pub(crate) Mutex<Model>);
 
 #[async_trait]
 impl ModelRepository for OneModelRepo {
@@ -47,7 +47,7 @@ impl ModelRepository for OneModelRepo {
 
 /// Reads a file's role from its first bytes, as the real parser reads it from
 /// the header: `projector`, `weights`, or anything else for "not a GGUF".
-struct FirstBytesParser;
+pub(crate) struct FirstBytesParser;
 
 impl GgufParserPort for FirstBytesParser {
     fn parse(&self, file_path: &Path) -> Result<GgufMetadata, GgufParseError> {

@@ -12,6 +12,7 @@ use gglib_core::repo_short_name;
 
 use crate::client::HfClient;
 use crate::error::HfError;
+use crate::file_roles::to_file_info;
 use crate::http::HttpBackend;
 use crate::models::{HfModelSummary, HfQuantization, HfRepoRef, HfSearchQuery, HfSortField};
 
@@ -182,17 +183,16 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
             .find_quantization_files_with_sizes(&repo, quantization)
             .await
             .map_err(map_error)?;
+        Ok(files.into_iter().map(to_file_info).collect())
+    }
 
-        // Convert HfFileEntry to HfFileInfo with OID
-        Ok(files
-            .into_iter()
-            .map(|f| HfFileInfo {
-                path: f.path,
-                size: f.size,
-                is_gguf: matches!(f.entry_type, crate::models::HfEntryType::File),
-                oid: f.oid,
-            })
-            .collect())
+    async fn list_projectors(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
+            message: format!("Invalid model ID format: {model_id}"),
+        })?;
+
+        let files = self.list_projectors(&repo).await.map_err(map_error)?;
+        Ok(files.into_iter().map(to_file_info).collect())
     }
 
     async fn get_commit_sha(&self, model_id: &str) -> HfPortResult<String> {

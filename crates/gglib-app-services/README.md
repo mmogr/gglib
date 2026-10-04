@@ -68,6 +68,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 **Module Descriptions:**
 - **`downloads.rs`** — `DownloadOps` download queue and progress operations
+- **`hf_quantizations.rs`** — A repository's quantizations as the `HuggingFace` browser shows them, each with the projector its download fetches
 - **`hub_chats.rs`** — `HubChats`, the hub's chats as a paired device reads them, with each chat's live run
 - **`error.rs`** — `GuiError` semantic error type for all app-service operations
 - **`mcp.rs`** — `McpOps` MCP server configuration and management

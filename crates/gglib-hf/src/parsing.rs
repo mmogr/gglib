@@ -172,13 +172,13 @@ pub(crate) fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
 
 /// Aggregate file entries into quantization groups.
 ///
-/// Groups GGUF files by their quantization type, handling both single files
-/// and sharded models (multiple files per quantization).
+/// Groups weights files by their quantization type, handling both single files
+/// and sharded models (multiple files per quantization). A projector is skipped.
 pub(crate) fn aggregate_quantizations(files: &[HfFileEntry]) -> Vec<HfQuantization> {
     let mut quant_map: HashMap<String, HfQuantization> = HashMap::new();
 
     for file in files {
-        if !file.is_gguf() {
+        if !file.is_weights() {
             continue;
         }
 
@@ -224,7 +224,7 @@ pub(crate) fn aggregate_quantizations(files: &[HfFileEntry]) -> Vec<HfQuantizati
     quantizations
 }
 
-/// Filter files to only GGUF files matching a specific quantization.
+/// Filter files to only weights files matching a specific quantization.
 pub(crate) fn filter_files_by_quantization(
     files: &[HfFileEntry],
     quantization: &str,
@@ -234,7 +234,7 @@ pub(crate) fn filter_files_by_quantization(
     let mut matching: Vec<HfFileEntry> = files
         .iter()
         .filter(|f| {
-            if !f.is_gguf() {
+            if !f.is_weights() {
                 return false;
             }
             let file_quant = Quantization::from_filename(&f.path);

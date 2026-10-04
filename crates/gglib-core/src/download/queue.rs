@@ -5,7 +5,7 @@
 //! frontends via SSE, Tauri events, or CLI output.
 
 use super::events::DownloadStatus;
-use super::types::{Quantization, ShardInfo};
+use super::{shard_info::ShardInfo, types::Quantization};
 use serde::{Deserialize, Serialize};
 
 /// Snapshot of the entire download queue for API responses.

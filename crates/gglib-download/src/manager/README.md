@@ -19,6 +19,11 @@ between the worker (core download logic) and bridges (event emission).
   of the progress or completion state the manager sequences. See the doc
   comment on `WorkerDeps` in `worker.rs`.
 - **Bridge tasks**: Subscribe to watch channels, emit events with rate-limiting
+- **Group**: A model is queued as one group of files (`enqueue.rs`): its weights,
+  then the projector fetched with them. The group is registered once every file
+  is on disk (`group_completion.rs`), with the weights as the model's files and
+  the projector handed to the registrar apart, to be linked. A projector's bytes
+  are reported as the model's progress, never as a shard.
 
 # Concurrency Model
 

@@ -49,15 +49,22 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
             "No GGUF file found for quantization '{quant}'. Use --list-quants to see available options. Error: {e}",
         ))?;
 
+    // Weights first: `files[0]` is the primary file, never the projector.
     let files: Vec<String> = resolution.files.iter().map(|f| f.path.clone()).collect();
     if resolution.is_sharded {
         gglib_core::telemetry::console_println(&format!(
             "✓ Found {} sharded files for quantization {}",
-            files.len(),
+            resolution.shard_count(),
             quant
         ));
     } else {
         gglib_core::telemetry::console_println(&format!("✓ Found file: {}", files[0]));
+    }
+    if let Some(projector) = resolution.projector() {
+        gglib_core::telemetry::console_println(&format!(
+            "✓ Found its projector: {}",
+            projector.path
+        ));
     }
 
     // Prepare destination directory

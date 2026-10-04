@@ -9,7 +9,7 @@ system. No I/O, networking, or runtime dependencies allowed.
 
 # Structure
 
-- `types` - Core identifiers and data structures (`DownloadId`, `Quantization`, `ShardInfo`).
+- `types` - Core identifiers and data structures (`DownloadId`, `Quantization`).
   `Quantization` models Unsloth Dynamic ("UD-") quants (e.g. `UD-Q6_K`) as distinct
   values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
   publish both with the same bit-depth suffix.
@@ -17,6 +17,12 @@ system. No I/O, networking, or runtime dependencies allowed.
   multimodal projector, read from its file name (`GgufFileRole::classify`), and which of
   a model's own files are projectors (`GgufFileRole::projectors_among`). `gglib-gguf`
   reports the same type from the file's header.
+- `projector_choice` - Which of a repository's projectors a download fetches
+  (`choose_projector`): the one of the download's own quantization, else the `F16` one,
+  else the first by name.
+- `shard_info` - One file's place in its download group (`ShardInfo`). A group is the
+  model's weights followed by the projector fetched with them; shards are numbered among
+  the weights alone, and the byte offsets cover every file.
 - `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`).
   `DownloadEvent::DownloadNotice` is the one variant that isn't part of the
   progress/lifecycle state machine: a transient, non-persisted, free-form note

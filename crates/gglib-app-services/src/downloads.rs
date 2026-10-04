@@ -8,9 +8,10 @@ use gglib_core::ports::{
 };
 
 use crate::error::GuiError;
+use crate::hf_quantizations::quantizations_response;
 use crate::types::{
-    HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    HfSortField, ToolSupportResponse,
+    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField,
+    ToolSupportResponse,
 };
 
 /// Dependencies for download and `HuggingFace` operations.
@@ -193,35 +194,25 @@ impl DownloadOps {
         })
     }
 
-    /// Get available quantizations for a `HuggingFace` model.
+    /// Get available quantizations for a `HuggingFace` model, each with the
+    /// projector its download fetches.
     pub async fn get_model_quantizations(
         &self,
         model_id: &str,
     ) -> Result<HfQuantizationsResponse, GuiError> {
+        let failed = |e| GuiError::Internal(format!("Failed to get quantizations: {e}"));
         let quants = self
             .hf_client
             .list_quantizations(model_id)
             .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get quantizations: {e}")))?;
+            .map_err(failed)?;
+        let projectors = self
+            .hf_client
+            .list_projectors(model_id)
+            .await
+            .map_err(failed)?;
 
-        Ok(HfQuantizationsResponse {
-            model_id: model_id.to_string(),
-            quantizations: quants
-                .into_iter()
-                .map(|q| HfQuantization {
-                    name: q.name.clone(),
-                    file_path: q.file_paths.first().cloned().unwrap_or_default(),
-                    size_bytes: q.total_size,
-                    size_mb: q.total_size as f64 / 1_048_576.0,
-                    is_sharded: q.shard_count > 1,
-                    shard_count: if q.shard_count > 1 {
-                        Some(q.shard_count as u32)
-                    } else {
-                        None
-                    },
-                })
-                .collect(),
-        })
+        Ok(quantizations_response(model_id, quants, &projectors))
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 mod api;
 mod exec;
+mod quant_listing;
 mod types;
 mod utils;
 

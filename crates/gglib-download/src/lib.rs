@@ -29,4 +29,7 @@ pub use cli_emitter::{CliDownloadEventEmitter, rate_suffix, total_bytes_key};
 // Public API - modular download manager
 mod manager;
 
+#[cfg(test)]
+mod test_hub;
+
 pub use manager::{DownloadManagerDeps, build_download_manager};

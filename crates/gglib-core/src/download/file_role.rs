@@ -18,6 +18,7 @@ const PROJECTOR_TOKEN: &[u8] = b"mmproj";
 
 /// What a GGUF file holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum GgufFileRole {
     /// A model's weights, whole or one shard of them.
     #[default]

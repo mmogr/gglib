@@ -1,7 +1,7 @@
 //! Download events - discriminated union for all download state changes.
 
 use super::completion::QueueRunSummary;
-use super::types::ShardInfo;
+use super::shard_info::ShardInfo;
 use serde::{Deserialize, Serialize};
 
 /// A summary of a download in the queue (for snapshots and API responses).
