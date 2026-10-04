@@ -2,18 +2,20 @@
 //!
 //! Draws the QR and the code in the alternate screen buffer, polls the daemon
 //! for a pairing, and leaves the moment one happens, the code expires, or the
-//! invite is withdrawn. The alternate buffer is the point: `less` and `vim`
-//! draw there so that leaving restores the terminal exactly, and nothing they
-//! showed survives in the scrollback. A pairing string is a credential for two
-//! minutes; a terminal history is forever.
+//! invite is withdrawn. The alternate buffer is half the point: `less` and
+//! `vim` draw there so that leaving restores the terminal exactly. The other
+//! half is `pairing_layout`, which paints without scrolling that buffer or
+//! erasing it, because a terminal may keep what either removes. A pairing
+//! string is a credential for two minutes; a terminal history is forever.
 
-use std::io::{Write as _, stdout};
+use std::io::stdout;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use crossterm::{cursor, execute, terminal};
 use gglib_app_services::{RemoteEnableResponse, RemoteStatus};
 
+use super::pairing_layout::{self, Frame};
 use crate::daemon_client::DaemonHandle;
 
 /// How the screen ended.
@@ -119,9 +121,15 @@ pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableResponse) -
     let _restore = Restore;
 
     let mut watch = Watch::for_offer(enabled);
+    let mut shown: Option<Frame> = None;
     let outcome = loop {
         let left = ttl.saturating_sub(started.elapsed());
-        draw(&mut out, enabled, rendered.as_deref(), left)?;
+        // The size is read again each time, so a resized window is refitted
+        // within the second.
+        let size = pairing_layout::usable(terminal::size());
+        let frame = Frame::lay(size, enabled, rendered.as_deref(), left.as_secs());
+        pairing_layout::paint(&mut out, &frame, shown.as_ref())?;
+        shown = Some(frame);
         if left.is_zero() {
             break Outcome::Expired;
         }
@@ -200,53 +208,13 @@ impl Watch {
     }
 }
 
-/// Leaves the alternate screen and shows the cursor again, on drop.
+/// Gives the terminal back, on drop.
 struct Restore;
 
 impl Drop for Restore {
     fn drop(&mut self) {
-        let _ = execute!(stdout(), cursor::Show, terminal::LeaveAlternateScreen);
+        let _ = pairing_layout::restore(&mut stdout());
     }
-}
-
-fn draw(
-    out: &mut std::io::Stdout,
-    enabled: &RemoteEnableResponse,
-    qr: Option<&str>,
-    left: Duration,
-) -> Result<()> {
-    execute!(
-        out,
-        terminal::Clear(terminal::ClearType::All),
-        cursor::MoveTo(0, 0)
-    )?;
-    writeln!(out, "  gglib remote — pair a device\r")?;
-    writeln!(out, "\r")?;
-    if let Some(qr) = qr {
-        for line in qr.lines() {
-            writeln!(out, "  {line}\r")?;
-        }
-        writeln!(out, "\r")?;
-    }
-    writeln!(out, "  On the other machine:\r")?;
-    writeln!(out, "\r")?;
-    let pairing = enabled.pairing.as_deref().unwrap_or_default();
-    writeln!(out, "    gglib remote join {pairing}\r")?;
-    writeln!(out, "\r")?;
-    writeln!(out, "  ticket  {}\r", enabled.ticket)?;
-    let code = enabled.code.as_deref().unwrap_or_default();
-    writeln!(out, "  code    {code}\r")?;
-    if let Some(device) = &enabled.device {
-        writeln!(out, "  device  {device}\r")?;
-    }
-    writeln!(out, "\r")?;
-    writeln!(
-        out,
-        "  Waiting for a device… the code expires in {}s. Ctrl-C leaves the tunnel up.\r",
-        left.as_secs()
-    )?;
-    out.flush()?;
-    Ok(())
 }
 
 #[cfg(test)]
