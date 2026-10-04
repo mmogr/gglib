@@ -39,6 +39,7 @@ pub(crate) mod conversation_settings;
 pub(crate) mod daemon_client;
 pub(crate) mod dispatch;
 pub(crate) mod handlers;
+pub(crate) mod image_args;
 pub(crate) mod llama_commands;
 pub(crate) mod mcp_commands;
 pub(crate) mod model_commands;
@@ -54,6 +55,7 @@ pub(crate) mod sampling_params;
 pub(crate) mod shared_args;
 pub(crate) mod subcommands;
 pub(crate) mod target;
+pub(crate) mod tool_limit_args;
 pub(crate) mod upstream_args;
 pub(crate) mod utils;
 

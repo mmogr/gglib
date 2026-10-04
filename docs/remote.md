@@ -378,6 +378,20 @@ desktop does not know comes back as a 404 listing the profiles it has.
 profile configured on the laptop, and there is no way for it to reach the
 machine that would apply it.
 
+**An image goes with a turn.** `gglib q --remote --image shot.png "What is
+the error?"` and `gglib chat --remote --image diagram.png` attach a PNG or a
+JPEG as they do without the flag
+([Images](../crates/gglib-cli/README.md#images)). The file is stored on the
+laptop, under the hash of its bytes, and the laptop's message names it by
+that id. The bytes leave only in the request to the desktop's model, as an
+`image_url` part, the form any OpenAI client sends. The whole chat is sent
+again each turn, so its images cross the tunnel again each turn: at most
+16 MiB of image bytes a request, refused on the laptop before anything is
+sent. The laptop does not ask whether the desktop's model reads images. The
+desktop's proxy does, and refuses a model with no projector before it loads
+it, `400 model_cannot_read_images`; the laptop shows that sentence, with the
+command that links a projector, to be run on the desktop.
+
 **A chat resumes on the machine it ran on.** Each conversation stores its
 model by machine and by id there, and `gglib chat --continue <id>` goes back
 to it: a chat that ran on the desktop resumes on the desktop without
@@ -728,7 +742,7 @@ readability.
 
 Everything the desktop's proxy serves — `/v1/models`, a model's detail at
 `/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
-`/v1/chat/completions`, `/v1/runs`, `/v1/chats`, the dashboard, `POST /v1/proxy/shutdown` —
+`/v1/chat/completions`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
 server configured on the desktop is remote code execution. The refusal is
@@ -741,7 +755,7 @@ this machine not reading a device's reply is a courtesy of the API, not a
 boundary.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
-with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content}`: the
+with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. A chat that stored its model runs on that model by its id, the one its
@@ -754,6 +768,34 @@ away with the key, though a reply the device already started still finishes
 and is saved. Such a turn calls none of the desktop's MCP tools unless the
 desktop ran `enable --allow-mcp`, the same gate as `/mcp`, and then only the
 tools the chat names.
+
+Such a turn may carry images, and they cross the tunnel by reference. The
+device sends each file once, as the raw body of `POST /v1/attachments`: a PNG
+or a JPEG by its first bytes, at most 8 MiB, else `413 image_too_large` or
+`400 unsupported_image`. The desktop stores the bytes exactly as they came,
+under their SHA-256, and answers that id with the image's type, its size in
+pixels and the prompt tokens it is estimated to cost; the same bytes sent
+twice are one image and the same answer. The turn then names its images,
+`{conversation_id, content, images}`, and needs text or an image. An id the
+desktop does not hold is `400 attachment_not_found`, and a chat whose model
+has no projector is `400 model_cannot_read_images`; both are answered before
+the model is loaded or a row is saved. So what crosses is the file, once;
+after that a turn is its text and ids, and an opened chat lists each row's
+images by id, type and size, with no bytes. A device reads the bytes of one
+with `GET /v1/attachments/{id}`, which answers them as they were sent, with
+`no-store`, so the device keeps no image, as it keeps no chat. Both routes
+are for a named device only, as `/v1/chats` is. An image no message names,
+last uploaded more than a day ago, is deleted when the desktop's daemon next
+starts, so one uploaded for a turn that was never sent does not stay; one a
+message names stays as long as the message does.
+
+On the joined machine the same two routes are behind its own daemon, at
+`POST /api/remote/attachments` and `GET /api/remote/attachments/{id}`, which
+adds the key as it does for the desktop's chats and keeps nothing. What it
+reads back it serves as `image/png` or `image/jpeg` when the desktop said
+so, and otherwise as `application/octet-stream`, with `nosniff` and
+`no-store`. The chat
+page does not attach images yet, so it sends none.
 
 The model list carries each model's id in the desktop's catalog
 (`gglib_id`) and the desktop's name (`machine_name`, its host name's first

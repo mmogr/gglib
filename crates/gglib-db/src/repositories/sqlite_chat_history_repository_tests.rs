@@ -24,6 +24,7 @@ fn make_msg(conversation_id: i64, content: &str) -> NewMessage {
         role: MessageRole::User,
         content: content.to_string(),
         metadata: None,
+        images: Vec::new(),
     }
 }
 

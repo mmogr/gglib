@@ -2,7 +2,8 @@
 //!
 //! Pairing is the grant: a device the tunnel edge names may list the hub's
 //! chats and open one, and `gglib remote forget` takes that away with the
-//! key. Nothing is copied; each call reads the hub's own rows.
+//! key. Nothing is copied; each call reads the hub's own rows. An image a
+//! turn carries is sent once, ahead of the turn, and read back by its id.
 //!
 //! # Design Rules
 //!
@@ -10,7 +11,9 @@
 
 use async_trait::async_trait;
 
+use super::attachment_store::AttachmentError;
 use super::runs::Created;
+use crate::domain::attachment::{AttachmentBlob, AttachmentId, AttachmentUpload};
 use crate::domain::hub_chats::{HubChatList, HubChatOpen, HubTurn};
 
 /// Why a chat could not be read. Fixed text only.
@@ -61,6 +64,20 @@ pub trait HubChatsPort: Send + Sync + std::fmt::Debug {
     ///
     /// [`HubChatsError::NotFound`] and [`HubChatsError::Unreadable`].
     async fn open(&self, id: i64) -> Result<HubChatOpen, HubChatsError>;
+
+    /// Store an image a device sends, for a turn to name by its id.
+    ///
+    /// # Errors
+    ///
+    /// What [`crate::services::AttachmentService::ingest`] refuses.
+    async fn attach(&self, bytes: &[u8]) -> Result<AttachmentUpload, AttachmentError>;
+
+    /// The bytes of the stored image `id`, as they were sent.
+    ///
+    /// # Errors
+    ///
+    /// [`AttachmentError::NotFound`] when no image has that id.
+    async fn attachment(&self, id: &AttachmentId) -> Result<AttachmentBlob, AttachmentError>;
 }
 
 /// Why a device's turn was not started: an HTTP status, a stable code and a

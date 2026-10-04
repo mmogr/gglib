@@ -3,7 +3,9 @@
  * Handles conversations and messages for the chat feature.
  */
 
+import type { Message } from '../../../types/generated/Message';
 import type { ModelRef } from '../../../types/generated/ModelRef';
+import type { SerializableToolCallPart } from '../../../utils/messages/contentParts';
 import type { ConversationId, MessageId, ModelId } from './ids';
 
 // ============================================================================
@@ -53,15 +55,13 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
-import type { SerializableContentPart } from '../../../utils/messages/contentParts';
-
 /**
  * Metadata attached to a chat message.
  */
 export interface ChatMessageMetadata {
   thinking?: string;
   thinkingDurationSeconds?: number | null;
-  contentParts?: SerializableContentPart[];
+  contentParts?: SerializableToolCallPart[];
   [key: string]: unknown;
 }
 
@@ -75,6 +75,8 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   metadata?: ChatMessageMetadata | null;
+  /** The images the message carries, in order, without their bytes; absent when it has none. */
+  images?: Message['images'];
 }
 
 /**

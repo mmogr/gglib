@@ -49,6 +49,7 @@ fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
         },
         AgentMessage::User {
             content: "First question.".into(),
+            images: Vec::new(),
         },
     ];
     for i in 0..n_pairs {
@@ -90,6 +91,7 @@ async fn test_context_budget_pruning() {
     let mut messages = build_long_history(20);
     messages.push(AgentMessage::User {
         content: "Final question after a long history.".into(),
+        images: Vec::new(),
     });
 
     // Single LLM response: no tool calls → FinalAnswer immediately.
@@ -171,6 +173,7 @@ async fn test_context_budget_pruning_two_iters() {
     let mut messages = build_long_history(20);
     messages.push(AgentMessage::User {
         content: "Second question.".into(),
+        images: Vec::new(),
     });
 
     // Two LLM responses: first a tool call, then a final answer.

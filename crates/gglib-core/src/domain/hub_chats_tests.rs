@@ -1,5 +1,6 @@
 //! The wire shapes of the hub's chats, pinned against the recorded bodies
-//! both clients replay: a listing, a chat opened, and a device's turn.
+//! both clients replay: a listing, a chat opened, a device's turn, a turn
+//! with an image, and the answer to the upload that image was sent by.
 
 use std::path::PathBuf;
 
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{HubChat, HubChatList, HubChatOpen, HubTurn};
+use crate::domain::attachment::{AttachmentId, AttachmentInfo, AttachmentUpload};
 use crate::domain::chat::{Conversation, ConversationSettings, Message, MessageRole};
 
 /// The recorded bodies, by name. The field order is the file's order.
@@ -16,6 +18,19 @@ struct Recorded {
     list: HubChatList,
     open: HubChatOpen,
     turn: HubTurn,
+    upload: AttachmentUpload,
+    image_turn: HubTurn,
+}
+
+/// The image the recorded chat carries: a 1280x720 PNG, as an upload answers
+/// it. The id is the hash of this text, standing in for the file's bytes.
+fn screenshot() -> AttachmentInfo {
+    AttachmentInfo {
+        id: AttachmentId::of(b"contracts/chats: a screenshot of the failed build"),
+        mime: "image/png".to_owned(),
+        width: 1280,
+        height: 720,
+    }
 }
 
 fn recorded() -> Recorded {
@@ -59,6 +74,7 @@ fn recorded() -> Recorded {
             content: "Why did the build break?".to_owned(),
             created_at: "2026-09-30 09:12:31".to_owned(),
             metadata: Some(json!({ "device": "phone-7c2e" })),
+            images: vec![screenshot()],
         },
         Message {
             id: 41,
@@ -73,6 +89,7 @@ fn recorded() -> Recorded {
                 "turnDurationMs": 4100,
                 "device": "phone-7c2e",
             })),
+            images: Vec::new(),
         },
     ];
     Recorded {
@@ -84,6 +101,16 @@ fn recorded() -> Recorded {
         turn: HubTurn {
             conversation_id: 12,
             content: "And how do I fix it?".to_owned(),
+            images: Vec::new(),
+        },
+        upload: AttachmentUpload {
+            info: screenshot(),
+            image_tokens: 920,
+        },
+        image_turn: HubTurn {
+            conversation_id: 12,
+            content: "What does this error mean?".to_owned(),
+            images: vec![screenshot().id],
         },
     }
 }
@@ -150,4 +177,57 @@ fn a_turn_is_the_chat_and_the_message() {
         more[key] = json!(null);
         assert!(serde_json::from_value::<HubTurn>(more).is_err(), "{key}");
     }
+}
+
+/// A turn with images names each by its id, in order, beside the message;
+/// one with none leaves the key out, and reads back from a body without it.
+#[test]
+fn a_turn_names_its_images_by_id() {
+    let id = screenshot().id;
+    let body = serde_json::to_value(&recorded().image_turn).unwrap();
+    assert_eq!(
+        body,
+        json!({
+            "conversation_id": 12,
+            "content": "What does this error mean?",
+            "images": [id.as_str()],
+        })
+    );
+    let read: HubTurn = serde_json::from_value(body.clone()).unwrap();
+    assert_eq!(read.images, [id]);
+
+    let bare: HubTurn =
+        serde_json::from_value(json!({ "conversation_id": 12, "content": "x" })).unwrap();
+    assert!(bare.images.is_empty());
+
+    let mut more = body;
+    more["messages"] = json!([]);
+    assert!(serde_json::from_value::<HubTurn>(more).is_err());
+    let not_an_id = json!({ "conversation_id": 12, "content": "x", "images": ["shot.png"] });
+    assert!(serde_json::from_value::<HubTurn>(not_an_id).is_err());
+}
+
+/// An opened chat's row carries its images without their bytes, and a row
+/// with none leaves the key out. The upload's answer is the same facts and
+/// the estimate, flat.
+#[test]
+fn a_row_carries_its_images_and_an_upload_answers_the_same_facts() {
+    let recorded = recorded();
+    let rows = serde_json::to_value(&recorded.open.messages).unwrap();
+    let image = json!({
+        "id": screenshot().id.as_str(),
+        "mime": "image/png",
+        "width": 1280,
+        "height": 720,
+    });
+    assert_eq!(rows[0]["images"], json!([image]));
+    assert!(rows[1].get("images").is_none());
+
+    let mut upload = image;
+    upload["image_tokens"] = json!(920);
+    assert_eq!(serde_json::to_value(&recorded.upload).unwrap(), upload);
+    assert_eq!(
+        recorded.upload.image_tokens,
+        crate::request_pipeline::estimate_image_tokens(1280, 720)
+    );
 }

@@ -59,6 +59,7 @@ async fn a_run_whose_llama_server_goes_silent_ends_at_the_idle_bound() {
     let (tx, _rx) = tokio::sync::mpsc::channel(64);
     let user = AgentMessage::User {
         content: "hi".to_owned(),
+        images: Vec::new(),
     };
 
     let started = Instant::now();

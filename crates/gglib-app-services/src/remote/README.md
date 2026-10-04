@@ -54,6 +54,10 @@ remote/
   far_proxy.rs      — FarProxy, every request made *through* the tunnel:
                       the far machine's chats and runs, carried on for this
                       machine's chat page
+  far_attachments.rs — FarProxy's two requests for an image: one sent to the
+                      far machine's store and one read back, both through
+                      the streaming client, which limits silence and not
+                      the whole exchange
   far_read.rs       — the far answers this side reads rather than passes
                       on: the model list, one model, a load, the shutdown,
                       and the far build too old to publish model ids

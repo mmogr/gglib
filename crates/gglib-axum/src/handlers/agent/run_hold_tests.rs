@@ -108,7 +108,7 @@ async fn a_local_upstream_names_the_model_it_holds() {
         started_at: 0,
     };
     assert_eq!(
-        local(&state, &req, server).await.local_model,
+        local(&state, &req, server).await.unwrap().local_model,
         Some((19_555, 3))
     );
 }

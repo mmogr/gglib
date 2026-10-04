@@ -16,7 +16,7 @@ use common::harness::{test_app_with_access, with_test_token};
 use common::origin::{Answer, HOST, bearer_token, send_request};
 use gglib_axum::DaemonAccess;
 use gglib_core::CorsConfig;
-use gglib_core::contracts::http::daemon;
+use gglib_core::contracts::http::{attachments, daemon};
 
 const LAN_KEY: &str = "lan-key";
 
@@ -28,7 +28,7 @@ fn api_routes() -> Vec<(Method, String)> {
         .iter()
         .filter(|(_, path)| path.starts_with("/api/"))
         .map(|(methods, path)| (*methods, (*path).to_owned()));
-    let more: [(&[&str], String); 7] = [
+    let more: [(&[&str], String); 9] = [
         (
             daemon::REMOTE_FORGET_METHODS,
             daemon::remote_forget_path("dev-0a1b2c3d"),
@@ -42,6 +42,8 @@ fn api_routes() -> Vec<(Method, String)> {
         (&["POST"], "/api/mcp/servers".to_owned()),
         (&["PUT"], "/api/config/settings".to_owned()),
         (&["GET"], "/api/conversations".to_owned()),
+        (&["POST"], attachments::ATTACHMENTS_PATH.to_owned()),
+        (&["GET"], attachments::attachment_path(&"0".repeat(64))),
     ];
     fixed
         .chain(more)

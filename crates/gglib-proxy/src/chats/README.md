@@ -8,6 +8,13 @@ saved; `GET /v1/chats/{id}` opens one with every row and the metadata the
 hub saved. Served through the `HubChatsPort` the proxy was started with,
 and answered `503 chats_unavailable` without one.
 
+`/v1/attachments` is the images those chats' turns carry. A device sends
+one as the raw body of `POST /v1/attachments`, at most 8 MiB, and is
+answered its id, type, size and estimated tokens; a turn then names it by
+that id. `GET /v1/attachments/{id}` answers the bytes as they were sent, with
+`no-store`: a device keeps none of this machine's chats. An id that is not stored is `404
+attachment_not_found`. Both go through the same port, behind the same guard.
+
 Pairing is the grant, and `gglib remote forget` takes it away with the
 key. Only a request the tunnel edge marked with a device's name reaches a
 chat: anything else, a local client or a LAN client holding the proxy's
@@ -20,6 +27,7 @@ copied; each call reads the hub's rows.
 ```text
 chats/
   mod.rs       — the module
+  attachments.rs — an image sent and one read back; no image is logged
   guard.rs     — only a named device passes
   handlers.rs  — list and open, with errors in the proxy's shape; nothing a
                  client sent is echoed

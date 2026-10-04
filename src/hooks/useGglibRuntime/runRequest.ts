@@ -7,7 +7,6 @@
 
 import { getToolRegistry } from '../../services/tools';
 import type { GglibMessage } from '../../types/messages';
-import type { AgentMessage } from '../../types/generated/AgentMessage';
 import type { AgentRequestConfig } from '../../types/generated/AgentRequestConfig';
 import type { AgentRunRequest } from '../../types/generated/AgentRunRequest';
 import type { ModelRef } from '../../types/generated/ModelRef';
@@ -118,7 +117,7 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
     replace_from: options.replaceFrom ?? null,
     port: options.selectedServerPort ?? 0,
     far: options.far ?? null,
-    messages: convertToWireMessages(options.messages) as AgentMessage[],
+    messages: convertToWireMessages(options.messages),
     config: wireConfig(options.config),
     tool_filter: toolFilter(options.supportsToolCalls),
     model: null,

@@ -50,6 +50,10 @@ async fn a_named_device_opens_a_chat_with_its_rows() {
     let (status, body) = json(request.send().await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body, serde_json::to_value(opened()).unwrap());
+    // A row's images travel as facts, by id: no bytes.
+    let image = &body["messages"][0]["images"][0];
+    assert_eq!(image["mime"], "image/png", "{body}");
+    assert_eq!(image.as_object().unwrap().len(), 4, "{image}");
     cancel.cancel();
 }
 

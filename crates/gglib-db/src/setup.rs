@@ -12,6 +12,10 @@ use sqlx::{
 use std::path::Path;
 use std::time::Duration;
 
+pub use attachments::sweep_unlinked_attachments;
+
+#[path = "setup_attachments.rs"]
+mod attachments;
 #[path = "setup_model_files.rs"]
 mod model_files;
 #[path = "setup_models.rs"]
@@ -295,6 +299,8 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     // Migration: Add settings column for session parameter persistence.
     add_column_if_missing(pool, "chat_conversations", "settings", "TEXT").await?;
+
+    attachments::create_attachment_tables(pool).await?;
 
     // Create MCP servers table
     sqlx::query(

@@ -14,6 +14,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::FarProxy;
+use gglib_core::domain::AttachmentId;
 use gglib_core::domain::hub_chats::HubTurn;
 use serde::Deserialize;
 
@@ -22,13 +23,19 @@ use crate::state::AppState;
 
 /// Body for `PUT /api/remote/chats/{id}/turns/{run_id}`: the new message
 /// and nothing else. The far machine rebuilds the history from its record,
-/// so a body that carries more is refused rather than half read.
+/// so a body that carries more is refused rather than half read. An image
+/// is named by the id `POST /api/remote/attachments` answered.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct RemoteTurnBody {
-    /// The user's message.
+    /// The user's message. Empty when the turn is its images alone.
     pub content: String,
+    /// The images the message carries, by id, in order. Left out of the
+    /// body when there are none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
+    pub images: Vec<AttachmentId>,
 }
 
 /// `?after=N` on a run's events.
@@ -99,6 +106,7 @@ pub(super) async fn add_turn_via(
     let turn = HubTurn {
         conversation_id: id,
         content: body.content,
+        images: body.images,
     };
     Ok(relay(far.add_turn(run_id, &turn).await?).await)
 }
@@ -136,7 +144,7 @@ pub(super) async fn run_events_via(
 
 /// A far answer, handed back: a success as it came, a refusal as
 /// [`refused`] gives it.
-async fn relay(answer: reqwest::Response) -> Response {
+pub(super) async fn relay(answer: reqwest::Response) -> Response {
     let status = answer.status();
     let retry_after = answer.headers().get(header::RETRY_AFTER).cloned();
     let content_type = answer.headers().get(header::CONTENT_TYPE).cloned();

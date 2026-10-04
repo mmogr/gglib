@@ -11,7 +11,8 @@ use super::messages::AgentMessage;
 /// Map an [`AgentMessage`] to a [`NewMessage`] for database storage.
 ///
 /// The mapping is 1:1 — each agent message becomes one DB row:
-/// - `System` / `User` → role + content, no metadata
+/// - `System` / `User` → role + content, no metadata; a user message's
+///   images go with it, by id
 /// - `Assistant` → text in `content`, tool calls (if any) in `metadata.tool_calls`
 /// - `Tool` → result in `content`, `tool_call_id` in `metadata`
 pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
@@ -21,12 +22,14 @@ pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
             role: MessageRole::System,
             content: content.clone(),
             metadata: None,
+            images: Vec::new(),
         },
-        AgentMessage::User { content } => NewMessage {
+        AgentMessage::User { content, images } => NewMessage {
             conversation_id,
             role: MessageRole::User,
             content: content.clone(),
             metadata: None,
+            images: images.clone(),
         },
         AgentMessage::Assistant { content } => {
             let metadata = if content.tool_calls.is_empty() {
@@ -41,6 +44,7 @@ pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
                 role: MessageRole::Assistant,
                 content: content.text.clone().unwrap_or_default(),
                 metadata,
+                images: Vec::new(),
             }
         }
         AgentMessage::Tool {
@@ -51,6 +55,7 @@ pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
             role: MessageRole::Tool,
             content: content.clone(),
             metadata: Some(serde_json::json!({ "tool_call_id": tool_call_id })),
+            images: Vec::new(),
         },
     }
 }

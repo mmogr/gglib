@@ -8,6 +8,12 @@
 use serde::{Deserialize, Serialize};
 
 use super::tool_types::ToolCall;
+use crate::domain::attachment::AttachmentId;
+use crate::request_pipeline::{CHARS_PER_TOKEN_APPROX, MAX_IMAGE_TOKENS};
+
+/// What one image is charged against the context budget, in characters: the
+/// cap on an image's tokens, at the ratio the budget is measured in.
+pub const IMAGE_CHARGE_CHARS: usize = MAX_IMAGE_TOKENS * CHARS_PER_TOKEN_APPROX;
 
 /// Content carried by an [`AgentMessage::Assistant`] turn.
 ///
@@ -92,6 +98,11 @@ pub enum AgentMessage {
     User {
         /// Message text.
         content: String,
+        /// The images the message carries, by id, in order. Left out of the
+        /// JSON when there are none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
+        images: Vec<AttachmentId>,
     },
 
     /// A response from the assistant model.
@@ -116,7 +127,25 @@ pub enum AgentMessage {
 }
 
 impl AgentMessage {
+    /// A user message of text alone.
+    #[must_use]
+    pub fn user(content: impl Into<String>) -> Self {
+        Self::User {
+            content: content.into(),
+            images: Vec::new(),
+        }
+    }
+
+    /// Whether the message carries an image.
+    #[must_use]
+    pub fn has_images(&self) -> bool {
+        matches!(self, Self::User { images, .. } if !images.is_empty())
+    }
+
     /// Estimate the Unicode scalar-value count of this message.
+    ///
+    /// An image a user message carries is charged [`IMAGE_CHARGE_CHARS`]:
+    /// the most an image can cost, with no look at its size.
     ///
     /// Uses `str::chars().count()` rather than [`str::len`] (byte count) so
     /// that multi-byte characters are counted as one unit, matching how LLMs
@@ -131,7 +160,10 @@ impl AgentMessage {
     /// does exactly this via its `running_chars` counter).
     pub fn char_count(&self) -> usize {
         match self {
-            Self::System { content } | Self::User { content } => content.chars().count(),
+            Self::System { content } => content.chars().count(),
+            Self::User { content, images } => {
+                content.chars().count() + images.len() * IMAGE_CHARGE_CHARS
+            }
             Self::Assistant { content } => {
                 content.text.as_ref().map_or(0, |s| s.chars().count())
                     + content
@@ -156,166 +188,5 @@ impl AgentMessage {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn serde_tag_matches_wire_format() {
-        let msg = AgentMessage::Tool {
-            tool_call_id: "call_1".into(),
-            content: "ok".into(),
-        };
-        let json = serde_json::to_value(&msg).unwrap();
-        assert_eq!(json["role"], "tool");
-        assert_eq!(json["tool_call_id"], "call_1");
-    }
-
-    #[test]
-    fn assistant_content_only_omits_tool_calls() {
-        let msg = AgentMessage::Assistant {
-            content: AssistantContent {
-                text: Some("hi".into()),
-                tool_calls: vec![],
-            },
-        };
-        let json = serde_json::to_value(&msg).unwrap();
-        assert_eq!(json["role"], "assistant");
-        assert_eq!(json["content"], "hi");
-        assert!(json.get("tool_calls").is_none());
-    }
-
-    #[test]
-    fn assistant_tool_calls_only_omits_content() {
-        use serde_json::json;
-        let msg = AgentMessage::Assistant {
-            content: AssistantContent {
-                text: None,
-                tool_calls: vec![ToolCall {
-                    id: "c1".into(),
-                    name: "search".into(),
-                    arguments: json!({}),
-                }],
-            },
-        };
-        let json_val = serde_json::to_value(&msg).unwrap();
-        assert_eq!(json_val["role"], "assistant");
-        assert!(json_val.get("content").is_none());
-        assert!(json_val["tool_calls"].is_array());
-    }
-
-    /// Verify that the custom Serde deserializer reconstructs
-    /// [`AssistantContent`] correctly on a round-trip when both text and
-    /// tool calls are present.
-    ///
-    /// Some LLMs (e.g. models with parallel function calling) emit a non-empty
-    /// `content` string alongside `tool_calls` in the same assistant message.
-    /// The round-trip must preserve both fields exactly.
-    #[test]
-    fn assistant_both_round_trips() {
-        use serde_json::json;
-
-        let original = AgentMessage::Assistant {
-            content: AssistantContent {
-                text: Some("thinking out loud".into()),
-                tool_calls: vec![
-                    ToolCall {
-                        id: "c1".into(),
-                        name: "web_search".into(),
-                        arguments: json!({ "query": "rust async" }),
-                    },
-                    ToolCall {
-                        id: "c2".into(),
-                        name: "read_file".into(),
-                        arguments: json!({ "path": "/tmp/x" }),
-                    },
-                ],
-            },
-        };
-
-        // Serialise -> deserialise.
-        let json_val = serde_json::to_value(&original).unwrap();
-        assert_eq!(json_val["role"], "assistant");
-        assert_eq!(
-            json_val["content"], "thinking out loud",
-            "content must be present"
-        );
-        assert_eq!(
-            json_val["tool_calls"].as_array().unwrap().len(),
-            2,
-            "tool_calls must be present with 2 entries"
-        );
-
-        // Round-trip: deserialise back from the serialised value.
-        let reconstructed: AgentMessage = serde_json::from_value(json_val).unwrap();
-        if let AgentMessage::Assistant { content } = reconstructed {
-            assert_eq!(content.text.as_deref(), Some("thinking out loud"));
-            assert_eq!(content.tool_calls.len(), 2);
-            assert_eq!(content.tool_calls[0].id, "c1");
-            assert_eq!(content.tool_calls[1].name, "read_file");
-        } else {
-            panic!("expected AgentMessage::Assistant");
-        }
-    }
-
-    #[test]
-    fn with_replaced_tool_calls_preserves_text() {
-        use serde_json::json;
-        let original = AssistantContent {
-            text: Some("hello".into()),
-            tool_calls: vec![],
-        };
-        let calls = vec![ToolCall {
-            id: "c1".into(),
-            name: "search".into(),
-            arguments: json!({}),
-        }];
-        let result = original.with_replaced_tool_calls(calls);
-        assert_eq!(result.text.as_deref(), Some("hello"));
-        assert_eq!(result.tool_calls.len(), 1);
-        assert_eq!(result.tool_calls[0].id, "c1");
-    }
-
-    #[test]
-    fn with_replaced_tool_calls_replaces_existing() {
-        use serde_json::json;
-        let original = AssistantContent {
-            text: Some("thinking".into()),
-            tool_calls: vec![ToolCall {
-                id: "old".into(),
-                name: "old_tool".into(),
-                arguments: json!({}),
-            }],
-        };
-        let new_calls = vec![ToolCall {
-            id: "new".into(),
-            name: "new_tool".into(),
-            arguments: json!({"key": "val"}),
-        }];
-        let result = original.with_replaced_tool_calls(new_calls);
-        assert_eq!(result.text.as_deref(), Some("thinking"));
-        assert_eq!(result.tool_calls.len(), 1);
-        assert_eq!(result.tool_calls[0].name, "new_tool");
-    }
-
-    #[test]
-    fn with_replaced_tool_calls_no_text() {
-        use serde_json::json;
-        let original = AssistantContent {
-            text: None,
-            tool_calls: vec![ToolCall {
-                id: "old".into(),
-                name: "old".into(),
-                arguments: json!({}),
-            }],
-        };
-        let new_calls = vec![ToolCall {
-            id: "new".into(),
-            name: "new".into(),
-            arguments: json!({}),
-        }];
-        let result = original.with_replaced_tool_calls(new_calls);
-        assert!(result.text.is_none());
-        assert_eq!(result.tool_calls.len(), 1);
-        assert_eq!(result.tool_calls[0].id, "new");
-    }
-}
+#[path = "messages_tests.rs"]
+mod messages_tests;

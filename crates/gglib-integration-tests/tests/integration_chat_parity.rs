@@ -74,6 +74,7 @@ async fn test_save_and_list_messages() {
             role: MessageRole::User,
             content: "Hello, how are you?".to_string(),
             metadata: None,
+            images: Vec::new(),
         })
         .await
         .expect("Failed to save user message");
@@ -85,6 +86,7 @@ async fn test_save_and_list_messages() {
             role: MessageRole::Assistant,
             content: "I'm doing well, thank you!".to_string(),
             metadata: None,
+            images: Vec::new(),
         })
         .await
         .expect("Failed to save assistant message");
@@ -180,6 +182,7 @@ async fn test_delete_conversation_cascades() {
         role: MessageRole::User,
         content: "Test message".to_string(),
         metadata: None,
+        images: Vec::new(),
     })
     .await
     .expect("Failed to save message");

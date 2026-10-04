@@ -1,22 +1,21 @@
-//! Restoring a prior session's settings, and showing the user where they left
-//! off.
+//! Restoring a prior session's settings.
 //!
-//! Both halves of "resuming feels like continuing": the saved
-//! [`ConversationSettings`] fill in whatever this invocation did not state,
-//! and the jogger reprints the tail of the conversation so the first new turn
-//! has visible context. Split from `mod.rs`, which orchestrates a session —
-//! merging stored settings and formatting a recap are a different job, and the
-//! file had reached its size budget. What a new session saves for a later
-//! resume is built here too, so the two sides are read together. Which
-//! machine a resume goes back to, and what it saves, is `resume_machine`'s.
+//! The saved [`ConversationSettings`] fill in whatever this invocation did
+//! not state. Split from `mod.rs`, which orchestrates a session — merging
+//! stored settings is a different job, and the file had reached its size
+//! budget. What a new session saves for a later resume is built here too,
+//! with the conversation it saves it on, so the two sides are read together.
+//! Which machine a resume goes back to, and what it saves, is
+//! `resume_machine`'s; what a resume reprints is `memory_jogger`'s.
 
 use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
 
+use super::persistence::Conversation;
+use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::inference::chat::ChatArgs;
 use crate::handlers::inference::profile_selection::warn_profile_gone;
-use crate::presentation::style;
 use crate::target::{Target, TurnModel};
 
 #[path = "resume_machine.rs"]
@@ -154,39 +153,29 @@ pub(crate) fn apply_saved_settings(
     merged
 }
 
-/// Print the last user/assistant exchange as a memory jogger when resuming.
-pub(crate) fn print_memory_jogger(db_messages: &[gglib_core::domain::chat::Message], title: &str) {
-    use gglib_core::domain::chat::MessageRole;
+/// Create a new conversation for a fresh session on `turn`'s model.
+pub(super) async fn new_conversation<'a>(
+    ctx: &'a CliContext,
+    args: &ChatArgs,
+    profile: Option<&InferenceProfile>,
+    turn: &TurnModel,
+) -> Option<Conversation<'a>> {
+    let settings = session_settings(args, profile, turn);
 
-    println!("\n{}Resuming: {}{}\n", style::INFO, title, style::RESET);
-
-    // Find last user message and last assistant message
-    let last_user = db_messages
-        .iter()
-        .rev()
-        .find(|m| m.role == MessageRole::User);
-    let last_assistant = db_messages
-        .iter()
-        .rev()
-        .find(|m| m.role == MessageRole::Assistant);
-
-    if let Some(user_msg) = last_user {
-        let content = if user_msg.content.len() > 200 {
-            format!("{}…", &user_msg.content[..200])
-        } else {
-            user_msg.content.clone()
-        };
-        println!("{}  You: {}{}", style::DIM, content, style::RESET);
+    match Conversation::create(
+        ctx.app.chat_history(),
+        args.system_prompt.clone(),
+        None,
+        Some(settings),
+    )
+    .await
+    {
+        Ok(conv) => Some(conv),
+        Err(e) => {
+            tracing::warn!("failed to create agent conversation: {e}");
+            None
+        }
     }
-    if let Some(asst_msg) = last_assistant {
-        let content = if asst_msg.content.len() > 200 {
-            format!("{}…", &asst_msg.content[..200])
-        } else {
-            asst_msg.content.clone()
-        };
-        println!("{}  Assistant: {}{}", style::DIM, content, style::RESET);
-    }
-    println!();
 }
 
 #[cfg(test)]

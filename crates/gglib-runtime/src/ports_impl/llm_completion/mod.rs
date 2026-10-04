@@ -11,13 +11,14 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    ports::{LlmCompletionPort, RetryObserver, UsageSink},
+    ports::{AttachmentStore, LlmCompletionPort, RetryObserver, UsageSink},
     request_pipeline::{self, ModelContext, SamplingLayers},
     retry::RetryPolicy,
 };
 
 mod body;
 mod far_machine;
+mod images;
 mod retry;
 mod stream;
 mod writing_time;
@@ -63,6 +64,9 @@ pub struct LlmCompletionAdapter {
     /// adapter takes part in: the struct derives none, and neither does that
     /// one.
     far_machine: Option<FarMachine>,
+    /// Where the images a message names by id are read from (`images.rs`).
+    /// `None` for a caller whose messages carry none.
+    attachments: Option<Arc<dyn AttachmentStore>>,
     /// The caller's own sampling parameters — the top layer of the hierarchy,
     /// equivalent to what an external client sends the proxy. Written into the
     /// body by [`body::build_chat_body`] and read back out by
@@ -167,8 +171,10 @@ impl LlmCompletionAdapter {
         &self,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
+        images: &images::ImageUrls,
     ) -> Result<serde_json::Value> {
-        let mut body = body::build_chat_body(&self.model, messages, tools, self.sampling.as_ref());
+        let sampling = self.sampling.as_ref();
+        let mut body = body::build_chat_body(&self.model, messages, tools, sampling, images);
 
         // Written before the pipeline runs so the shaping stages read it
         // exactly as they would an external client's tool_choice — and only on
@@ -252,7 +258,10 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         // Shaped once, outside the retry loop: the pipeline runs truncation and
         // logs what it trimmed, and neither should repeat per attempt. The body
         // is deterministic, so every attempt sends identical bytes.
-        let body = self.shaped_body(messages, tools)?;
+        // Before it, each image the messages name is read from the store: a
+        // refusal here (an id not stored, too many bytes) sends nothing.
+        let images = images::resolve(self.attachments.as_ref(), messages).await?;
+        let body = self.shaped_body(messages, tools, &images)?;
 
         // Each attempt's connect + first-byte phase is bounded by the send
         // timeout, and the whole sequence by the policy's own deadline, so a

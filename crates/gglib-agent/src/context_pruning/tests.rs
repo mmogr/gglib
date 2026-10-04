@@ -11,6 +11,7 @@ fn system(s: &str) -> AgentMessage {
 fn user(s: &str) -> AgentMessage {
     AgentMessage::User {
         content: s.to_owned(),
+        images: Vec::new(),
     }
 }
 fn assistant_text(s: &str) -> AgentMessage {

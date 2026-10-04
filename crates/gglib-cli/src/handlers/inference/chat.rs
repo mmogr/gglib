@@ -27,6 +27,8 @@ pub(crate) struct ChatArgs {
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,
     pub max_parallel: Option<usize>,
+    /// `--image`: the files attached to the first message.
+    pub images: Vec<std::path::PathBuf>,
     /// Mirror of the global `--verbose` / `-v` flag for agentic mode rendering.
     pub verbose: bool,
     /// Optional model-name override for llama-server routing.
@@ -61,3 +63,7 @@ mod tests {
         assert_send::<ChatArgs>();
     }
 }
+
+#[cfg(test)]
+#[path = "image_refusal_tests.rs"]
+mod image_refusal_tests;

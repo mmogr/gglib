@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{RetryObserver, UsageSink};
+use gglib_core::ports::{AttachmentStore, RetryObserver, UsageSink};
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
@@ -57,6 +57,7 @@ impl LlmCompletionAdapter {
             model: model.unwrap_or_default(),
             client,
             far_machine: None,
+            attachments: None,
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             stream_idle_timeout: gglib_proxy::STREAM_IDLE_TIMEOUT,
@@ -86,6 +87,18 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_far_machine(mut self, far_machine: Option<FarMachine>) -> Self {
         self.far_machine = far_machine.filter(|f| !f.key.trim().is_empty());
+        self
+    }
+
+    /// Read the images a message names from `store`.
+    ///
+    /// Every caller whose messages can carry an image passes the store: the
+    /// chat routes and the CLI. `None` (the default) is for one whose
+    /// messages are text alone, such as a benchmark; an image then ends the
+    /// request before it is sent.
+    #[must_use]
+    pub fn with_attachments(mut self, store: Option<Arc<dyn AttachmentStore>>) -> Self {
+        self.attachments = store;
         self
     }
 

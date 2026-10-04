@@ -11,7 +11,7 @@ use gglib_core::Repos;
 use gglib_core::services::AppCore;
 
 use crate::repositories::{
-    SqliteChatHistoryRepository, SqliteMcpRepository, SqliteModelRepository,
+    SqliteAttachmentStore, SqliteChatHistoryRepository, SqliteMcpRepository, SqliteModelRepository,
     SqliteSettingsRepository,
 };
 
@@ -31,7 +31,8 @@ impl CoreFactory {
             Arc::new(SqliteModelRepository::new(pool.clone())),
             Arc::new(SqliteSettingsRepository::new(pool.clone())),
             Arc::new(SqliteMcpRepository::new(pool.clone())),
-            Arc::new(SqliteChatHistoryRepository::new(pool)),
+            Arc::new(SqliteChatHistoryRepository::new(pool.clone())),
+            Arc::new(SqliteAttachmentStore::new(pool)),
         )
     }
 

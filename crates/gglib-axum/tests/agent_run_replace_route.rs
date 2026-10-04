@@ -44,6 +44,7 @@ async fn conversation(state: &gglib_axum::AppState) -> (i64, i64) {
         role,
         content: content.to_owned(),
         metadata: None,
+        images: Vec::new(),
     };
     let question = history
         .save_message(row(MessageRole::User, "Q"))

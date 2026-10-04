@@ -18,6 +18,7 @@ fn system_message_maps_correctly() {
 fn user_message_maps_correctly() {
     let msg = AgentMessage::User {
         content: "Hello".into(),
+        images: Vec::new(),
     };
     let out = to_new_message(&msg, 42);
     assert_eq!(out.role, MessageRole::User);
@@ -88,4 +89,35 @@ fn tool_message_maps_correctly() {
     assert_eq!(out.content, "file contents here");
     let meta = out.metadata.unwrap();
     assert_eq!(meta["tool_call_id"], "call_1");
+}
+
+#[test]
+fn a_user_message_keeps_its_images_and_no_other_row_has_any() {
+    use crate::domain::AttachmentId;
+
+    let images = vec![AttachmentId::of(b"b"), AttachmentId::of(b"a")];
+    let msg = AgentMessage::User {
+        content: "look".into(),
+        images: images.clone(),
+    };
+    assert_eq!(to_new_message(&msg, 42).images, images);
+
+    let others = [
+        AgentMessage::System {
+            content: "s".into(),
+        },
+        AgentMessage::Assistant {
+            content: AssistantContent {
+                text: Some("a".into()),
+                tool_calls: vec![],
+            },
+        },
+        AgentMessage::Tool {
+            tool_call_id: "call_1".into(),
+            content: "t".into(),
+        },
+    ];
+    for other in &others {
+        assert!(to_new_message(other, 42).images.is_empty());
+    }
 }

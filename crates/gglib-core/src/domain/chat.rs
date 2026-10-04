@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::agent::messages::AgentMessage;
 use super::agent::messages::AssistantContent;
 use super::agent::tool_types::ToolCall;
+use super::attachment::{AttachmentId, AttachmentInfo};
 use super::machine::ModelRef;
 
 /// A chat conversation.
@@ -49,13 +50,22 @@ pub struct Message {
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// The images the message carries, in order, without their bytes. Left
+    /// out of the JSON when there are none.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<Vec<AttachmentInfo>>", optional)
+    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<AttachmentInfo>,
 }
 
 impl Message {
     /// Convert a persisted message back into an [`AgentMessage`] for resume.
     ///
     /// Tool call metadata is faithfully restored from the JSON `"tool_calls"` key
-    /// (assistant messages) or `"tool_call_id"` key (tool messages).
+    /// (assistant messages) or `"tool_call_id"` key (tool messages). A user
+    /// message keeps its images, by id.
     #[must_use]
     pub fn to_agent_message(&self) -> AgentMessage {
         match self.role {
@@ -64,6 +74,7 @@ impl Message {
             },
             MessageRole::User => AgentMessage::User {
                 content: self.content.clone(),
+                images: self.images.iter().map(|image| image.id.clone()).collect(),
             },
             MessageRole::Assistant => {
                 let tool_calls: Vec<ToolCall> = self
@@ -160,6 +171,9 @@ pub struct NewMessage {
     pub content: String,
     /// Optional JSON metadata for tool usage, etc.
     pub metadata: Option<serde_json::Value>,
+    /// The images the message carries, by id, in order. Each must be in the
+    /// attachment store when the message is saved.
+    pub images: Vec<AttachmentId>,
 }
 
 /// Data for updating an existing conversation.
@@ -249,3 +263,7 @@ pub struct ConversationSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub no_tools: Option<bool>,
 }
+
+#[cfg(test)]
+#[path = "chat_tests.rs"]
+mod chat_tests;

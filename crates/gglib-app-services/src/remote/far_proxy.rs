@@ -26,6 +26,8 @@ use gglib_runtime::FarMachine;
 use super::paired_machine::FarCredentials;
 use crate::error::GuiError;
 
+#[path = "far_attachments.rs"]
+mod far_attachments;
 #[path = "far_read.rs"]
 mod far_read;
 pub use far_read::FarError;
@@ -194,8 +196,9 @@ impl FarProxy {
             .await
     }
 
-    /// `PUT /v1/runs/{run_id}?kind=agent` with `{conversation_id, content}`:
-    /// a turn on one of the far machine's chats, which it runs and saves.
+    /// `PUT /v1/runs/{run_id}?kind=agent` with `{conversation_id, content,
+    /// images}`: a turn on one of the far machine's chats, which it runs and
+    /// saves.
     ///
     /// # Errors
     ///

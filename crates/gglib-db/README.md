@@ -59,10 +59,12 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ```
 
 **Module Descriptions:**
+- **`daemon_startup.rs`** — What the daemon, and only the daemon, puts right when it starts: a benchmark run a crash left `running`, and stored images no message carries
 - **`database_file.rs`** — The database and its directory made private to this user before `SQLite` opens them
 - **`factory.rs`** — Database connection factory and pooling
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
+- **`setup_attachments.rs`** — The `attachments` table (an image's bytes under the SHA-256 of them) and `message_attachments` (the images each message carries, in order), and the sweep of images no message carries
 - **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, its indexes, and the one-time rebuild that stops it reusing ids
 - **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
 - **`repositories/`** — `SQLite` implementations of all repository ports
@@ -134,9 +136,14 @@ write to is refused instead: if `chat_messages` predates the `'tool'` role, setu
 fails and names the database file, leaving every conversation where it is. That
 branch used to DROP both chat tables — silently, at boot, on a substring match
 against a stored CREATE statement. Beyond reclaiming the removed `auto_tune`
-setting's row at setup, the one place this crate deletes rows on its own is the
-loop guard's log, which its writer prunes by age (90 days, today included) and
-by a row cap, whole days at a time.
+setting's row at setup, this crate deletes rows on its own in two places. The
+loop guard's log is pruned by its writer, by age (90 days, today included) and
+by a row cap, whole days at a time. A stored image no message carries, last
+stored more than a day ago, is deleted when the daemon starts, and only then.
+An image is stored before the message that names it is saved, and the CLI
+stores one in its own process and may then start the daemon, so an unlinked
+image must outlive both an open of the database and a daemon's start; storing
+the same image again starts its day again.
 
 **A model id is never reused.** `models.id` is `INTEGER PRIMARY KEY
 AUTOINCREMENT`, so removing a model never frees its id for the next one: an id

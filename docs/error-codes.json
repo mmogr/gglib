@@ -51,6 +51,30 @@
       "meaning": "The request body is over the 32 MiB limit."
     },
     {
+      "code": "image_too_large",
+      "type": "invalid_request_error",
+      "status": 413,
+      "meaning": "An uploaded image is over the 8 MiB one image may be."
+    },
+    {
+      "code": "unsupported_image",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "An uploaded file is not a PNG or a JPEG whose size can be read."
+    },
+    {
+      "code": "attachment_not_found",
+      "type": "invalid_request_error",
+      "status": null,
+      "meaning": "A message names an image id that is not stored (400), or an image was asked for by an id that is not stored (404); upload the image again."
+    },
+    {
+      "code": "request_images_too_large",
+      "type": null,
+      "status": null,
+      "meaning": "The images of one chat are over the 16 MiB one request to a model may carry; the request is not sent, and the run's last error event says so."
+    },
+    {
       "code": "upstream_error",
       "type": null,
       "status": null,

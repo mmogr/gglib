@@ -6,7 +6,9 @@
 use crate::ports::Repos;
 use std::sync::Arc;
 
-use super::{ChatHistoryService, ModelService, ModelVerificationService, SettingsService};
+use super::{
+    AttachmentService, ChatHistoryService, ModelService, ModelVerificationService, SettingsService,
+};
 
 /// The core application facade.
 ///
@@ -27,6 +29,7 @@ pub struct AppCore {
     models: ModelService,
     settings: SettingsService,
     chat_history: ChatHistoryService,
+    attachments: AttachmentService,
     verification: Option<Arc<ModelVerificationService>>,
 }
 
@@ -37,6 +40,7 @@ impl AppCore {
             models: ModelService::new(repos.models),
             settings: SettingsService::new(repos.settings),
             chat_history: ChatHistoryService::new(repos.chat_history),
+            attachments: AttachmentService::new(repos.attachments),
             verification: None,
         }
     }
@@ -65,6 +69,11 @@ impl AppCore {
         &self.chat_history
     }
 
+    /// Access the attachment service.
+    pub const fn attachments(&self) -> &AttachmentService {
+        &self.attachments
+    }
+
     /// Access the verification service (if available).
     pub fn verification(&self) -> Option<&ModelVerificationService> {
         self.verification.as_deref()
@@ -78,10 +87,11 @@ mod tests {
         Conversation, ConversationUpdate, Message, NewConversation, NewMessage,
     };
     use crate::domain::mcp::{McpServer, NewMcpServer};
-    use crate::domain::{Model, NewModel};
+    use crate::domain::{AttachmentBlob, AttachmentId, AttachmentInfo, Model, NewModel};
     use crate::ports::{
-        ChatHistoryError, ChatHistoryRepository, McpRepositoryError, McpServerRepository,
-        ModelRepository, RepositoryError, SettingsRepository,
+        AttachmentError, AttachmentStore, ChatHistoryError, ChatHistoryRepository,
+        McpRepositoryError, McpServerRepository, ModelRepository, RepositoryError,
+        SettingsRepository,
     };
     use crate::settings::Settings;
     use async_trait::async_trait;
@@ -214,6 +224,27 @@ mod tests {
         }
     }
 
+    struct MockAttachmentStore;
+
+    #[async_trait]
+    impl AttachmentStore for MockAttachmentStore {
+        async fn put(&self, _info: &AttachmentInfo, _bytes: &[u8]) -> Result<(), AttachmentError> {
+            Ok(())
+        }
+        async fn info(
+            &self,
+            _id: &AttachmentId,
+        ) -> Result<Option<AttachmentInfo>, AttachmentError> {
+            Ok(None)
+        }
+        async fn blob(
+            &self,
+            _id: &AttachmentId,
+        ) -> Result<Option<AttachmentBlob>, AttachmentError> {
+            Ok(None)
+        }
+    }
+
     struct MockSettingsRepo {
         settings: Mutex<Settings>,
     }
@@ -244,6 +275,7 @@ mod tests {
             settings: Arc::new(MockSettingsRepo::new()),
             mcp_servers: Arc::new(MockMcpRepo),
             chat_history: Arc::new(MockChatHistoryRepo),
+            attachments: Arc::new(MockAttachmentStore),
         };
 
         let core = AppCore::new(repos);

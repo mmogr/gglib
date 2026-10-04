@@ -4,7 +4,8 @@
  * the page never does. What comes back is shown, never kept.
  *
  * A turn sends only its text: the far machine rebuilds the history from its
- * own record, runs the reply and saves it there.
+ * own record, runs the reply and saves it there. The body has room for
+ * images by id (`RemoteTurnBody.images`), and this page names none.
  */
 
 import type { HubChat } from '../../../types/generated/HubChat';

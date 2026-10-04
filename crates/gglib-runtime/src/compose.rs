@@ -30,8 +30,8 @@ use std::sync::Arc;
 use gglib_agent::AgentLoop;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{
-    AgentGuardReporter, AgentLoopPort, LlmCompletionPort, RetryObserver, ToolExecutorPort,
-    UsageSink,
+    AgentGuardReporter, AgentLoopPort, AttachmentStore, LlmCompletionPort, RetryObserver,
+    ToolExecutorPort, UsageSink,
 };
 use gglib_core::request_pipeline::ModelContext;
 use gglib_core::retry::RetryPolicy;
@@ -80,6 +80,8 @@ use crate::{FarMachine, LlmCompletionAdapter};
 ///   and the fingerprint that names whose port it is, so a refusal of that key
 ///   can say which machine refused it. `None` for a llama-server on loopback,
 ///   which demands nothing and is not another machine.
+/// * `attachments` — where the images a message names by id are read from,
+///   just before each request is sent.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::implicit_hasher,
@@ -97,6 +99,7 @@ pub fn compose_agent_loop(
     retry_observer: Option<Arc<dyn RetryObserver>>,
     sampling: Option<InferenceConfig>,
     far_machine: Option<FarMachine>,
+    attachments: Arc<dyn AttachmentStore>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -113,6 +116,7 @@ pub fn compose_agent_loop(
         // The GUI has no per-turn retry override; the environment defaults apply.
         None,
         far_machine,
+        attachments,
     )
 }
 
@@ -125,6 +129,9 @@ pub fn compose_agent_loop(
 /// CLI's entry point, and `gglib chat` runs out of process, so the ledger the
 /// GUI reports to is not something it can reach (#1091). `None` makes every
 /// recording a no-op.
+///
+/// `attachments` is the store the CLI's own images were put in: the CLI
+/// opens the database itself.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::implicit_hasher,
@@ -143,6 +150,7 @@ pub fn compose_agent_loop_with_sampling(
     guard: Option<AgentGuardReporter>,
     retry_policy: Option<RetryPolicy>,
     far_machine: Option<FarMachine>,
+    attachments: Arc<dyn AttachmentStore>,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -160,6 +168,7 @@ pub fn compose_agent_loop_with_sampling(
         None,
         retry_policy,
         far_machine,
+        attachments,
     )
 }
 
@@ -178,10 +187,12 @@ fn compose_agent_loop_inner(
     retry_observer: Option<Arc<dyn RetryObserver>>,
     retry_policy: Option<RetryPolicy>,
     far_machine: Option<FarMachine>,
+    attachments: Arc<dyn AttachmentStore>,
 ) -> Arc<dyn AgentLoopPort> {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_far_machine(far_machine)
+            .with_attachments(Some(attachments))
             .with_sampling(sampling)
             .with_model_context(model_context)
             .with_usage_sink(usage_sink)

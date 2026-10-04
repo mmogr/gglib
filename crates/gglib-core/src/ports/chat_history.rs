@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
+use super::attachment_store::AttachmentError;
 use crate::domain::chat::{Conversation, ConversationUpdate, Message, NewConversation, NewMessage};
 
 /// Errors that can occur in chat history operations.
@@ -22,6 +23,11 @@ pub enum ChatHistoryError {
 
     #[error("Database error: {0}")]
     Database(String),
+
+    /// A message names an image the attachment store lacks
+    /// ([`AttachmentError::NotFound`]). Nothing was saved.
+    #[error(transparent)]
+    Attachment(#[from] AttachmentError),
 }
 
 /// Port for chat history persistence operations.
@@ -47,16 +53,22 @@ pub trait ChatHistoryRepository: Send + Sync {
         update: ConversationUpdate,
     ) -> Result<(), ChatHistoryError>;
 
-    /// Delete a conversation and all its messages.
+    /// Delete a conversation and all its messages. The links from those
+    /// messages to their images go with them; the images stay in the store.
     async fn delete_conversation(&self, id: i64) -> Result<(), ChatHistoryError>;
 
     /// Get conversation count.
     async fn get_conversation_count(&self) -> Result<i64, ChatHistoryError>;
 
-    /// Get all messages for a conversation, ordered chronologically.
+    /// Get all messages for a conversation, ordered chronologically, each
+    /// with the images it carries, in order, without their bytes.
     async fn get_messages(&self, conversation_id: i64) -> Result<Vec<Message>, ChatHistoryError>;
 
-    /// Save a new message and update conversation timestamp.
+    /// Save a new message, with a link to each image it carries, and update
+    /// the conversation timestamp: one transaction.
+    ///
+    /// `Attachment(NotFound)` when the store lacks one of `msg.images`;
+    /// nothing is saved. So it is of every method here that saves a message.
     async fn save_message(&self, msg: NewMessage) -> Result<i64, ChatHistoryError>;
 
     /// Save every message, in order, or none of them: one transaction, so a

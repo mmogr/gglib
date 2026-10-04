@@ -19,8 +19,9 @@ use gglib_core::ports::{
     AppEventEmitter, HfClientPort, LoopGuardTripLog, ModelCatalogPort, ModelRuntimePort,
 };
 use gglib_core::services::AppCore;
-use gglib_db::cleanup_zombie_benchmark_runs;
-use gglib_db::{LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
+use gglib_db::{
+    LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, repair_at_daemon_start,
+};
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 
@@ -155,17 +156,10 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         tracing::warn!("Failed to bootstrap model capabilities: {}", e);
     }
 
-    // 3b. Zombie-run cleanup — daemon-only, runs once at startup.
-    //
-    // Any benchmark_run left in status='running' from a prior crash is
-    // immediately corrected. This hook lives here (not in the CLI) because only
-    // the daemon can safely assume no other process owns a 'running' row: the
-    // daemon is the sole long-lived process with a stable DB connection. The
-    // CLI only performs this cleanup when it has confirmed (via health-ping)
-    // that no daemon is currently active — see Phase 3b implementation notes.
-    if let Err(e) = cleanup_zombie_benchmark_runs(&pool).await {
-        tracing::warn!("Failed to clean up zombie benchmark runs on startup: {e}");
-    }
+    // 3b. What only the daemon may put right in the database, once, at
+    //     startup: this is the one long-lived process, and the CLI opens the
+    //     same database on every invocation.
+    repair_at_daemon_start(&pool).await;
 
     // 4. MCP service.
     let mcp = Arc::new(McpService::new(repos.mcp_servers.clone()));
@@ -297,3 +291,7 @@ pub async fn start_server(config: ServerConfig) -> Result<()> {
     axum::serve(listener, app).await?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "bootstrap_tests.rs"]
+mod bootstrap_tests;

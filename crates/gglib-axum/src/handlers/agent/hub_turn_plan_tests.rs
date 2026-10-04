@@ -17,6 +17,7 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     let plan = plan(&state, turn(id, "second")).await.unwrap();
     let user = |c: &str| AgentMessage::User {
         content: c.to_owned(),
+        images: Vec::new(),
     };
     let wire: Vec<String> = plan
         .chat
@@ -103,6 +104,7 @@ async fn a_saved_system_row_is_left_out_of_the_history() {
             role: MessageRole::System,
             content: "OLD-PROMPT".to_owned(),
             metadata: None,
+            images: Vec::new(),
         })
         .await
         .unwrap();

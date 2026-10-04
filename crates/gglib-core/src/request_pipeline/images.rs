@@ -34,6 +34,17 @@ pub const IMAGE_TOKEN_PX: u32 = 32;
 /// is tokenized.
 pub const MAX_IMAGE_TOKENS: usize = 4096;
 
+/// The most bytes one stored image may be: 8 MiB.
+pub const MAX_IMAGE_BYTES: usize = 8 << 20;
+
+/// The most raw image bytes one request to a model may carry, over all of
+/// its messages: 16 MiB.
+///
+/// As base64 that is under 22 MiB, which with a chat's text must fit under
+/// [`crate::contracts::http::MAX_BODY_BYTES`] (32 MiB) when the request goes
+/// on to a far proxy.
+pub const MAX_REQUEST_IMAGE_BYTES: usize = 16 << 20;
+
 /// The prompt tokens an image of `width` by `height` pixels is estimated to
 /// take: one per [`IMAGE_TOKEN_PX`] square it touches, at least 1 and at most
 /// [`MAX_IMAGE_TOKENS`].

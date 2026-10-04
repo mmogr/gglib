@@ -1,14 +1,17 @@
 /**
- * Wire-format types and conversion for an agent run's history (`AgentRunRequest.messages`).
+ * Conversion to the wire form of an agent run's history (`AgentRunRequest.messages`).
  *
  * The backend expects a flat `AgentMessage[]` (OpenAI multi-turn format) while
  * the UI stores messages as `GglibMessage[]` with rich content-part arrays.
- * {@link convertToWireMessages} performs that translation.
+ * {@link convertToWireMessages} performs that translation. The wire types are
+ * the generated ones, so a change to the Rust message fails the build here.
  *
  * @module wireMessages
  */
 
 import { appLogger } from '../../services/platform';
+import type { AgentMessage } from '../../types/generated/AgentMessage';
+import type { ToolCall } from '../../types/generated/ToolCall';
 import { extractParts, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
 
 // ---------------------------------------------------------------------------
@@ -18,23 +21,6 @@ import { extractParts, type GglibMessage, type GglibToolCallPart, type TextPart 
 /** Narrow an unknown value to a plain JSON-object args record. */
 function isObjectArgs(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-// ---------------------------------------------------------------------------
-// Wire types (backend request body)
-// ---------------------------------------------------------------------------
-
-export type AgentWireMessage =
-  | { role: 'system';    content: string }
-  | { role: 'user';      content: string }
-  | { role: 'assistant'; content: string | null; tool_calls?: AgentWireToolCall[] }
-  | { role: 'tool';      tool_call_id: string; content: string };
-
-export interface AgentWireToolCall {
-  id: string;
-  name: string;
-  /** Must be a JSON object — OpenAI tool arguments are always objects. */
-  arguments: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,8 +35,8 @@ export interface AgentWireToolCall {
  * the corresponding `{ role: "tool", … }` entries are emitted immediately
  * after the assistant entry — matching OpenAI's multi-turn format.
  */
-export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessage[] {
-  const result: AgentWireMessage[] = [];
+export function convertToWireMessages(messages: GglibMessage[]): AgentMessage[] {
+  const result: AgentMessage[] = [];
 
   for (const msg of messages) {
     if (msg.role === 'system' || msg.role === 'user') {
@@ -100,7 +86,7 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
         appLogger.debug('hook.runtime', 'convertToWireMessages: dropped in-flight tool calls (no result yet)', { droppedCount });
       }
 
-      const toolCalls: AgentWireToolCall[] = completedToolCallParts.map(p => ({
+      const toolCalls: ToolCall[] = completedToolCallParts.map(p => ({
         id: p.toolCallId,
         name: p.toolName,
         // `args` is always populated by addToolCallPart; the guard is a
@@ -108,9 +94,10 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
         arguments: isObjectArgs(p.args) ? p.args : {},
       }));
 
+      // A key with nothing to say is left out, as the backend writes it.
       result.push({
         role: 'assistant',
-        content: text || null,
+        ...(text && { content: text }),
         ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
       });
 

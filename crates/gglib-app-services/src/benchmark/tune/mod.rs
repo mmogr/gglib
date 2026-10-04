@@ -707,6 +707,7 @@ where
     }
     messages.push(AgentMessage::User {
         content: task.user_prompt.clone(),
+        images: Vec::new(),
     });
 
     let executor = ScoringToolExecutorPort::new(task.tools.clone());

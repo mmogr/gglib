@@ -1,15 +1,17 @@
 //! The hub's chats, read for a paired device: `HubChatsPort` over the chat
 //! history, with each chat's live run from the daemon's runs.
 //!
-//! Nothing here writes or copies a row, and nothing logs a title or a row:
-//! only ids and counts.
+//! Nothing here writes or copies a row, and nothing logs a title, a row or
+//! an image: only ids and counts. An image a device sends is stored by the
+//! one ingest every surface uses.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use gglib_core::domain::hub_chats::{HubChat, HubChatList, HubChatOpen};
-use gglib_core::ports::{HubChatsError, HubChatsPort};
+use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentUpload};
+use gglib_core::ports::{AttachmentError, HubChatsError, HubChatsPort};
 use gglib_core::services::AppCore;
 
 use crate::runs::RunRegistry;
@@ -94,8 +96,19 @@ impl HubChatsPort for HubChats {
             messages,
         })
     }
+
+    async fn attach(&self, bytes: &[u8]) -> Result<AttachmentUpload, AttachmentError> {
+        self.core.attachments().ingest(bytes).await
+    }
+
+    async fn attachment(&self, id: &AttachmentId) -> Result<AttachmentBlob, AttachmentError> {
+        self.core.attachments().blob(id).await
+    }
 }
 
+#[cfg(test)]
+#[path = "hub_chats_images_tests.rs"]
+mod hub_chats_images_tests;
 #[cfg(test)]
 #[path = "hub_chats_tests.rs"]
 mod hub_chats_tests;

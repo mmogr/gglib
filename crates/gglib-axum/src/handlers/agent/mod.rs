@@ -4,6 +4,7 @@ mod dto;
 mod guard;
 mod hub_model;
 pub(crate) mod hub_turn;
+mod image_gate;
 mod launch;
 mod remote_upstream;
 mod retry_notice;
@@ -149,3 +150,6 @@ mod run_replace_tests;
 #[cfg(test)]
 #[path = "run_tests.rs"]
 mod run_tests;
+#[cfg(test)]
+#[path = "transcript_images_tests.rs"]
+mod transcript_images_tests;

@@ -16,10 +16,13 @@ use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 
 use crate::bootstrap::CliContext;
+use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::drain::drain_event_stream;
+use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
+use crate::handlers::agent_chat::sight::Sight;
 use crate::handlers::inference::shared::resolve_max_iterations;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use crate::target::Target;
@@ -48,6 +51,8 @@ pub(crate) struct QuestionArgs {
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,
     pub max_parallel: Option<usize>,
+    /// `--image`: the files attached to the question.
+    pub images: Vec<std::path::PathBuf>,
     pub observation_tools: Vec<String>,
     pub max_observation_steps: Option<usize>,
     /// `--show-prompt`: echo the assembled user message before sending.
@@ -77,6 +82,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         tools,
         tool_timeout_ms,
         max_parallel,
+        images,
         observation_tools,
         max_observation_steps,
         show_prompt,
@@ -86,6 +92,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         profile,
         context,
     } = args;
+    // A file that cannot be attached ends the command before any model lookup.
+    let (attachments, mut receipts) = (ctx.app.attachments(), io::stderr());
+    let mut images = TurnImages::attach(attachments, &images, quiet, &mut receipts).await?;
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
     let params = AgentSessionParams {
@@ -164,6 +173,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         Some(inference_config)
     };
 
+    let sight = Sight::of_session(ctx, &params).await;
+    images.judge(sight, &[]).await?;
     let agent = compose(
         ctx,
         &params,
@@ -191,8 +202,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     // Build messages
+    let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
     let mut messages = vec![AgentMessage::System {
-        content: format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display()),
+        content: system_prompt.clone(),
     }];
 
     // Construct user message with optional piped/file context
@@ -200,6 +212,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         super::question_input::build_user_message(&question, file.as_deref(), show_prompt)?;
     messages.push(AgentMessage::User {
         content: user_content,
+        images: images.take(),
     });
 
     // Run the agent loop
@@ -240,17 +253,12 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         && let Some(ref history) = history
         && let Some(turn) = &params.turn
     {
-        let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
-        let settings = crate::conversation_settings::ConversationSettingsBuilder::new(
-            &SamplingArgs::default(),
-            &crate::shared_args::ContextArgs::default(),
-        )
-        .model_name(turn.name.clone())
-        .model(turn.model_ref.clone())
-        .profile(turn.far_profile.clone())
-        .tools(tools.clone(), false)
-        .agent_params(max_iterations, tool_timeout_ms, max_parallel)
-        .build();
+        let settings =
+            ConversationSettingsBuilder::new(&SamplingArgs::default(), &ContextArgs::default())
+                .turn(turn)
+                .tools(tools.clone(), false)
+                .agent_params(max_iterations, tool_timeout_ms, max_parallel)
+                .build();
         match Conversation::create(
             ctx.app.chat_history(),
             Some(system_prompt),
@@ -279,7 +287,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         if let Some(history) = history
             && super::question_input::ask_continue()?
         {
-            run_repl_with_history(agent, history, config, verbose, persistence).await?;
+            run_repl_with_history(agent, history, config, verbose, persistence, images).await?;
         }
     } else if !completed {
         return Err(anyhow!("agent did not produce a final answer"));

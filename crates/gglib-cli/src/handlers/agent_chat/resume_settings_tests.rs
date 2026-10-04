@@ -30,6 +30,7 @@ pub(super) fn chat_args() -> ChatArgs {
         tools: Vec::new(),
         tool_timeout_ms: None,
         max_parallel: None,
+        images: Vec::new(),
         verbose: false,
         model: None,
         profile: None,

@@ -43,6 +43,7 @@ async fn a_busy_far_machine_says_when_to_come_back() {
         "chat-1",
         RemoteTurnBody {
             content: "x".into(),
+            images: Vec::new(),
         },
     )
     .await

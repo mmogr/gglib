@@ -10,6 +10,8 @@ use gglib_core::{
     ports::chat_history::{ChatHistoryError, ChatHistoryRepository},
 };
 
+use super::message_rows;
+
 /// `SQLite` implementation of the `ChatHistoryRepository` trait.
 ///
 /// This struct holds a connection pool and implements all CRUD operations
@@ -185,20 +187,23 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         .await
         .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
 
+        let mut images = message_rows::images_by_message(&self.pool, conversation_id).await?;
         let messages = rows
             .iter()
             .map(|row| {
+                let id: i64 = row.get("id");
                 let role_str: String = row.get("role");
                 let role = MessageRole::parse(&role_str).unwrap_or(MessageRole::User);
                 let metadata_str: Option<String> = row.get("metadata");
                 let metadata = metadata_str.and_then(|s| serde_json::from_str(&s).ok());
                 Message {
-                    id: row.get("id"),
+                    id,
                     conversation_id: row.get("conversation_id"),
                     role,
                     content: row.get("content"),
                     created_at: row.get("created_at"),
                     metadata,
+                    images: images.remove(&id).unwrap_or_default(),
                 }
             })
             .collect();
@@ -207,33 +212,12 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
     }
 
     async fn save_message(&self, msg: NewMessage) -> Result<i64, ChatHistoryError> {
-        // Serialize metadata to JSON string if present
-        let metadata_str = msg
-            .metadata
-            .as_ref()
-            .map(|m| serde_json::to_string(m).unwrap_or_default());
-
-        // Insert message
-        let result = sqlx::query(
-            "INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)",
-        )
-        .bind(msg.conversation_id)
-        .bind(msg.role.as_str())
-        .bind(&msg.content)
-        .bind(&metadata_str)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        let message_id = result.last_insert_rowid();
-
-        // Update conversation timestamp
-        sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
-            .bind(msg.conversation_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
+        let db = |e: sqlx::Error| ChatHistoryError::Database(e.to_string());
+        // Dropped before `commit`, the transaction rolls back.
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        let message_id = message_rows::insert(&mut tx, &msg).await?;
+        message_rows::touch(&mut tx, msg.conversation_id).await?;
+        tx.commit().await.map_err(db)?;
         Ok(message_id)
     }
 
@@ -243,28 +227,11 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         let mut tx = self.pool.begin().await.map_err(db)?;
         let mut touched = std::collections::BTreeSet::new();
         for msg in &msgs {
-            let metadata = msg
-                .metadata
-                .as_ref()
-                .map(|m| serde_json::to_string(m).unwrap_or_default());
-            sqlx::query(
-                "INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)",
-            )
-            .bind(msg.conversation_id)
-            .bind(msg.role.as_str())
-            .bind(&msg.content)
-            .bind(&metadata)
-            .execute(&mut *tx)
-            .await
-            .map_err(db)?;
+            message_rows::insert(&mut tx, msg).await?;
             touched.insert(msg.conversation_id);
         }
         for conversation_id in touched {
-            sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
-                .bind(conversation_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(db)?;
+            message_rows::touch(&mut tx, conversation_id).await?;
         }
         tx.commit().await.map_err(db)
     }
@@ -289,26 +256,8 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         if deleted.rows_affected() == 0 {
             return Err(ChatHistoryError::MessageNotFound(from));
         }
-        let metadata = msg
-            .metadata
-            .as_ref()
-            .map(|m| serde_json::to_string(m).unwrap_or_default());
-        let id = sqlx::query(
-            "INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)",
-        )
-        .bind(msg.conversation_id)
-        .bind(msg.role.as_str())
-        .bind(&msg.content)
-        .bind(&metadata)
-        .execute(&mut *tx)
-        .await
-        .map_err(db)?
-        .last_insert_rowid();
-        sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
-            .bind(msg.conversation_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(db)?;
+        let id = message_rows::insert(&mut tx, &msg).await?;
+        message_rows::touch(&mut tx, msg.conversation_id).await?;
         tx.commit().await.map_err(db)?;
         Ok(id)
     }
@@ -393,3 +342,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 #[cfg(test)]
 #[path = "sqlite_chat_history_repository_tests.rs"]
 mod sqlite_chat_history_repository_tests;
+
+#[cfg(test)]
+#[path = "sqlite_chat_history_images_tests.rs"]
+mod sqlite_chat_history_images_tests;

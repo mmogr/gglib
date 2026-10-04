@@ -58,9 +58,7 @@ async fn test_max_iterations_reached() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "go".into(),
-            }],
+            vec![AgentMessage::user("go")],
             common::for_test(|c| {
                 c.max_iterations = 3;
                 c.max_repeated_batch_steps = None; // disable loop detection for this test
@@ -120,9 +118,7 @@ async fn test_changing_tool_results_do_not_trip_the_loop_guard() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "watch the build".into(),
-            }],
+            vec![AgentMessage::user("watch the build")],
             common::for_test(|c| {
                 c.max_iterations = 12;
                 c.max_repeated_batch_steps = Some(2);
@@ -166,9 +162,7 @@ async fn test_changing_results_still_stop_at_the_read_only_allowance() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "go".into(),
-            }],
+            vec![AgentMessage::user("go")],
             common::for_test(|c| {
                 c.max_iterations = 30;
                 c.max_repeated_batch_steps = Some(2);
@@ -211,9 +205,7 @@ async fn test_loop_detection() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "go".into(),
-            }],
+            vec![AgentMessage::user("go")],
             common::for_test(|c| {
                 c.max_iterations = 10;
                 c.max_repeated_batch_steps = Some(2);
@@ -285,9 +277,7 @@ async fn test_narration_alongside_tool_calls_is_not_stagnation() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "say something new".into(),
-            }],
+            vec![AgentMessage::user("say something new")],
             common::for_test(|c| {
                 c.max_stagnation_steps = Some(2);
                 c.max_repeated_batch_steps = None;
@@ -369,9 +359,7 @@ async fn test_too_many_tool_calls_integration() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "search for things".into(),
-            }],
+            vec![AgentMessage::user("search for things")],
             common::for_test(|c| {
                 c.max_parallel_tools = 2; // 3 calls > 2 → soft-recovered
                 c.max_repeated_batch_steps = None;
@@ -461,9 +449,7 @@ async fn test_stagnation_fires_before_finalize() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "go".into(),
-            }],
+            vec![AgentMessage::user("go")],
             common::for_test(|c| {
                 c.max_stagnation_steps = Some(0);
                 c.max_repeated_batch_steps = None;
@@ -532,9 +518,7 @@ async fn test_observation_tool_uses_higher_threshold() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "browse".into(),
-            }],
+            vec![AgentMessage::user("browse")],
             common::for_test(|c| {
                 c.max_iterations = 10;
                 c.max_repeated_batch_steps = Some(2);
@@ -588,9 +572,7 @@ async fn test_observation_tool_fires_at_higher_threshold() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "browse".into(),
-            }],
+            vec![AgentMessage::user("browse")],
             common::for_test(|c| {
                 c.max_iterations = 20;
                 c.max_repeated_batch_steps = Some(2);
@@ -660,9 +642,7 @@ async fn test_mixed_batch_uses_standard_threshold() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "go".into(),
-            }],
+            vec![AgentMessage::user("go")],
             common::for_test(|c| {
                 c.max_iterations = 20;
                 c.max_repeated_batch_steps = Some(2);
@@ -724,9 +704,7 @@ async fn test_navigate_tool_uses_elevated_threshold_by_default() {
     // The default list includes "navigate" which suffix-matches "browser_navigate".
     let result = agent
         .run(
-            vec![AgentMessage::User {
-                content: "browse".into(),
-            }],
+            vec![AgentMessage::user("browse")],
             common::for_test(|c| {
                 c.max_iterations = 10;
                 c.max_stagnation_steps = None;

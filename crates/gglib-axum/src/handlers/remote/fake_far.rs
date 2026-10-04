@@ -29,6 +29,8 @@ pub(crate) struct Fake {
     pub(crate) seen: Mutex<Vec<Seen>>,
     pub(crate) status: Mutex<u16>,
     pub(crate) body: Mutex<String>,
+    /// The `Content-Type` of an answer that is not a run's stream.
+    pub(crate) content_type: Mutex<&'static str>,
     pub(crate) retry_after: Mutex<Option<&'static str>>,
     /// Holds a run's stream after its first frame until notified.
     pub(crate) release: Notify,
@@ -65,7 +67,7 @@ async fn answer(State(fake): State<Arc<Fake>>, request: Request) -> Response {
     }
     let mut response = Response::builder()
         .status(*fake.status.lock().unwrap())
-        .header(header::CONTENT_TYPE, "application/json");
+        .header(header::CONTENT_TYPE, *fake.content_type.lock().unwrap());
     if let Some(value) = *fake.retry_after.lock().unwrap() {
         response = response.header(header::RETRY_AFTER, value);
     }
@@ -83,6 +85,7 @@ pub(crate) async fn far(status: u16, body: &str) -> (Arc<Fake>, FarProxy) {
         seen: Mutex::new(Vec::new()),
         status: Mutex::new(status),
         body: Mutex::new(body.to_owned()),
+        content_type: Mutex::new("application/json"),
         retry_after: Mutex::new(None),
         release: Notify::new(),
     });

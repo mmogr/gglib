@@ -12,10 +12,20 @@ machine's chat page (`/api/remote/chats`, `/chats/{id}`,
 `/chats/{id}/turns/{run_id}`, `/runs`, `/runs/{run_id}/events`,
 `/runs/{run_id}/cancel`), each forwarded through the tunnel with the stored
 key by the `gglib_app_services::FarProxy` that `RemoteOps::far` builds. A
-turn sends only `{content}`; the far machine adds the chat's history itself.
+turn sends only `{content, images?}`; the far machine adds the chat's history itself.
 Bodies pass through and events stream through as they come; nothing is kept.
 A far refusal keeps its status and code, but a refused key is a `409`, since
 a `401` would have the page ask for this daemon's own key.
+
+`attachments.rs` is the images those turns carry, stored on the far machine:
+`POST /api/remote/attachments` forwards the file, refusing one over 8 MiB
+here by the code the far machine would use, and
+`GET /api/remote/attachments/{id}` reads one back, typed as the far machine
+typed it only when that is `image/png` or `image/jpeg`, else as
+`application/octet-stream`, and `nosniff` either way: it is served from this
+daemon's origin. A turn then names its
+images by id (`{content, images}`). Only an id is ever put in the far
+machine's path.
 
 `models.rs` is the far machine's models, through the same `FarProxy`:
 `GET /api/remote/models` answers `PairedModels` (the machine, what may be

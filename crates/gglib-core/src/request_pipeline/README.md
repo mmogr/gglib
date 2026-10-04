@@ -53,9 +53,13 @@ does either.
   [`image_url_tokens()`] prices a URL, at the cap when its size cannot be
   read. [`refuse_unless_can_see()`] refuses an image for a model with no
   projector, and holds the error code and the remedy for every surface.
+  [`MAX_IMAGE_BYTES`] (8 MiB) is the most one stored image may be, and
+  [`MAX_REQUEST_IMAGE_BYTES`] (16 MiB) the most raw image bytes one request
+  to a model may carry.
 - [`mod@image_size`] — [`image_size()`] and [`data_url_image_size()`]: a PNG's or
   a JPEG's width and height from its header alone, decoding only a bounded
   prefix of a base64 payload. Input cut short or not an image is `None`.
+  [`image_mime()`] is its media type, by its first bytes.
 
 **Shaping — what happens to the request**
 
