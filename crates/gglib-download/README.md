@@ -90,6 +90,14 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
 - **Resume Support** — Partial download resumption on failure
 - **Shard Handling** — Automatic detection and download of sharded models
+- **Projectors** — A download from a repository that has projectors fetches
+  one with the model, as one more file of its group after the weights: the
+  one whose name carries the download's quantization, else the `F16` one,
+  else the first by name (`choose_projector`). At completion the projector
+  is handed to the registrar apart from the weights, and the model is linked
+  to it when the file's header says it is a projector; a model the library
+  already holds with a link keeps that link. A projector is never counted as
+  a shard.
 - **Native Downloads** — The default path is Rust `reqwest`: a resumable ranged
   GET verified against the object's SHA-256, written to `<dest>.part` and
   renamed into place only once it checks out. Needs nothing installed.

@@ -14,6 +14,11 @@
 //! - **The refusal.** [`refuse_unless_can_see`], which holds the error code
 //!   and the remedy, so a request with an image for a model with no
 //!   projector is refused by name before the model is loaded.
+//!
+//! The cost, the refusal and the byte caps below are [ADR 0015]'s decisions
+//! 2, 3 and 6.
+//!
+//! [ADR 0015]: https://github.com/mmogr/gglib/blob/main/docs/adr/0015-a-model-reads-images-through-its-projector.md
 
 use serde_json::Value;
 

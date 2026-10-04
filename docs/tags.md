@@ -142,13 +142,27 @@ from GGUF metadata, which drive automatic flag selection at serve time:
 The taxonomy also reserves `code` and `moe` as recognized capability tags in
 the same auto-generated namespace; they carry no launch-flag effect today.
 
-Image input is not a tag. A model reads images exactly when it is linked to a
-projector, the second GGUF llama-server loads with `--mmproj`: the link is
-`models.projector_path`, set with `gglib model update <model> --projector
-<path>` or the Projector row of the model inspector, and cleared with
-`--no-projector` or the row's "None". A download from a repository that has
-projectors fetches one with the model and links it. `gglib model list` shows it in its
-`Images` column and `gglib model inspect` on its `Projector` line.
+Image input is not a tag. A model in this library reads images exactly when
+it is linked to a projector, the second GGUF llama-server loads with
+`--mmproj`: the link is `models.projector_path`, set with `gglib model update
+<model> --projector <path>` or the Projector row of the model inspector, and
+cleared with `--no-projector` or the row's "None". A download from a
+repository that has projectors fetches one with the model and links it.
+`gglib model list` shows it in its `Images` column and `gglib model inspect`
+on its `Projector` line
+([ADR 0015](adr/0015-a-model-reads-images-through-its-projector.md),
+decision 1).
+
+Two kinds of model are judged by something other than this library's link.
+With `--port` (`gglib q --port`, `gglib chat --port`), a turn goes to a
+llama-server that is already running, and that server's `GET /props` is
+asked, whatever row the library holds under the model's name:
+`modalities.vision` false is refused as a model with no projector is, and a
+server that does not answer within 2 s, or does not say, is sent the image
+([#1255](https://github.com/mmogr/gglib/issues/1255)). A model of the paired
+machine (`--remote`, or a far model on the chat page) is judged on that
+machine, by its own link there, and its refusal comes back with the same
+code.
 
 ### Overriding MTP
 

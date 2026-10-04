@@ -98,6 +98,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **GPU Detection** — Detects available GPUs and VRAM for context sizing
 - **Reasoning Model Support** — Streaming of thinking/reasoning phases
 - **MTP Speculative Decoding** — Auto-enabled for models with the `"mtp"` tag via the canonical `build_server_config` builder
+- **Image Input** — A model linked to a projector is launched with `--mmproj <projector>`. A changed link recycles the model's running server the next time the model is admitted (a request through the proxy, or a start), unless a run holds it. A chat run on a server already started talks to it directly and keeps the projector it was started with until then. The completion adapter turns the image ids a message names into `image_url` data URLs just before a request is sent.
 
 ## Config: one translator, fed by an optional cascade
 

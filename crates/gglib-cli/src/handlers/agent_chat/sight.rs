@@ -5,9 +5,10 @@
 //! ([`gglib_core::request_pipeline::refuse_unless_can_see`]); this is where
 //! the CLI finds out what to ask it with. A model of this machine is judged
 //! by its catalogue row: it can see when a projector is linked. A session
-//! on `--port` talks to a server the catalogue does not describe, so that
-//! server is asked, through its `/props`. A model of the paired machine is
-//! not judged here: its own proxy refuses the request by the same code.
+//! on `--port` talks to the server on that port, so that server is asked,
+//! through its `/props`, whatever the catalogue holds under the name. A
+//! model of the paired machine is not judged here: its own proxy refuses
+//! the request by the same code.
 
 use std::time::Duration;
 
