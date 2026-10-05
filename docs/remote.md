@@ -767,7 +767,12 @@ gets past `403 device_not_named`, and `gglib remote forget` takes the chats
 away with the key, though a reply the device already started still finishes
 and is saved. Such a turn calls none of the desktop's MCP tools unless the
 desktop ran `enable --allow-mcp`, the same gate as `/mcp`, and then only the
-tools the chat names.
+tools the chat names. A saved reply's row says how it was made in its
+`metadata`: beside its token counts, the context its model was launched with
+(`contextSize`), how many earlier messages the run left out to fit
+(`trimmedMessages`) and why the model stopped (`finishReason`), each only
+when it is known, so a device that opens the chat reads them with no route
+of their own ([Context reading](clients.md#context-reading)).
 
 Such a turn may carry images, and they cross the tunnel by reference. The
 device sends each file once, as the raw body of `POST /v1/attachments`: a PNG

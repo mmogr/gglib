@@ -1,6 +1,7 @@
 //! The wire shapes of the hub's chats, pinned against the recorded bodies
-//! both clients replay: a listing, a chat opened, a device's turn, a turn
-//! with an image, and the answer to the upload that image was sent by.
+//! both clients replay: a listing, a chat opened (a finished reply with how
+//! it was made, then one that was stopped), a device's turn, a turn with an
+//! image, and the answer to the upload that image was sent by.
 
 use std::path::PathBuf;
 
@@ -41,7 +42,7 @@ fn recorded() -> Recorded {
                 title: "Why the build broke".to_owned(),
                 model_id: Some(3),
                 model: Some("qwen3-8b".to_owned()),
-                updated_at: "2026-09-30 09:13:07".to_owned(),
+                updated_at: "2026-09-30 09:14:21".to_owned(),
                 live_run: Some("chat-5b1e".to_owned()),
             },
             HubChat {
@@ -64,7 +65,7 @@ fn recorded() -> Recorded {
             ..ConversationSettings::default()
         }),
         created_at: "2026-09-30 09:12:30".to_owned(),
-        updated_at: "2026-09-30 09:13:07".to_owned(),
+        updated_at: "2026-09-30 09:14:21".to_owned(),
     };
     let messages = vec![
         Message {
@@ -88,7 +89,28 @@ fn recorded() -> Recorded {
                 "completionTokens": 96,
                 "turnDurationMs": 4100,
                 "device": "phone-7c2e",
+                "finishReason": "stop",
+                "contextSize": 8192,
             })),
+            images: Vec::new(),
+        },
+        Message {
+            id: 42,
+            conversation_id: 12,
+            role: MessageRole::User,
+            content: "And how do I fix it?".to_owned(),
+            created_at: "2026-09-30 09:14:02".to_owned(),
+            metadata: Some(json!({ "device": "phone-7c2e" })),
+            images: Vec::new(),
+        },
+        // Stopped before its stream ended: no counts, no reading.
+        Message {
+            id: 43,
+            conversation_id: 12,
+            role: MessageRole::Assistant,
+            content: "Pin the".to_owned(),
+            created_at: "2026-09-30 09:14:21".to_owned(),
+            metadata: Some(json!({ "incomplete": true })),
             images: Vec::new(),
         },
     ];
@@ -230,4 +252,23 @@ fn a_row_carries_its_images_and_an_upload_answers_the_same_facts() {
         recorded.upload.image_tokens,
         crate::request_pipeline::estimate_image_tokens(1280, 720)
     );
+}
+
+/// The recorded reply says how it was made under the keys a saved row uses,
+/// its context's size and why it stopped among them, and no count of
+/// messages trimmed: only one message came before it, so none was. The
+/// reply stopped after it carries its mark and no figure.
+#[test]
+fn the_recorded_reply_carries_its_reading_and_the_stopped_one_none() {
+    use crate::domain::agent::{INCOMPLETE_KEY, MADE_KEYS as K};
+
+    let rows = recorded().open.messages;
+    let reply = rows[1].metadata.as_ref().unwrap();
+    for key in [K.prompt_tokens, K.completion_tokens, K.context_size] {
+        assert!(reply[key].is_u64(), "{key}");
+    }
+    assert!(reply.get(K.trimmed_messages).is_none(), "none was trimmed");
+    assert_eq!(reply[K.finish_reason], "stop");
+    assert_eq!(rows[3].role, MessageRole::Assistant);
+    assert_eq!(rows[3].metadata, Some(json!({ INCOMPLETE_KEY: true })));
 }

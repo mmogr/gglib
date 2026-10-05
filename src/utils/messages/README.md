@@ -12,7 +12,7 @@ Message conversion and serialization utilities — the single source of truth fo
 | File | Role |
 |------|------|
 | `contentParts.ts` | `reconstructContent()` rebuilds a saved row's tool calls for the thread; `extractReasoningText()` joins a message's reasoning parts |
-| `turnMade.ts` | How a reply's turn was made (model, token counts, times), from a run's `turn_usage` event or a saved row's metadata, in one shape |
+| `turnMade.ts` | How a reply's turn was made (model, token counts, times, why it stopped, its context's size and the messages trimmed to fit), from a run's `turn_usage` event or a saved row's metadata, in one shape |
 | `threadMessageToTranscriptMarkdown.ts` | Converts a `ThreadMessage` to plain-text Markdown (answer only, no reasoning, no tool calls) |
 
 ## Persistence Contract

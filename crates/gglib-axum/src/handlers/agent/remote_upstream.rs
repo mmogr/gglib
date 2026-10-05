@@ -18,7 +18,7 @@ use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
 use super::AgentChatRequest;
-use super::compose::MadeBy;
+use super::compose::{MadeBy, Prepared};
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
 
@@ -145,6 +145,7 @@ pub(super) async fn local(
             quantization: quantization_of(state, server.model_id).await,
             model: server.model_name,
             device: None,
+            context_size: None,
         },
         local_model: Some((req.port, server.model_id)),
         far_model: None,
@@ -179,6 +180,40 @@ pub(super) fn hold(
     })
 }
 
+/// The context the model a local run drives was launched with: the primary
+/// slot's, when the model in it is the run's own, by its port and its id.
+///
+/// `None` for a paired machine's model, for a model in the second slot, and
+/// when another model is the primary one. Never a default: a size the run
+/// does not know is a figure its reply leaves out.
+async fn launched_context(
+    runtime: &dyn ModelRuntimePort,
+    local_model: Option<(u16, i64)>,
+) -> Option<u64> {
+    let (port, model_id) = local_model?;
+    let running = runtime.current_model().await?;
+    let same = running.port == port && i64::from(running.model_id) == model_id;
+    same.then_some(running.effective_ctx)
+}
+
+/// Take a run's [`hold`] on its model, then read the context that model was
+/// launched with onto the run's turns.
+///
+/// In that order: until the model is held a proxy request may relaunch it at
+/// another context, and a size read before the hold could be the old one.
+///
+/// # Errors
+///
+/// Whatever [`hold`] refuses.
+pub(super) async fn hold_model(
+    runtime: &dyn ModelRuntimePort,
+    prepared: &mut Prepared,
+) -> Result<(), HttpError> {
+    prepared.hold = hold(runtime, prepared.local_model)?;
+    prepared.made_by.context_size = launched_context(runtime, prepared.local_model).await;
+    Ok(())
+}
+
 /// A far request's upstream: the far proxy's root through the tunnel, the
 /// far machine as the adapter carries it, and `model`'s id as the body's
 /// model. The id is looked up there first, so the run is counted under,
@@ -206,6 +241,7 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
             model: detail.name,
             quantization: detail.quantization,
             device: None,
+            context_size: None,
         },
         model: Some(id),
         local_model: None,

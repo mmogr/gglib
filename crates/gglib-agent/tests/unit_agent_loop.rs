@@ -12,6 +12,8 @@
 //! | [`test_iteration_complete_events`] | [`AgentEvent::IterationComplete`] / [`AgentEvent::FinalAnswer`] ordering |
 //! | [`test_llm_startup_error_emits_event`] | LLM stream failure → error event before `Err` return |
 //! | [`test_empty_tool_filter_exposes_no_tools`] | `build(…, Some([]))` → `EmptyToolExecutor` path |
+//! | [`a_run_over_budget_reports_the_count_on_its_turn_usage`] | Each model call's `turn_usage` counts the messages pruned from its request, over the whole run |
+//! | [`a_run_within_budget_reports_nothing_trimmed`] | Nothing pruned is no count |
 
 mod common;
 
@@ -22,7 +24,10 @@ use common::event_assertions::{collect_events, has_error_event};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolDefinition};
+use gglib_core::domain::agent::{
+    AgentConfig, AgentEvent, AgentMessage, AssistantContent, ContextReading, ToolCall,
+    ToolDefinition,
+};
 use gglib_core::ports::AgentError;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -182,4 +187,113 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         "rejection message should explain the tool is not available, got: {}",
         rejection.content
     );
+}
+
+/// The reading each model call's `turn_usage` carried, in call order.
+fn readings(events: &[AgentEvent]) -> Vec<ContextReading> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            AgentEvent::TurnUsage(usage) => Some(usage.reading),
+            _ => None,
+        })
+        .collect()
+}
+
+/// **Trimmed count**: a history over the budget is pruned before the first
+/// model call and again after its tool step. Each call's `turn_usage` says
+/// how many messages were missing from the request it answered: what the
+/// run had by then, less what the model was sent. The second call's count
+/// includes the first's, and neither names a context size, which the loop
+/// does not know.
+#[tokio::test]
+async fn a_run_over_budget_reports_the_count_on_its_turn_usage() {
+    let mut history = vec![AgentMessage::User {
+        content: "First question.".into(),
+        images: Vec::new(),
+    }];
+    for i in 0..20 {
+        history.push(AgentMessage::Assistant {
+            content: AssistantContent {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: format!("old{i}"),
+                    name: "search".into(),
+                    arguments: json!({}),
+                }],
+            },
+        });
+        history.push(AgentMessage::Tool {
+            tool_call_id: format!("old{i}"),
+            content: "x".repeat(60),
+        });
+    }
+    history.push(AgentMessage::User {
+        content: "And now?".into(),
+        images: Vec::new(),
+    });
+    let had = history.len();
+
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(MockLlmResponse::tool_call("c1", "search", json!({})))
+            .push(MockLlmResponse::text("done")),
+    );
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("search"),
+        MockToolBehavior::Immediate {
+            // Large enough that carrying it puts the run over budget again.
+            content: "y".repeat(200),
+        },
+    );
+    let asked = Arc::clone(&llm);
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+    let config = common::for_test(|c| {
+        c.context_budget_chars = 500;
+        c.prune_keep_tool_messages = 4;
+    });
+    agent.run(history, config, tx).await.unwrap();
+
+    let events = collect_events(rx).await;
+    let sent = asked.messages_received().await;
+    assert_eq!(sent.len(), 2, "two model calls");
+    // The second call's request also had the first call's assistant message
+    // and its tool result to carry.
+    let missing = [had - sent[0].len(), had + 2 - sent[1].len()];
+    assert!(missing[0] > 0, "the first request was pruned");
+    assert!(missing[1] > missing[0], "and the second pruned further");
+    assert_eq!(
+        readings(&events),
+        missing.map(|count| ContextReading::new(None, count))
+    );
+}
+
+/// A run that never prunes says nothing of trimming on any call.
+#[tokio::test]
+async fn a_run_within_budget_reports_nothing_trimmed() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(MockLlmResponse::tool_call("c1", "do_thing", json!({})))
+            .push(MockLlmResponse::text("done")),
+    );
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("do_thing"),
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
+    );
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+    let user = AgentMessage::User {
+        content: "go".into(),
+        images: Vec::new(),
+    };
+    agent
+        .run(vec![user], AgentConfig::default(), tx)
+        .await
+        .unwrap();
+
+    let events = collect_events(rx).await;
+    assert_eq!(readings(&events), [ContextReading::default(); 2]);
 }

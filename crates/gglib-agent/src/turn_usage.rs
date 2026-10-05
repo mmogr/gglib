@@ -3,9 +3,11 @@
 //! [`measure_turn`] wraps a turn's LLM stream and, when the stream ends,
 //! sends one [`AgentEvent::TurnUsage`]: the upstream's token counts (each
 //! only when it reported it), the time from the stream's start to its end,
-//! and the writing time the stream itself reports
+//! the writing time the stream itself reports
 //! ([`LlmStreamEvent::WritingTime`], timed before normalization; this
-//! stream is after it, where held-back markup makes writing look instant).
+//! stream is after it, where held-back markup makes writing look instant),
+//! why the model stopped ([`LlmStreamEvent::Done`]), and how many earlier
+//! messages the loop had dropped from the request this turn answered.
 //! A stream the collector stops reading early (an error, a cancelled run)
 //! ends no turn, and sends nothing.
 
@@ -15,7 +17,7 @@ use std::time::Instant;
 use anyhow::Result;
 use futures_core::Stream;
 use futures_util::StreamExt as _;
-use gglib_core::domain::agent::TurnUsage;
+use gglib_core::domain::agent::{ContextReading, TurnUsage};
 use gglib_core::{AgentEvent, LlmStreamEvent};
 use tokio::sync::mpsc;
 
@@ -33,6 +35,9 @@ impl Measuring {
     fn observe(&mut self, event: &LlmStreamEvent) {
         match event {
             LlmStreamEvent::WritingTime { ms } => self.usage.writing_ms = Some(*ms),
+            LlmStreamEvent::Done { finish_reason } => {
+                self.usage.finish_reason.clone_from(finish_reason);
+            }
             LlmStreamEvent::Usage {
                 prompt_tokens,
                 completion_tokens,
@@ -59,12 +64,23 @@ fn ms_between(from: Instant, to: Instant) -> u64 {
 }
 
 /// `stream`, sending the turn's [`AgentEvent::TurnUsage`] on `tx` once it ends.
-pub(crate) fn measure_turn(stream: LlmStream, tx: mpsc::Sender<AgentEvent>) -> LlmStream {
+///
+/// `trimmed` is how many earlier messages were missing from the request the
+/// stream answers; the turn reports it, and nothing when it is zero. The
+/// context's size is not known here: whoever composed the loop stamps it.
+pub(crate) fn measure_turn(
+    stream: LlmStream,
+    tx: mpsc::Sender<AgentEvent>,
+    trimmed: usize,
+) -> LlmStream {
     let state = Some(Measuring {
         inner: stream,
         tx,
         started: Instant::now(),
-        usage: TurnUsage::default(),
+        usage: TurnUsage {
+            reading: ContextReading::new(None, trimmed),
+            ..TurnUsage::default()
+        },
     });
     Box::pin(futures_util::stream::unfold(state, |state| async move {
         let mut measuring = state?;
