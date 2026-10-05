@@ -3,6 +3,7 @@ mod progress;
 pub(crate) mod python_bridge;
 pub(crate) mod python_env;
 mod python_protocol;
+mod python_requirements;
 mod xet_poller;
 
 use std::fs;

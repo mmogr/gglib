@@ -28,6 +28,12 @@ Python or environment manager the user has active is scrubbed from every child
 process. gglib reads those variables to locate an interpreter, never to run
 inside one.
 
+Its packages are pinned in `scripts/hf_xet_requirements.txt`, which gglib
+embeds, to the release lines the helper was tested against. They need Python
+3.10. The marker beside the environment records the pins it was installed
+with, so a changed pin re-installs on the next use, and an environment whose
+interpreter is older than 3.10 is built again first.
+
 `PythonEnvironment::prepare` takes an optional `NoticeCallback`
 (`Option<&NoticeCallback>`, aliased in `python_bridge.rs`): with one supplied,
 venv creation and dependency install surface as a
