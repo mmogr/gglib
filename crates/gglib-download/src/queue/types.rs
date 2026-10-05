@@ -66,20 +66,18 @@ impl QueuedItem {
     }
 
     /// Convert to a core DTO for API responses.
+    ///
+    /// The row is named for the download alone: a row stands for every file
+    /// of it, and `shard_info` says which file this one is.
     pub(crate) fn to_dto(
         &self,
         position: u32,
         status: DownloadStatus,
     ) -> gglib_core::download::QueuedDownload {
-        let display_name = self.shard_info.as_ref().map_or_else(
-            || self.id.to_string(),
-            |shard| format!("{} ({})", self.id, shard.display()),
-        );
-
         let mut dto = gglib_core::download::QueuedDownload::new(
             self.canonical_id(),
             self.id.model_id(),
-            display_name,
+            self.canonical_id(),
             position,
             self.queued_at.elapsed().as_secs(), // Approximate queued_at as epoch
         );
@@ -114,14 +112,9 @@ impl FailedItem {
 
     /// Convert to a core DTO for API responses.
     pub(crate) fn to_dto(&self) -> gglib_core::download::FailedDownload {
-        let display_name = self.item.shard_info.as_ref().map_or_else(
-            || self.item.id.to_string(),
-            |shard| format!("{} ({})", self.item.id, shard.display()),
-        );
-
         gglib_core::download::FailedDownload::new(
             self.item.canonical_id(),
-            display_name,
+            self.item.canonical_id(),
             &self.error,
             self.failed_at.elapsed().as_secs(),
         )
@@ -228,5 +221,25 @@ mod tests {
             // Model ID should match
             assert_eq!(dto.model_id.as_str(), "model/test");
         }
+    }
+
+    /// A file's row is named for its download, with no "(Part 2/3)" or
+    /// "(Projector)" after it.
+    #[test]
+    fn a_files_row_is_named_for_its_download() {
+        let id = DownloadId::new("model/test", Some("Q4_K_M"));
+        let place = ShardInfo::new(1, 3, "shard-00002.gguf".to_string());
+        let item = QueuedItem::new_shard(
+            id.clone(),
+            ShardGroupId::new("g"),
+            place.clone(),
+            test_completion_key(&id),
+        );
+
+        let dto = item.to_dto(2, DownloadStatus::Queued);
+
+        assert_eq!(dto.display_name, "model/test:Q4_K_M");
+        assert_eq!(dto.shard_info, Some(place));
+        assert_eq!(dto.group_id.as_deref(), Some("g"));
     }
 }

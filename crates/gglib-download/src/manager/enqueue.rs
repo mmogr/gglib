@@ -10,20 +10,20 @@ impl DownloadManagerImpl {
     /// Queue every file of `resolution` as one group under `id`, and keep
     /// the group's files for registration.
     ///
-    /// Returns the 1-based queue position of the group's first file.
+    /// Returns the group's 1-based position among the downloads.
     pub(super) async fn enqueue_group(
         &self,
         id: &DownloadId,
         revision: Option<&str>,
         resolution: &Resolution,
     ) -> Result<u32, DownloadError> {
-        let has_active = self.has_active().await;
         let completion_key = completion_key(id, revision, resolution)?;
 
-        // Minimal lock scope: mutate the queue, nothing else
+        // Minimal lock scope: find what is running and mutate the queue
         let position = {
             let mut queue = self.queue.write().await;
-            queue.queue_sharded(id, &completion_key, &resolution.files, has_active)?
+            let running = self.running_id(&queue).await;
+            queue.queue_sharded(id, &completion_key, &resolution.files, running.as_ref())?
         };
 
         // The files with their OIDs and roles, for registration and for

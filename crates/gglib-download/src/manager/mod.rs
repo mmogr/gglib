@@ -2,6 +2,7 @@
 mod enqueue;
 mod group_completion;
 mod paths;
+mod running;
 mod shard_group_tracker;
 mod worker;
 
@@ -896,11 +897,6 @@ impl DownloadManagerImpl {
         )
     }
 
-    /// Check if there's an active download.
-    async fn has_active(&self) -> bool {
-        !self.active.lock().await.is_empty()
-    }
-
     /// Emit a queue snapshot event.
     async fn emit_queue_snapshot(&self) {
         let Ok(snapshot) = self.get_queue_snapshot().await else {
@@ -1439,9 +1435,13 @@ impl DownloadManagerPort for DownloadManagerImpl {
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
+        // The queue is held for the whole read, so a file cannot leave
+        // `pending` for `active` between the two being looked at. Lock order:
+        // queue → active → tracker.
+        let queue = self.queue.read().await;
+
         // Sample the active job under its lock (short scope), then read the
-        // estimator afterwards — never nested, preserving the queue → active
-        // lock order.
+        // estimator afterwards, never nested.
         let active_sample = {
             let active = self.active.lock().await;
             active.iter().next().map(|(id, job)| {
@@ -1476,10 +1476,11 @@ impl DownloadManagerPort for DownloadManagerImpl {
                     eta_seconds,
                 ))
             }
-            None => None,
+            // Nothing is being fetched. A download between two of its files
+            // is still the running one, and keeps its row.
+            None => self.between_files_row(&queue).await,
         };
 
-        let queue = self.queue.read().await;
         Ok(queue.snapshot(current_dto))
     }
 
@@ -1555,12 +1556,11 @@ impl DownloadManagerPort for DownloadManagerImpl {
         id: &DownloadId,
         new_position: u32,
     ) -> Result<u32, DownloadError> {
-        let has_active = self.has_active().await;
-        let actual_position = self
-            .queue
-            .write()
-            .await
-            .reorder(id, new_position, has_active)?;
+        let actual_position = {
+            let mut queue = self.queue.write().await;
+            let running = self.running_id(&queue).await;
+            queue.reorder(id, new_position, running.as_ref())?
+        };
         tracing::info!(id = %id, position = actual_position, "Reordered download");
         self.emit_queue_snapshot().await;
         Ok(actual_position)

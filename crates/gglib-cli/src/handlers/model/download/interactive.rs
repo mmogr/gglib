@@ -412,7 +412,7 @@ fn parse_inline_quant(s: &str) -> (String, Option<String>) {
     (s.trim().to_string(), None)
 }
 
-/// Returns `true` when there are no active or pending downloads.
+/// Returns `true` when no download is running, between files or waiting.
 fn is_queue_finished(snapshot: &QueueSnapshot) -> bool {
     snapshot.active_count == 0 && snapshot.pending_count == 0
 }

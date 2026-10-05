@@ -68,27 +68,31 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
     assert_eq!(queued.queued, 3, "three shards, whatever else is fetched");
     assert_eq!(queued.root_id.to_string(), "owner/zeta-GGUF:Q8_0");
     let snapshot = manager.get_queue_snapshot().await.unwrap();
-    assert_eq!(snapshot.items.len(), 4, "progress covers every file");
-    let group = snapshot.items[0].group_id.clone();
-    assert!(group.is_some());
-    for item in &snapshot.items {
-        assert_eq!(item.id, "owner/zeta-GGUF:Q8_0", "one id for the model");
-        assert_eq!(item.group_id, group, "one group for the model");
-        let place = item.shard_info.as_ref().unwrap();
+    assert_eq!(snapshot.items.len(), 1, "one row for the model");
+    assert_eq!((snapshot.active_count, snapshot.pending_count), (0, 1));
+    let row = &snapshot.items[0];
+    assert_eq!(row.id, "owner/zeta-GGUF:Q8_0");
+    assert_eq!(row.display_name, "owner/zeta-GGUF:Q8_0", "no file's name");
+    assert_eq!(row.shard_info.as_ref().unwrap().total_shards, 3);
+
+    // The four files behind that row, in the order they will run
+    let mut queue = manager.queue.write().await;
+    let files: Vec<_> = std::iter::from_fn(|| queue.dequeue()).collect();
+    assert_eq!(files.len(), 4, "progress covers every file");
+    for file in &files {
+        assert_eq!(file.id.to_string(), "owner/zeta-GGUF:Q8_0");
+        assert_eq!(file.group_id, files[0].group_id, "one group for the model");
+        assert_eq!(
+            file.group_id.as_ref().map(ToString::to_string),
+            row.group_id
+        );
+        let place = file.shard_info.as_ref().unwrap();
         assert_eq!(place.total_shards, 3);
         assert_eq!(place.group_total_bytes, Some(2_800));
     }
-    let last = snapshot.items[3].shard_info.as_ref().unwrap();
+    let last = files[3].shard_info.as_ref().unwrap();
     assert_eq!(last.role, GgufFileRole::Projector);
     assert_eq!(last.filename, "mmproj-F16.gguf");
-    assert_eq!(
-        snapshot.items[3].display_name,
-        "owner/zeta-GGUF:Q8_0 (Projector)"
-    );
-    assert_eq!(
-        snapshot.items[2].display_name,
-        "owner/zeta-GGUF:Q8_0 (Part 3/3)"
-    );
 }
 
 /// The files are kept for registration by both ways in: the request a user
