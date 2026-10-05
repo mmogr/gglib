@@ -32,4 +32,4 @@ pub use replay::{
 pub use stagnation::StagnationDetector;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
 pub use transcript::to_new_message;
-pub use turn_usage::TurnUsage;
+pub use turn_usage::{ContextReading, TurnUsage};

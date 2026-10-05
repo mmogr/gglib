@@ -42,6 +42,19 @@ its live run from the far listing, its events and Stop from
 with the new text and its images, by the ids the far machine's store
 (`/api/remote/attachments`) answered; the far machine runs and saves the reply. A far chat
 offers no edit, no regenerate and no new chat, and nothing of it is kept here.
+Every reading of it (at opening, after a run, after a send it refused) is
+handed to the caller (`onFarOpened`) unless the chat was left first: the far
+list says nothing of a chat's settings, so that is where the page learns what
+a far chat remembers and which model it ran on.
+
+A send says the chat's Thinking choice when the caller's `thinking` gives one,
+asked as the send starts: `thinking: "off"` or `"default"` on the run's body,
+or on a far turn's, and no key otherwise. Once the daemon, or the far machine,
+has accepted the turn that says it, the runtime calls the `accepted` the
+caller gave with the choice, before the reply is read; a turn that was
+refused never calls it. The runtime keeps no choice itself and weighs nothing:
+the device-wide effort and budget go on every local run as they did, and the
+daemon lets a chat's Off win.
 
 A chat with the paired machine's model (`pairedModel`) is another thing: a
 conversation of this machine's, run here, whose turns the daemon sends to that
@@ -58,11 +71,11 @@ loop detection) lives in the Rust `gglib-agent` crate.
 
 | File | Role |
 |---|---|
-| `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs |
-| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end |
+| `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs; each start says the chat's Thinking choice when the caller gives one, and tells the caller once that turn is accepted |
+| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; hands up each reading of a far chat, unless it was left first |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
-| `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name |
-| `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, its live run from the far listing's `live_run` |
+| `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice |
+| `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |
 | `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events) and image store (upload, read), and the text a far turn carries |
 | `imageAttachments.ts` | The composer's image adapter: uploads an image when it is added (never when sent), says a refusal at once, turns a sent image into its stored id (only an id its own store answered: not one from the other machine's, as when the chat list moved there with images in the composer), and remembers each upload by its file so a draft handed back or carried over a model switch is not uploaded again |
 | `imagePrep.ts` | An image read as the store reads it (a PNG's or a JPEG's size from its header), kept as it is within 2560 px and 8 MiB, else redrawn smaller by a downscaler passed in (the canvas by default) |

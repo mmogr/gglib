@@ -1,0 +1,498 @@
+{
+  "about": "Worked examples of the context reading every gglib client draws. gglib reports the counts; a client applies this rule and nothing else. Replayed by gglib tests/ts and copied into ggchat as a fixture; change the rule here first.",
+  "rule": {
+    "source": "The newest reply decides, whether or not it carries figures. Only a reply marked incomplete that carries neither count is passed over. Counts are never summed across replies or model calls.",
+    "shown": "Only when prompt_tokens, completion_tokens and a context_size above zero are all present. No estimate, and never the model list context_window.",
+    "used": "prompt_tokens + completion_tokens",
+    "percent": "min(100, (200 * used + context_size) / (2 * context_size)) in whole-number division: round half up",
+    "severity": {
+      "normal": "percent < 70",
+      "warning": "70 <= percent < 90",
+      "danger": "percent >= 90"
+    },
+    "numbers": "Shown here with en-US grouping; a client may use its own locale for the digits and keeps the words."
+  },
+  "readings": [
+    {
+      "name": "a quarter full",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 200,
+        "context_size": 32768,
+        "finish_reason": "stop"
+      },
+      "expect": {
+        "shown": true,
+        "used": 8200,
+        "percent": 25,
+        "percent_text": "25%",
+        "severity": "normal",
+        "spoken": "25 percent of context used",
+        "lines": [
+          "8,200 of 32,768 tokens (25%) after the last finished reply."
+        ]
+      }
+    },
+    {
+      "name": "no context size is no ring",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 200
+      },
+      "expect": {
+        "shown": false
+      }
+    },
+    {
+      "name": "no completion count is no ring: absent is not zero",
+      "given": {
+        "prompt_tokens": 8000,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": false
+      }
+    },
+    {
+      "name": "no prompt count is no ring",
+      "given": {
+        "completion_tokens": 200,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": false
+      }
+    },
+    {
+      "name": "a context size of zero is no ring",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 200,
+        "context_size": 0
+      },
+      "expect": {
+        "shown": false
+      }
+    },
+    {
+      "name": "a completion count of zero is still a count",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 0,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": true,
+        "used": 8000,
+        "percent": 24,
+        "percent_text": "24%",
+        "severity": "normal",
+        "spoken": "24 percent of context used",
+        "lines": [
+          "8,000 of 32,768 tokens (24%) after the last finished reply."
+        ]
+      }
+    },
+    {
+      "name": "under one percent says so and never rounds to nothing",
+      "given": {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "context_size": 131072
+      },
+      "expect": {
+        "shown": true,
+        "used": 120,
+        "percent": 0,
+        "percent_text": "<1%",
+        "severity": "normal",
+        "spoken": "less than 1 percent of context used",
+        "lines": [
+          "120 of 131,072 tokens (<1%) after the last finished reply."
+        ]
+      }
+    },
+    {
+      "name": "just under the warning line",
+      "given": {
+        "prompt_tokens": 1380,
+        "completion_tokens": 8,
+        "context_size": 2000
+      },
+      "expect": {
+        "shown": true,
+        "used": 1388,
+        "percent": 69,
+        "percent_text": "69%",
+        "severity": "normal",
+        "spoken": "69 percent of context used",
+        "lines": [
+          "1,388 of 2,000 tokens (69%) after the last finished reply."
+        ]
+      }
+    },
+    {
+      "name": "an exact half rounds up, in whole numbers",
+      "given": {
+        "prompt_tokens": 130,
+        "completion_tokens": 9,
+        "context_size": 200
+      },
+      "expect": {
+        "shown": true,
+        "used": 139,
+        "percent": 70,
+        "percent_text": "70%",
+        "severity": "warning",
+        "spoken": "70 percent of context used, filling up",
+        "lines": [
+          "139 of 200 tokens (70%) after the last finished reply.",
+          "Context is filling up."
+        ]
+      }
+    },
+    {
+      "name": "the warning line is seventy",
+      "given": {
+        "prompt_tokens": 22000,
+        "completion_tokens": 938,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": true,
+        "used": 22938,
+        "percent": 70,
+        "percent_text": "70%",
+        "severity": "warning",
+        "spoken": "70 percent of context used, filling up",
+        "lines": [
+          "22,938 of 32,768 tokens (70%) after the last finished reply.",
+          "Context is filling up."
+        ]
+      }
+    },
+    {
+      "name": "just under the danger line",
+      "given": {
+        "prompt_tokens": 1780,
+        "completion_tokens": 8,
+        "context_size": 2000
+      },
+      "expect": {
+        "shown": true,
+        "used": 1788,
+        "percent": 89,
+        "percent_text": "89%",
+        "severity": "warning",
+        "spoken": "89 percent of context used, filling up",
+        "lines": [
+          "1,788 of 2,000 tokens (89%) after the last finished reply.",
+          "Context is filling up."
+        ]
+      }
+    },
+    {
+      "name": "the danger line is ninety",
+      "given": {
+        "prompt_tokens": 29000,
+        "completion_tokens": 492,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": true,
+        "used": 29492,
+        "percent": 90,
+        "percent_text": "90%",
+        "severity": "danger",
+        "spoken": "90 percent of context used, almost full",
+        "lines": [
+          "29,492 of 32,768 tokens (90%) after the last finished reply.",
+          "Context is almost full."
+        ]
+      }
+    },
+    {
+      "name": "full",
+      "given": {
+        "prompt_tokens": 32000,
+        "completion_tokens": 768,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": true,
+        "used": 32768,
+        "percent": 100,
+        "percent_text": "100%",
+        "severity": "danger",
+        "spoken": "100 percent of context used, almost full",
+        "lines": [
+          "32,768 of 32,768 tokens (100%) after the last finished reply.",
+          "Context is almost full."
+        ]
+      }
+    },
+    {
+      "name": "past full is drawn as full and the counts stay true",
+      "given": {
+        "prompt_tokens": 32900,
+        "completion_tokens": 100,
+        "context_size": 32768
+      },
+      "expect": {
+        "shown": true,
+        "used": 33000,
+        "percent": 100,
+        "percent_text": "100%",
+        "severity": "danger",
+        "spoken": "100 percent of context used, almost full",
+        "lines": [
+          "33,000 of 32,768 tokens (100%) after the last finished reply.",
+          "Context is almost full."
+        ]
+      }
+    },
+    {
+      "name": "one message trimmed",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 200,
+        "context_size": 32768,
+        "trimmed_messages": 1
+      },
+      "expect": {
+        "shown": true,
+        "used": 8200,
+        "percent": 25,
+        "percent_text": "25%",
+        "severity": "normal",
+        "spoken": "25 percent of context used",
+        "lines": [
+          "8,200 of 32,768 tokens (25%) after the last finished reply.",
+          "1 earlier message was shortened or left out to fit."
+        ]
+      }
+    },
+    {
+      "name": "several messages trimmed",
+      "given": {
+        "prompt_tokens": 24000,
+        "completion_tokens": 400,
+        "context_size": 32768,
+        "trimmed_messages": 3
+      },
+      "expect": {
+        "shown": true,
+        "used": 24400,
+        "percent": 74,
+        "percent_text": "74%",
+        "severity": "warning",
+        "spoken": "74 percent of context used, filling up",
+        "lines": [
+          "24,400 of 32,768 tokens (74%) after the last finished reply.",
+          "Context is filling up.",
+          "3 earlier messages were shortened or left out to fit."
+        ]
+      }
+    },
+    {
+      "name": "a trim count of zero says nothing",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 200,
+        "context_size": 32768,
+        "trimmed_messages": 0
+      },
+      "expect": {
+        "shown": true,
+        "used": 8200,
+        "percent": 25,
+        "percent_text": "25%",
+        "severity": "normal",
+        "spoken": "25 percent of context used",
+        "lines": [
+          "8,200 of 32,768 tokens (25%) after the last finished reply."
+        ]
+      }
+    },
+    {
+      "name": "a reply cut off",
+      "given": {
+        "prompt_tokens": 8000,
+        "completion_tokens": 200,
+        "context_size": 32768,
+        "finish_reason": "length"
+      },
+      "expect": {
+        "shown": true,
+        "used": 8200,
+        "percent": 25,
+        "percent_text": "25%",
+        "severity": "normal",
+        "spoken": "25 percent of context used",
+        "lines": [
+          "8,200 of 32,768 tokens (25%) after the last finished reply.",
+          "The last reply was cut off before it finished."
+        ]
+      }
+    },
+    {
+      "name": "everything at once, in this order",
+      "given": {
+        "prompt_tokens": 32000,
+        "completion_tokens": 768,
+        "context_size": 32768,
+        "trimmed_messages": 12,
+        "finish_reason": "length"
+      },
+      "expect": {
+        "shown": true,
+        "used": 32768,
+        "percent": 100,
+        "percent_text": "100%",
+        "severity": "danger",
+        "spoken": "100 percent of context used, almost full",
+        "lines": [
+          "32,768 of 32,768 tokens (100%) after the last finished reply.",
+          "Context is almost full.",
+          "12 earlier messages were shortened or left out to fit.",
+          "The last reply was cut off before it finished."
+        ]
+      }
+    },
+    {
+      "name": "a large context groups its digits",
+      "given": {
+        "prompt_tokens": 1250000,
+        "completion_tokens": 4000,
+        "context_size": 2097152
+      },
+      "expect": {
+        "shown": true,
+        "used": 1254000,
+        "percent": 60,
+        "percent_text": "60%",
+        "severity": "normal",
+        "spoken": "60 percent of context used",
+        "lines": [
+          "1,254,000 of 2,097,152 tokens (60%) after the last finished reply."
+        ]
+      }
+    }
+  ],
+  "sources": [
+    {
+      "name": "no replies",
+      "replies": [],
+      "decides": null
+    },
+    {
+      "name": "one finished reply",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        }
+      ],
+      "decides": 0
+    },
+    {
+      "name": "the newest decides and nothing is added up",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        },
+        {
+          "prompt_tokens": 9000,
+          "completion_tokens": 300,
+          "context_size": 32768
+        }
+      ],
+      "decides": 1
+    },
+    {
+      "name": "a stopped reply with no counts leaves the reading before it",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        },
+        {
+          "incomplete": true
+        }
+      ],
+      "decides": 0
+    },
+    {
+      "name": "a stopped reply that still has its counts decides",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        },
+        {
+          "prompt_tokens": 9000,
+          "completion_tokens": 300,
+          "context_size": 32768,
+          "incomplete": true
+        }
+      ],
+      "decides": 1
+    },
+    {
+      "name": "a newest reply with counts and no size hides the ring",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        },
+        {
+          "prompt_tokens": 9000,
+          "completion_tokens": 300
+        }
+      ],
+      "decides": 1
+    },
+    {
+      "name": "only a stopped reply is no reading",
+      "replies": [
+        {
+          "incomplete": true
+        }
+      ],
+      "decides": null
+    },
+    {
+      "name": "a finished reply with no figures still decides, and hides the ring",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        },
+        {}
+      ],
+      "decides": 1
+    },
+    {
+      "name": "a stopped reply with one count decides, and hides the ring",
+      "replies": [
+        {
+          "prompt_tokens": 8000,
+          "completion_tokens": 200,
+          "context_size": 32768
+        },
+        {
+          "prompt_tokens": 9000,
+          "incomplete": true
+        }
+      ],
+      "decides": 1
+    }
+  ]
+}

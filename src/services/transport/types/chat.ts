@@ -3,6 +3,7 @@
  * Handles conversations and messages for the chat feature.
  */
 
+import type { ConversationSettings } from '../../../types/generated/ConversationSettings';
 import type { Message } from '../../../types/generated/Message';
 import type { ModelRef } from '../../../types/generated/ModelRef';
 import type { SerializableToolCallPart } from '../../../utils/messages/contentParts';
@@ -13,28 +14,11 @@ import type { ConversationId, MessageId, ModelId } from './ids';
 // ============================================================================
 
 /**
- * Persisted session parameters for a conversation.
- * Mirrors the Rust `ConversationSettings` domain type.
+ * Persisted session parameters for a conversation: the Rust
+ * `ConversationSettings`, as generated from it. A field with no value is
+ * left out of the JSON, never `null`.
  */
-export interface ConversationSettings {
-  model_name?: string | null;
-  /** The session's model, named by its machine; a resume goes back to it. */
-  model?: ModelRef | null;
-  temperature?: number | null;
-  top_p?: number | null;
-  top_k?: number | null;
-  max_tokens?: number | null;
-  repeat_penalty?: number | null;
-  /** The inference profile the session sampled with, by name. */
-  profile?: string | null;
-  ctx_size?: number | null;
-  mlock?: boolean | null;
-  tools?: string[] | null;
-  tool_timeout_ms?: number | null;
-  max_parallel?: number | null;
-  max_iterations?: number | null;
-  no_tools?: boolean | null;
-}
+export type { ConversationSettings };
 
 /**
  * Whose chats the chat page shows: this machine's, or those of the machine

@@ -42,7 +42,7 @@ Axum backend (HTTP response) → typed result
 | `setup.ts` | First-run setup and dependency probes |
 | `sse.ts` | The server-sent-events endpoint this transport subscribes to |
 | `runs.ts` | Runs (`/api/runs`): start an agent run under a minted id, list, cancel, and read its events from any point |
-| `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text and images (by the ids the far store answered), and read, list and cancel its runs |
+| `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text and images (by the ids the far store answered) that says the chat's Thinking choice only when it changes it, and read, list and cancel its runs |
 | `attachments.ts` | The image stores (`/api/attachments`, and the far machine's at `/api/remote/attachments` for a far chat): upload an image as its raw bytes, and read one's bytes back with the page's credential |
 | `farModels.ts` | The paired machine's models (`/api/remote/models`), read by this machine's daemon: the list with that machine and what may be done there, one model by its id there, and a load |
 | `sseEvents.ts` | Reading SSE events, with their `id:` and `event:` fields, off a `fetch` response |

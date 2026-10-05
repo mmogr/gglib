@@ -9,6 +9,7 @@ mod launch;
 mod remote_upstream;
 mod retry_notice;
 mod run;
+mod thinking;
 mod transcript;
 
 pub(crate) use dto::AgentChatRequest;
@@ -150,6 +151,9 @@ mod run_replace_tests;
 #[cfg(test)]
 #[path = "run_tests.rs"]
 mod run_tests;
+#[cfg(test)]
+#[path = "run_thinking_tests.rs"]
+mod run_thinking_tests;
 #[cfg(test)]
 #[path = "transcript_images_tests.rs"]
 mod transcript_images_tests;

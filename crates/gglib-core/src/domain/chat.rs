@@ -13,6 +13,7 @@ use super::agent::messages::AssistantContent;
 use super::agent::tool_types::ToolCall;
 use super::attachment::{AttachmentId, AttachmentInfo};
 use super::machine::ModelRef;
+use super::thinking::Thinking;
 
 /// A chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,6 +263,14 @@ pub struct ConversationSettings {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub no_tools: Option<bool>,
+    /// The chat's Thinking choice, which a turn through gglib's turn routes
+    /// runs with: a paired device's turn, a far turn, and this machine's own
+    /// agent run. The CLI's own chat keeps it on resume and does not apply
+    /// it. Only `off` is stored: a turn that says `default` removes the key,
+    /// and an absent key is a chat that remembers nothing.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<Thinking>,
 }
 
 #[cfg(test)]

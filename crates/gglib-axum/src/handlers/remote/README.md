@@ -12,7 +12,9 @@ machine's chat page (`/api/remote/chats`, `/chats/{id}`,
 `/chats/{id}/turns/{run_id}`, `/runs`, `/runs/{run_id}/events`,
 `/runs/{run_id}/cancel`), each forwarded through the tunnel with the stored
 key by the `gglib_app_services::FarProxy` that `RemoteOps::far` builds. A
-turn sends only `{content, images?}`; the far machine adds the chat's history itself.
+turn sends only `{content, images?, thinking?}`, the last being the far
+chat's Thinking choice on the turn that changes it, forwarded as it was said;
+the far machine adds the chat's history itself.
 Bodies pass through and events stream through as they come; nothing is kept.
 A far refusal keeps its status and code, but a refused key is a `409`, since
 a `401` would have the page ask for this daemon's own key.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getTransport } from '../services/transport';
 import { canSee } from '../utils/canSee';
+import { thinks as modelThinks } from '../utils/thinks';
 
 export interface ChatModelFacts {
   /** null = unknown (permissive fallback - never gates tools when status is uncertain). */
@@ -12,12 +13,14 @@ export interface ChatModelFacts {
   sees: boolean | null;
   /** The context it is served with, from its catalogue entry, when known. */
   contextLength: number | null;
+  /** Whether it thinks, by its catalogue entry's tags; false until that is known. */
+  thinks: boolean;
 }
 
 /**
  * What the chat page knows about the model it is talking to: whether it
  * calls tools, in which format, its quantisation, whether it reads images,
- * and its context (its served default, else the file's).
+ * its context (its served default, else the file's), and whether it thinks.
  *
  * Fetched once per model id. A page that moves to another model is remounted
  * with the new id (ModelControlCenterPage keys it by the session), so the
@@ -29,6 +32,7 @@ export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {
   const [quantization, setQuantization] = useState<string | null>(null);
   const [sees, setSees] = useState<boolean | null>(null);
   const [contextLength, setContextLength] = useState<number | null>(null);
+  const [thinks, setThinks] = useState(false);
   useEffect(() => {
     // Nothing to ask about remotely: the capability is read from this
     // machine's server registry and the model is on the other machine.
@@ -51,9 +55,10 @@ export function useChatModelFacts(modelId: number | undefined): ChatModelFacts {
         setQuantization(model.quantization ?? null);
         setSees(canSee(model));
         setContextLength(model.serverDefaults?.contextLength ?? model.contextLength ?? null);
+        setThinks(modelThinks(model));
       })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [modelId]);
-  return { supportsToolCalls, toolFormat, quantization, sees, contextLength };
+  return { supportsToolCalls, toolFormat, quantization, sees, contextLength, thinks };
 }

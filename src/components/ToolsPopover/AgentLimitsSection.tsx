@@ -8,12 +8,9 @@
 import { FC, useState } from 'react';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
-import { Select } from '../ui/Select';
+import { ReasoningEffortField } from '../InferenceParametersForm/ReasoningEffortField';
 import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
-import {
-  REASONING_EFFORT_LEVELS,
-  type ReasoningEffortLevel,
-} from '../../constants/reasoningEffort';
+import type { TemplateSupport } from '../../types';
 import {
   MAX_OBSERVATION_STEPS_CEILING,
   MAX_PARALLEL_TOOLS_CEILING,
@@ -93,7 +90,17 @@ function seedOverrides(): StoredAgentOverrides {
   };
 }
 
-export const AgentLimitsSection: FC = () => {
+interface AgentLimitsSectionProps {
+  /**
+   * Whether the chat's model reads a reasoning effort, as its template was
+   * observed: `no` replaces the dropdown with a note, since gglib removes the
+   * level before it is sent; `unknown` and `yes` keep it. Absent when the
+   * chat is with no model of this machine, or the answer has not come.
+   */
+  effortSupport?: TemplateSupport;
+}
+
+export const AgentLimitsSection: FC<AgentLimitsSectionProps> = ({ effortSupport }) => {
   const [overrides, setOverrides] = useState<StoredAgentOverrides>(seedOverrides);
   const classificationDisabled = overrides.observationTools?.length === 0;
   const [observationText, setObservationText] = useState(() => {
@@ -152,32 +159,18 @@ export const AgentLimitsSection: FC = () => {
         Not an agent limit, and shown here anyway: this is the popover for
         "settings that apply to the chats I send", and a per-turn reasoning
         level is one. It reaches the request as a top-level field rather than
-        through `AgentConfig` — see `reasoningOverridesToWire`.
+        through `AgentConfig` — see `reasoningOverridesToWire`. The field is
+        the settings surfaces' own, so the three answers about a template
+        read the same here: a stored level is still sent where the dropdown
+        is replaced by its note, and the daemon removes it.
       */}
-      <div className="flex items-center justify-between gap-sm">
-        <label htmlFor="chat-reasoning-effort" className="text-xs text-text-secondary">
-          Reasoning effort
-        </label>
-        <Select
-          id="chat-reasoning-effort"
-          size="sm"
-          className="w-32"
-          value={overrides.reasoningEffort ?? ''}
-          onChange={(e) =>
-            update({
-              reasoningEffort: (e.target.value || undefined) as ReasoningEffortLevel | undefined,
-            })
-          }
-        >
-          {/* Blank sends no key, leaving the model's own resolved level in place. */}
-          <option value="">model default</option>
-          {REASONING_EFFORT_LEVELS.map((level) => (
-            <option key={level} value={level}>
-              {level}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <ReasoningEffortField
+        id="chat-reasoning-effort"
+        value={overrides.reasoningEffort}
+        onChange={(level) => update({ reasoningEffort: level })}
+        disabled={false}
+        support={effortSupport}
+      />
       <NumberRow
         id="chat-reasoning-budget"
         label="Reasoning budget"
@@ -192,9 +185,8 @@ export const AgentLimitsSection: FC = () => {
         onChange={(v) => update({ reasoningBudgetTokens: v })}
       />
       <p className="m-0 text-2xs text-text-muted">
-        The budget is a hard cap llama.cpp enforces on any model. The effort level is only a
-        request to the chat template — a model whose template does not read it is unaffected, and
-        the model inspector says which models those are.
+        The budget is a hard cap llama.cpp enforces on any model, in every chat on this device. A
+        chat with Thinking switched off runs with a budget of 0, whatever is set here.
       </p>
       <Checkbox
         checked={classificationDisabled}

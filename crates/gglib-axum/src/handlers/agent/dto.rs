@@ -259,6 +259,15 @@ pub(crate) struct AgentRunRequest {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub replace_from: Option<i64>,
+
+    /// The conversation's Thinking choice, said only on the run that changes
+    /// it: `off` runs this turn and the conversation's later ones with a
+    /// thinking budget of `0`, whatever `reasoning_budget_tokens` says;
+    /// `default` forgets that. Absent, the run is as the conversation
+    /// remembers. Without a `conversation_id` it holds for this run alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub thinking: Option<gglib_core::domain::Thinking>,
 }
 
 #[cfg(test)]

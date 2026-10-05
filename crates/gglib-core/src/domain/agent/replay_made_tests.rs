@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde_json::{Map, Value, json};
 
 use super::*;
-use crate::domain::agent::AgentEvent;
+use crate::domain::agent::{AgentEvent, ContextReading};
 use crate::domain::chat::MessageRole;
 
 fn rows(events: &[AgentEvent], finished: bool) -> Vec<NewMessage> {
@@ -33,6 +33,8 @@ fn full_usage() -> TurnUsage {
         duration_ms: 41_000,
         writing_ms: Some(38_200),
         device: Some("phone-7c2e".to_owned()),
+        finish_reason: Some("stop".to_owned()),
+        reading: ContextReading::new(Some(8192), 3),
     }
 }
 
@@ -93,11 +95,15 @@ fn a_turn_with_usage_saves_each_figure_under_its_key() {
             "turnDurationMs": 41_000,
             "writingDurationMs": 38_200,
             "device": "phone-7c2e",
+            "finishReason": "stop",
+            "contextSize": 8192,
+            "trimmedMessages": 3,
         })
     );
 }
 
-/// No rate is saved: the page computes it from what is.
+/// No rate and no share of the context is saved: the page computes them
+/// from what is.
 #[test]
 fn nothing_derived_is_saved() {
     let saved = turn_made();
@@ -106,6 +112,11 @@ fn nothing_derived_is_saved() {
         keys.iter()
             .all(|k| !k.to_lowercase().contains("rate") && !k.contains("PerSecond"))
     );
+    let derived = ["percent", "used"];
+    for key in keys {
+        let key = key.to_lowercase();
+        assert!(derived.iter().all(|word| !key.contains(word)), "{key}");
+    }
 }
 
 #[test]
@@ -117,6 +128,45 @@ fn what_the_upstream_did_not_report_is_left_out_not_zero() {
     let saved = rows(&[text("hi"), AgentEvent::TurnUsage(usage), text("")], true);
     let row = assistants(&saved)[0];
     assert_eq!(Value::Object(made(row)), json!({ "turnDurationMs": 1200 }));
+}
+
+/// A turn whose context is not known, with nothing trimmed and no reason
+/// given, saves none of the three: never a `0`, a `null` or a default size.
+#[test]
+fn a_turn_without_a_reading_saves_neither_key() {
+    let usage = TurnUsage {
+        prompt_tokens: Some(40),
+        reading: ContextReading::new(None, 0),
+        ..TurnUsage::default()
+    };
+    let saved = rows(&[text("hi"), AgentEvent::TurnUsage(usage), text("")], true);
+    let made = made(assistants(&saved)[0]);
+    let k = &MADE_KEYS;
+    for key in [k.context_size, k.trimmed_messages, k.finish_reason] {
+        assert!(!made.contains_key(key), "{key} in {made:?}");
+    }
+    assert_eq!(made[k.prompt_tokens], json!(40));
+}
+
+/// Each of a reading's two figures is saved alone when it is the only one.
+#[test]
+fn each_figure_of_a_reading_is_saved_under_its_own_key() {
+    let saved_of = |reading| {
+        let usage = TurnUsage {
+            reading,
+            ..TurnUsage::default()
+        };
+        let saved = rows(&[text("hi"), AgentEvent::TurnUsage(usage), text("")], true);
+        Value::Object(made(assistants(&saved)[0]))
+    };
+    assert_eq!(
+        saved_of(ContextReading::new(Some(4096), 0)),
+        json!({ "turnDurationMs": 0, "contextSize": 4096 })
+    );
+    assert_eq!(
+        saved_of(ContextReading::new(None, 7)),
+        json!({ "turnDurationMs": 0, "trimmedMessages": 7 })
+    );
 }
 
 #[test]

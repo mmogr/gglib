@@ -64,3 +64,30 @@ fn turn_usage_serialises_flat_and_leaves_out_what_is_unknown() {
         serde_json::json!({"type": "turn_usage", "completion_tokens": 12, "duration_ms": 900})
     );
 }
+
+/// A turn's reading and its finish reason sit flat beside the counts, under
+/// the names the proxy's usage frame uses, and read back to the same turn.
+#[test]
+fn turn_usage_carries_its_reading_flat() {
+    let usage = TurnUsage {
+        prompt_tokens: Some(30),
+        duration_ms: 900,
+        finish_reason: Some("length".to_owned()),
+        reading: crate::domain::agent::ContextReading::new(Some(8192), 2),
+        ..TurnUsage::default()
+    };
+    let json = serde_json::to_value(AgentEvent::TurnUsage(usage.clone())).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "turn_usage",
+            "prompt_tokens": 30,
+            "duration_ms": 900,
+            "finish_reason": "length",
+            "context_size": 8192,
+            "trimmed_messages": 2,
+        })
+    );
+    let back: TurnUsage = serde_json::from_value(json).unwrap();
+    assert_eq!(back, usage);
+}

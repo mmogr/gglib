@@ -35,7 +35,7 @@ concurrency:
 jobs:
   enrich:
     name: Enrich labels
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Fork PRs get a read-only GITHUB_TOKEN, so label writes would fail. Skip cleanly
     # instead — `label-check` below still runs (if: always()) and still reports, so a
     # maintainer just applies labels by hand.
@@ -312,7 +312,7 @@ jobs:
 
   label-check:
     name: Label Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: enrich
     # always() is what makes this run when `enrich` is SKIPPED (fork PR) or errors.
     # Never gate this job on the fork condition itself: a required status check whose job

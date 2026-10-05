@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::attachment::AttachmentId;
 use super::chat::{Conversation, Message};
+use super::thinking::Thinking;
 
 /// One of the hub's chats, as `GET /v1/chats` lists it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,8 +77,18 @@ pub struct HubTurn {
     #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<AttachmentId>,
+    /// The chat's Thinking choice, said only on the turn that changes it:
+    /// `off` runs this turn and the chat's later ones with a thinking
+    /// budget of `0`, `default` forgets that. Left out of the body when
+    /// unsaid, and the turn then runs as the chat remembers.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<Thinking>,
 }
 
 #[cfg(test)]
 #[path = "hub_chats_tests.rs"]
 mod hub_chats_tests;
+#[cfg(test)]
+#[path = "hub_chats_thinking_tests.rs"]
+mod hub_chats_thinking_tests;

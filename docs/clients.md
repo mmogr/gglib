@@ -98,6 +98,105 @@ Which models read images is in `/v1/models`: such a model's entry carries
   `PUT /v1/runs/{id}`. A larger body is answered with HTTP 413 and the code
   `request_too_large`.
 
+## Thinking
+
+Which models think is in `/v1/models`: the entry of a model tagged
+`reasoning` lists `"reasoning"` in its `capabilities`, after `"vision"` when
+it has both (`"capabilities": ["vision", "reasoning"]`). A gglib from before
+this never lists it, so a client that offers a Thinking switch only for such
+a model offers none there.
+
+A client that keeps its own chats, as a phone app does for the chats gglib
+never stores, turns thinking off for a request by sending
+`"reasoning_budget_tokens": 0` in the body of `POST /v1/chat/completions`,
+and leaves the key out otherwise. gglib honours that key from any client,
+whatever `trust_client_sampling` says
+([The two reasoning controls](sampling.md#the-two-reasoning-controls)). The
+choice is the client's to keep: gglib remembers nothing of such a request.
+
+gglib's own turn routes take the choice as a word and remember it on the
+chat: `"thinking": "off"` or `"thinking": "default"` beside the message, on a
+paired device's turn (`PUT /v1/runs/{id}?kind=agent`), on the chat page's
+turn on a paired machine (`PUT /api/remote/chats/{id}/turns/{run_id}`) and on
+this machine's own agent run (`PUT /api/runs/{id}?kind=agent`). Send it only
+on the turn that changes it. `off` runs that turn and the chat's later ones
+with a budget of `0`; `default` forgets that; a turn that says neither runs
+as the chat remembers, which its `settings.thinking` says when the chat is
+opened. [What the other machine can reach](remote.md#what-the-other-machine-can-reach)
+has the rest.
+
+gglib's chat page is such a client. Its composer has a Thinking switch only
+for a model that thinks, showing what the chat remembers; it sends `thinking`
+on the message after a click, and reads the chat's settings again when the
+chat is opened and after each reply, so a chat switched off on a paired
+device opens switched off there and the reverse. Once the message that
+carries a click is accepted the page says nothing more of it: the switch
+shows what the chat remembers when it is next read, so a change made since on
+another device is shown, and the page's next message does not undo it. A far
+chat's model is the one its settings name (`model_name`), else its last
+reply's, looked up in that machine's model list, so a chat that has never run
+shows no switch until its first reply.
+
+## Context reading
+
+A client that wants to show how full a model's context is gets the two facts
+it cannot work out by itself from gglib, beside the token counts it is
+already sent: the context the server that answered was launched with, and how
+many earlier messages gglib shortened or left out so the request fit.
+
+Send `"stream": true` and `"return_progress": true` in the request body. The
+stream's usage frame, the one with an empty `choices`, then carries two more
+keys inside `usage`:
+
+```json
+{"choices":[],"created":1729000000,"id":"chatcmpl-5b1e","model":"qwen3.6","object":"chat.completion.chunk",
+ "usage":{"completion_tokens":96,"context_size":8192,"prompt_tokens":812,"total_tokens":908,"trimmed_messages":3}}
+```
+
+- `context_size` is the context, in tokens, that the server which answered
+  this request was launched with.
+- `trimmed_messages` is how many earlier messages were shortened to a
+  placeholder so the request fit. It is left out when there were none: a
+  missing key means none, and it is never `0` or `null`.
+
+**The rule for a client.** The context used is `prompt_tokens +
+completion_tokens` of the newest reply that finished, taken from that reply's
+last model call and never summed over calls; a reply that was stopped before
+any of its model calls finished leaves the reading of the one before it. Draw
+it only when both counts and `context_size` are known, and draw nothing
+otherwise. Never divide by the `context_window` of a `/v1/models` entry:
+every figure there is advertised 8% low, to leave a client headroom, and only
+the entry of the model loaded at that moment starts from the context its
+server has. The rest start from the catalogue's.
+
+The rule is worked through, case by case, in
+[`contracts/context/readings.json`](../contracts/context/readings.json), and
+where this page and that file differ the file is right. It says which reply
+decides (one that did not finish is passed over only when it carries no
+counts), when a reading is drawn, the percent as a whole number (a half
+rounds up, and it is never over 100), the warning from 70 and the stronger
+one from 90, and the sentences a client says. It is written by hand for every
+client to replay; gglib's chat page replays every case in its tests.
+
+`return_progress` is llama.cpp's own key, and it also asks for
+`prompt_progress` frames, which have no `choices`. On
+`POST /v1/chat/completions` a client that does not send it is sent neither:
+its stream is byte for byte what it was before the reading existed. A chat
+run (`PUT /v1/runs/{id}`) sets the key for every client, so a run's usage
+frame always carries the reading. A reply that is not streamed carries no
+reading.
+
+An agent run says the same of each model call. Its `turn_usage` event carries
+`context_size` and `trimmed_messages` flat, under the same two names, with
+`finish_reason` beside them (`length` is a reply cut off at the model's
+limit). There `trimmed_messages` counts the messages the run left out of the
+request that call answered, over the whole run so far, and `context_size` is
+left out when the run does not know it: on a paired machine's model, or a
+model loaded in the second of this machine's two slots. A saved reply's row
+keeps them in its `metadata` as `contextSize`, `trimmedMessages` and
+`finishReason`, each only when the turn had it, so a chat opened later reads
+the same figures as one watched live.
+
 ## Error codes
 
 Every error code gglib's proxy writes, in a refusal, in a stream's error frame

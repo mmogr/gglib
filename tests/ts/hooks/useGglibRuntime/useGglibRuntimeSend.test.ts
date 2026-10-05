@@ -6,6 +6,11 @@
  * A chat with the paired machine's model goes through the same door, naming
  * that model by its machine and its id there; a conversation it makes is
  * made for that model, so its machine is fixed from the start.
+ *
+ * A send says the chat's Thinking choice when the caller's `thinking` gives
+ * one, asked as the send starts, and the device-wide reasoning controls go
+ * with it as they always have. The caller is told once the daemon has
+ * accepted the run that said it, and never for a run it refused.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,6 +27,7 @@ import { FakeDaemon } from '../../fixtures/fakeDaemon';
 import { conversation, mount, send, shown } from './runtimeHarness';
 import { resetRemoteState } from '../../../../src/services/remoteRegistry';
 import type { ModelRef } from '../../../../src/types/generated/ModelRef';
+import type { Thinking } from '../../../../src/types/generated/Thinking';
 
 let daemon: FakeDaemon;
 
@@ -191,5 +197,129 @@ describe('useGglibRuntime send', () => {
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
+  });
+});
+
+describe('useGglibRuntime send, the Thinking choice', () => {
+  afterEach(() => localStorage.clear());
+
+  /** Send `text`, end its run with a reply, and give the body the daemon got. */
+  async function exchange(hook: Awaited<ReturnType<typeof mount>>, text: string) {
+    const before = daemon.count('PUT', '/api/runs/');
+    send(hook, text);
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(before + 1));
+    const run = [...daemon.runs.values()].at(-1)!;
+    daemon.emit(run.info.id, { type: 'final_answer', content: 'ok' });
+    void daemon.finish(run.info.id, 'completed', [{ role: 'assistant', content: 'ok' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    return run.request as unknown as Record<string, unknown>;
+  }
+
+  it('says what `thinking` answers as each send starts: off once, then nothing, default once, then nothing', async () => {
+    let said: Thinking | undefined;
+    const thinking = vi.fn(() => said && { said, accepted: () => {} });
+    const hook = await mount({ ...local, thinking });
+    // Asked at a send, never at mount.
+    expect(thinking).not.toHaveBeenCalled();
+
+    expect(Object.keys(await exchange(hook, 'one'))).not.toContain('thinking');
+    said = 'off';
+    expect((await exchange(hook, 'two')).thinking).toBe('off');
+    said = undefined;
+    expect(Object.keys(await exchange(hook, 'three'))).not.toContain('thinking');
+    said = 'default';
+    expect((await exchange(hook, 'four')).thinking).toBe('default');
+    said = undefined;
+    expect(Object.keys(await exchange(hook, 'five'))).not.toContain('thinking');
+    expect(thinking).toHaveBeenCalledTimes(5);
+  });
+
+  it('says nothing of thinking when the caller gives no `thinking` at all', async () => {
+    const hook = await mount(local);
+    expect(Object.keys(await exchange(hook, 'hello'))).not.toContain('thinking');
+  });
+
+  it('sends the device-wide effort and budget unchanged, whatever the choice says', async () => {
+    localStorage.setItem(
+      'gglib.chat.agentOverrides',
+      JSON.stringify({ reasoningEffort: 'high', reasoningBudgetTokens: 2048 }),
+    );
+    let said: Thinking | undefined;
+    const hook = await mount({ ...local, thinking: () => said && { said, accepted: () => {} } });
+
+    const device = { reasoning_effort: 'high', reasoning_budget_tokens: 2048 };
+    expect(await exchange(hook, 'one')).toMatchObject(device);
+    said = 'off';
+    expect(await exchange(hook, 'two')).toMatchObject({ ...device, thinking: 'off' });
+    said = 'default';
+    expect(await exchange(hook, 'three')).toMatchObject({ ...device, thinking: 'default' });
+  });
+
+  it('a send gglib refused is asked again at the next send, and its choice is not called accepted: it is the caller\'s to keep', async () => {
+    const onError = vi.fn();
+    const accepted = vi.fn();
+    const thinking = vi.fn(() => ({ said: 'off' as Thinking, accepted }));
+    daemon.refuseNext = { status: 503, type: 'unavailable', error: 'the model is not ready' };
+    const hook = await mount({ ...local, thinking, onError });
+    send(hook, 'hello');
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(daemon.runs.size).toBe(0);
+    expect(accepted).not.toHaveBeenCalled();
+
+    expect((await exchange(hook, 'hello')).thinking).toBe('off');
+    expect(thinking).toHaveBeenCalledTimes(2);
+    expect(accepted).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls the choice accepted as soon as the daemon has taken the run that said it, while its reply is still being written', async () => {
+    const accepted = vi.fn();
+    const hook = await mount({ ...local, thinking: () => ({ said: 'off', accepted }) });
+    send(hook, 'hello');
+    await waitFor(() => expect(accepted).toHaveBeenCalledTimes(1));
+    const run = daemon.only();
+    expect(run.request).toMatchObject({ thinking: 'off' });
+    expect(run.info.status).not.toBe('completed');
+    expect(hook.result.current.isRunning).toBe(true);
+
+    void daemon.finish(run.info.id, 'completed', [{ role: 'assistant', content: 'ok' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    expect(accepted).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls the choice accepted for a run the daemon took after the conversation was left', async () => {
+    // The daemon answers the start only when the test lets it.
+    let answer: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'PUT' && String(input).startsWith('/api/runs/')) await held;
+      return daemon.fetch(input, init);
+    }));
+    const accepted = vi.fn();
+    const thinking = () => ({ said: 'off' as Thinking, accepted });
+    const hook = await mount({ ...local, thinking });
+    send(hook, 'hello');
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
+
+    // Another conversation is opened before the daemon answers.
+    hook.rerender({ ...local, conversationId: 2, conversation: conversation(2), thinking });
+    await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
+    expect(daemon.runs.size).toBe(0);
+    expect(accepted).not.toHaveBeenCalled();
+
+    await act(async () => {
+      answer();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(daemon.only().request).toMatchObject({ conversation_id: 1, thinking: 'off' });
+    expect(accepted).toHaveBeenCalledTimes(1);
+  });
+
+  it('a turn on a far model says it through the same door', async () => {
+    const accepted = vi.fn();
+    const hook = await mount({ conversationId: 1, conversation: conversation(1), pairedModel: far, thinking: () => ({ said: 'off', accepted }) });
+    expect(await exchange(hook, 'hello')).toMatchObject({ far, thinking: 'off' });
+    expect(accepted).toHaveBeenCalledTimes(1);
   });
 });

@@ -7,7 +7,9 @@
 //! a run on another machine than the one it ran on is refused before its
 //! message is saved. Once the message is saved, the run names its model on
 //! the conversation by its machine, so the chat's next turn, from either
-//! door, runs on it, or is refused for being the paired machine's. The reply
+//! door, runs on it, or is refused for being the paired machine's. A turn
+//! that said a Thinking choice has the conversation remember it then too.
+//! The reply
 //! is saved when the run ends, all rows or none, with how long each turn
 //! thought: from its first reasoning event to its last, as they were logged.
 
@@ -17,7 +19,7 @@ use std::time::Instant;
 use axum::http::StatusCode;
 use gglib_core::domain::agent::{AgentMessage, MADE_KEYS, rows_from_timed_frames, to_new_message};
 use gglib_core::domain::runs::{RunError, RunStatus};
-use gglib_core::domain::{Machine, ModelRef};
+use gglib_core::domain::{Machine, ModelRef, Thinking};
 use gglib_core::ports::ChatHistoryError;
 use gglib_core::services::AppCore;
 use serde_json::{Map, Value};
@@ -190,6 +192,27 @@ pub(super) async fn record_model(
         tracing::warn!(
             conversation = conversation_id,
             "an agent run's model was not recorded on its conversation"
+        );
+    }
+}
+
+/// Set what `conversation_id` remembers of thinking to `choice`, as the
+/// run's turn said: `off`, or nothing once it said `default`. One field of
+/// the conversation's settings; every other stays. Not saved is logged, not
+/// refused, as the model is.
+pub(super) async fn remember_thinking(
+    core: &AppCore,
+    conversation_id: i64,
+    choice: Option<Thinking>,
+) {
+    let recorded = core
+        .chat_history()
+        .record_thinking(conversation_id, choice)
+        .await;
+    if recorded.is_err() {
+        tracing::warn!(
+            conversation = conversation_id,
+            "an agent run's thinking choice was not recorded on its conversation"
         );
     }
 }

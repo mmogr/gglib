@@ -55,10 +55,10 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | Module | Responsibility |
 |--------|----------------|
 | `agent_loop` | `AgentLoop` struct + `AgentLoopPort` impl (main state machine) |
-| `context_pruning` | Budget-aware message trimming |
+| `context_pruning` | Budget-aware message trimming, and the count of what it dropped (`Pruned`) |
 | `guards` | The stagnation and loop detectors behind one verdict |
 | `stream_collector` | Consumes `LlmStreamEvent` stream, forwards text live |
 | `tool_execution` | Parallel tool dispatch with semaphore + timeout |
-| `turn_usage` | Measures each model turn's stream (duration, the upstream's counts, the adapter's writing time) and sends its `TurnUsage` when the stream ends |
+| `turn_usage` | Measures each model turn's stream (duration, the upstream's counts, the adapter's writing time, why the model stopped) and sends its `TurnUsage`, with how many messages the loop had left out of that request, when the stream ends |
 | `util` | Shared internal utilities |
 <!-- MODULE_TABLE_END -->

@@ -1,12 +1,17 @@
 import { FC, useContext } from 'react';
 import { ComposerPrimitive } from '@assistant-ui/react';
+import { Brain, CircleOff } from 'lucide-react';
 import { Button } from '../../ui/Button';
+import { Chip } from '../../ui/Chip';
+import { Icon } from '../../ui/Icon';
 import { ToolsPopover } from '../../ToolsPopover';
 import { ToolSupportIndicator } from '../../ToolSupportIndicator';
 import { getToolRegistry } from '../../../services/tools';
+import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
 import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
 import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
+import { ContextRing } from './ContextRing';
 
 interface ComposerFooterProps {
   isServerConnected: boolean;
@@ -28,14 +33,24 @@ interface ComposerFooterProps {
   /** null = capability status not yet resolved. */
   supportsToolCalls?: boolean | null;
   toolFormat?: string | null;
+  /** The chat's Thinking switch; drawn only where it says it is shown. */
+  thinking?: ThinkingSwitch;
 }
+
+const THINKING_ON = 'Thinking is on for this chat. Click to switch it off from the next message.';
+const THINKING_OFF = 'Thinking is off for this chat. Click to switch it back on from the next message.';
 
 /**
  * The composer, on the notebook's grid: the model (a picker, on this
- * machine) and the tools in the margin; in the body, the images attached,
- * then the attach button, the text box and Stop or Send. An image is
- * attached by the button, a paste or a drop, each only where the model
- * takes images, as `ImageInputContext` says.
+ * machine), the tools, the context ring and the Thinking switch in the
+ * margin; in the body, the images attached, then the attach button, the text
+ * box and Stop or Send. An image is attached by the button, a paste or a
+ * drop, each only where the model takes images, as `ImageInputContext` says.
+ * The switch is a button, pressed while the chat thinks and there only for
+ * a model that does; it changes what the next send says, never a reply
+ * already being written. Its name is "Thinking" either way; switched off it
+ * reads "Thinking off" beside another icon, so which way it is never rests
+ * on its colours alone.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -49,6 +64,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   quantization,
   supportsToolCalls,
   toolFormat,
+  thinking,
 }) => {
   const imageInput = useContext(ImageInputContext);
   return (
@@ -66,13 +82,24 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
           />
         }
         made={
-          <div className="flex items-center gap-sm">
+          <div className="flex flex-wrap items-center justify-end gap-sm">
             <ToolSupportIndicator
               supports={supportsToolCalls ?? null}
               hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
               toolFormat={toolFormat}
             />
-            <ToolsPopover opensUpward align="left" />
+            <ToolsPopover opensUpward align="left" modelId={modelId} />
+            <ContextRing />
+            {thinking?.shown && (
+              <Chip
+                leftIcon={<Icon icon={thinking.on ? Brain : CircleOff} size={12} />}
+                selected={thinking.on}
+                onClick={thinking.toggle}
+                title={thinking.on ? THINKING_ON : THINKING_OFF}
+              >
+                Thinking{!thinking.on && <span aria-hidden="true"> off</span>}
+              </Chip>
+            )}
           </div>
         }
         body={

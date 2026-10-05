@@ -119,6 +119,35 @@ describe('ChatPage, images in the composer', () => {
     expect(within(strip()).getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', 'blob:shown-1');
   });
 
+  it('once a reply says the context it was answered with, a tile\'s share is of that size, the one the ring reads', async () => {
+    fixture.rows = {
+      1: [
+        { id: 11, conversation_id: 1, role: 'user', content: 'Hello.', created_at: '2026-10-04T09:00:00Z' },
+        {
+          id: 12,
+          conversation_id: 1,
+          role: 'assistant',
+          content: 'Hi.',
+          created_at: '2026-10-04T09:00:05Z',
+          metadata: { promptTokens: 900, completionTokens: 50, contextSize: 16_384 },
+        },
+      ],
+    };
+    page({ imageInput: true, contextLength: 8_192, serverDefaults: { contextLength: 32_768 } });
+    renderLocal();
+    const box = await composerBox();
+    await waitFor(() => expect(attachButton()).toBeEnabled());
+    expect(screen.getByRole('button', { name: /^Context: / })).toHaveAttribute(
+      'title',
+      '950 of 16,384 tokens (6%) after the last finished reply.',
+    );
+
+    expect(fireEvent.paste(box, { clipboardData: { files: [pngFile(800, 600, 'shot.png')] } })).toBe(false);
+
+    // 475 of 16,384 is 3%; of the catalogue's 32,768 it would be 1%.
+    await waitFor(() => expect(within(strip()).getByText('~475 tokens · 3% of context')).toBeInTheDocument());
+  });
+
   it('a drop and the attach button add images too, and Remove takes one away', async () => {
     const user = userEvent.setup();
     page({ imageInput: true, contextLength: 4_096 });

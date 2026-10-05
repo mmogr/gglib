@@ -138,6 +138,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`fallback_session.rs`** — The session id of a request that names none: a hash of its system prompt and its first user message, that message's images included
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
+- **`usage_reading.rs`** — What a streamed reply's usage frame also says of its context (the answering server's launched context and how many messages were shortened to fit), and that only a client whose own body set `return_progress` is told (see [The context reading](#the-context-reading))
 - **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
@@ -239,6 +240,11 @@ gglib adds:
   reused. A variant carries its base model's. It means something only on
   this machine; `id` is what a client sends.
 - `profile` — on a variant, the profile it selects; absent on a base entry.
+- `capabilities` — what the model does beyond text chat, in this order:
+  `"embeddings"` (tagged `embedding`), `"vision"` (linked to a projector) and
+  `"reasoning"` (tagged `reasoning`: a model that thinks, which a client reads
+  to offer a Thinking switch). Absent, never `[]`, on a model that is none of
+  them; a variant carries its base model's.
 
 The list also carries `machine_name`, this machine's host name cut to its
 first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
@@ -324,7 +330,8 @@ the rest as raw bytes.
 Which models can serve it is advertised by `/v1/models`: an embedding model's
 entry carries `"capabilities": ["embeddings"]`.  A plain chat model's entry is
 unchanged — the field is omitted entirely rather than sent as an empty array —
-and one that reads images lists `"vision"` there (see [Images](#images)).
+and one that reads images lists `"vision"` there (see [Images](#images)), and
+one tagged `reasoning` lists `"reasoning"` after it.
 
 #### Embedding mode is exclusive, and that has a cost
 
@@ -545,6 +552,37 @@ SSE responses are forwarded with proper headers:
 - `Connection: keep-alive`
 
 The proxy preserves upstream headers (minus hop-by-hop) and strips `Authorization`.
+
+### The context reading
+
+A streamed reply's usage frame says, to a client that asked, how large the
+context was and how much of the conversation did not fit. Inside `usage`,
+beside the upstream's counts:
+
+- `context_size` — the context the server that answered was launched with
+  (the admitted target's `effective_ctx`, so a reply made after a swap or a
+  retry names the server that made it). Never the `/v1/models` figure, which
+  is advertised 8% low on every entry and starts from a running server's
+  context only for the model loaded when the list was read.
+- `trimmed_messages` — how many messages [history truncation](#history-truncation)
+  replaced with its placeholder in this request. Left out when it replaced
+  none: never `0`.
+
+```json
+{"choices":[],"created":1729000000,"id":"chatcmpl-5b1e","model":"qwen3.6","object":"chat.completion.chunk",
+ "usage":{"completion_tokens":96,"context_size":8192,"prompt_tokens":812,"total_tokens":908,"trimmed_messages":3}}
+```
+
+A client asks by setting `return_progress: true` in its own body, the key
+that also gets it `prompt_progress` frames. The proxy forces that key
+upstream for every streamed request, so what decides is what the client
+sent, read before the override. A client that did not send it gets the usage
+frame with the upstream's counts alone, byte for byte as before; chat runs
+set the key for every client, so a chat run's usage frame carries the reading.
+A reply that is not streamed carries none. The two names are `ContextReading`'s
+(`gglib_core::domain::agent`), which an agent run's `turn_usage` event
+carries flat, so one decoder reads both. The rule a client draws by is in
+[the client guide](../../docs/clients.md#context-reading).
 
 ### When the upstream stops talking
 

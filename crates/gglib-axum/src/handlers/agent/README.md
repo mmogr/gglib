@@ -21,7 +21,14 @@ An agent run stamps each turn's `turn_usage` event with the model it drove
 (`compose::MadeBy`: locally the model on the port and its catalogue
 quantisation, on the paired machine the name and quantisation that machine
 has for the model) before logging it, so the
-frame a page draws and the row the reply is saved as say the same.
+frame a page draws and the row the reply is saved as say the same. A local
+run also stamps the context its model was launched with
+(`remote_upstream::hold_model`): read once the run holds the model, so it
+cannot be an earlier launch's, and only when the primary slot's model is the
+run's own by port and id. A run on the paired machine's model, or on a model
+in the second slot, stamps none, and the figure is left out: never a default.
+The loop itself counts the messages it left out of each request and reports
+why the model stopped.
 
 # Which upstream
 
@@ -74,15 +81,34 @@ paired machine is told apart by its fingerprint), saves the user's message,
 names the run's model on the
 conversation by its machine (a local run's registry id, a far run's id on the
 paired machine, and its name in the settings) so the chat's next turn from
-either door runs on it, or is refused for being the paired machine's, and
-starts the loop.
+either door runs on it, or is refused for being the paired machine's, has
+the conversation remember the Thinking choice its turn said, and starts the
+loop.
+
+# The Thinking choice
+
+`thinking::settle` is the one rule for it, read at every door a turn comes
+through: a device's turn (`hub_turn::plan`), which is also how the page's
+turn on a paired machine arrives there, and this machine's own run
+(`run::plan`). A turn says `off`, `default` or nothing. `off` runs it with a
+thinking budget of `0` and the conversation remembers; `default` runs it with
+the request's own `reasoning_budget_tokens` and the conversation forgets;
+nothing runs it as the conversation remembers, and a remembered `off` beats
+the request's own budget, which a device's turn never has and the page's run
+carries once one is set in its Tools popover. A request's own budget and
+effort level are never remembered. What is remembered is
+`ConversationSettings.thinking`,
+written by `launch` beside the run's model, so a refused run, or a repeated
+id that starts nothing, writes nothing, and a run with no conversation
+applies what it said and remembers nothing.
 
 # A paired device's turn
 
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
 starts: `PUT /v1/runs/{id}?kind=agent` on the proxy's door carries only a
 chat's id and the device's message, with any image named by the id its
-upload answered; a turn may be its images alone. An image the turn or the
+upload answered, and the chat's Thinking choice on the turn that changes it;
+a turn may be its images alone. An image the turn or the
 history names that is not stored is `400 attachment_not_found`, images over
 16 MiB together `400 request_images_too_large`, and an image for a model
 with no projector `400 model_cannot_read_images`, all before the model is

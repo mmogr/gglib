@@ -27,6 +27,7 @@ pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
         conversation_id,
         content: content.to_owned(),
         images: Vec::new(),
+        thinking: None,
     }
 }
 
@@ -120,7 +121,7 @@ async fn a_device_turn_saves_its_message_and_the_reply() {
         &state,
         "phone",
         "d1",
-        plan.conversation_id,
+        plan.transcript,
         p,
         take_permit(&state).unwrap(),
     )

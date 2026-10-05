@@ -2,11 +2,13 @@
 //! hub's chats, and the hub runs the reply as an agent run in the device's
 //! scope, saved to the chat.
 //!
-//! The body is `{conversation_id, content, images}` and nothing more, with
-//! `images` (stored image ids) left out of a text-only turn: the hub
-//! rebuilds the history from its own record. Only a named device may: a
-//! local client writes to its chats at `/api`. Every error message is fixed
-//! text or the starter's, which is fixed text too.
+//! The body is `{conversation_id, content, images, thinking}` and nothing
+//! more, with `images` (stored image ids) left out of a text-only turn and
+//! `thinking` (`"off"` or `"default"`) left out of one that does not change
+//! the chat's Thinking choice: the hub rebuilds the history from its own
+//! record. Only a named device may: a local client writes to its chats at
+//! `/api`. Every error message is fixed text or the starter's, which is
+//! fixed text too.
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -49,7 +51,7 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
     let turns = state.turns.clone().ok_or_else(unavailable)?;
     let Ok(turn) = serde_json::from_value::<HubTurn>(body) else {
         return Err(invalid(
-            "a turn's body is {\"conversation_id\": <number>, \"content\": <text>, \"images\": [<id>]}",
+            "a turn's body is {\"conversation_id\": <number>, \"content\": <text>, \"images\": [<id>], \"thinking\": \"off\" or \"default\"}",
         ));
     };
     let created = turns.start(device, id, turn).await.map_err(refused)?;

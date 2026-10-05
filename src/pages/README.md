@@ -49,6 +49,8 @@ Interactive chat interface featuring:
 - Real-time streaming responses
 - Conversation history
 - Model selection from the composer's margin: a server running here, or a registered model, started first
+- A context ring in the composer's margin: how much of the model's context the conversation has used, from the figures its last finished reply carried, and absent where they are not known
+- A Thinking switch in the composer's margin, only where the chat's model thinks: it shows what gglib remembers of the conversation, so a chat switched off here opens switched off on a paired device and the reverse, and a click is said by the next message sent
 - MCP tool integration
 
 ## Sub-modules

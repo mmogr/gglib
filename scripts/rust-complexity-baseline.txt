@@ -75,7 +75,6 @@ crates/gglib-core/src/services/model_verification.rs 806
 crates/gglib-core/src/settings.rs 596
 crates/gglib-core/src/settings_tests.rs 484
 crates/gglib-core/src/sse/decoder.rs 334
-crates/gglib-core/src/sse/encoder.rs 460
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/repositories/row_mappers.rs 317

@@ -29,6 +29,7 @@ import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
 import type { ChatSource, ConversationSummary } from '../../services/transport';
 import type { ImageInput } from '../../hooks/useImageInput';
+import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -82,6 +83,8 @@ interface ChatMessagesPanelProps {
   source?: ChatSource;
   /** Whether the model takes images, why not, and its context: for every composer in the thread. */
   imageInput: ImageInput;
+  /** The chat's Thinking switch, for the composer's margin. */
+  thinking?: ThinkingSwitch;
 }
 
 /** The notebook's column: the width its rows are laid out in. */
@@ -118,6 +121,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   headOnly = false,
   source = 'this',
   imageInput,
+  thinking,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -263,6 +267,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     quantization={quantization}
                     supportsToolCalls={supportsToolCalls}
                     toolFormat={toolFormat}
+                    thinking={thinking}
                   />
                 </ThreadPrimitive.Root>
               </ThinkingTimingProvider>

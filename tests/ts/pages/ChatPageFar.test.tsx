@@ -16,6 +16,7 @@ import { UNREAD_STORAGE_KEY } from '../../../src/components/ConversationListPane
 import type { ChatDraft } from '../../../src/types/messages';
 import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
 import { guiModel } from '../fixtures/model';
+import { farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
 import { act } from '@testing-library/react';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
@@ -58,6 +59,8 @@ function farTransport() {
       messages: id === 1 ? FAR_ROWS : [],
     })),
     listFarRuns: vi.fn(async () => []),
+    // Read for a far chat's model; none of them thinks unless a test says so.
+    listPairedModels: vi.fn(async () => pairedModels([farEntry('qwen3-8b', 5)])),
     addFarTurn: vi.fn(async (_id: number, runId: string) => ({
       id: runId,
       kind: 'agent',
@@ -212,6 +215,31 @@ describe('ChatPage, the far machine’s chats', () => {
     made.mockRestore();
   });
 
+  /** Open the far chat with these figures on its reply's row, as the far machine saved them. */
+  async function openFarWith(figures: Record<string, unknown>) {
+    const user = userEvent.setup();
+    (transport.current as Record<string, unknown>).openFarChat = vi.fn(async (id: number) => ({
+      conversation: { id, title: 'Why the build broke', model_id: null, system_prompt: 'You are the hub.', created_at: '', updated_at: '' },
+      messages: [FAR_ROWS[0], { ...FAR_ROWS[1], metadata: { ...FAR_ROWS[1].metadata, ...figures } }, FAR_ROWS[2]],
+    }));
+    joined();
+    renderPage();
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
+    await screen.findByText('A dependency moved.');
+  }
+
+  it('a far chat shows the context ring where the far machine saved its context size', async () => {
+    await openFarWith({ promptTokens: 8000, completionTokens: 200, contextSize: 32768 });
+    const ring = screen.getByRole('button', { name: 'Context: 25 percent of context used' });
+    expect(ring).toHaveAttribute('title', '8,200 of 32,768 tokens (25%) after the last finished reply.');
+  });
+
+  it('a far chat whose rows carry counts and no size shows no ring', async () => {
+    await openFarWith({ promptTokens: 8000, completionTokens: 200 });
+    expect(screen.getByText('8,000 tok read')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Context: / })).not.toBeInTheDocument();
+  });
+
   it('a far chat offers no Unload: its model is the other machine’s', async () => {
     const user = userEvent.setup();
     joined();
@@ -277,7 +305,8 @@ describe('ChatPage, the far machine’s chats', () => {
     const sent = rowOf(await screen.findByText('And how do I fix it?'));
     expect(within(sent).getByText('You')).toBeInTheDocument();
     const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
-    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', []);
+    // Its text and no image, and nothing said of thinking: the switch was not touched.
+    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined);
   });
 
   it('a model switch that lands while a far chat is open opens no conversation here', async () => {

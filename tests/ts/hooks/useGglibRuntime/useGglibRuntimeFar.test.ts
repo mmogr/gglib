@@ -3,10 +3,14 @@
  * daemon: opening reads the far rows, a send is the new turn alone, its
  * text and its images (the images tested in `useGglibRuntimeImages.test.ts`),
  * the far machine runs and saves the reply, and nothing of it is kept here.
+ * A turn that changes the chat's Thinking choice says that too, and no other
+ * turn says anything of it; the caller is told once that machine has accepted
+ * such a turn, and never for one it refused. Each reading of the chat is
+ * handed up, which is where its settings come from.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 vi.mock('../../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -18,6 +22,9 @@ vi.mock('../../../../src/services/tools', () => ({
 import { FakeFarDaemon } from '../../fixtures/fakeFarDaemon';
 import { mount, send, shown } from './runtimeHarness';
 import { resetRemoteState } from '../../../../src/services/remoteRegistry';
+import { useGglibRuntime, type UseGglibRuntimeOptions } from '../../../../src/hooks/useGglibRuntime/useGglibRuntime';
+import type { HubChatOpen } from '../../../../src/types/generated/HubChatOpen';
+import type { Thinking } from '../../../../src/types/generated/Thinking';
 
 let daemons: FakeFarDaemon;
 
@@ -68,6 +75,7 @@ describe('useGglibRuntime on the far machine', () => {
     expect(put.url).toBe(`/api/remote/chats/1/turns/${run.info.id}`);
     expect(run.info.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
     expect(put.body).toEqual({ content: 'And how do I fix it?' });
+    expect(Object.keys(put.body as object)).toEqual(['content']);
 
     daemons.hub.emit(run.info.id, { type: 'text_delta', content: 'Pin' });
     await waitFor(() => expect(shown(hook.result.current.messages).at(-1)?.[2]).toBe('Pin'));
@@ -202,5 +210,138 @@ describe('useGglibRuntime on the far machine', () => {
     await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
 
     expect([{ ...localStorage }, { ...sessionStorage }]).toEqual(before);
+  });
+});
+
+describe('useGglibRuntime on the far machine, the Thinking choice', () => {
+  /** Send `text`, end the far run with a reply, and give the body the page sent. */
+  async function exchange(hook: Awaited<ReturnType<typeof mount>>, text: string) {
+    const before = daemons.farCount('PUT', '/api/remote/chats/1/turns/');
+    send(hook, text);
+    await waitFor(() => expect(daemons.farCount('PUT', '/api/remote/chats/1/turns/')).toBe(before + 1));
+    const run = [...daemons.hub.runs.values()].at(-1)!;
+    void daemons.hub.finish(run.info.id, 'completed', [{ role: 'assistant', content: 'ok' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    return daemons.farRequests.filter((r) => r.method === 'PUT').at(-1)!.body;
+  }
+
+  it('an untouched turn is its text alone; one that changes the choice adds off, then default, each once', async () => {
+    let said: Thinking | undefined;
+    const thinking = vi.fn(() => said && { said, accepted: () => {} });
+    const hook = await mount({ ...far(1), thinking });
+    expect(thinking).not.toHaveBeenCalled();
+
+    expect(await exchange(hook, 'one')).toEqual({ content: 'one' });
+    said = 'off';
+    expect(await exchange(hook, 'two')).toEqual({ content: 'two', thinking: 'off' });
+    said = undefined;
+    const untouched = await exchange(hook, 'three');
+    expect(untouched).toEqual({ content: 'three' });
+    expect(Object.keys(untouched as object)).toEqual(['content']);
+    said = 'default';
+    expect(await exchange(hook, 'four')).toEqual({ content: 'four', thinking: 'default' });
+    said = undefined;
+    expect(await exchange(hook, 'five')).toEqual({ content: 'five' });
+    expect(thinking).toHaveBeenCalledTimes(5);
+    nothingHere();
+  });
+
+  it('a far turn carries none of the device-wide reasoning controls, with or without the choice', async () => {
+    localStorage.setItem(
+      'gglib.chat.agentOverrides',
+      JSON.stringify({ reasoningEffort: 'high', reasoningBudgetTokens: 2048 }),
+    );
+    try {
+      let said: Thinking | undefined;
+      const hook = await mount({ ...far(1), thinking: () => said && { said, accepted: () => {} } });
+      expect(await exchange(hook, 'one')).toEqual({ content: 'one' });
+      said = 'off';
+      expect(await exchange(hook, 'two')).toEqual({ content: 'two', thinking: 'off' });
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('calls the choice accepted once that machine has taken the turn, while its reply is still being written, and not for a turn it refused', async () => {
+    const onError = vi.fn();
+    const accepted = vi.fn();
+    daemons.hub.save(1, { role: 'user', content: 'Why did the build break?' });
+    const hook = await mount({ ...far(1), thinking: () => ({ said: 'default', accepted }), onError });
+
+    daemons.hub.refuseNext = { status: 503, type: 'unavailable', error: 'the model is not ready' };
+    send(hook, 'one');
+    await waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(daemons.hub.runs.size).toBe(0);
+    expect(accepted).not.toHaveBeenCalled();
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+
+    send(hook, 'one');
+    await waitFor(() => expect(accepted).toHaveBeenCalledTimes(1));
+    const run = daemons.hub.only();
+    expect(daemons.farRequests.filter((r) => r.method === 'PUT').at(-1)!.body).toEqual({ content: 'one', thinking: 'default' });
+    expect(hook.result.current.isRunning).toBe(true);
+
+    void daemons.hub.finish(run.info.id, 'completed', [{ role: 'assistant', content: 'ok' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    expect(accepted).toHaveBeenCalledTimes(1);
+    nothingHere();
+  });
+
+  it('hands up the far chat each time it is read: at opening, and again after a run', async () => {
+    daemons.hub.save(1, { role: 'user', content: 'Why did the build break?' });
+    const onFarOpened = vi.fn<(open: HubChatOpen) => void>();
+    const hook = await mount({ ...far(1), onFarOpened });
+    await waitFor(() => expect(onFarOpened).toHaveBeenCalledTimes(1));
+    expect(onFarOpened.mock.calls[0][0].conversation).toMatchObject({ id: 1, system_prompt: 'You are the hub.' });
+    expect(onFarOpened.mock.calls[0][0].messages.map((m) => m.content)).toEqual(['Why did the build break?']);
+
+    await exchange(hook, 'And how do I fix it?');
+    expect(onFarOpened).toHaveBeenCalledTimes(2);
+    expect(onFarOpened.mock.calls[1][0].messages.map((m) => m.content)).toEqual([
+      'Why did the build break?',
+      'And how do I fix it?',
+      'ok',
+    ]);
+    nothingHere();
+  });
+
+  it('hands up nothing of a far chat that was left before its reading came back', async () => {
+    // Chat 1 answers only when the test lets it; chat 2 answers at once.
+    let answer: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    let asked = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input) === '/api/remote/chats/1') {
+        asked += 1;
+        await held;
+      }
+      return daemons.fetch(input, init);
+    }));
+    const onFarOpened = vi.fn<(open: HubChatOpen) => void>();
+    const hook = renderHook((props: UseGglibRuntimeOptions) => useGglibRuntime(props), {
+      initialProps: { ...far(1), onFarOpened },
+    });
+    await waitFor(() => expect(asked).toBe(1));
+
+    hook.rerender({ ...far(2), onFarOpened });
+    await waitFor(() => expect(onFarOpened).toHaveBeenCalledTimes(1));
+    expect(onFarOpened.mock.calls[0][0].conversation.id).toBe(2);
+
+    // Chat 1's answer arrives now, for a reading that was left.
+    await act(async () => {
+      answer();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(daemons.farCount('GET', '/api/remote/chats/1')).toBe(1);
+    expect(onFarOpened).toHaveBeenCalledTimes(1);
+  });
+
+  it('this machine\'s chat hands up nothing: its settings are in its list', async () => {
+    const onFarOpened = vi.fn();
+    const hook = await mount({ conversationId: 1, selectedServerPort: 9000, onFarOpened });
+    await waitFor(() => expect(hook.result.current.isLoading).toBe(false));
+    expect(onFarOpened).not.toHaveBeenCalled();
   });
 });

@@ -7,11 +7,14 @@
     {
       "cached_tokens": 2100,
       "completion_tokens": 496,
+      "context_size": 8192,
       "device": "phone-7c2e",
       "duration_ms": 41000,
+      "finish_reason": "stop",
       "model": "Qwen3.8-27B",
       "prompt_tokens": 3180,
       "quantization": "Q8_0",
+      "trimmed_messages": 3,
       "type": "turn_usage",
       "writing_ms": 38200
     },
@@ -23,10 +26,13 @@
   "metadata": {
     "cachedTokens": 2100,
     "completionTokens": 496,
+    "contextSize": 8192,
     "device": "phone-7c2e",
+    "finishReason": "stop",
     "modelName": "Qwen3.8-27B",
     "modelQuantization": "Q8_0",
     "promptTokens": 3180,
+    "trimmedMessages": 3,
     "turnDurationMs": 41000,
     "writingDurationMs": 38200
   }

@@ -47,6 +47,7 @@ async fn a_named_devices_turn_reaches_the_starter_in_its_name() {
         conversation_id: 7,
         content: "carry on".to_owned(),
         images: Vec::new(),
+        thinking: None,
     };
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
     assert!(runs.scopes().is_empty(), "no chat run was made");
@@ -72,6 +73,7 @@ async fn a_turns_images_reach_the_starter_by_id() {
         conversation_id: 7,
         content: String::new(),
         images,
+        thinking: None,
     };
     let started = turns.started.lock().unwrap().clone();
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
@@ -80,6 +82,33 @@ async fn a_turns_images_reach_the_starter_by_id() {
     let (status, answer) = json(from_device(put(&base, &named)).send().await.unwrap()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
     assert_eq!(code(&answer), "invalid_request");
+    cancel.cancel();
+}
+
+/// A turn's Thinking choice reaches the starter as it was said. A word that
+/// is neither is a body that is not a turn, and the refusal names the key.
+#[tokio::test]
+async fn a_turns_thinking_choice_reaches_the_starter_and_an_unknown_word_is_400() {
+    use gglib_core::domain::Thinking;
+
+    let turns = Arc::new(FakeTurns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::default()).await;
+    for (word, choice) in [("off", Thinking::Off), ("default", Thinking::Default)] {
+        let sent = json!({ "conversation_id": 7, "content": "carry on", "thinking": word });
+        let (status, run) = json(from_device(put(&base, &sent)).send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::CREATED, "{run}");
+        let started = turns.started.lock().unwrap().clone();
+        assert_eq!(started.last().unwrap().2.thinking, Some(choice));
+    }
+
+    for word in [json!("on"), json!(0)] {
+        let bad = json!({ "conversation_id": 7, "content": "x", "thinking": word });
+        let (status, answer) = json(from_device(put(&base, &bad)).send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+        assert_eq!(code(&answer), "invalid_request");
+        assert!(answer.to_string().contains("thinking"), "{answer}");
+    }
+    assert_eq!(turns.started.lock().unwrap().len(), 2);
     cancel.cancel();
 }
 

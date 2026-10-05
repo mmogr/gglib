@@ -5,7 +5,7 @@
 //! ```text
 //! AgentLoop::run()
 //!   │
-//!   ├─ context_pruning::prune_for_budget()        initial budget trim (before loop)
+//!   ├─ context_pruning::Pruned::new()             initial budget trim (before loop)
 //!   │
 //!   └─ [per iteration]
 //!       ├─ llm.chat_stream()                          LLM call (streaming)
@@ -16,7 +16,7 @@
 //!       │      ├─ AgentEvent::ToolCallStart           per-tool
 //!       │      └─ AgentEvent::ToolCallComplete        per-tool
 //!       ├─ LoopDetector::record_results()             the answers, after the fact
-//!       ├─ context_pruning::prune_for_budget()        post-append budget trim
+//!       ├─ context_pruning::Pruned::prune()           post-append budget trim
 //!       └─ AgentEvent::IterationComplete              per-iteration
 //! ```
 //!
@@ -49,7 +49,7 @@ use crate::turn_usage::measure_turn;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
-use crate::context_pruning::prune_for_budget;
+use crate::context_pruning::Pruned;
 use crate::guards::Guards;
 use crate::stream_collector::{CollectedResponse, MAX_TOOL_CALL_INDEX, collect_stream};
 use crate::tool_execution::execute_tools_parallel;
@@ -174,7 +174,7 @@ impl AgentLoop {
     /// closes.
     async fn call_and_collect(
         &self,
-        messages: &[AgentMessage],
+        messages: &Pruned,
         tools: &[ToolDefinition],
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
@@ -185,7 +185,7 @@ impl AgentLoop {
             Ok(s) => s,
             Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
         };
-        match collect_stream(measure_turn(stream, tx.clone()), tx).await {
+        match collect_stream(measure_turn(stream, tx.clone(), messages.dropped()), tx).await {
             Ok(r) => Ok(r),
             Err(e) => fail_loop(tx, format!("stream collection error: {e:#}")).await,
         }
@@ -276,7 +276,7 @@ impl AgentLoop {
     /// context budget, and emit `IterationComplete`.
     async fn execute_tool_iteration(
         &self,
-        messages: &mut Vec<AgentMessage>,
+        messages: &mut Pruned,
         response: CollectedResponse,
         config: &AgentConfig,
         iteration: usize,
@@ -310,7 +310,7 @@ impl AgentLoop {
         let answers_hash = batch_results_hash(&response.tool_calls, &answers);
         append_iteration_messages(messages, response.content, response.tool_calls, results);
 
-        *messages = prune_for_budget(std::mem::take(messages), config);
+        messages.prune(config);
 
         let _ = tx
             .send(AgentEvent::IterationComplete {
@@ -352,7 +352,7 @@ impl AgentLoopPort for AgentLoop {
     ///   text content for too many consecutive iterations.
     async fn run(
         &self,
-        mut messages: Vec<AgentMessage>,
+        messages: Vec<AgentMessage>,
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
@@ -368,7 +368,7 @@ impl AgentLoopPort for AgentLoop {
         let tools = self.tool_executor.list_tools().await;
         debug!(tool_count = tools.len(), "tools available");
 
-        messages = prune_for_budget(messages, &config);
+        let mut messages = Pruned::new(messages, &config);
 
         // Summed across iterations; `None` until any upstream reports usage,
         // so "not measured" stays distinct from "zero tokens".
@@ -469,7 +469,7 @@ impl AgentLoopPort for AgentLoop {
 /// and nothing to record: the model is
 /// being told to retry in smaller batches, and the retry is what gets counted.
 async fn recover_from_parallel_overflow(
-    messages: &mut Vec<AgentMessage>,
+    messages: &mut Pruned,
     response: CollectedResponse,
     config: &AgentConfig,
     iteration: usize,
@@ -521,7 +521,7 @@ async fn recover_from_parallel_overflow(
         response.tool_calls,
         synthetic_results,
     );
-    *messages = prune_for_budget(std::mem::take(messages), config);
+    messages.prune(config);
 
     let _ = tx
         .send(AgentEvent::IterationComplete {

@@ -30,6 +30,7 @@ fn replacing(conversation: i64, from: i64) -> Transcript {
     Transcript {
         conversation_id: Some(conversation),
         replace_from: Some(from),
+        remember: None,
     }
 }
 

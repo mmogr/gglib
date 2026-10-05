@@ -4,9 +4,9 @@
  *
  * `contracts/chats/recorded.json` is written by `gglib-core`'s wire tests
  * from the real serialisation of `GET /v1/chats`, `GET /v1/chats/{id}`, a
- * device's turn (`PUT /v1/runs/{id}?kind=agent`) with and without an image,
- * and the answer to the upload that image was sent by
- * (`POST /v1/attachments`), and fails there when it goes stale. ggchat hand-copies the same file. Here each body must fit the
+ * device's turn (`PUT /v1/runs/{id}?kind=agent`) with and without an image
+ * and one that turns thinking off, and the answer to the upload that image
+ * was sent by (`POST /v1/attachments`), and fails there when it goes stale. ggchat hand-copies the same file. Here each body must fit the
  * generated types, carry the keys and value types they promise, and leave
  * out what it has no value for (never a `null`, but for the two conversation
  * fields that are always written).
@@ -18,6 +18,7 @@ import type { AttachmentUpload } from '../../../src/types/generated/AttachmentUp
 import type { HubChatList } from '../../../src/types/generated/HubChatList';
 import type { HubChatOpen } from '../../../src/types/generated/HubChatOpen';
 import type { HubTurn } from '../../../src/types/generated/HubTurn';
+import { turnMadeFromMetadata } from '../../../src/utils/messages/turnMade';
 import { rust } from './rustSource';
 
 type Body = Record<string, unknown>;
@@ -28,6 +29,18 @@ const RECORDED = JSON.parse(rust('contracts/chats/recorded.json')) as {
   turn: HubTurn;
   upload: AttachmentUpload;
   image_turn: HubTurn;
+  thinking_turn: HubTurn;
+};
+
+/** The two keys every turn carries. */
+const TURN_KEYS = { conversation_id: 'number', content: 'string' };
+/**
+ * Every key a turn may carry beside them. Typed from the generated `HubTurn`,
+ * so a key added there does not compile here until it is named.
+ */
+const TURN_OPTIONAL: Record<Exclude<keyof HubTurn, keyof typeof TURN_KEYS>, string> = {
+  images: 'object',
+  thinking: 'string',
 };
 
 /** What a stored image is told as: its id and what its header says. */
@@ -81,7 +94,7 @@ describe('the recorded hub chats', () => {
       },
       { settings: 'object' },
     );
-    expect(RECORDED.open.messages).toHaveLength(2);
+    expect(RECORDED.open.messages).toHaveLength(4);
     for (const message of RECORDED.open.messages) {
       expectKeys(
         message as unknown as Body,
@@ -93,6 +106,26 @@ describe('the recorded hub chats', () => {
     const [user, reply] = RECORDED.open.messages;
     expect(user.metadata?.device).toBe('phone-7c2e');
     expect(reply.metadata?.modelName).toBeTypeOf('string');
+  });
+
+  it('a finished reply says how it was made, its context among it, and a stopped one says only that it stopped', () => {
+    const [, reply, , stopped] = RECORDED.open.messages;
+    expect(turnMadeFromMetadata(reply.metadata)).toEqual({
+      modelName: 'qwen3-8b',
+      promptTokens: 812,
+      completionTokens: 96,
+      turnDurationMs: 4100,
+      device: 'phone-7c2e',
+      finishReason: 'stop',
+      contextSize: 8192,
+    });
+    // Every key the hub saved on the reply is one the page reads.
+    expect(Object.keys(turnMadeFromMetadata(reply.metadata) ?? {}).sort()).toEqual(
+      Object.keys(reply.metadata ?? {}).sort(),
+    );
+    expect(stopped.role).toBe('assistant');
+    expect(stopped.metadata).toEqual({ incomplete: true });
+    expect(turnMadeFromMetadata(stopped.metadata)).toBeUndefined();
   });
 
   it('a row carries its images without their bytes, and a row with none leaves the key out', () => {
@@ -111,15 +144,32 @@ describe('the recorded hub chats', () => {
   });
 
   it("a device's turn is the chat's id and the message, and nothing more", () => {
-    expectKeys(RECORDED.turn as unknown as Body, { conversation_id: 'number', content: 'string' }, {});
+    expectKeys(RECORDED.turn as unknown as Body, TURN_KEYS, {});
+    expect(Object.keys(RECORDED.turn)).toEqual(['conversation_id', 'content']);
   });
 
   it('a turn with an image names it by the id its upload answered, beside the message', () => {
-    expectKeys(
-      RECORDED.image_turn as unknown as Body,
-      { conversation_id: 'number', content: 'string' },
-      { images: 'object' },
-    );
+    expectKeys(RECORDED.image_turn as unknown as Body, TURN_KEYS, { images: TURN_OPTIONAL.images });
     expect(RECORDED.image_turn.images).toEqual([RECORDED.upload.id]);
+  });
+
+  it('a turn that turns thinking off says so in one word beside the message', () => {
+    expectKeys(RECORDED.thinking_turn as unknown as Body, TURN_KEYS, { thinking: TURN_OPTIONAL.thinking });
+    expect(RECORDED.thinking_turn).toEqual({
+      conversation_id: 12,
+      content: 'Answer in one line.',
+      thinking: 'off',
+    });
+  });
+
+  it('a turn carries no key but its two, its images and its thinking choice', () => {
+    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['images', 'thinking']);
+    for (const turn of [RECORDED.turn, RECORDED.image_turn, RECORDED.thinking_turn]) {
+      expectKeys(turn as unknown as Body, TURN_KEYS, TURN_OPTIONAL);
+    }
+  });
+
+  it('the open chat remembers that thinking is off, beside its other settings', () => {
+    expect(RECORDED.open.conversation.settings).toEqual({ max_iterations: 8, thinking: 'off' });
   });
 });

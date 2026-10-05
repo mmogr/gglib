@@ -21,6 +21,7 @@ import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime
 import { useSettings } from '../hooks/useSettings';
 import { useChatModelFacts } from '../hooks/useChatModelFacts';
 import { useImageInput } from '../hooks/useImageInput';
+import { useThinkingSwitch } from '../hooks/useThinkingSwitch';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -28,6 +29,7 @@ import { cn } from '../utils/cn';
 import { useServerState } from '../services/serverEvents';
 import { getTransport, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/transport';
 import type { ConversationSummary } from '../services/transport';
+import type { HubChatOpen } from '../types/generated/HubChatOpen';
 import type { ModelRef } from '../types/generated/ModelRef';
 import type { ChatDraft } from '../types/messages';
 
@@ -136,11 +138,17 @@ export default function ChatPage(props: ChatPageProps) {
   // Tool support and quantisation for the active model. The model is fixed
   // for the lifetime of ChatPage: a switch from the composer's picker
   // remounts the page on the new session, with this conversation still open.
-  const { supportsToolCalls, toolFormat, quantization, sees, contextLength: servedContext } = useChatModelFacts(modelId);
+  const { supportsToolCalls, toolFormat, quantization, sees, contextLength: servedContext, thinks } = useChatModelFacts(modelId);
   const imageInput = useImageInput({ far, paired: paired?.far, sees, contextLength: servedContext });
 
   // Get active conversation
   const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
+
+  // The Thinking switch: shown where the chat's model thinks, saying what the
+  // chat remembers. The far list tells none of a chat's settings, so a far
+  // chat is kept as its machine last answered it, for this alone.
+  const [farOpen, setFarOpen] = useState<HubChatOpen | null>(null);
+  const thinking = useThinkingSwitch({ conversationId: activeConversationId, conversations, far, farOpen, paired: paired?.far, thinks });
 
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
@@ -160,6 +168,8 @@ export default function ChatPage(props: ChatPageProps) {
     supportsToolCalls,
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),
+    thinking: thinking.forSend,
+    onFarOpened: setFarOpen,
   });
 
   // A draft carried over a model switch goes back in the composer, once:
@@ -279,7 +289,12 @@ export default function ChatPage(props: ChatPageProps) {
             <ConversationListPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
-              onSelectConversation={setActiveConversationId}
+              onSelectConversation={(id) => {
+                setActiveConversationId(id);
+                // What a chat remembers can change on another device, and only
+                // this machine's list says it: read it again as one is opened.
+                if (!far) void syncConversations({ silent: true });
+              }}
               onDeleteConversation={far ? undefined : handleDeleteConversation}
               searchQuery={conversationSearch}
               onSearchChange={setConversationSearch}
@@ -324,6 +339,7 @@ export default function ChatPage(props: ChatPageProps) {
               onUnloadModel={onUnloadModel}
               quantization={far ? null : quantization}
               imageInput={imageInput}
+              thinking={thinking}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={pairedChat || far} onClose={onClose} />
               }

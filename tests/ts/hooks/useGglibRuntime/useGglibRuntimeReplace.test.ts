@@ -80,6 +80,23 @@ describe('useGglibRuntime edit and regenerate', () => {
     });
   });
 
+  it('an edit and a regenerate say the Thinking choice as a send does', async () => {
+    const accepted = vi.fn();
+    const hook = await mount({ ...open, thinking: () => ({ said: 'off', accepted }) });
+    regenerate(hook, 'db-1');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(daemon.only().request).toMatchObject({ replace_from: 1, thinking: 'off' });
+    const { id } = daemon.only().info;
+    void daemon.finish(id, 'completed', [{ role: 'assistant', content: 'a again' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    expect(accepted).toHaveBeenCalledTimes(1);
+
+    edit(hook, 'system-1', 'q2');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(2));
+    expect([...daemon.runs.values()].at(-1)!.request).toMatchObject({ thinking: 'off' });
+    await waitFor(() => expect(accepted).toHaveBeenCalledTimes(2));
+  });
+
   const refusals: Array<[string, (d: FakeDaemon) => void, string]> = [
     ['busy (429)', (d) => (d.refuseNext = { status: 429, type: 'agent_busy', error: 'all agent loop slots are in use; try again later' }), 'all agent loop slots are in use; try again later'],
     ['unavailable (503)', (d) => (d.refuseNext = { status: 503, type: 'unavailable', error: 'the model is not ready' }), 'the model is not ready'],

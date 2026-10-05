@@ -14,17 +14,18 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::FarProxy;
-use gglib_core::domain::AttachmentId;
 use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::{AttachmentId, Thinking};
 use serde::Deserialize;
 
 use crate::error::HttpError;
 use crate::state::AppState;
 
-/// Body for `PUT /api/remote/chats/{id}/turns/{run_id}`: the new message
-/// and nothing else. The far machine rebuilds the history from its record,
-/// so a body that carries more is refused rather than half read. An image
-/// is named by the id `POST /api/remote/attachments` answered.
+/// Body for `PUT /api/remote/chats/{id}/turns/{run_id}`: the new message,
+/// and the chat's Thinking choice on the turn that changes it. The far
+/// machine rebuilds the history from its record, so a body that carries
+/// more is refused rather than half read. An image is named by the id
+/// `POST /api/remote/attachments` answered.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -36,6 +37,11 @@ pub(crate) struct RemoteTurnBody {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
     pub images: Vec<AttachmentId>,
+    /// The far chat's Thinking choice, as [`HubTurn::thinking`] carries it:
+    /// said only on the turn that changes it, and remembered there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub thinking: Option<Thinking>,
 }
 
 /// `?after=N` on a run's events.
@@ -107,6 +113,7 @@ pub(super) async fn add_turn_via(
         conversation_id: id,
         content: body.content,
         images: body.images,
+        thinking: body.thinking,
     };
     Ok(relay(far.add_turn(run_id, &turn).await?).await)
 }
