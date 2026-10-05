@@ -54,7 +54,8 @@ final count, whatever was dropped before, and `complete` follows. A file the
 Hub finds already in place gets no bar, and so no count. Of
 its stderr, where its own progress bar draws, only the last 4 KiB are kept,
 as the text of a failure. `scripts/test_hf_xet_downloader.py` drives the
-helper's bar through the real Hub library.
+helper's bar through the real Hub library; CI runs it against the pinned
+packages, and `make test-helper` does where a venv holding them exists.
 
 `progress.rs`'s `CliProgressPrinter` draws each file of a `model upgrade`,
 which downloads without the download manager. It draws to **stderr**, matching

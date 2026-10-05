@@ -294,6 +294,16 @@ jobs:
       - name: Run Rust tests
         run: cargo test --no-fail-fast 2>&1 | tee rust-test-output.txt
 
+      # The download accelerator's helper is Python, so `cargo test` does not
+      # run it. Its tests drive its progress bar through the huggingface_hub
+      # the requirements file pins. In a venv, so nothing is installed into
+      # the runner's own Python.
+      - name: Test the download helper
+        run: |
+          python3 -m venv /tmp/hfx
+          /tmp/hfx/bin/pip install --quiet -r crates/gglib-download/scripts/hf_xet_requirements.txt
+          cd crates/gglib-download/scripts && /tmp/hfx/bin/python -m unittest test_hf_xet_downloader
+
       # badges.yml counts per-crate and per-module tests out of
       # rust-test-<crate>.txt. Those used to come from the loop above; they now
       # come from dividing the one run's output by the package each binary
