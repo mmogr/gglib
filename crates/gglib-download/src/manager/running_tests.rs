@@ -225,3 +225,76 @@ async fn the_running_downloads_files_take_no_place_in_the_gap() {
 
     assert!(matches!(third, Err(DownloadError::QueueFull { .. })));
 }
+
+// ── Starting a file ──────────────────────────────────────────────────────
+
+/// `next_job` is stopped between taking the file off the queue and putting
+/// it in `active`, by this test holding `active`. The queue must still be
+/// held then, or a snapshot taken there would find the file in neither.
+#[tokio::test]
+async fn next_job_holds_the_queue_while_it_starts_a_file() {
+    let manager = Arc::new(manager());
+    queue(&manager, "owner/a").await;
+
+    let active = manager.active.lock().await;
+    let runner = Arc::clone(&manager);
+    let started = tokio::spawn(async move { runner.next_job().await.is_some() });
+    // Let `next_job` run until it waits on `active`: by then it holds the
+    // queue, or it has let go of it with the file already taken.
+    for _ in 0..100 {
+        if manager
+            .queue
+            .try_read()
+            .map_or(true, |q| q.pending_len() < 2)
+        {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+
+    assert!(
+        manager.queue.try_read().is_err(),
+        "the queue was readable with a file in neither `pending` nor `active`"
+    );
+    drop(active);
+    assert!(started.await.unwrap());
+}
+
+/// The reader's half: a snapshot stopped on `active` must hold the queue.
+/// Were `active` read first, `next_job` could move a file between the two.
+#[tokio::test]
+async fn a_snapshot_holds_the_queue_while_it_reads_active() {
+    let manager = Arc::new(manager());
+    queue(&manager, "owner/a").await;
+
+    let active = manager.active.lock().await;
+    let reader = Arc::clone(&manager);
+    let read = tokio::spawn(async move { reader.get_queue_snapshot().await.unwrap() });
+    // Let the snapshot run until it waits on `active`.
+    for _ in 0..100 {
+        tokio::task::yield_now().await;
+    }
+
+    assert!(manager.queue.try_write().is_err(), "the queue is not held");
+    drop(active);
+    assert_eq!(read.await.unwrap().pending_count, 1);
+}
+
+/// The snapshot `next_job` emits reads the queue, so the guard must be gone
+/// by then: held, `next_job` would wait on itself for ever.
+#[tokio::test]
+async fn next_job_returns_after_publishing() {
+    let manager = manager();
+    queue(&manager, "owner/a").await;
+
+    let started = tokio::time::timeout(Duration::from_secs(1), manager.next_job()).await;
+
+    let (_, item, _, _) = started
+        .expect("next_job returns within a second")
+        .expect("a file was pending");
+    assert_eq!(item.id.model_id(), "owner/a");
+    assert_eq!(
+        rows(&manager).await,
+        [row("owner/a", DownloadStatus::Downloading, 1)]
+    );
+}

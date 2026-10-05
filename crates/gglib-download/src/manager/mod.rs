@@ -535,6 +535,11 @@ impl DownloadManagerImpl {
     /// Get the next job from the queue.
     ///
     /// Returns `None` if the queue is empty.
+    ///
+    /// The queue guard is held from the dequeue until the file is in
+    /// `active`, so a reader holding the queue never finds the file in
+    /// neither place. It is dropped before the snapshot is emitted, which
+    /// reads the queue itself.
     /// Lock order: queue → active.
     async fn next_job(
         &self,
@@ -545,10 +550,8 @@ impl DownloadManagerImpl {
         watch::Sender<ProgressUpdate>,
     )> {
         // Acquire queue lock first, then active lock
-        let item = {
-            let mut queue = self.queue.write().await;
-            queue.dequeue()?
-        };
+        let mut queue = self.queue.write().await;
+        let item = queue.dequeue()?;
 
         // Mint a new lease
         let lease = LeaseId(self.lease_counter.fetch_add(1, Ordering::Relaxed));
@@ -571,6 +574,7 @@ impl DownloadManagerImpl {
                 },
             );
         }
+        drop(queue);
 
         // Emit queue snapshot (item now active)
         self.emit_queue_snapshot().await;
