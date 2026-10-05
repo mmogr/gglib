@@ -16,7 +16,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::cli_exec::ProgressCallback;
+use super::progress::{RawCallback, RawProgress};
 use gglib_core::download::ProgressThrottle;
 
 /// Suffix for the in-progress file that sits beside the final destination.
@@ -124,8 +124,8 @@ pub(crate) struct NativeDownload<'a> {
     pub token: Option<&'a str>,
     /// Expected size from `HuggingFace` metadata, when known.
     pub expected_size: Option<u64>,
-    /// Sink for `(downloaded, total)` byte counts.
-    pub progress: Option<ProgressCallback>,
+    /// Sink for the transfer's readings.
+    pub progress: Option<RawCallback>,
     /// Cancellation token. A cancelled transfer leaves its `.part` file behind
     /// so the next attempt resumes rather than restarting.
     pub cancel: Option<CancellationToken>,
@@ -224,9 +224,14 @@ async fn stream_to_part(
     let mut sink = spawn_sink(file, hasher, rx);
 
     let mut downloaded = start_at;
-    // The initial report is unconditional: downstream relies on seq moving off
-    // 0 to know a transfer has started (see emit_synthetic_progress_if_cached).
-    report(req.progress.as_ref(), downloaded, total);
+    // Network bytes count from `start_at`: what this attempt kept on disk.
+    let report = |written: u64| {
+        if let Some(cb) = req.progress.as_ref() {
+            cb(RawProgress::new(written, written - start_at, total));
+        }
+    };
+    // The initial report is unconditional: it says where a resume stands.
+    report(downloaded);
 
     // Per-chunk reporting hammered the watch channel thousands of times a
     // second; consumers sample every 250ms anyway. 100ms keeps the final
@@ -267,7 +272,7 @@ async fn stream_to_part(
 
         downloaded += len;
         if throttle.should_emit() {
-            report(req.progress.as_ref(), downloaded, total);
+            report(downloaded);
         }
     }
 
@@ -276,7 +281,7 @@ async fn stream_to_part(
 
     // Unconditional final report so the last sample lands on the exact final
     // byte count instead of wherever the throttle last let one through.
-    report(req.progress.as_ref(), downloaded, total);
+    report(downloaded);
 
     Ok(TransferOutcome {
         digest: hasher.map(|h| Digested {
@@ -507,12 +512,6 @@ fn seed_hasher(path: &Path, len: u64, hasher: &mut Sha256) -> Result<(), NativeE
     Ok(())
 }
 
-fn report(progress: Option<&ProgressCallback>, downloaded: u64, total: Option<u64>) {
-    if let Some(cb) = progress {
-        cb(downloaded, total.unwrap_or(0));
-    }
-}
-
 /// The SHA-256 the server says the file should hash to, if it gave a usable one.
 ///
 /// Only [`X_LINKED_ETAG`] is trusted. Plain `ETag` is deliberately **not** a
@@ -576,4 +575,4 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 #[path = "native_tests.rs"]
-mod tests;
+pub(super) mod tests;

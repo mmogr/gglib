@@ -45,9 +45,20 @@ inherited — an inherited handle would write straight to the terminal, outside
 any bar's bookkeeping, the same way a stray `println!` would. This matters more
 with uv, which is chattier than `python -m venv`.
 
-`progress.rs`'s `CliProgressPrinter` (the no-callback path, e.g. `model
-upgrade`) draws to **stderr**, matching `CliDownloadEventEmitter`'s
-`MultiProgress` (indicatif's stderr default) — see the doc comment on
-`CliProgressPrinter::new`.
+The helper (`scripts/hf_xet_downloader.py`) is started once per file. It reads
+the Hub token from `HF_TOKEN` in its environment, not from its arguments, and
+writes its progress as JSON lines: `written`, the bytes of the file on disk,
+and `received`, the bytes off the network in this run. A report within 0.2 s
+of the last line is not written. When the helper's bar closes it writes the
+final count, whatever was dropped before, and `complete` follows. A file the
+Hub finds already in place gets no bar, and so no count. Of
+its stderr, where its own progress bar draws, only the last 4 KiB are kept,
+as the text of a failure. `scripts/test_hf_xet_downloader.py` drives the
+helper's bar through the real Hub library.
+
+`progress.rs`'s `CliProgressPrinter` draws each file of a `model upgrade`,
+which downloads without the download manager. It draws to **stderr**, matching
+`CliDownloadEventEmitter`'s `MultiProgress` (indicatif's stderr default) — see
+the doc comment on `CliProgressPrinter::new`.
 
 <!-- module-docs:end -->

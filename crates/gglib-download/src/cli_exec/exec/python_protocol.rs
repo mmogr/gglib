@@ -8,11 +8,15 @@
 //! All messages are JSON objects with a required `status` field:
 //!
 //! ```json
-//! {"status": "progress", "file": "model.gguf", "downloaded": 123456, "total": 789012}
+//! {"status": "progress", "written": 123456, "received": 150000, "total": 789012}
 //! {"status": "unavailable", "reason": "xet not supported for this repo"}
 //! {"status": "error", "message": "Network timeout"}
 //! {"status": "complete"}
 //! ```
+//!
+//! A progress line is about the one file the helper was started for.
+//! `written` is bytes of it on disk, `received` is bytes off the network in
+//! this run, and a `total` of 0 means the size is not known.
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -48,11 +52,11 @@ pub enum ProtocolError {
 pub(crate) enum PythonEvent {
     /// Download progress update.
     Progress {
-        /// The file being downloaded (may be None for aggregate progress).
-        file: Option<String>,
-        /// Bytes downloaded so far.
-        downloaded: u64,
-        /// Total bytes to download.
+        /// Bytes of the file on disk.
+        written: u64,
+        /// Bytes received from the network in this run.
+        received: u64,
+        /// The file's size, 0 when not known.
         total: u64,
     },
 
@@ -81,8 +85,8 @@ pub(crate) enum PythonEvent {
 struct RawEnvelope {
     status: Option<String>,
     // Progress fields
-    file: Option<String>,
-    downloaded: Option<u64>,
+    written: Option<u64>,
+    received: Option<u64>,
     total: Option<u64>,
     // Error/unavailable fields
     message: Option<String>,
@@ -104,7 +108,7 @@ struct RawEnvelope {
 /// # Examples
 ///
 /// ```ignore
-/// let event = parse_line(r#"{"status": "progress", "downloaded": 100, "total": 200}"#)?;
+/// let event = parse_line(r#"{"status": "progress", "written": 100, "received": 100, "total": 200}"#)?;
 /// assert!(matches!(event, PythonEvent::Progress { .. }));
 /// ```
 pub(crate) fn parse_line(line: &str) -> Result<PythonEvent, ProtocolError> {
@@ -114,14 +118,17 @@ pub(crate) fn parse_line(line: &str) -> Result<PythonEvent, ProtocolError> {
 
     match status.as_str() {
         "progress" => {
-            let downloaded = envelope
-                .downloaded
-                .ok_or(ProtocolError::MissingField("downloaded"))?;
+            let written = envelope
+                .written
+                .ok_or(ProtocolError::MissingField("written"))?;
+            let received = envelope
+                .received
+                .ok_or(ProtocolError::MissingField("received"))?;
             let total = envelope.total.ok_or(ProtocolError::MissingField("total"))?;
 
             Ok(PythonEvent::Progress {
-                file: envelope.file,
-                downloaded,
+                written,
+                received,
                 total,
             })
         }
@@ -165,47 +172,37 @@ mod tests {
     // ------------------------------------------------------------------------
 
     #[test]
-    fn test_parse_progress_with_file() {
-        let line =
-            r#"{"status": "progress", "file": "model.gguf", "downloaded": 1000, "total": 5000}"#;
+    fn test_parse_progress() {
+        let line = r#"{"status": "progress", "written": 1000, "received": 1500, "total": 5000}"#;
         let event = parse_line(line).unwrap();
 
         assert_eq!(
             event,
             PythonEvent::Progress {
-                file: Some("model.gguf".to_string()),
-                downloaded: 1000,
+                written: 1000,
+                received: 1500,
                 total: 5000,
             }
         );
     }
 
+    /// Each count is required: a line with one of them missing is from a
+    /// helper that counts some other way, and guessing the other would put a
+    /// wrong number on screen.
     #[test]
-    fn test_parse_progress_without_file() {
-        let line = r#"{"status": "progress", "downloaded": 500, "total": 1000}"#;
-        let event = parse_line(line).unwrap();
+    fn progress_needs_written_and_received() {
+        let no_received = r#"{"status": "progress", "written": 500, "total": 1000}"#;
+        let err = parse_line(no_received).unwrap_err();
+        assert!(matches!(err, ProtocolError::MissingField("received")));
 
-        assert_eq!(
-            event,
-            PythonEvent::Progress {
-                file: None,
-                downloaded: 500,
-                total: 1000,
-            }
-        );
-    }
-
-    #[test]
-    fn test_parse_progress_missing_downloaded() {
-        let line = r#"{"status": "progress", "total": 1000}"#;
-        let err = parse_line(line).unwrap_err();
-
-        assert!(matches!(err, ProtocolError::MissingField("downloaded")));
+        let no_written = r#"{"status": "progress", "received": 500, "total": 1000}"#;
+        let err = parse_line(no_written).unwrap_err();
+        assert!(matches!(err, ProtocolError::MissingField("written")));
     }
 
     #[test]
     fn test_parse_progress_missing_total() {
-        let line = r#"{"status": "progress", "downloaded": 500}"#;
+        let line = r#"{"status": "progress", "written": 500, "received": 500}"#;
         let err = parse_line(line).unwrap_err();
 
         assert!(matches!(err, ProtocolError::MissingField("total")));
@@ -313,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_parse_missing_status() {
-        let line = r#"{"downloaded": 100, "total": 200}"#;
+        let line = r#"{"written": 100, "total": 200}"#;
         let err = parse_line(line).unwrap_err();
 
         assert!(matches!(err, ProtocolError::InvalidStatus));
@@ -341,8 +338,8 @@ mod tests {
 
     #[test]
     fn test_protocol_error_display() {
-        let err = ProtocolError::MissingField("downloaded");
-        assert!(err.to_string().contains("downloaded"));
+        let err = ProtocolError::MissingField("written");
+        assert!(err.to_string().contains("written"));
 
         let err = ProtocolError::UnknownStatus("foo".to_string());
         assert!(err.to_string().contains("foo"));

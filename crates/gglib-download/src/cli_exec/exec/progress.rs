@@ -1,8 +1,8 @@
 //! CLI progress rendering for direct (non-queued) downloads.
 //!
 //! Pure sync, presentation-only module — no knowledge of Python or protocol.
-//! Used by the no-callback path (`model upgrade`), where there is no download
-//! manager to compute progress for us. The queued path renders through
+//! Used by `model upgrade`, which downloads without the download manager and
+//! so has nobody else to draw its files. The queued path renders through
 //! [`crate::cli_emitter::CliDownloadEventEmitter`] instead.
 //!
 //! Both renderers get their speed and ETA from
@@ -14,6 +14,7 @@
 use std::io::{self, IsTerminal, Write};
 use std::time::{Duration, Instant};
 
+use crate::executor::FileProgress;
 use gglib_core::download::{RateEstimator, format_duration, format_rate};
 use indicatif::{HumanBytes, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 
@@ -58,8 +59,9 @@ impl CliProgressPrinter {
         }
     }
 
-    /// Update progress display with current download state.
-    pub(crate) fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
+    /// Update progress display with a file's current progress.
+    pub(crate) fn update(&mut self, label: Option<&str>, progress: FileProgress) {
+        let (downloaded, total) = (progress.bytes, progress.size.unwrap_or(0));
         self.estimator.record(downloaded, total, Instant::now());
         let rate = Rate {
             speed_bps: self.estimator.rate_bps(),
@@ -78,12 +80,6 @@ impl CliProgressPrinter {
             ProgressRender::Fancy(inner) => inner.finish(),
             ProgressRender::Plain(inner) => inner.finish(),
         }
-    }
-}
-
-impl Default for CliProgressPrinter {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -120,7 +116,7 @@ impl FancyProgress {
         // stderr default) — see the module doc on `CliProgressPrinter::new`.
         let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
         bar.set_style(Self::spinner_style());
-        bar.set_message("Preparing fast download".to_string());
+        bar.set_message("Preparing download".to_string());
         bar.enable_steady_tick(Duration::from_millis(120));
         Self {
             bar,
@@ -130,7 +126,7 @@ impl FancyProgress {
     }
 
     fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64, rate: &Rate) {
-        let label_text = label.filter(|s| !s.is_empty()).unwrap_or("fast download");
+        let label_text = label.filter(|s| !s.is_empty()).unwrap_or("download");
         if total == 0 {
             self.bar
                 .set_message(format!("{} (preparing...)", Self::format_label(label_text)));
@@ -235,7 +231,7 @@ impl PlainProgress {
         }
         self.last_emit = now;
 
-        let mut line = String::from("⚡ Fast download");
+        let mut line = String::from("⚡ Download");
         if let Some(name) = label.filter(|name| !name.is_empty()) {
             let _ = write!(line, " [{name}]");
         }
@@ -322,8 +318,11 @@ mod tests {
         let mut printer = CliProgressPrinter::new();
         printer.update(
             Some("model.gguf"),
-            2 * 1024 * 1024 * 1024,
-            4 * 1024 * 1024 * 1024,
+            FileProgress {
+                bytes: 2 * 1024 * 1024 * 1024,
+                wire: 0,
+                size: Some(4 * 1024 * 1024 * 1024),
+            },
         );
         assert_eq!(printer.estimator.rate_bps(), None);
     }

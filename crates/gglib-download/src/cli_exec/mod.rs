@@ -11,10 +11,13 @@ pub use types::*;
 
 // Re-export Python bridge for use by the async manager
 pub use exec::python_bridge::{
-    FastDownloadRequest, NoticeCallback, ProgressCallback, PythonBridgeError,
-    ensure_fast_helper_ready, ensure_fast_helper_ready_with_python, preflight_fast_helper,
-    run_fast_download,
+    FastDownloadRequest, NoticeCallback, PythonBridgeError, ensure_fast_helper_ready,
+    ensure_fast_helper_ready_with_python, preflight_fast_helper, run_fast_download,
 };
+
+// A file's progress as every download path reports it, and the readings a
+// transport hands in.
+pub use crate::executor::{FileProgress, ProgressCallback, RawCallback, RawProgress};
 
 // Whether the optional hf_xet accelerator is already provisioned. Read by the
 // executor to choose a backend, and by the GUI to render setup status.

@@ -4,8 +4,8 @@
 
 Download execution: the layer that actually moves bytes, given a plan.
 
-[`DownloadPlan`] names a repository, a revision, a destination directory and the
-files to fetch. [`download_files`] picks a backend for it:
+[`DownloadPlan`] names a repository, a revision, a destination directory and
+one file to fetch. [`download_file`] picks a backend for it:
 
 | Backend | When | Implementation |
 |---------|------|----------------|
@@ -17,8 +17,29 @@ on demand put a toolchain in the critical path of a new user's first download,
 which is the reason this module exists. [`crate::cli_exec::fast_helper_provisioned`]
 is a file-existence check, not a probe — if the environment is absent, the
 native path runs and nothing is installed. When the accelerator is present but
-fails, [`download_files`] logs it, emits a notice and falls back to the native
+fails, [`download_file`] logs it, emits a notice and falls back to the native
 path; only a user cancellation propagates as-is.
+
+Whichever backend runs, the caller is shown one count for the file. A backend
+reports readings (`RawProgress`): bytes of the file on disk, and bytes received
+from the network, which are different numbers. On a resume the first is ahead
+by what was already there, and the accelerator receives well ahead of what it
+has written. `FileCounter` (`progress.rs`) turns the readings into the file's
+[`FileProgress`]:
+
+- `bytes` follows the bytes on disk and never falls. It stops one byte short
+  of the size until [`download_file`] has the finished file in place, so a
+  bar reaches 100% only for a file that is there. A file already on disk goes
+  straight to it.
+- `wire` is the network bytes, summed over a fallback, and never falls. Bytes
+  found on disk are not in it, which is what makes it the number to take a
+  speed from.
+- `size` is the size from metadata, or failing that the first one a backend
+  reports. A size of 0 is treated as not known.
+
+When the accelerator fails part-way, the native path starts the file again
+from its own partial file, so `bytes` may fall once, at the point the fallback
+notice is sent.
 
 The native path (`native.rs`) is responsible for:
 
@@ -46,8 +67,7 @@ The native path (`native.rs`) is responsible for:
 
 It is **not** responsible for resolving quantizations to files (`resolver`),
 queueing (`queue`), or emitting
-[`DownloadEvent`](gglib_core::download::DownloadEvent)s — it reports raw
-`(downloaded, total)` byte counts to a callback and the caller decides what to
-do with them.
+[`DownloadEvent`](gglib_core::download::DownloadEvent)s — it reports its
+readings to a callback and the caller decides what to do with them.
 
 <!-- module-docs:end -->
