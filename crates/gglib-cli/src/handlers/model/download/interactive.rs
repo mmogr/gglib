@@ -390,7 +390,7 @@ async fn handle_add_to_queue(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Build the hint bar message including live queue counts.
+/// Build the hint bar message with live counts of downloads, not files.
 fn build_hint_message(active: u32, pending: u32) -> String {
     format!("[a] queue another  [q] quit   ({active} active, {pending} queued)")
 }

@@ -594,7 +594,9 @@ impl DownloadManagerImpl {
     /// would allow the CLI to exit mid-insert, dropping the tokio runtime and
     /// silently losing the DB row.
     ///
-    /// Lock order: active → queue.
+    /// Locks: the steps here take `active`, the tracker and the queue one at a
+    /// time. The snapshot emitted at the end nests them: queue → active →
+    /// tracker.
     async fn finalize_job(
         &self,
         item: &QueuedItem,
