@@ -18,6 +18,7 @@ import type { AttachmentUpload } from '../../../src/types/generated/AttachmentUp
 import type { HubChatList } from '../../../src/types/generated/HubChatList';
 import type { HubChatOpen } from '../../../src/types/generated/HubChatOpen';
 import type { HubTurn } from '../../../src/types/generated/HubTurn';
+import { turnMadeFromMetadata } from '../../../src/utils/messages/turnMade';
 import { rust } from './rustSource';
 
 type Body = Record<string, unknown>;
@@ -81,7 +82,7 @@ describe('the recorded hub chats', () => {
       },
       { settings: 'object' },
     );
-    expect(RECORDED.open.messages).toHaveLength(2);
+    expect(RECORDED.open.messages).toHaveLength(4);
     for (const message of RECORDED.open.messages) {
       expectKeys(
         message as unknown as Body,
@@ -93,6 +94,26 @@ describe('the recorded hub chats', () => {
     const [user, reply] = RECORDED.open.messages;
     expect(user.metadata?.device).toBe('phone-7c2e');
     expect(reply.metadata?.modelName).toBeTypeOf('string');
+  });
+
+  it('a finished reply says how it was made, its context among it, and a stopped one says only that it stopped', () => {
+    const [, reply, , stopped] = RECORDED.open.messages;
+    expect(turnMadeFromMetadata(reply.metadata)).toEqual({
+      modelName: 'qwen3-8b',
+      promptTokens: 812,
+      completionTokens: 96,
+      turnDurationMs: 4100,
+      device: 'phone-7c2e',
+      finishReason: 'stop',
+      contextSize: 8192,
+    });
+    // Every key the hub saved on the reply is one the page reads.
+    expect(Object.keys(turnMadeFromMetadata(reply.metadata) ?? {}).sort()).toEqual(
+      Object.keys(reply.metadata ?? {}).sort(),
+    );
+    expect(stopped.role).toBe('assistant');
+    expect(stopped.metadata).toEqual({ incomplete: true });
+    expect(turnMadeFromMetadata(stopped.metadata)).toBeUndefined();
   });
 
   it('a row carries its images without their bytes, and a row with none leaves the key out', () => {

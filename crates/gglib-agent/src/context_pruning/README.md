@@ -18,4 +18,9 @@ count exceeds [`AgentConfig::context_budget_chars`], applying two passes:
    keep all `System` messages and the trailing
    [`AgentConfig::prune_keep_tail_messages`] non-system messages.
 
+The loop holds its messages in a [`Pruned`], which prunes them and counts
+what each prune dropped. The count runs over the whole run, and every model
+call's `turn_usage` reports it as `trimmed_messages`: the messages missing
+from the request that call answered. Nothing dropped is no key at all.
+
 <!-- module-docs:end -->

@@ -880,7 +880,7 @@ pub(crate) async fn forward_chat_completion(
             Arc::clone(&metrics),
             snapshot_seq,
             forwarded_chars,
-            client_wants_progress,
+            crate::usage_reading::told(client_wants_progress, effective_ctx, &report),
             permit,
             config,
             session_id,
@@ -982,7 +982,7 @@ pub(crate) async fn stream_response_to_channel(
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         connection,
         repair,
-        client_wants_progress,
+        client_wants_progress.then(Default::default),
     )
     .await
 }
@@ -997,12 +997,12 @@ pub(crate) async fn stream_response_to_channel(
 ///
 /// Taps [`LlmStreamEvent::PromptProgress`] frames as they pass through and
 /// records them on `connection` (the dashboard registry entry for this
-/// request). The frame itself is forwarded only when `client_wants_progress`,
-/// i.e. when the client's own body carried `return_progress: true`: the proxy
-/// forces that flag upstream for itself (see [`inject_streaming_body_overrides`])
-/// and the chunk has no `choices`, which stops a schema-validating client. Any
-/// other client is sent a [`prefill_comment`] in its place, so that a long
-/// prefill still sends it bytes.
+/// request). The frame itself is forwarded only when `told` is `Some`, i.e. the
+/// client's own body carried `return_progress: true`: the proxy forces that flag
+/// upstream for itself (see [`inject_streaming_body_overrides`]) and the chunk
+/// has no `choices`, which stops a schema-validating client. Any other client
+/// is sent a [`prefill_comment`] in its place, so a long prefill still sends it
+/// bytes. `told` is also what that client's usage frame says of its context.
 ///
 /// When the events end in an [`UpstreamStalled`], the client gets any held
 /// tool-call frames, a notice as the turn's own text, the `upstream_timeout`
@@ -1027,13 +1027,13 @@ pub(crate) async fn drain_events(
     tx: ClientSender,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
-    client_wants_progress: bool,
+    told: crate::usage_reading::Told,
 ) -> StreamOutcome {
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let encoder = SseEncoder::new(id, model_name, created);
+    let encoder = SseEncoder::new(id, model_name, created).with_reading(told);
 
     // Set once a generated token comes from the upstream, seen here because
     // the normalizer can hold tokens back from the loop below.
@@ -1101,7 +1101,7 @@ pub(crate) async fn drain_events(
                     connection.update_progress(*processed, *total, *cached, *time_ms);
                     // A comment unless the client asked for progress: the proxy
                     // needed the data, the client did not order the chunk.
-                    if client_wants_progress {
+                    if told.is_some() {
                         encoder.encode(&ev).map(Bytes::from)
                     } else {
                         Some(prefill_comment(*processed, *total))

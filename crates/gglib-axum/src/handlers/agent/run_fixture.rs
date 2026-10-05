@@ -133,6 +133,7 @@ pub(super) fn paced(
             model: "qwen".to_owned(),
             quantization: None,
             device: None,
+            context_size: None,
         },
         local_model: None,
         far_model: None,

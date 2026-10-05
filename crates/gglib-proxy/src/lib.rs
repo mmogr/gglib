@@ -157,6 +157,7 @@ pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;
 pub(crate) mod upstream_read;
+pub(crate) mod usage_reading;
 
 // What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
 pub use load_endpoint::LoadResponse;

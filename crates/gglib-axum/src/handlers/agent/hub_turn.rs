@@ -138,7 +138,7 @@ pub(super) async fn begin(
     mut prepared: Prepared,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
-    prepared.hold = remote_upstream::hold(state.runtime.as_ref(), prepared.local_model)?;
+    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
     let transcript = Transcript {
         conversation_id: Some(conversation_id),
         replace_from: None,

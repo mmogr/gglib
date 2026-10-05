@@ -31,8 +31,10 @@ pub const THINKING_DURATION_KEY: &str = "thinkingDurationSeconds";
 ///
 /// Each is set only when the turn's [`TurnUsage`] had it: the model's name
 /// and quantisation, tokens read, of them from the cache, tokens written,
-/// how long the turn took and spent writing, in ms, and the paired device
-/// whose turn it answered. A device's own message row carries `device` too.
+/// how long the turn took and spent writing, in ms, the paired device whose
+/// turn it answered, why it stopped, and its [`ContextReading`](super::ContextReading):
+/// the context's size and the earlier messages missing from its request.
+/// A device's own message row carries `device` too.
 pub const MADE_KEYS: MadeKeys = MadeKeys {
     model: "modelName",
     quantization: "modelQuantization",
@@ -42,9 +44,12 @@ pub const MADE_KEYS: MadeKeys = MadeKeys {
     duration_ms: "turnDurationMs",
     writing_ms: "writingDurationMs",
     device: "device",
+    finish_reason: "finishReason",
+    context_size: "contextSize",
+    trimmed_messages: "trimmedMessages",
 };
 
-/// The names of [`MADE_KEYS`], one per [`TurnUsage`] field.
+/// The names of [`MADE_KEYS`], one per figure a [`TurnUsage`] carries.
 pub struct MadeKeys {
     pub model: &'static str,
     pub quantization: &'static str,
@@ -54,6 +59,9 @@ pub struct MadeKeys {
     pub duration_ms: &'static str,
     pub writing_ms: &'static str,
     pub device: &'static str,
+    pub finish_reason: &'static str,
+    pub context_size: &'static str,
+    pub trimmed_messages: &'static str,
 }
 
 /// The metadata key set to `true` on the last assistant row of a reply that
@@ -158,6 +166,7 @@ fn set_made(row: &mut NewMessage, usage: TurnUsage) {
         (k.model, usage.model),
         (k.quantization, usage.quantization),
         (k.device, usage.device),
+        (k.finish_reason, usage.finish_reason),
     ];
     for (key, value) in text {
         if let Some(value) = value {
@@ -170,6 +179,11 @@ fn set_made(row: &mut NewMessage, usage: TurnUsage) {
         (k.completion_tokens, usage.completion_tokens.map(u64::from)),
         (k.duration_ms, Some(usage.duration_ms)),
         (k.writing_ms, usage.writing_ms),
+        (k.context_size, usage.reading.context_size),
+        (
+            k.trimmed_messages,
+            usage.reading.trimmed_messages.map(u64::from),
+        ),
     ];
     for (key, value) in counts {
         if let Some(value) = value {

@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod pruned;
 mod tail_pruning;
 mod tool_pruning;
 
@@ -7,6 +8,7 @@ mod tests;
 
 use gglib_core::{AgentConfig, AgentMessage};
 
+pub(crate) use pruned::Pruned;
 use tail_pruning::prune_tail;
 use tool_pruning::prune_tool_messages;
 
@@ -35,10 +37,7 @@ fn total_chars(messages: &[AgentMessage]) -> usize {
 /// context, so this is intentional — but callers should be aware that
 /// interleaved system prompts do not keep their original positions within
 /// the non-system flow after Pass 2 runs.
-pub(crate) fn prune_for_budget(
-    messages: Vec<AgentMessage>,
-    config: &AgentConfig,
-) -> Vec<AgentMessage> {
+fn prune_for_budget(messages: Vec<AgentMessage>, config: &AgentConfig) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
 
     if total_chars(&messages) <= budget {

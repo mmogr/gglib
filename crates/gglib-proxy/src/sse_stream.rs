@@ -45,9 +45,9 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// it does when the client closes its connection, or a keepalive outlasts
 /// [`StreamBounds::send`]; returning drops the request.
 ///
-/// `client_wants_progress` is passed through to [`drain_events`], which
-/// forwards `prompt_progress` frames when the client's own request asked for
-/// them and otherwise sends an SSE comment for each.
+/// `told` ([`crate::usage_reading`]) is passed through to [`drain_events`]:
+/// `Some` forwards `prompt_progress` frames and adds the reading to the usage
+/// frame; `None` sends an SSE comment for each and that frame unchanged.
 ///
 /// When `config` and `session_id` are both `Some` (KV cache enabled), the KV
 /// cache is saved via [`save_after_generation`] immediately after
@@ -71,7 +71,7 @@ pub(crate) fn spawn_and_return(
     context_metrics: Arc<crate::metrics::ContextMetricsStore>,
     snapshot_seq: u64,
     forwarded_chars: Option<usize>,
-    client_wants_progress: bool,
+    told: crate::usage_reading::Told,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
     config: Option<StreamConfig>,
     session_id: Option<String>,
@@ -212,7 +212,7 @@ pub(crate) fn spawn_and_return(
                     tx,
                     &connection,
                     repair,
-                    client_wants_progress,
+                    told,
                 )
                 .await;
                 if outcome.repair_attempted {

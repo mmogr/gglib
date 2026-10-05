@@ -21,7 +21,14 @@ An agent run stamps each turn's `turn_usage` event with the model it drove
 (`compose::MadeBy`: locally the model on the port and its catalogue
 quantisation, on the paired machine the name and quantisation that machine
 has for the model) before logging it, so the
-frame a page draws and the row the reply is saved as say the same.
+frame a page draws and the row the reply is saved as say the same. A local
+run also stamps the context its model was launched with
+(`remote_upstream::hold_model`): read once the run holds the model, so it
+cannot be an earlier launch's, and only when the primary slot's model is the
+run's own by port and id. A run on the paired machine's model, or on a model
+in the second slot, stamps none, and the figure is left out: never a default.
+The loop itself counts the messages it left out of each request and reports
+why the model stopped.
 
 # Which upstream
 

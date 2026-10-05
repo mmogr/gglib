@@ -16,7 +16,7 @@ the `OpenAI` `chat.completion.chunk` SSE wire format and the typed
 |-----------|------|
 | [`parser`] | Parse one `data:` JSON payload → typed events |
 | [`decoder`] | Stateful byte-stream → events (line buffering, `[DONE]`) |
-| [`encoder`] | Typed event → `data:` JSON payload (for re-emission) |
+| [`encoder`] | Typed event → `data:` JSON payload (for re-emission); the usage frame also carries a context reading when the encoder is given one |
 
 Promoting the codec to `gglib-core` lets every adapter (runtime, proxy,
 future GUIs) share a single, well-tested implementation rather than

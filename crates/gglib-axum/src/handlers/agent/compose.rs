@@ -43,23 +43,29 @@ pub(crate) struct Prepared {
     pub(crate) hold: Option<AdmissionLease>,
 }
 
-/// The model a run drives, and the paired device whose turn it answers,
-/// which the loop does not know: stamped on each turn's usage before it is
-/// logged.
+/// The model a run drives, the context it was launched with, and the paired
+/// device whose turn it answers, which the loop does not know: stamped on
+/// each turn's usage before it is logged.
 pub(crate) struct MadeBy {
     pub(crate) model: String,
     pub(crate) quantization: Option<String>,
     /// Absent for this machine's own turns.
     pub(crate) device: Option<String>,
+    /// The context the model was launched with, read once the run holds it
+    /// (`remote_upstream::hold_model`). Absent when that is not known: a
+    /// paired machine's model, or one outside the primary slot.
+    pub(crate) context_size: Option<u64>,
 }
 
 impl MadeBy {
-    /// Name the model on a `turn_usage` event; any other passes unchanged.
+    /// Name the model and its context's size on a `turn_usage` event; any
+    /// other passes unchanged.
     pub(crate) fn stamp(&self, event: &mut AgentEvent) {
         if let AgentEvent::TurnUsage(usage) = event {
             usage.model = Some(self.model.clone());
             usage.quantization.clone_from(&self.quantization);
             usage.device.clone_from(&self.device);
+            usage.reading.context_size = self.context_size;
         }
     }
 }

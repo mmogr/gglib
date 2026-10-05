@@ -214,7 +214,7 @@ async fn run_turn_with(
         ClientSender::new(tx, SEND),
         &connection,
         repair,
-        false,
+        None,
     );
     // A drain that never ends fails the test instead of hanging it.
     let outcome = tokio::time::timeout(IDLE * 30, drain)

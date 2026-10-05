@@ -69,7 +69,7 @@ async fn leave_after(
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         &connection,
         None,
-        false,
+        None,
     );
     // A drain that does not end fails the test instead of waiting out a
     // long bound.

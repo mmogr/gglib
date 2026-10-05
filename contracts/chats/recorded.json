@@ -6,7 +6,7 @@
         "title": "Why the build broke",
         "model_id": 3,
         "model": "qwen3-8b",
-        "updated_at": "2026-09-30 09:13:07",
+        "updated_at": "2026-09-30 09:14:21",
         "live_run": "chat-5b1e"
       },
       {
@@ -26,7 +26,7 @@
         "max_iterations": 8
       },
       "created_at": "2026-09-30 09:12:30",
-      "updated_at": "2026-09-30 09:13:07"
+      "updated_at": "2026-09-30 09:14:21"
     },
     "messages": [
       {
@@ -55,10 +55,32 @@
         "created_at": "2026-09-30 09:13:07",
         "metadata": {
           "completionTokens": 96,
+          "contextSize": 8192,
           "device": "phone-7c2e",
+          "finishReason": "stop",
           "modelName": "qwen3-8b",
           "promptTokens": 812,
           "turnDurationMs": 4100
+        }
+      },
+      {
+        "id": 42,
+        "conversation_id": 12,
+        "role": "user",
+        "content": "And how do I fix it?",
+        "created_at": "2026-09-30 09:14:02",
+        "metadata": {
+          "device": "phone-7c2e"
+        }
+      },
+      {
+        "id": 43,
+        "conversation_id": 12,
+        "role": "assistant",
+        "content": "Pin the",
+        "created_at": "2026-09-30 09:14:21",
+        "metadata": {
+          "incomplete": true
         }
       }
     ]

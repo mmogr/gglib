@@ -141,7 +141,7 @@ pub(crate) async fn create_run(
     })?;
     let mut prepared = prepare(state, req.chat).await.map_err(with_code)?;
     // Untested: `create_run` cannot be driven without a running llama-server.
-    prepared.hold = remote_upstream::hold(state.runtime.as_ref(), prepared.local_model)?;
+    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
     let transcript = Transcript {
         conversation_id: req.conversation_id,
         replace_from: req.replace_from,
