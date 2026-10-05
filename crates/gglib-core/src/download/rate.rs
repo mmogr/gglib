@@ -1,19 +1,19 @@
 //! Time-decayed download rate and ETA estimation.
 //!
 //! This is the single owner of all download speed / ETA math. The download
-//! manager owns one [`RateEstimator`] per shard group and ships the values it
-//! produces on the wire; every renderer (CLI progress bars, Tauri GUI, web UI)
-//! displays those values verbatim. Renderers must never re-derive a rate from
-//! byte deltas — doing so is what let the CLI and the GUI disagree with each
-//! other, and with the operating system's own network monitor.
+//! manager owns two [`RateEstimator`]s per shard group, one for the speed and
+//! one for the time remaining, and ships the values they produce on the wire;
+//! every renderer (CLI progress bars, Tauri GUI, web UI) displays those values
+//! verbatim. Renderers must never re-derive a rate from byte deltas — doing so
+//! is what let the CLI and the GUI disagree with each other, and with the
+//! operating system's own network monitor.
 //!
 //! # Why not an exponentially weighted average of instantaneous rates?
 //!
-//! Progress arrives in bursts. On the `hf-xet` fast path the byte counter comes
-//! from `stat`ing the partially-written file, and the chunk cache flushes to
-//! disk in large steps even while the network rate is perfectly flat. Dividing
-//! a burst by the short interval it landed in yields an enormous instantaneous
-//! rate, and weighting that into a running average still leaks a visible spike.
+//! Progress arrives in bursts. On the `hf-xet` fast path the bytes on disk rise
+//! in large steps, as the chunk cache flushes, even while the network rate is
+//! perfectly flat. Dividing a burst by the short interval it landed in yields an
+//! enormous instantaneous rate, and a running average of those still spikes.
 //!
 //! Instead this decays *bytes* and *elapsed time* separately and reports their
 //! ratio:
@@ -36,9 +36,9 @@
 //!   download reports its whole on-disk size in the first event; counting that
 //!   as bytes transferred "just now" is what produced multi-GB/s readings.
 //! * A byte count that moves backwards re-baselines instead of underflowing.
-//!   Per-shard counters restart at zero on every shard, so the manager feeds
-//!   aggregate bytes; this is the safety net for the fallback path where shard
-//!   sizes are unknown and the aggregate is not monotonic.
+//!   The manager relies on it: the bytes received, which give the speed,
+//!   restart at zero on every file, and the aggregate bytes on disk are not
+//!   monotonic on the fallback path where shard sizes are unknown.
 
 use std::time::Instant;
 
@@ -124,7 +124,7 @@ impl RateEstimator {
         };
 
         if downloaded < prev {
-            // Counter moved backwards (per-shard counters restart at zero, and
+            // Counter moved backwards (per-file counters restart at zero, and
             // the unknown-shard-size fallback is not monotonic). Re-baseline
             // without emitting a sample, keeping the accumulated average so the
             // user sees no discontinuity at a shard boundary.
@@ -246,8 +246,8 @@ mod tests {
 
     #[test]
     fn bursty_input_reads_as_steady() {
-        // All bytes for a 2s window land in a single 250ms tick — the shape the
-        // hf-xet stat poller actually produces when the chunk cache flushes.
+        // All bytes for a 2s window land in a single 250ms tick — the shape of
+        // hf-xet's bytes on disk when the chunk cache flushes.
         // The mean is 50 MB/s and the display must not swing around it.
         let start = Instant::now();
         let mut est = RateEstimator::new(start);

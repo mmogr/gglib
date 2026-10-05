@@ -5,8 +5,7 @@
 //! so has nobody else to draw its files. The queued path renders through
 //! [`crate::cli_emitter::CliDownloadEventEmitter`] instead.
 //!
-//! Both renderers get their speed and ETA from
-//! [`RateEstimator`] and format them with
+//! Both renderers get their speed and ETA from [`Meter`] and format them with
 //! the shared [`format_rate`] / [`format_duration`]. This module owns no rate
 //! math of its own — an earlier private exponentially-weighted average here
 //! was one of three competing implementations that disagreed with each other.
@@ -15,7 +14,8 @@ use std::io::{self, IsTerminal, Write};
 use std::time::{Duration, Instant};
 
 use crate::executor::FileProgress;
-use gglib_core::download::{RateEstimator, format_duration, format_rate};
+use crate::meter::Meter;
+use gglib_core::download::{format_duration, format_rate};
 use indicatif::{HumanBytes, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 
 /// Minimum gap between redraws on the non-terminal path.
@@ -30,7 +30,7 @@ pub(crate) struct CliProgressPrinter {
     inner: ProgressRender,
     /// Shared across both renderers — the rate is a property of the transfer,
     /// not of how it happens to be drawn.
-    estimator: RateEstimator,
+    meter: Meter,
 }
 
 enum ProgressRender {
@@ -55,17 +55,17 @@ impl CliProgressPrinter {
         };
         Self {
             inner,
-            estimator: RateEstimator::new(Instant::now()),
+            meter: Meter::new(Instant::now()),
         }
     }
 
-    /// Update progress display with a file's current progress.
-    pub(crate) fn update(&mut self, label: Option<&str>, progress: FileProgress) {
-        let (downloaded, total) = (progress.bytes, progress.size.unwrap_or(0));
-        self.estimator.record(downloaded, total, Instant::now());
+    /// Update progress display with a file's progress as it stands at `now`.
+    pub(crate) fn update(&mut self, label: Option<&str>, progress: FileProgress, now: Instant) {
+        let (wire, downloaded, total) = (progress.wire, progress.bytes, progress.size.unwrap_or(0));
+        self.meter.record(wire, downloaded, total, now);
         let rate = Rate {
-            speed_bps: self.estimator.rate_bps(),
-            eta_seconds: self.estimator.eta_seconds(),
+            speed_bps: self.meter.speed_bps(),
+            eta_seconds: self.meter.eta_seconds(),
         };
 
         match &mut self.inner {
@@ -83,7 +83,7 @@ impl CliProgressPrinter {
     }
 }
 
-/// The estimator's current verdict, ready for display.
+/// The meter's current verdict, ready for display.
 struct Rate {
     speed_bps: Option<f64>,
     eta_seconds: Option<f64>,
@@ -165,7 +165,7 @@ impl FancyProgress {
     }
 
     /// Note the absence of `{binary_bytes_per_sec}` and `{eta}` — those are
-    /// indicatif's own estimates. Rate and ETA come from the shared estimator
+    /// indicatif's own estimates. Rate and ETA come from the shared meter
     /// and are rendered into `{msg}`; `{human_bytes}` are sizes, which stay
     /// binary.
     fn bar_style() -> ProgressStyle {
@@ -311,19 +311,18 @@ mod tests {
     }
 
     #[test]
-    fn printer_reports_no_rate_from_a_single_sample() {
-        // A resumed download's first event carries everything already on disk.
-        // Counting that as bytes transferred "just now" is what produced
-        // multi-GB/s readings.
-        let mut printer = CliProgressPrinter::new();
-        printer.update(
-            Some("model.gguf"),
-            FileProgress {
-                bytes: 2 * 1024 * 1024 * 1024,
+    fn printer_takes_no_speed_from_bytes_found_on_disk() {
+        // A resumed download's readings carry everything already on disk, and
+        // none of it was received. Counting it produced multi-GB/s readings.
+        let (mut printer, start) = (CliProgressPrinter::new(), Instant::now());
+        for tick in 0..12 {
+            let progress = FileProgress {
+                bytes: if tick < 4 { 0 } else { 2 << 30 },
                 wire: 0,
-                size: Some(4 * 1024 * 1024 * 1024),
-            },
-        );
-        assert_eq!(printer.estimator.rate_bps(), None);
+                size: Some(4 << 30),
+            };
+            printer.update(None, progress, start + PLAIN_MIN_INTERVAL * tick);
+        }
+        assert_eq!(printer.meter.speed_bps(), None);
     }
 }

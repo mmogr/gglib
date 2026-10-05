@@ -13,6 +13,7 @@ pub use gglib_core::ports::{
 
 // Internal modules (pub(crate) to keep implementation private)
 pub(crate) mod executor;
+mod meter;
 pub(crate) mod queue;
 mod resolver;
 

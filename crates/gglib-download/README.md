@@ -80,8 +80,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   between the last byte hitting disk and the model row being written.
 - **Speed and ETA** — Computed once, by the manager's progress bridge, using
   `gglib_core::download::RateEstimator`, and shipped on the event for every
-  renderer to display verbatim. One estimator per *shard group*, so the
-  reported speed is continuous from the first shard to the last. Renderers must
+  renderer to display verbatim. The speed is taken from the bytes received
+  from the network and the time remaining from the bytes on disk (`meter.rs`):
+  the accelerator writes to disk in large steps while the network runs flat,
+  and a resumed or already-present file is bytes on disk that nobody
+  received. Those took no time to arrive, so the time remaining counts them
+  as done and leaves them out of its rate. One meter per *shard group*, so the reported speed is continuous
+  from the first shard to the last. Renderers must
   not derive a rate from successive byte counts; `indicatif`'s built-in
   `{bytes_per_sec}` and `{eta}` are deliberately absent from every template
   here, because using them made the CLI and the GUI report different numbers

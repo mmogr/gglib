@@ -7,6 +7,7 @@ mod python_requirements;
 
 use std::fs;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Result, anyhow};
 use gglib_core::ports::{HfClientPort, QuantizationResolver};
@@ -121,7 +122,7 @@ fn draw_on(printer: &Arc<Mutex<CliProgressPrinter>>, file: &str) -> ProgressCall
     let label = file.to_string();
     Arc::new(move |progress: FileProgress| {
         if let Ok(mut printer) = printer.lock() {
-            printer.update(Some(&label), progress);
+            printer.update(Some(&label), progress, Instant::now());
         }
     })
 }

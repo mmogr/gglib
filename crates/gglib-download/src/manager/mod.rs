@@ -11,6 +11,8 @@ mod duplicate_guard_tests;
 mod group_registration_tests;
 #[cfg(test)]
 mod projector_group_tests;
+#[cfg(test)]
+mod sample_tests;
 
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
@@ -26,8 +28,7 @@ use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, RateEstimator,
-    ShardInfo,
+    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, ShardInfo,
 };
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
@@ -36,6 +37,7 @@ use gglib_core::ports::{
 };
 
 use crate::executor::known_size;
+use crate::meter::Meter;
 use crate::quant_selector::QuantizationSelector;
 use crate::queue::{DownloadQueue, QueuedItem};
 use crate::resolver::HfQuantizationResolver;
@@ -47,7 +49,7 @@ pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 
 /// How often the progress bridge samples the worker and emits an event.
 ///
-/// Speed and ETA smoothing live in [`RateEstimator`], not here; this is purely
+/// Speed and ETA smoothing live in [`Meter`], not here; this is purely
 /// the display cadence. The GUI does not re-throttle on top of it.
 const PROGRESS_TICK: Duration = Duration::from_millis(250);
 
@@ -269,12 +271,12 @@ pub struct DownloadManagerImpl {
     prev_is_drained: Mutex<bool>,
     /// File entries with OIDs for each download (keyed by download ID).
     file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
-    /// Rate estimators, keyed by shard group (or by download ID when unsharded).
+    /// Meters, keyed by shard group (or by download ID when unsharded).
     ///
     /// Keyed by *group* rather than job so the estimate survives shard
     /// boundaries. A per-job estimator restarted from zero on every shard,
     /// which on a five-shard model meant five ramp-ups from a cold average.
-    rate_estimators: Mutex<HashMap<String, Arc<Mutex<RateEstimator>>>>,
+    rate_estimators: Mutex<HashMap<String, Arc<Mutex<Meter>>>>,
 }
 
 impl DownloadManagerImpl {
@@ -313,7 +315,7 @@ impl DownloadManagerImpl {
     ///
     /// Sharded downloads share one estimator across the whole group so the
     /// reported speed is continuous from the first shard to the last.
-    async fn rate_estimator_for(&self, item: &QueuedItem) -> Arc<Mutex<RateEstimator>> {
+    async fn rate_estimator_for(&self, item: &QueuedItem) -> Arc<Mutex<Meter>> {
         let key = item
             .group_id
             .as_ref()
@@ -324,9 +326,7 @@ impl DownloadManagerImpl {
                 .lock()
                 .await
                 .entry(key)
-                .or_insert_with(|| {
-                    Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now())))
-                }),
+                .or_insert_with(|| Arc::new(Mutex::new(Meter::new(std::time::Instant::now())))),
         )
     }
 
@@ -871,7 +871,7 @@ impl DownloadManagerImpl {
         shard_info: Option<&ShardInfo>,
         rx: watch::Receiver<ProgressUpdate>,
         cancel: CancellationToken,
-        estimator: Arc<Mutex<RateEstimator>>,
+        estimator: Arc<Mutex<Meter>>,
         finished: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         let bridge = ProgressBridge {
@@ -1117,7 +1117,7 @@ struct ProgressBridge {
     id: String,
     shard_info: Option<ShardInfo>,
     /// Shared with the rest of the shard group.
-    estimator: Arc<Mutex<RateEstimator>>,
+    estimator: Arc<Mutex<Meter>>,
     /// User cancellation: stop without emitting further progress.
     cancel: CancellationToken,
     /// Worker finished: emit a final progress event, then stop.
@@ -1128,7 +1128,7 @@ struct ProgressBridge {
 ///
 /// Samples the worker's `watch` channel on a fixed tick and feeds every sample
 /// — including ticks where the byte count has not moved — into the shared
-/// [`RateEstimator`]. Those idle samples are what let a stalled transfer decay
+/// [`Meter`]. Those idle samples are what let a stalled transfer decay
 /// toward zero instead of freezing the displayed speed while the ETA counts
 /// down against nothing. Events are emitted on every tick for the same reason.
 ///
@@ -1169,8 +1169,9 @@ async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<Progres
                 // position, then exit.
                 let final_progress = rx.borrow().clone();
                 if final_progress.seq > last_emitted.seq {
+                    let now = std::time::Instant::now();
                     let (speed, eta) =
-                        sample(&estimator, shard_info.as_ref(), &final_progress).await;
+                        sample(&estimator, shard_info.as_ref(), &final_progress, now).await;
                     emit_progress(
                         &event_emitter,
                         &id,
@@ -1188,7 +1189,8 @@ async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<Progres
 
                 // Sample unconditionally — a tick carrying no new bytes is a
                 // real observation of "nothing arrived".
-                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current).await;
+                let now = std::time::Instant::now();
+                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current, now).await;
 
                 // Nothing has been reported yet: no bar to update.
                 if current.seq > 0 {
@@ -1207,24 +1209,26 @@ async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<Progres
     }
 }
 
-/// Feed one observation to the group's estimator and read back its verdict.
+/// Feed one observation to the group's meter and read back its verdict.
 ///
-/// The estimator is fed *aggregate* bytes so that it measures the whole shard
-/// group as one continuous transfer; per-shard counters restart at zero and
-/// would otherwise look like the download going backwards.
+/// The speed is taken from the bytes the file in flight has received. The
+/// time remaining is taken from *aggregate* bytes on disk, so that it covers
+/// the whole shard group as one continuous transfer.
 async fn sample(
-    estimator: &Arc<Mutex<RateEstimator>>,
+    estimator: &Arc<Mutex<Meter>>,
     shard_info: Option<&ShardInfo>,
     progress: &ProgressUpdate,
+    now: std::time::Instant,
 ) -> (Option<f64>, Option<f64>) {
     let (file_bytes, file_size) = file_counts(progress);
     let (downloaded, total) = shard_info.map_or((file_bytes, file_size), |shard| {
         aggregate_progress(shard, file_bytes, file_size)
     });
 
+    let wire = progress.progress.wire;
     let mut estimator = estimator.lock().await;
-    estimator.record(downloaded, total, std::time::Instant::now());
-    (estimator.rate_bps(), estimator.eta_seconds())
+    estimator.record(wire, downloaded, total, now);
+    (estimator.speed_bps(), estimator.eta_seconds())
 }
 
 /// A file's bytes on disk and its size, with 0 for a size nobody knows.
@@ -1459,7 +1463,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
                 let (speed_bps, eta_seconds) = match estimator {
                     Some(estimator) => {
                         let estimator = estimator.lock().await;
-                        (estimator.rate_bps(), estimator.eta_seconds())
+                        (estimator.speed_bps(), estimator.eta_seconds())
                     }
                     None => (None, None),
                 };
@@ -1829,7 +1833,7 @@ mod tests {
             event_emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
             id: "owner/repo:Q4_K_M".to_string(),
             shard_info: None,
-            estimator: Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now()))),
+            estimator: Arc::new(Mutex::new(Meter::new(std::time::Instant::now()))),
             cancel,
             finished,
         }
