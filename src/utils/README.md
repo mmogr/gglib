@@ -22,6 +22,7 @@ Shared TypeScript helpers used across the React frontend.
 | `errors.ts` | `AbortError` predicate — the `DOMException` both `fetch()` and stream reads throw when a signal fires |
 | `formatPerSecond.ts` | Compact per-second count with no unit; the caller supplies "tok/s", "req/s" or whatever it counts |
 | `canSee.ts` | Whether a row's model reads images: a local row's `imageInput`, or a far row's `vision` capability |
+| `contextUsage.ts` | A usage meter's whole-number percent (a half rounds up, never over 100) and its severity (warning from 70, danger from 90), so a meter's colour, figure and words agree |
 | `dbTimestamp.ts` | Parse a database timestamp, reading SQLite's zone-less `YYYY-MM-DD HH:MM:SS` as the UTC it is rather than as local time |
 | `messages/` | Chat message transformation helpers |
 

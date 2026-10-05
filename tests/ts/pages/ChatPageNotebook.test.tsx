@@ -6,6 +6,9 @@
  * have is left out, never drawn as zero or a dash. A saved reply has its
  * time, how long it thought and its tool calls; nothing here knows its model
  * or token counts. A reply arriving has how far its prompt was read.
+ *
+ * The composer's context ring keeps the same rule: drawn from the figures
+ * the last reply carried, and not at all where its context size is missing.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -209,5 +212,184 @@ describe('ChatPage, notebook', () => {
     expect(when.parentElement?.textContent).toBe(when.textContent);
     const composer = rowOf(screen.getByRole('textbox', { name: 'Message' }));
     expect(composer).not.toHaveTextContent(/Q\d|·/);
+  });
+});
+
+describe('ChatPage, the context ring', () => {
+  /** The composer margin's ring, by its name; null when the page draws none. */
+  const ring = () => screen.queryByRole('button', { name: /^Context: / });
+  const detail = () => screen.queryByRole('group', { name: 'Context' });
+  const composerRow = () => rowOf(screen.getByRole('textbox', { name: 'Message' }));
+  /** The ring's track, the circle under its arc: there whenever a ring is drawn, named or not. */
+  const track = () => composerRow().querySelector('circle.stroke-border');
+
+  /**
+   * What the ring draws: its arc, the second circle and the one over the
+   * track, in this colour and as long as `used` of `size` round its radius.
+   */
+  function expectArc(trigger: HTMLElement, stroke: string, used: number, size: number) {
+    const arc = trigger.querySelectorAll('circle')[1];
+    expect(arc).toHaveClass(stroke);
+    const radius = Number(arc.getAttribute('r'));
+    expect(radius).toBeGreaterThan(0);
+    expect(Number(arc.getAttribute('stroke-dashoffset'))).toBeCloseTo(2 * Math.PI * radius * (1 - used / size), 6);
+  }
+
+  /** Give the saved reply these figures, as its row keeps them. */
+  function replyMade(figures: Record<string, unknown>) {
+    fixture.rows[1][1].metadata = { ...fixture.rows[1][1].metadata, ...figures };
+  }
+  const QUARTER = { promptTokens: 8000, completionTokens: 200, contextSize: 32768 };
+
+  it('draws no ring where the last reply has no figures', async () => {
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    expect(ring()).not.toBeInTheDocument();
+    // Nor a ring with no name: an empty one would still draw its track.
+    expect(track()).toBeNull();
+  });
+
+  it('draws nothing where the last reply has counts and no context size: not a ring, a zero or a dash', async () => {
+    replyMade({ promptTokens: 8000, completionTokens: 200 });
+    renderLocal();
+    await screen.findByText('8,000 tok read');
+    expect(ring()).not.toBeInTheDocument();
+    expect(track()).toBeNull();
+    expect(composerRow()).not.toHaveTextContent(/%|—|\b0\b/);
+  });
+
+  it('draws the ring after the tools button, says the sentence on hover and opens the detail on a click', async () => {
+    const user = userEvent.setup();
+    replyMade(QUARTER);
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+
+    const trigger = within(composerRow()).getByRole('button', { name: 'Context: 25 percent of context used' });
+    expect(trigger).toHaveAttribute('title', '8,200 of 32,768 tokens (25%) after the last finished reply.');
+    // Under 70% the ring stands alone: no figure and no mark beside it.
+    expect(trigger.textContent).toBe('');
+    expect(trigger.querySelectorAll('svg')).toHaveLength(1);
+    expect(track()).not.toBeNull();
+    expectArc(trigger, 'stroke-primary', 8200, 32768);
+    const tools = within(composerRow()).getByRole('button', { name: 'Tools' });
+    expect(tools.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(detail()).not.toBeInTheDocument();
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(detail()).toHaveTextContent('8,200 of 32,768 tokens (25%) after the last finished reply.');
+    expect(trigger).toHaveAttribute('aria-controls', detail()!.id);
+    // A group, never a dialog: a dialog would hold every other popout open.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(detail()).not.toBeInTheDocument();
+    await user.click(trigger);
+    expect(detail()).toBeInTheDocument();
+    await user.click(trigger);
+    expect(detail()).not.toBeInTheDocument();
+    await user.click(trigger);
+    await user.click(screen.getByRole('textbox', { name: 'Message' }));
+    expect(detail()).not.toBeInTheDocument();
+  });
+
+  it('from 70% says the figure beside the ring with a warning mark, and the detail says why', async () => {
+    const user = userEvent.setup();
+    replyMade({ promptTokens: 24000, completionTokens: 400, contextSize: 32768, trimmedMessages: 3, finishReason: 'length' });
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+
+    const trigger = screen.getByRole('button', { name: 'Context: 74 percent of context used, filling up' });
+    expect(trigger.textContent).toBe('74%');
+    const figure = within(trigger).getByText('74%');
+    expect(figure).toHaveClass('text-warning', 'font-mono', 'tabular-nums');
+    expect(figure.querySelector('svg')).not.toBeNull();
+    expectArc(trigger, 'stroke-warning', 24400, 32768);
+
+    await user.click(trigger);
+    expect(Array.from(detail()!.querySelectorAll('p'), (p) => p.textContent)).toEqual([
+      '24,400 of 32,768 tokens (74%) after the last finished reply.',
+      'Context is filling up.',
+      '3 earlier messages were shortened or left out to fit.',
+      'The last reply was cut off before it finished.',
+    ]);
+  });
+
+  it('from 90% says it is almost full, in the danger colour and in words', async () => {
+    replyMade({ promptTokens: 29000, completionTokens: 492, contextSize: 32768 });
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+
+    const trigger = screen.getByRole('button', { name: 'Context: 90 percent of context used, almost full' });
+    const figure = within(trigger).getByText('90%');
+    expect(figure).toHaveClass('text-danger');
+    expect(figure).not.toHaveClass('text-warning');
+    expect(figure.querySelector('svg')).not.toBeNull();
+    expectArc(trigger, 'stroke-danger', 29492, 32768);
+  });
+
+  /** A second exchange after the saved one, its reply's row keeping this metadata. */
+  function secondReply(metadata: Record<string, unknown>) {
+    fixture.rows[1].push(
+      { id: 14, conversation_id: 1, role: 'user', content: 'And when it crashes?', created_at: '2026-09-01T09:14:00Z' },
+      { id: 15, conversation_id: 1, role: 'assistant', content: 'It also', created_at: '2026-09-01T09:14:30Z', metadata },
+    );
+  }
+
+  it('keeps the reading of the reply before one that was stopped', async () => {
+    replyMade(QUARTER);
+    secondReply({ incomplete: true });
+    renderLocal();
+    await screen.findByText('It also');
+    expect(screen.getByRole('button', { name: 'Context: 25 percent of context used' })).toBeInTheDocument();
+  });
+
+  it('borrows no size for a newest reply that has its counts and none: no ring, though the reply before has one', async () => {
+    replyMade(QUARTER);
+    secondReply({ promptTokens: 9000, completionTokens: 300 });
+    renderLocal();
+    await screen.findByText('It also');
+    expect(ring()).not.toBeInTheDocument();
+  });
+
+  it('holds the last reading while a reply arrives without its figures', async () => {
+    replyMade(QUARTER);
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [{ type: 'prompt_progress', processed: 1240, total: 3420, cached: 2100, time_ms: 900 }];
+    renderLocal();
+    await screen.findByText('Reading the prompt');
+    expect(screen.getByRole('button', { name: 'Context: 25 percent of context used' })).toBeInTheDocument();
+  });
+
+  it('takes a reply\'s figures when they come, while its run is still live', async () => {
+    replyMade(QUARTER);
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [
+      { type: 'text_delta', content: 'Still going.' },
+      { type: 'turn_usage', prompt_tokens: 29000, completion_tokens: 492, context_size: 32768 },
+    ];
+    renderLocal();
+    await screen.findByText('Still going.');
+    // Waited for by its title, which is cheap to look for; the name is read once it is there.
+    const trigger = await screen.findByTitle('29,492 of 32,768 tokens (90%) after the last finished reply.');
+    expect(trigger).toHaveAccessibleName('Context: 90 percent of context used, almost full');
+  });
+
+  it('shows each chat its own reading: none for a chat whose reply has no size', async () => {
+    const user = userEvent.setup();
+    replyMade(QUARTER);
+    fixture.conversations.push(conversation(2, 'Parsing GGUF'));
+    fixture.rows[2] = [
+      { id: 21, conversation_id: 2, role: 'user', content: 'What is a tensor?', created_at: '2026-09-01T10:00:00Z' },
+      { id: 22, conversation_id: 2, role: 'assistant', content: 'A block of numbers.', created_at: '2026-09-01T10:00:09Z' },
+    ];
+    renderLocal();
+    await screen.findByText('It restarts the job whenever it exits.');
+    expect(ring()).toBeInTheDocument();
+
+    await user.click(screen.getByRole('option', { name: /Parsing GGUF/ }));
+    await screen.findByText('A block of numbers.');
+    expect(ring()).not.toBeInTheDocument();
   });
 });

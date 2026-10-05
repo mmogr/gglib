@@ -5,8 +5,8 @@
  * `contracts/runs/turn_made.json` is written by `gglib-core`'s replay tests:
  * a turn's frames as the loop logs them, and the metadata the daemon saves
  * from them. The page draws the frames (`dispatchAgentEvent`) and loads the
- * metadata (`buildLoadedMessage`); both must give the same figures, and the
- * margin the same lines.
+ * metadata (`buildLoadedMessage`); both must give the same figures, the
+ * margin the same lines and the composer's ring the same context reading.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -25,6 +25,11 @@ import {
   replyFacts,
   replyName,
 } from '../../../src/components/ChatMessagesPanel/components/turnFigures';
+import {
+  contextLines,
+  contextReading,
+  decidingMade,
+} from '../../../src/components/ChatMessagesPanel/components/contextReading';
 
 const CONTRACT = JSON.parse(rust('contracts/runs/turn_made.json')) as {
   frames: AgentEvent[];
@@ -67,5 +72,15 @@ describe('turn_made contract', () => {
     expect(madeLines(facts(loaded()))).toEqual(lines);
     expect(replyName(facts(drawn()))).toBe('Qwen3.8-27B');
     expect(replyName(facts(loaded()))).toBe('Qwen3.8-27B');
+  });
+
+  it('gives the same context reading either way, from the counts and the size the turn carried', () => {
+    const reading = (m: GglibMessage) => contextReading(decidingMade([m]));
+    expect(reading(drawn())).toEqual({ used: 3676, size: 8192, percent: 45, severity: 'normal', trimmed: 3, cutOff: false });
+    expect(reading(loaded())).toEqual(reading(drawn()));
+    expect(contextLines(reading(loaded())!)).toEqual([
+      '3,676 of 8,192 tokens (45%) after the last finished reply.',
+      '3 earlier messages were shortened or left out to fit.',
+    ]);
   });
 });

@@ -6,6 +6,7 @@ import { IconButton } from '../../ui/IconButton';
 import type { ImageAttachment } from '../../../hooks/useGglibRuntime/imageAttachments';
 import type { ImageInput } from '../../../hooks/useImageInput';
 import { useImageUrl } from '../hooks/useImageUrl';
+import { useContextReading } from '../hooks/useContextReading';
 import { MessageActionsContext } from './MessageActionsContext';
 import { imageCost } from './imageCost';
 
@@ -16,17 +17,23 @@ import { imageCost } from './imageCost';
  */
 export const ImageInputContext = createContext<ImageInput>({ offered: false, reason: null, contextLength: null });
 
-/** One image in a composer: its thumbnail, how its upload stands or what it costs, and Remove. */
+/**
+ * One image in a composer: its thumbnail, how its upload stands or what it
+ * costs, and Remove. Its share is of the context the ring reads, the size
+ * the server that answered was launched with; before the conversation has
+ * such a reading, of the context `ImageInputContext` gives.
+ */
 const ImageTile: FC = () => {
   const image = useAttachment() as ImageAttachment;
   const source = useContext(MessageActionsContext)?.source ?? 'this';
   const { contextLength } = useContext(ImageInputContext);
+  const reading = useContextReading();
   const { url } = useImageUrl(image, source);
   const tokens = image.stored?.image_tokens;
   const caption =
     image.status.type === 'running' ? 'Uploading…'
       : image.status.type === 'incomplete' ? 'Not uploaded'
-        : tokens !== undefined ? imageCost(tokens, contextLength) : '';
+        : tokens !== undefined ? imageCost(tokens, reading?.size ?? contextLength) : '';
   return (
     <AttachmentPrimitive.Root className="relative flex flex-col gap-xs w-[112px]">
       <div className="h-[72px] w-full overflow-hidden rounded-base border border-border bg-surface">
@@ -46,8 +53,7 @@ const TILES = { Image: ImageTile, Attachment: ImageTile };
 
 /**
  * The images in the composer it is rendered in (the page's, or an edit's),
- * as a strip of tiles; nothing when it has none. Each tile's share is of
- * the context `ImageInputContext` gives.
+ * as a strip of tiles; nothing when it has none.
  */
 export const ComposerImages: FC = () => {
   const count = useComposer((composer) => composer.attachments.length);
