@@ -20,7 +20,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │           │     ├── TurnMargin (who; figures or arrival, from turnFigures)
     │           │     ├── MarkdownMessageContent
     │           │     └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
-    │           └── ComposerFooter      ← model and tools; input, send / stop
+    │           └── ComposerFooter      ← model, tools and context ring; input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
@@ -40,6 +40,6 @@ A far chat (`source="far"`, the machine this one is joined to) is read and carri
 |-----------|----------|
 | `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
-| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration` |
+| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading` |
 
 <!-- module-docs:end -->

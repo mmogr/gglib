@@ -508,7 +508,11 @@ movement, not autoscaled noise.
 
 Usage-meter severity thresholds (donut, KV readouts) are **70 warning /
 90 danger**; below 70 meters wear `primary` — green is reserved for
-running/online and never means "usage is fine".
+running/online and never means "usage is fine". The donut takes its percent
+and its severity from `utils/contextUsage.ts`, so its color and its figure
+cannot disagree. A compact meter with no room for a figure (the chat
+composer's context ring) shows a warning icon and the figure beside it from
+70%, so it is never color alone.
 
 ### Density & radius
 

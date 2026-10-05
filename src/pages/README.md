@@ -49,6 +49,7 @@ Interactive chat interface featuring:
 - Real-time streaming responses
 - Conversation history
 - Model selection from the composer's margin: a server running here, or a registered model, started first
+- A context ring in the composer's margin: how much of the model's context the conversation has used, from the figures its last finished reply carried, and absent where they are not known
 - MCP tool integration
 
 ## Sub-modules

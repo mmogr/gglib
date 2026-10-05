@@ -122,13 +122,22 @@ keys inside `usage`:
 
 **The rule for a client.** The context used is `prompt_tokens +
 completion_tokens` of the newest reply that finished, taken from that reply's
-last model call and never summed over calls; a reply that was stopped leaves
-the reading of the one before it. Draw it only when both counts and
-`context_size` are known, and draw nothing otherwise. Never divide by the
-`context_window` of a `/v1/models` entry: every figure there is advertised
-8% low, to leave a client headroom, and only the entry of the model loaded
-at that moment starts from the context its server has. The rest start from
-the catalogue's.
+last model call and never summed over calls; a reply that was stopped before
+any of its model calls finished leaves the reading of the one before it. Draw
+it only when both counts and `context_size` are known, and draw nothing
+otherwise. Never divide by the `context_window` of a `/v1/models` entry:
+every figure there is advertised 8% low, to leave a client headroom, and only
+the entry of the model loaded at that moment starts from the context its
+server has. The rest start from the catalogue's.
+
+The rule is worked through, case by case, in
+[`contracts/context/readings.json`](../contracts/context/readings.json), and
+where this page and that file differ the file is right. It says which reply
+decides (one that did not finish is passed over only when it carries no
+counts), when a reading is drawn, the percent as a whole number (a half
+rounds up, and it is never over 100), the warning from 70 and the stronger
+one from 90, and the sentences a client says. It is written by hand for every
+client to replay; gglib's chat page replays every case in its tests.
 
 `return_progress` is llama.cpp's own key, and it also asks for
 `prompt_progress` frames, which have no `choices`. On

@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Custom hooks for the chat messages panel: message deletion, live timer ticks, and AI title generation. Loading a conversation belongs to the runtime (`hooks/useGglibRuntime/useRunReader.ts`). They are called from the panel root so that state which touches the thread runtime stays in the component that owns it.
+Custom hooks for the chat messages panel: message deletion, live timer ticks, and AI title generation. Loading a conversation belongs to the runtime (`hooks/useGglibRuntime/useRunReader.ts`). They are called from the panel root so that state which touches the thread runtime stays in the component that owns it. `useContextReading.ts` is the exception: it reads the thread itself, from the ring and the image tile that draw it, so the root hands nothing down for it.
 
 ## Key Files
 
@@ -15,5 +15,6 @@ Custom hooks for the chat messages panel: message deletion, live timer ticks, an
 | `useSharedTicker.ts` | Shared 1-second tick counter running only during active streaming; consumed by `ThinkingTimingContext` |
 | `useTitleGeneration.ts` | Generates conversation titles from the first user message via a backend LLM prompt |
 | `useImageUrl.ts` | A `blob:` URL for an image: of the file the page holds, or of its bytes read from the chat's store with the page's credential; revoked when it goes |
+| `useContextReading.ts` | The open thread's context reading, for the composer's ring and an image's share of the context; null when the thread gives none |
 
 <!-- module-docs:end -->

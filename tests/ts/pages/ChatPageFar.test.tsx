@@ -212,6 +212,31 @@ describe('ChatPage, the far machine’s chats', () => {
     made.mockRestore();
   });
 
+  /** Open the far chat with these figures on its reply's row, as the far machine saved them. */
+  async function openFarWith(figures: Record<string, unknown>) {
+    const user = userEvent.setup();
+    (transport.current as Record<string, unknown>).openFarChat = vi.fn(async (id: number) => ({
+      conversation: { id, title: 'Why the build broke', model_id: null, system_prompt: 'You are the hub.', created_at: '', updated_at: '' },
+      messages: [FAR_ROWS[0], { ...FAR_ROWS[1], metadata: { ...FAR_ROWS[1].metadata, ...figures } }, FAR_ROWS[2]],
+    }));
+    joined();
+    renderPage();
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
+    await screen.findByText('A dependency moved.');
+  }
+
+  it('a far chat shows the context ring where the far machine saved its context size', async () => {
+    await openFarWith({ promptTokens: 8000, completionTokens: 200, contextSize: 32768 });
+    const ring = screen.getByRole('button', { name: 'Context: 25 percent of context used' });
+    expect(ring).toHaveAttribute('title', '8,200 of 32,768 tokens (25%) after the last finished reply.');
+  });
+
+  it('a far chat whose rows carry counts and no size shows no ring', async () => {
+    await openFarWith({ promptTokens: 8000, completionTokens: 200 });
+    expect(screen.getByText('8,000 tok read')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Context: / })).not.toBeInTheDocument();
+  });
+
   it('a far chat offers no Unload: its model is the other machine’s', async () => {
     const user = userEvent.setup();
     joined();

@@ -7,6 +7,7 @@ import { getToolRegistry } from '../../../services/tools';
 import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
 import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
+import { ContextRing } from './ContextRing';
 
 interface ComposerFooterProps {
   isServerConnected: boolean;
@@ -32,10 +33,10 @@ interface ComposerFooterProps {
 
 /**
  * The composer, on the notebook's grid: the model (a picker, on this
- * machine) and the tools in the margin; in the body, the images attached,
- * then the attach button, the text box and Stop or Send. An image is
- * attached by the button, a paste or a drop, each only where the model
- * takes images, as `ImageInputContext` says.
+ * machine), the tools and the context ring in the margin; in the body, the
+ * images attached, then the attach button, the text box and Stop or Send.
+ * An image is attached by the button, a paste or a drop, each only where
+ * the model takes images, as `ImageInputContext` says.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -66,13 +67,14 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
           />
         }
         made={
-          <div className="flex items-center gap-sm">
+          <div className="flex flex-wrap items-center justify-end gap-sm">
             <ToolSupportIndicator
               supports={supportsToolCalls ?? null}
               hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
               toolFormat={toolFormat}
             />
             <ToolsPopover opensUpward align="left" />
+            <ContextRing />
           </div>
         }
         body={
