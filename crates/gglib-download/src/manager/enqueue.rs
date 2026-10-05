@@ -10,19 +10,46 @@ impl DownloadManagerImpl {
     /// Queue every file of `resolution` as one group under `id`, and keep
     /// the group's files for registration.
     ///
-    /// Returns the group's 1-based position among the downloads.
+    /// Returns the group's 1-based position among the downloads, or `None`
+    /// when `id` is already in flight and nothing was queued.
+    ///
+    /// Every way of queueing comes through here, so an id is on the queue or
+    /// running at most once, and a row or a progress bar can be keyed by it.
     pub(super) async fn enqueue_group(
         &self,
         id: &DownloadId,
         revision: Option<&str>,
         resolution: &Resolution,
-    ) -> Result<u32, DownloadError> {
+    ) -> Result<Option<u32>, DownloadError> {
         let completion_key = completion_key(id, revision, resolution)?;
 
         // Minimal lock scope: find what is running and mutate the queue
         let position = {
             let mut queue = self.queue.write().await;
             let running = self.running_id(&queue).await;
+
+            // A repeat request for a download already in flight attaches to
+            // it instead of enqueueing a second copy. `is_queued` scans only
+            // `pending`, so a file that has moved to `active` is asked after
+            // too: a retried `gglib model download`, or a repair of a model
+            // already being fetched, would otherwise queue the group a second
+            // time under the running id.
+            //
+            // Deliberately narrower than "does the queue know this id": a
+            // check that also matched a *failed* download would make failures
+            // permanently un-retryable, hence the `remove_from_failed` inside
+            // `queue_sharded`.
+            //
+            // The check and the enqueue share one queue guard, taken before
+            // `active`, so two requests for one id cannot both pass it.
+            if queue.is_queued(id) || running.as_ref() == Some(id) {
+                tracing::info!(
+                    id = %id,
+                    "Download already in flight - attaching rather than queueing a duplicate"
+                );
+                return Ok(None);
+            }
+
             queue.queue_sharded(id, &completion_key, &resolution.files, running.as_ref())?
         };
 
@@ -33,7 +60,7 @@ impl DownloadManagerImpl {
             .await
             .insert(id.to_string(), resolution.files.clone());
 
-        Ok(position)
+        Ok(Some(position))
     }
 }
 

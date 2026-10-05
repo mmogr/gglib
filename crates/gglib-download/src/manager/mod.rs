@@ -1405,9 +1405,12 @@ impl DownloadManagerPort for DownloadManagerImpl {
             .resolve(&request.repo_id, request.quantization)
             .await?;
 
-        let position = self
+        let Some(position) = self
             .enqueue_group(&id, request.revision.as_deref(), &resolution)
-            .await?;
+            .await?
+        else {
+            return Ok(id);
+        };
 
         tracing::info!(
             id = %id,
@@ -1639,52 +1642,22 @@ impl DownloadManagerImpl {
         #[allow(clippy::cast_possible_truncation)]
         let queued = resolution.shard_count() as u32;
 
-        // A repeat request for a download already in flight attaches to it
-        // instead of enqueueing a second copy. `Queue::is_queued` scans only
-        // `pending`, so once the first request moved to `active` it stopped
-        // matching — which is how a retried `gglib model download` left two
-        // entries for one model, the second wedged behind the first.
-        //
-        // Deliberately narrower than "does the queue know this id": a check
-        // that also matched a *failed* download would make failures
-        // permanently un-retryable — hence the `remove_from_failed` inside
-        // `queue_sharded`.
-        //
-        // Two statements, not one `||` expression: each guard drops at the end
-        // of its own statement, so the two locks are never held at once. They
-        // are read in the order this struct documents on `active` — queue
-        // before active — and both are released before the queue *write* lock
-        // below. `self.queue` is not reentrant, and nesting these is the shape
-        // of the AdmissionQueue deadlock fixed in #722.
-        let is_pending = self.queue.read().await.is_queued(&id);
-        let is_active = self.active.lock().await.contains_key(&id);
-        if is_pending || is_active {
-            tracing::info!(
-                id = %id,
-                "Download already in flight - attaching rather than queueing a duplicate"
-            );
-            let group_id = Some(id.to_string());
-            return Ok(QueueAutoResult {
-                root_id: id,
-                queued,
-                group_id,
-            });
-        }
-
-        let position = self.enqueue_group(&id, None, &resolution).await?;
-
         let group_id = Some(id.to_string());
 
-        tracing::info!(
-            id = %id,
-            position = position,
-            sharded = resolution.is_sharded,
-            files = resolution.files.len(),
-            "Download queued via queue_download_smart"
-        );
+        // `None` is a repeat request, attached to the download already in
+        // flight: the same answer, and nothing new to announce.
+        if let Some(position) = self.enqueue_group(&id, None, &resolution).await? {
+            tracing::info!(
+                id = %id,
+                position = position,
+                sharded = resolution.is_sharded,
+                files = resolution.files.len(),
+                "Download queued via queue_download_smart"
+            );
 
-        self.queue_notify.notify_one();
-        self.emit_queue_snapshot().await;
+            self.queue_notify.notify_one();
+            self.emit_queue_snapshot().await;
+        }
 
         Ok(QueueAutoResult {
             root_id: id,
