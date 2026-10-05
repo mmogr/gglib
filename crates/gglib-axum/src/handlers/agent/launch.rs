@@ -16,23 +16,30 @@ use gglib_core::ports::{Created, RunScope};
 
 use super::compose::Prepared;
 use super::run::work;
-use super::transcript::{FrameTimes, keep_machine, record_model, save_reply, save_user};
+use super::thinking::Remember;
+use super::transcript::{
+    FrameTimes, keep_machine, record_model, remember_thinking, save_reply, save_user,
+};
 use crate::error::HttpError;
 use crate::state::AppState;
 
-/// Where a run's transcript goes, and the rows its user's message replaces.
+/// Where a run's transcript goes, the rows its user's message replaces, and
+/// what the conversation is to remember of thinking (`thinking::settle`).
 #[derive(Clone, Copy)]
 pub(super) struct Transcript {
     pub(super) conversation_id: Option<i64>,
     pub(super) replace_from: Option<i64>,
+    pub(super) remember: Remember,
 }
 
 /// Reserve the id in `scope`, refuse a run on another machine than its
 /// conversation's, save the user's message (naming the device, for a
-/// device's run) and the model the run uses, and start the loop,
+/// device's run), the model the run uses and the Thinking choice its turn
+/// said, and start the loop,
 /// in one task of its own: a request dropped part-way cannot split them, so
 /// a retry finds the run rather than saving the message, or replacing rows,
-/// again.
+/// again. A run that is refused, or whose id is already a run, writes none
+/// of them.
 pub(super) async fn launch(
     state: &AppState,
     id: &str,
@@ -69,6 +76,7 @@ async fn reserve_and_start(
     let Transcript {
         conversation_id,
         replace_from,
+        remember,
     } = transcript;
     let id = id.as_str();
     let state = &state;
@@ -116,6 +124,9 @@ async fn reserve_and_start(
                 &prepared.made_by.model,
             )
             .await;
+            if let Some(choice) = remember {
+                remember_thinking(&state.core, conversation_id, choice).await;
+            }
             save_reply(Arc::clone(&state.core), conversation_id, times.clone())
         }
         None => Box::new(|_, _| -> BoxFuture<'static, Result<(), RunError>> {

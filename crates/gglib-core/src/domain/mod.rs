@@ -41,6 +41,7 @@ pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
 pub(crate) mod template_caps;
+mod thinking;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
@@ -128,6 +129,7 @@ pub use attachment::{
 pub use chat::{
     Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
 };
+pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience
 pub use gguf::{CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata};

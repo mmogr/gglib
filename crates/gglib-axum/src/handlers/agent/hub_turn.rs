@@ -6,7 +6,9 @@
 //! upload answered. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
-//! with the limits the conversation's settings name. It calls no tool unless
+//! with the limits the conversation's settings name, and with thinking off
+//! when the turn says so or the chat remembers it (`thinking`). It calls no
+//! tool unless
 //! this machine lets the tunnel reach its MCP tools, and then only those the
 //! settings name. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
@@ -35,6 +37,7 @@ use super::hub_model::{model_for, on_model};
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
 use super::run::{coded, with_code};
+use super::thinking;
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -124,35 +127,33 @@ pub(super) async fn start(
     })?;
     let chat = on_model(state, &plan.model, plan.chat).await?;
     let prepared = prepare(state, chat).await.map_err(with_code)?;
-    begin(state, device, id, plan.conversation_id, prepared, permit).await
+    begin(state, device, id, plan.transcript, prepared, permit).await
 }
 
 /// Start `device`'s run `id` with its prepared loop: held on its model,
-/// reserved in the device's scope, its message and reply saved to
-/// `conversation_id`.
+/// reserved in the device's scope, and saved as `transcript` says: its
+/// message and reply to the chat, which then remembers what the turn said
+/// of thinking.
 pub(super) async fn begin(
     state: &AppState,
     device: &str,
     id: &str,
-    conversation_id: i64,
+    transcript: Transcript,
     mut prepared: Prepared,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
     remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
-    let transcript = Transcript {
-        conversation_id: Some(conversation_id),
-        replace_from: None,
-    };
     let scope = RunScope::Device(device.to_owned());
     launch(state, id, scope, transcript, prepared, permit).await
 }
 
-/// A turn read against the hub's record: the chat request the page would
-/// send, less the port, and the model it runs on.
+/// A turn read against the hub's record: the model it runs on, the chat
+/// request the page would send, less the port, and where the run is saved,
+/// with what the chat is to remember of thinking once it starts.
 pub(super) struct Plan {
-    pub(super) conversation_id: i64,
     pub(super) model: String,
     pub(super) chat: AgentChatRequest,
+    pub(super) transcript: Transcript,
 }
 
 /// Read `turn` against the chat it names, with the tools the tunnel's owner
@@ -217,6 +218,8 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     state.core.attachments().check_request(&messages).await?;
     super::image_gate::named(state, &model, &messages).await?;
     let settings = conversation.settings.unwrap_or_default();
+    // A device's turn has no budget of its own: off, or the model's default.
+    let thinking = thinking::settle(turn.thinking, settings.thinking, None);
     let chat = AgentChatRequest {
         port: 0,
         far: None,
@@ -225,12 +228,17 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         tool_filter: Some(tools_of(&settings, state.remote.gateway().mcp_allowed())),
         model: None,
         reasoning_effort: None,
-        reasoning_budget_tokens: None,
+        reasoning_budget_tokens: thinking.budget,
+    };
+    let transcript = Transcript {
+        conversation_id: Some(id),
+        replace_from: None,
+        remember: thinking.remember,
     };
     Ok(Plan {
-        conversation_id: id,
         model,
         chat,
+        transcript,
     })
 }
 
@@ -272,3 +280,6 @@ mod hub_turn_plan_tests;
 #[cfg(test)]
 #[path = "hub_turn_tests.rs"]
 mod hub_turn_tests;
+#[cfg(test)]
+#[path = "hub_turn_thinking_tests.rs"]
+mod hub_turn_thinking_tests;

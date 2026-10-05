@@ -50,6 +50,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
     let body = RemoteTurnBody {
         content: "And how do I fix it?".to_owned(),
         images: Vec::new(),
+        thinking: None,
     };
 
     let (status, answer) = read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
@@ -87,6 +88,26 @@ async fn a_turn_with_images_sends_their_ids() {
     assert!(bare.images.is_empty());
     let more = r#"{"content":"hi","images":[],"messages":[]}"#;
     assert!(serde_json::from_str::<RemoteTurnBody>(more).is_err());
+}
+
+/// The page's turn on a far chat carries the chat's Thinking choice on, in
+/// the word it was said. A word that is neither is not a turn's body.
+#[tokio::test]
+async fn a_far_turn_forwards_the_thinking_choice() {
+    for word in ["off", "default"] {
+        let (fake, far) = far(201, "{}").await;
+        let sent = serde_json::json!({ "content": "hi", "thinking": word });
+        let body: RemoteTurnBody = serde_json::from_value(sent).unwrap();
+
+        read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
+
+        assert_eq!(
+            json(&only(&fake).body),
+            serde_json::json!({ "conversation_id": 12, "content": "hi", "thinking": word })
+        );
+    }
+    let other = r#"{"content":"hi","thinking":"on"}"#;
+    assert!(serde_json::from_str::<RemoteTurnBody>(other).is_err());
 }
 
 #[tokio::test]

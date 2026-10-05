@@ -5,8 +5,9 @@
 `/v1/chats`: a paired device's view of the hub's chats. `GET /v1/chats`
 lists them newest first, each with the run whose reply to it is not yet
 saved; `GET /v1/chats/{id}` opens one with every row and the metadata the
-hub saved. Served through the `HubChatsPort` the proxy was started with,
-and answered `503 chats_unavailable` without one.
+hub saved, and with the chat's settings, which say `"thinking": "off"` when a
+turn switched its thinking off. Served through the `HubChatsPort` the proxy
+was started with, and answered `503 chats_unavailable` without one.
 
 `/v1/attachments` is the images those chats' turns carry. A device sends
 one as the raw body of `POST /v1/attachments`, at most 8 MiB, and is

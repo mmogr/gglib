@@ -24,6 +24,7 @@ fn image_turn(conversation_id: i64, content: &str, image: &AttachmentId) -> HubT
         conversation_id,
         content: content.to_owned(),
         images: vec![image.clone()],
+        thinking: None,
     }
 }
 
@@ -81,6 +82,7 @@ async fn a_hub_turn_counts_the_images_of_the_saved_rows() {
         conversation_id: id,
         content: "and in words?".to_owned(),
         images: Vec::new(),
+        thinking: None,
     };
     let refusal = refused(plan(&state, turn).await);
 
@@ -112,6 +114,7 @@ async fn a_hub_turn_is_text_or_an_image() {
         conversation_id: id,
         content: " ".to_owned(),
         images: Vec::new(),
+        thinking: None,
     };
     assert_eq!(
         refused(plan(&state, neither).await),

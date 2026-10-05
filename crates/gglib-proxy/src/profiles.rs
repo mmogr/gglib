@@ -225,6 +225,19 @@ mod tests {
         assert_eq!(entries[0].context_window, Some(8192));
     }
 
+    /// A profile changes sampling, not what the model can do: a variant of
+    /// a model that reads images and thinks says both, as its base does.
+    #[test]
+    fn variants_inherit_the_base_capabilities() {
+        let capabilities = Some(vec!["vision".to_owned(), "reasoning".to_owned()]);
+        let base = ModelInfo {
+            capabilities: capabilities.clone(),
+            ..model_info("qwen", None)
+        };
+        let entries = variant_entries(&[base], &[listed("chat")]);
+        assert_eq!(entries[0].capabilities, capabilities);
+    }
+
     /// A variant is its base model under a profile: the same catalogue id,
     /// and the profile named.
     #[test]

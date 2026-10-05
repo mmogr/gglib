@@ -23,10 +23,12 @@ use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::runs::RunError;
 use gglib_core::ports::{AgentError, Created, RunScope};
 
+use super::AgentChatRequest;
 use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
+use super::thinking;
 use super::transcript::FrameTimes;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -94,9 +96,50 @@ pub(crate) async fn create_run(
             created: false,
         });
     }
-    if req.replace_from.is_some()
-        && (req.conversation_id.is_none()
-            || !matches!(req.chat.messages.last(), Some(AgentMessage::User { .. })))
+    let (chat, transcript) = plan(state, req).await?;
+    // Before a slot is taken or a model is held, for a run on this
+    // machine's model or the paired machine's: their images are read here.
+    state
+        .core
+        .attachments()
+        .check_request(&chat.messages)
+        .await?;
+    let permit = take_permit(state).ok_or_else(|| {
+        coded(
+            StatusCode::TOO_MANY_REQUESTS,
+            "agent_busy",
+            "all agent loop slots are in use; try again later",
+        )
+    })?;
+    let mut prepared = prepare(state, chat).await.map_err(with_code)?;
+    // Untested: `create_run` cannot be driven without a running llama-server.
+    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
+    launch(state, id, RunScope::Local, transcript, prepared, permit).await
+}
+
+/// A run's request read against the conversation it names: the chat request
+/// with the thinking budget the run uses (`thinking::settle`, over what the
+/// request says, what the conversation remembers and the request's own
+/// budget), and what the run writes to the conversation once it starts.
+///
+/// # Errors
+///
+/// `invalid_request` (400) for a `replace_from` with no conversation or no
+/// user's message to put there; `conversation_not_found` (404);
+/// `internal_error` when the conversation cannot be read.
+pub(super) async fn plan(
+    state: &AppState,
+    req: AgentRunRequest,
+) -> Result<(AgentChatRequest, Transcript), HttpError> {
+    let AgentRunRequest {
+        mut chat,
+        conversation_id,
+        replace_from,
+        thinking: said,
+    } = req;
+    if replace_from.is_some()
+        && (conversation_id.is_none()
+            || !matches!(chat.messages.last(), Some(AgentMessage::User { .. })))
     {
         return Err(coded(
             StatusCode::BAD_REQUEST,
@@ -104,7 +147,7 @@ pub(crate) async fn create_run(
             "replace_from needs a conversation_id and a last message that is the user's",
         ));
     }
-    if let Some(conversation_id) = req.conversation_id {
+    let remembered = if let Some(conversation_id) = conversation_id {
         let found = state
             .core
             .chat_history()
@@ -117,36 +160,25 @@ pub(crate) async fn create_run(
                     "the conversation could not be read",
                 )
             })?;
-        if found.is_none() {
+        let Some(conversation) = found else {
             return Err(coded(
                 StatusCode::NOT_FOUND,
                 "conversation_not_found",
                 format!("no conversation has id {conversation_id}"),
             ));
-        }
-    }
-    // Before a slot is taken or a model is held, for a run on this
-    // machine's model or the paired machine's: their images are read here.
-    state
-        .core
-        .attachments()
-        .check_request(&req.chat.messages)
-        .await?;
-    let permit = take_permit(state).ok_or_else(|| {
-        coded(
-            StatusCode::TOO_MANY_REQUESTS,
-            "agent_busy",
-            "all agent loop slots are in use; try again later",
-        )
-    })?;
-    let mut prepared = prepare(state, req.chat).await.map_err(with_code)?;
-    // Untested: `create_run` cannot be driven without a running llama-server.
-    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
-    let transcript = Transcript {
-        conversation_id: req.conversation_id,
-        replace_from: req.replace_from,
+        };
+        conversation.settings.and_then(|settings| settings.thinking)
+    } else {
+        None
     };
-    launch(state, id, RunScope::Local, transcript, prepared, permit).await
+    let settled = thinking::settle(said, remembered, chat.reasoning_budget_tokens);
+    chat.reasoning_budget_tokens = settled.budget;
+    let transcript = Transcript {
+        conversation_id,
+        replace_from,
+        remember: settled.remember,
+    };
+    Ok((chat, transcript))
 }
 
 /// Run the loop, logging each event as the chat route frames it. Dropped

@@ -118,6 +118,23 @@ proxy's key, is refused `device_not_named`, since this machine reads its own
 chats at `/api` — and, as with runs, a client that reaches the proxy
 directly can forge the marker.
 
+### Amendment, 2026-10-05: a turn says the chat's Thinking choice
+
+A turn's body may carry one more optional key, `thinking`: `"off"` or
+`"default"`. `off` runs the turn with a thinking budget of `0` and this
+machine remembers it on the chat; `default` forgets it; a turn that says
+neither runs as the chat remembers. When the turn's run starts it writes that
+one field of the chat's own settings, as a run already writes the model it
+ran on (`record_model`), and keeps every other. A refused turn, or one that
+repeats a run's id, writes nothing.
+
+This is still using the machine. The settings the line above keeps out of
+reach are the machine's, which hold the key and the bind; a chat's settings
+are part of the chat a turn already writes its message and reply to. No
+route is added, and the list of routes the tunnel reaches, which the proxy's
+test pins, is unchanged. A device still has no way to write a chat's
+settings at large: a turn's body with any other key is refused.
+
 ### 4. A turn remembers the model it asked that machine for
 
 `RemotePairing` gains `default_model`: the model this machine last asked

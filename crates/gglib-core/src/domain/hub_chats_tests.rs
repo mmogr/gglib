@@ -1,7 +1,8 @@
 //! The wire shapes of the hub's chats, pinned against the recorded bodies
 //! both clients replay: a listing, a chat opened (a finished reply with how
 //! it was made, then one that was stopped), a device's turn, a turn with an
-//! image, and the answer to the upload that image was sent by.
+//! image, the answer to the upload that image was sent by, and a turn that
+//! turns thinking off (`hub_chats_thinking_tests` reads that one).
 
 use std::path::PathBuf;
 
@@ -9,18 +10,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{HubChat, HubChatList, HubChatOpen, HubTurn};
+use crate::domain::Thinking;
 use crate::domain::attachment::{AttachmentId, AttachmentInfo, AttachmentUpload};
 use crate::domain::chat::{Conversation, ConversationSettings, Message, MessageRole};
 
 /// The recorded bodies, by name. The field order is the file's order.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Recorded {
+pub(super) struct Recorded {
     list: HubChatList,
-    open: HubChatOpen,
-    turn: HubTurn,
+    pub(super) open: HubChatOpen,
+    pub(super) turn: HubTurn,
     upload: AttachmentUpload,
     image_turn: HubTurn,
+    pub(super) thinking_turn: HubTurn,
 }
 
 /// The image the recorded chat carries: a 1280x720 PNG, as an upload answers
@@ -34,7 +37,18 @@ fn screenshot() -> AttachmentInfo {
     }
 }
 
-fn recorded() -> Recorded {
+/// A turn on the recorded chat that says `content`, with no image and no
+/// Thinking choice.
+fn turn(content: &str) -> HubTurn {
+    HubTurn {
+        conversation_id: 12,
+        content: content.to_owned(),
+        images: Vec::new(),
+        thinking: None,
+    }
+}
+
+pub(super) fn recorded() -> Recorded {
     let list = HubChatList {
         chats: vec![
             HubChat {
@@ -62,6 +76,7 @@ fn recorded() -> Recorded {
         system_prompt: Some("You are a helpful assistant.".to_owned()),
         settings: Some(ConversationSettings {
             max_iterations: Some(8),
+            thinking: Some(Thinking::Off),
             ..ConversationSettings::default()
         }),
         created_at: "2026-09-30 09:12:30".to_owned(),
@@ -120,19 +135,18 @@ fn recorded() -> Recorded {
             conversation,
             messages,
         },
-        turn: HubTurn {
-            conversation_id: 12,
-            content: "And how do I fix it?".to_owned(),
-            images: Vec::new(),
-        },
+        turn: turn("And how do I fix it?"),
         upload: AttachmentUpload {
             info: screenshot(),
             image_tokens: 920,
         },
         image_turn: HubTurn {
-            conversation_id: 12,
-            content: "What does this error mean?".to_owned(),
             images: vec![screenshot().id],
+            ..turn("What does this error mean?")
+        },
+        thinking_turn: HubTurn {
+            thinking: Some(Thinking::Off),
+            ..turn("Answer in one line.")
         },
     }
 }

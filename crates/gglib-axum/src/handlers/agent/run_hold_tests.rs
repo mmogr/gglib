@@ -17,8 +17,8 @@ use gglib_app_services::types::ServerInfo;
 
 use super::remote_upstream::{hold, hold_model, local};
 use super::run_fixture::{
-    End, LOCAL, conversation, finished_reply, logged, meta, prepared, reply, saved, settled, start,
-    state,
+    End, LOCAL, conversation, finished_reply, logged, meta, prepared, reply, saved, saving,
+    settled, start, state,
 };
 use crate::error::HttpError;
 
@@ -267,7 +267,7 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
     p.local_model = Some((19_555, 1));
     let free = super::compose::take_permit(&state);
 
-    super::hub_turn::begin(&state, "phone", "d1", id, p, free.expect("a free slot"))
+    super::hub_turn::begin(&state, "phone", "d1", saving(id), p, free.expect("a slot"))
         .await
         .unwrap();
     settled(&state).await;

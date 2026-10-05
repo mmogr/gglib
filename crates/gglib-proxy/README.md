@@ -240,6 +240,11 @@ gglib adds:
   reused. A variant carries its base model's. It means something only on
   this machine; `id` is what a client sends.
 - `profile` — on a variant, the profile it selects; absent on a base entry.
+- `capabilities` — what the model does beyond text chat, in this order:
+  `"embeddings"` (tagged `embedding`), `"vision"` (linked to a projector) and
+  `"reasoning"` (tagged `reasoning`: a model that thinks, which a client reads
+  to offer a Thinking switch). Absent, never `[]`, on a model that is none of
+  them; a variant carries its base model's.
 
 The list also carries `machine_name`, this machine's host name cut to its
 first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
@@ -325,7 +330,8 @@ the rest as raw bytes.
 Which models can serve it is advertised by `/v1/models`: an embedding model's
 entry carries `"capabilities": ["embeddings"]`.  A plain chat model's entry is
 unchanged — the field is omitted entirely rather than sent as an empty array —
-and one that reads images lists `"vision"` there (see [Images](#images)).
+and one that reads images lists `"vision"` there (see [Images](#images)), and
+one tagged `reasoning` lists `"reasoning"` after it.
 
 #### Embedding mode is exclusive, and that has a cost
 

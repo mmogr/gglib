@@ -3,6 +3,7 @@ import type { AgentMessage } from "./AgentMessage";
 import type { AgentRequestConfig } from "./AgentRequestConfig";
 import type { ModelRef } from "./ModelRef";
 import type { ReasoningEffort } from "./ReasoningEffort";
+import type { Thinking } from "./Thinking";
 
 /**
  * Request body for an agent run, `PUT /api/runs/{id}?kind=agent`: the body
@@ -23,6 +24,14 @@ conversation_id: number | null,
  * message is added after the rest.
  */
 replace_from: number | null, 
+/**
+ * The conversation's Thinking choice, said only on the run that changes
+ * it: `off` runs this turn and the conversation's later ones with a
+ * thinking budget of `0`, whatever `reasoning_budget_tokens` says;
+ * `default` forgets that. Absent, the run is as the conversation
+ * remembers. Without a `conversation_id` it holds for this run alone.
+ */
+thinking?: Thinking, 
 /**
  * Port of the llama-server instance to drive.
  *

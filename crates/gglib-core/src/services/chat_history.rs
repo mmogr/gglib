@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::domain::chat::{
     Conversation, ConversationSettings, ConversationUpdate, Message, NewConversation, NewMessage,
 };
-use crate::domain::{Machine, ModelRef};
+use crate::domain::{Machine, ModelRef, Thinking};
 use crate::ports::chat_history::{ChatHistoryError, ChatHistoryRepository};
 
 /// Service for managing chat history.
@@ -132,6 +132,31 @@ impl ChatHistoryService {
         settings.model_name = Some(model_name.to_owned());
         settings.model = model;
         self.record_settings(id, settings).await
+    }
+
+    /// Set what a conversation remembers of thinking: `thinking`, or nothing
+    /// for `None`, keeping every other setting and the conversation's
+    /// `model_id`. Writes nothing when it already remembers that.
+    pub async fn record_thinking(
+        &self,
+        id: i64,
+        thinking: Option<Thinking>,
+    ) -> Result<(), ChatHistoryError> {
+        let conversation = self
+            .repo
+            .get_conversation(id)
+            .await?
+            .ok_or(ChatHistoryError::ConversationNotFound(id))?;
+        let mut settings = conversation.settings.unwrap_or_default();
+        if settings.thinking == thinking {
+            return Ok(());
+        }
+        settings.thinking = thinking;
+        let update = ConversationUpdate {
+            settings: Some(Some(settings)),
+            ..ConversationUpdate::default()
+        };
+        self.repo.update_conversation(id, update).await
     }
 
     /// Replace a conversation's settings with `settings`, which name the

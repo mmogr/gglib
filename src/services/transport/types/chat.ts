@@ -5,6 +5,7 @@
 
 import type { Message } from '../../../types/generated/Message';
 import type { ModelRef } from '../../../types/generated/ModelRef';
+import type { Thinking } from '../../../types/generated/Thinking';
 import type { SerializableToolCallPart } from '../../../utils/messages/contentParts';
 import type { ConversationId, MessageId, ModelId } from './ids';
 
@@ -34,6 +35,8 @@ export interface ConversationSettings {
   max_parallel?: number | null;
   max_iterations?: number | null;
   no_tools?: boolean | null;
+  /** The chat's Thinking choice; only `off` is ever stored. */
+  thinking?: Thinking | null;
 }
 
 /**

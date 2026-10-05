@@ -39,9 +39,11 @@ context_window?: number,
  *
  * `"embeddings"` for a model tagged `embedding`, which serves
  * `/v1/embeddings`; `"vision"` for a model linked to a projector, which
- * reads `image_url` parts. `None` — and so absent from the JSON
- * entirely — for a model that is neither, so a plain chat model's entry
- * is byte-identical to what it was before this field existed.
+ * reads `image_url` parts; `"reasoning"` for a model tagged `reasoning`,
+ * for which a client may offer a Thinking switch. In that order. `None`
+ * — and so absent from the JSON entirely — for a model that is none of
+ * them, so a plain chat model's entry is byte-identical to what it was
+ * before this field existed.
  *
  * An array rather than a `type` discriminant because capability is not
  * exclusive: a future entry may serve both chat and embeddings, and

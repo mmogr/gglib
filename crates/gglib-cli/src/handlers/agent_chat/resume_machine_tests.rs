@@ -243,6 +243,34 @@ async fn a_resume_on_another_model_stores_that_model() {
     assert_eq!(resumed.params.model_identifier, llama.to_string());
 }
 
+/// A chat the page or a phone switched thinking off on stays switched off
+/// through a resume that moves it to another model: the resume rewrites the
+/// settings whole, and keeps what it does not set. (The CLI's own turns do
+/// not apply the choice.)
+#[tokio::test]
+async fn a_remembered_thinking_choice_survives_a_resume_on_another_model() {
+    use gglib_core::domain::Thinking;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (ctx, _, _) = library(&dir).await;
+    let started = chat(&ctx, "qwen", None).await.expect("a new chat");
+    let id = started.persistence.expect("saved").id;
+    let history = ctx.app.chat_history();
+    let off = Some(Thinking::Off);
+    history.record_thinking(id, off).await.expect("remembered");
+
+    chat(&ctx, "llama", Some(id))
+        .await
+        .expect("continued on llama");
+
+    let row = history.get_conversation(id).await.unwrap().unwrap();
+    let settings = row.settings.expect("settings");
+    assert_eq!(
+        (settings.model_name.as_deref(), settings.thinking),
+        (Some("llama"), off)
+    );
+}
+
 /// A chat whose model has left this library says so, and does not send the
 /// user to the paired machine, which `--remote` would refuse for this chat.
 #[tokio::test]
