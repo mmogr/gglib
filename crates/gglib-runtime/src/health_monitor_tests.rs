@@ -118,7 +118,7 @@ async fn test_monitor_emits_initial_status() {
 /// passed for the wrong reason.
 ///
 /// **This guard is vacuous on CI.** The only job running `cargo test -p
-/// gglib-runtime` is `test:` on `ubuntu-latest` (`.github/workflows/ci.yml`),
+/// gglib-runtime` is `test:` on `ubuntu-24.04` (`.github/workflows/ci.yml`),
 /// and on Linux `/proc/<self>` exists — so the pre-fix implementation passes
 /// this too. It fails only where `/proc` is absent, i.e. on a macOS developer
 /// machine. Do not read its green status on CI as protection; if the delegation

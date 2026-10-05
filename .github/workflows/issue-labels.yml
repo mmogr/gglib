@@ -39,7 +39,7 @@ concurrency:
 jobs:
   parse:
     name: Parse form (opened only)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event.action == 'opened'
     outputs:
       json: ${{ steps.parse.outputs.jsonString }}
@@ -57,7 +57,7 @@ jobs:
 
   enrich_and_verify:
     name: Apply labels and verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: parse
     if: always()
     steps:
