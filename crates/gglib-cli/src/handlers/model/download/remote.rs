@@ -51,7 +51,10 @@ async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
     // estimator computed for the same transfer (see the BAR_TEMPLATE comment
     // in gglib_download::cli_emitter). The daemon's rate arrives on the
     // snapshot and is rendered into the message instead.
-    let style = ProgressStyle::with_template("  {msg:48!} [{bar:30}] {bytes}/{total_bytes}")
+    //
+    // `{wide_msg}` gives the message the rest of the line. A fixed width cut
+    // a long model name off before its shard, rate and ETA.
+    let style = ProgressStyle::with_template("  {wide_msg} [{bar:30}] {bytes}/{total_bytes}")
         .unwrap_or_else(|_| ProgressStyle::default_bar())
         .progress_chars("=> ")
         .with_key("total_bytes", total_bytes_key);
@@ -66,6 +69,8 @@ async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
             .await
             .context("polling the daemon download queue")?;
 
+        // One item per download, so one bar per id: a model's waiting files
+        // are not items of their own to redraw its bar as queued.
         for item in &snapshot.items {
             seen_items = true;
             if !observed.contains(&item.id) {
