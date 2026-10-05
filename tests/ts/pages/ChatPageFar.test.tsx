@@ -16,6 +16,7 @@ import { UNREAD_STORAGE_KEY } from '../../../src/components/ConversationListPane
 import type { ChatDraft } from '../../../src/types/messages';
 import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
 import { guiModel } from '../fixtures/model';
+import { farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
 import { act } from '@testing-library/react';
 import { ingestServerEvent } from '../../../src/services/serverRegistry';
 import { IDLE_STATUS, applyRemoteStatus, resetRemoteState } from '../../../src/services/remoteRegistry';
@@ -58,6 +59,8 @@ function farTransport() {
       messages: id === 1 ? FAR_ROWS : [],
     })),
     listFarRuns: vi.fn(async () => []),
+    // Read for a far chat's model; none of them thinks unless a test says so.
+    listPairedModels: vi.fn(async () => pairedModels([farEntry('qwen3-8b', 5)])),
     addFarTurn: vi.fn(async (_id: number, runId: string) => ({
       id: runId,
       kind: 'agent',
@@ -302,7 +305,8 @@ describe('ChatPage, the far machine’s chats', () => {
     const sent = rowOf(await screen.findByText('And how do I fix it?'));
     expect(within(sent).getByText('You')).toBeInTheDocument();
     const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
-    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', []);
+    // Its text and no image, and nothing said of thinking: the switch was not touched.
+    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined);
   });
 
   it('a model switch that lands while a far chat is open opens no conversation here', async () => {

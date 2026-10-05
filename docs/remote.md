@@ -484,6 +484,11 @@ carries on the desktop's chats live through this machine's daemon, which adds
 the key, and the desktop runs and saves each reply, so nothing of them is kept
 here but their "New" marks. A chat there is started, renamed, edited or
 deleted only on the desktop, and the margin names the device behind each turn.
+One thing of such a chat can be changed from here: its Thinking choice, by the
+switch in the composer's margin, which the next message sent carries to the
+desktop ([Thinking](clients.md#thinking)). The switch is there only when the
+desktop lists the chat's model as one that thinks, so a desktop whose gglib
+predates the choice shows none and is never sent the key.
 
 **Any other OpenAI-compatible client** on the laptop can be pointed at the
 port `join` printed, `http://127.0.0.1:<port>/v1`, with this laptop's

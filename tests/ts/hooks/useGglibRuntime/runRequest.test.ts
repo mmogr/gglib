@@ -5,7 +5,9 @@
  * a missing key. A turn on the paired machine's model names it by `far`, that
  * machine and the model's id there, and never by a name, which another model
  * there could share; a local turn names no model and lets llama-server serve
- * the one it loaded.
+ * the one it loaded. The conversation's Thinking choice is a key of its own,
+ * there only when the run changes it, beside the two reasoning controls and
+ * never in place of them.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -76,6 +78,22 @@ describe('buildRunRequest', () => {
       options({ reasoning: { reasoning_effort: 'high', reasoning_budget_tokens: 0 } }),
     );
     expect(body).toMatchObject({ reasoning_effort: 'high', reasoning_budget_tokens: 0 });
+  });
+
+  it('says the Thinking choice only when given one, and changes nothing else by it', () => {
+    const reasoning = { reasoning_effort: 'high', reasoning_budget_tokens: 2048 };
+    const unsaid = buildRunRequest(options({ reasoning }));
+    expect(Object.keys(unsaid)).not.toContain('thinking');
+    expect(unsaid).toMatchObject({ reasoning_effort: 'high', reasoning_budget_tokens: 2048 });
+
+    expect(buildRunRequest(options({ reasoning, thinking: 'off' }))).toEqual({ ...unsaid, thinking: 'off' });
+    expect(buildRunRequest(options({ reasoning, thinking: 'default' }))).toEqual({ ...unsaid, thinking: 'default' });
+  });
+
+  it('says the Thinking choice of a turn on a far model as well', () => {
+    const far: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
+    const body = buildRunRequest(options({ selectedServerPort: undefined, far, thinking: 'off' }));
+    expect(body).toMatchObject({ far, thinking: 'off' });
   });
 });
 

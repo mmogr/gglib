@@ -2,27 +2,35 @@
  * What the page asks the daemon about a conversation it shows: its saved
  * rows as thread messages, the run live in it, and the row a message is.
  * A far chat's rows and live run are the far machine's, asked through this
- * machine's daemon; its rows head themselves with its own prompt.
+ * machine's daemon; its rows head themselves with its own prompt, and each
+ * reading of it is handed to whoever asked to see it (`onFarOpened`), since
+ * the far list tells none of a chat's settings.
  *
  * @module savedRows
  */
 
 import { getTransport, type ChatSource } from '../../services/transport';
 import type { GglibMessage } from '../../types/messages';
+import type { HubChatOpen } from '../../types/generated/HubChatOpen';
 import type { RunInfo } from '../../types/generated/RunInfo';
 import {
   buildThreadMessages,
   type ThreadConversation,
 } from '../useChatPersistence/buildThreadMessages';
 
-/** A conversation's saved rows, as the thread shows them. */
+/**
+ * A conversation's saved rows, as the thread shows them. A far chat is
+ * handed to `onFarOpened` as the far machine answered it, every time.
+ */
 export async function loadSavedThread(
   conversationId: number,
   conversation: ThreadConversation | null,
   source: ChatSource = 'this',
+  onFarOpened?: (open: HubChatOpen) => void,
 ): Promise<GglibMessage[]> {
   if (source === 'far') {
     const open = await getTransport().openFarChat(conversationId);
+    onFarOpened?.(open);
     return buildThreadMessages(open.messages, open.conversation, conversationId) as GglibMessage[];
   }
   const rows = await getTransport().getMessages(conversationId);

@@ -44,8 +44,9 @@ Custom React hooks for gglib GUI functionality.
 | [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library and a chat on one of them: read while it is reached and the caller needs them, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
 | [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; a far pick tells the native menu nothing here is selected |
 | [`useServers.ts`](useServers.ts) | Server lifecycle management (start/stop/health) |
-| [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, quantisation, whether it reads images, and its context |
+| [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, quantisation, whether it reads images, its context, and whether it thinks |
 | [`useImageInput.ts`](useImageInput.ts) | Whether the chat's composers offer images, by `canSee` (this machine's model, or the paired machine's row for it, read only for a chat on its model; always for a far chat), why not, and the context their cost is read against |
+| [`useThinkingSwitch.ts`](useThinkingSwitch.ts) | The chat's Thinking switch: shown where its model thinks, by `thinks` (this machine's model, the paired machine's row for it, or a far chat's row for the model it last ran on); showing what gglib remembers of the chat until it is clicked; and saying the choice on a send, `off` or `default`, until the turn that says it is accepted, after which the choice shows only until the chat is next read and that reading is shown whatever it says; a choice no accepted turn has said ends when a reading of the chat agrees with it |
 | [`useTags.ts`](useTags.ts) | Model tagging operations |
 | [`useMcpServers.ts`](useMcpServers.ts) | MCP server configuration |
 | [`useSettings.ts`](useSettings.ts) | Application settings management |

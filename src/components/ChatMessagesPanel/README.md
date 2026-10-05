@@ -20,7 +20,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │           │     ├── TurnMargin (who; figures or arrival, from turnFigures)
     │           │     ├── MarkdownMessageContent
     │           │     └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
-    │           └── ComposerFooter      ← model, tools and context ring; input, send / stop
+    │           └── ComposerFooter      ← model, tools, context ring and Thinking switch; input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
