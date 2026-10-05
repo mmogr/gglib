@@ -125,6 +125,18 @@ as the chat remembers, which its `settings.thinking` says when the chat is
 opened. [What the other machine can reach](remote.md#what-the-other-machine-can-reach)
 has the rest.
 
+gglib's chat page is such a client. Its composer has a Thinking switch only
+for a model that thinks, showing what the chat remembers; it sends `thinking`
+on the message after a click, and reads the chat's settings again when the
+chat is opened and after each reply, so a chat switched off on a paired
+device opens switched off there and the reverse. Once the message that
+carries a click is accepted the page says nothing more of it: the switch
+shows what the chat remembers when it is next read, so a change made since on
+another device is shown, and the page's next message does not undo it. A far
+chat's model is the one its settings name (`model_name`), else its last
+reply's, looked up in that machine's model list, so a chat that has never run
+shows no switch until its first reply.
+
 ## Context reading
 
 A client that wants to show how full a model's context is gets the two facts

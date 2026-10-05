@@ -6,7 +6,8 @@
  * A turn sends only its text and its images, by the ids the far machine's
  * store answered (`uploadAttachment(source 'far', …)`): the far machine
  * rebuilds the history from its own record, runs the reply and saves it
- * there.
+ * there. The turn that changes the chat's Thinking choice says that too,
+ * and the far machine remembers it.
  */
 
 import type { HubChat } from '../../../types/generated/HubChat';
@@ -15,6 +16,7 @@ import type { HubChatOpen } from '../../../types/generated/HubChatOpen';
 import type { RemoteTurnBody } from '../../../types/generated/RemoteTurnBody';
 import type { RunInfo } from '../../../types/generated/RunInfo';
 import type { RunList } from '../../../types/generated/RunList';
+import type { Thinking } from '../../../types/generated/Thinking';
 import { REMOTE_CHATS_PATH, REMOTE_RUNS_PATH } from '../../api/routes';
 import { get, post, put } from './client';
 import { readRunStream, type RunStreamItem } from './runs';
@@ -36,10 +38,23 @@ export async function openFarChat(id: number): Promise<HubChatOpen> {
 /**
  * Add `content` and `images` (ids in the far machine's store) to far chat
  * `id` as run `runId`; the far machine runs the reply. A turn with no image
- * leaves `images` out, as a far gglib from before images reads it.
+ * leaves `images` out, as a far gglib from before images reads it. Only the
+ * turn that changes the chat's Thinking choice carries `thinking`: a far
+ * gglib from before the choice refuses the key, and lists no model as one
+ * that thinks, so the page offers no switch to change it by.
  */
-export async function addFarTurn(id: number, runId: string, content: string, images: string[] = []): Promise<RunInfo> {
-  const body: RemoteTurnBody = images.length > 0 ? { content, images } : { content };
+export async function addFarTurn(
+  id: number,
+  runId: string,
+  content: string,
+  images: string[] = [],
+  thinking?: Thinking,
+): Promise<RunInfo> {
+  const body: RemoteTurnBody = {
+    content,
+    ...(images.length > 0 && { images }),
+    ...(thinking !== undefined && { thinking }),
+  };
   return put<RunInfo>(`${REMOTE_CHATS_PATH}/${id}/turns/${encodeURIComponent(runId)}`, body);
 }
 

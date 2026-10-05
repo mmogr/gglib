@@ -8,6 +8,8 @@ import { Checkbox } from '../ui/Checkbox';
 import { Calculator, Clock3, FileText, Search, SunMedium, Wrench } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { getToolRegistry, type ToolDefinition } from '../../services/tools';
+import { getTransport } from '../../services/transport';
+import type { TemplateSupport } from '../../types';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
@@ -45,9 +47,15 @@ interface ToolsPopoverProps {
    * rightwards, for one in a left margin, where growing left leaves the page.
    */
   align?: 'left' | 'right';
+  /**
+   * This machine's model the chat is with, by its registry id. Absent for a
+   * chat on another machine's model, which has no id here: the reasoning
+   * effort row then says it applies where a template reads it.
+   */
+  modelId?: number;
 }
 
-export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false, align = 'right' }) => {
+export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false, align = 'right', modelId }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -56,6 +64,22 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
 
   // Close when clicking outside
   useClickOutside(popoverRef, () => setIsOpen(false), isOpen);
+
+  // Whether the model's template reads a reasoning effort, asked once, the
+  // first time the popover opens: the page's mount asks nothing for it. Kept
+  // with the id it was asked of, so it never describes another model.
+  const [effort, setEffort] = useState<{ modelId: number; support: TemplateSupport } | null>(null);
+  const askedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isOpen || modelId === undefined || askedRef.current === modelId) return;
+    askedRef.current = modelId;
+    getTransport().getModelDetail(modelId)
+      .then((detail) => detail && setEffort({ modelId, support: detail.reasoningEffortSupport }))
+      .catch(() => {
+        // Not known: the row keeps its control, as it does for no model.
+      });
+  }, [isOpen, modelId]);
+  const effortSupport = effort !== null && effort.modelId === modelId ? effort.support : undefined;
 
   // Load tools and their enabled state
   const refreshTools = useCallback(() => {
@@ -215,7 +239,7 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
             </>
           )}
 
-          <AgentLimitsSection />
+          <AgentLimitsSection effortSupport={effortSupport} />
 
           <div className="px-[14px] py-2 border-t border-border bg-surface-elevated">
             <span className="text-2xs text-text-muted italic">

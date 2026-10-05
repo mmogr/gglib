@@ -18,7 +18,8 @@
  *
  * Leaving (another conversation, unmount) stops reading; it never cancels
  * the run. The run's id is kept in memory only. A far chat is read the same
- * way from the far machine, and nothing of it is kept.
+ * way from the far machine, and nothing of it is kept; each reading of it is
+ * handed up (`onFarOpened`), for what the far list does not say of a chat.
  *
  * @module useRunReader
  */
@@ -27,6 +28,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSource } from '../../services/transport';
 import type { GglibMessage } from '../../types/messages';
 import { mkAssistantMessage } from '../../types/messages';
+import type { HubChatOpen } from '../../types/generated/HubChatOpen';
 import type { ThreadConversation } from '../useChatPersistence/buildThreadMessages';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
@@ -47,6 +49,8 @@ export interface RunReaderInputs {
   onError?: (error: Error) => void;
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
   onConversationChanged?: (conversationId: number) => void;
+  /** A far chat as the far machine just answered it, each time it is read: at opening, after a run or a refused send. */
+  onFarOpened?: (open: HubChatOpen) => void;
 }
 
 export function useRunReader(
@@ -125,7 +129,10 @@ export function useRunReader(
 
   /** Show what is saved in `cid`, unless the reading was left. */
   const showSaved = useCallback(async (cid: number, signal: AbortSignal) => {
-    const thread = await loadSavedThread(cid, latest.current.conversation ?? null, latest.current.source);
+    const { conversation, source, onFarOpened } = latest.current;
+    // A reading that was left hands nothing up: it is not the chat on screen.
+    const opened = (open: HubChatOpen) => !signal.aborted && onFarOpened?.(open);
+    const thread = await loadSavedThread(cid, conversation ?? null, source, opened);
     if (signal.aborted) return;
     messagesRef.current = thread;
     setMessages(thread);

@@ -11,6 +11,7 @@ import type { AgentRequestConfig } from '../../types/generated/AgentRequestConfi
 import type { AgentRunRequest } from '../../types/generated/AgentRunRequest';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import type { ReasoningEffort } from '../../types/generated/ReasoningEffort';
+import type { Thinking } from '../../types/generated/Thinking';
 import { convertToWireMessages } from './wireMessages';
 
 /**
@@ -64,6 +65,13 @@ export interface RunRequestOptions {
    * floor layers.
    */
   reasoning?: { reasoning_effort?: string; reasoning_budget_tokens?: number };
+  /**
+   * The conversation's Thinking choice, on the run that changes it: `off`
+   * or `default`. Left out of the body otherwise, and the daemon runs the
+   * turn as the conversation remembers. `reasoning` is sent whatever this
+   * says: weighing the two is the daemon's.
+   */
+  thinking?: Thinking;
   /** `false` exposes no tools (an empty `tool_filter`); otherwise permissive. */
   supportsToolCalls?: boolean | null;
   /**
@@ -123,5 +131,6 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
     model: null,
     reasoning_effort: (options.reasoning?.reasoning_effort as ReasoningEffort | undefined) ?? null,
     reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
+    ...(options.thinking !== undefined && { thinking: options.thinking }),
   };
 }

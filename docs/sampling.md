@@ -140,6 +140,18 @@ resolves through the hierarchy as it always has. The CLI's own chat
 (`gglib chat`, `gglib q`) does not apply a remembered `off`: pass
 `--reasoning-budget-tokens 0` there.
 
+On the chat page the choice is the **Thinking** switch in the composer's
+margin, drawn only for a model that thinks: one tagged `reasoning` here, or
+one a paired machine lists with the `reasoning` capability. It shows what the
+chat remembers, reading "Thinking off" while the chat is switched off, and a
+click is said by the next message sent and not again once gglib has accepted
+that message. The page applies no rule of its own between the
+switch and the Tools popover's budget: each is sent as it is set, and the rule
+above decides. For a chat on one of this machine's models the popover's effort
+dropdown follows the [three support states](#three-support-states-and-what-each-one-does)
+below, and is replaced by a note where the model's template was observed to
+read no level.
+
 ### Three support states, and what each one does
 
 gglib asks the running llama-server what its loaded template declares, and

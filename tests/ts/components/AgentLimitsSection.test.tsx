@@ -10,6 +10,10 @@
  * The rows floored at 1 cannot catch that regression, because every prefix of
  * their values is already in range; only the timeout row can, which is why it
  * is tested here beside the reasoning rows this arc added.
+ *
+ * The effort row is the settings surfaces' three-state field: a note in place
+ * of the dropdown where the chat's model was observed not to read a level, the
+ * dropdown everywhere else, and the budget row under it whatever the answer.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -138,5 +142,84 @@ describe('the reasoning budget, whose legal values are not counts', () => {
     await userEvent.tab();
 
     expect(budgetField()).toHaveValue(-1);
+  });
+});
+
+describe('the reasoning effort row, by what is known of the model\'s template', () => {
+  beforeEach(() => localStorage.clear());
+
+  const effortField = () => screen.queryByRole('combobox', { name: 'Reasoning Effort' });
+  const NOTE = /template does not declare reasoning effort/;
+
+  it('shows a note and no dropdown where the template reads no level', () => {
+    render(<AgentLimitsSection effortSupport="no" />);
+
+    expect(effortField()).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['unknown', 'Not yet observed — start the model to find out whether its template reads this. Until then a level set here is sent as given.'],
+    ['yes', "This model's template reads reasoning effort, so a level set here is honoured."],
+  ] as const)('keeps the dropdown where support is %s, and says so', (support, caption) => {
+    render(<AgentLimitsSection effortSupport={support} />);
+
+    expect(effortField()).toBeInTheDocument();
+    expect(effortField()).toHaveAccessibleDescription(caption);
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it('keeps the dropdown with no model in scope, and names the condition rather than a model', () => {
+    render(<AgentLimitsSection />);
+
+    expect(effortField()).toBeInTheDocument();
+    expect(effortField()).toHaveAccessibleDescription(
+      'Applies to models whose template declares reasoning effort; others ignore it.',
+    );
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+
+  it.each([['no'], ['unknown'], ['yes'], [undefined]] as const)(
+    'always has the budget row, here with support %s',
+    async (support) => {
+      render(<AgentLimitsSection effortSupport={support} />);
+
+      await userEvent.type(budgetField(), '512');
+      await userEvent.tab();
+      expect(budgetField()).toHaveValue(512);
+      expect(readStoredAgentOverrides().reasoningBudgetTokens).toBe(512);
+    },
+  );
+
+  it('stores a level picked from the dropdown, and clears it on the blank choice', async () => {
+    render(<AgentLimitsSection effortSupport="unknown" />);
+
+    await userEvent.selectOptions(effortField()!, 'high');
+    expect(effortField()).toHaveValue('high');
+    expect(readStoredAgentOverrides().reasoningEffort).toBe('high');
+
+    await userEvent.selectOptions(effortField()!, '');
+    expect(readStoredAgentOverrides().reasoningEffort).toBeUndefined();
+  });
+
+  it('shows a level stored before, and leaves it stored where the note replaces the dropdown', () => {
+    localStorage.setItem('gglib.chat.agentOverrides', JSON.stringify({ reasoningEffort: 'low' }));
+    const seen = render(<AgentLimitsSection effortSupport="yes" />);
+    expect(effortField()).toHaveValue('low');
+    seen.unmount();
+
+    render(<AgentLimitsSection effortSupport="no" />);
+    expect(readStoredAgentOverrides().reasoningEffort).toBe('low');
+  });
+
+  it('says the budget is for every chat on this device, and that a chat with Thinking switched off runs with none', () => {
+    render(<AgentLimitsSection />);
+
+    expect(
+      screen.getByText(
+        'The budget is a hard cap llama.cpp enforces on any model, in every chat on this device. A chat with Thinking switched off runs with a budget of 0, whatever is set here.',
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -15,7 +15,8 @@
  * and it offers no edit, no regenerate and no new chat. A chat with a far
  * model (`pairedModel`) is this machine's, run here on that machine's model:
  * its runs name the model by its machine, and a conversation made for it
- * keeps that model.
+ * keeps that model. Either kind of send says the chat's Thinking choice only
+ * when the caller's `thinking` gives one, and calls its `accepted` once taken.
  *
  * @module useGglibRuntime
  */
@@ -37,16 +38,16 @@ import {
   type ThreadConversation,
 } from '../useChatPersistence/buildThreadMessages';
 import type { ReasoningTimingTracker } from './reasoningTiming';
-import { buildRunRequest, mintRunId } from './runRequest';
+import { buildRunRequest, mintRunId, type RunRequestOptions } from './runRequest';
 import { imageStoreOf, runsOf, turnText } from './chatSource';
 import { useImageAttachments, type SentImage } from './imageAttachments';
 import type { Downscale } from './imagePrep';
 import { codeOf, sendRefusal } from './imageRefusals';
 import { giveDraftBack, imagesOf, unsentImage } from './turnImages';
 import { savedRowId } from './savedRows';
-import { useRunReader } from './useRunReader';
+import { useRunReader, type RunReaderInputs } from './useRunReader';
 
-export interface UseGglibRuntimeOptions {
+export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
   conversationId?: number;
   /** Whose chat it is; this machine's when absent. */
   source?: ChatSource;
@@ -77,6 +78,8 @@ export interface UseGglibRuntimeOptions {
   onImageRefused?: (sentence: string) => void;
   /** Makes an image too large to send smaller; the browser's canvas by default. */
   downscaleImage?: Downscale;
+  /** What a send says of the chat's Thinking choice, asked at each send: nothing unless it changed, and `accepted` is called once its turn is. */
+  thinking?: () => { said: RunRequestOptions['thinking']; accepted: () => void } | undefined;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -179,6 +182,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       }
       const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
+      const thinking = options.thinking?.();
       const request = far ? null : buildRunRequest({
         messages: history,
         conversationId: cid,
@@ -190,6 +194,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
           ...agentOverridesToWire(),
         },
         reasoning: reasoningOverridesToWire(),
+        thinking: thinking?.said,
         supportsToolCalls,
         far: pairedModel,
       });
@@ -197,7 +202,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       setMessages(history);
       const runId = mintRunId();
       if (request) await getTransport().startAgentRun(runId, request);
-      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id));
+      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said);
+      thinking?.accepted();
       if (stopAskedRef.current) {
         await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       }
