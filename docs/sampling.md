@@ -125,6 +125,21 @@ is honoured even when `trust_client_sampling` is off — it joins `max_tokens` a
 a bound the caller sets on its own turn — while a client's `reasoning_effort`
 is gated like every other sampling opinion.
 
+**A chat can remember that thinking is off.** A turn on one of gglib's own
+chats (a paired device's turn, the chat page's turn on a paired machine, or
+this machine's own agent run) may say `thinking: "off"` or `"default"`. `off`
+runs the turn with a budget of `0` and the chat remembers it
+(`ConversationSettings.thinking`); `default` forgets it; a turn that says
+neither runs as the chat remembers. A remembered `off` beats the request's own
+`reasoning_budget_tokens`: the chat page keeps one budget per browser, not per
+chat, in its Tools popover, and once one is set sends it with every message,
+and a chat that was switched off does not start thinking again because of it.
+Nothing else is remembered. A request's own budget and `reasoning_effort` are
+that request's, and with `default`, or with nothing remembered, the budget
+resolves through the hierarchy as it always has. The CLI's own chat
+(`gglib chat`, `gglib q`) does not apply a remembered `off`: pass
+`--reasoning-budget-tokens 0` there.
+
 ### Three support states, and what each one does
 
 gglib asks the running llama-server what its loaded template declares, and

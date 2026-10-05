@@ -8,6 +8,7 @@
 //! Both types also deserialize, for a reader of this list on another machine,
 //! into the same shape it was written from.
 
+use gglib_core::domain::capability_tags;
 use gglib_core::ports::ModelSummary;
 use gglib_core::server_config::{
     ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
@@ -110,8 +111,14 @@ pub fn this_machine_name() -> Option<String> {
 /// [`ModelSummary::image_input`], and what a client reads to offer images.
 pub const VISION_CAPABILITY: &str = "vision";
 
+/// What [`ModelInfo::capabilities`] lists for a model that thinks: one
+/// tagged `reasoning`, which is what launches it with its thinking set apart
+/// from its answer. The tag, not the template-derived capability bit, and
+/// what a client reads to offer a Thinking switch.
+pub(crate) const REASONING_CAPABILITY: &str = "reasoning";
+
 /// What a catalogued model can do beyond text chat, for
-/// [`ModelInfo::capabilities`]: serve embeddings, read images.
+/// [`ModelInfo::capabilities`]: serve embeddings, read images, think.
 ///
 /// `None` rather than an empty vec for an ordinary chat model, so the field
 /// disappears from the response instead of appearing as `[]` — an empty list
@@ -123,9 +130,11 @@ fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
         .any(|t| t == crate::embeddings::EMBEDDING_TAG)
         .then_some("embeddings");
     let vision = summary.image_input.then_some(VISION_CAPABILITY);
+    let reasoning = capability_tags::is_reasoning(&summary.tags).then_some(REASONING_CAPABILITY);
     let capabilities: Vec<String> = embeddings
         .into_iter()
         .chain(vision)
+        .chain(reasoning)
         .map(str::to_owned)
         .collect();
     (!capabilities.is_empty()).then_some(capabilities)
@@ -173,9 +182,11 @@ pub struct ModelInfo {
     ///
     /// `"embeddings"` for a model tagged `embedding`, which serves
     /// `/v1/embeddings`; `"vision"` for a model linked to a projector, which
-    /// reads `image_url` parts. `None` — and so absent from the JSON
-    /// entirely — for a model that is neither, so a plain chat model's entry
-    /// is byte-identical to what it was before this field existed.
+    /// reads `image_url` parts; `"reasoning"` for a model tagged `reasoning`,
+    /// for which a client may offer a Thinking switch. In that order. `None`
+    /// — and so absent from the JSON entirely — for a model that is none of
+    /// them, so a plain chat model's entry is byte-identical to what it was
+    /// before this field existed.
     ///
     /// An array rather than a `type` discriminant because capability is not
     /// exclusive: a future entry may serve both chat and embeddings, and

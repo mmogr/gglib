@@ -197,8 +197,8 @@ impl FarProxy {
     }
 
     /// `PUT /v1/runs/{run_id}?kind=agent` with `{conversation_id, content,
-    /// images}`: a turn on one of the far machine's chats, which it runs and
-    /// saves.
+    /// images, thinking}`: a turn on one of the far machine's chats, which it
+    /// runs and saves.
     ///
     /// # Errors
     ///

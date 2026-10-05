@@ -133,12 +133,14 @@ fn an_embedding_tagged_model_advertises_the_embeddings_capability() {
     );
 }
 
-/// A chat model's entry has to stay exactly what it was before this field
-/// existed — a picker built from it must not change shape.
+/// A chat model that neither sees nor thinks has an entry exactly as it
+/// was before this field existed — a picker built from it must not change
+/// shape. Retargeted on purpose: this model was tagged `reasoning` until
+/// that tag became a capability of its own (the test below).
 #[test]
-fn a_chat_model_omits_the_capabilities_field_entirely() {
+fn a_plain_chat_model_omits_the_capabilities_field_entirely() {
     let resp = ModelsResponse::from_summaries(
-        vec![summary_with_tags("qwen3", &["agent", "reasoning"])],
+        vec![summary_with_tags("llama3", &["agent"])],
         Some(DEFAULT_CONTEXT_SIZE),
         true,
     );
@@ -187,6 +189,44 @@ fn an_embedding_model_linked_to_a_projector_advertises_both() {
     assert_eq!(
         json["capabilities"],
         serde_json::json!(["embeddings", "vision"])
+    );
+}
+
+/// A model tagged `reasoning` says it thinks, in the one spelling a client
+/// reads to offer a Thinking switch. The tag decides, not the capability
+/// bit a template sets: a model with the bit and no tag says nothing.
+#[test]
+fn a_reasoning_tagged_model_advertises_reasoning() {
+    let bit_only = ModelSummary {
+        capabilities: ModelCapabilities::SUPPORTS_REASONING,
+        ..summary_with_tags("phi", &["agent"])
+    };
+    let resp = ModelsResponse::from_summaries(
+        vec![
+            summary_with_tags("qwen3", &["agent", "reasoning"]),
+            bit_only,
+        ],
+        Some(DEFAULT_CONTEXT_SIZE),
+        true,
+    );
+    assert_eq!(REASONING_CAPABILITY, "reasoning");
+    let json = serde_json::to_value(&resp.data).unwrap();
+    assert_eq!(json[0]["capabilities"], serde_json::json!(["reasoning"]));
+    assert!(json[1].get("capabilities").is_none(), "{json}");
+}
+
+/// A model that reads images and thinks lists both, vision first.
+#[test]
+fn a_model_that_sees_and_thinks_lists_both() {
+    let both = ModelSummary {
+        image_input: true,
+        ..summary_with_tags("qwen3-vl", &["agent", "reasoning"])
+    };
+    let resp = ModelsResponse::from_summaries(vec![both], Some(DEFAULT_CONTEXT_SIZE), true);
+    let json = serde_json::to_value(&resp.data[0]).unwrap();
+    assert_eq!(
+        json["capabilities"],
+        serde_json::json!(["vision", "reasoning"])
     );
 }
 

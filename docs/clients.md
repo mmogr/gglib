@@ -98,6 +98,33 @@ Which models read images is in `/v1/models`: such a model's entry carries
   `PUT /v1/runs/{id}`. A larger body is answered with HTTP 413 and the code
   `request_too_large`.
 
+## Thinking
+
+Which models think is in `/v1/models`: the entry of a model tagged
+`reasoning` lists `"reasoning"` in its `capabilities`, after `"vision"` when
+it has both (`"capabilities": ["vision", "reasoning"]`). A gglib from before
+this never lists it, so a client that offers a Thinking switch only for such
+a model offers none there.
+
+A client that keeps its own chats, as a phone app does for the chats gglib
+never stores, turns thinking off for a request by sending
+`"reasoning_budget_tokens": 0` in the body of `POST /v1/chat/completions`,
+and leaves the key out otherwise. gglib honours that key from any client,
+whatever `trust_client_sampling` says
+([The two reasoning controls](sampling.md#the-two-reasoning-controls)). The
+choice is the client's to keep: gglib remembers nothing of such a request.
+
+gglib's own turn routes take the choice as a word and remember it on the
+chat: `"thinking": "off"` or `"thinking": "default"` beside the message, on a
+paired device's turn (`PUT /v1/runs/{id}?kind=agent`), on the chat page's
+turn on a paired machine (`PUT /api/remote/chats/{id}/turns/{run_id}`) and on
+this machine's own agent run (`PUT /api/runs/{id}?kind=agent`). Send it only
+on the turn that changes it. `off` runs that turn and the chat's later ones
+with a budget of `0`; `default` forgets that; a turn that says neither runs
+as the chat remembers, which its `settings.thinking` says when the chat is
+opened. [What the other machine can reach](remote.md#what-the-other-machine-can-reach)
+has the rest.
+
 ## Context reading
 
 A client that wants to show how full a model's context is gets the two facts

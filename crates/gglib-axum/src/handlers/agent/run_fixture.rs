@@ -204,6 +204,7 @@ pub(super) fn saving(conversation: i64) -> super::launch::Transcript {
     super::launch::Transcript {
         conversation_id: Some(conversation),
         replace_from: None,
+        remember: None,
     }
 }
 
@@ -220,6 +221,7 @@ pub(super) async fn start(
         super::launch::Transcript {
             conversation_id: conversation,
             replace_from: None,
+            remember: None,
         },
         p,
         super::compose::take_permit(state).expect("a free slot"),

@@ -755,7 +755,7 @@ this machine not reading a device's reply is a courtesy of the API, not a
 boundary.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
-with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?}`: the
+with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. A chat that stored its model runs on that model by its id, the one its
@@ -773,6 +773,21 @@ tools the chat names. A saved reply's row says how it was made in its
 (`trimmedMessages`) and why the model stopped (`finishReason`), each only
 when it is known, so a device that opens the chat reads them with no route
 of their own ([Context reading](clients.md#context-reading)).
+
+Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or
+`"thinking": "default"`, and says it only when the user changes it. `off`
+runs that turn with a thinking budget of `0`, and the desktop remembers it on
+the chat, so every later turn there runs the same way, whichever device or
+page sends it; `default` forgets it; a turn that says neither runs as the
+chat remembers. An opened chat says what it remembers in its `settings`:
+`"thinking": "off"`, or no such key. The choice is written when the turn's
+run starts, so a turn that is refused, or that repeats a run's id, changes
+nothing. No route was added for it, and it is the only setting of a chat a
+turn sets by its body. Which models think is in the model list
+([Thinking](clients.md#thinking)). A desktop whose gglib predates the key
+refuses a turn that carries it, `400 invalid_request`, as it would any key it
+does not know; it lists no model as one that thinks either, so a client that
+offers the choice only for those models never sends it there.
 
 Such a turn may carry images, and they cross the tunnel by reference. The
 device sends each file once, as the raw body of `POST /v1/attachments`: a PNG

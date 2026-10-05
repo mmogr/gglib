@@ -27,11 +27,13 @@ infrastructure concerns (database, filesystem, etc.).
 - `attachment` - An image a user message carries: its id, the SHA-256 of its
   bytes (`AttachmentId`), what a client is told of it without the bytes
   (`AttachmentInfo`), and the answer to an upload (`AttachmentUpload`)
-- `hub_chats` - The hub's chats as a paired device reads them (`HubChat`, `HubChatOpen`)
+- `hub_chats` - The hub's chats as a paired device reads them (`HubChat`, `HubChatOpen`),
+  and the turn it adds (`HubTurn`)
 - `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)
 - `gguf` - GGUF metadata and capability types
 - `capabilities` - Model capability detection and inference
-- `thinking` - Thinking/reasoning tag parsing and streaming accumulation
+- `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
+  turn says and `ConversationSettings.thinking` remembers
 - `kv_memory` - Shape of a model's KV memory from GGUF metadata: whether it
   keeps only part of the token history (`kv_memory_is_partial`), and how many
   layers hold a per-token cache at all (`kv_cache_layer_count`)

@@ -7,11 +7,14 @@ daemon owns until they end. The same five calls, bodies and event framing as
 the daemon's `/api/runs/*`, served through the `RunsPort` the proxy was
 started with, and answered `503 runs_unavailable` without one.
 
-`PUT /v1/runs/{id}?kind=agent` with `{conversation_id, content, images?}` is a
+`PUT /v1/runs/{id}?kind=agent` with `{conversation_id, content, images?,
+thinking?}` is a
 paired device's turn on one of the hub's chats: handed to the daemon's
 `AgentRunStarter`, which runs the reply as an agent run in the device's
 scope and saves it to the chat. Only a named device may; anything else is
-`403 device_not_named`.
+`403 device_not_named`. `thinking` is the chat's Thinking choice, `"off"` or
+`"default"`, said on the turn that changes it; any other word, like any other
+key, is `400 invalid_request`.
 
 A request the tunnel edge marked is served in the scope of the device it
 named, and sees that device's runs and every run on one of the hub's
