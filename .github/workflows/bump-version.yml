@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   validate-and-bump:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Generate GitHub App token
         id: app-token

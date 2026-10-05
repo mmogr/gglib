@@ -29,7 +29,7 @@ permissions:
 jobs:
   check-version:
     name: Check Version Change
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     outputs:
       version-changed: ${{ steps.version-check.outputs.changed }}
@@ -92,7 +92,7 @@ jobs:
 
   create-release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check-version
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
     outputs:
@@ -131,7 +131,7 @@ jobs:
 
   deploy-docs:
     name: Deploy Documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [check-version, create-release]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true' && needs.check-version.outputs.is-test-version != 'true' && needs.check-version.outputs.is-prerelease != 'true' && inputs.test_run != true
     # Allow one concurrent deployment
@@ -293,8 +293,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # A Linux binary needs at least the glibc of the image it was built on, and the
+          # AppImage also carries that image's WebKitGTK and GLib. So this is the oldest
+          # image gglib supports, pinned: ubuntu-latest moves to 26.04 (glibc 2.43) from
+          # 2026-10-19 (actions/runner-images#14748), and an AppImage built there will not
+          # start on Ubuntu 24.04. Steps below test runner.os, never this label.
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - target: aarch64-apple-darwin
             os: macos-14
           - target: x86_64-pc-windows-msvc
@@ -308,7 +313,7 @@ jobs:
 
       # Pinned by SHA; ci.yml's `test` job says why.
       - name: Free Disk Space (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
@@ -325,7 +330,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           # This job builds `-p gglib-cli` and nothing else. The CLI does not
           # link GTK or WebKit — ci.yml's `cli-cross-os` job compiles it on
@@ -521,8 +526,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # A Linux binary needs at least the glibc of the image it was built on, and the
+          # AppImage also carries that image's WebKitGTK and GLib. So this is the oldest
+          # image gglib supports, pinned: ubuntu-latest moves to 26.04 (glibc 2.43) from
+          # 2026-10-19 (actions/runner-images#14748), and an AppImage built there will not
+          # start on Ubuntu 24.04. Steps below test runner.os, never this label.
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - target: aarch64-apple-darwin
             os: macos-14
           - target: x86_64-pc-windows-msvc
@@ -536,7 +546,7 @@ jobs:
 
       # Pinned by SHA; ci.yml's `test` job says why.
       - name: Free Disk Space (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: false
@@ -580,7 +590,7 @@ jobs:
         run: npm ci
 
       - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -598,7 +608,7 @@ jobs:
           echo "Building Tauri app for ${{ matrix.target }}"
           if [ "${{ matrix.os }}" == "windows-2022" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis
-          elif [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+          elif [ "${{ runner.os }}" = "Linux" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage,deb,rpm
           else
             npm run tauri:build -- --target ${{ matrix.target }}
@@ -663,7 +673,7 @@ jobs:
           find target -name "gglib-app*" -type f 2>/dev/null || echo "No gglib-app executables found"
 
       - name: Prepare GUI binary for packaging (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           mkdir -p gui-release
           cp target/${{ matrix.target }}/release/gglib-app gui-release/
@@ -744,7 +754,7 @@ jobs:
             echo "staged $(basename "$found") -> $(basename "$dest")"
           }
 
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+          if [ "${{ runner.os }}" = "Linux" ]; then
             stage appimage AppImage
             stage deb deb
             stage rpm rpm
@@ -838,7 +848,7 @@ jobs:
           files: dist/*
   checksums:
     name: Publish SHA256SUMS
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [check-version, create-release, build, build-gui]
     # Requires success from both build jobs, not just "not failure". A partial
     # manifest is worse than none: `sha256sum -c --ignore-missing` passes

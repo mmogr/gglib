@@ -29,7 +29,7 @@ env:
 jobs:
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -42,7 +42,7 @@ jobs:
 
   quality:
     name: Lint & Typecheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -78,7 +78,7 @@ jobs:
   # requires every job, so nothing loses enforcement.
   boundaries:
     name: Check Boundaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -95,7 +95,7 @@ jobs:
 
   enforcement:
     name: Enforce Architecture
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -157,7 +157,7 @@ jobs:
 
   test:
     name: Test (Rust)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # No `needs:`. This was chained to `clippy` so it would restore the target
     # dir clippy had just populated — but clippy builds `--all-features` and
     # this job builds default features, so on run 32705784511 it inherited
@@ -318,7 +318,7 @@ jobs:
 
   bindings:
     name: Bindings Freshness
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Its own job rather than a step on `test`, which is where it lived on the
     # stated grounds that "the cargo cache is warm in this job". It was not:
     # this builds `--features ts-bindings`, a different feature unification
@@ -381,7 +381,7 @@ jobs:
 
   rustdoc:
     name: Rustdoc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Off `test` for the same reason as `bindings` above: it sat there for a
     # cargo cache that did not apply to it. rustdoc builds its own artifacts
     # and the job log shows 137 crates recompiling, so the four and a half
@@ -440,7 +440,7 @@ jobs:
 
   test-frontend:
     name: Test (Frontend)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # No `needs:` — this job is pure npm and finishes in about a minute. It used
     # to wait on a full workspace clippy build it shares nothing with.
     # Same masking as the Rust job: `npm run test:run … | tee` reported `tee`'s
@@ -484,7 +484,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # No `needs:` — clippy is a long pole and nothing gates it. It no longer
     # warms anyone else's cache: it builds `--all-features`, which is not what
     # `test` or `cli-cross-os` build, and the shared key that pretended
@@ -559,7 +559,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - target: aarch64-apple-darwin
             os: macos-14
           - target: x86_64-pc-windows-msvc
@@ -663,7 +663,7 @@ jobs:
 
   ci-success:
     name: CI Success
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: always()
     needs: [boundaries, bindings, enforcement, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
     steps:

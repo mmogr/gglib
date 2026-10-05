@@ -30,7 +30,7 @@ jobs:
   update-test-badges:
     name: Update Test Badges
     if: ${{ github.event.workflow_run.name == 'CI' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout badges branch
         uses: actions/checkout@v7
@@ -328,7 +328,7 @@ jobs:
   update-coverage-badges:
     name: Update Coverage Badges
     if: ${{ github.event.workflow_run.name == 'Coverage' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout badges branch
         uses: actions/checkout@v7
@@ -504,7 +504,7 @@ jobs:
     name: Update Release Badges
     needs: [update-test-badges]
     if: ${{ github.event.workflow_run.name == 'CI' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout main branch (for source analysis)
         uses: actions/checkout@v7
