@@ -60,11 +60,10 @@ fn a_snapshot_survives_the_wire() {
         revision: 7,
         active: Some(waiting_row()),
         waiting: vec![waiting_row()],
-        finished: vec![FinishedDownload {
-            id: "a/b:Q4_K_M".to_string(),
-            title: "a/b:Q4_K_M".to_string(),
-            outcome: DownloadOutcome::Cancelled,
-        }],
+        finished: vec![FinishedDownload::new(
+            &DownloadId::new("a/b", Some("Q4_K_M")),
+            DownloadOutcome::Cancelled,
+        )],
         max_size: 10,
         full: false,
     };
@@ -76,4 +75,33 @@ fn a_snapshot_survives_the_wire() {
     assert_eq!(back.rows().count(), 2);
     assert!(!back.is_idle());
     assert!(QueueSnapshot::default().is_idle());
+}
+
+/// How a download ended is worded here, once: the download's name and then
+/// what became of it. A completed download says what its message does.
+#[test]
+fn a_finished_download_says_how_it_ended() {
+    let id = DownloadId::new("owner/repo", Some("Q8_0"));
+    let text = |outcome| FinishedDownload::new(&id, outcome).text;
+
+    let ended = FinishedDownload::new(&id, DownloadOutcome::Cancelled);
+    assert_eq!(ended.id, "owner/repo:Q8_0");
+    assert_eq!(ended.title, "owner/repo:Q8_0");
+    assert_eq!(ended.text, "owner/repo:Q8_0: download cancelled");
+    assert_eq!(
+        text(DownloadOutcome::Completed { message: None }),
+        "owner/repo:Q8_0: downloaded"
+    );
+    assert_eq!(
+        text(DownloadOutcome::Completed {
+            message: Some("Downloaded model to m.gguf".to_string()),
+        }),
+        "owner/repo:Q8_0: Downloaded model to m.gguf"
+    );
+    assert_eq!(
+        text(DownloadOutcome::Failed {
+            error: "no route".to_string(),
+        }),
+        "owner/repo:Q8_0: download failed: no route"
+    );
 }

@@ -19,17 +19,32 @@ between the worker (core download logic) and publishing (the queue snapshot).
   It carries the bytes of the files already in, so the download's bytes never
   fall back at a file boundary, and feeds the speed the bytes received and the
   time remaining the bytes on disk. A task samples the worker's channel into
-  it four times a second and publishes. A download queued again starts with
-  no meter, whatever an earlier run of it left
+  it four times a second and publishes. The meter is dropped when its
+  download ends, so a download queued again counts from nothing
 - **Publishing** (`publish.rs`): One builder makes the queue snapshot for the
   REST route and the event stream alike. Every snapshot takes the next
   `revision` under the publish mutex, which is held until the snapshot is
   sent, so they leave in order. A snapshot is published when the queue
   changes, on every meter tick, and at each change of phase: `Downloading`,
   then `Finalizing` and `Registering` once the last file is in
-- **Outcomes**: When a download ends, its outcome joins the queue's finished
-  list under the same guard that takes its file out of `active`, and one event
-  says so. A model the library refuses is a failed download
+- **Ending** (`ending.rs`): A download ends as a whole, in one place,
+  `end_download`: its files still pending leave the queue, its group is closed
+  in the tracker, its meter is dropped, and its outcome joins the queue's
+  finished list and the run's summary, all under one queue guard, the one
+  that takes its file out of `active`. One event then says so. It ends when
+  its last file is registered, when a file of it fails, or when the user stops
+  it. A model the library refuses is a failed download
+- **Stopping**: A download waiting, or between two of its files, ends at once
+  as cancelled. One with a file being fetched has its worker told to stop and
+  ends when the worker returns: cancelled whatever the worker answered, and
+  never registered. Cancelling and removing both do this; removing a download
+  that has already ended drops its finished entry. Cancelling everything ends
+  each download with its own outcome. A cancel can come too late: once the
+  download's last file has landed and its model is being registered, or once
+  a file of it has failed, it ends completed or failed as it was going to,
+  and the cancel is still accepted
+- **Tracker** (`shard_group_tracker.rs`): Counts a group's files in. A group
+  that was closed stays closed to a file landing late
 - **Group**: A model is queued as one group of files (`enqueue.rs`): its weights,
   then the projector fetched with them. The group is registered once every file
   is on disk (`group_completion.rs`), with the weights as the model's files and

@@ -92,17 +92,14 @@ pub(crate) fn plain_line(row: &DownloadRow) -> String {
     format!("{}  {}", parts.prefix, parts.message)
 }
 
-/// How a download ended, as the line printed for it.
+/// How a download ended, as the line printed for it: a mark for whether
+/// it arrived, and the entry's own words.
 pub(crate) fn outcome_line(ended: &FinishedDownload) -> String {
-    let title = &ended.title;
-    match &ended.outcome {
-        DownloadOutcome::Completed { message: None } => format!("✓ {title}"),
-        DownloadOutcome::Completed {
-            message: Some(message),
-        } => format!("✓ {title} — {message}"),
-        DownloadOutcome::Failed { error } => format!("✗ {title}: {error}"),
-        DownloadOutcome::Cancelled => format!("✗ {title}: cancelled"),
-    }
+    let mark = match ended.outcome {
+        DownloadOutcome::Completed { .. } => '✓',
+        DownloadOutcome::Failed { .. } | DownloadOutcome::Cancelled => '✗',
+    };
+    format!("{mark} {}", ended.text)
 }
 
 /// The queue's rows on the terminal.

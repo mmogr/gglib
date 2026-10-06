@@ -25,7 +25,7 @@ export interface UseDownloadCompletionEffectsOptions {
  * - Batches completion events within a time window
  * - Triggers model refresh once per batch
  * - Dispatches aggregated toast notifications
- * - Says at once, in an error toast, that a download failed and why
+ * - Says at once, in an error toast, that a download failed, in the daemon's words
  * 
  * @returns Stable onCompleted and onFailed callbacks to pass to useDownloadManager
  * 
@@ -61,9 +61,9 @@ export function useDownloadCompletionEffects(
       // Trigger single refresh for all completions in batch
       refreshModelsRef.current();
       
-      // Show aggregated toast
+      // One download is announced in the daemon's words; several are counted
       if (items.length === 1) {
-        showToastRef.current(`Downloaded ${items[0].title}`, 'success');
+        showToastRef.current(items[0].text, 'success');
       } else {
         showToastRef.current(`${items.length} models downloaded`, 'success');
       }
@@ -83,9 +83,9 @@ export function useDownloadCompletionEffects(
     batcherRef.current?.push(info);
   }, []);
 
-  // A failure is not batched: each one is its own toast, with the daemon's error.
+  // A failure is not batched: each one is its own toast, in the daemon's words.
   const onFailed = useCallback((info: DownloadFailureInfo) => {
-    showToastRef.current(`Download failed: ${info.title}: ${info.error}`, 'error');
+    showToastRef.current(info.text, 'error');
   }, []);
 
   return { onCompleted, onFailed };

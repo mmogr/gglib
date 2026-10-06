@@ -79,11 +79,38 @@ pub(super) fn size_of(item: &QueuedItem) -> u64 {
         .unwrap_or(0)
 }
 
-/// Start the next file as the runner does, and end it as the worker would:
-/// its bytes read by the meter when it is on disk, and then finalized.
+/// A file started as the runner starts it, and not yet ended.
+pub(super) struct Started {
+    pub(super) lease: LeaseId,
+    pub(super) item: QueuedItem,
+    pub(super) cancel: CancellationToken,
+}
+
+/// Start the next file as the runner does.
+pub(super) async fn start_next(manager: &DownloadManagerImpl) -> Started {
+    let (lease, item, cancel, _progress) = manager.next_job().await.expect("a file is pending");
+    Started {
+        lease,
+        item,
+        cancel,
+    }
+}
+
+/// Start the next file as the runner does, and end it as the worker would.
 /// Answers the file's name.
 pub(super) async fn run_next(manager: &DownloadManagerImpl, end: End) -> String {
-    let (lease, item, _cancel, _progress) = manager.next_job().await.expect("a file is pending");
+    let started = start_next(manager).await;
+    end_started(manager, started, end).await
+}
+
+/// End a started file as the worker would: its bytes read by the meter when
+/// it is on disk, and then finalized. Answers the file's name.
+pub(super) async fn end_started(
+    manager: &DownloadManagerImpl,
+    started: Started,
+    end: End,
+) -> String {
+    let Started { lease, item, .. } = started;
     let name = item.shard_info.as_ref().unwrap().filename.clone();
     let path = Path::new("models").join(&name);
     let result = match end {

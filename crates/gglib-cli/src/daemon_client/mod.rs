@@ -21,7 +21,19 @@ const LAUNCH_WAIT: Duration = Duration::from_secs(10);
 /// see `gglib_core::DAEMON_PORT`.
 #[must_use]
 pub(crate) fn base_url() -> String {
+    #[cfg(test)]
+    if let Ok(port) = STAND_IN_PORT.try_with(|port| *port) {
+        return format!("http://127.0.0.1:{port}");
+    }
     format!("http://127.0.0.1:{DAEMON_PORT}")
+}
+
+#[cfg(test)]
+tokio::task_local! {
+    /// In a test, the port of a stand-in that answers a call as the daemon
+    /// would. A task that sets it sends its calls there, so a test of a call
+    /// never reaches a daemon that may be running on this machine.
+    pub(crate) static STAND_IN_PORT: u16;
 }
 
 /// Every daemon path this CLI calls, defined in shared vocabulary so the

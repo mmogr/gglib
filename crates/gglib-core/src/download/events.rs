@@ -1,7 +1,7 @@
 //! Download events - discriminated union for all download state changes.
 
 use super::completion::QueueRunSummary;
-use super::queue::{DownloadOutcome, QueueSnapshot};
+use super::queue::{DownloadOutcome, FinishedDownload, QueueSnapshot};
 use serde::{Deserialize, Serialize};
 
 /// Single discriminated union for all download events.
@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 /// The queue itself travels as [`DownloadEvent::QueueSnapshot`]: the same
 /// [`QueueSnapshot`] the REST route serves, with every row's bytes, speed and
 /// text. The other four say that something ended, for a notice to the user
-/// and a refresh of the library; they carry no state a snapshot lacks.
+/// and a refresh of the library; they carry no state a snapshot lacks. An
+/// ending's `text` is its finished entry's, ready to print; the outcome
+/// itself, with its message or error, is on that entry and not repeated here.
 /// TypeScript reads this type through its generated binding; there is no
 /// mirror to keep in step.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -25,24 +27,24 @@ pub enum DownloadEvent {
     DownloadCompleted {
         /// Canonical ID of the download.
         id: String,
-        /// Optional success message.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        message: Option<String>,
+        /// How it ended, in words: its finished entry's text.
+        text: String,
     },
 
     /// Download failed with an error.
     DownloadFailed {
         /// Canonical ID of the download.
         id: String,
-        /// Error message describing what went wrong.
-        error: String,
+        /// How it ended, in words: its finished entry's text.
+        text: String,
     },
 
     /// Download was cancelled by the user.
     DownloadCancelled {
         /// Canonical ID of the download.
         id: String,
+        /// How it ended, in words: its finished entry's text.
+        text: String,
     },
 
     /// Queue run completed (all downloads in the queue finished).
@@ -63,34 +65,14 @@ impl DownloadEvent {
         Self::QueueSnapshot(Box::new(snapshot))
     }
 
-    /// Create a download completed event.
-    pub fn completed(id: impl Into<String>, message: Option<impl Into<String>>) -> Self {
-        Self::DownloadCompleted {
-            id: id.into(),
-            message: message.map(Into::into),
-        }
-    }
-
-    /// Create a download failed event.
-    pub fn failed(id: impl Into<String>, error: impl Into<String>) -> Self {
-        Self::DownloadFailed {
-            id: id.into(),
-            error: error.into(),
-        }
-    }
-
-    /// Create a download cancelled event.
-    pub fn cancelled(id: impl Into<String>) -> Self {
-        Self::DownloadCancelled { id: id.into() }
-    }
-
-    /// The event that says a download ended with `outcome`.
+    /// The event that says a download ended as `ended` records.
     #[must_use]
-    pub fn ended(id: &str, outcome: &DownloadOutcome) -> Self {
-        match outcome {
-            DownloadOutcome::Completed { message } => Self::completed(id, message.as_deref()),
-            DownloadOutcome::Failed { error } => Self::failed(id, error),
-            DownloadOutcome::Cancelled => Self::cancelled(id),
+    pub fn ended(ended: &FinishedDownload) -> Self {
+        let (id, text) = (ended.id.clone(), ended.text.clone());
+        match &ended.outcome {
+            DownloadOutcome::Completed { .. } => Self::DownloadCompleted { id, text },
+            DownloadOutcome::Failed { .. } => Self::DownloadFailed { id, text },
+            DownloadOutcome::Cancelled => Self::DownloadCancelled { id, text },
         }
     }
 
@@ -106,7 +88,7 @@ impl DownloadEvent {
             Self::QueueSnapshot(_) | Self::QueueRunComplete { .. } => None,
             Self::DownloadCompleted { id, .. }
             | Self::DownloadFailed { id, .. }
-            | Self::DownloadCancelled { id } => Some(id),
+            | Self::DownloadCancelled { id, .. } => Some(id),
         }
     }
 
@@ -127,57 +109,5 @@ impl DownloadEvent {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_event_id_extraction() {
-        assert_eq!(DownloadEvent::failed("test", "e").id(), Some("test"));
-        assert_eq!(DownloadEvent::cancelled("test").id(), Some("test"));
-        let snapshot = DownloadEvent::queue_snapshot(QueueSnapshot::default());
-        assert!(snapshot.id().is_none());
-    }
-
-    /// The snapshot's own keys sit beside the event's `type`, so the event
-    /// stream and the REST route carry one shape.
-    #[test]
-    fn a_snapshot_event_is_the_snapshot_with_a_type() {
-        let snapshot = QueueSnapshot {
-            revision: 4,
-            max_size: 10,
-            ..QueueSnapshot::default()
-        };
-
-        let event = serde_json::to_value(DownloadEvent::queue_snapshot(snapshot.clone()))
-            .expect("serializes");
-        let mut rest = serde_json::to_value(&snapshot).expect("serializes");
-        rest["type"] = "queue_snapshot".into();
-
-        assert_eq!(event, rest);
-        let back: DownloadEvent = serde_json::from_value(event).expect("parses");
-        assert!(matches!(back, DownloadEvent::QueueSnapshot(s) if *s == snapshot));
-    }
-
-    #[test]
-    fn an_outcome_has_its_terminal_event() {
-        let completed = DownloadOutcome::Completed {
-            message: Some("ok".to_string()),
-        };
-        let failed = DownloadOutcome::Failed {
-            error: "no".to_string(),
-        };
-
-        assert!(matches!(
-            DownloadEvent::ended("id", &completed),
-            DownloadEvent::DownloadCompleted { id, message } if id == "id" && message.as_deref() == Some("ok")
-        ));
-        assert!(matches!(
-            DownloadEvent::ended("id", &failed),
-            DownloadEvent::DownloadFailed { error, .. } if error == "no"
-        ));
-        assert!(matches!(
-            DownloadEvent::ended("id", &DownloadOutcome::Cancelled),
-            DownloadEvent::DownloadCancelled { .. }
-        ));
-    }
-}
+#[path = "events_tests.rs"]
+mod tests;

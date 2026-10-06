@@ -24,7 +24,6 @@ const transport = vi.hoisted(() => ({
   queueDownload: vi.fn(),
   getDownloadQueue: vi.fn(),
   cancelDownload: vi.fn(),
-  clearFailedDownloads: vi.fn(),
   subscribe: vi.fn(),
   onEventStreamOpen: vi.fn(),
 }));
@@ -126,32 +125,26 @@ describe('useDownloadManager', () => {
     expect(result.current.snapshot?.revision).toBe(2);
   });
 
-  it("reports a completion under the row's own title", async () => {
+  it("reports a completion in the event's own words", async () => {
     const onCompleted = vi.fn();
     renderHook(() => useDownloadManager({ onCompleted }));
     await waitFor(() => expect(sendEvent).toBeTruthy());
-    const row = runningRow({ text: { ...runningRow().text, title: 'Zeta, eight bit' } });
+    const row = runningRow();
     emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
 
-    emit({ type: 'download_completed', id: row.id });
+    emit({ type: 'download_completed', id: row.id, text: 'Zeta, eight bit: in the library' });
 
-    expect(onCompleted).toHaveBeenCalledWith({ id: row.id, title: 'Zeta, eight bit' });
+    expect(onCompleted).toHaveBeenCalledWith({ id: row.id, text: 'Zeta, eight bit: in the library' });
   });
 
-  it('reports a failure with its error, titled from the finished list once the row is gone', async () => {
+  it("reports a failure in the event's own words, whatever the snapshot holds", async () => {
     const onFailed = vi.fn();
     renderHook(() => useDownloadManager({ onFailed }));
     await waitFor(() => expect(sendEvent).toBeTruthy());
-    emit(snapshotEvent(queueSnapshot({
-      revision: 2,
-      finished: [{ id: 'owner/b:Q4_K_M', title: 'B, four bit', outcome: { kind: 'failed', error: 'disk full' } }],
-    })));
 
-    emit({ type: 'download_failed', id: 'owner/b:Q4_K_M', error: 'disk full' });
-    emit({ type: 'download_failed', id: 'owner/unseen', error: 'gone' });
+    emit({ type: 'download_failed', id: 'owner/b:Q4_K_M', text: 'B, four bit: it broke' });
 
-    expect(onFailed).toHaveBeenNthCalledWith(1, { id: 'owner/b:Q4_K_M', title: 'B, four bit', error: 'disk full' });
-    expect(onFailed).toHaveBeenNthCalledWith(2, { id: 'owner/unseen', title: 'owner/unseen', error: 'gone' });
+    expect(onFailed).toHaveBeenCalledWith({ id: 'owner/b:Q4_K_M', text: 'B, four bit: it broke' });
   });
 
   it("keeps a run's summary until a download runs again", async () => {
@@ -181,7 +174,7 @@ describe('useDownloadManager', () => {
     expect(transport.cancelDownload).toHaveBeenCalledWith(row.id);
     expect(result.current.cancellingId).toBe(row.id);
 
-    emit({ type: 'download_cancelled', id: row.id });
+    emit({ type: 'download_cancelled', id: row.id, text: 'cancelled' });
     expect(result.current.cancellingId).toBeNull();
   });
 
@@ -196,7 +189,7 @@ describe('useDownloadManager', () => {
     // The download failed before the cancel reached it: no `download_cancelled` comes.
     await act(async () => { await result.current.cancel(row.id); });
     expect(result.current.cancellingId).toBe(row.id);
-    emit({ type: 'download_failed', id: row.id, error: 'no route' });
+    emit({ type: 'download_failed', id: row.id, text: 'failed' });
     expect(result.current.cancellingId).toBeNull();
 
     // The ending event was missed: a snapshot with another download running says as much.
@@ -221,7 +214,7 @@ describe('useDownloadManager', () => {
   });
 
   it('queues a model and reads the queue again', async () => {
-    transport.queueDownload.mockResolvedValue({ position: 1 });
+    transport.queueDownload.mockResolvedValue({ id: 'm2:q4' });
     const { result } = renderHook(() => useDownloadManager());
     await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));
     transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 2, waiting: [waitingRow('m2:q4', 1)] }));

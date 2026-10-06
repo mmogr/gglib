@@ -38,7 +38,8 @@ This module handles all download-related commands that interact with `HuggingFac
 
 **Key Flow:**
 1. `gglib model download <repo>`: `exec.rs` queues the download on the gglib
-   daemon and `remote.rs` polls the daemon's queue. `gglib up` queues on this
+   daemon, which answers with the download's ID, and `remote.rs` polls the
+   daemon's queue for that ID. `gglib up` queues on this
    process's own download manager and runs `interactive.rs`. Neither subscribes
    to events: each reads the queue snapshot four times a second.
 2. `board.rs` draws the snapshot, one line per download, from the row's own
@@ -57,24 +58,28 @@ This module handles all download-related commands that interact with `HuggingFac
    it through `QueueWatch::take`, which draws the snapshot, takes the step and
    prints the outcomes. A monitor goes on while a download of its own is a
    row: running, between two of its files, or waiting. It exits on its own
-   outcome in the snapshot's finished list, which covers a failure before the
-   first poll. The daemon monitor counts the downloads of its repository as
-   its own, and once it has seen one as a row, only the outcomes of the rows
-   it saw: the daemon also lists how earlier downloads ended. The in-process
-   monitor counts every download.
-4. How each download ended is printed when its monitor exits that way. The
-   daemon monitor exits non-zero when one failed or was cancelled, and a model
-   the library refused is a failure. It also exits non-zero when its download
-   left the queue with no outcome recorded, as one removed while it waited
-   does. A forced quit of the in-process monitor prints no outcomes.
+   outcome in the snapshot's finished list, which covers a download that
+   ended before the first poll. The daemon monitor follows one download, the
+   ID the daemon answered its queue request with: another quantization of
+   the same repository is not its own, and neither is that one's outcome. The
+   in-process monitor counts every download.
+4. How each download ended is printed when its monitor exits that way: a
+   `✓` or `✗` and the finished entry's own `text`, which is the text the GUI's
+   toast shows. The daemon monitor exits non-zero when its download failed or
+   was cancelled, with that text as its error, and a model the library
+   refused is a failure. Every download leaves an outcome, one removed
+   while it waited included. The monitor also exits non-zero when its
+   download's outcome is gone from the queue, cleared or pushed out by later
+   ones. A forced quit of the in-process monitor prints no outcomes.
 5. In TTY mode, `interactive.rs`: `[a]` prompts for another model to add to
    the queue. `[q]` (or `Esc` / `Ctrl-C`) is **two-step**:
    - First press → arms drain mode (hint becomes
      `Draining... press q again to force quit`); active downloads
      continue running until they finish naturally and the queue auto-
      exits when it empties.
-   - Second press → calls `cancel_all()`, which signals cancel tokens
-     and waits up to 5 s for in-flight Python helpers to actually
+   - Second press → calls `cancel_all()`, which ends each waiting
+     download as cancelled, signals the cancel token of the transfer in
+     flight, and waits up to 5 s for in-flight Python helpers to actually
      finalize before returning.
 
    The `[a]/[q]` hint bar is created eagerly and registered as the console's

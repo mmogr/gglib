@@ -11,7 +11,7 @@ use crate::error::GuiError;
 use crate::hf_quantizations::quantizations_response;
 use crate::types::{
     HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField,
-    ToolSupportResponse,
+    QueueDownloadResponse, ToolSupportResponse,
 };
 
 /// Dependencies for download and `HuggingFace` operations.
@@ -41,7 +41,7 @@ impl DownloadOps {
     // Download Queue Operations
     // =========================================================================
 
-    /// Queue a model download from `HuggingFace` Hub.
+    /// Queue a model download from `HuggingFace` Hub, and answer its ID.
     ///
     /// Uses smart quantization selection:
     /// - If quantization is provided, validates it exists
@@ -51,15 +51,16 @@ impl DownloadOps {
         &self,
         model_id: String,
         quantization: Option<String>,
-    ) -> Result<(usize, usize), GuiError> {
+    ) -> Result<QueueDownloadResponse, GuiError> {
         // Use queue_smart which handles quantization selection in the domain layer
-        Arc::clone(&self.downloads)
+        let id = Arc::clone(&self.downloads)
             .queue_smart(model_id, quantization)
             .await
-            .map_err(|e| GuiError::Internal(e.to_string()))
+            .map_err(|e| GuiError::Internal(e.to_string()))?;
+        Ok(QueueDownloadResponse { id: id.to_string() })
     }
 
-    /// Cancel an in-flight download.
+    /// Cancel a download that is waiting or running, every file of it.
     pub async fn cancel_download(&self, model_id: &str) -> Result<(), GuiError> {
         let id: DownloadId = model_id
             .parse()
@@ -81,7 +82,7 @@ impl DownloadOps {
             .unwrap_or_default()
     }
 
-    /// Remove an item from the pending download queue.
+    /// Cancel a waiting or running download, or drop the entry of an ended one.
     pub async fn remove_from_queue(&self, model_id: &str) -> Result<(), GuiError> {
         let id: DownloadId = model_id
             .parse()
@@ -132,17 +133,9 @@ impl DownloadOps {
         Ok(())
     }
 
-    /// Cancel all shards in a shard group.
-    pub async fn cancel_shard_group(&self, group_id: &str) -> Result<(), GuiError> {
-        self.downloads
-            .cancel_group(group_id)
-            .await
-            .map_err(GuiError::from)
-    }
-
-    /// Clear all failed downloads from the list.
-    pub async fn clear_failed(&self) {
-        let _ = self.downloads.clear_failed().await;
+    /// Clear the record of how earlier downloads ended.
+    pub async fn clear_finished(&self) {
+        let _ = self.downloads.clear_finished().await;
     }
 
     /// Cancel all active and queued downloads.
@@ -295,81 +288,5 @@ impl DownloadOps {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::error::GuiError;
-    use crate::test_support::{MockDownloadManager, MockHfClient, MockToolSupportDetector};
-
-    fn make_ops(mgr: MockDownloadManager) -> DownloadOps {
-        DownloadOps::new(DownloadDeps {
-            downloads: Arc::new(mgr),
-            hf: Arc::new(MockHfClient),
-            tool_detector: Arc::new(MockToolSupportDetector),
-        })
-    }
-
-    #[tokio::test]
-    async fn get_queue_snapshot_returns_empty_snapshot() {
-        let ops = make_ops(MockDownloadManager::new());
-        let snapshot = ops.get_queue_snapshot().await;
-        assert!(snapshot.is_idle() && snapshot.finished.is_empty());
-    }
-
-    #[tokio::test]
-    async fn cancel_download_succeeds_with_model_id_string() {
-        // Ensure the parse-then-fallback path works when given a plain model ID
-        let ops = make_ops(MockDownloadManager::new());
-        let result = ops.cancel_download("some/model").await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn cancel_download_not_found_maps_to_gui_error() {
-        let ops = make_ops(MockDownloadManager::failing_cancel());
-        let result = ops.cancel_download("some/model").await;
-        assert!(
-            matches!(
-                result,
-                Err(GuiError::NotFound {
-                    entity: "download",
-                    ..
-                })
-            ),
-            "expected GuiError::NotFound, got {result:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn remove_from_queue_delegates_ok() {
-        let ops = make_ops(MockDownloadManager::new());
-        let result = ops.remove_from_queue("some/model").await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn reorder_queue_returns_new_position() {
-        let mgr = MockDownloadManager {
-            reorder_position: 3,
-            ..MockDownloadManager::default()
-        };
-        let ops = make_ops(mgr);
-        let result = ops.reorder_queue("some/model", 3).await;
-        assert_eq!(result.unwrap(), 3);
-    }
-
-    #[tokio::test]
-    async fn clear_failed_completes_without_error() {
-        let ops = make_ops(MockDownloadManager::new());
-        // clear_failed is fire-and-forget (returns ())
-        ops.clear_failed().await;
-    }
-
-    #[tokio::test]
-    async fn cancel_all_completes_without_error() {
-        let ops = make_ops(MockDownloadManager::new());
-        // cancel_all is fire-and-forget (returns ())
-        ops.cancel_all().await;
-    }
-}
+#[path = "downloads_tests.rs"]
+mod tests;

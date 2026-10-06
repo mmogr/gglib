@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use gglib_core::download::{DownloadOutcome, FinishedDownload, QueueSnapshot};
+use gglib_core::download::{DownloadId, DownloadOutcome, FinishedDownload, QueueSnapshot};
 
 use crate::console::CliConsole;
 
@@ -20,9 +20,10 @@ use super::board::DownloadBoard;
 enum Watch {
     /// Every download in the queue: this process owns the queue.
     Everything,
-    /// The downloads of one repository. The queue is the daemon's, and may
-    /// hold other people's.
-    Model(String),
+    /// One download, by the ID the daemon gave it when it was queued. The
+    /// queue is the daemon's, and may hold other people's downloads, another
+    /// quantization of the same repository among them.
+    Download(String),
 }
 
 impl Watch {
@@ -30,9 +31,7 @@ impl Watch {
     fn covers(&self, id: &str) -> bool {
         match self {
             Self::Everything => true,
-            Self::Model(model_id) => id
-                .strip_prefix(model_id.as_str())
-                .is_some_and(|rest| rest.is_empty() || rest.starts_with(':')),
+            Self::Download(mine) => id == mine,
         }
     }
 }
@@ -51,7 +50,9 @@ pub(crate) enum Step {
 #[derive(Debug)]
 pub(crate) struct MonitorState {
     watch: Watch,
-    /// The downloads of its own that have been rows of some snapshot.
+    /// The downloads of its own known to have reached the queue: those that
+    /// have been rows of some snapshot, and the one the daemon said it
+    /// queued.
     seen: BTreeSet<String>,
 }
 
@@ -64,11 +65,13 @@ impl MonitorState {
         }
     }
 
-    /// A monitor of the downloads of the repository `model_id`.
-    pub(crate) fn model(model_id: &str) -> Self {
+    /// A monitor of the download `id`, which the daemon has queued: it
+    /// answered the queue request with this ID, so the download has reached
+    /// the queue whether or not a snapshot has shown it yet.
+    pub(crate) fn download(id: &DownloadId) -> Self {
         Self {
-            watch: Watch::Model(model_id.to_string()),
-            seen: BTreeSet::new(),
+            watch: Watch::Download(id.to_string()),
+            seen: BTreeSet::from([id.to_string()]),
         }
     }
 
@@ -77,9 +80,9 @@ impl MonitorState {
     /// While a download of its own is a row, running, between two files or
     /// waiting, the monitor goes on. With none, it exits once it has
     /// something to say: an outcome of its own in the finished list, which
-    /// covers a download that failed before the first snapshot, or a
-    /// download it saw earlier and no longer does. Until then nothing has
-    /// reached the queue yet, and it goes on.
+    /// covers a download that ended before the first snapshot, or a download
+    /// known to have reached the queue that is no longer in it. Until then
+    /// nothing has reached the queue yet, and it goes on.
     pub(crate) fn step(&mut self, snapshot: &QueueSnapshot) -> Step {
         let mut live = false;
         for row in snapshot.rows().filter(|row| self.watch.covers(&row.id)) {
@@ -90,34 +93,18 @@ impl MonitorState {
             return Step::Continue;
         }
 
+        // A download queued again loses its old entry as it is queued, so an
+        // entry under a watched ID is how this run of it ended.
         let ended: Vec<FinishedDownload> = snapshot
             .finished
             .iter()
-            .filter(|ended| self.is_its_outcome(&ended.id))
+            .filter(|ended| self.watch.covers(&ended.id))
             .cloned()
             .collect();
         if ended.is_empty() && self.seen.is_empty() {
             return Step::Continue;
         }
         Step::Exit(ended)
-    }
-
-    /// Whether the finished entry `id` is how a download of this monitor's
-    /// ended.
-    ///
-    /// The daemon keeps the outcomes of earlier runs, and an earlier
-    /// download of the same repository is not this run's. So a monitor of
-    /// one repository that has seen rows counts the outcomes of those rows
-    /// alone. One that has seen none takes every outcome of its repository:
-    /// its download ended before the first snapshot. A monitor of the whole
-    /// queue owns the queue, and every outcome in it.
-    fn is_its_outcome(&self, id: &str) -> bool {
-        match &self.watch {
-            Watch::Everything => true,
-            Watch::Model(_) => {
-                self.watch.covers(id) && (self.seen.is_empty() || self.seen.contains(id))
-            }
-        }
     }
 }
 
@@ -136,12 +123,12 @@ impl QueueWatch {
         }
     }
 
-    /// A watch of the downloads of the repository `model_id`, drawn on
-    /// `console`. The board still draws every row of the queue.
-    pub(crate) fn model(console: Arc<CliConsole>, model_id: &str) -> Self {
+    /// A watch of the download `id`, drawn on `console`. The board still
+    /// draws every row of the queue.
+    pub(crate) fn download(console: Arc<CliConsole>, id: &DownloadId) -> Self {
         Self {
             board: DownloadBoard::new(console),
-            state: MonitorState::model(model_id),
+            state: MonitorState::download(id),
         }
     }
 
@@ -167,28 +154,24 @@ impl QueueWatch {
     }
 }
 
-/// Why the downloads that `ended` this way did not all arrive: the first
-/// that failed or was cancelled, in words. `None` when every one completed.
+/// Why the downloads that `ended` this way did not all arrive: the words of
+/// the first that failed or was cancelled. `None` when every one completed.
 pub(crate) fn failure(ended: &[FinishedDownload]) -> Option<String> {
-    ended.iter().find_map(|ended| match &ended.outcome {
-        DownloadOutcome::Completed { .. } => None,
-        DownloadOutcome::Failed { error } => {
-            Some(format!("download failed: {} \u{2014} {error}", ended.title))
-        }
-        DownloadOutcome::Cancelled => Some(format!("download cancelled: {}", ended.title)),
-    })
+    ended
+        .iter()
+        .find(|ended| !matches!(ended.outcome, DownloadOutcome::Completed { .. }))
+        .map(|ended| ended.text.clone())
 }
 
-/// What watching the downloads of `model_id` comes to, given how they
-/// `ended`: `Ok` when every one completed, and otherwise why not.
+/// What watching the download `id` comes to, given how it `ended`: `Ok`
+/// when it completed, and otherwise why not.
 ///
-/// An empty list is not a success. The download left the queue and nothing
-/// says how: it was taken off while it waited, or its outcome is no longer
-/// among the few the queue keeps.
-pub(crate) fn model_result(model_id: &str, ended: &[FinishedDownload]) -> Result<(), String> {
+/// An empty list is not a success. Every download leaves an outcome, so
+/// this one's has gone from the few the queue keeps, or was cleared.
+pub(crate) fn download_result(id: &DownloadId, ended: &[FinishedDownload]) -> Result<(), String> {
     if ended.is_empty() {
         return Err(format!(
-            "{model_id} left the download queue and how it ended is not recorded"
+            "{id} left the download queue and how it ended is no longer recorded"
         ));
     }
     failure(ended).map_or(Ok(()), Err)

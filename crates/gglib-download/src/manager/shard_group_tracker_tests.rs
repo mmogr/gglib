@@ -105,7 +105,7 @@ fn test_idempotent_shard_recording() {
 }
 
 #[test]
-fn test_on_group_failed_cleanup() {
+fn test_close_cleanup() {
     let mut tracker = ShardGroupTracker::new();
     let group_id = ShardGroupId::new("test-group");
     let metadata = test_metadata();
@@ -122,7 +122,7 @@ fn test_on_group_failed_cleanup() {
     assert_eq!(tracker.active_count(), 1);
 
     // Mark as failed
-    tracker.on_group_failed(&group_id);
+    tracker.close(&group_id);
 
     assert_eq!(tracker.active_count(), 0);
 }
@@ -169,7 +169,7 @@ fn test_invariant_failure_removes_group() {
     assert_eq!(tracker.active_count(), 1);
 
     // Mark group as failed
-    tracker.on_group_failed(&group_id);
+    tracker.close(&group_id);
 
     // INVARIANT: failure must remove the group
     assert!(
@@ -197,7 +197,7 @@ fn test_invariant_multiple_groups_drain_correctly() {
     assert!(tracker.has_open_groups(), "Group B still in progress");
 
     // Fail group B
-    tracker.on_group_failed(&group_b);
+    tracker.close(&group_b);
     assert_eq!(tracker.active_count(), 0, "Group B should be removed");
     assert!(!tracker.has_open_groups(), "No groups should remain");
 }
@@ -228,4 +228,46 @@ fn a_group_is_open_from_its_first_file_to_its_last() {
 
     tracker.on_shard_done(&group, 1, PathBuf::from("/a1"), 2, &metadata);
     assert!(!tracker.is_open(&group));
+}
+
+/// A file of a closed group that lands late does not open the group again,
+/// even when it is the group's last. Another group is untouched.
+#[test]
+fn a_late_file_does_not_reopen_a_closed_group() {
+    let mut tracker = ShardGroupTracker::new();
+    let group = ShardGroupId::new("group-a");
+    let other = ShardGroupId::new("group-b");
+    let metadata = test_metadata();
+    tracker.on_shard_done(&group, 0, PathBuf::from("/a0"), 2, &metadata);
+
+    tracker.close(&group);
+    let late = tracker.on_shard_done(&group, 1, PathBuf::from("/a1"), 2, &metadata);
+
+    assert!(late.is_none());
+    assert!(!tracker.is_open(&group));
+    assert!(!tracker.has_open_groups());
+
+    // A group closed before any file of it landed is closed all the same.
+    tracker.close(&other);
+    tracker.on_shard_done(&other, 0, PathBuf::from("/b0"), 2, &metadata);
+    assert!(!tracker.has_open_groups());
+}
+
+/// The tracker remembers a bounded number of closed groups, the latest.
+#[test]
+fn the_closed_groups_remembered_are_bounded() {
+    let mut tracker = ShardGroupTracker::new();
+    let metadata = test_metadata();
+    let group = |n: usize| ShardGroupId::new(format!("group-{n}"));
+
+    for n in 0..=CLOSED_LIMIT {
+        tracker.close(&group(n));
+        tracker.close(&group(n));
+    }
+
+    assert_eq!(tracker.closed.len(), CLOSED_LIMIT);
+    tracker.on_shard_done(&group(CLOSED_LIMIT), 0, PathBuf::from("/s"), 2, &metadata);
+    assert!(!tracker.has_open_groups(), "the latest is remembered");
+    tracker.on_shard_done(&group(0), 0, PathBuf::from("/s"), 2, &metadata);
+    assert!(tracker.is_open(&group(0)), "the oldest has made way");
 }

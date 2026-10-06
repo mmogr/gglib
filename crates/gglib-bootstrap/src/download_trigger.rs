@@ -105,7 +105,7 @@ mod tests {
             self: Arc<Self>,
             _repo_id: String,
             _quantization: Option<String>,
-        ) -> Result<(usize, usize), DownloadError> {
+        ) -> Result<DownloadId, DownloadError> {
             unimplemented!()
         }
 
@@ -137,11 +137,7 @@ mod tests {
             unimplemented!()
         }
 
-        async fn cancel_group(&self, _group_id: &str) -> Result<(), DownloadError> {
-            unimplemented!()
-        }
-
-        async fn clear_failed(&self) -> Result<(), DownloadError> {
+        async fn clear_finished(&self) -> Result<(), DownloadError> {
             unimplemented!()
         }
 

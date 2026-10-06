@@ -136,6 +136,12 @@ impl DownloadManagerImpl {
 }
 
 #[cfg(test)]
+#[path = "ending_tests.rs"]
+mod ending_tests;
+#[cfg(test)]
+#[path = "ending_worker_tests.rs"]
+mod ending_worker_tests;
+#[cfg(test)]
 #[path = "outcome_tests.rs"]
 mod outcome_tests;
 #[cfg(test)]

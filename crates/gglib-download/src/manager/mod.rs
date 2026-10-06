@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod ending;
 mod enqueue;
 mod group_completion;
 mod meter;
@@ -78,8 +79,8 @@ struct ActiveJob {
     lease: LeaseId,
     /// Cancellation token.
     cancel: CancellationToken,
-    /// The file's place in its download.
-    shard_info: Option<ShardInfo>,
+    /// The file being fetched, as it came off the queue.
+    item: QueuedItem,
     /// What the download is doing: fetching this file, or, once its last
     /// file is in, being finalized and registered.
     phase: DownloadPhase,
@@ -245,7 +246,10 @@ pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl 
 ///
 /// Lock order: `publish` → `queue` → `active` → `shard_tracker` → `meters`.
 /// A task takes them in that order and never the other way; `meters` is a
-/// std mutex, taken last and never held across an await.
+/// std mutex, never held across an await. `current_run` is taken under
+/// `publish` when a run starts or is summed up, and under `queue` when a
+/// download's ending is recorded in it; nothing else is taken while it is
+/// held.
 pub struct DownloadManagerImpl {
     /// Model registrar for completed downloads.
     model_registrar: Arc<dyn ModelRegistrarPort>,
@@ -281,7 +285,7 @@ pub struct DownloadManagerImpl {
     /// File entries with OIDs for each download (keyed by download ID).
     file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
     /// One meter per download that has started, kept from file to file so its
-    /// bytes and speed run on, until the download ends or is queued again.
+    /// bytes and speed run on, until the download ends.
     meters: std::sync::Mutex<HashMap<DownloadId, GroupMeter>>,
 }
 
@@ -514,7 +518,7 @@ impl DownloadManagerImpl {
                 ActiveJob {
                     lease,
                     cancel: cancel.clone(),
-                    shard_info: item.shard_info.clone(),
+                    item: item.clone(),
                     phase: DownloadPhase::Downloading,
                 },
             );
@@ -549,53 +553,50 @@ impl DownloadManagerImpl {
     /// completes would allow the CLI to exit mid-insert, dropping the tokio
     /// runtime and silently losing the DB row.
     ///
-    /// When the file was the download's last, or the download failed or was
-    /// cancelled, the download has ended. Its outcome is recorded and its
-    /// meter dropped under the same queue guard that takes the file out of
-    /// `active`, so no snapshot shows a download gone with no outcome, or
-    /// ended and still running.
+    /// Cancel wins when it is in time. The token is read once, as the worker
+    /// returns: cancelled by then, the download ends cancelled whatever the
+    /// worker answered, and a landed file is neither counted nor registered.
+    /// A later cancel still ends a download with files to come (`settle`),
+    /// but not one this file has ended, its last file being registered or a
+    /// file that failed: that one ends completed or failed all the same.
+    ///
+    /// The file then leaves `active`, and the download ends when this file
+    /// ended it (`ending.rs`).
     ///
     /// Locks: registration takes `active`, the tracker and the publish mutex
-    /// one at a time. The ending takes queue → active → meters, and the
-    /// snapshot published after it takes them all in order.
+    /// one at a time. The ending takes queue → active → tracker → meters,
+    /// and the snapshot published after it takes them all in order.
     async fn finalize_job(
         &self,
         item: &QueuedItem,
         lease: LeaseId,
         result: Result<CompletedJob, DownloadError>,
     ) {
-        // Step 1 — verify lease (guards against stale/duplicate finalization)
-        // without yet removing the item from the active map.
-        if !self.verify_lease(&item.id, lease).await {
+        // Step 1 — verify lease (a stale or duplicate finalize); stay active.
+        let Some(cancelled) = self.cancelled_under(&item.id, lease).await else {
             tracing::debug!(id = %item.id, "Ignoring stale finalize (lease mismatch)");
             return;
-        }
+        };
 
-        // Step 2 — run registration while still in the active map so the
-        // CLI monitor cannot race past registration.
-        let ended = self.handle_job_result(item, result).await;
+        // Step 2 — register while still active: no monitor races past it.
+        let ended = if cancelled {
+            Some(DownloadOutcome::Cancelled)
+        } else {
+            self.handle_job_result(item, result).await
+        };
 
         // Step 3 — now safe to remove from active map and notify watchers.
-        let mut queue = self.queue.write().await;
-        self.active.lock().await.remove(&item.id);
-        if let Some(outcome) = &ended {
-            queue.record_outcome(&item.id, outcome.clone());
-            self.meters().remove(&item.id);
-        }
-        // Held over the whole ending, so no snapshot reads half of it.
-        drop(queue);
-
-        if let Some(outcome) = &ended {
-            self.emit(DownloadEvent::ended(&item.id.to_string(), outcome));
-        }
-
-        self.publish().await;
+        self.settle(&item.id, ended).await;
     }
 
-    /// Check that the stored lease matches `lease` without removing the entry.
-    async fn verify_lease(&self, id: &DownloadId, lease: LeaseId) -> bool {
+    /// Whether the job holding `lease` was cancelled. `None` when the stored
+    /// lease is another, or there is none. The entry is not removed.
+    async fn cancelled_under(&self, id: &DownloadId, lease: LeaseId) -> Option<bool> {
         let active = self.active.lock().await;
-        active.get(id).is_some_and(|job| job.lease == lease)
+        let job = active.get(id).filter(|job| job.lease == lease);
+        let cancelled = job.map(|job| job.cancel.is_cancelled());
+        drop(active);
+        cancelled
     }
 
     /// Handle the result of a completed job.
@@ -609,14 +610,12 @@ impl DownloadManagerImpl {
     ) -> Option<DownloadOutcome> {
         match result {
             Ok(completed) => self.handle_success(item, completed).await,
-            Err(DownloadError::Cancelled) => {
-                self.handle_cancellation(item).await;
-                Some(DownloadOutcome::Cancelled)
-            }
+            Err(DownloadError::Cancelled) => Some(DownloadOutcome::Cancelled),
             Err(e) => {
-                let error = e.to_string();
-                self.handle_failure(item, &e).await;
-                Some(DownloadOutcome::Failed { error })
+                tracing::warn!(id = %item.id, error = %e, "Download failed");
+                Some(DownloadOutcome::Failed {
+                    error: e.to_string(),
+                })
             }
         }
     }
@@ -679,9 +678,6 @@ impl DownloadManagerImpl {
                 file_count = complete.ordered_paths.len(),
                 "All files downloaded, registering model"
             );
-            // Record completion ONCE per group (not per shard)
-            self.record_completion_in_run(item, CompletionKind::Downloaded)
-                .await;
             Some(self.register_completed_model(&item.id, complete).await)
         } else {
             tracing::debug!(
@@ -711,38 +707,7 @@ impl DownloadManagerImpl {
             ordered_paths: completed.all_paths.clone(),
             metadata: GroupMetadata::of(&completed, file_entries),
         };
-        // Record completion before registering
-        self.record_completion_in_run(item, CompletionKind::Downloaded)
-            .await;
         self.register_completed_model(&item.id, complete).await
-    }
-
-    /// Handle download cancellation.
-    async fn handle_cancellation(&self, item: &QueuedItem) {
-        tracing::info!(id = %item.id, "Download cancelled");
-
-        // Clean up shard tracker if this was part of a group
-        if let Some(group_id) = &item.group_id {
-            self.shard_tracker.lock().await.on_group_failed(group_id);
-        }
-
-        // Record cancellation
-        self.record_completion_in_run(item, CompletionKind::Cancelled)
-            .await;
-    }
-
-    /// Handle download failure.
-    async fn handle_failure(&self, item: &QueuedItem, e: &DownloadError) {
-        tracing::warn!(id = %item.id, error = %e, "Download failed");
-
-        // Clean up shard tracker if this was part of a group
-        if let Some(group_id) = &item.group_id {
-            self.shard_tracker.lock().await.on_group_failed(group_id);
-        }
-
-        // Record failure
-        self.record_completion_in_run(item, CompletionKind::Failed)
-            .await;
     }
 
     /// Register a completed model (all shards downloaded).
@@ -1072,10 +1037,10 @@ impl DownloadManagerPort for DownloadManagerImpl {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
-    ) -> Result<(usize, usize), DownloadError> {
-        let result = self.queue_download_smart(&repo_id, quantization).await?;
+    ) -> Result<DownloadId, DownloadError> {
+        let id = self.queue_download_smart(&repo_id, quantization).await?;
         self.ensure_runner();
-        Ok((1, result.queued as usize))
+        Ok(id)
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
@@ -1086,35 +1051,16 @@ impl DownloadManagerPort for DownloadManagerImpl {
     }
 
     async fn cancel_download(&self, id: &DownloadId) -> Result<(), DownloadError> {
-        // Check if active, cancel via token
-        {
-            let active = self.active.lock().await;
-            if let Some(job) = active.get(id) {
-                job.cancel.cancel();
-                tracing::info!(id = %id, "Cancelled active download");
-                return Ok(());
-            }
+        if self.stop_download(id).await {
+            Ok(())
+        } else {
+            Err(DownloadError::not_in_queue(id.to_string()))
         }
-
-        // Otherwise remove from queue
-        self.queue.write().await.remove(id)?;
-        tracing::info!(id = %id, "Removed download from queue");
-        self.publish().await;
-        Ok(())
     }
 
     async fn cancel_all(&self) -> Result<(), DownloadError> {
-        // Cancel all active downloads
-        {
-            let active = self.active.lock().await;
-            for job in active.values() {
-                job.cancel.cancel();
-            }
-        }
-
-        // Clear queue (drops everything still pending).
-        self.queue.write().await.clear();
-        self.publish().await;
+        // The one being fetched is told to stop; the rest end here.
+        self.stop_all().await;
 
         // Bounded drain: wait up to 5s for active downloads to actually
         // finalize so we don't return while the Python helper subprocesses
@@ -1147,10 +1093,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
     }
 
     async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError> {
-        self.queue.write().await.remove(id)?;
-        tracing::info!(id = %id, "Removed download from queue");
-        self.publish().await;
-        Ok(())
+        self.take_off(id).await
     }
 
     async fn reorder_queue(
@@ -1168,19 +1111,9 @@ impl DownloadManagerPort for DownloadManagerImpl {
         Ok(actual_position)
     }
 
-    async fn cancel_group(&self, group_id: &str) -> Result<(), DownloadError> {
-        use crate::queue::ShardGroupId;
-
-        let shard_group_id = ShardGroupId::new(group_id);
-        let removed = self.queue.write().await.remove_group(&shard_group_id);
-        self.publish().await;
-        tracing::info!(group_id = %group_id, removed = removed, "Cancelled shard group");
-        Ok(())
-    }
-
-    async fn clear_failed(&self) -> Result<(), DownloadError> {
-        self.queue.write().await.clear_failed();
-        tracing::info!("Cleared failed downloads");
+    async fn clear_finished(&self) -> Result<(), DownloadError> {
+        self.queue.write().await.clear_finished();
+        tracing::info!("Cleared the finished downloads");
         self.publish().await;
         Ok(())
     }
@@ -1198,25 +1131,15 @@ impl DownloadManagerPort for DownloadManagerImpl {
 // Convenience methods for GUI / AppCore compatibility
 // =============================================================================
 
-/// Result of queuing a download with auto-detection.
-#[derive(Debug, Clone)]
-pub struct QueueAutoResult {
-    /// The root download ID for this request.
-    pub root_id: DownloadId,
-    /// Number of weights shards queued (1 for a single file). A projector
-    /// fetched with them is not counted.
-    pub queued: u32,
-    /// Group ID if this is a sharded download.
-    pub group_id: Option<String>,
-}
-
 impl DownloadManagerImpl {
-    /// Queue a download with smart quantization selection.
+    /// Queue a download with smart quantization selection, and answer its
+    /// ID. A request for a download already waiting or running answers that
+    /// download's ID.
     pub async fn queue_download_smart(
         &self,
         repo_id: impl Into<String>,
         quantization: Option<String>,
-    ) -> Result<QueueAutoResult, DownloadError> {
+    ) -> Result<DownloadId, DownloadError> {
         let repo_id = repo_id.into();
 
         let selection = self
@@ -1241,11 +1164,6 @@ impl DownloadManagerImpl {
             .resolve(&repo_id, selection.quantization)
             .await?;
 
-        #[allow(clippy::cast_possible_truncation)]
-        let queued = resolution.shard_count() as u32;
-
-        let group_id = Some(id.to_string());
-
         // `None` is a repeat request, attached to the download already in
         // flight: the same answer, and nothing new to announce.
         if let Some(position) = self.enqueue_group(&id, None, &resolution).await? {
@@ -1261,11 +1179,7 @@ impl DownloadManagerImpl {
             self.publish().await;
         }
 
-        Ok(QueueAutoResult {
-            root_id: id,
-            queued,
-            group_id,
-        })
+        Ok(id)
     }
 }
 

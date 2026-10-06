@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 use gglib_core::download::{
     CompletionKey, DownloadError, DownloadId, DownloadOutcome, FINISHED_LIMIT, FinishedDownload,
-    QueueSnapshot, download_title,
+    QueueSnapshot,
 };
 use gglib_core::ports::ResolvedFile;
 
@@ -141,31 +141,22 @@ impl DownloadQueue {
         self.pending.pop_front()
     }
 
-    /// Clear the queue: every pending file, and the record of how earlier
-    /// downloads ended.
-    pub(crate) fn clear(&mut self) {
-        self.pending.clear();
-        self.finished.clear();
+    /// Take every pending file of the download `id` off the queue, and
+    /// answer them in order.
+    pub(crate) fn take_pending(&mut self, id: &DownloadId) -> Vec<QueuedItem> {
+        let (taken, kept): (VecDeque<_>, VecDeque<_>) =
+            self.pending.drain(..).partition(|item| &item.id == id);
+        self.pending = kept;
+        taken.into()
     }
 
-    /// Remove a download from the pending queue, or else its entry from the
-    /// finished list.
-    pub(crate) fn remove(&mut self, id: &DownloadId) -> Result<(), DownloadError> {
-        let initial_pending = self.pending.len();
-        self.pending.retain(|item| &item.id != id);
-
-        if self.pending.len() < initial_pending {
-            return Ok(());
-        }
-
-        let initial_finished = self.finished.len();
-        self.forget_outcome(id);
-
-        if self.finished.len() < initial_finished {
-            Ok(())
-        } else {
-            Err(DownloadError::not_in_queue(id.to_string()))
-        }
+    /// The downloads with a file pending, each once, in the order they run.
+    pub(crate) fn pending_ids(&self) -> Vec<DownloadId> {
+        let first_files = self.waiting(None);
+        first_files
+            .into_iter()
+            .map(|item| item.id.clone())
+            .collect()
     }
 
     /// Move a waiting download, every file of it, to a new position.
@@ -228,33 +219,23 @@ impl DownloadQueue {
     }
 
     /// Record how the download `id` ended, in place of any earlier ending of
-    /// the same download. The oldest entries make way past
-    /// [`FINISHED_LIMIT`].
-    pub(crate) fn record_outcome(&mut self, id: &DownloadId, outcome: DownloadOutcome) {
+    /// it, and answer the entry. The oldest make way past [`FINISHED_LIMIT`].
+    pub(crate) fn record_outcome(
+        &mut self,
+        id: &DownloadId,
+        outcome: DownloadOutcome,
+    ) -> FinishedDownload {
         self.forget_outcome(id);
-        self.finished.push(FinishedDownload {
-            id: id.to_string(),
-            title: download_title(id),
-            outcome,
-        });
+        let ended = FinishedDownload::new(id, outcome);
+        self.finished.push(ended.clone());
         let excess = self.finished.len().saturating_sub(FINISHED_LIMIT);
         self.finished.drain(..excess);
+        ended
     }
 
-    /// Drop the failures from the finished list.
-    pub(crate) fn clear_failed(&mut self) {
-        self.finished
-            .retain(|entry| !matches!(entry.outcome, DownloadOutcome::Failed { .. }));
-    }
-
-    // --- Shard group helpers ---
-
-    /// Remove all pending items belonging to a shard group.
-    pub(crate) fn remove_group(&mut self, group_id: &ShardGroupId) -> usize {
-        let initial = self.pending.len();
-        self.pending
-            .retain(|item| item.group_id.as_ref() != Some(group_id));
-        initial - self.pending.len()
+    /// Drop every entry of the finished list.
+    pub(crate) fn clear_finished(&mut self) {
+        self.finished.clear();
     }
 
     // --- Private helpers ---
@@ -277,11 +258,14 @@ impl DownloadQueue {
         }
     }
 
-    /// Drop what is recorded of an earlier run of `id`. A download queued
-    /// again starts clean: its old ending is not this run's.
-    fn forget_outcome(&mut self, id: &DownloadId) {
+    /// Drop what is recorded of an earlier run of `id`, and answer whether
+    /// there was anything. A download queued again starts clean: its old
+    /// ending is not this run's.
+    pub(crate) fn forget_outcome(&mut self, id: &DownloadId) -> bool {
+        let before = self.finished.len();
         let id = id.to_string();
         self.finished.retain(|entry| entry.id != id);
+        self.finished.len() < before
     }
 }
 
@@ -466,63 +450,49 @@ mod tests {
         assert_eq!(snapshot.waiting.len(), 1);
     }
 
-    #[test]
-    fn test_remove_group() {
-        let mut queue = DownloadQueue::new(10);
-        let id = test_id("model/x", Some("Q4_K_M"));
-        let shards = vec![ResolvedFile::new("s1.gguf"), ResolvedFile::new("s2.gguf")];
-        let key = test_completion_key(&id);
-        queue.queue_sharded(&id, &key, &shards, None).unwrap();
-
-        let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
-        let removed = queue.remove_group(&group_id);
-
-        assert_eq!(removed, 2);
-        assert!(queue.pending.is_empty());
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
-    // Tests for new port methods: remove, reorder, retry, clear_failed, max_size
+    // Tests for new port methods: remove, reorder, retry, clear_finished, max_size
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// Taking a download off takes every pending file of it, in order, and
+    /// no other download's.
     #[test]
-    fn test_remove_pending_item() {
+    fn taking_a_download_takes_every_pending_file_of_it() {
         let mut queue = DownloadQueue::new(10);
         let id_a = test_id("a", None);
         let id_b = test_id("b", None);
-        queue
-            .queue(id_a.clone(), test_completion_key(&id_a), false)
-            .unwrap();
+        let shards = [ResolvedFile::new("s1.gguf"), ResolvedFile::new("s2.gguf")];
+        let key = test_completion_key(&id_a);
+        queue.queue_sharded(&id_a, &key, &shards, None).unwrap();
         queue
             .queue(id_b.clone(), test_completion_key(&id_b), false)
             .unwrap();
+        assert_eq!(queue.pending_ids(), [id_a.clone(), id_b.clone()]);
 
-        queue.remove(&id_a).unwrap();
+        let taken = queue.take_pending(&id_a);
 
+        let names: Vec<_> = taken
+            .iter()
+            .map(|item| item.shard_info.as_ref().unwrap().filename.as_str())
+            .collect();
+        assert_eq!(names, ["s1.gguf", "s2.gguf"]);
         assert!(!queue.is_queued(&id_a));
-        assert!(queue.is_queued(&id_b));
-        assert_eq!(queue.pending_len(), 1);
+        assert_eq!(queue.pending_ids(), [id_b]);
+        assert!(queue.take_pending(&id_a).is_empty(), "nothing left of it");
     }
 
     #[test]
-    fn removing_a_finished_download_drops_its_outcome() {
+    fn forgetting_a_finished_download_drops_its_outcome_alone() {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("a", None);
         queue.record_outcome(&id, failed("error"));
+        queue.record_outcome(&test_id("b", None), failed("error"));
 
-        assert_eq!(queue.finished().len(), 1);
-        queue.remove(&id).unwrap();
-        assert!(queue.finished().is_empty());
-        assert!(queue.remove(&id).is_err(), "nothing left to remove");
-    }
+        assert!(queue.forget_outcome(&id));
 
-    #[test]
-    fn test_remove_not_found() {
-        let mut queue = DownloadQueue::new(10);
-        let id = test_id("nonexistent", None);
-
-        let result = queue.remove(&id);
-        assert!(matches!(result, Err(DownloadError::NotInQueue { .. })));
+        let left: Vec<_> = queue.finished().iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(left, ["b"]);
+        assert!(!queue.forget_outcome(&id), "nothing left to forget");
     }
 
     #[test]
@@ -646,19 +616,21 @@ mod tests {
         assert_eq!(ids, vec!["sharded", "sharded", "a", "b"]);
     }
 
-    /// Clearing the failures leaves the other outcomes where they were.
+    /// Clearing the finished list drops every outcome and nothing else.
     #[test]
-    fn clear_failed_drops_only_the_failures() {
+    fn clear_finished_drops_every_outcome_and_no_pending_file() {
         let mut queue = DownloadQueue::new(10);
+        let waiting = test_id("w", None);
+        let key = test_completion_key(&waiting);
+        queue.queue(waiting, key, false).unwrap();
         queue.record_outcome(&test_id("a", None), failed("err1"));
         queue.record_outcome(&test_id("b", None), DownloadOutcome::Cancelled);
-        queue.record_outcome(&test_id("c", None), failed("err2"));
-        assert_eq!(queue.snapshot(0, None, None).finished.len(), 3);
+        assert_eq!(queue.snapshot(0, None, None).finished.len(), 2);
 
-        queue.clear_failed();
+        queue.clear_finished();
 
-        let left: Vec<_> = queue.finished().iter().map(|f| f.id.as_str()).collect();
-        assert_eq!(left, ["b"]);
+        assert!(queue.finished().is_empty());
+        assert_eq!(queue.pending_len(), 1);
     }
 
     /// An outcome carries the download's id and title, and the snapshot

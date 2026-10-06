@@ -244,12 +244,8 @@ fn model_fetch_routes() -> Router<AppState> {
             post(handlers::model::downloads::reorder_full),
         )
         .route(
-            "/downloads/shard-group/{id}/cancel",
-            post(handlers::model::downloads::cancel_shard_group),
-        )
-        .route(
-            "/downloads/failed/clear",
-            post(handlers::model::downloads::clear_failed),
+            "/downloads/finished/clear",
+            post(handlers::model::downloads::clear_finished),
         )
         // HuggingFace discovery
         .route("/hf/search", post(handlers::model::hf::search))

@@ -8,7 +8,9 @@ import type { QueueSnapshot } from "./QueueSnapshot";
  * The queue itself travels as [`DownloadEvent::QueueSnapshot`]: the same
  * [`QueueSnapshot`] the REST route serves, with every row's bytes, speed and
  * text. The other four say that something ended, for a notice to the user
- * and a refresh of the library; they carry no state a snapshot lacks.
+ * and a refresh of the library; they carry no state a snapshot lacks. An
+ * ending's `text` is its finished entry's, ready to print; the outcome
+ * itself, with its message or error, is on that entry and not repeated here.
  * TypeScript reads this type through its generated binding; there is no
  * mirror to keep in step.
  */
@@ -18,21 +20,25 @@ export type DownloadEvent = { "type": "queue_snapshot" } & QueueSnapshot | { "ty
  */
 id: string, 
 /**
- * Optional success message.
+ * How it ended, in words: its finished entry's text.
  */
-message?: string, } | { "type": "download_failed", 
+text: string, } | { "type": "download_failed", 
 /**
  * Canonical ID of the download.
  */
 id: string, 
 /**
- * Error message describing what went wrong.
+ * How it ended, in words: its finished entry's text.
  */
-error: string, } | { "type": "download_cancelled", 
+text: string, } | { "type": "download_cancelled", 
 /**
  * Canonical ID of the download.
  */
-id: string, } | { "type": "queue_run_complete", 
+id: string, 
+/**
+ * How it ended, in words: its finished entry's text.
+ */
+text: string, } | { "type": "queue_run_complete", 
 /**
  * Complete summary of the queue run.
  */

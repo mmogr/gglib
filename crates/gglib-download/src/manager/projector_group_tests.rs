@@ -40,8 +40,7 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
         .await
         .unwrap();
 
-    assert_eq!(queued.queued, 3, "three shards, whatever else is fetched");
-    assert_eq!(queued.root_id.to_string(), "owner/zeta-GGUF:Q8_0");
+    assert_eq!(queued.to_string(), "owner/zeta-GGUF:Q8_0");
     let snapshot = manager.get_queue_snapshot().await.unwrap();
     assert!(snapshot.active.is_none());
     assert_eq!(snapshot.waiting.len(), 1, "one row for the model");

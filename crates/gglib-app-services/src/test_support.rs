@@ -3,7 +3,7 @@
 //! All types are `pub(crate)` and only compiled under `#[cfg(test)]`
 //! (the module is declared with `#[cfg(test)] mod test_support;` in lib.rs).
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
@@ -25,9 +25,11 @@ pub(crate) use crate::test_support_hf::MockHfClient;
 ///
 /// - `fail_cancel = true` → `cancel_download` returns `DownloadError::NotFound`
 /// - `reorder_position` → the position value returned by `reorder_queue`
+/// - `calls` → the cancel, remove and clear calls it was sent, in order
 pub(crate) struct MockDownloadManager {
     pub fail_cancel: bool,
     pub reorder_position: u32,
+    pub calls: Arc<Mutex<Vec<String>>>,
 }
 
 impl Default for MockDownloadManager {
@@ -35,6 +37,7 @@ impl Default for MockDownloadManager {
         Self {
             fail_cancel: false,
             reorder_position: 1,
+            calls: Arc::default(),
         }
     }
 }
@@ -48,8 +51,13 @@ impl MockDownloadManager {
     pub(crate) fn failing_cancel() -> Self {
         Self {
             fail_cancel: true,
-            reorder_position: 1,
+            ..Self::default()
         }
+    }
+
+    /// Keep that `call` was sent.
+    fn record(&self, call: String) {
+        self.calls.lock().unwrap().push(call);
     }
 }
 
@@ -63,8 +71,8 @@ impl DownloadManagerPort for MockDownloadManager {
         self: Arc<Self>,
         _repo_id: String,
         _quantization: Option<String>,
-    ) -> Result<(usize, usize), DownloadError> {
-        Ok((1, 1))
+    ) -> Result<DownloadId, DownloadError> {
+        Ok(DownloadId::new("mock/model", Some("Q8_0")))
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
@@ -72,6 +80,7 @@ impl DownloadManagerPort for MockDownloadManager {
     }
 
     async fn cancel_download(&self, id: &DownloadId) -> Result<(), DownloadError> {
+        self.record(format!("cancel_download {id}"));
         if self.fail_cancel {
             Err(DownloadError::NotFound {
                 message: id.to_string(),
@@ -89,7 +98,8 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(0)
     }
 
-    async fn remove_from_queue(&self, _id: &DownloadId) -> Result<(), DownloadError> {
+    async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError> {
+        self.record(format!("remove_from_queue {id}"));
         Ok(())
     }
 
@@ -101,11 +111,8 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(self.reorder_position)
     }
 
-    async fn cancel_group(&self, _group_id: &str) -> Result<(), DownloadError> {
-        Ok(())
-    }
-
-    async fn clear_failed(&self) -> Result<(), DownloadError> {
+    async fn clear_finished(&self) -> Result<(), DownloadError> {
+        self.record("clear_finished".to_string());
         Ok(())
     }
 

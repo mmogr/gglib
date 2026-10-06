@@ -25,7 +25,6 @@ export interface UseDownloadManagerResult {
   refreshQueue: () => Promise<void>;
   queueModel: (modelId: string, quantization?: string) => Promise<QueueDownloadResponse>;
   cancel: (id: string) => Promise<void>;
-  clearFailed: () => Promise<void>;
   /** Dismiss the queue run summary banner */
   clearQueueSummary: () => void;
 }
@@ -35,20 +34,6 @@ interface UseDownloadManagerOptions {
   onCompleted?: (info: DownloadCompletionInfo) => void;
   /** Called when a download fails, for the toast. */
   onFailed?: (info: DownloadFailureInfo) => void;
-}
-
-/**
- * The name the queue last gave the download `id`.
- *
- * A download that just ended is still the snapshot's active row: its ending
- * is sent before the snapshot that moves it to `finished`. With no snapshot
- * that names it, the id stands in.
- */
-function titleOf(snapshot: QueueSnapshot | null, id: string): string {
-  if (snapshot?.active?.id === id) return snapshot.active.text.title;
-  const row = snapshot?.waiting.find((waiting) => waiting.id === id);
-  if (row) return row.text.title;
-  return snapshot?.finished.find((ended) => ended.id === id)?.title ?? id;
 }
 
 /**
@@ -126,15 +111,11 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
           return;
         case 'download_completed':
           cancelSettled(event.id);
-          onCompletedRef.current?.({ id: event.id, title: titleOf(snapshotRef.current, event.id) });
+          onCompletedRef.current?.({ id: event.id, text: event.text });
           return;
         case 'download_failed':
           cancelSettled(event.id);
-          onFailedRef.current?.({
-            id: event.id,
-            title: titleOf(snapshotRef.current, event.id),
-            error: event.error,
-          });
+          onFailedRef.current?.({ id: event.id, text: event.text });
           return;
         case 'download_cancelled':
           cancelSettled(event.id);
@@ -185,11 +166,6 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     }
   }, [refreshQueue, cancelSettled]);
 
-  const clearFailed = useCallback(async () => {
-    await getTransport().clearFailedDownloads();
-    await refreshQueue();
-  }, [refreshQueue]);
-
   const clearQueueSummary = useCallback(() => {
     setLastQueueSummary(null);
   }, []);
@@ -203,7 +179,6 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     refreshQueue,
     queueModel,
     cancel,
-    clearFailed,
     clearQueueSummary,
   };
 }

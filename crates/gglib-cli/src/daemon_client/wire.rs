@@ -7,8 +7,11 @@
 //! pairing is visible from the tree; `StartServerDto` narrows
 //! `gglib_app_services::types::StartServerResponse`, and `QueueDownloadBody`
 //! pairs with `gglib_axum::handlers::model::downloads`. The tests in
-//! `wire_tests.rs` pin `StartProxyBody` and `StartServerDto`.
-//! `ProxyStatusDto` and `QueueDownloadBody` are not pinned.
+//! `wire_tests.rs` pin `StartProxyBody` and `StartServerDto`, and the test of
+//! the queue request in `calls.rs` reads `QueueDownloadBody` as it was sent.
+//! `ProxyStatusDto` is not pinned. The answer to a
+//! queue request has no twin here: the CLI reads the daemon's own
+//! `gglib_app_services::types::QueueDownloadResponse`.
 //!
 //! The remote tunnel's shapes are not here: the CLI reads and sends
 //! `gglib_app_services`' own `RemoteStatus`, `RemoteDevice` and the rest, the

@@ -43,7 +43,16 @@ fn test_event_names() {
 /// the frontend listened for the wrong event names.
 #[test]
 fn download_event_names_are_stable() {
-    use crate::download::{QueueRunSummary, QueueSnapshot};
+    use crate::download::{
+        DownloadId, DownloadOutcome, FinishedDownload, QueueRunSummary, QueueSnapshot,
+    };
+
+    let ended = |outcome| {
+        DownloadEvent::ended(&FinishedDownload::new(
+            &DownloadId::from_model("id"),
+            outcome,
+        ))
+    };
 
     let summary = QueueRunSummary {
         run_id: uuid::Uuid::nil(),
@@ -64,11 +73,16 @@ fn download_event_names_are_stable() {
             "download:queue_snapshot",
         ),
         (
-            DownloadEvent::completed("id", None::<String>),
+            ended(DownloadOutcome::Completed { message: None }),
             "download:completed",
         ),
-        (DownloadEvent::failed("id", "error"), "download:failed"),
-        (DownloadEvent::cancelled("id"), "download:cancelled"),
+        (
+            ended(DownloadOutcome::Failed {
+                error: "error".to_string(),
+            }),
+            "download:failed",
+        ),
+        (ended(DownloadOutcome::Cancelled), "download:cancelled"),
         (
             DownloadEvent::queue_run_complete(summary),
             "download:queue_run_complete",

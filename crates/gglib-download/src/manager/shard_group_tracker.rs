@@ -3,7 +3,7 @@
 //! This module provides a pure state tracker that accumulates shard completion
 //! events and signals when all shards in a group have been downloaded.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -90,6 +90,11 @@ pub(crate) struct GroupComplete {
     pub metadata: GroupMetadata,
 }
 
+/// How many closed groups the tracker remembers. The manager closes a group
+/// as its download ends, when no file of it is being fetched or waiting, so
+/// it sends none after; the list is a second guard, and this many is margin.
+const CLOSED_LIMIT: usize = 32;
+
 /// Tracker for coordinating shard group completion.
 ///
 /// This is a pure state machine that accumulates shard completions
@@ -101,6 +106,10 @@ pub(crate) struct ShardGroupTracker {
     /// INVARIANT: `groups` contains ONLY in-progress groups.
     /// Terminal paths (completion, failure, cancel) MUST remove entries from `groups`.
     groups: HashMap<ShardGroupId, ShardGroupState>,
+    /// The groups closed most recently, oldest first: those of downloads
+    /// that ended, completed, failed or cancelled. A file of one that lands
+    /// afterwards is ignored.
+    closed: VecDeque<ShardGroupId>,
 }
 
 impl ShardGroupTracker {
@@ -113,7 +122,8 @@ impl ShardGroupTracker {
     ///
     /// Returns `Some(GroupComplete)` if this was the last shard needed.
     /// This method is idempotent - recording the same shard index twice
-    /// will not cause issues.
+    /// will not cause issues. A file of a group that was closed is ignored:
+    /// it does not open the group again.
     ///
     /// # Arguments
     ///
@@ -135,6 +145,12 @@ impl ShardGroupTracker {
         expected_total: u32,
         metadata: &GroupMetadata,
     ) -> Option<GroupComplete> {
+        // A closed group stays closed. Group ids are never reused, so this
+        // can only be a file of the download that ended.
+        if self.closed.contains(group_id) {
+            return None;
+        }
+
         // Get or create the group state
         let state = self
             .groups
@@ -164,11 +180,15 @@ impl ShardGroupTracker {
         None
     }
 
-    /// Remove a shard group that was cancelled or failed.
-    ///
-    /// This prevents memory leaks from incomplete downloads.
-    pub(crate) fn on_group_failed(&mut self, group_id: &ShardGroupId) {
+    /// Close a group whose download has ended, however it ended: forget
+    /// what it had, and remember that it is closed.
+    pub(crate) fn close(&mut self, group_id: &ShardGroupId) {
         self.groups.remove(group_id);
+        if !self.closed.contains(group_id) {
+            self.closed.push_back(group_id.clone());
+        }
+        let excess = self.closed.len().saturating_sub(CLOSED_LIMIT);
+        self.closed.drain(..excess);
     }
 
     /// Check if there are any in-progress shard groups.
