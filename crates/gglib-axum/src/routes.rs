@@ -11,35 +11,16 @@ use axum::routing::{delete, get, post, put};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::access::{DaemonAccess, host_guard, origin_guard};
+use crate::access::DaemonAccess;
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
 use crate::trust::{ApiCredentials, bearer_guard};
 use gglib_core::CorsConfig;
 use gglib_core::services::SettingsCache;
-
-/// Build CORS layer from configuration. It lets an origin read exactly when
-/// [`CorsConfig::allows_origin`] does, the test `origin_guard` asks too.
-fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    let origins = if matches!(config, CorsConfig::AllowAll) {
-        AllowOrigin::any()
-    } else {
-        let config = config.clone();
-        AllowOrigin::predicate(move |origin: &axum::http::HeaderValue, _req_headers| {
-            origin
-                .to_str()
-                .is_ok_and(|origin| config.allows_origin(origin))
-        })
-    };
-    CorsLayer::new()
-        .allow_origin(origins)
-        .allow_methods(Any)
-        .allow_headers(Any)
-}
+use gglib_proxy::access::{build_cors_layer, host_guard, origin_guard};
 
 /// Build all API routes without `/api` prefix (for nesting under /api).
 ///
@@ -350,7 +331,7 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
         .layer(middleware::from_fn_with_state(credentials, bearer_guard))
         .layer(middleware::from_fn_with_state(
             Arc::new(cfg.clone()),
-            origin_guard,
+            origin_guard::<DaemonAccess>,
         ))
         .layer(cors);
 
@@ -380,8 +361,10 @@ pub fn create_router(
     cors_config: &CorsConfig,
     access: Arc<DaemonAccess>,
 ) -> Router {
-    base_router(state, cors_config, &access)
-        .layer(middleware::from_fn_with_state(access, host_guard))
+    base_router(state, cors_config, &access).layer(middleware::from_fn_with_state(
+        access,
+        host_guard::<DaemonAccess>,
+    ))
 }
 
 /// Create a router with API routes and static asset serving.
@@ -423,7 +406,10 @@ pub fn create_spa_router<P: AsRef<Path>>(
     // after the fallback so a rebound page cannot even load the dashboard.
     base_router(state, cors_config, &access)
         .fallback_service(serve_dir)
-        .layer(middleware::from_fn_with_state(access, host_guard))
+        .layer(middleware::from_fn_with_state(
+            access,
+            host_guard::<DaemonAccess>,
+        ))
 }
 
 /// Health check endpoint.

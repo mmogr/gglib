@@ -4,7 +4,9 @@
 // lints only warn on it; here it is an error wherever clippy runs.
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
-mod access;
+// Public, like the nine named below: gglib-axum installs this module's Host
+// guard, origin guard and CORS layer in the daemon's router too.
+pub mod access;
 mod admin;
 #[allow(
     clippy::redundant_closure_for_method_calls,
