@@ -25,7 +25,7 @@ Axum backend (HTTP response) → typed result
 | `client.ts` | HTTP client with auth injection, retry, and error normalization; `apiFetch` for a stream or a body that is not JSON |
 | `renew.ts` | A stream refused with a 401 renews the session's credential before it reconnects |
 | `daemonToken.ts` | The daemon's token from the link `gglib web` prints: stripped from the address bar, kept until the daemon next starts |
-| `chat.ts` | Conversations and messages |
+| `chat.ts` | Conversations and messages, and a chat's title asked of its model (`POST /api/chat`) |
 | `servers.ts` | llama.cpp server lifecycle and proxy |
 | `downloads.ts` | Download queue management |
 | `mcp.ts` | MCP server config, lifecycle and config test |

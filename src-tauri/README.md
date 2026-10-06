@@ -27,7 +27,8 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
 3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the daemon:
    - `/api/models` - List and manage models
    - `/api/servers` - Control llama-server instances
-   - `/api/chat` - Chat history and conversations
+   - `/api/conversations`, `/api/messages` - Chat history and conversations
+   - `/api/chat` - A chat's title
    - `/api/proxy` - Proxy management
    - `/api/downloads` - Download queue management
    - `/api/mcp` - MCP server configuration

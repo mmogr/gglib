@@ -13,13 +13,7 @@ import { clearProxyCache, subscribeProxyDashboard } from '../../../../src/servic
 import { getServerLogs, listenToServerLogs } from '../../../../src/services/platform/serverLogs';
 import { fetchAttachmentBlob, uploadAttachment } from '../../../../src/services/transport/api/attachments';
 import { generateChatTitle } from '../../../../src/services/transport/api/chat';
-import {
-  apiFetch,
-  get,
-  getAuthenticatedFetchConfig,
-  resetClientCache,
-  setApiSession,
-} from '../../../../src/services/transport/api/client';
+import { apiFetch, get, resetClientCache, setApiSession } from '../../../../src/services/transport/api/client';
 import { readFarRunEvents } from '../../../../src/services/transport/api/farChats';
 import { readRunEvents } from '../../../../src/services/transport/api/runs';
 import { streamLlamaInstall, streamLlamaUpdate } from '../../../../src/services/transport/api/setup';
@@ -165,7 +159,6 @@ describe('API auth headers', () => {
     await apiFetch('/api/anything');
 
     expect(new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers).has('Authorization')).toBe(false);
-    expect((await getAuthenticatedFetchConfig()).headers).toEqual({});
   });
 
   it('adds the token over the caller\'s own headers, which it keeps', async () => {
@@ -222,7 +215,6 @@ describe('API auth headers', () => {
     it('asks the desktop where the daemon is once, not on every call', async () => {
       await apiFetch('/api/a');
       await apiFetch('/api/b');
-      await getAuthenticatedFetchConfig();
 
       expect(invoke).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledWith('get_embedded_api_info');

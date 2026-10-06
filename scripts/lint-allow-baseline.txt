@@ -14,7 +14,7 @@ crates/gglib-runtime 90 17
 crates/gglib-agent 4 4
 crates/gglib-sse 0 0
 crates/gglib-cli 101 12
-crates/gglib-axum 28 8
+crates/gglib-axum 25 8
 crates/gglib-tauri 0 0
 crates/gglib-integration-tests 5 5
 src-tauri 22 4

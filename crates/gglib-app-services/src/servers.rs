@@ -378,7 +378,7 @@ impl ServerOps {
     /// Get tool support detection for a running server's model.
     ///
     /// Sources `supports_tool_calls` from the model's `ModelCapabilities` bitflags
-    /// stored in the database (same path used by the chat proxy on every request).
+    /// stored in the database.
     /// `confidence` and `detected_format` are derived by running the detector with
     /// the chat template already stored in `model.metadata` — no disk I/O required.
     pub async fn get_server_tool_support(
