@@ -390,7 +390,7 @@ async fn handle_add_to_queue(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Build the hint bar message including live queue counts.
+/// Build the hint bar message with live counts of downloads, not files.
 fn build_hint_message(active: u32, pending: u32) -> String {
     format!("[a] queue another  [q] quit   ({active} active, {pending} queued)")
 }
@@ -412,7 +412,7 @@ fn parse_inline_quant(s: &str) -> (String, Option<String>) {
     (s.trim().to_string(), None)
 }
 
-/// Returns `true` when there are no active or pending downloads.
+/// Returns `true` when no download is running, between files or waiting.
 fn is_queue_finished(snapshot: &QueueSnapshot) -> bool {
     snapshot.active_count == 0 && snapshot.pending_count == 0
 }

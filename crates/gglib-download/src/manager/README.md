@@ -24,12 +24,18 @@ between the worker (core download logic) and bridges (event emission).
   is on disk (`group_completion.rs`), with the weights as the model's files and
   the projector handed to the registrar apart, to be linked. A projector's bytes
   are reported as the model's progress, never as a shard.
+- **Running download**: The group being fetched, or the one between two of its
+  files (`running.rs`). The queue snapshot gives it one row at position 1 and
+  counts it as active across its file boundaries; every other group is one
+  waiting row. A group is queued once: a repeat request attaches to it.
 
 # Concurrency Model
 
 - Single long-lived runner (never resets `runner_started`)
 - `Notify` for efficient wake-on-work
 - Lease tokens prevent stale finalize commits
-- Lock order: queue → active (consistent everywhere)
+- Lock order: queue → active → tracker (consistent everywhere)
+- A file is started under the queue lock, so it is never off the queue and
+  not yet active
 
 <!-- module-docs:end -->

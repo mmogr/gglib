@@ -219,10 +219,14 @@ pub trait DownloadManagerPort: Send + Sync {
     /// use `cancel_download` instead.
     async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError>;
 
-    /// Reorder a download to a new position in the queue.
+    /// Reorder a waiting download to a new position in the queue.
     ///
-    /// The position is 1-based where 1 is next to run. Returns the actual
-    /// position assigned (may differ if requested position is out of bounds).
+    /// Positions are 1-based and count downloads, as the snapshot numbers
+    /// them: a running download holds position 1 and the first waiting one
+    /// is at 2; with nothing running the first waiting one is at 1. A
+    /// download moves with all of its files, and never ahead of the running
+    /// one. Returns the actual position assigned (may differ if the
+    /// requested position is out of bounds).
     async fn reorder_queue(&self, id: &DownloadId, new_position: u32)
     -> Result<u32, DownloadError>;
 

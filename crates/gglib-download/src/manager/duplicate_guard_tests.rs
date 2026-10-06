@@ -1,4 +1,5 @@
-//! Tests for the duplicate-enqueue guard in `queue_download_smart`.
+//! Tests for the duplicate-enqueue guard in `enqueue_group`, which both
+//! `queue_download_smart` and `queue_download` queue through.
 //!
 //! Kept out of `mod.rs`: the port stubs a real `DownloadManagerImpl` needs are
 //! bulky and self-contained, and that file is already well over the size
@@ -7,6 +8,7 @@
 use super::*;
 use async_trait::async_trait;
 use gglib_core::RepositoryError;
+use gglib_core::download::Quantization;
 use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
@@ -153,6 +155,54 @@ async fn repeat_request_while_pending_attaches_instead_of_duplicating() {
         manager.queue.read().await.pending_len(),
         1,
         "the repeat request must not append a second entry"
+    );
+}
+
+/// `queue_download` is the way in for a repair, and had no guard at all: a
+/// repair of a model already being fetched queued its files a second time
+/// under the running id. Both ways in now attach, pending or active.
+#[tokio::test]
+async fn a_repeat_request_attaches_on_both_paths() {
+    let manager = test_manager();
+    let request = || DownloadRequest::new(REPO.to_string(), Quantization::Q8_0);
+
+    let first = manager.queue_download(request()).await.expect("first");
+    // Stand a marker in for the files kept for registration: an attach
+    // must leave them as they are, not write the repeat request's over them.
+    let marker = vec![ResolvedFile::new("kept-from-the-first-request.gguf")];
+    manager
+        .file_entries_map
+        .lock()
+        .await
+        .insert(first.to_string(), marker.clone());
+    let again = manager.queue_download(request()).await;
+    assert_eq!(again.expect("attaches while pending"), first);
+    assert_eq!(manager.queue.read().await.pending_len(), 1);
+
+    let active_id = start_head(&manager).await;
+    let again = manager.queue_download(request()).await;
+    assert_eq!(again.expect("attaches while active"), active_id);
+    let smart = manager
+        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .await
+        .expect("attaches while active");
+    assert_eq!(smart.root_id, active_id);
+
+    assert_eq!(
+        manager.queue.read().await.pending_len(),
+        0,
+        "neither repeat request may queue the running download again"
+    );
+    let kept = manager
+        .file_entries_map
+        .lock()
+        .await
+        .get(&first.to_string())
+        .cloned();
+    assert_eq!(
+        kept,
+        Some(marker),
+        "an attach must not replace the files kept for registration"
     );
 }
 

@@ -1,12 +1,13 @@
 #![doc = include_str!("README.md")]
 mod group_items;
+mod rows;
 mod shard_group;
 mod types;
 
 use std::collections::VecDeque;
 
 use gglib_core::download::{
-    CompletionKey, DownloadError, DownloadId, DownloadStatus, QueueSnapshot,
+    CompletionKey, DownloadError, DownloadId, DownloadStatus, QueueSnapshot, QueuedDownload,
 };
 use gglib_core::ports::ResolvedFile;
 
@@ -91,7 +92,7 @@ impl DownloadQueue {
         has_active: bool,
     ) -> Result<u32, DownloadError> {
         self.check_not_queued(&id)?;
-        self.check_capacity(1)?;
+        self.check_capacity(None)?;
         self.remove_from_failed(&id);
 
         let item = QueuedItem::new(id, completion_key);
@@ -110,32 +111,31 @@ impl DownloadQueue {
     /// Queue a download group: every file of one model, with a shared
     /// `group_id`. The weights come first; a projector is the last file.
     ///
-    /// Returns the 1-based queue position of the first file.
+    /// The group is one download however many files it has. Returns its
+    /// 1-based position among the downloads, behind `running` and every
+    /// download already waiting.
     pub(crate) fn queue_sharded(
         &mut self,
         id: &DownloadId,
         completion_key: &CompletionKey,
         shard_files: &[ResolvedFile],
-        has_active: bool,
+        running: Option<&DownloadId>,
     ) -> Result<u32, DownloadError> {
         if shard_files.is_empty() {
             return Err(DownloadError::not_in_queue(id.to_string()));
         }
 
         self.check_not_queued(id)?;
-        self.check_capacity(shard_files.len())?;
+        self.check_capacity(running)?;
         self.remove_from_failed(id);
 
-        let first_position = if has_active {
-            usize_to_u32_saturating(self.pending.len()).saturating_add(2)
-        } else {
-            usize_to_u32_saturating(self.pending.len()).saturating_add(1)
-        };
+        let position = rows::first_waiting_position(running.is_some())
+            .saturating_add(usize_to_u32_saturating(self.waiting(running).len()));
 
         let items = group_items::group_items(id, completion_key, shard_files);
         self.pending.extend(items);
 
-        Ok(first_position)
+        Ok(position)
     }
 
     /// Pop the next item from the front of the queue.
@@ -168,96 +168,61 @@ impl DownloadQueue {
         }
     }
 
-    /// Reorder a queued item (or shard group) to a new position.
+    /// Move a waiting download, every file of it, to a new position.
     ///
-    /// Returns the actual 1-based position where the item(s) were placed.
+    /// Positions count downloads, as the snapshot numbers them: the first
+    /// waiting download is at 2 behind `running`, and at 1 when nothing is
+    /// running. The pending files of `running` stay at the head of the queue:
+    /// nothing is placed before them, and they are not moved.
+    ///
+    /// Returns the 1-based position the download now holds.
     pub(crate) fn reorder(
         &mut self,
         id: &DownloadId,
         new_position: u32,
-        has_active: bool,
+        running: Option<&DownloadId>,
     ) -> Result<u32, DownloadError> {
-        // Find item(s) to move (handles shard groups)
-        let group_id = self
-            .pending
-            .iter()
-            .find(|item| &item.id == id)
-            .and_then(|item| item.group_id.clone());
-
-        let items_to_move: Vec<_> = if let Some(ref gid) = group_id {
-            self.pending
-                .iter()
-                .filter(|item| item.group_id.as_ref() == Some(gid))
-                .cloned()
-                .collect()
-        } else {
-            self.pending
-                .iter()
-                .filter(|item| &item.id == id)
-                .cloned()
-                .collect()
-        };
-
-        if items_to_move.is_empty() {
+        if !self.is_queued(id) {
             return Err(DownloadError::not_in_queue(id.to_string()));
         }
-
-        // Remove then reinsert at new position
-        if let Some(ref gid) = group_id {
-            self.pending
-                .retain(|item| item.group_id.as_ref() != Some(gid));
-        } else {
-            self.pending.retain(|item| &item.id != id);
+        if running == Some(id) {
+            return Ok(1);
         }
 
-        // Convert 1-based position to 0-based index
-        let target_index = if has_active {
-            (new_position.saturating_sub(2)) as usize
-        } else {
-            (new_position.saturating_sub(1)) as usize
-        };
-        let insert_pos = target_index.min(self.pending.len());
+        let (moved, kept): (VecDeque<_>, VecDeque<_>) =
+            self.pending.drain(..).partition(|item| &item.id == id);
+        self.pending = kept;
 
-        // Insert items at new position preserving order
-        for (offset, item) in items_to_move.into_iter().enumerate() {
-            let pos = insert_pos + offset;
-            if pos >= self.pending.len() {
-                self.pending.push_back(item);
-            } else {
-                self.pending.push_back(item);
-                let len = self.pending.len();
-                for i in (pos + 1..len).rev() {
-                    self.pending.swap(i, i - 1);
-                }
-            }
+        let first = rows::first_waiting_position(running.is_some());
+        let slot = (new_position.saturating_sub(first) as usize).min(self.waiting(running).len());
+        let index = self.waiting_index(running, slot);
+        for (offset, item) in moved.into_iter().enumerate() {
+            self.pending.insert(index + offset, item);
         }
 
-        // Return 1-based position
-        let result_position = if has_active {
-            usize_to_u32_saturating(insert_pos).saturating_add(2)
-        } else {
-            usize_to_u32_saturating(insert_pos).saturating_add(1)
-        };
-
-        Ok(result_position)
+        Ok(first.saturating_add(usize_to_u32_saturating(slot)))
     }
 
     /// Get a snapshot of the current queue state for API responses.
     ///
-    /// The `current_item` is the download currently being processed (if any).
-    pub(crate) fn snapshot(
-        &self,
-        current_item: Option<gglib_core::download::QueuedDownload>,
-    ) -> QueueSnapshot {
-        let base_position = if current_item.is_some() { 2 } else { 1 };
+    /// `running` is the row of the running download, if any: the one being
+    /// fetched, or between two of its files. Each waiting download is one
+    /// row behind it, however many files it has, and the pending files of
+    /// the running download are no row at all.
+    pub(crate) fn snapshot(&self, running: Option<QueuedDownload>) -> QueueSnapshot {
+        let first = rows::first_waiting_position(running.is_some());
 
-        let pending: Vec<_> = self
-            .pending
-            .iter()
+        let waiting: Vec<_> = self
+            .waiting_but(|item| {
+                running
+                    .as_ref()
+                    .is_some_and(|row| row.id == item.canonical_id())
+            })
+            .into_iter()
             .enumerate()
             .map(|(idx, item)| {
                 item.to_dto(
-                    base_position + usize_to_u32_saturating(idx),
+                    first.saturating_add(usize_to_u32_saturating(idx)),
                     DownloadStatus::Queued,
                 )
             })
@@ -265,14 +230,12 @@ impl DownloadQueue {
 
         let failed: Vec<_> = self.failed.iter().map(types::FailedItem::to_dto).collect();
 
-        let active_count = u32::from(current_item.is_some());
-        let pending_count = usize_to_u32_saturating(pending.len());
+        let active_count = u32::from(running.is_some());
+        let pending_count = usize_to_u32_saturating(waiting.len());
 
-        let mut items = Vec::with_capacity(1 + pending.len());
-        if let Some(current) = current_item {
-            items.push(current);
-        }
-        items.extend(pending);
+        let mut items = Vec::with_capacity(1 + waiting.len());
+        items.extend(running);
+        items.extend(waiting);
 
         QueueSnapshot {
             items,
@@ -313,8 +276,10 @@ impl DownloadQueue {
         }
     }
 
-    fn check_capacity(&self, additional: usize) -> Result<(), DownloadError> {
-        if self.pending.len() + additional > self.max_size as usize {
+    /// Room for one more waiting download. The files of `running` take no
+    /// place, and a download is one place however many files it has.
+    fn check_capacity(&self, running: Option<&DownloadId>) -> Result<(), DownloadError> {
+        if self.waiting(running).len() >= self.max_size as usize {
             Err(DownloadError::queue_full(self.max_size))
         } else {
             Ok(())
@@ -480,14 +445,17 @@ mod tests {
         ];
 
         let key = test_completion_key(&id);
-        let pos = queue.queue_sharded(&id, &key, &shards, false).unwrap();
+        let pos = queue.queue_sharded(&id, &key, &shards, None).unwrap();
         assert_eq!(pos, 1);
         assert_eq!(queue.pending_len(), 2);
 
-        // All items share the same group_id
+        // Both files share one group, and the two of them are one row
+        let group_id = queue.pending[0].group_id.clone().unwrap();
+        assert_eq!(queue.pending[1].group_id.as_ref(), Some(&group_id));
         let snapshot = queue.snapshot(None);
-        let group_id = snapshot.items[0].group_id.as_ref().unwrap();
-        assert_eq!(snapshot.items[1].group_id.as_ref().unwrap(), group_id);
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(snapshot.items[0].group_id, Some(group_id.to_string()));
+        assert_eq!(snapshot.pending_count, 1);
     }
 
     #[test]
@@ -496,7 +464,7 @@ mod tests {
         let id = test_id("model/x", Some("Q4_K_M"));
         let shards = vec![ResolvedFile::new("s1.gguf"), ResolvedFile::new("s2.gguf")];
         let key = test_completion_key(&id);
-        queue.queue_sharded(&id, &key, &shards, false).unwrap();
+        queue.queue_sharded(&id, &key, &shards, None).unwrap();
 
         let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
         let removed = queue.remove_group(&group_id);
@@ -566,7 +534,7 @@ mod tests {
             .unwrap();
 
         // Move "c" to position 1
-        let new_pos = queue.reorder(&test_id("c", None), 1, false).unwrap();
+        let new_pos = queue.reorder(&test_id("c", None), 1, None).unwrap();
 
         assert_eq!(new_pos, 1);
         let ids: Vec<_> = queue.pending.iter().map(|i| i.id.model_id()).collect();
@@ -590,7 +558,7 @@ mod tests {
             .unwrap();
 
         // Move "c" to position 2
-        let new_pos = queue.reorder(&test_id("c", None), 2, false).unwrap();
+        let new_pos = queue.reorder(&test_id("c", None), 2, None).unwrap();
 
         assert_eq!(new_pos, 2);
         let ids: Vec<_> = queue.pending.iter().map(|i| i.id.model_id()).collect();
@@ -613,9 +581,12 @@ mod tests {
             .queue(id_c.clone(), test_completion_key(&id_c), false)
             .unwrap();
 
-        // has_active = true, so position 1 is the active item
-        // Move "c" to position 2 (first pending slot)
-        let new_pos = queue.reorder(&test_id("c", None), 2, true).unwrap();
+        // Another download is running, so position 1 is taken
+        // Move "c" to position 2 (first waiting place)
+        let running = test_id("z", None);
+        let new_pos = queue
+            .reorder(&test_id("c", None), 2, Some(&running))
+            .unwrap();
 
         assert_eq!(new_pos, 2);
         let ids: Vec<_> = queue.pending.iter().map(|i| i.id.model_id()).collect();
@@ -630,7 +601,7 @@ mod tests {
             .queue(id_a.clone(), test_completion_key(&id_a), false)
             .unwrap();
 
-        let result = queue.reorder(&test_id("nonexistent", None), 1, false);
+        let result = queue.reorder(&test_id("nonexistent", None), 1, None);
         assert!(matches!(result, Err(DownloadError::NotInQueue { .. })));
     }
 
@@ -649,7 +620,7 @@ mod tests {
                 &id_sharded.clone(),
                 &test_completion_key(&id_sharded),
                 &shards,
-                false,
+                None,
             )
             .unwrap();
 
@@ -659,7 +630,7 @@ mod tests {
             .unwrap();
 
         // Move shard group to front - both shards should move together
-        let new_pos = queue.reorder(&id_sharded, 1, false).unwrap();
+        let new_pos = queue.reorder(&id_sharded, 1, None).unwrap();
 
         assert_eq!(new_pos, 1);
         let ids: Vec<_> = queue.pending.iter().map(|i| i.id.model_id()).collect();

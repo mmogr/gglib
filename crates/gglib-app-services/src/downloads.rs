@@ -93,6 +93,9 @@ impl DownloadOps {
     }
 
     /// Reorder a queued download to a new position.
+    ///
+    /// The position is the one a queue snapshot gives a download: 1 is the
+    /// running download, when there is one, and the waiting ones follow.
     pub async fn reorder_queue(
         &self,
         model_id: &str,
@@ -110,6 +113,12 @@ impl DownloadOps {
     }
 
     /// Reorder the download queue using a full ordering array.
+    ///
+    /// `ids` are the waiting downloads in the order wanted, one id each. Each
+    /// is moved in turn to its place in the array, the first to position 1.
+    /// Behind a running download the waiting places start at 2, so the order
+    /// that results can differ from the one given. An id that is not waiting
+    /// is skipped.
     pub async fn reorder_queue_full(&self, ids: &[String]) -> Result<(), GuiError> {
         for (position, model_id) in ids.iter().enumerate() {
             let id: DownloadId = model_id
