@@ -68,6 +68,10 @@ Provides table formatting utilities and helper functions.
 **Key Functions:**
 - `format_relative_time(datetime_str: &str)` - Renders a `SQLite` timestamp as "5 min ago"
 - `truncate_string(s: &str, max_len: usize)` - Safely truncates with ellipsis
+- `truncate_with(s: &str, max_len: usize, marker: &str)` - The same cut, ending in `marker`
+- `first_chars(s: &str, max: usize)` - The first `max` characters, never part of one
+- `short_sha(sha: &str)` - The first 8 characters of a hash
+- `format_number(n: u64)` - Renders a count as `500`, `1.5K` or `1.5M`
 - `print_separator(width: usize)` - Prints a horizontal separator
 
 **Example:**

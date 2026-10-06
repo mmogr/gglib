@@ -8,6 +8,8 @@ use std::time::Instant;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
+use crate::presentation::short_sha;
+use crate::utils::input;
 
 /// Execute the verify command.
 ///
@@ -84,8 +86,8 @@ pub(crate) async fn execute_verify(
                         ShardHealth::Corrupt { expected, actual } => {
                             format!(
                                 "✗ Corrupt (expected: {}, actual: {})",
-                                &expected[..8],
-                                &actual[..8]
+                                short_sha(expected),
+                                short_sha(actual)
                             )
                         }
                         ShardHealth::Missing => "✗ Missing".to_string(),
@@ -161,10 +163,6 @@ pub(crate) async fn execute_verify(
 /// Execute the repair command.
 ///
 /// Repairs a corrupt model by deleting failed shards and re-downloading them.
-#[allow(
-    clippy::items_after_statements,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn execute_repair(
     ctx: &CliContext,
     identifier: &str,
@@ -200,15 +198,7 @@ pub(crate) async fn execute_repair(
         println!("  • Delete corrupt or missing model files");
         println!("  • Re-download them from HuggingFace");
         println!();
-        print!("Proceed? (y/N): ");
-
-        use std::io::{self, Write};
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if !input.trim().eq_ignore_ascii_case("y") {
+        if !input::prompt_confirmation("Proceed?")? {
             println!("Repair cancelled.");
             return Ok(());
         }

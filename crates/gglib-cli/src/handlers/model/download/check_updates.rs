@@ -6,8 +6,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
-
-use super::update_model::short_sha;
+use crate::presentation::short_sha;
 
 /// Execute the check-updates command.
 ///

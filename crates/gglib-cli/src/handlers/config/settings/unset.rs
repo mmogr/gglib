@@ -16,27 +16,8 @@ use anyhow::{Result, bail};
 use gglib_app_services::types::UpdateSettingsRequest;
 use serde_json::{Map, Value};
 
+use super::settings_display::{camel_to_kebab, kebab_to_camel};
 use crate::bootstrap::CliContext;
-
-/// `default-context-size` → `defaultContextSize`.
-///
-/// The inverse of the conversion `settings show` prints with, so the key a
-/// person reads out of that output is the key this accepts.
-fn kebab_to_camel(key: &str) -> String {
-    let mut out = String::with_capacity(key.len());
-    let mut upper_next = false;
-    for ch in key.chars() {
-        if ch == '-' {
-            upper_next = true;
-        } else if upper_next {
-            out.push(ch.to_ascii_uppercase());
-            upper_next = false;
-        } else {
-            out.push(ch);
-        }
-    }
-    out
-}
 
 /// Every settable key, as the wire type spells them.
 ///
@@ -50,18 +31,6 @@ fn known_keys() -> Map<String, Value> {
         Value::Object(map) => map,
         _ => Map::new(),
     }
-}
-
-/// Convert a camelCase key back to the kebab-case a person typed.
-fn camel_to_kebab(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 4);
-    for (i, ch) in s.chars().enumerate() {
-        if ch.is_uppercase() && i != 0 {
-            out.push('-');
-        }
-        out.push(ch.to_ascii_lowercase());
-    }
-    out
 }
 
 #[allow(

@@ -133,8 +133,7 @@ async fn run_on_daemon(
     body: &impl serde::Serialize,
     mut on_event: impl FnMut(&BenchmarkEvent),
 ) -> Result<()> {
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let url = format!("{}{path}", daemon_client::base_url());
     let stream = daemon_client::sse::stream_json::<BenchmarkEvent, _>(
         &handle.client,
@@ -345,8 +344,7 @@ async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
     use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
     use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let outcome: ApplyOutcome = handle
         .tune_apply(run_id)
         .send()
@@ -1112,23 +1110,11 @@ fn fmt_delta(value: Option<f64>) -> String {
 /// setup-status endpoint. `null` when unavailable — the report is still
 /// valid, just unpinned to a machine.
 async fn fetch_hardware_snapshot(ctx: &CliContext) -> serde_json::Value {
-    let url = format!(
-        "{}{}",
-        daemon_client::base_url(),
-        daemon_client::paths::SETUP_STATUS_PATH
-    );
-    let request = gglib_proxy::loopback::client().get(&url);
-    let request = match daemon_client::auth::daemon_api_key(ctx).await {
-        Some(key) => request.bearer_auth(key),
-        None => request,
-    };
-    match request.send().await {
-        Ok(resp) => resp
-            .json::<serde_json::Value>()
-            .await
-            .unwrap_or(serde_json::Value::Null),
-        Err(_) => serde_json::Value::Null,
-    }
+    daemon_client::DaemonHandle::new(ctx, gglib_proxy::loopback::client())
+        .await
+        .setup_status()
+        .await
+        .unwrap_or(serde_json::Value::Null)
 }
 
 /// Parse `--sweep DIM=V1,V2,...` arguments into a [`SweepSpec`].

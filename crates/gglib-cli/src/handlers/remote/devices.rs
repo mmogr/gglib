@@ -15,8 +15,7 @@ use crate::presentation::style;
 /// admitted then and saying "no" of one row would read as that device having
 /// been singled out.
 pub(crate) async fn list(ctx: &CliContext) -> Result<()> {
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let devices = handle.remote_devices().await?;
 
     style::print_info_banner("Devices", "\u{1f4f1}");
@@ -61,8 +60,7 @@ pub(crate) async fn forget(ctx: &CliContext, device: &str) -> Result<()> {
         );
     }
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let answer = handle.remote_forget(device).await?;
 
     if !answer.forgotten {

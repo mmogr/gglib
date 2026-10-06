@@ -15,7 +15,7 @@ use gglib_runtime::FarMachine;
 
 use super::{TurnModel, Upstream};
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonHandle, DaemonProbe};
+use crate::daemon_client::{self, DaemonHandle};
 use crate::handlers::agent_chat::config::BannerInfo;
 use crate::handlers::agent_chat::upstream;
 use crate::presentation::style;
@@ -61,16 +61,11 @@ impl super::Target {
         if self == Self::Local {
             bail!("internal: the local target has no far machine");
         }
-        let client = gglib_proxy::loopback::client();
-        if !matches!(daemon_client::probe(&client).await, DaemonProbe::Running) {
+        let Ok(handle) = daemon_client::running(ctx).await else {
             bail!(
                 "reaching the paired machine needs the daemon running and connected to it: \
                  `gglib remote join` first"
             );
-        }
-        let handle = DaemonHandle {
-            client,
-            api_key: daemon_client::auth::daemon_api_key(ctx).await,
         };
         let status = handle.remote_status().await?;
         let name = status.paired_shown().to_owned();

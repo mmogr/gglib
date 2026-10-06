@@ -17,6 +17,7 @@ use super::BAR_WIDTH;
 use super::render_defects::render_defects_section;
 use super::render_reasoning::{render_client_fields_section, render_reasoning_section};
 use super::wire::{AdmissionSnapshot, CacheStatus, CacheUsage, DashboardSnapshot};
+use crate::presentation::truncate_string;
 
 /// Render a `[███░░░] NN%` bar. `total == 0` renders an empty bar at 0%
 /// rather than dividing by zero — used for every gauge in this dashboard so
@@ -89,7 +90,7 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
         };
         out.push_str(&format!(
             "  {:<24} {:<11} {}  {}\n",
-            truncate(&conn.model_name, 24),
+            truncate_string(&conn.model_name, 24),
             conn.phase.label(),
             bar,
             format_elapsed_secs(conn.started_at_secs)
@@ -103,7 +104,10 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
         // "  " prefix takes 2 columns — clip so the whole line fits in
         // one physical row regardless of terminal width.
         let max_reason_chars = usize::from(term_width.saturating_sub(2));
-        out.push_str(&format!("  {}\n", truncate(reason, max_reason_chars)));
+        out.push_str(&format!(
+            "  {}\n",
+            truncate_string(reason, max_reason_chars)
+        ));
     } else if snapshot.slots.is_empty() {
         out.push_str("  (no slots reported)\n");
     } else {
@@ -179,7 +183,7 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
         };
         out.push_str(&format!(
             "  {:<24} {:<10} {:<14} {}\n",
-            truncate(&slot.model_name, 24),
+            truncate_string(&slot.model_name, 24),
             role,
             activity,
             format_duration_secs(slot.resident_for_secs),
@@ -193,14 +197,14 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
         let max_chars = usize::from(term_width.saturating_sub(2));
         out.push_str(&format!(
             "  {}\n",
-            truncate(&admission.secondary_slot.detail, max_chars)
+            truncate_string(&admission.secondary_slot.detail, max_chars)
         ));
     }
 
     for queued in &admission.queued {
         out.push_str(&format!(
             "  {:<24} {} waiting, oldest {}\n",
-            truncate(&queued.model_name, 24),
+            truncate_string(&queued.model_name, 24),
             queued.waiting,
             format_duration_secs(queued.oldest_wait_ms / 1000),
         ));
@@ -289,7 +293,10 @@ pub(super) fn render_cache_section(cache: &CacheStatus, term_width: u16) -> Stri
     // physical row, matching how `slots_status` is handled above.
     let max_warning_chars = usize::from(term_width.saturating_sub(4));
     for warning in &cache.warnings {
-        out.push_str(&format!("  ! {}\n", truncate(warning, max_warning_chars)));
+        out.push_str(&format!(
+            "  ! {}\n",
+            truncate_string(warning, max_warning_chars)
+        ));
     }
 
     out.push_str(&render_usage_rows(&cache.usage));
@@ -337,18 +344,6 @@ pub(super) fn thousands(value: u64) -> String {
         out.push(ch);
     }
     out
-}
-
-/// Truncate to at most `max_chars` characters, appending `…` when cut short.
-/// Keeps model-name columns from wrapping the frame onto extra lines.
-pub(super) fn truncate(s: &str, max_chars: usize) -> String {
-    if s.chars().count() <= max_chars {
-        s.to_string()
-    } else {
-        let mut truncated: String = s.chars().take(max_chars.saturating_sub(1)).collect();
-        truncated.push('\u{2026}');
-        truncated
-    }
 }
 
 #[cfg(test)]

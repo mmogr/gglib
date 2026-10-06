@@ -48,13 +48,34 @@ pub(super) struct DisplaySection {
 /// Convert a camelCase identifier to kebab-case.
 ///
 /// `topK` → `top-k`, `maxTokens` → `max-tokens`, `topP` → `top-p`
-fn camel_to_kebab(s: &str) -> String {
+pub(super) fn camel_to_kebab(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
     for (i, ch) in s.chars().enumerate() {
         if ch.is_uppercase() && i != 0 {
             out.push('-');
         }
         out.push(ch.to_ascii_lowercase());
+    }
+    out
+}
+
+/// `default-context-size` → `defaultContextSize`.
+///
+/// The inverse of [`camel_to_kebab`], which `settings show` prints with, so
+/// the key a person reads out of that output is the key `settings unset`
+/// accepts.
+pub(super) fn kebab_to_camel(key: &str) -> String {
+    let mut out = String::with_capacity(key.len());
+    let mut upper_next = false;
+    for ch in key.chars() {
+        if ch == '-' {
+            upper_next = true;
+        } else if upper_next {
+            out.push(ch.to_ascii_uppercase());
+            upper_next = false;
+        } else {
+            out.push(ch);
+        }
     }
     out
 }

@@ -34,8 +34,7 @@ pub(crate) struct EnableArgs {
 /// the pairing once — in the alternate screen when stdout is a terminal, as
 /// plain text otherwise.
 pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
 
     eprintln!("  Enabling remote access\u{2026} (finding a relay can take a few seconds)");
     let enabled = handle

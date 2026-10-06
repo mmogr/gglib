@@ -14,6 +14,8 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
+use crate::presentation::short_sha;
+use crate::utils::input;
 
 use super::board::SoloBoard;
 
@@ -21,10 +23,6 @@ use super::board::SoloBoard;
 ///
 /// Upgrades a model to the latest revision from `HuggingFace`. `force` skips
 /// the confirmation prompt; everything else is identical to the GUI path.
-#[allow(
-    clippy::items_after_statements,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
@@ -67,15 +65,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
         println!("  • Re-download the model at the latest revision");
         println!("  • Replace the current file and update the database row");
         println!();
-        print!("Proceed? (y/N): ");
-
-        use std::io::{self, Write};
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if !input.trim().eq_ignore_ascii_case("y") {
+        if !input::prompt_confirmation("Proceed?")? {
             println!("Upgrade cancelled.");
             return Ok(());
         }
@@ -101,30 +91,4 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
     }
 
     Ok(())
-}
-
-/// First 8 characters of a commit SHA, without assuming there are 8.
-/// `HuggingFace` returns 40, but a truncated or empty value must not panic a
-/// command whose whole job is repairing a model.
-pub(super) fn short_sha(sha: &str) -> &str {
-    &sha[..sha.len().min(8)]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::short_sha;
-
-    #[test]
-    fn short_sha_truncates_a_full_sha() {
-        assert_eq!(
-            short_sha("0123456789abcdef0123456789abcdef01234567"),
-            "01234567"
-        );
-    }
-
-    #[test]
-    fn short_sha_tolerates_shorter_input() {
-        assert_eq!(short_sha("abc"), "abc");
-        assert_eq!(short_sha(""), "");
-    }
 }

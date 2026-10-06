@@ -28,7 +28,7 @@ pub(crate) async fn execute(ctx: &CliContext, share_lan: bool, no_open: bool) ->
         return super::daemon::run(true, Vec::new()).await;
     }
 
-    daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    daemon_client::ensure_daemon(ctx).await?;
 
     let token = daemon_client::auth::daemon_token();
     let url = dashboard_url(&daemon_client::base_url(), token.as_deref());

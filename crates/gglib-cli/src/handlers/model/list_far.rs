@@ -80,10 +80,7 @@ impl ConnectionReport for Daemon<'_> {
     }
 
     async fn connection(&self) -> Option<RemoteConnection> {
-        let handle = DaemonHandle {
-            client: self.client.clone(),
-            api_key: daemon_client::auth::daemon_api_key(self.ctx).await,
-        };
+        let handle = DaemonHandle::new(self.ctx, self.client.clone()).await;
         handle.remote_status().await.ok().and_then(|s| s.connected)
     }
 }

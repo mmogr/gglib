@@ -6,10 +6,10 @@
 
 use anyhow::{Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::io::{self, Write};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+use crate::utils::input;
 use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
@@ -162,11 +162,7 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     // Step 3: Interactive pre-flight prompt.
     if !force {
         print_preflight_info(&acceleration)?;
-        print!("Continue? [Y/n]: ");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        if input.trim().eq_ignore_ascii_case("n") {
+        if !input::prompt_confirmation_default_yes("Continue?")? {
             println!("Installation cancelled.");
             return Ok(());
         }

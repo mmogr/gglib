@@ -3,7 +3,6 @@
 //! Handles updating model metadata in the database.
 
 use std::collections::HashMap;
-use std::io::{self, Write};
 
 use anyhow::{Result, anyhow};
 use gglib_core::{
@@ -14,6 +13,7 @@ use gglib_core::{
 use super::{resolver, update_projector};
 use crate::bootstrap::CliContext;
 use crate::sampling_params::clear_param;
+use crate::utils::input;
 
 /// Arguments for the update command.
 #[derive(Debug, Clone)]
@@ -75,15 +75,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
             file_path = %existing_model.file_path.display(),
             "Model file no longer exists"
         );
-        if !args.dry_run {
-            print!("Continue with metadata update anyway? [y/N]: ");
-            io::stdout().flush()?;
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-            if !input.trim().to_lowercase().starts_with('y') {
-                println!("Update cancelled.");
-                return Ok(());
-            }
+        if !args.dry_run && !input::prompt_confirmation("Continue with metadata update anyway?")? {
+            println!("Update cancelled.");
+            return Ok(());
         }
     }
 
@@ -112,11 +106,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
 
     // Confirm changes unless force flag is used
     if !args.force {
-        print!("\nApply these changes? [y/N]: ");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        if !input.trim().to_lowercase().starts_with('y') {
+        println!();
+        if !input::prompt_confirmation("Apply these changes?")? {
             println!("Update cancelled.");
             return Ok(());
         }
