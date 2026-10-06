@@ -80,8 +80,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   between the last byte hitting disk and the model row being written.
 - **Speed and ETA** — Computed once, by the manager's progress bridge, using
   `gglib_core::download::RateEstimator`, and shipped on the event for every
-  renderer to display verbatim. One estimator per *shard group*, so the
-  reported speed is continuous from the first shard to the last. Renderers must
+  renderer to display verbatim. The speed is taken from the bytes received
+  from the network and the time remaining from the bytes on disk (`meter.rs`):
+  the accelerator writes to disk in large steps while the network runs flat,
+  and a resumed or already-present file is bytes on disk that nobody
+  received. Those took no time to arrive, so the time remaining counts them
+  as done and leaves them out of its rate. One meter per *shard group*, so the reported speed is continuous
+  from the first shard to the last. Renderers must
   not derive a rate from successive byte counts; `indicatif`'s built-in
   `{bytes_per_sec}` and `{eta}` are deliberately absent from every template
   here, because using them made the CLI and the GUI report different numbers
@@ -103,10 +108,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   renamed into place only once it checks out. Needs nothing installed.
 - **Optional Acceleration** — `hf_xet` is used for multi-gigabyte files when its
   environment is already provisioned; it is never provisioned implicitly, and
-  its absence or failure falls back to the native path. When the `hf-xet`
-  transport bypasses Python `tqdm`, a stat-based fallback poller
-  (`cli_exec/exec/xet_poller.rs`) emits synthetic progress events so the bar
-  keeps moving instead of freezing at `0 B / 0 B`.
+  its absence or failure falls back to the native path. Either way each file
+  has one count (`executor/progress.rs`): bytes on disk for the bar, and bytes
+  off the network apart from them.
 - **Bounded Drain on Cancel** — `cancel_all()` signals cancel tokens and
   then waits up to 5 s for in-flight jobs to finalize before returning,
   so callers (CLI, Tauri, Axum) don't exit while in-flight transfers (or an

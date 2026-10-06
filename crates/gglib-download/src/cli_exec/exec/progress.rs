@@ -1,12 +1,11 @@
 //! CLI progress rendering for direct (non-queued) downloads.
 //!
 //! Pure sync, presentation-only module — no knowledge of Python or protocol.
-//! Used by the no-callback path (`model upgrade`), where there is no download
-//! manager to compute progress for us. The queued path renders through
+//! Used by `model upgrade`, which downloads without the download manager and
+//! so has nobody else to draw its files. The queued path renders through
 //! [`crate::cli_emitter::CliDownloadEventEmitter`] instead.
 //!
-//! Both renderers get their speed and ETA from
-//! [`RateEstimator`] and format them with
+//! Both renderers get their speed and ETA from [`Meter`] and format them with
 //! the shared [`format_rate`] / [`format_duration`]. This module owns no rate
 //! math of its own — an earlier private exponentially-weighted average here
 //! was one of three competing implementations that disagreed with each other.
@@ -14,7 +13,9 @@
 use std::io::{self, IsTerminal, Write};
 use std::time::{Duration, Instant};
 
-use gglib_core::download::{RateEstimator, format_duration, format_rate};
+use crate::executor::FileProgress;
+use crate::meter::Meter;
+use gglib_core::download::{format_duration, format_rate};
 use indicatif::{HumanBytes, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 
 /// Minimum gap between redraws on the non-terminal path.
@@ -29,7 +30,7 @@ pub(crate) struct CliProgressPrinter {
     inner: ProgressRender,
     /// Shared across both renderers — the rate is a property of the transfer,
     /// not of how it happens to be drawn.
-    estimator: RateEstimator,
+    meter: Meter,
 }
 
 enum ProgressRender {
@@ -54,16 +55,17 @@ impl CliProgressPrinter {
         };
         Self {
             inner,
-            estimator: RateEstimator::new(Instant::now()),
+            meter: Meter::new(Instant::now()),
         }
     }
 
-    /// Update progress display with current download state.
-    pub(crate) fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
-        self.estimator.record(downloaded, total, Instant::now());
+    /// Update progress display with a file's progress as it stands at `now`.
+    pub(crate) fn update(&mut self, label: Option<&str>, progress: FileProgress, now: Instant) {
+        let (wire, downloaded, total) = (progress.wire, progress.bytes, progress.size.unwrap_or(0));
+        self.meter.record(wire, downloaded, total, now);
         let rate = Rate {
-            speed_bps: self.estimator.rate_bps(),
-            eta_seconds: self.estimator.eta_seconds(),
+            speed_bps: self.meter.speed_bps(),
+            eta_seconds: self.meter.eta_seconds(),
         };
 
         match &mut self.inner {
@@ -81,13 +83,7 @@ impl CliProgressPrinter {
     }
 }
 
-impl Default for CliProgressPrinter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// The estimator's current verdict, ready for display.
+/// The meter's current verdict, ready for display.
 struct Rate {
     speed_bps: Option<f64>,
     eta_seconds: Option<f64>,
@@ -120,7 +116,7 @@ impl FancyProgress {
         // stderr default) — see the module doc on `CliProgressPrinter::new`.
         let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
         bar.set_style(Self::spinner_style());
-        bar.set_message("Preparing fast download".to_string());
+        bar.set_message("Preparing download".to_string());
         bar.enable_steady_tick(Duration::from_millis(120));
         Self {
             bar,
@@ -130,7 +126,7 @@ impl FancyProgress {
     }
 
     fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64, rate: &Rate) {
-        let label_text = label.filter(|s| !s.is_empty()).unwrap_or("fast download");
+        let label_text = label.filter(|s| !s.is_empty()).unwrap_or("download");
         if total == 0 {
             self.bar
                 .set_message(format!("{} (preparing...)", Self::format_label(label_text)));
@@ -169,7 +165,7 @@ impl FancyProgress {
     }
 
     /// Note the absence of `{binary_bytes_per_sec}` and `{eta}` — those are
-    /// indicatif's own estimates. Rate and ETA come from the shared estimator
+    /// indicatif's own estimates. Rate and ETA come from the shared meter
     /// and are rendered into `{msg}`; `{human_bytes}` are sizes, which stay
     /// binary.
     fn bar_style() -> ProgressStyle {
@@ -235,7 +231,7 @@ impl PlainProgress {
         }
         self.last_emit = now;
 
-        let mut line = String::from("⚡ Fast download");
+        let mut line = String::from("⚡ Download");
         if let Some(name) = label.filter(|name| !name.is_empty()) {
             let _ = write!(line, " [{name}]");
         }
@@ -315,16 +311,18 @@ mod tests {
     }
 
     #[test]
-    fn printer_reports_no_rate_from_a_single_sample() {
-        // A resumed download's first event carries everything already on disk.
-        // Counting that as bytes transferred "just now" is what produced
-        // multi-GB/s readings.
-        let mut printer = CliProgressPrinter::new();
-        printer.update(
-            Some("model.gguf"),
-            2 * 1024 * 1024 * 1024,
-            4 * 1024 * 1024 * 1024,
-        );
-        assert_eq!(printer.estimator.rate_bps(), None);
+    fn printer_takes_no_speed_from_bytes_found_on_disk() {
+        // A resumed download's readings carry everything already on disk, and
+        // none of it was received. Counting it produced multi-GB/s readings.
+        let (mut printer, start) = (CliProgressPrinter::new(), Instant::now());
+        for tick in 0..12 {
+            let progress = FileProgress {
+                bytes: if tick < 4 { 0 } else { 2 << 30 },
+                wire: 0,
+                size: Some(4 << 30),
+            };
+            printer.update(None, progress, start + PLAIN_MIN_INTERVAL * tick);
+        }
+        assert_eq!(printer.meter.speed_bps(), None);
     }
 }

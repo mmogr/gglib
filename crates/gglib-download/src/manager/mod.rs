@@ -11,6 +11,8 @@ mod duplicate_guard_tests;
 mod group_registration_tests;
 #[cfg(test)]
 mod projector_group_tests;
+#[cfg(test)]
+mod sample_tests;
 
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
@@ -26,8 +28,7 @@ use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, RateEstimator,
-    ShardInfo,
+    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, ShardInfo,
 };
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
@@ -35,6 +36,8 @@ use gglib_core::ports::{
     ModelRegistrarPort, QuantizationResolver, ResolvedFile,
 };
 
+use crate::executor::known_size;
+use crate::meter::Meter;
 use crate::quant_selector::QuantizationSelector;
 use crate::queue::{DownloadQueue, QueuedItem};
 use crate::resolver::HfQuantizationResolver;
@@ -46,7 +49,7 @@ pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 
 /// How often the progress bridge samples the worker and emits an event.
 ///
-/// Speed and ETA smoothing live in [`RateEstimator`], not here; this is purely
+/// Speed and ETA smoothing live in [`Meter`], not here; this is purely
 /// the display cadence. The GUI does not re-throttle on top of it.
 const PROGRESS_TICK: Duration = Duration::from_millis(250);
 
@@ -268,12 +271,12 @@ pub struct DownloadManagerImpl {
     prev_is_drained: Mutex<bool>,
     /// File entries with OIDs for each download (keyed by download ID).
     file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
-    /// Rate estimators, keyed by shard group (or by download ID when unsharded).
+    /// Meters, keyed by shard group (or by download ID when unsharded).
     ///
     /// Keyed by *group* rather than job so the estimate survives shard
     /// boundaries. A per-job estimator restarted from zero on every shard,
     /// which on a five-shard model meant five ramp-ups from a cold average.
-    rate_estimators: Mutex<HashMap<String, Arc<Mutex<RateEstimator>>>>,
+    rate_estimators: Mutex<HashMap<String, Arc<Mutex<Meter>>>>,
 }
 
 impl DownloadManagerImpl {
@@ -312,7 +315,7 @@ impl DownloadManagerImpl {
     ///
     /// Sharded downloads share one estimator across the whole group so the
     /// reported speed is continuous from the first shard to the last.
-    async fn rate_estimator_for(&self, item: &QueuedItem) -> Arc<Mutex<RateEstimator>> {
+    async fn rate_estimator_for(&self, item: &QueuedItem) -> Arc<Mutex<Meter>> {
         let key = item
             .group_id
             .as_ref()
@@ -323,9 +326,7 @@ impl DownloadManagerImpl {
                 .lock()
                 .await
                 .entry(key)
-                .or_insert_with(|| {
-                    Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now())))
-                }),
+                .or_insert_with(|| Arc::new(Mutex::new(Meter::new(std::time::Instant::now())))),
         )
     }
 
@@ -434,21 +435,13 @@ impl DownloadManagerImpl {
                 // Remove corrupt cached files before hf_hub_download sees them.
                 Self::remove_corrupt_cached_file(&item, primary_file_path.as_ref());
 
-                // Clone the progress sender so we can detect cache hits after
-                // run_job consumes the original.
-                let progress_tx_clone = progress_tx.clone();
-
                 let job = DownloadJob {
                     id: item.id.clone(),
                     destination,
                     revision: item.revision.clone(),
                     cancel: cancel.clone(),
                     progress_tx,
-                    // Plumb the per-shard file size from HF metadata so the
-                    // stat-fallback poller (`xet_poller`) can emit synthetic
-                    // progress events with a real total. Without this the
-                    // hf-xet fast path leaves the CLI bar stuck at `0 B/0 B`.
-                    expected_total: item.shard_info.as_ref().and_then(|s| s.file_size),
+                    expected_size: known_size(item.shard_info.as_ref().and_then(|s| s.file_size)),
                 };
 
                 // Emit started event (include shard info if this is a sharded download)
@@ -456,17 +449,6 @@ impl DownloadManagerImpl {
 
                 // Run the worker
                 let result = worker::run_job(job, &deps).await;
-
-                // If the file was cached, emit synthetic progress so the UI
-                // shows at least one ShardProgress event.
-                Self::emit_synthetic_progress_if_cached(
-                    &item,
-                    &result,
-                    &progress_tx_clone,
-                    primary_file_path.as_ref(),
-                );
-
-                drop(progress_tx_clone);
 
                 // Tell the bridge the worker is done, then actually join it.
                 // Dropping the JoinHandle only detaches the task, which let its
@@ -529,7 +511,7 @@ impl DownloadManagerImpl {
             return;
         }
 
-        let expected_size = item.shard_info.as_ref().and_then(|s| s.file_size);
+        let expected_size = known_size(item.shard_info.as_ref().and_then(|s| s.file_size));
         if expected_size.is_none() {
             tracing::warn!(
                 id = %item.id,
@@ -547,41 +529,6 @@ impl DownloadManagerImpl {
             );
             let _ = std::fs::remove_file(path);
         }
-    }
-
-    /// Emit synthetic 100% progress when a cache hit produced no callbacks.
-    ///
-    /// When `hf_hub_download(force_download=False)` finds a cached file it
-    /// returns instantly without progress callbacks.  The bridge never emits
-    /// a `ShardProgress` event, so the UI would skip the shard entirely.
-    fn emit_synthetic_progress_if_cached(
-        item: &QueuedItem,
-        result: &Result<worker::CompletedJob, DownloadError>,
-        progress_tx: &watch::Sender<ProgressUpdate>,
-        primary_file_path: Option<&std::path::PathBuf>,
-    ) {
-        if !(result.is_ok() && progress_tx.borrow().seq == 0) {
-            return;
-        }
-
-        let file_size = primary_file_path
-            .as_ref()
-            .and_then(|p| std::fs::metadata(p).ok())
-            .map(|m| m.len())
-            .or_else(|| item.shard_info.as_ref().and_then(|s| s.file_size))
-            .unwrap_or(0);
-
-        progress_tx.send_modify(|state| {
-            state.downloaded = file_size;
-            state.total = file_size;
-            state.seq = 1;
-        });
-
-        tracing::debug!(
-            id = %item.id,
-            file_size,
-            "File already cached — emitted synthetic 100% progress"
-        );
     }
 
     /// Get the next job from the queue.
@@ -924,7 +871,7 @@ impl DownloadManagerImpl {
         shard_info: Option<&ShardInfo>,
         rx: watch::Receiver<ProgressUpdate>,
         cancel: CancellationToken,
-        estimator: Arc<Mutex<RateEstimator>>,
+        estimator: Arc<Mutex<Meter>>,
         finished: CancellationToken,
     ) -> tokio::task::JoinHandle<()> {
         let bridge = ProgressBridge {
@@ -1170,7 +1117,7 @@ struct ProgressBridge {
     id: String,
     shard_info: Option<ShardInfo>,
     /// Shared with the rest of the shard group.
-    estimator: Arc<Mutex<RateEstimator>>,
+    estimator: Arc<Mutex<Meter>>,
     /// User cancellation: stop without emitting further progress.
     cancel: CancellationToken,
     /// Worker finished: emit a final progress event, then stop.
@@ -1181,7 +1128,7 @@ struct ProgressBridge {
 ///
 /// Samples the worker's `watch` channel on a fixed tick and feeds every sample
 /// — including ticks where the byte count has not moved — into the shared
-/// [`RateEstimator`]. Those idle samples are what let a stalled transfer decay
+/// [`Meter`]. Those idle samples are what let a stalled transfer decay
 /// toward zero instead of freezing the displayed speed while the ETA counts
 /// down against nothing. Events are emitted on every tick for the same reason.
 ///
@@ -1222,8 +1169,9 @@ async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<Progres
                 // position, then exit.
                 let final_progress = rx.borrow().clone();
                 if final_progress.seq > last_emitted.seq {
+                    let now = std::time::Instant::now();
                     let (speed, eta) =
-                        sample(&estimator, shard_info.as_ref(), &final_progress).await;
+                        sample(&estimator, shard_info.as_ref(), &final_progress, now).await;
                     emit_progress(
                         &event_emitter,
                         &id,
@@ -1241,7 +1189,8 @@ async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<Progres
 
                 // Sample unconditionally — a tick carrying no new bytes is a
                 // real observation of "nothing arrived".
-                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current).await;
+                let now = std::time::Instant::now();
+                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current, now).await;
 
                 // Nothing has been reported yet: no bar to update.
                 if current.seq > 0 {
@@ -1260,23 +1209,38 @@ async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<Progres
     }
 }
 
-/// Feed one observation to the group's estimator and read back its verdict.
+/// Feed one observation to the group's meter and read back its verdict.
 ///
-/// The estimator is fed *aggregate* bytes so that it measures the whole shard
-/// group as one continuous transfer; per-shard counters restart at zero and
-/// would otherwise look like the download going backwards.
+/// The speed is taken from the bytes the file in flight has received. The
+/// time remaining is taken from *aggregate* bytes on disk, so that it covers
+/// the whole shard group as one continuous transfer.
 async fn sample(
-    estimator: &Arc<Mutex<RateEstimator>>,
+    estimator: &Arc<Mutex<Meter>>,
     shard_info: Option<&ShardInfo>,
     progress: &ProgressUpdate,
+    now: std::time::Instant,
 ) -> (Option<f64>, Option<f64>) {
-    let (downloaded, total) = shard_info.map_or((progress.downloaded, progress.total), |shard| {
-        aggregate_progress(shard, progress.downloaded, progress.total)
+    let (file_bytes, file_size) = file_counts(progress);
+    let (downloaded, total) = shard_info.map_or((file_bytes, file_size), |shard| {
+        aggregate_progress(shard, file_bytes, file_size)
     });
 
+    let wire = progress.progress.wire;
     let mut estimator = estimator.lock().await;
-    estimator.record(downloaded, total, std::time::Instant::now());
-    (estimator.rate_bps(), estimator.eta_seconds())
+    estimator.record(wire, downloaded, total, now);
+    (estimator.speed_bps(), estimator.eta_seconds())
+}
+
+/// A file's bytes on disk and its size, with 0 for a size nobody knows.
+const fn file_counts(progress: &ProgressUpdate) -> (u64, u64) {
+    let file = progress.progress;
+    (
+        file.bytes,
+        match file.size {
+            Some(size) => size,
+            None => 0,
+        },
+    )
 }
 
 /// Aggregate progress across a whole shard group.
@@ -1310,7 +1274,7 @@ fn aggregate_progress(shard: &ShardInfo, downloaded: u64, shard_total: u64) -> (
 ///
 /// Bytes go through [`aggregate_progress`] for sharded downloads so the REST
 /// snapshot agrees with the SSE bridge. Before the first chunk lands
-/// (`progress.total == 0`) the shard's known file size stands in for the
+/// (`progress.size` is `None`) the shard's known file size stands in for the
 /// per-shard total, so consumers can size a bar immediately.
 fn build_active_dto(
     id: &DownloadId,
@@ -1320,13 +1284,14 @@ fn build_active_dto(
     speed_bps: Option<f64>,
     eta_seconds: Option<f64>,
 ) -> gglib_core::download::QueuedDownload {
-    let (downloaded, total) = shard_info.map_or((progress.downloaded, progress.total), |shard| {
-        let shard_total = if progress.total == 0 {
+    let (file_bytes, file_size) = file_counts(progress);
+    let (downloaded, total) = shard_info.map_or((file_bytes, file_size), |shard| {
+        let shard_total = if file_size == 0 {
             shard.file_size.unwrap_or(0)
         } else {
-            progress.total
+            file_size
         };
-        aggregate_progress(shard, progress.downloaded, shard_total)
+        aggregate_progress(shard, file_bytes, shard_total)
     });
 
     let mut dto = gglib_core::download::QueuedDownload::new(
@@ -1359,9 +1324,10 @@ fn emit_progress(
     speed_bps: Option<f64>,
     eta_seconds: Option<f64>,
 ) {
+    let (file_bytes, file_size) = file_counts(progress);
     let (aggregate_downloaded, aggregate_total) = shard_info
-        .map_or((progress.downloaded, progress.total), |shard| {
-            aggregate_progress(shard, progress.downloaded, progress.total)
+        .map_or((file_bytes, file_size), |shard| {
+            aggregate_progress(shard, file_bytes, file_size)
         });
     if let Some(shard) = shard_info.filter(|shard| !shard.role.is_projector()) {
         emitter.emit(app_event(DownloadEvent::shard_progress(
@@ -1369,8 +1335,8 @@ fn emit_progress(
             shard.shard_index,
             shard.total_shards,
             &shard.filename,
-            progress.downloaded,
-            progress.total,
+            file_bytes,
+            file_size,
             aggregate_downloaded,
             aggregate_total,
             speed_bps,
@@ -1497,7 +1463,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
                 let (speed_bps, eta_seconds) = match estimator {
                     Some(estimator) => {
                         let estimator = estimator.lock().await;
-                        (estimator.rate_bps(), estimator.eta_seconds())
+                        (estimator.speed_bps(), estimator.eta_seconds())
                     }
                     None => (None, None),
                 };
@@ -1867,7 +1833,7 @@ mod tests {
             event_emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
             id: "owner/repo:Q4_K_M".to_string(),
             shard_info: None,
-            estimator: Arc::new(Mutex::new(RateEstimator::new(std::time::Instant::now()))),
+            estimator: Arc::new(Mutex::new(Meter::new(std::time::Instant::now()))),
             cancel,
             finished,
         }
@@ -1912,9 +1878,8 @@ mod tests {
 
     #[test]
     fn aggregate_never_exceeds_the_group_total() {
-        // The stat poller can transiently over-report (a file counted at both
-        // its final path and under `.cache`). Clamping keeps the percentage
-        // sane and stops the estimator seeing a phantom burst.
+        // A finished file can be longer than its metadata said. Clamping keeps
+        // the percentage sane and stops the estimator seeing a phantom burst.
         let shard = shard_with_offsets(2, 8_000, 9_500, 1_500);
         let (downloaded, total) = aggregate_progress(&shard, 5_000, 1_500);
         assert_eq!(downloaded, total, "must clamp to the group total");

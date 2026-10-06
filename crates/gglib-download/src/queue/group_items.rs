@@ -3,6 +3,8 @@
 use gglib_core::download::{CompletionKey, DownloadId, ShardInfo};
 use gglib_core::ports::ResolvedFile;
 
+use crate::executor::known_size;
+
 use super::shard_group::ShardGroupId;
 use super::types::QueuedItem;
 use super::usize_to_u32_saturating;
@@ -24,8 +26,9 @@ pub(super) fn group_items(
 
     // Exact byte offsets, but only when HuggingFace gave us a size for
     // every file. A partial layout is worse than none: the consumer's
-    // equal-size fallback is at least self-consistent.
-    let group_total: Option<u64> = files.iter().map(|f| f.size).sum();
+    // equal-size fallback is at least self-consistent. A size of 0 is one
+    // it did not give.
+    let group_total: Option<u64> = files.iter().map(|f| known_size(f.size)).sum();
 
     let mut preceding: u64 = 0;
 
@@ -34,8 +37,7 @@ pub(super) fn group_items(
         .enumerate()
         .map(|(idx, file)| {
             let index = usize_to_u32_saturating(idx);
-            let shard_info = file
-                .size
+            let shard_info = known_size(file.size)
                 .map_or_else(
                     || ShardInfo::new(index, total_shards, &file.path),
                     |size| ShardInfo::with_size(index, total_shards, &file.path, size),
@@ -161,5 +163,17 @@ mod tests {
 
         assert!(group.iter().all(|f| f.group_total_bytes.is_none()));
         assert_eq!(group[1].file_size, Some(300));
+    }
+
+    /// Metadata with no size arrives as a size of 0, which is no size.
+    #[test]
+    fn a_size_of_zero_is_an_unknown_size() {
+        let group = items(&[
+            ResolvedFile::with_size("zeta.Q8_0.gguf", 0),
+            ResolvedFile::projector("mmproj-F16.gguf", 300, None),
+        ]);
+
+        assert_eq!(group[0].file_size, None);
+        assert!(group.iter().all(|f| f.group_total_bytes.is_none()));
     }
 }

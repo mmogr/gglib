@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use gglib_core::download::{DownloadError, DownloadEvent, DownloadId, Quantization};
 use gglib_core::ports::{AppEventEmitter, DownloadManagerConfig};
 
-use crate::executor::{DownloadPlan, download_files};
+use crate::executor::{DownloadPlan, FileProgress, download_file};
 
 use super::{app_event, paths::DownloadDestination};
 
@@ -59,22 +59,19 @@ pub(crate) struct DownloadJob {
     pub cancel: CancellationToken,
     /// Progress sender for this job.
     pub progress_tx: watch::Sender<ProgressUpdate>,
-    /// Expected total bytes from HF metadata, if known.
-    ///
-    /// Used by the stat-fallback poller (`xet_poller`) so synthetic progress
-    /// events carry a real total. Without it the CLI bar renders `0 B/0 B`
-    /// for the entire transfer because the hf-xet fast path never drives
-    /// tqdm to publish a `(0, total)` initial event.
-    pub expected_total: Option<u64>,
+    /// The file's size from HF metadata, if known. It sizes the bar before
+    /// the first byte arrives.
+    pub expected_size: Option<u64>,
 }
 
 /// Progress update sent through the watch channel.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ProgressUpdate {
-    /// Bytes downloaded so far.
-    pub downloaded: u64,
-    /// Total bytes to download.
-    pub total: u64,
+    /// How far the job's file has got.
+    pub progress: FileProgress,
+    /// A note standing in for progress while there is none to show, e.g. the
+    /// accelerator's environment being prepared.
+    pub notice: Option<String>,
     /// Monotonically increasing sequence number for change detection.
     pub seq: u64,
 }
@@ -84,12 +81,30 @@ impl ProgressUpdate {
     /// it forward with `send_modify`, never constructing one this way. Gated so
     /// `dead_code` keeps telling the truth about production reach.
     #[cfg(test)]
-    pub(crate) const fn new(downloaded: u64, total: u64, seq: u64) -> Self {
+    pub(crate) fn new(downloaded: u64, total: u64, seq: u64) -> Self {
         Self {
-            downloaded,
-            total,
+            progress: FileProgress {
+                bytes: downloaded,
+                wire: downloaded,
+                size: crate::executor::known_size(Some(total)),
+            },
+            notice: None,
             seq,
         }
+    }
+
+    /// Take the file's latest progress.
+    ///
+    /// A notice is dropped once bytes arrive again, on disk or off the
+    /// network: it stood in for progress, and now there is some. A count
+    /// that falls is the announced restart, so the notice that announced it
+    /// stays.
+    fn advance(&mut self, progress: FileProgress) {
+        if progress.bytes > self.progress.bytes || progress.wire > self.progress.wire {
+            self.notice = None;
+        }
+        self.progress = progress;
+        self.seq += 1;
     }
 }
 
@@ -196,23 +211,12 @@ pub(crate) async fn run_job(
 
 /// Execute the actual file download with progress and cancellation.
 async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), DownloadError> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    // Sequence counter for progress updates
-    let seq = Arc::new(AtomicU64::new(0));
-
     // Create progress callback that updates watch channel
     let progress_tx = job.progress_tx.clone();
-    let seq_clone = Arc::clone(&seq);
     let progress_callback: crate::cli_exec::ProgressCallback =
-        Arc::new(move |downloaded: u64, total: u64| {
-            let current_seq = seq_clone.fetch_add(1, Ordering::Relaxed);
+        Arc::new(move |progress: FileProgress| {
             // send_modify avoids clone and is infallible
-            progress_tx.send_modify(|state| {
-                state.downloaded = downloaded;
-                state.total = total;
-                state.seq = current_seq + 1;
-            });
+            progress_tx.send_modify(|state| state.advance(progress));
         });
 
     // Notice callback: surfaces transient notes that carry no byte progress of
@@ -221,24 +225,31 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     // comment on `WorkerDeps`.
     let notice_id = job.id.to_string();
     let notice_emitter = Arc::clone(&deps.event_emitter);
+    let notice_tx = job.progress_tx.clone();
     let notice_callback: crate::cli_exec::NoticeCallback = Arc::new(move |message: &str| {
+        notice_tx.send_modify(|state| state.notice = Some(message.to_string()));
         notice_emitter.emit(app_event(DownloadEvent::DownloadNotice {
             id: notice_id.clone(),
             message: message.to_string(),
         }));
     });
 
+    // A job is one file of its download.
+    let Some(file) = job.destination.files.first() else {
+        return Ok(());
+    };
+
     // Build download plan
     let plan = DownloadPlan {
         repo_id: job.id.model_id(),
         revision: "main",
         destination: &job.destination.model_dir,
-        files: &job.destination.files,
+        file,
         token: deps.config.hf_token.as_deref(),
         force: false,
-        progress: Some(Arc::clone(&progress_callback)),
+        progress: Some(progress_callback),
         notice: Some(notice_callback),
-        expected_total: job.expected_total,
+        expected_size: job.expected_size,
         cancel: Some(job.cancel.clone()),
     };
 
@@ -250,67 +261,10 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
             Err(DownloadError::Cancelled)
         }
 
-        result = download_files(&plan) => result,
+        result = download_file(&plan) => result,
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn progress_update_new_creates_with_seq() {
-        let update = ProgressUpdate::new(100, 1000, 5);
-        assert_eq!(update.downloaded, 100);
-        assert_eq!(update.total, 1000);
-        assert_eq!(update.seq, 5);
-    }
-
-    #[test]
-    fn progress_update_default_is_zero() {
-        let update = ProgressUpdate::default();
-        assert_eq!(update.downloaded, 0);
-        assert_eq!(update.total, 0);
-        assert_eq!(update.seq, 0);
-    }
-
-    #[test]
-    fn test_percent_encode_revision() {
-        // Normal alphanumeric revisions pass through
-        assert_eq!(percent_encode_revision("main"), "main");
-        assert_eq!(percent_encode_revision("v1.0.2"), "v1.0.2");
-        assert_eq!(percent_encode_revision("abc123-def"), "abc123-def");
-
-        // Branch names with slashes
-        assert_eq!(
-            percent_encode_revision("feature/branch"),
-            "feature%2Fbranch"
-        );
-        assert_eq!(percent_encode_revision("hotfix/v1.2"), "hotfix%2Fv1.2");
-
-        // Special characters that could cause ambiguity
-        assert_eq!(percent_encode_revision("tag#123"), "tag%23123");
-        assert_eq!(percent_encode_revision("user@commit"), "user%40commit");
-
-        // Complex case
-        assert_eq!(
-            percent_encode_revision("feature/test@v1#fix"),
-            "feature%2Ftest%40v1%23fix"
-        );
-
-        // Unicode (UTF-8 encoding)
-        let encoded = percent_encode_revision("café/模型#x@y");
-        assert!(encoded.contains("%C3%A9"), "Should contain UTF-8 encoded é");
-        assert!(encoded.contains("%2F"), "Should encode /");
-        assert!(encoded.contains("%23"), "Should encode #");
-        assert!(encoded.contains("%40"), "Should encode @");
-        // Verify it encodes the CJK character (模 = E6 A8 A1 in UTF-8)
-        assert!(
-            encoded.contains("%E6%A8%A1"),
-            "Should contain UTF-8 encoded 模"
-        );
-
-        // Full verification
-        assert_eq!(percent_encode_revision("café"), "caf%C3%A9");
-    }
-}
+#[path = "worker_tests.rs"]
+mod tests;

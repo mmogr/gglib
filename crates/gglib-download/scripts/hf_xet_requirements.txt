@@ -1,0 +1,8 @@
+# Python packages of the hf_xet download accelerator, one per line.
+#
+# Pinned to the release lines hf_xet_downloader.py was tested against, and
+# raised on purpose. gglib embeds this file: a change here re-installs an
+# existing environment on its next use.
+huggingface_hub>=2.1.1,<2.2
+hf_xet>=1.6.0,<1.7
+tqdm>=4.70.1,<5

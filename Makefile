@@ -2,7 +2,7 @@
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
-        test check fmt lint doc doc-check dev pre-commit release \
+        test test-helper check fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries enforce \
         bindings bindings-check \
         clean clean-gui clean-llama clean-db clean-all \
@@ -175,6 +175,22 @@ build-all: build-gui build ## Build Rust CLI and web UI
 test: ## Run Rust tests
 	@echo "Running all tests..."
 	$(CARGO) test
+
+# The download accelerator's helper is Python, so `cargo test` does not run
+# it. Its tests need a venv holding the packages of hf_xet_requirements.txt,
+# which CI builds on every run and a machine has only if someone built it:
+#   python3 -m venv target/helper-venv
+#   target/helper-venv/bin/pip install -r crates/gglib-download/scripts/hf_xet_requirements.txt
+# Without one this says so and passes, and it is not part of `pre-commit`.
+HELPER_VENV ?= target/helper-venv
+HELPER_DIR := crates/gglib-download/scripts
+
+test-helper: ## Run the download helper's Python tests, if its venv is there
+	@if [ -x "$(HELPER_VENV)/bin/python" ]; then \
+		cd $(HELPER_DIR) && "$(abspath $(HELPER_VENV))/bin/python" -m unittest test_hf_xet_downloader; \
+	else \
+		echo "⚠ no venv at $(HELPER_VENV): skipping the download helper's tests (see the Makefile for how to build one)"; \
+	fi
 
 # Check code without building
 check: ## Check Rust code without building

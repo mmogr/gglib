@@ -541,7 +541,7 @@ const PythonSetupStep: FC<{
 
       {!status.pythonAvailable && (
         <Banner variant="warning" title="Python not found">
-          The accelerator needs Python 3.9 or newer. Skip this step and downloads
+          The accelerator needs Python 3.10 or newer. Skip this step and downloads
           will run directly, which needs nothing installed. To use it later,
           install Python and either re-run this wizard from Settings or run{' '}
           <code>gglib config fast-downloads enable</code>.

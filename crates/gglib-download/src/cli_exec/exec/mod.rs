@@ -3,18 +3,20 @@ mod progress;
 pub(crate) mod python_bridge;
 pub(crate) mod python_env;
 mod python_protocol;
-mod xet_poller;
+mod python_requirements;
 
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Result, anyhow};
 use gglib_core::ports::{HfClientPort, QuantizationResolver};
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
 use super::utils::model_directory;
-use crate::executor::{DownloadPlan, download_files};
+use crate::executor::{DownloadPlan, FileProgress, ProgressCallback, download_file};
 use crate::resolver::HfQuantizationResolver;
+use progress::CliProgressPrinter;
 
 /// Execute a download request and return the result.
 ///
@@ -73,26 +75,28 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         fs::create_dir_all(&model_dir)?;
     }
 
-    // Download files. `expected_total` is the summed size of everything being
-    // fetched, which is only attributable to a single file when there is one.
-    let expected_total = (files.len() == 1)
-        .then(|| resolution.files.first().and_then(|f| f.size))
-        .flatten();
+    // Download the files one at a time, each drawn on a bar of its own.
+    for file in &resolution.files {
+        let printer = Arc::new(Mutex::new(CliProgressPrinter::new()));
+        let plan = DownloadPlan {
+            repo_id: &request.model_id,
+            revision: &commit_sha,
+            destination: &model_dir,
+            file: &file.path,
+            token: request.token.as_deref(),
+            force: request.force,
+            progress: Some(draw_on(&printer, &file.path)),
+            notice: None,
+            expected_size: file.size,
+            cancel: None,
+        };
 
-    let plan = DownloadPlan {
-        repo_id: &request.model_id,
-        revision: &commit_sha,
-        destination: &model_dir,
-        files: &files,
-        token: request.token.as_deref(),
-        force: request.force,
-        progress: None,
-        notice: None,
-        expected_total,
-        cancel: None,
-    };
-
-    download_files(&plan).await?;
+        let result = download_file(&plan).await;
+        if let Ok(mut printer) = printer.lock() {
+            printer.finish();
+        }
+        result?;
+    }
 
     let primary_path = model_dir.join(&files[0]);
     let all_paths: Vec<_> = files.iter().map(|f| model_dir.join(f)).collect();
@@ -109,6 +113,17 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         quantization: quant.clone(),
         repo_id: request.model_id,
         commit_sha,
+    })
+}
+
+/// A progress sink that draws `file`'s progress on `printer`.
+fn draw_on(printer: &Arc<Mutex<CliProgressPrinter>>, file: &str) -> ProgressCallback {
+    let printer = Arc::clone(printer);
+    let label = file.to_string();
+    Arc::new(move |progress: FileProgress| {
+        if let Ok(mut printer) = printer.lock() {
+            printer.update(Some(&label), progress, Instant::now());
+        }
     })
 }
 

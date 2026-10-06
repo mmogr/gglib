@@ -62,10 +62,9 @@ This module handles all download-related commands that interact with `HuggingFac
    (`DownloadEvent::DownloadNotice`, e.g. "preparing fast downloader…")
    covers the tens of seconds the fast downloader's Python venv can take
    to build, before any bytes exist to show progress for.
-6. When the Python helper uses the `hf-xet` transport (which bypasses
-   tqdm), a stat-based fallback poller emits synthetic progress events
-   so the bar still ticks. See
-   [`gglib-download/src/cli_exec/exec/xet_poller.rs`](../../../../../gglib-download/src/cli_exec/exec/xet_poller.rs).
+6. Each file is counted once, whichever transport moves it: the bytes on
+   disk fill the bar. See
+   [`gglib-download/src/executor/progress.rs`](../../../../../gglib-download/src/executor/progress.rs).
 7. Model registration on completion is handled by the download manager
    (via `ModelRegistrarPort`).
 8. `CliDownloadEventEmitter` also installs itself as the process-wide
