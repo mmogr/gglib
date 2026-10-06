@@ -183,6 +183,20 @@ fn upstream_error_event_encodes_to_bare_error_frame_no_sentinel() {
     );
 }
 
+/// The frame byte for byte, since this is the one place it is written and
+/// clients parse it: ggchat's `WireTests` quote this envelope, keys in this
+/// order.
+#[test]
+fn the_error_frame_is_these_bytes() {
+    assert_eq!(
+        SseEncoder::upstream_error_frame("gone", "server_error", "upstream_error"),
+        concat!(
+            r#"data: {"error":{"code":"upstream_error","message":"gone","type":"server_error"}}"#,
+            "\n\n",
+        )
+    );
+}
+
 #[test]
 fn prompt_progress_encodes_to_top_level_field() {
     let out = enc()

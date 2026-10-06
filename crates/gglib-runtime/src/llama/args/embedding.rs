@@ -8,14 +8,18 @@
 //! produce one that 501s on `/v1/embeddings`.  Neither is a choice worth
 //! exposing, so this resolves from the model's tags and nothing else.
 
+use gglib_core::domain::capability_tags;
+
 /// Whether to pass `--embeddings` for a model carrying these tags.
 ///
-/// The `"embedding"` tag is written at import time by
-/// `gglib_gguf::capabilities`, from the GGUF's pooling type or an encoder-only
-/// architecture.
+/// That is whether it is an embedding model, by
+/// [`capability_tags::is_embedding`]. The proxy asks the same predicate before
+/// it routes a request, so the server this launches is sent what it serves.
+/// The tag is written at import time by `gglib_gguf::capabilities`, from the
+/// GGUF's pooling type or an encoder-only architecture.
 #[must_use]
 pub fn resolve_embeddings_flag(tags: &[String]) -> bool {
-    tags.iter().any(|tag| tag.eq_ignore_ascii_case("embedding"))
+    capability_tags::is_embedding(tags)
 }
 
 #[cfg(test)]

@@ -124,11 +124,7 @@ pub(crate) const REASONING_CAPABILITY: &str = "reasoning";
 /// disappears from the response instead of appearing as `[]` — an empty list
 /// reads as "this model can do nothing", which is the opposite of the truth.
 fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
-    let embeddings = summary
-        .tags
-        .iter()
-        .any(|t| t == crate::embeddings::EMBEDDING_TAG)
-        .then_some("embeddings");
+    let embeddings = capability_tags::is_embedding(&summary.tags).then_some("embeddings");
     let vision = summary.image_input.then_some(VISION_CAPABILITY);
     let reasoning = capability_tags::is_reasoning(&summary.tags).then_some(REASONING_CAPABILITY);
     let capabilities: Vec<String> = embeddings

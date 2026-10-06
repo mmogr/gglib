@@ -42,14 +42,7 @@ use crate::forward::should_forward_header;
 use crate::models::{EmbeddingsRoutingEnvelope, ErrorResponse};
 use crate::server::{AppState, handle_runtime_error, refuse_unresolved};
 use crate::unary_body::{Exchange, answer_with, exchange};
-
-/// The tag that marks a model as launchable in embedding mode.
-///
-/// Written at import time by `gglib_gguf::capabilities` and consumed by
-/// `gglib_runtime`'s `resolve_embeddings_flag`. Read here so the proxy can
-/// refuse a request the upstream would only 501 on, without paying for the
-/// swap first.
-pub(crate) const EMBEDDING_TAG: &str = "embedding";
+use gglib_core::domain::capability_tags;
 
 /// Handle an embeddings request — ensure the model is running, then proxy.
 #[allow(
@@ -92,7 +85,9 @@ pub(crate) async fn embeddings(
         Ok(model) => model,
         Err(e) => return refuse_unresolved(&envelope.model, e),
     };
-    if !model.tags.iter().any(|t| t == EMBEDDING_TAG) {
+    // The predicate the launch passes `--embeddings` by, asked here so a
+    // request the upstream would only 501 on is refused before the swap.
+    if !capability_tags::is_embedding(&model.tags) {
         info!(
             model = %model.name,
             "refusing embeddings request for a model that is not an embedding model"

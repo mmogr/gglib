@@ -1,7 +1,8 @@
 //! A reply that goes silent mid-answer ends, within one idle bound, in a
 //! notice, `upstream_timeout` and one `[DONE]`, with any tool call held back
 //! from the client sent ahead of them; and the three things that look like
-//! silence from the drain's side and are not.
+//! silence from the drain's side and are not. A reply whose connection breaks
+//! is the other way a turn dies upstream: it ends in `upstream_error`.
 //!
 //! The bound times reads of the upstream, so three things that look like
 //! silence from elsewhere are not stalls: an upstream that is slow but still
@@ -110,6 +111,31 @@ async fn a_held_back_tool_call_cut_off_by_a_stall_goes_out_before_the_notice_and
     assert_eq!(turn.error_codes(), ["upstream_timeout"]);
     assert_eq!(turn.dones(), 1);
     assert_eq!(turn.payloads().last(), Some(&"[DONE]"));
+}
+
+/// A connection that breaks is not a stall, and gets no notice: the answer so
+/// far, then the error frame and one `[DONE]`. The frame is pinned byte for
+/// byte, because clients parse it (ggchat's `WireTests` quote this envelope).
+#[tokio::test]
+async fn a_reply_whose_connection_breaks_ends_in_upstream_error_byte_for_byte_and_one_done() {
+    let broken = upstream(at_once(vec![text("Hel")]), Then::Break);
+    let turn = run_turn(broken, None, Reader::default()).await;
+
+    assert_eq!(turn.outcome.upstream_stalled, None);
+    assert!(turn.outcome.upstream_errored, "a break is a death upstream");
+    assert_eq!(turn.text(), "Hel", "the answer so far and no notice");
+    // From the end of the frame before it: nothing else is in the error frame.
+    let ending = concat!(
+        "\n\n",
+        r#"data: {"error":{"code":"upstream_error","#,
+        r#""message":"upstream SSE byte-stream error: connection reset","#,
+        r#""type":"server_error"}}"#,
+        "\n\n",
+        "data: [DONE]\n\n",
+    );
+    assert!(turn.wire.ends_with(ending), "{}", turn.wire);
+    assert_eq!(turn.error_codes(), ["upstream_error"]);
+    assert_eq!(turn.dones(), 1);
 }
 
 #[tokio::test]

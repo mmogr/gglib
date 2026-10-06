@@ -589,11 +589,7 @@ pub(crate) async fn chat_completions(
     // outright. Forwarding anyway would evict whatever is currently serving
     // chat, load the embedding model, and collect a 501, leaving the endpoint
     // worse off than before the request arrived.
-    if model
-        .tags
-        .iter()
-        .any(|t| t == crate::embeddings::EMBEDDING_TAG)
-    {
+    if gglib_core::domain::capability_tags::is_embedding(&model.tags) {
         info!(
             model = %model.name,
             "refusing chat completion for an embedding-only model"

@@ -92,6 +92,18 @@ pub fn is_reasoning(tags: &[String]) -> bool {
     has(tags, REASONING)
 }
 
+/// Whether this is an embedding model: one launched with `--embeddings`,
+/// which serves `/v1/embeddings` and refuses chat completions.
+///
+/// The single definition. The launch and the proxy both ask it, and they have
+/// to agree: a model launched in embedding mode that the proxy took for a chat
+/// model would be refused the embeddings it serves and sent the chat it
+/// cannot.
+#[must_use]
+pub fn is_embedding(tags: &[String]) -> bool {
+    has(tags, EMBEDDING)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +141,27 @@ mod tests {
     fn a_tag_that_merely_contains_the_word_does_not_match() {
         assert!(!is_reasoning(&tags(&["reasoning-lite"])));
         assert!(!is_reasoning(&tags(&["pre-reasoning"])));
+    }
+
+    #[test]
+    fn an_embedding_tagged_model_is_an_embedding_model_alone_or_among_other_tags() {
+        assert!(is_embedding(&tags(&["embedding"])));
+        assert!(is_embedding(&tags(&["code", "embedding"])));
+    }
+
+    /// A hand edit stores the tag as typed, so `Embedding` is the same model.
+    #[test]
+    fn the_embedding_match_is_case_insensitive() {
+        assert!(is_embedding(&tags(&["Embedding"])));
+        assert!(is_embedding(&tags(&["EMBEDDING"])));
+    }
+
+    /// `embeddings`, the capability `/v1/models` lists, is not the tag.
+    #[test]
+    fn a_model_without_the_whole_tag_is_not_an_embedding_model() {
+        assert!(!is_embedding(&[]));
+        assert!(!is_embedding(&tags(&["agent", "reasoning", "mtp"])));
+        assert!(!is_embedding(&tags(&["embeddings", "format:embedding"])));
     }
 
     #[test]

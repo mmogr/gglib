@@ -223,7 +223,11 @@ impl SseEncoder {
         format!("data: {value}\n\n")
     }
 
-    /// Encode a [`LlmStreamEvent::UpstreamError`] event.
+    /// One error frame, `data: {"error": {…}}`: the one place the in-stream
+    /// error envelope is written.
+    ///
+    /// An [`LlmStreamEvent::UpstreamError`] is encoded with it, and the proxy
+    /// calls it for the failures it reports itself.
     ///
     /// Deliberately bare — no `id`/`object`/`created`/`model` envelope and,
     /// crucially, no `choices` key at all (unlike every other frame this
@@ -235,7 +239,8 @@ impl SseEncoder {
     ///
     /// Does **not** append [`DONE_SENTINEL`] — see [`Self::encode`] doc; the
     /// caller appends it exactly once after the stream is truly exhausted.
-    fn upstream_error_frame(message: &str, error_type: &str, code: &str) -> String {
+    #[must_use]
+    pub fn upstream_error_frame(message: &str, error_type: &str, code: &str) -> String {
         let error_obj = json!({
             "error": {
                 "message": message,

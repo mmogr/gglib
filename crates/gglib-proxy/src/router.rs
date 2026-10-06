@@ -151,8 +151,9 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             Arc::new(access.clone()),
             crate::access::host_guard::<ProxyAccessConfig>,
         ))
-        // LocalOnly CORS: mirrors the Axum web server's default security posture.
-        // Only localhost, 127.0.0.1, ::1, and tauri://localhost origins are accepted.
+        // CORS, built from `access.cors`, whichever policy that is: an origin
+        // reads an answer exactly when the policy allows it, which is the test
+        // the origin guard above asks too.
         //
         // Outermost deliberately: it answers OPTIONS preflight itself, and a
         // preflight that reached the guards above would be refused for carrying
