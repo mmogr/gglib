@@ -8,7 +8,6 @@ mod executor;
 mod local;
 mod reader;
 mod registry;
-mod sse;
 
 pub use cell::{RunSpec, Stopped};
 pub use executor::RunLog;

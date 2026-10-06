@@ -62,7 +62,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`paths/`** — Path configuration and platform-specific directory handling
 - **`download/`** — Download-related DTOs and progress tracking types
 - **`ports/mcp_dto.rs`** — Cross-boundary DTOs for MCP resolution status (Tauri/Axum/TypeScript)
-- **`sse/`** — OpenAI-compatible SSE codec: byte-stream `SseStreamDecoder`, single-frame `parse_sse_frame`, and `SseEncoder` that re-emits canonical `chat.completion.chunk` envelopes. Used by the proxy's universal consistency layer.
+- **`sse/`** — OpenAI-compatible SSE codec: the byte-level splitter `DataFrames` (complete lines, then each event's `data:` payload), byte-stream `SseStreamDecoder` built on the same lines, single-frame `parse_sse_frame`, and `SseEncoder` that re-emits canonical `chat.completion.chunk` envelopes. Used by the proxy's universal consistency layer and by the daemon's runs.
 - **`normalize/`** — Universal normalization layer. The `ToolCallParser` trait plus dialect parsers (`StandardJsonParser` identity and the spec-driven `DelimitedToolCallParser` for marker-delimited tool calls) rewrite model-specific output into strict `OpenAI` events. Selected per-request from the model's persisted `DialectSpec` (with a `format:*` tag fallback) via `normalize::registry::get_parser`.
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types

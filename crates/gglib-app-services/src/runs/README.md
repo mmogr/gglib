@@ -27,11 +27,12 @@ runs/
   reader.rs       — a run's event stream: the log by index, then live
   executor.rs     — the seam an executor writes a run's events through
   chat.rs         — the chat executor: the body to the daemon's own proxy,
-                    each `data:` payload logged verbatim, `[DONE]` not
+                    each `data:` payload logged verbatim, `[DONE]` not;
+                    `gglib_core::sse::DataFrames` cuts the reply into those
+                    payloads, holding no more of one event than the log
+                    could take
   door.rs         — where that proxy is and the key it wants, by the
                     tunnel's rule in `remote/key.rs`; never minted
-  sse.rs          — `data:` payloads out of a byte stream, holding no
-                    more of one event than the log could take
 ```
 
 # Privacy
