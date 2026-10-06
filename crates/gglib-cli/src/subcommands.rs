@@ -35,9 +35,10 @@ pub enum ProxyCommand {
         /// Host of the already-running proxy to connect to
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
-        /// Port of the already-running proxy to connect to
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
+        /// Port of the already-running proxy to connect to.
+        /// Omit to use the stored `proxy_port` setting.
+        #[arg(short, long)]
+        port: Option<u16>,
         /// API key of the target proxy, if it requires one.
         /// Omit to use the stored `proxy_api_key` setting.
         #[arg(long, env = "GGLIB_API_KEY")]
@@ -55,9 +56,10 @@ pub enum ProxyCommand {
         /// Host of the already-running proxy to connect to
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
-        /// Port of the already-running proxy to connect to
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
+        /// Port of the already-running proxy to connect to.
+        /// Omit to use the stored `proxy_port` setting.
+        #[arg(short, long)]
+        port: Option<u16>,
         /// Optional session ID to target (without --session-id, clears all sessions)
         #[arg(long)]
         session_id: Option<String>,

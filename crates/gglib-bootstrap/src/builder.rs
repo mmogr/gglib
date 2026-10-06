@@ -95,7 +95,7 @@ impl CoreBootstrap {
         // 9. Download manager
         let downloads: Arc<dyn DownloadManagerPort> =
             Arc::new(build_download_manager(DownloadManagerDeps {
-                model_registrar: Arc::clone(&model_registrar),
+                model_registrar,
                 hf_client: Arc::clone(&hf_client),
                 event_emitter: emitter,
                 config: download_config,
@@ -130,7 +130,6 @@ impl CoreBootstrap {
             hf_client,
             gguf_parser,
             repos,
-            model_registrar,
             pool,
         })
     }

@@ -47,9 +47,9 @@ pub enum Commands {
         /// Load this model instead of the recommended (or most recent) one
         #[arg(long)]
         model: Option<String>,
-        /// Port to bind the endpoint to
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
+        /// Port to bind the endpoint to. Omit to use the stored `proxy_port` setting
+        #[arg(short, long)]
+        port: Option<u16>,
     },
 
     // ── Management (these have subcommands — use `<command> --help`) ────

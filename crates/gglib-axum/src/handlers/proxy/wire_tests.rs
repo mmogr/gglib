@@ -7,6 +7,7 @@ use super::*;
 use gglib_core::contracts::http::daemon_bodies::{
     PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS,
 };
+use gglib_core::settings::DEFAULT_PROXY_PORT;
 
 /// An omitted port must come from settings, not from the compile-time
 /// default. The tray panel sends no port at all, and starting it on 8080
@@ -14,20 +15,34 @@ use gglib_core::contracts::http::daemon_bodies::{
 /// split-brain this endpoint has to avoid.
 #[test]
 fn an_omitted_port_comes_from_settings() {
-    let settings = AppSettings {
+    let settings = Settings {
         proxy_port: Some(18080),
-        ..AppSettings::default()
+        ..Settings::default()
     };
     let runtime_cfg = to_runtime_config(&StartProxyConfig::default(), &settings);
     assert_eq!(runtime_cfg.port, 18080);
 }
 
+/// `gglib proxy`, `serve` and `up` without `--port` send the key with a null
+/// value rather than leaving it out. That reads as no port, and so as the
+/// stored one.
+#[test]
+fn a_null_port_comes_from_settings_as_an_omitted_one_does() {
+    let cfg: StartProxyConfig =
+        serde_json::from_str(r#"{"port":null}"#).expect("a null port must deserialize");
+    let settings = Settings {
+        proxy_port: Some(18080),
+        ..Settings::default()
+    };
+    assert_eq!(to_runtime_config(&cfg, &settings).port, 18080);
+}
+
 /// An explicit port still wins: settings are the fallback, not an override.
 #[test]
 fn an_explicit_port_beats_the_setting() {
-    let settings = AppSettings {
+    let settings = Settings {
         proxy_port: Some(18080),
-        ..AppSettings::default()
+        ..Settings::default()
     };
     let cfg = StartProxyConfig {
         port: Some(9999),
@@ -40,7 +55,7 @@ fn an_explicit_port_beats_the_setting() {
 /// still the floor.
 #[test]
 fn no_port_anywhere_falls_back_to_the_default() {
-    let runtime_cfg = to_runtime_config(&StartProxyConfig::default(), &AppSettings::default());
+    let runtime_cfg = to_runtime_config(&StartProxyConfig::default(), &Settings::default());
     assert_eq!(runtime_cfg.port, DEFAULT_PROXY_PORT);
 }
 
@@ -49,7 +64,7 @@ fn no_port_anywhere_falls_back_to_the_default() {
 #[test]
 fn cache_omitted_defaults_to_disabled() {
     let cfg = StartProxyConfig::default();
-    let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
+    let runtime_cfg = to_runtime_config(&cfg, &Settings::default());
     assert!(!runtime_cfg.cache_enabled);
     assert_eq!(runtime_cfg.slot_dir, None);
 }
@@ -64,7 +79,7 @@ fn cache_false_ignores_a_supplied_slot_dir() {
         slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
         ..Default::default()
     };
-    let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
+    let runtime_cfg = to_runtime_config(&cfg, &Settings::default());
     assert!(!runtime_cfg.cache_enabled);
     assert_eq!(runtime_cfg.slot_dir, None);
 }
@@ -79,7 +94,7 @@ fn cache_true_carries_the_explicit_slot_dir() {
         slot_dir: Some(std::path::PathBuf::from("/custom/slots")),
         ..Default::default()
     };
-    let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
+    let runtime_cfg = to_runtime_config(&cfg, &Settings::default());
     assert!(runtime_cfg.cache_enabled);
     assert_eq!(
         runtime_cfg.slot_dir,
@@ -97,7 +112,7 @@ fn cache_true_without_slot_dir_uses_the_default_directory() {
         cache: Some(true),
         ..Default::default()
     };
-    let runtime_cfg = to_runtime_config(&cfg, &AppSettings::default());
+    let runtime_cfg = to_runtime_config(&cfg, &Settings::default());
     assert!(runtime_cfg.cache_enabled);
     assert_eq!(
         runtime_cfg.slot_dir,
@@ -119,9 +134,9 @@ fn default_context_is_the_context_somebody_chose() {
             default_context: requested,
             ..Default::default()
         };
-        let settings = AppSettings {
+        let settings = Settings {
             default_context_size: stored,
-            ..AppSettings::default()
+            ..Settings::default()
         };
         assert_eq!(to_runtime_config(&cfg, &settings).default_context, want);
     }

@@ -136,7 +136,7 @@ gglib proxy
 
 # In another
 gglib proxy dashboard
-gglib proxy dashboard --host 127.0.0.1 --port 8080
+gglib proxy dashboard --host 127.0.0.1 --port 8123
 ```
 
 This is a simple redraw-in-place view (via `crossterm` cursor moves), not a full raw-mode TUI — consistent with this crate's existing terminal-handling conventions (see `handlers/model/download/interactive.rs`). Falls back to plain sequential prints on a non-TTY stdout. Press `Ctrl+C` to exit.
@@ -152,7 +152,7 @@ Proxy cache-clear options:
 | Flag | Description |
 |---|---|
 | `--host` | Proxy host (default: 127.0.0.1) |
-| `-p`, `--port` | Proxy port (default: 8080) |
+| `-p`, `--port` | Proxy port (default: the stored `proxy_port` setting) |
 | `--session-id` | Optional session ID to target (without it, clears all sessions) |
 
 Cache flags (`gglib proxy`, `gglib serve`):
@@ -332,7 +332,7 @@ gglib model update 1 --projector ~/models/mmproj-F16.gguf
 gglib model update 1 --no-projector
 
 # Pin one model to an OpenAI-compatible endpoint (proxy stack, dashboard included)
-gglib serve 1 --port 8080
+gglib serve 1 --port 8123
 
 # Same, with KV cache session persistence on disk
 gglib serve 1 --cache --slot-dir ~/.gglib/slots

@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use gglib_core::ports::{
-    DownloadManagerPort, GgufParserPort, HfClientPort, ModelRegistrarPort, Repos,
-};
+use gglib_core::ports::{DownloadManagerPort, GgufParserPort, HfClientPort, Repos};
 use gglib_core::services::AppCore;
 use sqlx::SqlitePool;
 
@@ -26,9 +24,6 @@ pub struct BuiltCore {
     /// Adapters need this to construct the MCP service and other
     /// infrastructure that requires direct repository access.
     pub repos: Repos,
-    /// Model registrar shared between the download manager and direct
-    /// registration code paths (e.g., CLI `model add` command).
-    pub model_registrar: Arc<dyn ModelRegistrarPort>,
     /// Raw `SQLite` connection pool.
     ///
     /// Adapters that need to construct additional repositories (e.g., the

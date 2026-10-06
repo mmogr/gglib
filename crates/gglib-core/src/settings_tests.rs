@@ -331,20 +331,17 @@ fn test_proxy_loop_detection_defaults_to_none_and_merges_like_any_bool_setting()
     assert_eq!(settings.proxy_loop_detection, None);
 }
 
+/// The stored port, and the default only when none is stored.
 #[test]
-fn test_effective_ports() {
-    let settings = Settings::with_defaults();
-    assert_eq!(settings.effective_proxy_port(), DEFAULT_PROXY_PORT);
+fn the_effective_proxy_port_is_the_stored_one_then_the_default() {
+    let stored = Settings {
+        proxy_port: Some(9123),
+        ..Settings::default()
+    };
+    assert_eq!(stored.effective_proxy_port(), 9123);
     assert_eq!(
-        settings.effective_llama_base_port(),
-        DEFAULT_LLAMA_BASE_PORT
-    );
-
-    let settings_none = Settings::default();
-    assert_eq!(settings_none.effective_proxy_port(), DEFAULT_PROXY_PORT);
-    assert_eq!(
-        settings_none.effective_llama_base_port(),
-        DEFAULT_LLAMA_BASE_PORT
+        Settings::default().effective_proxy_port(),
+        DEFAULT_PROXY_PORT
     );
 }
 

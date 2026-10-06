@@ -274,10 +274,11 @@ pub struct ServeOptions {
     /// IP need that value passed to `--allowed-host`.
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
-    /// Port the OpenAI-compatible endpoint listens on.
+    /// Port the OpenAI-compatible endpoint listens on. Omit to use the stored
+    /// `proxy_port` setting.
     ///
     /// The proxy dashboard is served from the same port at
     /// `/v1/proxy/status` (JSON) and `/v1/proxy/status/stream` (SSE).
-    #[arg(short, long, default_value = "8080")]
-    pub port: u16,
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }

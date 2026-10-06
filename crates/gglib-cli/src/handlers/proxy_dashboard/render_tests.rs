@@ -82,7 +82,7 @@ fn render_frame_shows_placeholder_when_no_connections() {
         sampling_audit: None,
     };
     let frame = render_frame(
-        "http://127.0.0.1:8080/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );
@@ -118,7 +118,7 @@ fn render_frame_shows_connection_and_slot_bars() {
         sampling_audit: None,
     };
     let frame = render_frame(
-        "http://127.0.0.1:8080/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/proxy/status/stream",
         &snapshot,
         DEFAULT_TERM_WIDTH,
     );
@@ -153,7 +153,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
     };
     let width = 80u16;
     let frame = render_frame(
-        "http://127.0.0.1:8080/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/proxy/status/stream",
         &snapshot,
         width,
     );
@@ -212,7 +212,7 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
     };
     let term_width = 40u16;
     let frame = render_frame(
-        "http://127.0.0.1:8080/v1/proxy/status/stream",
+        "http://127.0.0.1:8123/v1/proxy/status/stream",
         &snapshot,
         term_width,
     );
@@ -251,7 +251,7 @@ fn frame_with_cache(cache: Option<CacheStatus>) -> String {
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
     };
-    render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
 
 fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
@@ -267,7 +267,7 @@ fn frame_with_agent_usage(agent_usage: CacheUsage) -> String {
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
     };
-    render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
 
 fn frame_with_admission(admission: AdmissionSnapshot) -> String {
@@ -283,7 +283,7 @@ fn frame_with_admission(admission: AdmissionSnapshot) -> String {
         per_model_defects: BTreeMap::new(),
         sampling_audit: None,
     };
-    render_frame("http://127.0.0.1:8080", &snapshot, DEFAULT_TERM_WIDTH)
+    render_frame("http://127.0.0.1:8123", &snapshot, DEFAULT_TERM_WIDTH)
 }
 
 /// A proxy that predates admission control still renders — the section
@@ -378,7 +378,7 @@ fn a_long_second_slot_explanation_is_clipped_to_the_terminal() {
         sampling_audit: None,
     };
 
-    let frame = render_frame("http://127.0.0.1:8080", &snapshot, 80);
+    let frame = render_frame("http://127.0.0.1:8123", &snapshot, 80);
     for line in frame.lines() {
         assert!(
             line.chars().count() <= 80,

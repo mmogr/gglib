@@ -133,7 +133,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // 2. Shared infrastructure via gglib-bootstrap.
     let bootstrap_config = BootstrapConfig {
         db_path,
-        llama_server_path: config.llama_server_path.clone(),
         models_dir: models_resolution.path,
         hf_token: None,
     };
@@ -144,7 +143,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         hf_client,
         gguf_parser,
         repos,
-        model_registrar: _,
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
