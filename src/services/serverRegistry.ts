@@ -8,12 +8,14 @@
  * - Keyed by modelId (string) for frontend/JSON compatibility
  * - getServerState returns undefined for unknown models (UI treats as not running)
  * - Uses useSyncExternalStore for React integration
+ * - Held in a createEventStore, like the proxy and remote registries
  * - Single ingestServerEvent function handles all event types
  * - Ordering guard via updatedAt prevents stale event overwrites
  */
 
 import { useSyncExternalStore } from 'react';
 import type { RuntimeErrorInfo, ServerHealthStatus } from '../types';
+import { createEventStore } from './createEventStore';
 
 // Re-export for convenience
 export type { ServerHealthStatus } from '../types';
@@ -56,14 +58,16 @@ export type ServerEvent =
 // Registry State
 // ============================================================================
 
-const state = new Map<string, ServerState>();
-const listeners = new Set<() => void>();
+type ServerStates = ReadonlyMap<string, ServerState>;
+
+// The map is replaced on every write and never changed in place, so its
+// identity says whether anything was written.
+const store = createEventStore<ServerStates>(new Map());
 
 // Memoization for getAllRunningServerInfos — ensures useSyncExternalStore
 // receives a stable reference when nothing has changed (two distinct [] instances
 // are not Object.is-equal, which would trigger an infinite re-render loop).
-let snapshotVersion = 0;
-let cachedInfosVersion = -1;
+let cachedInfosFor: ServerStates | null = null;
 let cachedInfos: ServerStateInfo[] = [];
 
 // ============================================================================
@@ -75,7 +79,7 @@ let cachedInfos: ServerStateInfo[] = [];
  * Returns undefined for unknown models (UI should treat as not running).
  */
 export function getServerState(modelId: string): ServerState | undefined {
-  return state.get(modelId);
+  return store.getState().get(modelId);
 }
 
 
@@ -84,16 +88,14 @@ export function getServerState(modelId: string): ServerState | undefined {
  * Returns an unsubscribe function.
  */
 export function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  return store.subscribe(listener);
 }
 
 /**
- * Notify all listeners of a state change.
+ * Write one server's state, as a new map, and notify all listeners.
  */
-function notifyListeners(): void {
-  snapshotVersion++;
-  listeners.forEach((listener) => listener());
+function setServerState(modelId: string, next: ServerState): void {
+  store.setState(new Map(store.getState()).set(modelId, next));
 }
 
 /**
@@ -121,11 +123,12 @@ export function ingestServerEvent(evt: ServerEvent): void {
       // Snapshot contains only running servers
       // Clear existing state and replace with snapshot
       // Note: We don't clear stopped/crashed servers as snapshot only shows running
+      const next = new Map(store.getState());
       for (const server of evt.servers) {
         if (!isValidModelId(server.modelId)) continue;
-        const existing = state.get(server.modelId);
+        const existing = next.get(server.modelId);
         if (!existing || server.updatedAt >= existing.updatedAt) {
-          state.set(server.modelId, {
+          next.set(server.modelId, {
             status: server.status,
             port: server.port,
             updatedAt: server.updatedAt,
@@ -134,7 +137,7 @@ export function ingestServerEvent(evt: ServerEvent): void {
           });
         }
       }
-      notifyListeners();
+      store.setState(next);
       break;
     }
 
@@ -142,9 +145,9 @@ export function ingestServerEvent(evt: ServerEvent): void {
     case 'stopping':
     case 'stopped':
     case 'crashed': {
-      const existing = state.get(evt.modelId);
+      const existing = getServerState(evt.modelId);
       if (!existing || evt.updatedAt >= existing.updatedAt) {
-        state.set(evt.modelId, {
+        setServerState(evt.modelId, {
           status: evt.type,
           port: evt.port,
           updatedAt: evt.updatedAt,
@@ -152,21 +155,19 @@ export function ingestServerEvent(evt: ServerEvent): void {
           health: evt.type === 'running' ? { status: 'healthy' } : undefined,
           modelName: evt.modelName ?? existing?.modelName,
         });
-        notifyListeners();
       }
       break;
     }
 
     case 'server_health_changed': {
-      const existing = state.get(evt.modelId);
+      const existing = getServerState(evt.modelId);
       // Only update health if server exists and event is newer
       if (existing && evt.updatedAt >= existing.updatedAt) {
-        state.set(evt.modelId, {
+        setServerState(evt.modelId, {
           ...existing,
           health: evt.status,
           updatedAt: evt.updatedAt,
         });
-        notifyListeners();
       }
       break;
     }
@@ -249,7 +250,8 @@ export function useAllServerStates(): ServerStateInfo[] {
 }
 
 function getAllRunningServerInfos(): ServerStateInfo[] {
-  if (cachedInfosVersion === snapshotVersion) return cachedInfos;
+  const state = store.getState();
+  if (cachedInfosFor === state) return cachedInfos;
   const result: ServerStateInfo[] = [];
   for (const [modelId, s] of state) {
     if (s.status === 'running') {
@@ -264,6 +266,6 @@ function getAllRunningServerInfos(): ServerStateInfo[] {
     }
   }
   cachedInfos = result;
-  cachedInfosVersion = snapshotVersion;
+  cachedInfosFor = state;
   return cachedInfos;
 }

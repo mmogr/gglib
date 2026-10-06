@@ -2,8 +2,9 @@
  * Generic external store factory for event-driven state.
  *
  * Provides subscribe/getSnapshot/update/use pattern compatible with
- * React's useSyncExternalStore. Used by serverRegistry and proxyRegistry
- * to avoid duplicating store boilerplate.
+ * React's useSyncExternalStore. Used by serverRegistry, proxyRegistry and
+ * remoteRegistry to avoid duplicating store boilerplate. What feeds one from
+ * the daemon's events is `bridgeEvents`.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -17,8 +18,6 @@ export interface EventStore<S> {
   subscribe: (listener: () => void) => () => void;
   /** React hook — subscribes to the full store state. */
   useStore: () => S;
-  /** React hook — subscribes with a selector for derived values. */
-  useSelector: <T>(selector: (state: S) => T) => T;
 }
 
 /**
@@ -52,13 +51,5 @@ export function createEventStore<S>(initial: S): EventStore<S> {
     return useSyncExternalStore(subscribe, getState, getState);
   }
 
-  function useSelector<T>(selector: (s: S) => T): T {
-    return useSyncExternalStore(
-      subscribe,
-      () => selector(state),
-      () => selector(state),
-    );
-  }
-
-  return { getState, setState, subscribe, useStore, useSelector };
+  return { getState, setState, subscribe, useStore };
 }

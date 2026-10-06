@@ -11,15 +11,22 @@
  */
 
 import { createApiTransport } from './api';
-import { createEventBus } from './events';
+import { onEventStreamOpen, subscribeSseEvent } from './events/sse';
+
+/**
+ * The event bus: the one SSE stream, subscribed to by category. There is one
+ * stream and nothing to construct, so this is the two functions themselves;
+ * callers reach them as `getTransport().subscribe` and
+ * `getTransport().onEventStreamOpen`.
+ */
+const events = { subscribe: subscribeSseEvent, onEventStreamOpen };
 
 /**
  * What `getTransport()` hands back: the HTTP client and the event bus, spread
- * into one object. Inferred from the two factories rather than restated as an
- * interface, so it cannot drift from what they actually return.
+ * into one object. Inferred from the two rather than restated as an
+ * interface, so it cannot drift from what they actually are.
  */
-type TransportInstance = ReturnType<typeof createApiTransport> &
-  ReturnType<typeof createEventBus>;
+type TransportInstance = ReturnType<typeof createApiTransport> & typeof events;
 
 // Internal singleton storage
 let _transport: TransportInstance | null = null;
@@ -38,7 +45,6 @@ export function getTransport(): TransportInstance {
   }
 
   const api = createApiTransport();
-  const events = createEventBus();
 
   const transport = {
     ...api,
