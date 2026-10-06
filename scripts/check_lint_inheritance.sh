@@ -31,15 +31,20 @@
 #
 #    The listed `.rs` files that no member directory holds, such as one
 #    `include!`d into several members' build scripts, are counted the same
-#    way, in a row of their own named `(outside-members)`.
+#    way, in a row of their own named `(outside-members)`, and a failure in
+#    that row names them.
 #
-# The self-test runs before every check: five manifests that must
-# fail rule 1 and a member without one, tried together and then the missing
-# one and a bad one each alone; files whose counts are known; baselines each
-# count must fail against; and a counter that exits 1 without printing a
-# count, a row listed twice and a count field that is not a number, the row
-# listed twice also under `--update`, which must leave the baseline as it
-# was. Each fixture that must fail must also make the check exit non-zero.
+# The self-test runs before every check, and `--self-test` runs it alone:
+# five manifests that must fail rule 1 and a member without one, tried
+# together and then the missing one and a bad one each alone; files whose
+# counts are known (in `src/`, `tests/`, a build script and outside every
+# member, and none in ignored, deleted or non-`.rs` files); baselines each
+# count must fail against; an `--update` that must raise the first number; a
+# counter that exits 1 without printing a count, a row listed twice and a
+# count field that is not a number, the row listed twice also under
+# `--update`, which must leave the baseline as it was; a baseline row naming
+# no member; and a tree in which git lists no `.rs` file. Each fixture that
+# must fail must also make the check exit non-zero.
 # Its fixture repository reads no global or system git config and copies no
 # init template, so an excludes file the caller keeps cannot hide a fixture.
 #

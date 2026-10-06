@@ -2,512 +2,195 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "🔨 Build (Debug)",
+			"label": "🛠️ Full Setup (make setup)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"build"
-			],
+			"command": "make",
+			"args": ["setup"],
 			"group": "build",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": true, "clear": true }
 		},
 		{
 			"label": "🚀 Build (Release)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"build",
-				"--release"
-			],
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"command": "make",
+			"args": ["build"],
+			"group": { "kind": "build", "isDefault": true },
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
-			"label": "🧪 Run All Tests",
+			"label": "🔨 Build (Debug)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"test",
-				"--all"
-			],
-			"group": {
-				"kind": "test",
-				"isDefault": true
-			},
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧪 Run Frontend Tests",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"test:run"
-			],
-			"group": "test",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧪 Run Tests (Lib Only)",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"test",
-				"--lib"
-			],
-			"group": "test",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧪 Run Integration Tests",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"test",
-				"--test",
-				"*"
-			],
-			"group": "test",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧪 Run Doc Tests",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"test",
-				"--doc"
-			],
-			"group": "test",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧪 Run Specific Test",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"test",
-				"${input:testName}"
-			],
-			"group": "test",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"command": "make",
+			"args": ["build-dev"],
+			"group": "build",
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "📋 Check (Fast Compile Check)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"check"
-			],
+			"command": "make",
+			"args": ["check"],
 			"group": "build",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
-			"label": "🎨 Format Code",
+			"label": "🎨 Build Frontend",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"fmt",
-				"--all"
-			],
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"command": "make",
+			"args": ["build-gui"],
+			"group": "build",
+			"problemMatcher": ["$tsc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
-			"label": "🔍 Check Formatting",
+			"label": "🖥️ Build GUI (Release)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"fmt",
-				"--all",
-				"--",
-				"--check"
-			],
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "📎 Clippy (Linter)",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"clippy",
-				"--workspace",
-				"--exclude",
-				"gglib-app",
-				"--all-targets",
-				"--all-features"
-			],
-			"group": "none",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "📎 Clippy (Strict)",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"clippy",
-				"--workspace",
-				"--exclude",
-				"gglib-app",
-				"--all-targets",
-				"--all-features",
-				"--",
-				"-D",
-				"warnings"
-			],
-			"group": "none",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧹 Clean Build Artifacts",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"clean"
-			],
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🔒 Check Boundaries",
-			"type": "shell",
-			"command": "./scripts/check_boundaries.sh",
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"command": "make",
+			"args": ["build-tauri"],
+			"group": "build",
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "📦 Install Binary",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"build",
-				"--release",
-				"--package",
-				"gglib-cli"
-			],
+			"command": "make",
+			"args": ["install"],
 			"group": "none",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"dependsOn": ["🚀 Build (Release)"],
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "🧪 Run All Tests",
+			"type": "shell",
+			"command": "make",
+			"args": ["test"],
+			"group": { "kind": "test", "isDefault": true },
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "🧪 Run Frontend Tests",
+			"type": "shell",
+			"command": "make",
+			"args": ["test-web"],
+			"group": "test",
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "🎨 Format Code",
+			"type": "shell",
+			"command": "make",
+			"args": ["fmt"],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "📎 Clippy (Strict)",
+			"type": "shell",
+			"command": "make",
+			"args": ["lint"],
+			"group": "none",
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "🔒 Check Boundaries",
+			"type": "shell",
+			"command": "make",
+			"args": ["boundaries"],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "🔒 Architecture Checks (make enforce)",
+			"type": "shell",
+			"command": "make",
+			"args": ["enforce"],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
+		},
+		{
+			"label": "🔗 Regenerate Bindings (make bindings)",
+			"type": "shell",
+			"command": "make",
+			"args": ["bindings"],
+			"group": "none",
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "📚 Generate Documentation",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"doc",
-				"--no-deps",
-				"--open"
-			],
+			"command": "make",
+			"args": ["doc"],
 			"group": "none",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
-			"label": "🔄 Update Dependencies",
+			"label": "✅ Pre-commit Check (make pre-commit)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"update"
-			],
+			"command": "make",
+			"args": ["pre-commit"],
+			"group": "none",
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": true, "clear": true }
+		},
+		{
+			"label": "🧹 Clean Build Artifacts",
+			"type": "shell",
+			"command": "make",
+			"args": ["clean"],
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
-			"label": "🔎 Check Outdated Dependencies",
+			"label": "🧹 Clean All (Backend + Frontend)",
 			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"outdated"
-			],
+			"command": "make",
+			"args": ["clean", "clean-gui"],
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
-			"label": "🎯 Run Binary (Release)",
+			"label": "🌐 Open Web UI (make run-web)",
 			"type": "shell",
-			"command": "./target/release/gglib",
-			"args": [
-				"${input:cliArgs}"
-			],
+			"command": "make",
+			"args": ["run-web"],
 			"group": "none",
-			"dependsOn": [
-				"🚀 Build (Release)"
-			],
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "✅ Pre-commit Check (Format + Clippy + Tests)",
-			"dependsOn": [
-				"🎨 Format Code",
-				"📎 Clippy (Strict)",
-				"🧪 Run All Tests"
-			],
-			"dependsOrder": "sequence",
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🚢 Full CI Pipeline",
-			"dependsOn": [
-				"🔍 Check Formatting",
-				"🔒 Check Boundaries",
-				"📎 Clippy (Strict)",
-				"🧪 Run All Tests",				"🧪 Run Frontend Tests",				"🚀 Build (Release)"
-			],
-			"dependsOrder": "sequence",
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
-		},
-		{
-			"label": "🎬 Run gglib --help",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"run",
-				"--",
-				"--help"
-			],
-			"group": "none",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🎬 Run gglib model list",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"run",
-				"--",
-				"model",
-				"list"
-			],
-			"group": "none",
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"dependsOn": ["🎨 Build Frontend"],
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "📥 Install Frontend Dependencies",
 			"type": "shell",
 			"command": "npm",
-			"args": [
-				"install"
-			],
+			"args": ["install"],
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🎨 Build Frontend",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"build"
-			],
-			"group": "build",
-			"dependsOn": [
-				"📥 Install Frontend Dependencies"
-			],
-			"problemMatcher": [
-				"$tsc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "🎨 Run Frontend Dev",
 			"type": "shell",
 			"command": "npm",
-			"args": [
-				"run",
-				"dev"
-			],
+			"args": ["run", "dev"],
 			"isBackground": true,
 			"group": "none",
-			"dependsOn": [
-				"📥 Install Frontend Dependencies"
-			],
+			"dependsOn": ["📥 Install Frontend Dependencies"],
 			"problemMatcher": {
 				"pattern": {
 					"regexp": "^([^\\s].*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
@@ -523,226 +206,36 @@
 					"endsPattern": "Local:.*http"
 				}
 			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "🧠 Run Backend Dev (API-only)",
 			"type": "shell",
 			"command": "cargo",
-			"args": [
-				"run",
-				"--package",
-				"gglib-cli",
-				"--",
-				"daemon",
-				"run"
-			],
+			"args": ["run", "--package", "gglib-cli", "--", "daemon", "run"],
 			"isBackground": true,
 			"group": "none",
-			"problemMatcher": {
-				"pattern": {
-					"regexp": "^(.*)$",
-					"message": 1
-				},
-				"background": {
-					"activeOnStart": true,
-					"beginsPattern": ".",
-					"endsPattern": "API:"
-				}
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🌐 Cargo Web",
-			"type": "shell",
-			"command": "cargo",
-			"args": [
-				"run",
-				"--package",
-				"gglib-cli",
-				"--",
-				"web"
-			],
-			"isBackground": true,
-			"group": "none",
-			"dependsOn": [
-				"🎨 Build Frontend"
-			],
-			"problemMatcher": {
-				"pattern": {
-					"regexp": "^(.*)$",
-					"message": 1
-				},
-				"background": {
-					"activeOnStart": true,
-					"beginsPattern": ".",
-					"endsPattern": "Serving UI from:"
-				}
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"problemMatcher": [],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "🚀 Run Dev (Frontend + Backend)",
-			"dependsOn": [
-				"🎨 Run Frontend Dev",
-				"🧠 Run Backend Dev (API-only)"
-			],
+			"dependsOn": ["🎨 Run Frontend Dev", "🧠 Run Backend Dev (API-only)"],
 			"dependsOrder": "parallel",
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🖥️ Build GUI (Debug)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"tauri",
-				"build",
-				"--",
-				"--debug"
-			],
-			"group": "build",
-			"dependsOn": [
-				"🎨 Build Frontend"
-			],
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🖥️ Build GUI (Release)",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"tauri",
-				"build"
-			],
-			"group": "build",
-			"dependsOn": [
-				"🎨 Build Frontend"
-			],
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "🖥️ Run GUI (Dev)",
 			"type": "shell",
 			"command": "npm",
-			"args": [
-				"run",
-				"tauri:dev"
-			],
+			"args": ["run", "tauri:dev"],
 			"isBackground": true,
 			"group": "none",
-			"dependsOn": [
-				"📥 Install Frontend Dependencies"
-			],
-			"problemMatcher": [
-				"$rustc"
-			],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🚀 Build Everything (Release)",
-			"dependsOn": [
-				"🎨 Build Frontend",
-				"🚀 Build (Release)"
-			],
-			"dependsOrder": "parallel",
-			"group": "build",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🚀 Build & Install Everything",
-			"dependsOn": [
-				"🎨 Build Frontend",
-				"📦 Install Binary"
-			],
-			"dependsOrder": "sequence",
-			"group": "build",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		},
-		{
-			"label": "🛠️ Full Setup (make setup)",
-			"type": "shell",
-			"command": "make",
-			"args": [
-				"setup"
-			],
-			"group": "build",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
-		},
-		{
-			"label": "🧹 Clean All (Backend + Frontend)",
-			"type": "shell",
-			"command": "cargo clean && rm -rf node_modules web_ui dist",
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"dependsOn": ["📥 Install Frontend Dependencies"],
+			"problemMatcher": ["$rustc"],
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "🧪 Release Dry Run (build, publish nothing)",
@@ -751,12 +244,7 @@
 			"command": "gh workflow run release.yml -f test_run=true && echo 'Dispatched — waiting for the run to register…' && sleep 8 && gh run watch \"$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')\"",
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": true, "clear": true }
 		},
 		{
 			"label": "📥 Fetch Dry Run Artifacts",
@@ -765,129 +253,43 @@
 			"command": "gh run download \"$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')\" --pattern 'dryrun-*' --dir target/dry-run && echo '' && echo 'Artifacts in target/dry-run/:' && find target/dry-run -type f",
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": true, "clear": true }
 		},
 		{
 			"label": "🚦 Release Pre-flight (dry run + fetch)",
 			"detail": "The whole loop: build a real release without tagging, then pull the artifacts down. Install them before you bump the version.",
-			"dependsOn": [
-				"🧪 Release Dry Run (build, publish nothing)",
-				"📥 Fetch Dry Run Artifacts"
-			],
+			"dependsOn": ["🧪 Release Dry Run (build, publish nothing)", "📥 Fetch Dry Run Artifacts"],
 			"dependsOrder": "sequence",
 			"group": "none",
 			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
-		},
-		{
-			"label": "🔄 Sync Versions",
-			"type": "shell",
-			"command": "python3",
-			"args": [
-				"scripts/sync_versions.py"
-			],
-			"isBackground": false,
-			"group": "none"
-		},
-		{
-			"label": "📊 Complexity Hotspots",
-			"type": "shell",
-			"command": "./scripts/complexity_hotspots.sh",
-			"args": [
-				"${input:complexityThreshold}"
-			],
-			"group": "none",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": true, "clear": true }
 		},
 		{
 			"label": "🔬 Rust Coverage (lcov)",
 			"type": "shell",
 			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-tauri --exclude gglib-app --lcov --output-path lcov.info",
-			"options": {
-				"env": {
-					"MACOSX_DEPLOYMENT_TARGET": "14.0"
-				}
-			},
+			"options": { "env": { "MACOSX_DEPLOYMENT_TARGET": "14.0" } },
 			"group": "test",
 			"problemMatcher": ["$rustc"],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		},
 		{
 			"label": "🔬 Rust Coverage (table)",
 			"type": "shell",
 			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-tauri --exclude gglib-app",
-			"options": {
-				"env": {
-					"MACOSX_DEPLOYMENT_TARGET": "14.0"
-				}
-			},
+			"options": { "env": { "MACOSX_DEPLOYMENT_TARGET": "14.0" } },
 			"group": "test",
 			"problemMatcher": ["$rustc"],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": true,
-				"clear": true
-			}
+			"presentation": { "reveal": "always", "panel": "shared", "focus": true, "clear": true }
 		},
 		{
 			"label": "🔬 Rust Coverage (html)",
 			"type": "shell",
 			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-tauri --exclude gglib-app --html --output-dir coverage && open coverage/html/index.html",
-			"options": {
-				"env": {
-					"MACOSX_DEPLOYMENT_TARGET": "14.0"
-				}
-			},
+			"options": { "env": { "MACOSX_DEPLOYMENT_TARGET": "14.0" } },
 			"group": "test",
 			"problemMatcher": ["$rustc"],
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"focus": false,
-				"clear": true
-			}
-		}
-	],
-	"inputs": [
-		{
-			"id": "testName",
-			"type": "promptString",
-			"description": "Enter test name or pattern",
-			"default": ""
-		},
-		{
-			"id": "cliArgs",
-			"type": "promptString",
-			"description": "Enter CLI arguments",
-			"default": "--help"
-		},
-		{
-			"id": "complexityThreshold",
-			"type": "promptString",
-			"description": "Minimum complexity threshold to report (default: 40)",
-			"default": "40"
+			"presentation": { "reveal": "always", "panel": "shared", "focus": false, "clear": true }
 		}
 	]
 }

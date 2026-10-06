@@ -108,7 +108,7 @@ The output binary will be located in `target/release/bundle/`.
 
 For more details on the architecture and how all interfaces work together, see:
 - [Interfaces](../README.md#interfaces) in the main README
-- [Architecture Overview](../README.md#architecture) for backend details
+- [Architecture Overview](../crates/README.md#architecture-overview) for the layer diagram and the backend crates
 
 ## Project Structure
 

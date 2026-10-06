@@ -1,34 +1,29 @@
 # Styling & UI Architecture Contracts
 
 <!-- module-docs:start -->
-**Version**: Phase 0 (foundational contracts)  
-**Status**: Active  
-**Epic**: [#19 - Tailwind-first UI rewrite](https://github.com/mmogr/gglib/issues/19)
+
+The contracts for gglib's Tailwind-first UI: where a design token lives, how a
+component is styled, where platform code may sit, and the visual language every
+screen implements. They hold for the desktop app and the web UI alike, which
+render the same components.
+
+| File | Role |
+|------|------|
+| `tailwind.css` | Tailwind v4 configuration: the fonts, the `@theme inline` bridge to the tokens, the keyframes and the base layer |
+| `base/` | The design tokens (`variables.css`) and the highlight.js theme (`hljs.css`), described in [its README](base/README.md) |
 
 ---
 
-## Overview
-
-This document defines the **non-negotiable contracts** for gglib's Tailwind-first UI architecture. These rules govern how we build, style, and organize UI components across both **Tauri desktop** and **Axum WebUI** platforms.
-
-**Critical principle**: This is a **clean-slate migration** with **no backwards compatibility**. When we introduce new primitives in Phases 1–5, we migrate all usages immediately and **delete legacy assets**.
-
----
-
-## 1. Design Tokens: Source of Truth
-
-### Contract
+## Design tokens
 
 **CSS variables in [`variables.css`](base/variables.css) are the canonical design token source.**
 
 - All design tokens (colors, spacing, typography, shadows, etc.) are defined as CSS variables in `:root`
-- Tailwind consumes these tokens via `@theme inline` configuration in [`tailwind.css`](tailwind.css)
+- Tailwind consumes these tokens via the `@theme inline` block in [`tailwind.css`](tailwind.css)
 - No parallel token systems—CSS variables are the single source of truth
 - Token changes propagate automatically to both Tailwind utilities and vanilla CSS
 
-### Token Organization
-
-Tokens follow a **semantic layering** approach:
+Tokens are layered: a foundation value, then aliases named for their purpose.
 
 ```css
 /* Foundation tokens (primitives) */
@@ -46,13 +41,7 @@ Tokens follow a **semantic layering** approach:
 <div className="bg-primary">            {/* ✅ Tailwind utility */}
 ```
 
-### Migration Path
-
-- **Phase 0**: All tokens defined, gaps filled
-- **Phase 4**: Token hygiene audit — ✅ **COMPLETE**. All semantic subtle-tint and border tokens added (`--color-{primary,success,warning,danger}-subtle` and `--color-{primary,success,warning,danger}-border`). Bridged to Tailwind @theme. (The `--color-surface-raised` alias added here was later removed: it existed to fix references that the restyle had already deleted.)
-- **Phase 5**: Enforce via linting
-
-### Component Color Rule (enforced as of Phase 4)
+### Component color rule
 
 > **No raw `rgba()` or `#hex` color values in component files.**
 >
@@ -60,206 +49,85 @@ Tokens follow a **semantic layering** approach:
 > - A Tailwind semantic utility class (e.g. `bg-danger-subtle`, `text-success`, `border-primary-border`)
 > - A CSS variable reference (e.g. `var(--color-danger-subtle)`) — only when a Tailwind utility is unavailable
 
-Inline arbitrary values like `bg-[rgba(239,68,68,0.15)]` or `text-[#ef4444]` are **banned**. Add tokens to `variables.css` instead.
+Inline arbitrary values like `bg-[rgba(239,68,68,0.15)]` or `text-[#ef4444]` are **banned**. Add tokens to `variables.css` instead. Nothing checks this rule ([Enforcement](#enforcement) lists what is checked), and [`base/README.md`](base/README.md) names its one standing exception.
 
 ---
 
-## 2. Tailwind Scope & CSS Modules Policy
+## Tailwind first
 
-### Contract
-
-**Tailwind is the default for layout and component composition.**
-
-The CSS-module half of this section is a standing permission rather than a
-description: `find src -name '*.module.css'` returns nothing, and has for some
-time. The three plain stylesheets that do exist (`ConsoleLogPanel`,
-`InferenceParametersForm`, `RangeSlider`) sit beside their components and are
-imported directly. Kept because the rule still decides what to do when a
-component genuinely needs scoped CSS — but nothing in the tree exercises it, so
-do not read the examples below as a survey of what is here.
-
-### When to Use Tailwind
-
-✅ **Default choice for:**
-- Layout primitives (flex, grid, spacing)
-- Component composition (containers, wrappers, cards)
-- Interactive states (hover, focus, active)
-- Responsive design (breakpoints, conditional styles)
-- Utility-first styling in TSX files
+**Tailwind is the default for layout and component composition**: layout, spacing, hover and focus states, responsive rules and token colors are utility classes in the TSX.
 
 ```tsx
-// ✅ Tailwind-first approach
 <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover rounded-md">
-  <Icon name="plus" size={16} />
+  <Icon icon={Plus} />
   Add Item
 </button>
 ```
 
-### When to Use CSS Modules
+A stylesheet is for styling that does not map to utilities, such as a complex
+`@keyframes` animation. It is not for layout, for a simple hover or focus
+state, or for a color, spacing or type value a token already holds. Three
+exist outside `styles/`, each beside the component that imports it:
+`ConsoleLogPanel.css`, `InferenceParametersForm.css` and `RangeSlider.css`.
+The same rule decides when a CSS module is allowed; the tree has none
+(`find src -name '*.module.css'` prints nothing).
 
-✅ **Allowed for:**
-- Truly component-unique styling that doesn't map to utilities
-- Complex animations requiring `@keyframes`
-- Legacy components **during migration only** (temporary)
+A new primitive replaces what it supersedes in one change: every usage moves to
+it and the old asset is deleted, with no period in which both exist.
 
-❌ **Not allowed for:**
-- Layout that can be expressed with Tailwind utilities
-- Simple hover/focus states
-- Colors, spacing, typography already in design tokens
-- New components after Phase 0 (unless justified)
-
-### File Size Budget
-
-**Complexity budget guideline:**
-- TSX files: **≤200 LOC** per component (exceptions must be justified)
-- CSS files: **≤200 LOC** per module (split by subcomponent/concern if larger)
-- If a component exceeds this, decompose into smaller single-purpose components
+Files stay small: the file-size ratchet covers every `.ts`, `.tsx` and `.css`
+file under `src/` outside `src/types/generated/`, and CONTRIBUTING's
+[UI Conventions](../../CONTRIBUTING.md#ui-conventions) say what it holds and
+how to split a component that outgrows it.
 
 ---
 
-## 3. No-Compatibility Deletion Policy
+## Platform parity
 
-### Contract
+**UI must render identically in the Tauri desktop app and the web UI. Shared UI components must be platform-agnostic.**
 
-**When a new primitive is introduced, we migrate all usages immediately and delete legacy equivalents. No gradual deprecation.**
-
-### Phase-by-Phase Deletion
-
-| Phase | New Primitives | Legacy Assets Deleted |
-|-------|----------------|----------------------|
-| **Phase 1** | `Button`, `Icon` (final versions) | `buttons.css`, all `.btn` class usages |
-| **Phase 2** | `Input`, `Select`, `Textarea`, form components | `forms.css`, all `.form-input` usages, CSS Module form clones |
-| **Phase 3** | Layout primitives (Stack, Grid, Container) | Inline layout styles, god components split |
-| **Phase 4** | Token-aligned color system | Raw hex colors in components — ✅ **COMPLETE** |
-| **Phase 5** | Final cleanup | Any remaining CSS Modules not justified, dead CSS |
-
-### Why No Compatibility?
-
-- **Prevents drift**: Can't have "old way" and "new way" coexisting
-- **Forces migration**: Immediate migration ensures no forgotten usages
-- **Reduces complexity**: One way to do things, documented and enforced
-- **Faster completion**: Aggressive deletion accelerates the rewrite
-
-### Progressive Adoption (Phase 0 Only)
-
-**During Phase 0 only**, existing components keep their current styling approach. However:
-- **New components** created after Phase 0 **must** use Tailwind-first approach
-- **Modified components** should opportunistically migrate to Tailwind utilities where trivial
-- **No new CSS Modules** should be created without justification
-
-**Starting Phase 1**: All migration is mandatory and immediate.
-
----
-
-## 4. Platform Parity Requirements
-
-### Contract
-
-**UI must render identically in Tauri desktop and Axum WebUI. Shared UI components must be platform-agnostic.**
-
-### Platform Architecture
-
-```
-┌────────────────────────────────────────────────┐
-│           Shared UI Components                 │
-│        (src/components, src/pages)             │
-│                                                │
-│  • Must be platform-agnostic                   │
-│  • No direct Tauri API imports                 │
-│  • Inject platform deps via props/context      │
-└────────────────┬───────────────────────────────┘
-                 │
-                 │ Import from adapter
-                 ▼
-┌────────────────────────────────────────────────┐
-│       Platform Adapter Interface               │
-│        (src/services/platform)                 │
-│                                                │
-│  • Platform detection (isDesktop)              │
-│  • File dialogs                                │
-│  • Native menus                                │
-│  • External URL opening                        │
-│  • Event streaming (Tauri events vs SSE)       │
-│                                                │
-│  TRANSPORT_EXCEPTION: unavoidable platform code│
-└────────────────┬───────────────────────────────┘
-                 │
-         ┌───────┴────────┐
-         ▼                ▼
-    ┌─────────┐      ┌──────────┐
-    │  Tauri  │      │ Axum Web │
-    │ Desktop │      │   UI     │
-    └─────────┘      └──────────┘
-```
-
-### Rules for Shared UI
-
-✅ **Allowed in shared UI:**
+✅ **Allowed in shared UI** (`src/components`, `src/pages`):
 - React components, hooks, contexts
-- Styling (Tailwind, CSS Modules, CSS variables)
-- Import from `services/platform/*` adapters
+- Styling (Tailwind, stylesheets, CSS variables)
+- Imports from `services/platform`
 - Props for injecting platform-specific functionality
 
 ❌ **Not allowed in shared UI:**
-- Direct imports from `@tauri-apps/api`
-- Direct imports from `@tauri-apps/plugin-*`
-- `window.__TAURI__` checks (use `services/platform/detect.ts` instead)
+- Direct imports from `@tauri-apps/api` or `@tauri-apps/plugin-*`
+- Reading the Tauri bridge (`window.__TAURI_INTERNALS__`): ask `isDesktop()` from `services/platform` instead
 - Platform-specific business logic
 
-### Platform-Specific Code Location
+Platform-specific code belongs in `src/services/platform/`, and
+[its README](../services/platform/README.md) lists the files there.
 
-All platform-specific implementations must live in:
+### TRANSPORT_EXCEPTION marker
 
-**`src/services/platform/`**
+A `// TRANSPORT_EXCEPTION:` comment marks a file where platform-specific
+behaviour is unavoidable, so that those files are enumerable.
+`scripts/check_transport_branching.sh` lists every file outside
+`services/transport/` that reads the Tauri bridge and warns, without failing,
+on one that carries no marker.
 
-The files there:
-- `detect.ts` - Platform detection utilities
-- `fileDialogs.ts` - Native file picker (Tauri) vs HTML input (Web)
-- `llamaInstall.ts` - llama.cpp install and build management
-- `menuEvents.ts` / `menuSync.ts` - Native menu integration
-- `openUrl.ts` - External URL opening
-- `serverLogs.ts` - Log streaming
-- `logging/` - The app logger
-- `index.ts` - The barrel every consumer imports from
+Note what the marker is *not* for. The transport itself does not branch: the
+GUI talks HTTP to the daemon in both builds (see the header of
+`src/services/serverEvents.ts`). A platform check inside
+`src/services/clients/` fails that script, and one around a data path anywhere
+else is not an example to follow. What legitimately carries the marker is
+genuine OS integration: a native file dialog, a menu, opening a URL in the
+system browser.
 
-### TRANSPORT_EXCEPTION Marker
+### Checking parity by hand
 
-Use `// TRANSPORT_EXCEPTION` comments to mark the few places where
-platform-specific behaviour is unavoidable — the marker exists so those places
-are enumerable, and `scripts/check_transport_branching.sh` fails on an
-unmarked one.
-
-Note what this is *not* for. The transport itself does not branch: the GUI
-talks HTTP to the daemon in both builds, and the `if (isTauri())` fork that
-used to pick between a Tauri event and an `EventSource` is gone — see the
-header of `src/services/serverEvents.ts`. A new `isTauri()` branch around a
-data path is the thing the check was written to catch, not an example to
-follow. What legitimately carries the marker is genuine OS integration: a
-native file dialog, a menu, opening a URL in the system browser.
-
-### Testing Platform Parity
-
-**Manual verification checklist:**
-
-1. **Run Tauri desktop**: `npm run tauri:dev`
-2. **Run the daemon**: `cargo run --package gglib-cli -- daemon run` + `npm run dev`
-3. **Test UI features**:
-   - Button styles and interactions (hover, active, disabled)
-   - Modal dialogs (open, close, backdrop click)
-   - Form inputs (focus, validation, error states)
-   - Layout responsiveness (resize window)
-   - Icon rendering
-4. **Visual comparison**: Take screenshots, ensure pixel-perfect match where platform allows
+1. **Run the desktop app**: `npm run tauri:dev`
+2. **Run the web UI**: `cargo run --package gglib-cli -- daemon run`, and `npm run dev` beside it
+3. **Compare** buttons (hover, active, disabled), modals (open, close, backdrop click), form inputs (focus, validation, error states), layout on resize and icon rendering, side by side
 
 ---
 
-## 5. Tailwind v4 Configuration
+## Tailwind v4 configuration
 
-### Current Setup
-
-Tailwind v4 uses **CSS-native configuration** (no `tailwind.config.js`).
-
-**File**: [`tailwind.css`](tailwind.css)
+Tailwind v4 is configured in CSS: there is no `tailwind.config.js`, and
+[`tailwind.css`](tailwind.css) is the configuration. In outline:
 
 ```css
 @import "tailwindcss";
@@ -279,13 +147,9 @@ Tailwind v4 uses **CSS-native configuration** (no `tailwind.config.js`).
 }
 ```
 
-### Why `@theme inline`?
-
-- **Prevents circular references**: `@theme inline` properly references external CSS variables defined in `:root`
-- **Enables both utility classes and vanilla CSS**: Tailwind generates utilities like `bg-primary` while vanilla CSS can still use `var(--color-primary)`
-- **Avoids resolution issues**: Ensures CSS variable values are correctly resolved when nested
-
-### Usage Patterns
+`@theme inline` makes each utility reference the variable `variables.css`
+already defines, so Tailwind generates `bg-primary` without a second set of
+variables, and vanilla CSS goes on using `var(--color-primary)`.
 
 ```tsx
 // ✅ Tailwind utility classes
@@ -294,51 +158,35 @@ Tailwind v4 uses **CSS-native configuration** (no `tailwind.config.js`).
 // ✅ Arbitrary values with CSS variables
 <div className="bg-[var(--color-primary-hover)]" />
 
-// ✅ Vanilla CSS in .module.css
+// ✅ Vanilla CSS in a component's stylesheet
 .myClass {
   background: var(--color-primary);
 }
-
-// All three work together seamlessly!
 ```
 
 ---
 
-## 6. File Organization Conventions
-
-### Component Structure
+## File organization
 
 ```
 src/
 ├── components/
-│   ├── ui/                    # UI primitives (Button, Icon, Modal, Input)
-│   │   ├── Button.tsx
-│   │   ├── Icon.tsx
-│   │   └── Modal.tsx
+│   ├── ui/                    # Controls: Button, Icon, Modal, Input, Tabs, …
+│   ├── primitives/            # Layout and readouts: Stack, Row, Readout, …
 │   ├── AddModel.tsx           # Feature components
 │   └── Header.tsx
 ├── pages/                     # Route/page components
 ├── contexts/                  # React contexts
 ├── hooks/                     # Custom hooks
 ├── services/
-│   ├── platform/              # Platform-specific adapters
-│   └── api/                   # Backend API clients
-├── styles/
-│   ├── base/
-│   │   ├── variables.css      # Design tokens (source of truth)
-│   │   └── hljs.css           # Syntax highlighting theme
-│   └── tailwind.css           # Tailwind v4 configuration
-└── types/                     # TypeScript types
+│   ├── platform/              # OS integration
+│   ├── clients/               # Backend clients with request logic of their own
+│   ├── transport/             # HTTP and SSE to the daemon
+│   └── …
+├── styles/                    # This directory
+├── types/                     # TypeScript types
+└── constants/, utils/         # Shared constants and helpers
 ```
-
-`src/styles/` really is those three files. The `reset.css`, `typography.css`
-and `main.css` this section used to list, and the whole `components/`
-directory with them, were deleted by the phases below — `tailwind.css` notes
-where the reset went. The three `.css` files left outside `styles/` are plain
-stylesheets collocated with the components that import them
-(`ConsoleLogPanel`, `InferenceParametersForm`, `RangeSlider`).
-
-### Import Conventions
 
 ```typescript
 // React
@@ -351,42 +199,13 @@ import { Icon } from './ui/Icon';
 // Icons
 import { Plus, Check, X } from 'lucide-react';
 
-// Platform adapters
-import { isTauri } from '../services/platform/detect';
-import { openFileDialog } from '../services/platform/fileDialogs';
+// Platform code, through the barrel
+import { isDesktop, pickGgufFile } from '../services/platform';
 ```
 
-There is no CSS-module import line, because the repo has no `*.module.css`.
-See §2 — the policy permits them; nothing has needed one.
-
 ---
 
-## 7. Phase Roadmap
-
-| Phase | Focus | Status | Issue |
-|-------|-------|--------|-------|
-| **Phase 0** | Contracts, token fixes, platform parity docs | ✅ Complete | [#14](https://github.com/mmogr/gglib/issues/14) |
-| **Phase 1** | Button + Icon primitives migration, delete `buttons.css` | ✅ Complete | [#16](https://github.com/mmogr/gglib/issues/16) |
-| **Phase 2** | Input/Form primitives migration, delete `forms.css` | ✅ Complete | [#13](https://github.com/mmogr/gglib/issues/13) |
-| **Phase 3** | Layout primitives, decompose god components | ✅ Complete | [#18](https://github.com/mmogr/gglib/issues/18) |
-| **Phase 4** | Token hygiene, no raw hex colors | ✅ Complete | [#15](https://github.com/mmogr/gglib/issues/15) |
-| **Phase 5** | Final cleanup, add guardrails, parity smoke tests | ✅ Complete | [#17](https://github.com/mmogr/gglib/issues/17) |
-
-Every phase has landed. The status column said "🔄 Blocked" for all five long
-after `buttons.css`, `forms.css` and `modals.css` were gone and §1 and §3 had
-been rewritten around their absence — the roadmap outlived the work it
-described, which is the failure this table is kept short to avoid.
-
----
-
-## 8. Enforcement & Validation
-
-### During Development
-
-- **Code review checklist**: PR reviewers verify compliance with contracts
-- **Self-check before commit**: Does this follow Tailwind-first? Are CSS variables used? Is platform code isolated?
-
-### Automated Enforcement
+## Enforcement
 
 What `eslint.config.js` actually enforces, all as errors:
 
@@ -421,21 +240,7 @@ Still open, and unclaimed by anything:
 
 ---
 
-## 9. Migration Checklist (For Phases 1-5)
-
-When migrating a component:
-
-- [ ] Replace CSS Module/global CSS with Tailwind utilities where possible
-- [ ] Use CSS variables for colors, spacing, typography (no raw hex)
-- [ ] Ensure component is platform-agnostic (no Tauri API imports)
-- [ ] Keep file ≤200 LOC (split if needed)
-- [ ] Test in both Tauri and Axum WebUI
-- [ ] Delete legacy CSS file once migration complete
-- [ ] Update all call sites to use new primitive
-
----
-
-## 10. Design Language Contracts (Restyle, 2026-08)
+## Design language (Restyle, 2026-08)
 
 The visual language every screen implements. Two implementers following
 these rules should produce the same UI.
@@ -526,16 +331,5 @@ Never render a raw `<button>` or `<input type="checkbox">` outside
 `src/components/ui` / `src/components/primitives` — use `Button`,
 `IconButton`, `Tabs`, `Chip`, `Banner`, `Checkbox`. Enforced by ESLint;
 justified exceptions carry an inline disable with a reason.
-
----
-
-## Questions & Feedback
-
-For questions about these contracts or proposed changes:
-- Open an issue tagged with `component: frontend` and `arch: domain`
-- Reference this document and the specific section
-- Propose alternatives with justification
-
-**These contracts are living documentation**—they may evolve based on learnings from Phases 1-5, but changes require explicit discussion and approval.
 
 <!-- module-docs:end -->

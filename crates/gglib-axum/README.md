@@ -47,9 +47,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
-│  │   main.rs   │ ──► │ bootstrap.rs│ ──► │  routes.rs  │                            │
-│  │  Entry pt   │     │  DI setup   │     │   Router    │                            │
-│  │             │     │  & wiring   │     │  mounting   │                            │
+│  │   daemon/   │ ──► │ bootstrap.rs│ ──► │  routes.rs  │                            │
+│  │ run_daemon: │     │  DI setup   │     │   Router    │                            │
+│  │ lock, serve │     │  & wiring   │     │  mounting   │                            │
 │  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
@@ -62,6 +62,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ```
 
 **Module Descriptions:**
+- **`daemon/`** — `run_daemon`, which `gglib daemon run` calls: the one process per machine that owns llama-server, and its singleton lock
 - **`bootstrap.rs`** — Dependency injection and service wiring
 - **`config.rs`** — `ServerConfig`: what the server is given
 - **`chat_api.rs`** — Chat completion API endpoints and streaming
@@ -120,8 +121,7 @@ gglib up
 
 ```rust,ignore
 // Programmatic usage
-use gglib_axum::start_server;
-use gglib_axum::bootstrap::ServerConfig;
+use gglib_axum::{ServerConfig, start_server};
 
 async fn run() -> anyhow::Result<()> {
     let config = ServerConfig::with_defaults()?;
@@ -132,6 +132,6 @@ async fn run() -> anyhow::Result<()> {
 ## Design Decisions
 
 1. **Axum Framework** — Chosen for async-first design and tower middleware ecosystem
-2. **Shared `GuiBackend`** — Same façade as Tauri for feature parity
+2. **Shared backend** — Handlers call `gglib-app-services`, the facade `gglib-cli` and `src-tauri` use too
 3. **Thin Handlers** — No logic, just parse → delegate → serialize
 4. **CORS Support** — Configurable CORS for web UI development

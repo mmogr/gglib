@@ -45,32 +45,7 @@ Code from outside contributors is not accepted yet. Issues, bug reports and idea
 
 ## Architecture Overview
 
-The workspace is organized into layers. Dependencies flow strictly inward.
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Surfaces (one per interface)                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  gglib-cli   │  │  gglib-axum  │  │  gglib-tauri │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                  │               │
-├─────────▼─────────────────▼──────────────────▼──────────────┤
-│  Shared Backend                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ gglib-runtime│  │  gglib-agent │  │  gglib-app-services   │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                  │               │
-├─────────▼─────────────────▼──────────────────▼──────────────┤
-│  Domain & Infrastructure                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  gglib-core  │  │   gglib-db   │  │  gglib-hf    │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**`gglib-core`** is the pure domain layer: types, traits, error definitions, and path utilities. It has no adapter dependencies and must not acquire any. This is enforced in CI.
-
-**`gglib-runtime`** orchestrates processes (llama.cpp, llama-server). It owns the build and install pipelines.
+The workspace is organized into layers, and no crate depends on a layer above its own. [`crates/README.md`](crates/README.md#architecture-overview) has the layer diagram and the crate catalog, and [Crate Boundaries](#crate-boundaries) has the dependency rules. What that diagram calls the adapter layer, this document calls the *surfaces*: the CLI, the daemon's HTTP API and the desktop app.
 
 **Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) adapt the shared backend to their output medium. They contain no business logic. Any feature added to one surface must be achievable on all three; how quickly the other surfaces must follow depends on the capability's tier — see the [GUI Parity Principle](#gui-parity-principle).
 
@@ -120,13 +95,13 @@ When adding a new long-running operation:
 
 ## UI Conventions
 
-The design system already exists — use it rather than reinventing it inline:
+The design system already exists — use it rather than reinventing it inline. [`src/styles/README.md`](src/styles/README.md) holds its contracts in full: the tokens, the platform boundary, what ESLint enforces and the design language.
 
 - **Icons: `lucide-react` only, via `<Icon icon={...} />`** (`src/components/ui/Icon.tsx`). No emoji or unicode dingbats (`👈 🔽 🔍 ⚡ ✓ ✗ ▶ ▼`, etc.) anywhere in JSX or string literals — they render as full-colour, double-width glyphs that clash with lucide's thin monochrome strokes and can't inherit `currentColor`. This is enforced by an ESLint `no-restricted-syntax` rule (see `eslint.config.js`); it is not a style preference you can opt out of.
-- **Buttons: the `Button` primitive** (`src/components/ui/Button.tsx`), not raw `<button>`. It encodes a 4-level hierarchy — `primary` (one CTA per surface) → `secondary` (default action) → `outline` (emphasis without fill) → `ghost` (minimal) — plus semantic variants (`danger`, `success`, `warning`) and a `link` variant for inline text actions. Not yet lint-enforced (there is a large pre-existing surface of raw `<button>`s); new and touched code should still prefer it.
+- **Buttons: the `Button` primitive** (`src/components/ui/Button.tsx`), not raw `<button>`. It encodes a 4-level hierarchy — `primary` (one CTA per surface) → `secondary` (default action) → `outline` (emphasis without fill) → `ghost` (minimal) — plus `danger` and `dangerGhost` for destructive actions and a `link` variant for inline text actions. ESLint rejects a raw `<button>` in `src/components` and `src/pages` outside the primitive layer (`ui/` and `primitives/`).
 - **Colour is semantic, never decorative.** `primary` = action, `success` = running/healthy, `warning` = degraded, `danger` = destructive/failure. A fact about a model (its quantization, its parameter count, its throughput) is not a state and should not borrow a state colour. An idle/stopped state is not a failure — it gets `--color-offline` (GUI) or `style::MUTED` (CLI), not danger red.
 - **Spacing and radius come from the token scale** (`--spacing-*`, `--radius-*` in `src/styles/base/variables.css`, bridged into Tailwind's `p-xs/sm/md/base/lg/xl`, `rounded-sm/base/md/lg/xl`), not raw Tailwind numerics (`p-2`, `rounded-[6px]`) or arbitrary bracket values, except where a value is genuinely one-off (e.g. matching an icon's exact pixel size).
-- **Reach for the existing primitives** (`src/components/primitives/`: `Card`, `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`) before writing a bespoke `flex` wrapper or empty-state block by hand.
+- **Reach for the existing primitives** (`src/components/primitives/`: `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`, `Readout`, `Sparkline`) before writing a bespoke `flex` wrapper or empty-state block by hand.
 - **Files stay small and single-responsibility.** `scripts/check_file_size.sh` holds a 300-LOC budget as a *ratchet*, run once for Rust and once for TypeScript/CSS, both in CI: a file already over it may shrink but not grow, and a file under it may not cross. `--update` records a deliberate growth as a visible line in the diff, and lowers the recorded size of a file that shrank. When a component grows past that, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half.
 
 ---
