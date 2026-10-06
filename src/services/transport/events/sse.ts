@@ -13,8 +13,8 @@ import type { Unsubscribe, EventHandler } from '../types/common';
 import type { AppEventType, AppEventMap } from '../types/events';
 import { decodeDownloadEvent } from '../../decoders/downloadEvent';
 import { appLogger } from '../../platform';
-import { createSSEStream, type SSEMessage } from '../../../utils/sse';
-import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
+import { readSse, type SseEvent } from '../../../utils/sse';
+import { apiFetch } from '../api/client';
 import { renewAfterRefusal } from '../api/renew';
 import { getEventCategory } from './category';
 import { Backoff } from './backoff';
@@ -43,7 +43,7 @@ function safeJsonParse(s: string): unknown {
  * Parse app event from SSE message.
  * Backend sends JSON in data: field with {type: "...", ...} structure.
  */
-function parseAppEvent(msg: SSEMessage): unknown {
+function parseAppEvent(msg: SseEvent): unknown {
   const data = safeJsonParse(msg.data);
   // Backend uses default event type, payload is in data
   return data;
@@ -60,11 +60,11 @@ export class SSEConnectionManager<T = unknown> {
   private running = false;
   private abort: AbortController | null = null;
   private readonly path: string;
-  private readonly parse: (msg: SSEMessage) => unknown;
+  private readonly parse: (msg: SseEvent) => unknown;
 
   constructor(
     path: string,
-    parse: (msg: SSEMessage) => unknown = parseAppEvent
+    parse: (msg: SseEvent) => unknown = parseAppEvent
   ) {
     this.path = path;
     this.parse = parse;
@@ -117,20 +117,17 @@ export class SSEConnectionManager<T = unknown> {
     this.abort = new AbortController();
 
     const backoff = new Backoff();
-    // Ensure client is initialized (triggers API discovery in Tauri mode)
-    await getClient();
-
-    const url = `${getApiBaseUrl()}${this.path}`;
 
     while (this.running && this.abort && !this.abort.signal.aborted) {
       try {
-        appLogger.debug('transport.sse', '[SSE] Connecting to', { url });
+        appLogger.debug('transport.sse', '[SSE] Connecting to', { path: this.path });
 
-        for await (const msg of createSSEStream(url, {
-          headers: getAuthHeaders(),
-          signal: this.abort.signal,
-          onOpen: () => this.opened.announce(),
-        })) {
+        // The daemon's base URL and the session's token are resolved here, on
+        // each connection, so one made after a renewal presents the new token.
+        const response = await apiFetch(this.path, { signal: this.abort.signal });
+        this.opened.announce();
+
+        for await (const msg of readSse(response)) {
           // Successful receipt => reset backoff
           backoff.reset();
 

@@ -15,6 +15,7 @@ import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
 import { sanitizeToolName, detectCollisions } from './nameUtils';
 import { mcpGenericRenderer } from './renderers';
 import { appLogger } from '../platform';
+import { formatError } from '../../utils/errors';
 
 /**
  * Convert an MCP tool to a ToolDefinition.
@@ -53,7 +54,7 @@ function createMcpExecutor(serverId: McpServerId, toolName: string): ToolExecuto
         };
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = formatError(err);
       return {
         success: false,
         error: `MCP call failed: ${message}`,

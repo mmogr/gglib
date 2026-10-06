@@ -1,7 +1,7 @@
 /**
  * Desktop menu event utilities
  * TRANSPORT_EXCEPTION: Uses Tauri events for native menu integration.
- * UI components should import from 'services/platform' rather than checking isTauriApp directly.
+ * UI components should import from 'services/platform' rather than checking for Tauri directly.
  */
 
 import { isDesktop } from './detect';

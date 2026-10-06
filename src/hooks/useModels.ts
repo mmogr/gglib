@@ -3,6 +3,7 @@ import { GgufModel, SparseInferenceConfig, ServerConfig } from '../types';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
+import { formatError } from '../utils/errors';
 
 /** What an update may change. `projectorPath`: a path links, `null` unlinks, absent leaves the link alone. */
 export interface ModelUpdates {
@@ -37,7 +38,7 @@ export function useModels() {
       setModels(modelList);
     } catch (err) {
       if (generation !== requestGeneration.current) return;
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = formatError(err);
       setError(`Failed to load models: ${errorMessage}`);
     } finally {
       if (generation === requestGeneration.current) {

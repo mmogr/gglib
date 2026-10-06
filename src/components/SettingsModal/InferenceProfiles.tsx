@@ -19,6 +19,7 @@ import { Button } from "../ui/Button";
 import { Banner } from '../ui/Banner';
 import { Stack, EmptyState } from "../primitives";
 import { InferenceProfileEditor } from "./InferenceProfileEditor";
+import { formatError } from "../../utils/errors";
 
 /**
  * Human-readable summary of the parameters a profile actually sets.
@@ -90,7 +91,7 @@ export const InferenceProfiles: FC = () => {
       const settings = await getSettings();
       setProfiles(settings.inferenceProfiles ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ export const InferenceProfiles: FC = () => {
       setProfiles(settings.inferenceProfiles ?? []);
       setEditing(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e));
     } finally {
       setSaving(false);
     }

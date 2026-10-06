@@ -3,10 +3,14 @@
  * 
  * Transports define where logs go: console, files, Tauri IPC, etc.
  * All transports implement the ILogTransport interface.
+ *
+ * TRANSPORT_EXCEPTION: `TauriTracingTransport` hands each entry over Tauri
+ * IPC to the desktop process, which writes the log files.
  */
 
 import type { LogEntry } from './types';
 import { truncatePayload } from './truncate';
+import { isDesktop } from '../detect';
 
 // =============================================================================
 // Transport Interface
@@ -108,8 +112,8 @@ export class TauriTracingTransport implements ILogTransport {
   write(entry: LogEntry): void {
     if (!this.enabled) return;
     
-    // Check if Tauri IPC is available
-    if (!this.hasTauriInvoke()) return;
+    // Tauri IPC exists only in the desktop app
+    if (!isDesktop()) return;
     
     // Truncate data payload to prevent IPC message bloat
     const truncatedEntry: LogEntry = {
@@ -126,27 +130,14 @@ export class TauriTracingTransport implements ILogTransport {
   }
   
   /**
-   * Check if Tauri invoke API is available.
-   */
-  private hasTauriInvoke(): boolean {
-    return !!(
-      typeof window !== 'undefined' &&
-      window.__TAURI_INTERNALS__ &&
-      typeof window.__TAURI_INTERNALS__.invoke === 'function'
-    );
-  }
-  
-  /**
    * Invoke Tauri command asynchronously (fire-and-forget).
    * 
    * This method is async but callers should NOT await it to maintain
    * non-blocking behavior.
    */
   private async invokeAsync(entry: LogEntry): Promise<void> {
-    if (!window.__TAURI_INTERNALS__) return;
-    
     // Convert LogEntry to format expected by Rust backend
-    await window.__TAURI_INTERNALS__.invoke('log_from_frontend', {
+    await window.__TAURI_INTERNALS__?.invoke('log_from_frontend', {
       entry: {
         timestamp: entry.timestamp,
         level: entry.level,
@@ -155,17 +146,5 @@ export class TauriTracingTransport implements ILogTransport {
         data: entry.data ? JSON.stringify(entry.data) : null,
       },
     });
-  }
-}
-
-// =============================================================================
-// Type Augmentation for Tauri
-// =============================================================================
-
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: {
-      invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-    };
   }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getTransport } from '../services/transport';
+import { formatError } from '../utils/errors';
 
 export function useTags() {
   const [tags, setTags] = useState<string[]>([]);
@@ -13,7 +14,7 @@ export function useTags() {
       const tagList = await getTransport().listTags();
       setTags(tagList);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = formatError(err);
       setError(`Failed to load tags: ${errorMessage}`);
     } finally {
       setLoading(false);

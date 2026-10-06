@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getLoopGuardTrips } from '../../services/transport/api/proxy';
 import type { LoopGuardTripDay } from '../../types/generated/LoopGuardTripDay';
+import { formatError } from '../../utils/errors';
 
 /**
  * The window the panel reads, in days: the same default the daemon's route and
@@ -35,7 +36,7 @@ export function useLoopGuardTrips(): LoopGuardTripsState {
     return getLoopGuardTrips(LOOP_GUARD_LOG_DAYS)
       .then(setDays)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(formatError(err));
       })
       .finally(() => setLoading(false));
   }, []);

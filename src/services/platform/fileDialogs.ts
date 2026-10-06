@@ -1,7 +1,7 @@
 /**
  * Native file dialog utilities
  * TRANSPORT_EXCEPTION: Uses Tauri's native file picker dialog.
- * UI components should import from 'services/platform' rather than checking isTauriApp directly.
+ * UI components should import from 'services/platform' rather than checking for Tauri directly.
  */
 
 import { isDesktop } from './detect';

@@ -9,15 +9,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SSEConnectionManager } from '../../../../src/services/transport/events/sse';
 
-vi.mock('../../../../src/services/transport/api/client', () => ({
-  getClient: async () => ({}),
-  getApiBaseUrl: () => '',
-  getAuthHeaders: () => ({}),
-}));
-vi.mock('../../../../src/services/transport/api/renew', () => ({
-  renewAfterRefusal: async () => {},
-}));
-
 /** An accepted stream that sends `frames` and then ends. */
 function stream(frames: string[]): Response {
   const encoder = new TextEncoder();

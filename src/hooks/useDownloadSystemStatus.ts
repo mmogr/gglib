@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isDesktop } from '../services/platform';
+import { formatError } from '../utils/errors';
 
 export type DownloadSystemStatus =
   | { status: 'initializing' }
@@ -51,7 +52,7 @@ export function useDownloadSystemStatus(): DownloadSystemStatus {
         });
       } catch (e) {
         if (cancelled) return;
-        const message = e instanceof Error ? e.message : String(e);
+        const message = formatError(e);
         setState({ status: 'error', message: `Failed to subscribe to download init events: ${message}` });
       }
     })();

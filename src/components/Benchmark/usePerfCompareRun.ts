@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GgufModel } from '../../types';
 import type { BenchmarkEvent, CompareConfig, PerfConfig } from '../../types/benchmark';
 import { startCompareRun, startPerfRun } from '../../services/clients/benchmark';
+import { isAbortError } from '../../utils/errors';
 import type { ModelResultState } from './PerfCompareResultCard';
 
 export interface PerfCompareRunState {
@@ -131,7 +132,7 @@ export function usePerfCompareRun(models: GgufModel[], onRunComplete: () => void
             : prev,
         );
       } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
+        if (!isAbortError(err)) {
           setRunState((prev) => ({ ...prev, status: 'failed', error: (err as Error).message }));
         }
       }

@@ -13,13 +13,12 @@ Shared TypeScript helpers used across the React frontend.
 |------|---------|
 | `cn.ts` | Tailwind class merging utility (clsx + tailwind-merge) |
 | `format.ts` | Number and date formatting helpers |
-| `platform.ts` | Platform detection (Tauri vs web, OS) |
-| `sse.ts` | Server-Sent Events client with reconnect logic |
+| `sse.ts` | The one Server-Sent Events reader: `readSse` yields the events of a `fetch` response, and `createSSEStream` opens a stream that is not the daemon's and reads it. Reconnecting is the caller's |
 | `modelSearchParser.ts` | Parse HuggingFace search queries and filters |
 | `batchWithinWindow.ts` | Batch rapid events within a time window |
 | `mcp.ts` | MCP server status predicates (running / error state) |
 | `samplingProvenance.ts` | Render a resolved sampling parameter and the layer that supplied it; wording mirrors `gglib model explain` |
-| `errors.ts` | `AbortError` predicate — the `DOMException` both `fetch()` and stream reads throw when a signal fires |
+| `errors.ts` | `isAbortError`, the predicate for the `DOMException` both `fetch()` and stream reads throw when a signal fires, and `formatError`, a thrown value as the message to show |
 | `formatPerSecond.ts` | Compact per-second count with no unit; the caller supplies "tok/s", "req/s" or whatever it counts |
 | `canSee.ts` | Whether a row's model reads images: a local row's `imageInput`, or a far row's `vision` capability |
 | `thinks.ts` | Whether a row's model thinks, which is what a Thinking switch is offered for: a local row's `reasoning` tag in any case (never its capability bit), or a far row's `reasoning` capability |

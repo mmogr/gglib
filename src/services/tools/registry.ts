@@ -12,6 +12,7 @@ import type {
   ParsedToolCall,
 } from './types';
 import { parseToolCall, ToolCall } from './types';
+import { formatError } from '../../utils/errors';
 
 /**
  * Source identifier for tool registration.
@@ -278,8 +279,7 @@ export class ToolRegistry {
       const result = await tool.execute(args);
       return result;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { success: false, error: message };
+      return { success: false, error: formatError(err) };
     }
   }
 

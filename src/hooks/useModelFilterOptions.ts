@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ModelFilterOptions } from '../types';
 import { getTransport } from '../services/transport';
+import { formatError } from '../utils/errors';
 
 /**
  * Hook to fetch model filter options (quantizations, param range, context range)
@@ -18,7 +19,7 @@ export function useModelFilterOptions() {
       const options = await getTransport().getModelFilterOptions();
       setFilterOptions(options);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = formatError(err);
       setError(`Failed to load filter options: ${errorMessage}`);
     } finally {
       setLoading(false);

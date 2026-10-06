@@ -9,6 +9,7 @@
 import { TransportError } from '../../services/transport/errors';
 import type { ChatSource } from '../../services/transport';
 import { ImageRefusal } from './imagePrep';
+import { formatError } from '../../utils/errors';
 
 /** The far machine answers an image as a gglib from before images. */
 export const FAR_CANNOT_TAKE_IMAGES =
@@ -51,7 +52,7 @@ export function uploadRefusal(error: unknown, source: ChatSource): string {
   const code = codeOf(error);
   if (code && SENTENCES[code]) return SENTENCES[code];
   if (source === 'far' && TransportError.hasCode(error, 'NOT_FOUND')) return FAR_CANNOT_TAKE_IMAGES;
-  const told = error instanceof Error ? error.message : String(error);
+  const told = formatError(error);
   return `The image could not be uploaded: ${told}`;
 }
 

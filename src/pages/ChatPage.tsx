@@ -32,6 +32,7 @@ import type { ConversationSummary } from '../services/transport';
 import type { HubChatOpen } from '../types/generated/HubChatOpen';
 import type { ModelRef } from '../types/generated/ModelRef';
 import type { ChatDraft } from '../types/messages';
+import { formatError } from '../utils/errors';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -257,7 +258,7 @@ export default function ChatPage(props: ChatPageProps) {
       // Reconcile with server ordering in background
       void syncConversations({ preferredId: newId, silent: true });
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
+      setChatError(formatError(error));
     } finally {
       setCreatingConversation(false);
     }

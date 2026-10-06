@@ -20,6 +20,7 @@ import { getTransport } from '../services/transport';
 import type { ChatSource, ConversationSummary } from '../services/transport';
 import type { HubChat } from '../types/generated/HubChat';
 import type { Machine } from '../types/generated/Machine';
+import { formatError } from '../utils/errors';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -111,7 +112,7 @@ export function useChatConversations(
           return list[0]?.id ?? null;
         });
       } catch (error) {
-        if (sourceRef.current === asked) errorRef.current(error instanceof Error ? error.message : String(error));
+        if (sourceRef.current === asked) errorRef.current(formatError(error));
       } finally {
         if (!options.silent && sourceRef.current === asked) setConversationLoading(false);
       }

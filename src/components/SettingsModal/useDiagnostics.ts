@@ -13,6 +13,7 @@ import {
   getDiagnostics,
 } from '../../services/transport/api/setup';
 import type { Diagnostics } from '../../types/setup';
+import { formatError } from '../../utils/errors';
 
 export interface DiagnosticsState {
   diagnostics: Diagnostics | null;
@@ -41,7 +42,7 @@ export function useDiagnostics(): DiagnosticsState {
     return getDiagnostics()
       .then(setDiagnostics)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(formatError(err));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -67,7 +68,7 @@ export function useDiagnostics(): DiagnosticsState {
       } catch (err) {
         // Provisioning fails for ordinary reasons (no Python), and the
         // message carries the remedy — surface it rather than a generic error.
-        setAcceleratorError(err instanceof Error ? err.message : String(err));
+        setAcceleratorError(formatError(err));
       } finally {
         setTogglingAccelerator(false);
       }

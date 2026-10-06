@@ -11,7 +11,7 @@ import type { AttachmentUpload } from '../../../types/generated/AttachmentUpload
 import { ATTACHMENTS_PATH, REMOTE_ATTACHMENTS_PATH } from '../../api/routes';
 import { readData } from '../errors';
 import type { ChatSource } from '../types/chat';
-import { getAuthenticatedFetchConfig } from './client';
+import { apiFetch } from './client';
 
 function storeOf(source: ChatSource): string {
   return source === 'far' ? REMOTE_ATTACHMENTS_PATH : ATTACHMENTS_PATH;
@@ -24,10 +24,9 @@ function storeOf(source: ChatSource): string {
  * `unsupported_image` (400).
  */
 export async function uploadAttachment(source: ChatSource, image: Blob): Promise<AttachmentUpload> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}${storeOf(source)}`, {
+  const response = await apiFetch(storeOf(source), {
     method: 'POST',
-    headers: { ...(headers as Record<string, string>), 'Content-Type': image.type || 'application/octet-stream' },
+    headers: { 'Content-Type': image.type || 'application/octet-stream' },
     body: image,
   });
   return readData<AttachmentUpload>(response);
@@ -38,10 +37,6 @@ export async function uploadAttachment(source: ChatSource, image: Blob): Promise
  * credential: an `<img>` cannot send it, so the page shows the blob.
  */
 export async function fetchAttachmentBlob(source: ChatSource, id: string): Promise<Blob> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}${storeOf(source)}/${encodeURIComponent(id)}`, {
-    headers: headers as Record<string, string>,
-  });
-  if (!response.ok) await readData(response);
+  const response = await apiFetch(`${storeOf(source)}/${encodeURIComponent(id)}`);
   return response.blob();
 }

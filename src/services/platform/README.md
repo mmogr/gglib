@@ -43,6 +43,6 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 
 ## Transport Exception Policy
 
-Components needing shell integration import from `platform/` directly. All other backend communication must go through `clients/` → `transport/`. Never import `platform/` from within `clients/` or `transport/`.
+Components needing shell integration import from `platform/` directly. All other backend communication must go through `clients/` → `transport/`. `clients/` and `transport/` never reach the backend through `platform/`: what they import from here is the logger and, in `transport/api/client.ts` alone, `isDesktop()`.
 
 <!-- module-docs:end -->
