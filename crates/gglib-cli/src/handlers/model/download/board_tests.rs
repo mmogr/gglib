@@ -72,6 +72,60 @@ fn sync_keeps_one_bar_per_row() {
     assert!(board.bars.is_empty());
 }
 
+/// A download fetched without a queue is drawn as a queue's running download
+/// is: one bar under its id, made of the row's text, and the same bar from
+/// one file to the next.
+#[test]
+fn a_lone_row_is_drawn_as_the_queue_draws_it() {
+    let solo = SoloBoard::new(Arc::new(CliConsole::unseen()));
+    let rows = solo.rows();
+    let part = |number| running("o/a", Some(FilePlace::Part { number, of: 2 }));
+
+    rows(&part(1));
+    let first = solo.0.lock().unwrap().bars["o/a:Q8_0"].clone();
+    assert_eq!(first.prefix(), "o/a:Q8_0 · part 1/2");
+    rows(&part(2));
+
+    let mut queue = DownloadBoard::new(Arc::new(CliConsole::unseen()));
+    queue.sync(&snapshot(Some(part(2)), vec![]));
+    let queued = &queue.bars["o/a:Q8_0"];
+    assert_eq!(ids(&solo.0.lock().unwrap()), ["o/a:Q8_0"]);
+    assert_eq!(first.prefix(), "o/a:Q8_0 · part 2/2", "the same bar");
+    assert_eq!(
+        (first.prefix(), first.message(), first.position()),
+        (queued.prefix(), queued.message(), queued.position())
+    );
+    assert_eq!(first.position(), 250);
+
+    solo.clear();
+    assert!(first.is_finished());
+    assert!(solo.0.lock().unwrap().bars.is_empty());
+}
+
+/// A download fetched without a queue is on the board from the first row it
+/// hands over until it is over, and then its bar is gone, and what it came
+/// to is handed back.
+#[tokio::test]
+async fn a_lone_download_is_on_the_board_until_it_is_over() {
+    let solo = SoloBoard::new(Arc::new(CliConsole::unseen()));
+
+    let board = &solo.0;
+    let (bar, came_to) = solo
+        .during(|rows| async move {
+            assert!(board.lock().unwrap().bars.is_empty());
+            rows(&running("o/a", None));
+            let bar = board.lock().unwrap().bars["o/a:Q8_0"].clone();
+            assert_eq!(bar.prefix(), "o/a:Q8_0");
+            assert!(!bar.is_finished(), "drawn while it is fetched");
+            (bar, "what the fetch came to")
+        })
+        .await;
+
+    assert_eq!(came_to, "what the fetch came to");
+    assert!(bar.is_finished(), "taken off once it is over");
+    assert!(solo.0.lock().unwrap().bars.is_empty());
+}
+
 /// A healthy transfer is its numbers; anything else leads with its status.
 #[test]
 fn a_bar_is_made_of_the_rows_text() {

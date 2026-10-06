@@ -13,7 +13,9 @@ separated from the queue-based
 - [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`: the
   quantizations, then the repository's projectors, each marked with the
   quantizations whose download fetches it
-- [`check_update`] / [`update_model`] — update path for `model upgrade`
+- [`check_update`] / [`update_model`] — update path for `model upgrade`.
+  `update_model` hands the download's row to a [`RowCallback`] while its
+  files are fetched
 - The optional `hf_xet` accelerator: [`ensure_fast_helper_ready`] provisions it
   (only from an explicit opt-in — never from a download),
   [`fast_helper_provisioned`] reports whether it is already here, and

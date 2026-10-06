@@ -74,6 +74,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`models.rs`** — `ModelOps` model CRUD and listing operations
 - **`models_projector.rs`** — The projector link on `ModelOps`: an update's `projector_path` applied through `ModelService::set_projector`, and the choices the inspector's picker offers
+- **`models_upgrade.rs`** — `gglib model upgrade` on `ModelOps`: the commit check, and the download and row rewrite, whose progress is the download row handed to the caller's `RowCallback`
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
 - **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
 - **`settings.rs`** — `SettingsOps` application settings persistence

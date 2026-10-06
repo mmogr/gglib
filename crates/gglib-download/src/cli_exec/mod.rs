@@ -19,6 +19,9 @@ pub use exec::python_bridge::{
 // transport hands in.
 pub use crate::executor::{FileProgress, ProgressCallback, RawCallback, RawProgress};
 
+// The row of a download fetched without the queue, for whoever draws it.
+pub use crate::solo::RowCallback;
+
 // Whether the optional hf_xet accelerator is already provisioned. Read by the
 // executor to choose a backend, and by the GUI to render setup status.
 pub use exec::python_env::fast_helper_provisioned;

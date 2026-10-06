@@ -70,6 +70,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   the dispatch that picks between it and the optional accelerator
 - **`cli_exec/`** — The optional `hf_xet` Python subprocess accelerator
 - **`manager/`** — High-level download manager facade
+- **`solo.rs`** — One download fetched without the queue (`model upgrade`),
+  as the row the queue would show for it
 
 ## Features
 
@@ -97,6 +99,14 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   here, because using them made the CLI and the GUI report different numbers
   for the same transfer. Both are `Option` on the wire and omitted when
   unknown — an absent rate is not a zero rate.
+- **One Row Off the Queue Too** — `gglib model upgrade` fetches its files
+  without the queue (`solo.rs`), and is one row all the same. The row is put
+  together where the queue's running row is (`queue::running_row`), from
+  files placed by the function that places a queued group's and a meter of
+  the kind a queued download has, so its bytes carry on from one file to
+  the next. The row is handed to the caller's `RowCallback` four times a
+  second while a file is fetched and as each file lands. This crate draws
+  nothing on a terminal and does not depend on `indicatif`.
 - **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
 - **Resume Support** — Partial download resumption on failure
 - **Shard Handling** — Automatic detection and download of sharded models

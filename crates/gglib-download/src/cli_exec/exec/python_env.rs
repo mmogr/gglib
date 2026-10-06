@@ -369,10 +369,11 @@ impl PythonEnvironment {
     ) -> Result<(), EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated(python).await?;
 
-        // With a notice sink (the queued-download path), the note lands on
-        // the bar itself and stays terse — no path, it wouldn't fit and
-        // isn't actionable there. Without one (preflight, `model upgrade`),
-        // fall back to a console line with the full path for context.
+        // With a notice sink (a queued download, or a `model upgrade` whose
+        // row is shown), the note lands on the bar itself and stays terse —
+        // no path, it wouldn't fit and isn't actionable there. Without one
+        // (`ensure_fast_helper_ready`, or an upgrade nobody is shown the row
+        // of), fall back to a console line with the full path for context.
         notify(
             notice,
             "preparing fast downloader (first run, this can take a minute)…",

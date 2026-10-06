@@ -46,9 +46,6 @@ bytes = "1"
 # Checksum verification for downloaded files
 sha2.workspace = true
 
-# Progress display (for CLI)
-indicatif = "0.18"
-
 # System utilities (for python env)
 which = "8"
 # Home directory, for locating interpreters installed by conda/pyenv/uv

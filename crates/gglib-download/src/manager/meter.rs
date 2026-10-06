@@ -8,6 +8,8 @@
 
 use std::time::Instant;
 
+use gglib_core::download::ShardInfo;
+
 use crate::executor::FileProgress;
 use crate::meter::Meter;
 use crate::queue::Reading;
@@ -50,6 +52,17 @@ impl GroupMeter {
             lone_file,
             notice: None,
         }
+    }
+
+    /// A meter for the download whose first file is at `place` in its group,
+    /// which carries the group's size and whether the file is alone in it.
+    /// A file with no place is a download of that one file.
+    pub(crate) fn for_group(place: Option<&ShardInfo>, now: Instant) -> Self {
+        Self::new(
+            place.and_then(|place| place.group_total_bytes),
+            place.is_none_or(ShardInfo::is_alone),
+            now,
+        )
     }
 
     /// Take the latest reading of the file in flight, on every tick, moved

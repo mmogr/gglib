@@ -72,11 +72,17 @@ impl ProgressUpdate {
     /// network: it stood in for progress, and now there is some. A count
     /// that falls is the announced restart, so the notice that announced it
     /// stays.
-    fn advance(&mut self, progress: FileProgress) {
+    pub(crate) fn advance(&mut self, progress: FileProgress) {
         if progress.bytes > self.progress.bytes || progress.wire > self.progress.wire {
             self.notice = None;
         }
         self.progress = progress;
+    }
+
+    /// Take a note on the file. It is shown in place of progress until
+    /// bytes arrive again.
+    pub(crate) fn note(&mut self, message: &str) {
+        self.notice = Some(message.to_string());
     }
 }
 
@@ -197,7 +203,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     // the download's row until bytes arrive again.
     let notice_tx = job.progress_tx.clone();
     let notice_callback: crate::cli_exec::NoticeCallback = Arc::new(move |message: &str| {
-        notice_tx.send_modify(|state| state.notice = Some(message.to_string()));
+        notice_tx.send_modify(|state| state.note(message));
     });
 
     // A job is one file of its download.
