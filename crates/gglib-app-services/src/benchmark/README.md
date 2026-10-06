@@ -13,7 +13,8 @@ Benchmark service — shared between CLI and web adapters.
 benchmark/
   mod.rs     — BenchmarkOps, BenchmarkDeps (public API)
   compare.rs — SSE inference loop: ModelRuntimePort orchestration +
-               defensive stream parsing
+               defensive parsing of the reply, which
+               gglib_core::sse::DataFrames cuts into its chunks
   perf.rs    — llama-bench process spawning + VRAM drain logic
   mapper.rs  — raw serde_json::Value → domain type transforms
   guard.rs   — BenchmarkTaskGuard (DropCancels pattern for HTTP layer)

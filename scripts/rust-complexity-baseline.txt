@@ -3,7 +3,7 @@ crates/gglib-agent/src/stream_collector.rs 456
 crates/gglib-agent/tests/integration_guards.rs 751
 crates/gglib-agent/tests/integration_happy_path.rs 433
 crates/gglib-app-services/src/benchmark/agentic.rs 745
-crates/gglib-app-services/src/benchmark/compare.rs 374
+crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1355
 crates/gglib-app-services/src/mcp.rs 397

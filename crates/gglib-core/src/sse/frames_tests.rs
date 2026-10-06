@@ -8,6 +8,23 @@ fn frames_of(chunks: &[&[u8]]) -> Vec<String> {
     chunks.iter().flat_map(|chunk| frames.push(chunk)).collect()
 }
 
+/// The events of a stream that arrives as `chunks`.
+fn events_of(chunks: &[&[u8]]) -> Vec<Event> {
+    let mut frames = DataFrames::new(1024);
+    chunks
+        .iter()
+        .flat_map(|chunk| frames.push_events(chunk))
+        .collect()
+}
+
+fn event(id: Option<&str>, name: Option<&str>, data: &str) -> Event {
+    Event {
+        id: id.map(str::to_owned),
+        name: name.map(str::to_owned),
+        data: data.to_owned(),
+    }
+}
+
 #[test]
 fn a_line_is_returned_only_once_its_newline_arrives() {
     let mut lines = Lines::new();
@@ -114,4 +131,67 @@ fn a_character_split_across_reads_is_decoded_whole() {
 #[test]
 fn bytes_that_are_not_utf8_are_replaced_in_a_frame_not_refused() {
     assert_eq!(frames_of(&[b"data: a\xffb\n\n"]), ["a\u{fffd}b"]);
+}
+
+#[test]
+fn an_event_carries_its_own_id_and_name_and_none_from_the_one_before() {
+    assert_eq!(
+        events_of(&[b"id: 7\nevent: run\ndata: one\n\ndata: two\n\n"]),
+        [
+            event(Some("7"), Some("run"), "one"),
+            event(None, None, "two")
+        ]
+    );
+}
+
+#[test]
+fn an_event_without_data_is_dropped_and_its_fields_with_it() {
+    assert_eq!(
+        events_of(&[b"id: 7\nevent: run\n\ndata: one\n\n"]),
+        [event(None, None, "one")]
+    );
+}
+
+#[test]
+fn a_field_loses_the_one_space_after_its_colon_and_no_more() {
+    assert_eq!(
+        events_of(&[b"id:7\nevent:  run\ndata:  one \n\n"]),
+        [event(Some("7"), Some(" run"), " one ")]
+    );
+}
+
+#[test]
+fn a_line_that_only_starts_like_a_field_is_not_that_field() {
+    assert_eq!(
+        events_of(&[b"identity: 7\nevents: run\ndatum: no\ndata: one\n\n"]),
+        [event(None, None, "one")]
+    );
+}
+
+#[test]
+fn events_cut_at_every_byte_are_the_events_read_whole() {
+    let stream = "id: 12\r\nevent: run\r\ndata: caf\u{e9}\r\n\r\nid: 13\ndata: \u{1f680}\n\n";
+    let bytes = stream.as_bytes();
+    let whole = events_of(&[bytes]);
+    assert_eq!(
+        whole,
+        [
+            event(Some("12"), Some("run"), "caf\u{e9}"),
+            event(Some("13"), None, "\u{1f680}")
+        ]
+    );
+    for cut in 1..bytes.len() {
+        assert_eq!(
+            events_of(&[&bytes[..cut], &bytes[cut..]]),
+            whole,
+            "cut at byte {cut}"
+        );
+    }
+}
+
+#[test]
+fn a_splitter_with_no_limit_never_overflows() {
+    let mut frames = DataFrames::unbounded();
+    assert!(frames.push(&[b'x'; 4096]).is_empty());
+    assert!(!frames.overflowed());
 }
