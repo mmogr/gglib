@@ -5,7 +5,17 @@
 //! stays beside the struct it validates and reaches these through the
 //! re-export; every external caller does too, so the module path is a detail.
 
+use std::fmt::{Debug, Display};
+use std::ops::RangeInclusive;
+
 use crate::domain::{InferenceConfig, InferenceProfile};
+
+use super::settings_bounds::{
+    DRY_ALLOWED_LENGTH_MIN, DRY_BASE_EXCLUSIVE_MIN, DRY_MULTIPLIER_RANGE, DRY_PENALTY_LAST_N_MIN,
+    DYNATEMP_EXPONENT_EXCLUSIVE_MIN, DYNATEMP_RANGE_MIN, FREQUENCY_PENALTY_RANGE, MAX_TOKENS_MIN,
+    MIN_P_RANGE, PRESENCE_PENALTY_RANGE, REASONING_BUDGET_TOKENS_MIN, REPEAT_PENALTY_EXCLUSIVE_MIN,
+    TEMPERATURE_RANGE, TOP_K_MIN, TOP_N_SIGMA_MIN, TOP_P_RANGE,
+};
 
 /// Validate a set of inference profiles.
 ///
@@ -38,44 +48,36 @@ pub fn validate_inference_profiles(profiles: &[InferenceProfile]) -> Result<(), 
 
 /// Validate inference configuration parameters.
 ///
-/// Checks that all specified parameters are within valid ranges.
+/// Checks that all specified parameters are within valid ranges. Each bound is
+/// a constant in [`settings_bounds`](super::settings_bounds), and what a
+/// refusal says is formatted from the same constant.
 pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String> {
-    // Validate temperature (0.0 - 2.0)
     if let Some(temp) = config.temperature
-        && !(0.0..=2.0).contains(&temp)
+        && !TEMPERATURE_RANGE.contains(&temp)
     {
-        return Err(format!(
-            "Temperature must be between 0.0 and 2.0, got {temp}"
-        ));
+        return Err(outside("Temperature", &TEMPERATURE_RANGE, temp));
     }
 
-    // Validate top_p (0.0 - 1.0)
     if let Some(top_p) = config.top_p
-        && !(0.0..=1.0).contains(&top_p)
+        && !TOP_P_RANGE.contains(&top_p)
     {
-        return Err(format!("Top P must be between 0.0 and 1.0, got {top_p}"));
+        return Err(outside("Top P", &TOP_P_RANGE, top_p));
     }
 
-    // Validate top_k (must be positive)
     if let Some(top_k) = config.top_k
-        && top_k <= 0
+        && top_k < TOP_K_MIN
     {
-        return Err(format!("Top K must be positive, got {top_k}"));
+        return Err(format!("Top K must be {TOP_K_MIN} or greater, got {top_k}"));
     }
 
-    // Validate max_tokens (must be positive)
     if let Some(max_tokens) = config.max_tokens
-        && max_tokens == 0
+        && max_tokens < MAX_TOKENS_MIN
     {
-        return Err("Max tokens must be positive".to_string());
+        return Err(format!("Max tokens must be {MAX_TOKENS_MIN} or greater"));
     }
 
-    // Validate reasoning_budget_tokens (>= -1, exactly upstream's range —
-    // llama-server answers -2 with an HTTP 400 naming it, ADR 0007 finding 7c;
-    // -1 defers to the launch `--reasoning-budget` and 0 stops thinking).
-    //
     // This guard is the *stored* half of a boundary the request half already
-    // has. `InferenceConfig::extract_client_sampling` applies the same range to
+    // has. `InferenceConfig::extract_client_sampling` applies the same floor to
     // a value that arrives on a request, but three surfaces deserialise a whole
     // `InferenceConfig` and never pass through it: `Settings::inference_defaults`,
     // `inference_profiles[].config`, and the proxy's `inference_override`. A
@@ -89,72 +91,62 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
     // `reasoning_effort` needs no twin guard: it is an enum, so serde refuses
     // an unknown level before this function is reached.
     if let Some(budget) = config.reasoning_budget_tokens
-        && budget < -1
+        && budget < REASONING_BUDGET_TOKENS_MIN
     {
         return Err(format!(
-            "Reasoning budget tokens must be -1 or greater \
+            "Reasoning budget tokens must be {REASONING_BUDGET_TOKENS_MIN} or greater \
              (-1 defers to the launch default, 0 stops thinking), got {budget}"
         ));
     }
 
-    // Validate repeat_penalty (must be positive)
     if let Some(repeat_penalty) = config.repeat_penalty
-        && repeat_penalty <= 0.0
+        && repeat_penalty <= REPEAT_PENALTY_EXCLUSIVE_MIN
     {
         return Err(format!(
-            "Repeat penalty must be positive, got {repeat_penalty}"
+            "Repeat penalty must be greater than {REPEAT_PENALTY_EXCLUSIVE_MIN:?}, \
+             got {repeat_penalty}"
         ));
     }
 
-    // Validate presence_penalty (0.0 - 2.0)
     if let Some(pp) = config.presence_penalty
-        && !(0.0..=2.0).contains(&pp)
+        && !PRESENCE_PENALTY_RANGE.contains(&pp)
     {
-        return Err(format!(
-            "Presence penalty must be between 0.0 and 2.0, got {pp}"
-        ));
+        return Err(outside("Presence penalty", &PRESENCE_PENALTY_RANGE, pp));
     }
 
-    // Validate min_p (0.0 - 1.0)
     if let Some(mp) = config.min_p
-        && !(0.0..=1.0).contains(&mp)
+        && !MIN_P_RANGE.contains(&mp)
     {
-        return Err(format!("Min P must be between 0.0 and 1.0, got {mp}"));
+        return Err(outside("Min P", &MIN_P_RANGE, mp));
     }
 
-    // Validate frequency_penalty (-2.0 - 2.0, the OpenAI-spec range llama.cpp
-    // honours; negative values encourage reuse and are valid upstream)
     if let Some(fp) = config.frequency_penalty
-        && !(-2.0..=2.0).contains(&fp)
+        && !FREQUENCY_PENALTY_RANGE.contains(&fp)
     {
-        return Err(format!(
-            "Frequency penalty must be between -2.0 and 2.0, got {fp}"
-        ));
+        return Err(outside("Frequency penalty", &FREQUENCY_PENALTY_RANGE, fp));
     }
 
-    // Validate dynatemp_range (non-negative; 0.0 disables dynamic temperature)
     if let Some(dr) = config.dynatemp_range
-        && dr < 0.0
+        && dr < DYNATEMP_RANGE_MIN
     {
         return Err(format!(
-            "Dynatemp range must be non-negative (0.0 disables), got {dr}"
+            "Dynatemp range must be {DYNATEMP_RANGE_MIN:?} or greater (0.0 disables), got {dr}"
         ));
     }
 
-    // Validate dynatemp_exponent (must be positive; inert without a range)
     if let Some(de) = config.dynatemp_exponent
-        && de <= 0.0
-    {
-        return Err(format!("Dynatemp exponent must be positive, got {de}"));
-    }
-
-    // Validate top_n_sigma (-1.0 disables; llama.cpp treats any value at or
-    // below zero as off, and -1.0 is its own spelling of the default)
-    if let Some(ts) = config.top_n_sigma
-        && ts < -1.0
+        && de <= DYNATEMP_EXPONENT_EXCLUSIVE_MIN
     {
         return Err(format!(
-            "Top-n-sigma must be -1.0 (disabled) or greater, got {ts}"
+            "Dynatemp exponent must be greater than {DYNATEMP_EXPONENT_EXCLUSIVE_MIN:?}, got {de}"
+        ));
+    }
+
+    if let Some(ts) = config.top_n_sigma
+        && ts < TOP_N_SIGMA_MIN
+    {
+        return Err(format!(
+            "Top-n-sigma must be {TOP_N_SIGMA_MIN:?} (disabled) or greater, got {ts}"
         ));
     }
 
@@ -169,41 +161,49 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
 /// under `clippy::too_many_lines` when `reasoning_budget_tokens` joined. Every
 /// caller reaches this through the parent; nothing validates DRY alone.
 fn validate_dry_params(config: &InferenceConfig) -> Result<(), String> {
-    // Validate dry_multiplier (0.0 - 5.0; 0.0 disables DRY)
     if let Some(dm) = config.dry_multiplier
-        && !(0.0..=5.0).contains(&dm)
+        && !DRY_MULTIPLIER_RANGE.contains(&dm)
     {
-        return Err(format!(
-            "DRY multiplier must be between 0.0 and 5.0, got {dm}"
-        ));
+        return Err(outside("DRY multiplier", &DRY_MULTIPLIER_RANGE, dm));
     }
 
-    // Validate dry_base (> 1.0; the exponent base grows the penalty with
-    // matched sequence length, so a base at or below 1.0 cannot penalise)
     if let Some(db) = config.dry_base
-        && db <= 1.0
-    {
-        return Err(format!("DRY base must be greater than 1.0, got {db}"));
-    }
-
-    // Validate dry_allowed_length (non-negative token count)
-    if let Some(dal) = config.dry_allowed_length
-        && dal < 0
+        && db <= DRY_BASE_EXCLUSIVE_MIN
     {
         return Err(format!(
-            "DRY allowed length must be non-negative, got {dal}"
+            "DRY base must be greater than {DRY_BASE_EXCLUSIVE_MIN:?}, got {db}"
         ));
     }
 
-    // Validate dry_penalty_last_n (0 disables; negatives are resolved by
-    // llama.cpp against the context size)
-    if let Some(dpn) = config.dry_penalty_last_n
-        && dpn < -1
+    if let Some(dal) = config.dry_allowed_length
+        && dal < DRY_ALLOWED_LENGTH_MIN
     {
         return Err(format!(
-            "DRY penalty last N must be -1 or greater (0 disables), got {dpn}"
+            "DRY allowed length must be {DRY_ALLOWED_LENGTH_MIN} or greater, got {dal}"
+        ));
+    }
+
+    if let Some(dpn) = config.dry_penalty_last_n
+        && dpn < DRY_PENALTY_LAST_N_MIN
+    {
+        return Err(format!(
+            "DRY penalty last N must be {DRY_PENALTY_LAST_N_MIN} or greater (0 disables), \
+             got {dpn}"
         ));
     }
 
     Ok(())
 }
+
+/// What a value outside a closed range is refused with.
+fn outside<T: Debug + Display>(name: &str, range: &RangeInclusive<T>, got: T) -> String {
+    format!(
+        "{name} must be between {:?} and {:?}, got {got}",
+        range.start(),
+        range.end()
+    )
+}
+
+#[cfg(test)]
+#[path = "settings_validate_tests.rs"]
+mod tests;

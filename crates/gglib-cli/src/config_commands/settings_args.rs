@@ -68,7 +68,7 @@ pub struct SettingsSetArgs {
     /// Default download path for models
     #[arg(long)]
     pub default_download_path: Option<String>,
-    /// Maximum agent iterations for tool-calling loop (1-50)
+    /// Maximum agent iterations for tool-calling loop (clamped to 1-50 when a loop runs)
     #[arg(long)]
     pub max_tool_iterations: Option<u32>,
     /// Maximum stagnation steps before stopping agent loop
@@ -155,8 +155,8 @@ pub struct SettingsSetArgs {
 mod tests {
     use super::{LoopGuardModeArg, SettingsSetArgs};
     use clap::{Args, Command, FromArgMatches};
-    use gglib_core::LoopGuardMode;
-    use gglib_core::settings::CONTEXT_SIZE_RANGE;
+    use gglib_core::settings::{CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MIN_PORT};
+    use gglib_core::{LoopGuardMode, MAX_ITERATIONS_CEILING};
 
     /// Every variant maps to its own, and the mapping is the only place the
     /// two enums meet.
@@ -205,25 +205,41 @@ mod tests {
         );
     }
 
-    /// The range in this flag's help must be the range the backend enforces.
+    /// The range in a flag's help must be the range the backend holds the
+    /// setting to.
     ///
-    /// `CONTEXT_SIZE_RANGE`'s own doc says more than one surface describes this
-    /// bound and that spelling the numbers out separately is how they drift.
-    /// `validate_settings` and `gglib proxy --default-context` derive from the
-    /// constant; a clap doc comment cannot, because it is a literal. This is
-    /// what stands in for that — the numbers may stay written out, but they
-    /// stop being able to disagree in silence.
+    /// `validate_settings` and what it refuses with derive from the constants
+    /// in `gglib-core`'s `settings_bounds.rs`; a clap doc comment cannot,
+    /// because it is a literal. This is what stands in for that — the numbers
+    /// may stay written out, but they stop being able to disagree in silence.
+    /// `--max-tool-iterations` is held to the ceiling it is clamped to, since
+    /// nothing refuses it at save.
     #[test]
-    fn the_context_size_help_states_the_range_the_backend_enforces() {
-        let rendered = SettingsSetArgs::augment_args(Command::new("t"))
-            .render_long_help()
-            .to_string();
+    fn each_bounded_flags_help_states_the_range_the_backend_holds_it_to() {
+        fn closed<T: std::fmt::Display>(range: &std::ops::RangeInclusive<T>) -> String {
+            format!("({}-{})", range.start(), range.end())
+        }
+        let command = SettingsSetArgs::augment_args(Command::new("t"));
 
-        let start = CONTEXT_SIZE_RANGE.start();
-        let end = CONTEXT_SIZE_RANGE.end();
-        assert!(
-            rendered.contains(&format!("({start}-{end})")),
-            "--default-context-size help must state ({start}-{end}); rendered help was:\n{rendered}"
-        );
+        for (flag, stated) in [
+            ("default-context-size", closed(&CONTEXT_SIZE_RANGE)),
+            ("proxy-port", format!("(>= {MIN_PORT})")),
+            ("llama-base-port", format!("(>= {MIN_PORT})")),
+            ("max-download-queue-size", closed(&DOWNLOAD_QUEUE_RANGE)),
+            (
+                "max-tool-iterations",
+                format!("(clamped to 1-{MAX_ITERATIONS_CEILING} "),
+            ),
+        ] {
+            let arg = command
+                .get_arguments()
+                .find(|arg| arg.get_long() == Some(flag))
+                .unwrap_or_else(|| panic!("no --{flag}"));
+            let help = arg.get_help().expect("help").to_string();
+            assert!(
+                help.contains(&stated),
+                "--{flag} help must state {stated}; it says: {help}"
+            );
+        }
     }
 }

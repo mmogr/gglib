@@ -159,8 +159,8 @@ pub struct RemoteServe {
 /// generated from the CSPRNG rather than derived from the key: an
 /// identifier that falls out of a live credential is needless coupling at
 /// best. `label` is for a person to read and is sent nowhere, because
-/// modelpipe's names are `[A-Za-z0-9._-]{1,64}` and "Matt's iPhone" is not
-/// one.
+/// modelpipe's names are what [`valid_device_id`] accepts and "Matt's iPhone"
+/// is not one.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Device {
@@ -289,10 +289,10 @@ pub(super) fn validate_remote(settings: &Settings) -> Result<(), SettingsError> 
 
 /// modelpipe's rule for a token name, applied before a row is written
 /// rather than when the listener refuses it: ASCII letters, digits, `.`,
-/// `_` and `-`, one to sixty-four bytes.
+/// `_` and `-`, one to [`MAX_DEVICE_ID_LEN`](super::MAX_DEVICE_ID_LEN) bytes.
 fn valid_device_id(id: &str) -> bool {
     !id.is_empty()
-        && id.len() <= 64
+        && id.len() <= super::MAX_DEVICE_ID_LEN
         && id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))

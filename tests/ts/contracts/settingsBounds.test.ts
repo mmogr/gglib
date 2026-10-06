@@ -7,8 +7,12 @@
  * backend does not have, or accepts input the backend will reject on save.
  * Both had happened by the time this test was written.
  *
- * So rather than trusting the comments, this reads the Rust source and checks
- * two invariants:
+ * The Rust side of the comparison is `contracts/settings/bounds.json`.
+ * `gglib-core`'s settings-bounds tests write it from the constants
+ * `validate_settings` and `validate_inference_config` check against, and from
+ * what `Settings::with_defaults()` and the two inference floors return, and
+ * fail there when it goes stale. So a bound or a default moved in Rust moves
+ * the file, and this holds the GUI's copies to the file:
  *
  *   1. The GUI never accepts what the backend rejects — every `[min, max]` is a
  *      subset of the accepted range. A subset, not an equality: several GUI
@@ -18,10 +22,10 @@
  *   2. A stated default is the real one — and a value Rust deliberately leaves
  *      unset is not given an invented default.
  *
- * The parsing is deliberately narrow: a handful of named functions with a
- * stable literal shape. Every extractor throws with the symbol it could not
- * find rather than returning a default, so restructuring the Rust turns this
- * red instead of silently retiring the guarantee.
+ * Nothing here reads Rust source, so the validators may be laid out however
+ * they read best. A field the file does not name throws rather than passing
+ * unchecked, so dropping one from the file turns this red instead of silently
+ * retiring the guarantee.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -30,170 +34,54 @@ import * as settingsDefaults from '../../../src/constants/settingsDefaults';
 import { INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
 import type { SamplingParamKey } from '../../../src/types';
 
-import { fnSource, rust } from './rustSource';
+import { rust } from './rustSource';
 
-const SETTINGS_RS = rust('crates/gglib-core/src/settings.rs');
-const SETTINGS_VALIDATE_RS = rust('crates/gglib-core/src/settings_validate.rs');
-const INFERENCE_RS = rust('crates/gglib-core/src/domain/inference.rs');
-const AGENT_CONFIG_RS = rust('crates/gglib-core/src/domain/agent/config.rs');
-
-/** An accepted range. Rust often bounds only one end; the other is infinite. */
-interface Range {
-  min: number;
-  max: number;
+/**
+ * What a validator accepts for one number: `min` and up, or anything greater
+ * than `above`, and no further than `max` where there is a ceiling.
+ */
+interface Accepted {
+  min?: number;
+  above?: number;
+  max?: number;
 }
 
-const num = (literal: string) => Number(literal.replace(/_/g, ''));
+const BOUNDS = JSON.parse(rust('contracts/settings/bounds.json')) as {
+  /** By `Settings` field: what `validate_settings` holds it to. */
+  settings: Record<string, Accepted>;
+  /** By `Settings` field: what `Settings::with_defaults()` sets. */
+  settings_defaults: Record<string, number | null>;
+  /** By `InferenceConfig` wire key: what `validate_inference_config` holds it to. */
+  inference: Record<string, Accepted>;
+  /** `InferenceConfig::with_hardcoded_defaults()`, as it serialises. */
+  inference_floor: Record<string, unknown>;
+  /** `InferenceConfig::reasoning_floor()`, as it serialises. */
+  reasoning_floor: Record<string, unknown>;
+};
 
-/**
- * Every `pub const NAME: RangeInclusive<T> = A..=B;` across those files.
- *
- * A bound that has been extracted into a named range still has to be followed,
- * or this file silently stops checking the field the moment someone stops
- * spelling the numbers out inline.
- */
-const RANGE_CONSTANTS: Map<string, Range> = new Map(
-  [SETTINGS_RS, SETTINGS_VALIDATE_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
-    [
-      ...source.matchAll(
-        /pub const (\w+):\s*(?:std::ops::)?RangeInclusive<\w+>\s*=\s*(-?[0-9_.]+)\.\.=(-?[0-9_.]+)\s*;/g,
-      ),
-    ].map((match) => [match[1], { min: num(match[2]), max: num(match[3]) }] as [string, Range]),
-  ),
-);
-
-/** Every `pub const NAME: T = <number>;` across the files we care about. */
-const CONSTANTS: Map<string, number> = new Map(
-  [SETTINGS_RS, SETTINGS_VALIDATE_RS, INFERENCE_RS, AGENT_CONFIG_RS].flatMap((source) =>
-    [...source.matchAll(/pub const (\w+):\s*\w+\s*=\s*([0-9_.]+)\s*;/g)].map(
-      (match) => [match[1], num(match[2])] as [string, number],
-    ),
-  ),
-);
-
-/**
- * The body of a `-> Self` constructor, as a field → expression map.
- *
- * Sliced to the function's own closing brace rather than a fixed window, so a
- * field added to the struct is picked up instead of silently falling outside.
- */
-function structLiteral(source: string, fnName: string): Map<string, string> {
-  // `\n    }` closes a body nested inside an `impl`.
-  const body = fnSource(source, fnName, '\n    }');
-
-  const fields = new Map<string, string>();
-  for (const match of body.matchAll(/^\s{12}(\w+):\s*(Some\((.*?)\)|None),$/gm)) {
-    fields.set(match[1], match[2] === 'None' ? 'None' : match[3]);
+/** One entry of the file, or a throw naming what it lacks. */
+function recorded<T>(section: keyof typeof BOUNDS, key: string): T {
+  const entries = BOUNDS[section] as Record<string, unknown>;
+  if (!(key in entries)) {
+    throw new Error(`contracts/settings/bounds.json has no ${section} entry for ${key}`);
   }
-  if (fields.size === 0) throw new Error(`No struct fields parsed out of ${fnName}`);
-  return fields;
+  return entries[key] as T;
 }
 
-/** Resolve a Rust field expression to a number, or null for a deliberate `None`. */
-function value(fnName: string, fields: Map<string, string>, field: string): number | null {
-  const expression = fields.get(field);
-  if (expression === undefined) throw new Error(`${fnName} does not set ${field}`);
-  if (expression === 'None') return null;
-
-  // e.g. `crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32` -> the constant.
-  const bare = expression.replace(/\s+as\s+\w+$/, '').replace(/^.*::/, '');
-  if (/^[0-9_.]+$/.test(bare)) return num(bare);
-
-  const resolved = CONSTANTS.get(bare);
-  if (resolved === undefined) throw new Error(`Cannot resolve ${expression} for ${field}`);
-  return resolved;
-}
-
-/**
- * A top-level function's body, so a search cannot wander into its neighbours
- * or into the test module at the bottom of the file.
- */
-function fnBody(source: string, fnName: string): string {
-  return fnSource(source, fnName);
-}
-
-/**
- * The range one `validate_*` guard accepts for one field.
- *
- * Anchored on the guard's subject (`config.top_p` / `settings.proxy_port`) and
- * bounded to that single `if` block. Scanning forward from a bare field name
- * instead would read the *next* parameter's guard — which is exactly how an
- * early draft of this test declared the Repeat Penalty bug clean, by picking up
- * Presence Penalty's inclusive range out of the block below it.
- */
-function acceptedRange(source: string, field: string): Range {
-  const subject = source.search(new RegExp(`(?:config|settings)\\.${field}\\b`));
-  if (subject === -1) {
-    throw new Error(`No validation guard found for ${field} — has it stopped being validated?`);
+/** The GUI's `[min, max]` lies inside what the backend accepts. */
+function expectOffersOnlyAccepted(offered: { min: number; max: number }, accepted: Accepted) {
+  if (accepted.above !== undefined) {
+    // The floor itself is refused, so a field starting exactly on it is out of
+    // bounds.
+    expect(offered.min).toBeGreaterThan(accepted.above);
+  } else if (accepted.min !== undefined) {
+    expect(offered.min).toBeGreaterThanOrEqual(accepted.min);
+  } else {
+    throw new Error(`a recorded range has neither a min nor an above: ${JSON.stringify(accepted)}`);
   }
 
-  const rest = source.slice(subject);
-  const blockEnd = rest.indexOf('\n    }');
-  const guard = rest.slice(0, blockEnd === -1 ? undefined : blockEnd);
-
-  // Either bound may be negative: `frequency_penalty` accepts the OpenAI-spec
-  // -2.0..=2.0, where negative values encourage reuse.
-  const inclusive = guard.match(/!\((-?[0-9_.]+)\.\.=(-?[0-9_.]+)\)\.contains/);
-  if (inclusive) return { min: num(inclusive[1]), max: num(inclusive[2]) };
-
-  // The same guard, written against a named range rather than two literals.
-  const namedRange = guard.match(/!(\w+)\.contains/);
-  if (namedRange) {
-    const resolved = RANGE_CONSTANTS.get(namedRange[1]);
-    if (!resolved) {
-      throw new Error(
-        `${field} is guarded by ${namedRange[1]}, which is not a resolvable RangeInclusive const`,
-      );
-    }
-    return resolved;
-  }
-
-  // `x < N` rejects everything below N. N may be negative: `dry_penalty_last_n`
-  // accepts -1 as "scan the whole context".
-  const lessThan = guard.match(/&&\s*\w+\s*<\s*(-?[0-9_.]+)/);
-  if (lessThan) return { min: num(lessThan[1]), max: Infinity };
-
-  // `x <= N` rejects N itself, so anything offered must be strictly greater —
-  // a slider starting exactly at N is out of bounds. The smallest representable
-  // step above N stands in for that exclusive bound, so a UI minimum equal to N
-  // fails rather than passing by rounding.
-  const lessOrEqual = guard.match(/&&\s*\w+\s*<=\s*(-?[0-9_.]+)/);
-  if (lessOrEqual) {
-    const bound = num(lessOrEqual[1]);
-    const step = Number.EPSILON * Math.max(1, Math.abs(bound));
-    return { min: bound === 0 ? Number.MIN_VALUE : bound + step, max: Infinity };
-  }
-
-  // `x == 0` on an unsigned field means "any positive integer".
-  if (/&&\s*\w+\s*==\s*0\b/.test(guard)) return { min: 1, max: Infinity };
-
-  throw new Error(`Unrecognised validation guard for ${field}: ${guard.trim()}`);
+  expect(offered.max).toBeLessThanOrEqual(accepted.max ?? Infinity);
 }
-
-const VALIDATE_SETTINGS = fnBody(SETTINGS_RS, 'validate_settings');
-
-/**
- * Every guard `validate_inference_config` applies, across the functions it is
- * split over.
- *
- * It was one function until `reasoning_budget_tokens` joined and pushed it past
- * `clippy::too_many_lines`, at which point the four DRY guards moved into
- * `validate_dry_params` — and this test went red naming each of them, which is
- * precisely the behaviour its header promises ("restructuring the Rust turns
- * this red instead of silently retiring the guarantee"). Listing the halves is
- * the right answer to that, not widening the search to the whole file: a guard
- * that vanishes entirely must still throw here, and it does, because
- * `acceptedRange` fails on a field it cannot find in this text.
- *
- * A future split has to be added to this list. That is the point. The move
- * of both halves into `settings_validate.rs` — whole and unchanged, so
- * `settings.rs` could take the remote tunnel's fields — was the next such
- * event, and it went red here the same way.
- */
-const VALIDATE_INFERENCE = [
-  fnBody(SETTINGS_VALIDATE_RS, 'validate_inference_config'),
-  fnBody(SETTINGS_VALIDATE_RS, 'validate_dry_params'),
-].join('\n');
 
 // ── The settings modal's numeric fields ─────────────────────────────────────
 
@@ -201,112 +89,73 @@ const SETTINGS_FIELDS: {
   label: string;
   spec: settingsDefaults.NumericSettingSpec;
   rustField: string;
-  /** Absent where Rust bounds the field but `with_defaults()` sets no constant. */
-  defaultField?: string;
 }[] = [
-  {
-    label: 'Proxy Server Port',
-    spec: settingsDefaults.PROXY_PORT,
-    rustField: 'proxy_port',
-    defaultField: 'proxy_port',
-  },
-  {
-    label: 'Base Server Port',
-    spec: settingsDefaults.LLAMA_BASE_PORT,
-    rustField: 'llama_base_port',
-    defaultField: 'llama_base_port',
-  },
+  { label: 'Proxy Server Port', spec: settingsDefaults.PROXY_PORT, rustField: 'proxy_port' },
+  { label: 'Base Server Port', spec: settingsDefaults.LLAMA_BASE_PORT, rustField: 'llama_base_port' },
   {
     label: 'Max Download Queue Size',
     spec: settingsDefaults.MAX_DOWNLOAD_QUEUE_SIZE,
     rustField: 'max_download_queue_size',
-    defaultField: 'max_download_queue_size',
   },
-  {
-    label: 'Default Context Size',
-    spec: settingsDefaults.CONTEXT_SIZE,
-    rustField: 'default_context_size',
-    defaultField: 'default_context_size',
-  },
+  { label: 'Default Context Size', spec: settingsDefaults.CONTEXT_SIZE, rustField: 'default_context_size' },
 ];
+
+/** A spec's default as the file writes one: a number, or null for unset. */
+const statedDefault = (spec: settingsDefaults.NumericSettingSpec) =>
+  spec.default === null ? null : Number(spec.default);
 
 describe('settings fields vs validate_settings', () => {
   it.each(SETTINGS_FIELDS)('$label offers only values the backend accepts', ({ spec, rustField }) => {
-    const accepted = acceptedRange(VALIDATE_SETTINGS, rustField);
-
-    expect(Number(spec.min)).toBeGreaterThanOrEqual(accepted.min);
-    expect(Number(spec.max)).toBeLessThanOrEqual(accepted.max);
+    expectOffersOnlyAccepted(
+      { min: Number(spec.min), max: Number(spec.max) },
+      recorded<Accepted>('settings', rustField),
+    );
   });
 
-  it.each(SETTINGS_FIELDS.filter((f) => f.defaultField))(
+  it.each(SETTINGS_FIELDS)(
     '$label states the default Settings::with_defaults() actually uses',
-    ({ spec, defaultField }) => {
-      const fields = structLiteral(SETTINGS_RS, 'with_defaults');
-
-      expect(spec.default === null ? null : Number(spec.default)).toBe(
-        value('with_defaults', fields, defaultField!),
-      );
+    ({ spec, rustField }) => {
+      expect(statedDefault(spec)).toBe(recorded<number | null>('settings_defaults', rustField));
     },
   );
 
   it('Max Tool Iterations tracks the agent default, and caps only in the UI', () => {
-    // No entry in validate_settings: the 1-50 range is a UI guard rail, which
-    // is why this one is asserted apart from the table above.
-    expect(SETTINGS_RS).not.toMatch(/max_tool_iterations[\s\S]{0,160}?contains/);
+    // No range in the file: `validate_settings` does not bound it, which
+    // `gglib-core`'s settings-bounds tests prove by storing its extremes. The
+    // 1-50 range is a UI guard rail, which is why this one is asserted apart
+    // from the table above.
+    expect(BOUNDS.settings).not.toHaveProperty('max_tool_iterations');
 
-    const fields = structLiteral(SETTINGS_RS, 'with_defaults');
-    expect(Number(settingsDefaults.MAX_TOOL_ITERATIONS.default)).toBe(
-      value('with_defaults', fields, 'max_tool_iterations'),
+    expect(statedDefault(settingsDefaults.MAX_TOOL_ITERATIONS)).toBe(
+      recorded<number | null>('settings_defaults', 'max_tool_iterations'),
     );
   });
 });
 
 // ── The sampling parameters ─────────────────────────────────────────────────
 
-const RUST_PARAM: Record<SamplingParamKey, string> = {
-  temperature: 'temperature',
-  topP: 'top_p',
-  topK: 'top_k',
-  maxTokens: 'max_tokens',
-  repeatPenalty: 'repeat_penalty',
-  presencePenalty: 'presence_penalty',
-  minP: 'min_p',
-  frequencyPenalty: 'frequency_penalty',
-  dynatempRange: 'dynatemp_range',
-  dynatempExponent: 'dynatemp_exponent',
-  topNSigma: 'top_n_sigma',
-  dryMultiplier: 'dry_multiplier',
-  dryBase: 'dry_base',
-  dryAllowedLength: 'dry_allowed_length',
-  dryPenaltyLastN: 'dry_penalty_last_n',
-  // Not a sampling parameter, but it is the one reasoning control with a
-  // number and a Rust-side range (`budget < -1` is rejected), which is exactly
-  // what this table checks. Its twin `reasoning_effort` is an enum with no
-  // bounds and no numeric floor, so it is absent from `SamplingParamKey` and
-  // therefore cannot be silently forgotten here — the `Record` would not
-  // compile without it.
-  reasoningBudgetTokens: 'reasoning_budget_tokens',
-};
-
-const PARAMS = Object.keys(RUST_PARAM) as SamplingParamKey[];
+/**
+ * Every key of `INFERENCE_PARAMS`, which its `Record<SamplingParamKey, …>`
+ * type keeps complete. They are the wire's own camelCase names, and the file
+ * is keyed by those.
+ *
+ * `reasoningBudgetTokens` is among them though it is not a sampling
+ * parameter: it is the one reasoning control with a number and a Rust-side
+ * range, which is exactly what this table checks. Its twin `reasoningEffort`
+ * is an enum with no bounds and no numeric floor, so it is absent from
+ * `SamplingParamKey`.
+ */
+const PARAMS = Object.keys(INFERENCE_PARAMS) as SamplingParamKey[];
 
 describe('sampling parameters vs validate_inference_config', () => {
   it.each(PARAMS)('%s offers only values the backend accepts', (param) => {
-    const accepted = acceptedRange(VALIDATE_INFERENCE, RUST_PARAM[param]);
-    const { min, max } = INFERENCE_PARAMS[param];
-
-    expect(min).toBeGreaterThanOrEqual(accepted.min);
-    expect(max).toBeLessThanOrEqual(accepted.max);
+    expectOffersOnlyAccepted(INFERENCE_PARAMS[param], recorded<Accepted>('inference', param));
   });
 
   it.each(PARAMS)('%s states the floor with_hardcoded_defaults() actually uses', (param) => {
-    const fields = structLiteral(INFERENCE_RS, 'with_hardcoded_defaults');
-
     // null on both sides is the point for max_tokens: Rust leaves it unset
     // deliberately, so the GUI must not invent one.
-    expect(INFERENCE_PARAMS[param].default).toBe(
-      value('with_hardcoded_defaults', fields, RUST_PARAM[param]),
-    );
+    expect(INFERENCE_PARAMS[param].default).toBe(recorded<number | null>('inference_floor', param));
   });
 
   it('only presence_penalty and min_p differ in the reasoning floor', () => {
@@ -314,8 +163,10 @@ describe('sampling parameters vs validate_inference_config', () => {
     // model-dependent floors. If reasoning_floor() ever overrides a third
     // field, those comments — and the settings-surface captions built on
     // them — go stale.
-    const overrides = [...structLiteral(INFERENCE_RS, 'reasoning_floor').keys()];
+    const differing = Object.keys(BOUNDS.reasoning_floor).filter(
+      (key) => BOUNDS.reasoning_floor[key] !== BOUNDS.inference_floor[key],
+    );
 
-    expect(overrides).toEqual(['presence_penalty', 'min_p']);
+    expect(differing.sort()).toEqual(['minP', 'presencePenalty']);
   });
 });

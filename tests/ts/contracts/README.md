@@ -7,7 +7,7 @@ They exist because this class of drift is silent. Nothing fails to compile when 
 | File | Pins |
 |------|------|
 | `startServerRequest.test.ts` | The flat `POST /api/servers/start` body against `StartServerRequest`'s field list, `StartServerBody`'s `alias`/`flatten`, and `InferenceConfig`'s accepted keys |
-| `settingsBounds.test.ts` | `src/constants/settingsDefaults.ts` and `inferenceDefaults.ts` against `validate_settings`, `validate_inference_config`, `Settings::with_defaults` and `InferenceConfig::with_hardcoded_defaults` |
+| `settingsBounds.test.ts` | `src/constants/settingsDefaults.ts` and `inferenceDefaults.ts` against `contracts/settings/bounds.json` (written by `gglib-core`'s settings-bounds tests from the constants `validate_settings` and `validate_inference_config` check against, and from what `Settings::with_defaults` and the two inference floors return): every range the page offers lies inside the one the backend accepts, and every stated default is the real one |
 | `settingsParity.test.ts` | `STARTER_PROFILES` against `builtin_templates()`, and `MAX_STAGNATION_STEPS` against the agent default |
 | `mcpReturnShapes.test.ts` | Every `/api/mcp/servers*` route's declared response type, against the shape the TypeScript client promises |
 | `turnMade.test.ts` | `contracts/runs/turn_made.json` (written by `gglib-core`'s replay tests): a turn's `turn_usage` frame drawn and the metadata the daemon saved from it give the same figures, the same margin lines and the same context reading |
@@ -21,11 +21,11 @@ They exist because this class of drift is silent. Nothing fails to compile when 
 
 ## Reading Rust from a TypeScript test
 
-Every test here parses the Rust source at run time. That is unusual enough to say why: the alternative is a comment asking the next person to keep two files in step, which is what was there before, and in each case the thing it guarded had already drifted — `settingsBounds.test.ts` found a Max Tokens default the backend deliberately does not have and a Repeat Penalty of 0 that validation rejects, and `startServerRequest.test.ts` replaced a test that pinned an IPC command which had never existed.
+The tests that use `rustSource.ts`'s extractors parse the Rust source at run time. That is unusual enough to say why: the alternative is a comment asking the next person to keep two files in step, which is what was there before, and the thing it guarded had already drifted — `startServerRequest.test.ts` replaced a test that pinned an IPC command which had never existed.
 
 Two rules keep the parsing honest:
 
 - **Anchor on the guard, not the name.** Scanning forward from a bare field name reads whatever comes next, including the following parameter's bounds. An early draft passed the Repeat Penalty bug for exactly this reason.
 - **Throw, never default.** Every extractor names the symbol it could not find. Restructuring the Rust turns the test red rather than quietly retiring the guarantee it was providing.
 
-The check is a subset relation, not equality: the GUI may be stricter than the backend (several caps are deliberate UI guard rails over a Rust bound that does not exist), but never looser.
+Parsing ties the Rust's layout to the test that reads it. Where the Rust side can state a value itself, it writes it to a file under `contracts/` and the test reads that instead, which leaves the Rust free to be laid out however it reads best. `settingsBounds.test.ts` is one of those. Its check is a subset relation, not equality: the GUI may be stricter than the backend (several caps are deliberate UI guard rails over a Rust bound that does not exist), but never looser.

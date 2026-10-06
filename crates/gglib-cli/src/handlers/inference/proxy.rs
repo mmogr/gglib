@@ -50,7 +50,7 @@ fn resolve_default_context(
     };
     let parsed = trimmed.parse::<u64>().with_context(invalid)?;
     // Bounded here rather than left to the daemon. This is the same value
-    // `validate_settings` holds to 512..=1_000_000 and the same one
+    // `validate_settings` holds to `CONTEXT_SIZE_RANGE` and the same one
     // `--default-context-size` documents with that range, so accepting `1` on
     // this surface alone would make three descriptions of one number disagree.
     if !CONTEXT_SIZE_RANGE.contains(&parsed) {
