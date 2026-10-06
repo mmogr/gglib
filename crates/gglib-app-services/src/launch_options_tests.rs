@@ -1,6 +1,6 @@
 use super::*;
 
-fn model() -> Model {
+pub(super) fn model() -> Model {
     Model {
         dialect_spec: None,
         id: 1,

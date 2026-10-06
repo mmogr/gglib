@@ -125,7 +125,6 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     customPort: serveModal.customPort,
     jinjaOverride: serveModal.jinjaOverride,
     hasAgentTag,
-    hasMtpTag,
     mtpNMaxOverride: serveModal.mtpNMaxOverride,
     mtpPMinOverride: serveModal.mtpPMinOverride,
     inferenceParams: serveModal.inferenceParams,

@@ -134,8 +134,8 @@ const FULL_CONFIG: ServeConfig = {
   port: MOCK_PROXY_PORT,
   mlock: true,
   jinja: true,
-  specDraftNMax: 4,
-  specDraftPMin: 0.75,
+  mtpDraftNMax: 4,
+  mtpDraftPMin: 0.75,
   temperature: 0.7,
   topP: 0.95,
   topK: 40,
@@ -176,8 +176,8 @@ describe('POST /api/servers/start request body', () => {
       jinja: FULL_CONFIG.jinja,
       // Omitted on purpose: the backend auto-detects it from model tags.
       reasoningFormat: undefined,
-      mtpDraftNMax: FULL_CONFIG.specDraftNMax,
-      mtpDraftPMin: FULL_CONFIG.specDraftPMin,
+      mtpDraftNMax: FULL_CONFIG.mtpDraftNMax,
+      mtpDraftPMin: FULL_CONFIG.mtpDraftPMin,
       inferenceParams: {
         temperature: FULL_CONFIG.temperature,
         topP: FULL_CONFIG.topP,

@@ -296,9 +296,9 @@ export interface ServeConfig extends SparseInferenceConfig {
   port?: number;
   jinja?: boolean;
   /** Number of MTP draft tokens. undefined = auto-detect from tags; 0 = disable. */
-  specDraftNMax?: number;
+  mtpDraftNMax?: number;
   /** Minimum acceptance probability for MTP draft tokens (default 0.75). */
-  specDraftPMin?: number;
+  mtpDraftPMin?: number;
 }
 
 /**

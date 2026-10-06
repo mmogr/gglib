@@ -12,7 +12,9 @@ use anyhow::{Result, anyhow};
 use gglib_app_services::types::QueueDownloadResponse;
 use gglib_core::download::{DownloadId, QueueSnapshot};
 
-use super::wire::{ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerDto};
+use super::wire::{
+    ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerBody, StartServerDto,
+};
 use super::{DaemonHandle, auth, base_url, paths};
 
 impl DaemonHandle {
@@ -114,12 +116,11 @@ impl DaemonHandle {
     /// Long timeout: the daemon holds the request open while the model loads.
     pub(crate) async fn start_model_server(
         &self,
-        model_id: i64,
-        context_length: Option<u64>,
+        body: &StartServerBody,
     ) -> Result<StartServerDto> {
         let response = self
             .post(paths::SERVERS_START_PATH)
-            .json(&serde_json::json!({ "id": model_id, "context_length": context_length }))
+            .json(body)
             .timeout(Duration::from_mins(3))
             .send()
             .await?;

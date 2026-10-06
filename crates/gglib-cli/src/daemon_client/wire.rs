@@ -4,13 +4,15 @@
 //! with what the daemon sends or expects, or the CLI silently drops a field.
 //! `StartProxyBody` and `ProxyStatusDto` pair with
 //! `gglib_axum::handlers::proxy::wire`, and carry the same filename so the
-//! pairing is visible from the tree; `StartServerDto` narrows
+//! pairing is visible from the tree; `StartServerBody` pairs with its namesake
+//! in `gglib_axum::handlers::servers`, and carries the daemon's own
+//! `StartServerRequest`; `StartServerDto` narrows
 //! `gglib_app_services::types::StartServerResponse`, and `QueueDownloadBody`
 //! pairs with `gglib_axum::handlers::model::downloads`. The tests in
-//! `wire_tests.rs` pin `StartProxyBody` and `StartServerDto`, and the test of
-//! the queue request in `calls.rs` reads `QueueDownloadBody` as it was sent.
-//! `ProxyStatusDto` is not pinned. The answer to a
-//! queue request has no twin here: the CLI reads the daemon's own
+//! `wire_tests.rs` pin `StartProxyBody`, `StartServerBody` and
+//! `StartServerDto`, and the test of the queue request in `calls.rs` reads
+//! `QueueDownloadBody` as it was sent. `ProxyStatusDto` is not pinned. The
+//! answer to a queue request has no twin here: the CLI reads the daemon's own
 //! `gglib_app_services::types::QueueDownloadResponse`.
 //!
 //! The remote tunnel's shapes are not here: the CLI reads and sends
@@ -24,6 +26,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use gglib_app_services::types::StartServerRequest;
 use gglib_core::ports::PinnedSpec;
 
 /// Body for `POST /api/proxy/start` — the client-side twin of
@@ -52,6 +55,20 @@ pub(crate) struct ProxyStatusDto {
     pub port: Option<u16>,
     #[serde(default)]
     pub pinned_model: Option<String>,
+}
+
+/// Body for `POST /api/servers/start` — the client-side twin of
+/// `gglib_axum::handlers::servers::StartServerBody`.
+///
+/// The request is the daemon's own type, flat beside the model's id as the
+/// daemon reads it, so in one build its fields travel under the names the
+/// daemon reads them by. `id` is this struct's own key, and `wire_tests.rs`
+/// holds it to the list the daemon's test reads.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct StartServerBody {
+    pub id: i64,
+    #[serde(flatten)]
+    pub config: StartServerRequest,
 }
 
 /// `POST /api/servers/start` response.

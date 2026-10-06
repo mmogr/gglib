@@ -333,6 +333,20 @@ pub const fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
     resolve_context_size_with_source(opts).0
 }
 
+/// The context the chain resolves, unless that is the built-in floor: only a
+/// value some rung supplied.
+///
+/// For a caller that hands its answer on as the *fallback* of a later
+/// resolution. The floor handed on as `Some(4096)` reads there as a number
+/// somebody chose, and the fitted rung beneath it is never reached.
+#[must_use]
+pub const fn chosen_context_size(opts: &ServerConfigOptions) -> Option<u64> {
+    match resolve_context_size_with_source(opts) {
+        (_, ContextSizeSource::BuiltInDefault) => None,
+        (ctx, _) => Some(ctx),
+    }
+}
+
 // =============================================================================
 // Host-RAM prompt cache budget (`--cache-ram`)
 // =============================================================================
@@ -551,52 +565,30 @@ mod tests {
         assert_eq!(resolve_context_size(&opts), 0);
     }
 
-    // -------------------------------------------------------------------
-    // CtxSizeArg / parse_ctx_size_flag
-    // -------------------------------------------------------------------
-
-    use crate::server_config::{CtxSizeArg, parse_ctx_size_flag};
-
+    /// Each rung is an answer while it is the highest one set, and the floor
+    /// is none: it is what is left when nobody chose. A rung that holds the
+    /// floor's own number is still somebody's choice.
     #[test]
-    fn ctx_size_arg_parses_explicit_numeric() {
-        assert_eq!(CtxSizeArg::parse("8192").unwrap(), CtxSizeArg::Value(8192));
-    }
+    fn the_chosen_context_is_whichever_rung_holds_one_and_never_the_floor() {
+        use crate::server_config::chosen_context_size;
 
-    #[test]
-    fn ctx_size_arg_parses_max_case_insensitive() {
-        assert_eq!(CtxSizeArg::parse("max").unwrap(), CtxSizeArg::Max);
-        assert_eq!(CtxSizeArg::parse("MAX").unwrap(), CtxSizeArg::Max);
-        assert_eq!(CtxSizeArg::parse("  Max  ").unwrap(), CtxSizeArg::Max);
-    }
-
-    #[test]
-    fn ctx_size_arg_invalid_string_is_hard_error() {
-        assert!(CtxSizeArg::parse("banana").is_err());
-    }
-
-    #[test]
-    fn ctx_size_arg_max_resolves_to_model_metadata() {
-        assert_eq!(CtxSizeArg::Max.resolve(Some(131_072)), Some(131_072));
-    }
-
-    #[test]
-    fn ctx_size_arg_max_without_model_metadata_resolves_to_none() {
-        assert_eq!(CtxSizeArg::Max.resolve(None), None);
-    }
-
-    #[test]
-    fn ctx_size_arg_value_ignores_model_metadata() {
-        assert_eq!(CtxSizeArg::Value(4096).resolve(Some(131_072)), Some(4096));
-    }
-
-    #[test]
-    fn parse_ctx_size_flag_none_when_flag_omitted() {
-        assert_eq!(parse_ctx_size_flag(None).unwrap(), None);
-    }
-
-    #[test]
-    fn parse_ctx_size_flag_propagates_parse_error() {
-        assert!(parse_ctx_size_flag(Some("not-a-number")).is_err());
+        let mut opts = ServerConfigOptions {
+            context_size: Some(32_768),
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(DEFAULT_CONTEXT_SIZE),
+            fitted_ctx: Some(65_536),
+            ..Default::default()
+        };
+        assert_eq!(chosen_context_size(&opts), Some(32_768), "explicit");
+        opts.context_size = None;
+        assert_eq!(chosen_context_size(&opts), Some(16_384), "model default");
+        opts.model_server_ctx = None;
+        let global = Some(DEFAULT_CONTEXT_SIZE);
+        assert_eq!(chosen_context_size(&opts), global, "global default");
+        opts.global_default_ctx = None;
+        assert_eq!(chosen_context_size(&opts), Some(65_536), "fitted");
+        opts.fitted_ctx = None;
+        assert_eq!(chosen_context_size(&opts), None, "the floor");
     }
 
     // -------------------------------------------------------------------
@@ -724,3 +716,7 @@ mod tests {
         assert_eq!(base.overlay(&over).jinja, Some(false));
     }
 }
+
+#[cfg(test)]
+#[path = "server_config_ctx_size_arg_tests.rs"]
+mod ctx_size_arg_tests;

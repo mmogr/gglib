@@ -4,7 +4,7 @@ src/components/HfModelPreview/HfModelPreview.tsx 346
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 339
 src/components/McpServersPanel.tsx 447
 src/components/ModelInspectorPanel/components/ServeModal.tsx 342
-src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 324
+src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 323
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 403
 src/components/SettingsModal.tsx 373
