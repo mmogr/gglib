@@ -14,17 +14,13 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::{AgentRunStarter, HubChatsPort, RemoteGatewayPort, RunsPort};
-use gglib_core::ports::{
-    ModelCatalogPort, ModelRuntimeError, ModelRuntimePort, SettingsRepository,
-};
+use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
 use gglib_core::request_pipeline::{ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
@@ -38,6 +34,7 @@ use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse};
 use crate::profiles::configured_names;
 use crate::sampling_audit::SamplingAuditStore;
+use crate::serve_config::ServeConfig;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
@@ -173,65 +170,36 @@ impl AppState {
     }
 }
 
-/// Start the proxy server with a pre-bound listener.
+/// Start the proxy server on the pre-bound listener in `config`.
 ///
-/// This function runs the Axum server until the cancellation token is triggered.
-///
-/// # Arguments
-///
-/// * `listener` - Pre-bound TCP listener (from supervisor)
-/// * `default_ctx` - Default context size for models
-/// * `device_memory_readable` - Whether a fitted context is reachable here
-/// * `runtime_port` - Port for managing model runtime
-/// * `catalog_port` - Port for listing and resolving models
-/// * `mcp` - MCP service for tool gateway
-/// * `cancel` - Cancellation token for graceful shutdown
-/// * `settings_repo` - Settings repository, wrapped in a `SettingsCache` so the
-///   per-request read is served from a short-lived snapshot rather than a query
-/// * `disk_budget` - Byte budget for the on-disk slot cache eviction sweep.
-///   Only consulted when `slot_dir` is `Some`.
-/// * `agent_metrics` - Agent-path prompt-cache reuse store (GUI + CLI chat),
-///   surfaced on the dashboard as `agent_usage` alongside the proxied figure.
+/// This function runs the Axum server until `config.cancel` is triggered.
+/// [`ServeConfig`] documents each thing it is given.
 ///
 /// # Returns
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve(
-    listener: TcpListener,
-    default_ctx: Option<u64>,
-    // See `AppState::device_memory_readable`.
-    device_memory_readable: bool,
-    runtime_port: Arc<dyn ModelRuntimePort>,
-    catalog_port: Arc<dyn ModelCatalogPort>,
-    mcp: Arc<McpService>,
-    cancel: CancellationToken,
-    // The daemon's own token, when this proxy runs under one, so an
-    // authenticated remote client can stop the whole thing. `None` for an
-    // embedded server: there is no daemon, and the route says so.
-    daemon_cancel: Option<CancellationToken>,
-    settings_repo: Arc<dyn SettingsRepository>,
-    // Operator overrides from this process's command line, applied above the
-    // client's own request parameters. See `SamplingLayers::cli_override`.
-    inference_override: Option<gglib_core::domain::InferenceConfig>,
-    default_profile: Option<String>,
-    cache_enabled: bool,
-    slot_dir: Option<PathBuf>,
-    disk_budget: crate::slot_eviction::DiskBudget,
-    // Agent-path prompt-cache reuse store, owned by the supervisor so it can
-    // also be shared with the embedded axum server (GUI chat) and outlives a
-    // single proxy run. Exposed on the dashboard as `agent_usage`, alongside
-    // the proxied figure.
-    agent_metrics: Arc<CacheMetricsStore>,
-    // What this run reports to that outlives it — the per-model defect
-    // counters and the loop guard's log — supervisor-owned for the same
-    // reason as `agent_metrics`. See `ProxyObservers`.
-    observers: crate::ProxyObservers,
-    // Who may reach this endpoint: the CORS policy, the optional bearer token,
-    // and the Host allowlist. Carries the `CorsConfig` rather than sitting
-    // beside it: access decisions belong together.
-    access: &ProxyAccessConfig,
-) -> anyhow::Result<()> {
+pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
+    // Every field by name and no `..`: one this function never reads is an
+    // unused binding, not a silently ignored setting.
+    let ServeConfig {
+        listener,
+        default_ctx,
+        device_memory_readable,
+        runtime_port,
+        catalog_port,
+        mcp,
+        cancel,
+        daemon_cancel,
+        settings_repo,
+        inference_override,
+        default_profile,
+        cache_enabled,
+        slot_dir,
+        disk_budget,
+        agent_metrics,
+        observers,
+        access,
+    } = config;
     let addr = listener.local_addr()?;
     info!("Proxy server starting on {addr}");
 
@@ -360,7 +328,7 @@ pub async fn serve(
         loop_guard_trips: observers.loop_guard_trips,
     };
 
-    let app = crate::router::build(state, access);
+    let app = crate::router::build(state, &access);
 
     info!("Proxy listening on {addr}");
     info!("Configure OpenWebUI to use: http://{addr}/v1");

@@ -1,15 +1,26 @@
-//! A stand-in for the tunnel's owner, for the proxy's remote-tunnel tests.
+//! A stand-in for the tunnel's owner, for the proxy's remote-tunnel tests,
+//! and the headers the tunnel edge marks a named device's request with.
 //!
-//! Implements [`RemoteGatewayPort`] and records what the proxy tells it — the
-//! same contract `gglib-app-services` implements over its real session,
-//! reduced to what these tests need to observe. Pairing is not part of it:
-//! the tunnel edge answers a pairing request itself, and nothing reaches the
-//! proxy.
+//! The stand-in implements [`RemoteGatewayPort`] and records what the proxy
+//! tells it — the same contract `gglib-app-services` implements over its real
+//! session, reduced to what these tests need to observe. Pairing is not part
+//! of it: the tunnel edge answers a pairing request itself, and nothing
+//! reaches the proxy.
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use gglib_core::ports::RemoteGatewayPort;
+use reqwest::RequestBuilder;
+
+use super::tunnel::DEVICE;
+
+/// A request as the tunnel edge marks one from a named device.
+pub(crate) fn from_device(request: RequestBuilder) -> RequestBuilder {
+    request
+        .header("via", "1.1 modelpipe")
+        .header("x-modelpipe-device", DEVICE)
+}
 
 /// The stub. Fields are read by the tests; the port methods write them.
 pub(crate) struct StubGateway {

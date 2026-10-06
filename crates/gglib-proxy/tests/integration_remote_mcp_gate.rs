@@ -11,14 +11,13 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, RemoteGatewayPort};
+use gglib_core::ports::RemoteGatewayPort;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
 use reqwest::{Client, StatusCode};
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 mod fixtures;
-use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
+use fixtures::access::spawn_proxy;
 use fixtures::remote::StubGateway;
 
 const TOKEN: &str = "sk-zzq-proxy-token";
@@ -35,43 +34,6 @@ const TOKEN: &str = "sk-zzq-proxy-token";
 /// `integration_remote_devices.rs`.
 const DEVICE: &str = "dev-0a1b2c3d";
 
-async fn spawn_proxy(access: ProxyAccessConfig) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            None,
-            Arc::new(MockSettingsRepo),
-            None,
-            None,
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &access,
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel)
-}
-
 /// A proxy with a token and a tunnel owner whose `/mcp` grant is `allow`.
 async fn tunnelled_proxy(allow_mcp: bool) -> (String, CancellationToken, Arc<StubGateway>) {
     let gateway = Arc::new(StubGateway::new(allow_mcp));
@@ -82,7 +44,7 @@ async fn tunnelled_proxy(allow_mcp: bool) -> (String, CancellationToken, Arc<Stu
         vec![],
     )
     .with_remote(Some(Arc::clone(&gateway) as Arc<dyn RemoteGatewayPort>));
-    let (base, cancel) = spawn_proxy(access).await;
+    let (base, _, cancel) = spawn_proxy(access).await;
     (base, cancel, gateway)
 }
 
@@ -181,7 +143,7 @@ async fn a_forged_marker_on_a_proxy_with_no_tunnel_only_denies_itself() {
         "127.0.0.1",
         vec![],
     );
-    let (base, cancel) = spawn_proxy(access).await;
+    let (base, _, cancel) = spawn_proxy(access).await;
 
     let forged = mcp_initialize(&base, true).await;
     assert_eq!(forged.status(), StatusCode::FORBIDDEN);

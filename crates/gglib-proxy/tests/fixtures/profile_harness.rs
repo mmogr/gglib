@@ -6,7 +6,6 @@
 //! the forwarded body rather than any internal state.
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use axum::{Json, Router, routing::post};
 use reqwest::Client;
@@ -15,9 +14,8 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::domain::{InferenceConfig, InferenceProfile};
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_proxy::ServeConfig;
 
-use super::common::make_mcp_service;
 use super::profile_mocks::{MODEL, NamedCatalog, ProfileSettings, RecordingRuntime};
 
 // ─── Harness ───────────────────────────────────────────────────────────────
@@ -130,51 +128,28 @@ pub(crate) async fn spawn_with_default_profile(
 
     // Proxy.
     let launched: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
     let names: Vec<String> = catalog_names.iter().map(|n| (*n).to_owned()).collect();
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RecordingRuntime {
-        port: upstream_port,
-        names: names.clone(),
-        launched: Arc::clone(&launched),
-    });
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(NamedCatalog {
-        names,
-        inference_defaults: model_defaults,
-    });
-    let mcp = make_mcp_service();
-    let proxy_cancel = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            mcp,
-            proxy_cancel,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(ProfileSettings {
-                profiles,
-                trust_client_sampling,
-            }),
-            None, // inference_override
-            default_profile,
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    let proxy = super::spawn::spawn(ServeConfig {
+        runtime_port: Arc::new(RecordingRuntime {
+            port: upstream_port,
+            names: names.clone(),
+            launched: Arc::clone(&launched),
+        }),
+        catalog_port: Arc::new(NamedCatalog {
+            names,
+            inference_defaults: model_defaults,
+        }),
+        cancel: cancel.clone(),
+        settings_repo: Arc::new(ProfileSettings {
+            profiles,
+            trust_client_sampling,
+        }),
+        default_profile,
+        ..super::spawn::defaults().await
+    })
+    .await;
     Harness {
-        proxy_url: format!("http://{addr}"),
+        proxy_url: proxy.base,
         forwarded,
         launched,
         _cancel: cancel,

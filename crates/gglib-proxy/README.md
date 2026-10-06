@@ -118,6 +118,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 **Module Descriptions:**
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
+- **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
 - **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
@@ -521,28 +522,28 @@ or defaults if there is none.
 
 ## Usage
 
-This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` along with port trait implementations:
+This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` in a `ServeConfig`, along with port trait implementations. Every field of the config is set by name and none has a default:
 
 ```rust,ignore
-use gglib_proxy;
-use std::sync::Arc;
+use gglib_proxy::ServeConfig;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 let listener = TcpListener::bind("127.0.0.1:8080").await?;
 let cancel = CancellationToken::new();
 
-gglib_proxy::serve(
+gglib_proxy::serve(ServeConfig {
     listener,
-    4096,                    // default context size
+    default_ctx: Some(4096), // default context size
     runtime_port,            // Arc<dyn ModelRuntimePort>
     catalog_port,            // Arc<dyn ModelCatalogPort>
     mcp,                     // Arc<McpService>
     cancel,
-).await?;
+    // ...and the eleven other fields
+}).await?;
 ```
 
-See the [full doctest](src/lib.rs) for a complete example with mock implementations.
+[`src/serve_config.rs`](src/serve_config.rs) documents each field, and `tests/fixtures/spawn.rs` builds a complete one over mock ports.
 
 ## Streaming
 
