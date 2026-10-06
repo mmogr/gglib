@@ -1,32 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
-
-// Silence unused dev-dependency warnings for planned test infrastructure
-#[cfg(test)]
-use http_body_util as _;
-#[cfg(test)]
-use hyper as _;
-#[cfg(test)]
-use tempfile as _;
-#[cfg(test)]
-use tokio_test as _;
-#[cfg(test)]
-use tower as _;
-
-// Dependencies used by bootstrap module
-use anyhow as _;
-use chrono as _;
-use futures_util as _;
-use gglib_app_services as _;
-use gglib_mcp as _;
-use gglib_runtime as _;
-use serde as _;
-use serde_json as _;
-use tokio as _;
-use tokio_stream as _;
-use tracing as _;
-use tracing_subscriber as _; // Used by main.rs binary
 
 // Crate-internal: the re-export list below is the whole public surface,
 // and nothing under `handlers` is reachable from outside this crate.

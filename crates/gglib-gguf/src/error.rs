@@ -30,10 +30,6 @@ pub enum GgufInternalError {
 
     /// An unknown value type was encountered.
     InvalidValueType(u32),
-
-    /// Memory mapping failed.
-    #[cfg(feature = "mmap")]
-    MmapError(String),
 }
 
 impl std::fmt::Display for GgufInternalError {
@@ -45,8 +41,6 @@ impl std::fmt::Display for GgufInternalError {
             Self::Io(e) => write!(f, "I/O error: {e}"),
             Self::Utf8Error => write!(f, "Invalid UTF-8 string in GGUF file"),
             Self::InvalidValueType(t) => write!(f, "Unknown GGUF value type: {t}"),
-            #[cfg(feature = "mmap")]
-            Self::MmapError(msg) => write!(f, "Memory mapping error: {msg}"),
         }
     }
 }
@@ -86,8 +80,6 @@ impl From<GgufInternalError> for GgufParseError {
             GgufInternalError::InvalidValueType(t) => {
                 Self::InvalidFormat(format!("Unknown value type: {t}"))
             }
-            #[cfg(feature = "mmap")]
-            GgufInternalError::MmapError(msg) => Self::Io(msg),
         }
     }
 }

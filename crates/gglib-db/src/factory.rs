@@ -63,21 +63,6 @@ impl CoreFactory {
         AppCore::new(repos)
     }
 
-    /// Create a model repository from a pool.
-    pub fn model_repository(pool: SqlitePool) -> Arc<SqliteModelRepository> {
-        Arc::new(SqliteModelRepository::new(pool))
-    }
-
-    /// Create a settings repository from a pool.
-    pub fn settings_repository(pool: SqlitePool) -> Arc<SqliteSettingsRepository> {
-        Arc::new(SqliteSettingsRepository::new(pool))
-    }
-
-    /// Create an MCP server repository from a pool.
-    pub fn mcp_repository(pool: SqlitePool) -> Arc<SqliteMcpRepository> {
-        Arc::new(SqliteMcpRepository::new(pool))
-    }
-
     /// Build a `ModelRegistrar` for tests.
     ///
     /// `gglib-bootstrap` is the sole production call site for
@@ -90,6 +75,10 @@ impl CoreFactory {
         pool: SqlitePool,
         gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
     ) -> gglib_core::services::ModelRegistrar {
-        gglib_core::services::ModelRegistrar::new(Self::model_repository(pool), gguf_parser, None)
+        gglib_core::services::ModelRegistrar::new(
+            Arc::new(SqliteModelRepository::new(pool)),
+            gguf_parser,
+            None,
+        )
     }
 }

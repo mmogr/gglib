@@ -48,7 +48,6 @@ authors = ["mmogr"]
 # most of `full`. The win is honest manifests and cheap single-crate builds
 # (`cargo check -p gglib-sse` no longer compiles process, net and signal).
 tokio = { version = "1.0" }
-tokio-test = "0.4"
 
 # Futures / async streams
 # Both crates are published in lock-step from the same futures-rs release; using
@@ -62,10 +61,9 @@ serde_json = "1.0"
 serde_with = "3"
 
 # TypeScript binding generation, behind each deriving crate's `ts-bindings`
-# feature. Every one of those crates sets `#![deny(unused_crate_dependencies)]`,
-# so they take it as `{ workspace = true, optional = true }`: an optional
-# dependency stays out of the build graph entirely until the feature turns it
-# on, which is what keeps `-D warnings` clean in the default build.
+# feature. Each takes it as `{ workspace = true, optional = true }`: an
+# optional dependency stays out of the build graph entirely until the feature
+# turns it on, so an ordinary build never compiles it.
 #
 # `chrono-impl` because a few wire types carry `DateTime<Utc>` directly; ts-rs
 # maps those to `string`, which is what RFC 3339 arrives as.
@@ -129,7 +127,6 @@ sysinfo = "0.37"
 
 # Testing
 tempfile = "3.8"
-mockall = "0.14"
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
 gglib-download = { path = "crates/gglib-download" }

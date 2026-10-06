@@ -327,14 +327,14 @@ mod tests {
     use std::sync::Arc;
 
     use gglib_core::McpLifecycle;
-    use gglib_db::CoreFactory;
+    use gglib_db::SqliteMcpRepository;
 
     use super::*;
     use gglib_db::setup_test_database;
 
     async fn make_ops() -> McpOps {
         let pool = setup_test_database().await.expect("in-memory DB");
-        let repo = CoreFactory::mcp_repository(pool);
+        let repo = Arc::new(SqliteMcpRepository::new(pool));
         let mcp = Arc::new(McpService::new(repo));
         McpOps::new(McpDeps { mcp })
     }

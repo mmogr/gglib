@@ -1,7 +1,7 @@
 //! GGUF file reader abstraction.
 //!
-//! This module provides a unified API for reading GGUF files,
-//! hiding the underlying I/O strategy (mmap or standard file I/O).
+//! This module provides a unified API for reading GGUF files over any
+//! [`Read`], which for a file on disk is buffered standard I/O.
 
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -14,16 +14,13 @@ use crate::format::GGUF_MAGIC;
 
 /// A reader for GGUF files.
 ///
-/// Abstracts file I/O, potentially using memory mapping for better performance.
+/// Abstracts the byte source the GGUF primitives are read from.
 pub(crate) struct GgufReader<R: Read> {
     reader: R,
 }
 
 impl GgufReader<BufReader<File>> {
-    /// Open a GGUF file for reading.
-    ///
-    /// Uses buffered I/O for standard reading. Memory mapping is handled
-    /// separately when the `mmap` feature is enabled.
+    /// Open a GGUF file for reading, through a buffer.
     pub(crate) fn open(path: &Path) -> GgufResult<Self> {
         let file = File::open(path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {

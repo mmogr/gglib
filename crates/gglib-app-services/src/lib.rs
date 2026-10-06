@@ -1,16 +1,5 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
 
-// Silence unused dependency warnings - these are used transitively
-use async_trait as _;
-use gglib_hf as _;
-#[cfg(test)]
-use tempfile as _;
-use thiserror as _;
-use tokio as _;
-#[cfg(test)]
-use tokio_test as _;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
@@ -86,7 +75,3 @@ pub use servers::ServerOps;
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::SettingsOps;
 pub use setup::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
-
-// Re-export commonly used types from gglib-core for convenience
-pub use gglib_core::ModelFilterOptions;
-pub use gglib_core::download::QueueSnapshot;

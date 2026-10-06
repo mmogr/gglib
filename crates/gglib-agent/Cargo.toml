@@ -27,5 +27,4 @@ serde_json   = { workspace = true }
 workspace = true
 
 [dev-dependencies]
-reqwest             = { workspace = true }
 tokio               = { workspace = true, features = ["rt-multi-thread", "macros"] }

@@ -1,9 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unused_crate_dependencies)]
-// Silence unused dependency warnings for optional/future use
-#[cfg(feature = "mmap")]
-use memmap2 as _;
-use tracing as _;
 
 mod capabilities;
 mod error;

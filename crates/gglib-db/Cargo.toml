@@ -7,8 +7,6 @@ license.workspace = true
 publish = false
 
 [features]
-default = ["sqlite"]
-sqlite = []
 test-utils = []
 
 [dependencies]
@@ -16,9 +14,7 @@ gglib-core = { path = "../gglib-core" }
 
 # Universal dependencies
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync", "macros"] }
-serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
@@ -33,7 +29,10 @@ libsqlite3-sys = { version = "0.30", features = ["bundled", "unlock_notify"] }
 tempfile = { workspace = true }
 # #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
 tokio = { workspace = true, features = ["macros", "rt"] }
-tokio-test = { workspace = true }
+
+[package.metadata.cargo-shear]
+# Named nowhere in code: it sets the features of the SQLite that sqlx links.
+ignored = ["libsqlite3-sys"]
 
 [lints]
 workspace = true

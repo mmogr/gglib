@@ -19,8 +19,7 @@ gglib-download = { path = "../gglib-download" }
 gglib-gguf = { path = "../gglib-gguf" }
 gglib-hf = { path = "../gglib-hf" }
 
-# Async runtime — full features match the adapters that consume this crate
-tokio = { workspace = true, features = ["rt", "sync"] }
+# The download trigger implements an async port
 async-trait = { workspace = true }
 
 # Error handling

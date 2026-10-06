@@ -1,6 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
 // Allow private types in public type alias - DefaultHfClient is meant to be used
 // through the HfClientPort trait, not its internal generic structure
 #![allow(private_interfaces)]
@@ -27,9 +25,3 @@ pub use config::HfClientConfig;
 
 // URL construction
 pub use url::build_file_url;
-
-// Silence unused dev-dependency warnings
-#[cfg(test)]
-use mockall as _;
-#[cfg(test)]
-use tokio_test as _;

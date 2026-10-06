@@ -1,6 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
 
 //! Generic, transport-agnostic-within-axum SSE broadcast utility.
 //!

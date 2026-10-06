@@ -73,9 +73,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-  # No `needs:` — these are shell scripts with no cargo dependency, so gating
-  # them behind `fmt` only lengthened the critical path. `ci-success` still
-  # requires every job, so nothing loses enforcement.
+  # No `needs:` — nothing here compiles the workspace, so gating these behind
+  # `fmt` only lengthened the critical path. `ci-success` still requires every
+  # job, so nothing loses enforcement.
   boundaries:
     name: Check Boundaries
     runs-on: ubuntu-24.04
@@ -85,6 +85,17 @@ jobs:
 
       - name: Check crate boundaries
         run: ./scripts/check_boundaries.sh
+
+      # A dependency a manifest declares and none of that crate's targets
+      # names. cargo-shear reads the source as text and compiles nothing, so
+      # code for another platform or behind a feature counts as a use.
+      # `--deny-warnings` also fails an optional dependency nothing uses and an
+      # `ignored` entry that is no longer needed.
+      - name: Install cargo-shear
+        uses: taiki-e/install-action@cargo-shear
+
+      - name: Check for unused dependencies
+        run: cargo shear --deny-warnings
 
       - name: Upload boundary results
         uses: actions/upload-artifact@v7

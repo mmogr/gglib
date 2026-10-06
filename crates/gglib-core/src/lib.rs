@@ -1,5 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unused_crate_dependencies)]
 
 pub mod access;
 pub mod cache_config;
@@ -72,9 +71,3 @@ pub use paths::{
     default_models_dir, ensure_directory, is_prebuilt_binary, llama_config_path, llama_cpp_dir,
     llama_server_path, persist_models_dir, resolve_models_dir, resource_root,
 };
-
-// Silence unused dev-dependency warnings until we add mock-based tests
-#[cfg(test)]
-use mockall as _;
-#[cfg(test)]
-use tokio_test as _;
