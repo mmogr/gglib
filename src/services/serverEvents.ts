@@ -37,11 +37,10 @@ const bridge = bridgeEvents({
       ingestServerEvent(normalized);
     }
   },
-  // Hydration: seed the registry with servers already running at load. This
-  // is a REST list, not an event, so it goes through the normalizer's own
-  // entry point for one rather than being dressed up as a `server_snapshot`
-  // frame — the two shapes differ, and pretending otherwise is what left the
-  // event path quietly accepting snake_case it never receives.
+  // Hydration: seed the registry with servers already running at load. No
+  // event carries those, so they are read from the REST list, which has the
+  // normalizer's own entry point for one: it is snake_case where the event
+  // frames are camelCase.
   read: () => getTransport().listServers(),
   apply: (servers) => ingestServerEvent(normalizeServerSnapshotFromList(servers)),
 });

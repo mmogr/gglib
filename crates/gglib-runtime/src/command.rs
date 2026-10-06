@@ -6,10 +6,9 @@
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
 use crate::system::is_truthy_flag;
-use gglib_core::ports::{JinjaMode, ServerConfig, ServerLogSinkPort};
+use gglib_core::ports::{JinjaMode, ServerConfig};
 use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tokio::process::Child;
 use tracing::{debug, info, warn};
 
@@ -328,20 +327,16 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
 
 /// Spawn background tasks to stream stdout/stderr logs asynchronously.
 ///
-/// The tasks read lines from the process output and log them
-/// via tracing. If a log sink is provided, lines are also forwarded there.
-/// They exit when the streams close.
-pub(crate) fn spawn_log_readers(
-    child: &mut Child,
-    port: u16,
-    log_sink: Option<Arc<dyn ServerLogSinkPort>>,
-) {
+/// The tasks read lines from the process output, log them via tracing and
+/// hand them to the log manager under `port`. They exit when the streams
+/// close.
+pub(crate) fn spawn_log_readers(child: &mut Child, port: u16) {
     if let Some(stdout) = child.stdout.take() {
-        spawn_stream_reader(stdout, port, "stdout", log_sink.clone());
+        spawn_stream_reader(stdout, port, "stdout");
     }
 
     if let Some(stderr) = child.stderr.take() {
-        spawn_stream_reader(stderr, port, "stderr", log_sink);
+        spawn_stream_reader(stderr, port, "stderr");
     }
 }
 

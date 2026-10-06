@@ -4,8 +4,7 @@
  * A tag with no arm here resolves to `null`, and `validateEvent` drops the
  * frame without a word — so an unmapped family is not a degraded feature, it
  * is a silent one. The model events spent their whole existence in that state:
- * the variants were declared, `event_name()` mapped them, and the frontend
- * threw every one away.
+ * the variants were declared, and the frontend threw every one away.
  */
 
 import { readFileSync } from 'node:fs';
@@ -21,8 +20,8 @@ import { getEventCategory } from '../../../src/services/transport/events/categor
  * Read out of the binding rather than listed here, so a variant added in Rust
  * arrives in this test on the next `make bindings` instead of whenever
  * somebody remembers. That is the failure this file exists for: the model
- * events were declared in Rust, mapped by `event_name()`, and silently
- * discarded by the frontend for their whole existence.
+ * events were declared in Rust and silently discarded by the frontend for
+ * their whole existence.
  */
 const WIRE_TAGS: string[] = (() => {
   const binding = readFileSync(
@@ -75,7 +74,7 @@ describe('getEventCategory', () => {
   it('keeps routing the families that already worked', () => {
     expect(getEventCategory('download')).toBe('download');
     expect(getEventCategory('server_started')).toBe('server');
-    expect(getEventCategory('server_snapshot')).toBe('server');
+    expect(getEventCategory('server_health_changed')).toBe('server');
     expect(getEventCategory('verification_progress')).toBe('verification');
     expect(getEventCategory('proxy_started')).toBe('proxy');
   });
@@ -86,10 +85,19 @@ describe('getEventCategory', () => {
   });
 
   /**
+   * The tags are serde's snake_case. The colon spellings were the Tauri bus's,
+   * which nothing sends.
+   */
+  it('claims no colon-separated tag', () => {
+    expect(getEventCategory('verification:progress')).toBeNull();
+    expect(getEventCategory('server:started')).toBeNull();
+  });
+
+  /**
    * There is no `log` family on this stream and never was.
    *
    * `AppEvent` is the only type `/api/events` carries, and none of its
-   * fourteen tags begins with `log`. Server logs are real, but they are a
+   * tags begins with `log`. Server logs are real, but they are a
    * different route — `/api/servers/{port}/logs/stream`, framing bare
    * `ServerLogEntry` objects that carry no `type` at all and never reach this
    * function.
@@ -101,8 +109,7 @@ describe('getEventCategory', () => {
 
   /**
    * `model` is a prefix of nothing else on the wire, but the guard is cheap
-   * and the `server_`/`server_snapshot` pair shows how easily a prefix arm
-   * swallows a sibling family.
+   * and a prefix arm swallows a sibling family easily.
    */
   it('does not claim tags that merely start with the same letters', () => {
     expect(getEventCategory('modelling_something')).toBeNull();

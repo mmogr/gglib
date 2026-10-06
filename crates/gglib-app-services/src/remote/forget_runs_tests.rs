@@ -19,8 +19,8 @@ use super::super::RemoteOps;
 use super::super::device_keys::{read_keys, write_keys};
 use crate::runs::RunRegistry;
 use crate::runs::test_executor::{Cmd, body, next, registry};
-use crate::test_support::test_core_and_proxy_over;
-use crate::test_support_remote::{RecordingEmitter, scratch_device_keys, test_remote_ops};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy_over};
+use crate::test_support_remote::{scratch_device_keys, test_remote_ops};
 
 const DEVICE: &str = "dev-11112222";
 

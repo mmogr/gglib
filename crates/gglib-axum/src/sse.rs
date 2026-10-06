@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
-use gglib_core::events::{AppEvent, ServerEvents, ServerSummary};
-use gglib_core::ports::{AppEventEmitter, ModelRuntimeError};
+use gglib_core::events::AppEvent;
+use gglib_core::ports::AppEventEmitter;
 use gglib_sse::{Broadcaster, SseOptions};
 
 /// SSE broadcaster that implements event emitter ports.
@@ -89,57 +89,6 @@ impl SseBroadcaster {
 impl AppEventEmitter for SseBroadcaster {
     fn emit(&self, event: AppEvent) {
         self.inner.send(event);
-    }
-}
-
-/// Axum adapter for server lifecycle events via SSE.
-///
-/// This adapter implements the `ServerEvents` trait by converting
-/// `ServerSummary` instances to `AppEvent` variants and emitting them
-/// via the SSE broadcaster. This keeps the core lifecycle logic
-/// transport-agnostic while allowing Axum-specific event delivery.
-#[derive(Debug, Clone)]
-pub(crate) struct AxumServerEvents {
-    broadcaster: SseBroadcaster,
-}
-
-impl AxumServerEvents {
-    /// Create a new Axum server events adapter.
-    #[must_use]
-    pub(crate) fn new(broadcaster: SseBroadcaster) -> Self {
-        Self { broadcaster }
-    }
-}
-
-impl ServerEvents for AxumServerEvents {
-    fn started(&self, server: &ServerSummary) {
-        let event = AppEvent::from_server_started(server);
-        self.broadcaster.emit(event);
-    }
-
-    fn stopping(&self, server: &ServerSummary) {
-        // Note: There's no AppEvent::ServerStopping variant currently
-        // We could add one or just emit stopped after the fact
-        tracing::debug!(
-            model_id = %server.model_id,
-            model_name = %server.model_name,
-            "Server stopping"
-        );
-    }
-
-    fn stopped(&self, server: &ServerSummary) {
-        let event = AppEvent::from_server_stopped(server);
-        self.broadcaster.emit(event);
-    }
-
-    fn snapshot(&self, servers: &[ServerSummary]) {
-        let event = AppEvent::from_server_snapshot(servers);
-        self.broadcaster.emit(event);
-    }
-
-    fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
-        let event = AppEvent::from_server_error(server, error.into());
-        self.broadcaster.emit(event);
     }
 }
 

@@ -13,11 +13,11 @@
 //! Polling rather than subscribing to the daemon's `/api/events` stream is
 //! deliberate. The server lifecycle events are deltas; `gglib-sse`'s
 //! broadcaster documents that it drops them silently for a lagging subscriber,
-//! and the one `ServerSnapshot` is emitted at daemon startup rather than per
-//! subscriber — so a single missed event would leave the resident count wrong
-//! until the app restarted. Every poll is absolute, so drift cannot accumulate;
-//! a failed request is also the daemon-down signal, and it catches a wedged
-//! daemon that a 30-second SSE keep-alive would still call healthy.
+//! and no event carries the whole picture — so a single missed event would
+//! leave the resident count wrong until the app restarted. Every poll is
+//! absolute, so drift cannot accumulate; a failed request is also the
+//! daemon-down signal, and it catches a wedged daemon that a 30-second SSE
+//! keep-alive would still call healthy.
 
 use std::sync::Arc;
 use std::time::Duration;

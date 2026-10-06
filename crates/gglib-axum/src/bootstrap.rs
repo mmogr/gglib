@@ -15,9 +15,7 @@ use gglib_app_services::{
     ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{
-    AppEventEmitter, HfClientPort, LoopGuardTripLog, ModelCatalogPort, ModelRuntimePort,
-};
+use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelCatalogPort, ModelRuntimePort};
 use gglib_core::services::AppCore;
 use gglib_db::{
     LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, repair_at_daemon_start,
@@ -80,7 +78,7 @@ pub struct AxumContext {
     pub loop_guard_trip_writer: Arc<LoopGuardTripWriter>,
     /// The loop guard's log read back: what the daemon's route answers with,
     /// from the same database the writer writes to.
-    pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
+    pub loop_guard_trips: Arc<SqliteLoopGuardTripLog>,
     /// Benchmark operations: `run_compare` and `run_perf` with SSE streaming.
     pub benchmark: Arc<BenchmarkOps>,
     /// Shared `ModelRuntimePort` wrapping the one `ProcessManager`.
@@ -173,8 +171,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // cannot drift; only genuinely Axum-shaped wiring stays here.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
     let loop_guard_trip_writer = LoopGuardTripWriter::spawn(pool.clone());
-    let loop_guard_trips: Arc<dyn LoopGuardTripLog> =
-        Arc::new(SqliteLoopGuardTripLog::new(pool.clone()));
+    let loop_guard_trips = Arc::new(SqliteLoopGuardTripLog::new(pool.clone()));
 
     let AppServices {
         models,
@@ -200,7 +197,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         tool_detector: Arc::new(ToolSupportDetector::new()),
         mcp: mcp.clone(),
         emitter: sse.clone(),
-        server_events: Arc::new(crate::sse::AxumServerEvents::new((*sse).clone())),
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
         loop_guard_trips: Arc::clone(&loop_guard_trip_writer)
             as Arc<dyn gglib_core::ports::LoopGuardTripSink>,
@@ -209,14 +205,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         device_keys_path: config.device_keys_path.clone(),
     })
     .await?;
-
-    // Emit initial server snapshot after initialization
-    tokio::spawn({
-        let servers = Arc::clone(&servers);
-        async move {
-            servers.emit_initial_snapshot().await;
-        }
-    });
 
     crate::proxy_watch::spawn(&proxy, &sse);
 

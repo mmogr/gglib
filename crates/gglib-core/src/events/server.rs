@@ -1,114 +1,8 @@
 //! Model server lifecycle events.
 
-use serde::{Deserialize, Serialize};
-
-use crate::ports::model_runtime::{ModelRuntimeError, RuntimeErrorEnvelope};
+use crate::ports::model_runtime::RuntimeErrorEnvelope;
 
 use super::AppEvent;
-
-/// Summary of a running server for event emission.
-///
-/// This is a lightweight representation used by the `ServerEvents` port
-/// to decouple lifecycle logic from transport-specific implementations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerSummary {
-    /// Unique server instance ID.
-    pub id: String,
-    /// Model ID being served.
-    pub model_id: String,
-    /// Model name.
-    pub model_name: String,
-    /// Port the server is listening on.
-    pub port: u16,
-}
-
-/// Port for emitting server lifecycle events.
-///
-/// This trait decouples the core server lifecycle logic from transport-specific
-/// event emission (Tauri events, SSE, logging, etc.). Implementations convert
-/// `ServerSummary` to their native event format.
-///
-/// # Design
-///
-/// - **Object-safe**: Uses `&self` for dynamic dispatch via `Arc<dyn ServerEvents>`
-/// - **Fire-and-forget**: Methods don't return `Result` — adapters handle errors internally
-/// - **Generic**: No knowledge of Tauri/Axum/CLI specifics
-///
-/// # Example
-///
-/// ```rust
-/// use gglib_core::events::{ServerEvents, ServerSummary};
-/// use gglib_core::ports::ModelRuntimeError;
-///
-/// struct LoggingEvents;
-///
-/// impl ServerEvents for LoggingEvents {
-///     fn started(&self, server: &ServerSummary) {
-///         println!("Server {} started on port {}", server.model_name, server.port);
-///     }
-///     fn stopping(&self, server: &ServerSummary) {
-///         println!("Stopping server {}", server.model_name);
-///     }
-///     fn stopped(&self, server: &ServerSummary) {
-///         println!("Server {} stopped", server.model_name);
-///     }
-///     fn snapshot(&self, servers: &[ServerSummary]) {
-///         println!("Server snapshot: {} running", servers.len());
-///     }
-///     fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
-///         eprintln!("Server {} error: {}", server.model_name, error);
-///     }
-/// }
-/// ```
-pub trait ServerEvents: Send + Sync {
-    /// Called when a server has successfully started.
-    fn started(&self, server: &ServerSummary);
-
-    /// Called just before stopping a server.
-    fn stopping(&self, server: &ServerSummary);
-
-    /// Called after a server has stopped.
-    fn stopped(&self, server: &ServerSummary);
-
-    /// Called to broadcast the current state of all running servers.
-    fn snapshot(&self, servers: &[ServerSummary]);
-
-    /// Called when a server error occurs.
-    fn error(&self, server: &ServerSummary, error: &ModelRuntimeError);
-}
-
-/// No-op implementation of `ServerEvents` for testing and non-GUI contexts.
-///
-/// This is the default when `GuiBackend` is constructed without explicit
-/// event handling (e.g., in unit tests or CLI contexts).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoopServerEvents;
-
-impl ServerEvents for NoopServerEvents {
-    fn started(&self, _server: &ServerSummary) {}
-    fn stopping(&self, _server: &ServerSummary) {}
-    fn stopped(&self, _server: &ServerSummary) {}
-    fn snapshot(&self, _servers: &[ServerSummary]) {}
-    fn error(&self, _server: &ServerSummary, _error: &ModelRuntimeError) {}
-}
-
-/// Entry in a server snapshot.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "camelCase")]
-pub struct ServerSnapshotEntry {
-    /// Model ID being served.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub model_id: i64,
-    /// Model name.
-    pub model_name: String,
-    /// Port the server is listening on.
-    pub port: u16,
-    /// Unix timestamp (seconds) when started.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub started_at: u64,
-}
 
 impl AppEvent {
     /// Create a server started event.
@@ -140,152 +34,66 @@ impl AppEvent {
             error,
         }
     }
-
-    /// Create a server snapshot event.
-    pub const fn server_snapshot(servers: Vec<ServerSnapshotEntry>) -> Self {
-        Self::ServerSnapshot { servers }
-    }
-
-    /// Build a `ServerStarted` event from a `ServerSummary`.
-    pub fn from_server_started(server: &ServerSummary) -> Self {
-        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        Self::server_started(model_id, &server.model_name, server.port)
-    }
-
-    /// Build a `ServerStopped` event from a `ServerSummary`.
-    pub fn from_server_stopped(server: &ServerSummary) -> Self {
-        let model_id = server.model_id.parse::<i64>().unwrap_or(0);
-        Self::server_stopped(model_id, &server.model_name)
-    }
-
-    /// Build a `ServerError` event from a `ServerSummary`.
-    pub fn from_server_error(server: &ServerSummary, error: RuntimeErrorEnvelope) -> Self {
-        let model_id = server.model_id.parse::<i64>().ok();
-        Self::server_error(model_id, &server.model_name, error)
-    }
-
-    /// Build a `ServerSnapshot` event from a slice of `ServerSummary`.
-    pub fn from_server_snapshot(servers: &[ServerSummary]) -> Self {
-        let started_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let entries: Vec<ServerSnapshotEntry> = servers
-            .iter()
-            .map(|s| ServerSnapshotEntry {
-                model_id: s.model_id.parse::<i64>().unwrap_or(0),
-                model_name: s.model_name.clone(),
-                port: s.port,
-                started_at,
-            })
-            .collect();
-        Self::server_snapshot(entries)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ports::model_runtime::ModelRuntimeError;
 
-    fn make_server(id: &str, model_id: &str, name: &str, port: u16) -> ServerSummary {
-        ServerSummary {
-            id: id.to_string(),
-            model_id: model_id.to_string(),
-            model_name: name.to_string(),
-            port,
-        }
+    /// The frame `/api/events` carries for `event`, as the bytes it is sent
+    /// as: key order included, since that is what a client is handed.
+    fn wire(event: &AppEvent) -> String {
+        serde_json::to_string(event).unwrap()
     }
 
     #[test]
-    fn test_from_server_started() {
-        let server = make_server("srv-1", "42", "test-model", 8080);
-        let event = AppEvent::from_server_started(&server);
-        match event {
-            AppEvent::ServerStarted {
-                model_id,
-                model_name,
-                port,
-            } => {
-                assert_eq!(model_id, 42);
-                assert_eq!(model_name, "test-model");
-                assert_eq!(port, 8080);
-            }
-            _ => panic!("expected ServerStarted"),
-        }
+    fn a_started_server_is_sent_with_its_model_and_port() {
+        assert_eq!(
+            wire(&AppEvent::server_started(42, "test-model", 9001)),
+            r#"{"type":"server_started","modelId":42,"modelName":"test-model","port":9001}"#
+        );
     }
 
     #[test]
-    fn test_from_server_stopped() {
-        let server = make_server("srv-1", "42", "test-model", 8080);
-        let event = AppEvent::from_server_stopped(&server);
-        match event {
-            AppEvent::ServerStopped {
-                model_id,
-                model_name,
-            } => {
-                assert_eq!(model_id, 42);
-                assert_eq!(model_name, "test-model");
-            }
-            _ => panic!("expected ServerStopped"),
-        }
+    fn a_stopped_server_is_sent_with_its_model_and_no_port() {
+        assert_eq!(
+            wire(&AppEvent::server_stopped(42, "test-model")),
+            r#"{"type":"server_stopped","modelId":42,"modelName":"test-model"}"#
+        );
     }
 
     #[test]
-    fn test_from_server_error() {
-        let server = make_server("srv-1", "42", "test-model", 8080);
-        let runtime_err = ModelRuntimeError::Internal("something failed".to_string());
-        let event = AppEvent::from_server_error(&server, RuntimeErrorEnvelope::from(&runtime_err));
-        match event {
-            AppEvent::ServerError {
-                model_id,
-                model_name,
-                error,
-            } => {
-                assert_eq!(model_id, Some(42));
-                assert_eq!(model_name, "test-model");
-                assert_eq!(error.message, "Internal error: something failed");
-                assert_eq!(error.r#type, "server_error");
-                assert!(!error.retryable);
-            }
-            _ => panic!("expected ServerError"),
-        }
+    fn a_server_error_is_sent_with_the_envelope_of_the_runtime_error() {
+        let failed = ModelRuntimeError::SpawnFailed("no binary".to_owned());
+        assert_eq!(
+            wire(&AppEvent::server_error(
+                Some(42),
+                "test-model",
+                (&failed).into()
+            )),
+            r#"{"type":"server_error","modelId":42,"modelName":"test-model","error":{"message":"Failed to start model: no binary","type":"server_error","retryable":false}}"#
+        );
+
+        let loading = ModelRuntimeError::ModelLoading;
+        assert_eq!(
+            wire(&AppEvent::server_error(
+                Some(42),
+                "test-model",
+                (&loading).into()
+            )),
+            r#"{"type":"server_error","modelId":42,"modelName":"test-model","error":{"message":"Model is loading, try again","type":"service_unavailable","retryable":true}}"#
+        );
     }
 
+    /// The key is always there: a model that is not known is `null`, and a
+    /// client reading the field never finds it missing.
     #[test]
-    fn test_from_server_error_invalid_model_id() {
-        let server = make_server("srv-1", "abc", "test-model", 8080);
-        let runtime_err = ModelRuntimeError::Internal("something failed".to_string());
-        let event = AppEvent::from_server_error(&server, RuntimeErrorEnvelope::from(&runtime_err));
-        match event {
-            AppEvent::ServerError {
-                model_id,
-                model_name,
-                error,
-            } => {
-                assert_eq!(model_id, None);
-                assert_eq!(model_name, "test-model");
-                assert_eq!(error.message, "Internal error: something failed");
-            }
-            _ => panic!("expected ServerError"),
-        }
-    }
-
-    #[test]
-    fn test_from_server_snapshot() {
-        let servers = vec![
-            make_server("srv-a", "1", "model-a", 9001),
-            make_server("srv-b", "2", "model-b", 9002),
-        ];
-        let event = AppEvent::from_server_snapshot(&servers);
-        match event {
-            AppEvent::ServerSnapshot { servers: entries } => {
-                assert_eq!(entries.len(), 2);
-                assert_eq!(entries[0].model_id, 1);
-                assert_eq!(entries[0].port, 9001);
-                assert_eq!(entries[1].model_id, 2);
-                assert_eq!(entries[1].port, 9002);
-            }
-            _ => panic!("expected ServerSnapshot"),
-        }
+    fn a_server_error_for_no_known_model_sends_a_null_model_id() {
+        let failed = ModelRuntimeError::Internal("x".to_owned());
+        assert_eq!(
+            wire(&AppEvent::server_error(None, "n", (&failed).into())),
+            r#"{"type":"server_error","modelId":null,"modelName":"n","error":{"message":"Internal error: x","type":"server_error","retryable":false}}"#
+        );
     }
 }

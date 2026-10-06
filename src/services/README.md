@@ -90,18 +90,17 @@ Events are the source of truth for server state. They arrive from the daemon
 over SSE (`/api/events`) — one path, desktop and web alike — and are normalized
 into the registry's union by `serverEvents.normalize.ts`.
 
-There are two ingestion paths, not one. `server_snapshot` is emitted at daemon
-boot and never replayed, so a client connecting later never sees it; `initServerEvents`
-hydrates from `GET /api/servers` instead. That list is a REST DTO, snake_case,
-and has its own reader — writing `model_id` into an `AppEvent` fixture, or
-`modelId` into a REST one, yields a silently empty registry rather than an error.
+There are two ingestion paths, not one. The events are deltas, and none carries
+the servers that were already running, so `initServerEvents` hydrates from
+`GET /api/servers`. That list is a REST DTO, snake_case, and has its own
+reader — writing `model_id` into an `AppEvent` fixture, or `modelId` into a
+REST one, yields a silently empty registry rather than an error.
 Note that camelCase on `AppEvent` is per-field `#[serde(rename)]`, not a
 container rule: snake_case is serde's default here, so a newly added field is
 snake_case unless someone remembers otherwise.
 
 | `AppEvent` type | Description |
 |-------|-------------|
-| `server_snapshot` | Initial state of all running servers (emitted at daemon startup) |
 | `server_started` | Server started and ready |
 | `server_stopped` | Server stopped cleanly |
 | `server_error` | Server encountered an error |

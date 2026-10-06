@@ -2,27 +2,19 @@
 //! session it holds. The invite a session holds is `gateway_invite_tests.rs`,
 //! which shares the fixture below.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, RemoteGatewayPort};
+use gglib_core::ports::RemoteGatewayPort;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 use super::*;
 use crate::remote::pairing::pairing_tests::FakeInvite;
 use crate::remote::roster::Note;
+use crate::test_support::RecordingEmitter;
 
-#[derive(Default)]
-pub(super) struct Recording(Mutex<Vec<AppEvent>>);
-
-impl AppEventEmitter for Recording {
-    fn emit(&self, event: AppEvent) {
-        self.0.lock().unwrap().push(event);
-    }
-}
-
-pub(super) fn gateway() -> (Arc<Recording>, RemoteGateway) {
-    let recorder = Arc::new(Recording::default());
+pub(super) fn gateway() -> (Arc<RecordingEmitter>, RemoteGateway) {
+    let recorder = Arc::new(RecordingEmitter::default());
     let gateway = RemoteGateway::new(recorder.clone());
     (recorder, gateway)
 }
@@ -35,14 +27,12 @@ pub(super) fn notes(gateway: &RemoteGateway) -> UnboundedReceiver<Note> {
 }
 
 /// Every `remote_paired` announced, by the peer it named.
-pub(super) fn announced(events: &Recording) -> Vec<Option<String>> {
+pub(super) fn announced(events: &RecordingEmitter) -> Vec<Option<String>> {
     events
-        .0
-        .lock()
-        .unwrap()
-        .iter()
+        .events()
+        .into_iter()
         .filter_map(|event| match event {
-            AppEvent::RemotePaired { peer } => Some(peer.clone()),
+            AppEvent::RemotePaired { peer } => Some(peer),
             _ => None,
         })
         .collect()

@@ -23,25 +23,23 @@ use super::serve_rearm_look_tests::switched_on;
 use super::serve_rearm_tests::{a_look, stop_and_lose};
 use super::*;
 use crate::remote::WAIT_OUT_RESUME;
-use crate::remote::enable_tests::Recording;
 use crate::remote::serve_watch_tests::ops_with_key;
+use crate::test_support::RecordingEmitter;
 
 /// The ticket fingerprint of each tunnel armed so far, in order.
-fn armed(events: &Recording) -> Vec<String> {
+fn armed(events: &RecordingEmitter) -> Vec<String> {
     events
-        .0
-        .lock()
-        .expect("the recorded events")
-        .iter()
+        .events()
+        .into_iter()
         .filter_map(|event| match event {
-            AppEvent::RemoteEnabled { ticket_fingerprint } => Some(ticket_fingerprint.clone()),
+            AppEvent::RemoteEnabled { ticket_fingerprint } => Some(ticket_fingerprint),
             _ => None,
         })
         .collect()
 }
 
 /// [`armed`], once it lists `n` tunnels or `within` has passed.
-async fn until_armed(events: &Recording, n: usize, within: Duration) -> Vec<String> {
+async fn until_armed(events: &RecordingEmitter, n: usize, within: Duration) -> Vec<String> {
     let _ = timeout(within, async {
         while armed(events).len() < n {
             tokio::task::yield_now().await;

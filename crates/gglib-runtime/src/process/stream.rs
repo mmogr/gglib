@@ -5,16 +5,16 @@
 //! This module provides byte-based line reading with lossy UTF-8 decoding so
 //! log streaming remains robust.
 
-use gglib_core::ports::ServerLogSinkPort;
-use std::sync::Arc;
+use super::logs::get_log_manager;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tracing::debug;
 
+/// Read `stream` line by line until it closes, handing each line to the log
+/// manager under `port`.
 pub(crate) fn spawn_stream_reader(
     stream: impl AsyncRead + Unpin + Send + 'static,
     port: u16,
     stream_type: &'static str,
-    sink: Option<Arc<dyn ServerLogSinkPort>>,
 ) {
     tokio::spawn(async move {
         let mut reader = BufReader::new(stream);
@@ -35,9 +35,7 @@ pub(crate) fn spawn_stream_reader(
 
                     let line = String::from_utf8_lossy(&buf).to_string();
                     debug!(port = %port, %stream_type, "{}: {}", stream_type, line);
-                    if let Some(ref s) = sink {
-                        s.append(port, stream_type, line);
-                    }
+                    get_log_manager().add_log(port, &line);
                 }
                 Err(e) => {
                     debug!(port = %port, %stream_type, error = %e, "log stream reader exiting due to read error");
@@ -49,3 +47,7 @@ pub(crate) fn spawn_stream_reader(
         debug!(port = %port, %stream_type, "log stream reader task exiting");
     });
 }
+
+#[cfg(test)]
+#[path = "stream_tests.rs"]
+mod tests;

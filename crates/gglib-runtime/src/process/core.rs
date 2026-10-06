@@ -17,7 +17,6 @@ use anyhow::{Result, anyhow};
 use gglib_core::ports::ServerConfig;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
 
@@ -95,7 +94,7 @@ impl GuiProcessCore {
             debug!("Failed to write PID file: {}", e);
         }
 
-        self.spawn_log_readers(&mut child, port);
+        spawn_log_readers(&mut child, port);
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -107,11 +106,6 @@ impl GuiProcessCore {
         self.processes.insert(model_id, running);
 
         Ok((port, pid))
-    }
-
-    fn spawn_log_readers(&self, child: &mut tokio::process::Child, port: u16) {
-        use crate::process::LogManagerSink;
-        spawn_log_readers(child, port, Some(Arc::new(LogManagerSink)));
     }
 
     fn resolve_port(&self, requested: Option<u16>) -> Result<u16> {

@@ -4,7 +4,7 @@ import {
   normalizeServerEventFromAppEvent,
   normalizeServerSnapshotFromList,
 } from '../../../../src/services/serverEvents.normalize';
-import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../../fixtures/ports';
+import { MOCK_BASE_PORT } from '../../fixtures/ports';
 import type { ServerInfo } from '../../../../src/types';
 
 describe('serverEvents.normalize', () => {
@@ -15,33 +15,6 @@ describe('serverEvents.normalize', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-  });
-
-  it('normalizes server_snapshot with startedAt seconds -> updatedAt ms', () => {
-    const evt = normalizeServerEventFromAppEvent({
-      type: 'server_snapshot',
-      servers: [
-        {
-          modelId: 1,
-          modelName: 'M',
-          port: MOCK_PROXY_PORT,
-          startedAt: 1_700_000_000,
-        },
-      ],
-    });
-
-    expect(evt).toEqual({
-      type: 'snapshot',
-      servers: [
-        {
-          modelId: '1',
-          modelName: 'M',
-          status: 'running',
-          port: MOCK_PROXY_PORT,
-          updatedAt: 1_700_000_000_000,
-        },
-      ],
-    });
   });
 
   it('normalizes server_started into running with deterministic updatedAt', () => {
@@ -134,11 +107,11 @@ describe('serverEvents.normalize', () => {
   /**
    * The hydration path, and the reason there are two entry points.
    *
-   * `GET /api/servers` reports the same running servers as the SSE snapshot,
-   * in a different shape: snake_case keys and a `pid` the registry has no use
-   * for. It is the current schema, not a legacy one — this test used to claim
-   * otherwise while being the only cover for the branch that made startup
-   * hydration work.
+   * `GET /api/servers` is the only place the servers already running come
+   * from, and its shape is not an event's: snake_case keys and a `pid` the
+   * registry has no use for. It is the current schema, not a legacy one —
+   * this test used to claim otherwise while being the only cover for the
+   * branch that made startup hydration work.
    */
   it('normalizes the REST server list, which is snake_case', () => {
     const evt = normalizeServerSnapshotFromList([
@@ -190,34 +163,31 @@ describe('serverEvents.normalize', () => {
     expect(evt.servers[0]).toMatchObject({ modelId: '9', modelName: 'Good' });
   });
 
-  /**
-   * The SSE snapshot is camelCase throughout — `ServerSnapshotEntry` carries
-   * `rename_all = "camelCase"`, so `startedAt` is the only spelling that
-   * arrives on this path.
-   */
-  it('no longer accepts snake_case on the SSE snapshot path', () => {
-    const evt = normalizeServerEventFromAppEvent({
-      type: 'server_snapshot',
-      servers: [{ model_id: 4, model_name: 'SnakeModel', port: MOCK_BASE_PORT, started_at: 1 }],
-    });
-
-    expect(evt).toEqual({ type: 'snapshot', servers: [] });
-  });
-
-  it('drops snapshot entries whose id is missing or non-numeric', () => {
-    const evt = normalizeServerEventFromAppEvent({
-      type: 'server_snapshot',
-      servers: [
-        { port: MOCK_BASE_PORT }, // no id at all — would stringify to "undefined"
-        { modelId: 'abc', port: MOCK_BASE_PORT + 1 },
-        { modelId: 5, port: MOCK_BASE_PORT + 2 },
-      ],
-    });
+  it('drops REST entries whose id is missing or non-numeric', () => {
+    const evt = normalizeServerSnapshotFromList([
+      { port: MOCK_BASE_PORT }, // no id at all — would stringify to "undefined"
+      { model_id: 'abc', port: MOCK_BASE_PORT + 1 },
+      { model_id: 5, port: MOCK_BASE_PORT + 2 },
+    ] as unknown as ServerInfo[]);
 
     expect(evt).toMatchObject({
       type: 'snapshot',
       servers: [{ modelId: '5', port: MOCK_BASE_PORT + 2 }],
     });
+    expect(evt.servers).toHaveLength(1);
+  });
+
+  /**
+   * No event carries the running servers: the daemon sends none, so a frame
+   * with that tag is one this reader does not know.
+   */
+  it('reads no snapshot off the event stream', () => {
+    const evt = normalizeServerEventFromAppEvent({
+      type: 'server_snapshot',
+      servers: [{ modelId: 1, modelName: 'M', port: MOCK_BASE_PORT, startedAt: 1_700_000_000 }],
+    });
+
+    expect(evt).toBeNull();
   });
 
   it('ignores lifecycle events with non-numeric model ids', () => {

@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use gglib_core::events::{AppEvent, ServerSummary};
+use gglib_core::events::AppEvent;
 use gglib_core::ports::{
     AppEventEmitter, ModelRuntimeError, ProcessHandle, ServerHealthStatus, ToolSupportDetectorPort,
 };
@@ -34,8 +34,8 @@ pub struct ServerDeps {
     /// with the proxy for the GPU by running a second llama-server alongside
     /// it.
     pub proxy: Arc<ProxyOps>,
+    /// Where every server event goes: started, stopped, error and health.
     pub emitter: Arc<dyn AppEventEmitter>,
-    pub server_events: Arc<dyn gglib_core::events::ServerEvents>,
     pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
 }
 
@@ -196,25 +196,17 @@ impl ServerOps {
             .await
             .map(gglib_core::ports::Admission::into_target)
             .map_err(|e| {
-                let error_summary = ServerSummary {
-                    id: format!("server-{id}"),
-                    model_id: id.to_string(),
-                    model_name: model.name.clone(),
-                    port: 0, // No port on failure
-                };
-                self.deps.server_events.error(&error_summary, &e);
+                self.deps
+                    .emitter
+                    .emit(AppEvent::server_error(Some(id), &model.name, (&e).into()));
                 map_runtime_error(&e)
             })?;
 
         debug!(model_id = %id, port = %target.port, "Server started successfully");
 
-        let summary = ServerSummary {
-            id: format!("server-{id}"),
-            model_id: id.to_string(),
-            model_name: model.name.clone(),
-            port: target.port,
-        };
-        self.deps.server_events.started(&summary);
+        self.deps
+            .emitter
+            .emit(AppEvent::server_started(id, &model.name, target.port));
 
         let handle = ProcessHandle::new(id, model.name.clone(), None, target.port, now_secs());
         self.spawn_health_monitor(handle, id).await;
@@ -291,27 +283,15 @@ impl ServerOps {
     pub async fn stop(&self, id: i64) -> Result<String, GuiError> {
         debug!(model_id = %id, "Stopping server");
 
-        let running = self
-            .deps
-            .proxy
-            .runtime()
-            .current_model()
-            .await
-            .filter(|t| i64::from(t.model_id) == id)
-            .ok_or_else(|| GuiError::NotFound {
+        let running = self.deps.proxy.runtime().current_model().await;
+        if running.is_none_or(|t| i64::from(t.model_id) != id) {
+            return Err(GuiError::NotFound {
                 entity: "server",
                 id: id.to_string(),
-            })?;
+            });
+        }
 
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-
-        let summary = ServerSummary {
-            id: format!("server-{id}"),
-            model_id: id.to_string(),
-            model_name: model.name.clone(),
-            port: running.port,
-        };
-        self.deps.server_events.stopping(&summary);
 
         // Cancel monitoring first, so a shutdown is not reported as a health
         // regression.
@@ -330,11 +310,15 @@ impl ServerOps {
             .stop_current()
             .await
             .map_err(|e| {
-                self.deps.server_events.error(&summary, &e);
+                self.deps
+                    .emitter
+                    .emit(AppEvent::server_error(Some(id), &model.name, (&e).into()));
                 GuiError::Internal(format!("Failed to stop server: {e}"))
             })?;
 
-        self.deps.server_events.stopped(&summary);
+        self.deps
+            .emitter
+            .emit(AppEvent::server_stopped(id, &model.name));
 
         Ok(format!("Server for model {id} stopped"))
     }
@@ -366,51 +350,6 @@ impl ServerOps {
         }
 
         Ok(())
-    }
-
-    /// Build a server snapshot for event emission.
-    pub async fn build_server_snapshot(
-        &self,
-    ) -> Result<Vec<gglib_core::events::ServerSummary>, GuiError> {
-        let servers = self.list_servers().await;
-        let mut summaries = Vec::with_capacity(servers.len());
-
-        for server in servers {
-            match self.deps.core.models().get_by_id(server.model_id).await {
-                Ok(Some(model)) => {
-                    summaries.push(gglib_core::events::ServerSummary {
-                        id: format!("server-{}", server.model_id),
-                        model_id: server.model_id.to_string(),
-                        model_name: model.name,
-                        port: server.port,
-                    });
-                }
-                Ok(None) => {
-                    summaries.push(gglib_core::events::ServerSummary {
-                        id: format!("server-{}", server.model_id),
-                        model_id: server.model_id.to_string(),
-                        model_name: format!("Model {}", server.model_id),
-                        port: server.port,
-                    });
-                }
-                Err(_) => continue,
-            }
-        }
-
-        Ok(summaries)
-    }
-
-    /// Emit an initial server snapshot to connected clients (200ms delay).
-    pub async fn emit_initial_snapshot(&self) {
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        match self.build_server_snapshot().await {
-            Ok(snapshot) => {
-                self.deps.server_events.snapshot(&snapshot);
-            }
-            Err(e) => {
-                tracing::warn!("Failed to build initial server snapshot: {}", e);
-            }
-        }
     }
 
     /// List all running servers as GUI DTOs.
@@ -670,103 +609,9 @@ mod tests {
     }
 
     // =========================================================================
-    // ServerEvents recording tests
-    // =========================================================================
-
-    use gglib_core::events::{ServerEvents, ServerSummary};
-    use std::sync::Mutex;
-
-    /// Recording implementation of `ServerEvents` for testing.
-    ///
-    /// Records all event calls in a vector for later assertion.
-    #[derive(Default)]
-    struct RecordingServerEvents {
-        calls: Arc<Mutex<Vec<String>>>,
-    }
-
-    impl RecordingServerEvents {
-        fn new() -> Self {
-            Self {
-                calls: Arc::new(Mutex::new(Vec::new())),
-            }
-        }
-
-        fn get_calls(&self) -> Vec<String> {
-            self.calls.lock().unwrap().clone()
-        }
-    }
-
-    impl ServerEvents for RecordingServerEvents {
-        fn started(&self, server: &ServerSummary) {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("started:{}", server.model_name));
-        }
-
-        fn stopping(&self, server: &ServerSummary) {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("stopping:{}", server.model_name));
-        }
-
-        fn stopped(&self, server: &ServerSummary) {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("stopped:{}", server.model_name));
-        }
-
-        fn snapshot(&self, servers: &[ServerSummary]) {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("snapshot:{}", servers.len()));
-        }
-
-        fn error(&self, server: &ServerSummary, error: &ModelRuntimeError) {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("error:{}:{}", server.model_name, error));
-        }
-    }
-
-    #[tokio::test]
-    async fn test_server_events_recording() {
-        // This test demonstrates that ServerEvents trait can be used
-        // for testing without requiring real SSE/Tauri infrastructure
-        let recorder = RecordingServerEvents::new();
-
-        let summary = ServerSummary {
-            id: "test-server-1".to_string(),
-            model_id: "42".to_string(),
-            model_name: "TestModel".to_string(),
-            port: 8080,
-        };
-
-        recorder.started(&summary);
-        recorder.stopping(&summary);
-        recorder.stopped(&summary);
-        recorder.error(
-            &summary,
-            &ModelRuntimeError::Internal("test error".to_string()),
-        );
-
-        let calls = recorder.get_calls();
-        assert_eq!(calls.len(), 4);
-        assert_eq!(calls[0], "started:TestModel");
-        assert_eq!(calls[1], "stopping:TestModel");
-        assert_eq!(calls[2], "stopped:TestModel");
-        assert_eq!(calls[3], "error:TestModel:Internal error: test error");
-    }
-
-    // =========================================================================
     // DB-backed ServerOps tests
     // =========================================================================
 
-    use gglib_core::events::NoopServerEvents;
     use gglib_core::ports::NoopEmitter;
 
     use crate::test_support::{MockToolSupportDetector, test_core_and_proxy};
@@ -777,7 +622,6 @@ mod tests {
             core,
             proxy,
             emitter: Arc::new(NoopEmitter::new()),
-            server_events: Arc::new(NoopServerEvents),
             tool_detector: Arc::new(MockToolSupportDetector),
         })
     }
@@ -911,3 +755,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "servers_events_tests.rs"]
+mod events_tests;

@@ -8,11 +8,11 @@ crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1355
 crates/gglib-app-services/src/mcp.rs 397
 crates/gglib-app-services/src/models.rs 460
-crates/gglib-app-services/src/models_tests.rs 876
+crates/gglib-app-services/src/models_tests.rs 857
 crates/gglib-app-services/src/proxy.rs 445
 crates/gglib-app-services/src/sampling_explain.rs 454
 crates/gglib-app-services/src/sampling_explain_tests.rs 757
-crates/gglib-app-services/src/servers.rs 913
+crates/gglib-app-services/src/servers.rs 761
 crates/gglib-app-services/src/setup.rs 351
 crates/gglib-app-services/src/types.rs 642
 crates/gglib-axum/src/chat_api.rs 733
@@ -131,7 +131,7 @@ crates/gglib-proxy/tests/integration_mcp_gateway.rs 480
 crates/gglib-proxy/tests/integration_pinned_models.rs 311
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 615
-crates/gglib-runtime/src/command.rs 717
+crates/gglib-runtime/src/command.rs 712
 crates/gglib-runtime/src/launch_narration.rs 694
 crates/gglib-runtime/src/llama/args/cache_ram.rs 340
 crates/gglib-runtime/src/llama/build/mod.rs 418
