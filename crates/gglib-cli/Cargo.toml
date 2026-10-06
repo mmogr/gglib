@@ -11,18 +11,18 @@ name = "gglib"
 path = "src/main.rs"
 
 [dependencies]
-gglib-app-services = { path = "../gglib-app-services" }
-gglib-axum = { path = "../gglib-axum" }
-gglib-bootstrap = { path = "../gglib-bootstrap" }
+gglib-app-services = { workspace = true }
+gglib-axum = { workspace = true }
+gglib-bootstrap = { workspace = true }
 gglib-build-info.workspace = true
-gglib-core = { path = "../gglib-core" }
-gglib-db = { path = "../gglib-db" }
-gglib-download = { path = "../gglib-download" }
-gglib-hf = { path = "../gglib-hf" }
-gglib-mcp = { path = "../gglib-mcp" }
-gglib-proxy = { path = "../gglib-proxy" }
-gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
-reqwest = { workspace = true }
+gglib-core = { workspace = true }
+gglib-db = { workspace = true }
+gglib-download = { workspace = true }
+gglib-hf = { workspace = true }
+gglib-mcp = { workspace = true }
+gglib-proxy = { workspace = true }
+gglib-runtime = { workspace = true, features = ["cli"] }
+reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-proxy"] }
 
 # CLI-specific dependencies
 clap = { version = "4.0", features = ["derive", "env"] }
@@ -39,7 +39,7 @@ chrono = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 anyhow = { workspace = true }
-dotenvy = "0.15"
+dotenvy = { workspace = true }
 rustyline = "14"
 serde = { workspace = true }
 tracing = { workspace = true }
@@ -59,10 +59,10 @@ open.workspace = true
 
 [dev-dependencies]
 async-trait = { workspace = true }
-gglib-db = { path = "../gglib-db", features = ["test-utils"] }
+gglib-db = { workspace = true, features = ["test-utils"] }
 # A data root of the test binary's own, for a test that names the daemon's
 # token file (#955).
-gglib-core = { path = "../gglib-core", features = ["test-utils"] }
+gglib-core = { workspace = true, features = ["test-utils"] }
 tempfile = { workspace = true }
 
 [lints]

@@ -8,13 +8,13 @@ publish = false
 
 [dependencies]
 # Core domain types and port definitions
-gglib-core = { path = "../gglib-core" }
+gglib-core = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
 
 # Template render-and-diff dialect derivation (capabilities::template_probe).
-# Adapter-specific deps stay local to this crate per the workspace policy.
+# Only this crate uses the two minijinja crates, so their versions are here.
 minijinja = { version = "2", features = ["json", "loop_controls"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 serde_json = { workspace = true }

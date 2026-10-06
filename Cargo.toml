@@ -33,8 +33,14 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/mmogr/gglib"
 authors = ["mmogr"]
 
-# Workspace-wide dependencies: ONLY truly universal crates
-# Adapter-specific deps (sqlx, clap, tauri, axum) are defined locally per crate
+# One place for a version. A sibling crate that another member depends on, and
+# an external dependency that two or more members declare, is listed here, and
+# a member takes it with `workspace = true`. A dependency only one member uses
+# can stay in that member's manifest.
+#
+# A feature named on an entry here is on for every crate that inherits it, so
+# most entries name none and each member lists the features it uses. The tokio
+# note below has the reasoning.
 [workspace.dependencies]
 # Async runtime.
 #
@@ -48,6 +54,9 @@ authors = ["mmogr"]
 # most of `full`. The win is honest manifests and cheap single-crate builds
 # (`cargo check -p gglib-sse` no longer compiles process, net and signal).
 tokio = { version = "1.0" }
+tokio-stream = "0.1"
+tokio-util = "0.7"
+async-stream = "0.3"
 
 # Futures / async streams
 # Both crates are published in lock-step from the same futures-rs release; using
@@ -93,20 +102,33 @@ async-trait = "0.1.89"
 dirs = "6.0"
 
 # HTTP/Networking
-# `system-proxy`: on macOS and Windows a client built with defaults also
-# follows the proxy set in the operating system's settings, not only the
-# `HTTP_PROXY` family of variables. Clients for this machine are built through
-# gglib-proxy's `loopback` module, which turns every proxy off.
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls", "system-proxy"] }
+# No default features, and none named here: as with tokio, each crate lists
+# its own.
+#
+# `system-proxy`, in the crates that list it: on macOS and Windows a client
+# built with defaults also follows the proxy set in the operating system's
+# settings, not only the `HTTP_PROXY` family of variables. Clients for this
+# machine are built through gglib-proxy's `loopback` module, which turns every
+# proxy off.
+reqwest = { version = "0.13", default-features = false }
+bytes = "1"
+http-body-util = "0.1"
+url = "2.5"
+urlencoding = "2.1"
+# The p2p tunnel behind `gglib remote` (ADR 0012).
+modelpipe = "0.8.1"
 indicatif = "0.18"
 crossterm = "0.29"
 termimad = "0.34.1"
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
-uuid = { version = "1.10", features = ["v4"] }
+uuid = { version = "1.11", features = ["v4"] }
+
+# Database
+sqlx = "0.8"
 
 # Tauri
-tauri = { version = "2.8.5", features = ["devtools", "tray-icon", "image-png"] }
+tauri = "2.8.5"
 tauri-build = { version = "2.4.1", features = [] }
 tauri-plugin-dialog = "2.6"
 tauri-plugin-autostart = "2"
@@ -126,9 +148,13 @@ ksni = "0.3"
 sysinfo = "0.37"
 
 # Testing
-tempfile = "3.8"
+tempfile = "3.10"
+
+# Sibling crates. Bare paths with no features: a member names the features it
+# wants, and the test-only ones (`test-utils`, `test-support`) under
+# `[dev-dependencies]`.
 gglib-core = { path = "crates/gglib-core" }
-gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
+gglib-db = { path = "crates/gglib-db" }
 gglib-download = { path = "crates/gglib-download" }
 gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
@@ -138,6 +164,10 @@ gglib-axum = { path = "crates/gglib-axum" }
 gglib-app-services = { path = "crates/gglib-app-services" }
 gglib-tauri = { path = "crates/gglib-tauri" }
 gglib-build-info = { path = "crates/gglib-build-info" }
+gglib-agent = { path = "crates/gglib-agent" }
+gglib-bootstrap = { path = "crates/gglib-bootstrap" }
+gglib-mcp = { path = "crates/gglib-mcp" }
+gglib-proxy = { path = "crates/gglib-proxy" }
 
 # Workspace-wide lints for consistency
 [workspace.lints.rust]

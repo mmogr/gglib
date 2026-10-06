@@ -21,11 +21,11 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
 [dependencies]
 # Core domain types and ports (NO runtime, NO sqlx)
 gglib-build-info.workspace = true
-gglib-core = { path = "../gglib-core" }
+gglib-core = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 
 # MCP service for tool gateway
-gglib-mcp = { path = "../gglib-mcp" }
+gglib-mcp = { workspace = true }
 
 # Generic SSE broadcast utility, shared with gglib-axum (no gglib-* deps of its own)
 gglib-sse = { workspace = true }
@@ -41,31 +41,31 @@ tokio = { workspace = true, features = ["fs", "macros", "net", "rt-multi-thread"
 tower-http = { workspace = true }
 
 # HTTP client for forwarding
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
+reqwest = { workspace = true, features = ["rustls", "json", "stream"] }
 
 # HTTP body handling
-bytes = "1"
+bytes = { workspace = true }
 
 # Async utilities
-futures-util = "0.3"
-async-stream = "0.3"
-tokio-util = { version = "0.7", features = ["rt"] }
+futures-util = { workspace = true }
+async-stream = { workspace = true }
+tokio-util = { workspace = true, features = ["rt"] }
 
 # Error handling
-anyhow = "1.0"
+anyhow = { workspace = true }
 
 # Logging
-tracing = "0.1"
+tracing = { workspace = true }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Text processing
 regex = "1"
 
 # Content-derived fallback session ID hashing (cache_lifecycle)
-sha2 = "0.10"
+sha2 = { workspace = true }
 
 # Concurrent collections
 dashmap = "6"
@@ -79,7 +79,7 @@ sysinfo = { workspace = true }
 [dev-dependencies]
 # Self-dependency purely to enable `test-support` for `tests/`; the
 # feature stays off for anyone who depends on this crate normally.
-gglib-proxy = { path = ".", features = ["test-support"] }
+gglib-proxy = { workspace = true, features = ["test-support"] }
 # Same arrangement for the SSE broadcaster's raw-stream door, which the
 # dashboard publisher test observes through.
 gglib-sse = { workspace = true, features = ["test-support"] }
@@ -87,12 +87,12 @@ gglib-sse = { workspace = true, features = ["test-support"] }
 # deliberately not part of tokio's `full`. Declared here rather than left to
 # feature unification, so the contention tests do not rest on what another
 # crate in the graph happens to enable.
-tokio = { version = "1.0", features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util"] }
 # The port doubles the tests implement.
-async-trait = "0.1"
-http-body-util = "0.1"
+async-trait = { workspace = true }
+http-body-util = { workspace = true }
 tempfile = { workspace = true }
-serde_json = "1.0"
+serde_json = { workspace = true }
 # For the two suites that put a real tunnel in front of a real proxy rather
 # than synthesising the edge's headers: `integration_remote_tunnel.rs`, about
 # a request crossing the pipe at all, and `integration_remote_devices.rs`,
@@ -100,7 +100,7 @@ serde_json = "1.0"
 # Every other remote test synthesises those headers, which proves what the
 # proxy does with a request that claims to have come through a tunnel rather
 # than one that did.
-modelpipe = "0.8.1"
+modelpipe = { workspace = true }
 
 [lints]
 workspace = true

@@ -9,9 +9,9 @@
 //! `http://127.0.0.1:<port>/…`.
 //!
 //! A `reqwest::Client` built with defaults honours `HTTP_PROXY`, `ALL_PROXY`
-//! and, with hyper-util's `client-proxy-system` feature (turned on by the
-//! workspace's reqwest `system-proxy` feature, so present in every binary gglib
-//! ships), the operating system's own proxy settings. Its matcher skips only
+//! and, with hyper-util's `client-proxy-system` feature (turned on by reqwest's
+//! `system-proxy` feature, which the crate behind every binary gglib ships asks
+//! for), the operating system's own proxy settings. Its matcher skips only
 //! the hosts named in `NO_PROXY`; loopback is not special-cased. So on a
 //! machine with a proxy in the environment, such a client asks gglib's own
 //! daemon through somebody else's machine ([#1085]): a fresh llama-server

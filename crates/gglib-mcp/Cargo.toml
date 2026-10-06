@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 # Core domain types and ports only - no sqlx
 gglib-build-info.workspace = true
-gglib-core = { path = "../gglib-core" }
+gglib-core = { workspace = true }
 
 # Async runtime. `macros` is for `tokio::join!` in `combined.rs`; without it
 # this crate only compiles when something else in the build graph turns the
@@ -34,7 +34,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-tempfile = "3"
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
