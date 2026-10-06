@@ -19,7 +19,7 @@ use super::{
 /// # Example
 ///
 /// ```ignore
-/// let repos = Repos { models: model_repo, settings: settings_repo };
+/// let repos = Repos::new(models, settings, mcp_servers, chat_history, attachments);
 /// let core = AppCore::new(repos);
 ///
 /// // Access services

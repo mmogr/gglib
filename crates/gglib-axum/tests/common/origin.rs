@@ -44,7 +44,7 @@ pub(crate) fn shipped_cors() -> CorsConfig {
 /// The router a shipped daemon builds, over a context of its own, with
 /// `access` asking [`test_token`] as a shipped daemon asks the one it minted.
 pub(crate) async fn shipped(cors: &CorsConfig, access: DaemonAccess) -> Router {
-    let state = test_state(cors.clone()).await;
+    let state = test_state().await;
     let access = Arc::new(with_test_token(access));
     gglib_axum::create_embedded_spa_router(state, cors, access)
 }

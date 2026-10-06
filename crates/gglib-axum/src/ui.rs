@@ -126,9 +126,8 @@ fn respond<E: RustEmbed>(path: &str, headers: &HeaderMap) -> Response {
     // success and then fails parsing the shell as JSON, which reports a
     // deserialisation error instead of "no such route".
     //
-    // Every daemon that carries a dashboard and is given no directory serves
-    // through this router, so this path is the common one. Hence the guard
-    // here rather than in the frontend.
+    // Every daemon that carries a dashboard serves through this router.
+    // Hence the guard here rather than in the frontend.
     if rel == "api" || rel.starts_with("api/") {
         return StatusCode::NOT_FOUND.into_response();
     }

@@ -39,11 +39,10 @@ use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
 /// Prefill sets the floor. The proxy asks llama-server for `return_progress`
 /// (see `inject_streaming_body_overrides` in [`crate::forward`]), so it sends
 /// a `prompt_progress` chunk after each batch of the prompt. gglib passes no
-/// `-b` or `-ub` and `extra_args` has no path from the user, so a batch is
-/// llama-server's default 2048 tokens, and a host that prefills slower than
-/// about 6.8 tokens a second (2048 / 300) can go longer than this between two
-/// chunks. Such a stall comes before the first token, so it strikes once
-/// rather than recycling the model; see
+/// `-b` or `-ub`, so a batch is llama-server's default 2048 tokens, and a host
+/// that prefills slower than about 6.8 tokens a second (2048 / 300) can go
+/// longer than this between two chunks. Such a stall comes before the first
+/// token, so it strikes once rather than recycling the model; see
 /// [`StreamVerdict::Stalled`](crate::upstream_health::StreamVerdict::Stalled).
 pub const STREAM_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 

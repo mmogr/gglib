@@ -1,7 +1,7 @@
 //! Route definitions and router construction.
 //!
 //! This module defines the HTTP routes and creates the main router.
-//! Handlers delegate to the shared `GuiBackend` facade.
+//! Handlers delegate to the services on [`AppState`].
 
 use axum::Json;
 use axum::Router;

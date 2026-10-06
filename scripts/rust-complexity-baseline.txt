@@ -45,7 +45,7 @@ crates/gglib-core/src/domain/inference.rs 1916
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 524
-crates/gglib-core/src/domain/model.rs 343
+crates/gglib-core/src/domain/model.rs 301
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 432
 crates/gglib-core/src/domain/recommendation.rs 381
@@ -57,17 +57,16 @@ crates/gglib-core/src/download/types.rs 752
 crates/gglib-core/src/normalize/parsers/delimited.rs 984
 crates/gglib-core/src/normalize/stream.rs 651
 crates/gglib-core/src/ports/model_runtime.rs 600
-crates/gglib-core/src/ports/process_runner.rs 341
 crates/gglib-core/src/request_pipeline/constrain.rs 325
 crates/gglib-core/src/request_pipeline/sampling.rs 678
 crates/gglib-core/src/request_pipeline/sampling_tests.rs 1755
 crates/gglib-core/src/request_pipeline/truncation.rs 313
 crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/validate.rs 497
-crates/gglib-core/src/server_config.rs 722
+crates/gglib-core/src/server_config.rs 700
 crates/gglib-core/src/services/model_import.rs 689
 crates/gglib-core/src/services/model_registrar.rs 335
-crates/gglib-core/src/services/model_service.rs 1484
+crates/gglib-core/src/services/model_service.rs 1452
 crates/gglib-core/src/services/model_verification.rs 806
 crates/gglib-core/src/settings.rs 596
 crates/gglib-core/src/settings_tests.rs 484
@@ -131,7 +130,7 @@ crates/gglib-proxy/tests/integration_mcp_gateway.rs 480
 crates/gglib-proxy/tests/integration_pinned_models.rs 311
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 615
-crates/gglib-runtime/src/command.rs 712
+crates/gglib-runtime/src/command.rs 703
 crates/gglib-runtime/src/launch_narration.rs 694
 crates/gglib-runtime/src/llama/args/cache_ram.rs 340
 crates/gglib-runtime/src/llama/build/mod.rs 418
@@ -147,6 +146,6 @@ crates/gglib-runtime/src/process/residency/mod.rs 565
 crates/gglib-runtime/src/process/residency/vram.rs 361
 crates/gglib-runtime/src/proxy/supervisor.rs 569
 crates/gglib-runtime/src/system/mod.rs 641
-crates/gglib-runtime/src/unified_server_config.rs 508
+crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320
 src-tauri/src/main.rs 303

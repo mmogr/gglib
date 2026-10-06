@@ -29,7 +29,7 @@ pub(crate) mod ui;
 
 // Re-export primary types
 pub use access::DaemonAccess;
-pub use bootstrap::{AxumContext, bootstrap, start_server};
+pub use bootstrap::{AxumContext, bootstrap};
 pub use config::ServerConfig;
 pub use daemon::{DaemonLock, DaemonOptions, run_daemon};
 pub use error::HttpError;

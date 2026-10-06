@@ -189,11 +189,6 @@ impl ChatHistoryService {
         self.repo.delete_conversation(id).await
     }
 
-    /// Get conversation count.
-    pub async fn get_conversation_count(&self) -> Result<i64, ChatHistoryError> {
-        self.repo.get_conversation_count().await
-    }
-
     /// Get all messages for a conversation.
     pub async fn get_messages(
         &self,

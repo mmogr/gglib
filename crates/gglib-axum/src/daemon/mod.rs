@@ -4,7 +4,6 @@ mod lock;
 mod shutdown;
 mod watchdog;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
@@ -36,7 +35,7 @@ pub(crate) fn daemon_cors_origins() -> Vec<String> {
     ]
 }
 
-/// How the daemon binds and what it serves alongside the API.
+/// How the daemon binds, and which origins and hosts it answers.
 #[derive(Debug, Clone)]
 pub struct DaemonOptions {
     /// Bind host. The default is loopback; anything else is an explicit,
@@ -44,18 +43,6 @@ pub struct DaemonOptions {
     pub host: String,
     /// CORS policy for `/api`.
     pub cors: CorsConfig,
-    /// Directory with a built frontend to serve as an SPA. `None` — the only
-    /// value anything in this workspace sets — means serve the dashboard
-    /// compiled into this binary. Nothing sets it implicitly, so the working
-    /// directory does not decide what is served.
-    ///
-    /// `Some` overrides the embed with a directory. Note that no CLI flag or
-    /// env var reaches this today: it is settable only by constructing
-    /// `DaemonOptions` directly. It is kept because pointing a release build at
-    /// a local `npm run build` is the obvious thing to want, and wiring a flag
-    /// is a small change — but until one exists, calling it "the frontend
-    /// developer's override" overstates what is here.
-    pub static_dir: Option<PathBuf>,
     /// `Host` header values accepted in addition to loopback (and, on a
     /// non-loopback bind, IP literals). The mDNS name and `--allowed-host`
     /// entries arrive here.
@@ -67,7 +54,6 @@ impl Default for DaemonOptions {
         Self {
             host: "127.0.0.1".into(),
             cors: CorsConfig::AllowOrigins(daemon_cors_origins()),
-            static_dir: None,
             allowed_hosts: Vec::new(),
         }
     }
@@ -85,8 +71,8 @@ impl Default for DaemonOptions {
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
 ///    non-loopback binds, a new daemon token on every `/api` route — then
 ///    bind
-///    `{host}:{DAEMON_PORT}` and serve the management API (+ SPA when a
-///    frontend build is found).
+///    `{host}:{DAEMON_PORT}` and serve the management API (and the dashboard,
+///    when this binary carries one).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
 ///    machine told once to be reachable is reachable again after a reboot,
@@ -113,12 +99,7 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     }
 
     // 3. One context, one ProcessManager.
-    let config = ServerConfig {
-        host: opts.host.clone(),
-        port: DAEMON_PORT,
-        ..ServerConfig::with_defaults()?
-    };
-    let mut ctx = bootstrap(config).await?;
+    let mut ctx = bootstrap(ServerConfig::with_defaults()?).await?;
 
     let shutdown_token = CancellationToken::new();
     ctx.daemon_shutdown = Some(shutdown_token.clone());
@@ -140,16 +121,9 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
             .with_daemon_token(crate::trust::daemon_token()),
     );
 
-    // Router. The dashboard is compiled in (see `crate::ui`); a directory is
-    // only ever an explicit override, never found by probing the working
-    // directory.
-    let app = if let Some(dir) = opts.static_dir.clone() {
-        info!(
-            "serving dashboard from {} (explicit override)",
-            dir.display()
-        );
-        crate::routes::create_spa_router(Arc::clone(&state), &dir, &opts.cors, access)
-    } else if crate::ui::has_embedded_ui() {
+    // Router. The dashboard is compiled in (see `crate::ui`), never found by
+    // probing the working directory.
+    let app = if crate::ui::has_embedded_ui() {
         info!("serving the dashboard compiled into this binary");
         crate::ui::create_embedded_spa_router(Arc::clone(&state), &opts.cors, access)
     } else {

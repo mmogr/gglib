@@ -7,7 +7,6 @@
 use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
-use crate::domain::InferenceConfig;
 use crate::settings::DEFAULT_CONTEXT_SIZE;
 
 // =============================================================================
@@ -173,10 +172,6 @@ pub struct ServerConfigOptions {
     /// `gglib_runtime::llama::args::kv_cache_type` module docs.
     pub cache_type_v: Option<crate::cache_config::KvCacheType>,
 
-    /// Inference parameter overrides (temperature, top-p, etc.) forwarded
-    /// directly to llama-server.
-    pub inference_params: Option<InferenceConfig>,
-
     /// Whether to memory-lock the model into RAM (`--mlock`).
     /// `None` defaults to `false` in `build_server_config()`.
     pub mlock: Option<bool>,
@@ -219,7 +214,6 @@ impl ServerConfigOptions {
             cache_reuse,
             cache_type_k,
             cache_type_v,
-            inference_params,
             mlock,
         } = over;
 
@@ -242,9 +236,6 @@ impl ServerConfigOptions {
             cache_reuse: cache_reuse.or(self.cache_reuse),
             cache_type_k: cache_type_k.or(self.cache_type_k),
             cache_type_v: cache_type_v.or(self.cache_type_v),
-            inference_params: inference_params
-                .clone()
-                .or_else(|| self.inference_params.clone()),
             mlock: mlock.or(self.mlock),
         }
     }
@@ -596,7 +587,6 @@ mod tests {
     // -------------------------------------------------------------------
 
     use crate::cache_config::KvCacheType;
-    use crate::domain::InferenceConfig;
     use std::path::PathBuf;
 
     /// Every field set, so a merge that drops one is visible. `marker` is a
@@ -617,10 +607,6 @@ mod tests {
             cache_reuse: Some(u32::from(marker)),
             cache_type_k: Some(KvCacheType::Q8_0),
             cache_type_v: Some(KvCacheType::F16),
-            inference_params: Some(InferenceConfig {
-                temperature: Some(f32::from(marker)),
-                ..Default::default()
-            }),
             mlock: Some(true),
         }
     }
@@ -644,10 +630,6 @@ mod tests {
         assert_eq!(merged.cache_reuse, Some(2));
         assert_eq!(merged.cache_type_k, Some(KvCacheType::Q8_0));
         assert_eq!(merged.cache_type_v, Some(KvCacheType::F16));
-        assert_eq!(
-            merged.inference_params.and_then(|c| c.temperature),
-            Some(2.0)
-        );
         assert_eq!(merged.mlock, Some(true));
     }
 
@@ -671,10 +653,6 @@ mod tests {
         assert_eq!(merged.cache_reuse, Some(1));
         assert_eq!(merged.cache_type_k, Some(KvCacheType::Q8_0));
         assert_eq!(merged.cache_type_v, Some(KvCacheType::F16));
-        assert_eq!(
-            merged.inference_params.and_then(|c| c.temperature),
-            Some(1.0)
-        );
         assert_eq!(merged.mlock, Some(true));
     }
 

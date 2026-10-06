@@ -119,16 +119,6 @@ gglib daemon run
 gglib up
 ```
 
-```rust,ignore
-// Programmatic usage
-use gglib_axum::{ServerConfig, start_server};
-
-async fn run() -> anyhow::Result<()> {
-    let config = ServerConfig::with_defaults()?;
-    start_server(config).await
-}
-```
-
 ## Design Decisions
 
 1. **Axum Framework** — Chosen for async-first design and tower middleware ecosystem

@@ -56,9 +56,9 @@ pub(crate) async fn start_pinned(
         default_context: proxy_config.default_context,
         // Sampling rides the proxy-wide override, exactly as the CLI sends
         // it. It cannot ride the pinned model's launch options: gglib emits
-        // no sampler flags to llama-server at all (ADR 0003/0004), so the
-        // field those options write to is read by nobody. Hardcoding `None`
-        // here would make a GUI pinned start discard its own sampling.
+        // no sampler flags to llama-server at all (ADR 0003/0004), so those
+        // options carry no sampling. Hardcoding `None` here would make a GUI
+        // pinned start discard its own sampling.
         inference_override: proxy_config.inference_override,
         ..body.proxy
     };

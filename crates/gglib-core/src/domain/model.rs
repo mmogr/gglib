@@ -21,8 +21,7 @@ use super::server_config::ServerConfig;
 /// Tags with this prefix (e.g. `format:qwen-xml`) drive the universal
 /// normalization pipeline's parser selection at compose time. Removing
 /// one would silently break dialect handling for the affected model, so
-/// the standard tag-mutation API rejects deletions while admin/debug
-/// paths can opt in via the `_force` variants.
+/// the tag-mutation API rejects deletions.
 pub(super) const SYSTEM_TAG_PREFIX: &str = "format:";
 
 /// Returns `true` when `tag` is a system tag that callers must not

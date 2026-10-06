@@ -90,7 +90,7 @@ async fn the_routes_that_act_on_this_machine_are_refused_to_another_site() {
         "/api/models/downloads/finished/clear",
     ];
     let cors = shipped_cors();
-    let app = gglib_axum::create_router(test_state(cors.clone()).await, &cors, test_access());
+    let app = gglib_axum::create_router(test_state().await, &cors, test_access());
     let mut let_through = Vec::new();
     for path in ISSUE_1118 {
         let headers = [("origin", ELSEWHERE), FORM];

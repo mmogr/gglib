@@ -30,9 +30,8 @@ ts-rs = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 [features]
-# Emit TypeScript for the domain types that cross the wire. See this crate's
-# `domain` module docs for which do and why. Enabled transitively by the
-# adapter crates' own `ts-bindings`, never on its own in an ordinary build.
+# Emit TypeScript for the types that cross the wire. Enabled transitively by
+# the adapter crates' own `ts-bindings`, never on its own in an ordinary build.
 ts-bindings = ["dep:ts-rs"]
 # A data root of a test binary's own, which `data_root()` and
 # `resource_root()` answer before anything else (#955). Other crates enable it

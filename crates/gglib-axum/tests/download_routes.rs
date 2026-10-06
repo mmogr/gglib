@@ -101,7 +101,7 @@ impl DownloadManagerPort for Recording {
 /// The daemon's router with `manager` behind its download routes.
 async fn app_over(manager: Arc<Recording>) -> Router {
     let cors = CorsConfig::AllowAll;
-    let mut state = Arc::into_inner(test_state(cors.clone()).await).expect("the only holder");
+    let mut state = Arc::into_inner(test_state().await).expect("the only holder");
     state.downloads = Arc::new(DownloadOps::new(DownloadDeps {
         downloads: manager,
         hf: Arc::clone(&state.hf_client),

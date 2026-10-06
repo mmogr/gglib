@@ -93,11 +93,13 @@ pub use usage_sink::UsageSink;
 /// # Example
 ///
 /// ```ignore
-/// // In gglib-db factory:
-/// pub fn build_repos(pool: &SqlitePool) -> Repos { ... }
+/// // In gglib-db:
+/// impl CoreFactory {
+///     pub fn build_repos(pool: SqlitePool) -> Repos { ... }
+/// }
 ///
-/// // In adapter bootstrap:
-/// let repos = gglib_db::factory::build_repos(&pool);
+/// // In gglib-bootstrap:
+/// let repos = gglib_db::CoreFactory::build_repos(pool);
 /// let core = AppCore::new(repos);
 /// ```
 #[derive(Clone)]
