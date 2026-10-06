@@ -22,9 +22,9 @@ use gglib_core::download::RateEstimator;
 pub(crate) struct Meter {
     speed: RateEstimator,
     remaining: RateEstimator,
-    /// Bytes on disk that the file in flight did not receive: what a resume
-    /// found there, a file that was already complete, and the earlier files
-    /// of the download.
+    /// Bytes on disk beyond the bytes received, by the two counts it is
+    /// given: what a resume found there, and a file that was already
+    /// complete.
     found: u64,
 }
 
@@ -40,10 +40,10 @@ impl Meter {
 
     /// Take one sample, on every tick, moved or not.
     ///
-    /// `wire` is the bytes received for the file in flight. It starts again
-    /// at each file of a download, which the estimator takes as a new
-    /// baseline. `bytes` of `total` are the download's bytes on disk, with a
-    /// `total` of 0 when the size is not known.
+    /// `wire` is the bytes received. A count that starts again, as one kept
+    /// per file does at each file of a download, is taken by the estimator
+    /// as a new baseline. `bytes` of `total` are the download's bytes on
+    /// disk, with a `total` of 0 when the size is not known.
     pub(crate) fn record(&mut self, wire: u64, bytes: u64, total: u64, now: Instant) {
         self.speed.record(wire, 0, now);
 
@@ -110,7 +110,7 @@ mod tests {
     }
 
     /// A resume: half the file is on disk before a byte is received. The
-    /// first sample is of nothing, as the progress bridge's is, so the bytes
+    /// first sample is of nothing, as the meter task's is, so the bytes
     /// on disk turn up between two samples. What is left to wait for is what
     /// is missing from the disk, at the rate the rest is arriving.
     #[test]

@@ -32,6 +32,8 @@ const far = vi.hoisted(() => ({ hang: false }));
 // This machine's model as its detail route answers, the projector files its
 // picker is offered, and the update the page sends.
 const here = vi.hoisted(() => ({ detail: null as unknown, projectors: null as unknown }));
+// The download queue the daemon answers with.
+const downloads = vi.hoisted(() => ({ queue: null as unknown }));
 const updateModel = vi.hoisted(() => vi.fn(async (_params: { id: number; projectorPath?: string | null }) => ({})));
 const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ port: 9456 })));
 // What the stub chat page's switch button picks, and the conversation it
@@ -65,9 +67,10 @@ vi.mock('../../../src/services/transport', async () => {
         tags: [],
         parameterSizes: [],
       })),
-      getDownloadQueue: vi.fn(async () => ({ active: [], queued: [], recent: [] })),
+      getDownloadQueue: vi.fn(async () => downloads.queue),
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn(() => () => {}),
+      onEventStreamOpen: vi.fn(() => () => {}),
     }),
   };
 });
@@ -158,6 +161,7 @@ import ModelControlCenterPage from '../../../src/pages/ModelControlCenterPage';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { guiModel } from '../fixtures/model';
 import { farDetail, farEntry, pairedModels } from '../fixtures/fakeFarDaemon';
+import { queueSnapshot, runningRow, waitingRow } from '../fixtures/downloads';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import {
@@ -210,6 +214,7 @@ async function pickFar(name: RegExp) {
 describe('ModelControlCenterPage', () => {
   beforeEach(() => {
     library.models = [];
+    downloads.queue = queueSnapshot();
     here.detail = null;
     here.projectors = null;
     updateModel.mockClear();
@@ -311,6 +316,22 @@ describe('ModelControlCenterPage', () => {
     const chat = await screen.findByTestId('chat-page');
     expect(chat).toHaveTextContent('Chatting with qwen3-8b');
     expect(chat).toHaveAttribute('data-paired', '');
+  });
+
+  it('draws the download the queue read at load names, with no event yet', async () => {
+    // A page opened mid-download: the stream has sent nothing, and the row
+    // the read returned is on screen in its own words.
+    downloads.queue = queueSnapshot({
+      revision: 12,
+      active: runningRow(),
+      waiting: [waitingRow('owner/b:Q4_K_M', 2), waitingRow('owner/c:Q4_K_M', 3)],
+    });
+    renderPage();
+
+    expect(await screen.findByText('owner/zeta-GGUF:Q8_0')).toBeInTheDocument();
+    expect(screen.getByText('7.00 GiB / 28.00 GiB')).toBeInTheDocument();
+    expect(screen.getByText('118.4 MB/s')).toBeInTheDocument();
+    expect(screen.getByText('+2 queued')).toBeInTheDocument();
   });
 
   /** One model running here, one not, and the chat open on the running one. */

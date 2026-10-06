@@ -8,10 +8,9 @@ use std::sync::Mutex as StdMutex;
 use async_trait::async_trait;
 use gglib_core::RepositoryError;
 use gglib_core::domain::{Model, NewModel};
-use gglib_core::download::Quantization;
 use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 
-use super::worker::CompletedJob;
+use super::test_support::{End, run_next};
 use super::*;
 use crate::test_hub::RepoHub;
 
@@ -20,9 +19,9 @@ const REPO: &str = "owner/zeta-GGUF";
 /// Keeps each download it is asked to register, and answers `refusal` as
 /// the reason the projector was not linked.
 #[derive(Default)]
-struct RecordingRegistrar {
-    registered: StdMutex<Vec<CompletedDownload>>,
-    refusal: Option<String>,
+pub(super) struct RecordingRegistrar {
+    pub(super) registered: StdMutex<Vec<CompletedDownload>>,
+    pub(super) refusal: Option<String>,
 }
 
 #[async_trait]
@@ -91,22 +90,9 @@ async fn queued(files: &[(&str, u64)], refusal: Option<&str>) -> Fixture {
 }
 
 impl Fixture {
-    /// Finishes the next queued file as the worker reports it, and answers
-    /// its name.
+    /// Runs the next queued file to the end, on disk, and answers its name.
     async fn finish_next(&self) -> String {
-        let item = self.manager.queue.write().await.dequeue().unwrap();
-        let name = item.shard_info.as_ref().unwrap().filename.clone();
-        let path = Path::new("models").join(&name);
-        let job = CompletedJob {
-            primary_path: path.clone(),
-            all_paths: vec![path],
-            repo_id: REPO.to_string(),
-            commit_sha: "abc123".to_string(),
-            quantization: Quantization::Q8_0,
-            files: vec![name.clone()],
-        };
-        self.manager.handle_job_result(&item, Ok(job)).await;
-        name
+        run_next(&self.manager, End::OnDisk).await
     }
 
     fn registered(&self) -> Vec<CompletedDownload> {

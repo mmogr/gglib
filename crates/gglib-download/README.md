@@ -18,9 +18,9 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
 ```text
 gglib-core (types)          gglib-download            External
 ┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│  DownloadTask    │◄───────│  DownloadManager │───────►│   HuggingFace    │
-│  DownloadStatus  │        │  DownloadQueue   │        │       Hub        │
-│  ProgressInfo    │        │  FileResolver    │        └──────────────────┘
+│  QueueSnapshot   │◄───────│  DownloadManager │───────►│   HuggingFace    │
+│  DownloadRow     │        │  DownloadQueue   │        │       Hub        │
+│  DownloadEvent   │        │  FileResolver    │        └──────────────────┘
 └──────────────────┘        └───────┬──────────┘                 
                                     │                            
                             ┌───────▼──────────┐        ┌──────────────────┐
@@ -38,11 +38,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                             gglib-download                                          │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │  manager/   │ ──► │   queue/    │ ──► │  executor/  │ ──► │ cli_emitter │        │
-│  │  Public API │     │  Task queue │     │  Download   │     │  Terminal   │        │
-│  │  & facade   │     │  & state    │     │  workers    │     │  rendering  │        │
-│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
+│  │  manager/   │ ──► │   queue/    │ ──► │  executor/  │                            │
+│  │  Public API │     │  Task queue │     │  Download   │                            │
+│  │  & facade   │     │  & state    │     │  workers    │                            │
+│  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
 │  │  resolver/  │     │  cli_exec/  │                                                │
@@ -65,7 +65,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`quant_selector.rs`** — Quantization selection logic for model downloads
 - **`queue/`** — Download task queue with priority and state management
 - **`executor/`** — Async download workers with retry logic
-- **`cli_emitter.rs`** — Terminal progress bars for CLI contexts
 - **`resolver/`** — File URL resolution and shard detection
 - **`executor/`** — The download backends: `native.rs` (default, `reqwest`) and
   the dispatch that picks between it and the optional accelerator
@@ -75,18 +74,24 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## Features
 
 - **Queued Downloads** — Multiple concurrent downloads with priority ordering
-- **Progress Tracking** — Real-time progress events for UI updates, including
-  non-terminal `Finalizing` and `Registering` lifecycle transitions emitted
-  between the last byte hitting disk and the model row being written.
-- **Speed and ETA** — Computed once, by the manager's progress bridge, using
-  `gglib_core::download::RateEstimator`, and shipped on the event for every
+- **One Row per Download** — The queue is served as one `QueueSnapshot`, on
+  the REST route and the event stream alike: the running download, the waiting
+  ones, and how the latest ended. A download is one row however many files it
+  has, with its bytes over all of them, its phase (`Finalizing` and
+  `Registering` between the last byte hitting disk and the model row being
+  written), and its text ready to print. A snapshot is sent when the queue
+  changes and four times a second while a file is fetched, each with the next
+  `revision`.
+- **Speed and ETA** — Computed once, by the download's meter, using
+  `gglib_core::download::RateEstimator`, and carried on the row for every
   renderer to display verbatim. The speed is taken from the bytes received
   from the network and the time remaining from the bytes on disk (`meter.rs`):
   the accelerator writes to disk in large steps while the network runs flat,
   and a resumed or already-present file is bytes on disk that nobody
   received. Those took no time to arrive, so the time remaining counts them
-  as done and leaves them out of its rate. One meter per *shard group*, so the reported speed is continuous
-  from the first shard to the last. Renderers must
+  as done and leaves them out of its rate. One meter per *download*
+  (`manager/meter.rs`), so the reported speed is continuous from its first
+  file to its last. Renderers must
   not derive a rate from successive byte counts; `indicatif`'s built-in
   `{bytes_per_sec}` and `{eta}` are deliberately absent from every template
   here, because using them made the CLI and the GUI report different numbers

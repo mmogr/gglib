@@ -28,7 +28,7 @@ static GUARD: OnceLock<tracing_appender::non_blocking::WorkerGuard> = OnceLock::
 // `MultiProgress::println` instead, so a log line emitted while download bars
 // are live gets erased-printed-redrawn atomically rather than landing as raw
 // bytes that corrupt the bars' redraw bookkeeping. See
-// `gglib-download/src/cli_emitter.rs` for the installing side.
+// `gglib-cli/src/console.rs` for the installing side.
 
 /// A sink for formatted console lines, e.g. one backed by
 /// `MultiProgress::println`.

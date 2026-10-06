@@ -68,22 +68,22 @@ export default function ModelControlCenterPage({
   // that appeared but cannot filter to it.
   useModelLibraryEvents(handleRefreshAll);
 
-  // Download completion effects - batches completions, triggers refresh, shows toast
-  const { onCompleted } = useDownloadCompletionEffects({
+  // Download ending effects - batches completions, triggers refresh, shows toasts
+  const { onCompleted, onFailed } = useDownloadCompletionEffects({
     refreshModels: handleRefreshAll,
   });
   
-  // Global download progress - lifted to page level so it's always visible
+  // The download queue - lifted to page level so it's always visible
   const {
-    currentProgress,
-    queueStatus,
-    downloadUiState,
+    snapshot: downloadQueue,
+    cancellingId,
     lastQueueSummary,
     cancel: cancelDownload,
     refreshQueue,
     clearQueueSummary,
   } = useDownloadManager({
     onCompleted,
+    onFailed,
   });
 
   // Backend download system initialization (Python fast helper)
@@ -287,9 +287,8 @@ export default function ModelControlCenterPage({
           <>
             {!downloadDismissed && (
               <GlobalDownloadStatus
-                progress={currentProgress}
-                queueStatus={queueStatus}
-                downloadUiState={downloadUiState}
+                snapshot={downloadQueue}
+                cancellingId={cancellingId}
                 lastQueueSummary={lastQueueSummary}
                 onCancel={cancelDownload}
                 onDismissSummary={clearQueueSummary}
@@ -313,7 +312,7 @@ export default function ModelControlCenterPage({
                 onRemoveTag={removeTagFromModel}
                 getModelDetail={(id) => getTransport().getModelDetail(id)}
                 onRefresh={handleRefreshAll}
-                queueStatus={queueStatus}
+                downloadQueue={downloadQueue}
                 onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
                 onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
               />

@@ -81,7 +81,7 @@ When a model is served, users can switch between Chat and Console views:
 - **`LlamaInstallModal.tsx`**: llama.cpp installation wizard
 
 ### Support Components
-- **`GlobalDownloadStatus/`**: Download progress indicator and queue popover
+- **`GlobalDownloadStatus/`**: The running download's card, drawn from the daemon's queue snapshot, and the popover of waiting downloads
 - **`Toast/`**: Reusable toast notification system for success/error/info messages
 
 <!-- module-docs:end -->

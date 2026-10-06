@@ -3,16 +3,14 @@
 //! These types are used internally by the queue state machine.
 //! For API responses, use the DTO types from `gglib_core::download::queue`.
 
-use std::time::Instant;
-
-use gglib_core::download::{CompletionKey, DownloadId, DownloadStatus, ShardInfo};
+use gglib_core::download::{CompletionKey, DownloadId, ShardInfo};
 
 use super::shard_group::ShardGroupId;
 
 /// A queued download item waiting to be processed.
 ///
 /// This is an internal type for the queue state machine.
-/// For serialization to APIs, convert to `gglib_core::download::QueuedDownload`.
+/// What a client is shown of it is a row, built in `rows`.
 #[derive(Clone, Debug)]
 pub(crate) struct QueuedItem {
     /// The download identifier.
@@ -23,8 +21,6 @@ pub(crate) struct QueuedItem {
     pub shard_info: Option<ShardInfo>,
     /// Git revision/tag/commit (e.g., "main", "v1.0", SHA).
     pub revision: Option<String>,
-    /// When this item was queued (for ordering/debugging).
-    pub queued_at: Instant,
     /// Stable artifact identity computed at enqueue time.
     /// Used for completion tracking and deduplication.
     pub completion_key: CompletionKey,
@@ -32,13 +28,13 @@ pub(crate) struct QueuedItem {
 
 impl QueuedItem {
     /// Create a new simple (non-sharded) queued download.
+    #[cfg(test)]
     pub(crate) fn new(id: DownloadId, completion_key: CompletionKey) -> Self {
         Self {
             id,
             group_id: None,
             shard_info: None,
             revision: None,
-            queued_at: Instant::now(),
             completion_key,
         }
     }
@@ -55,69 +51,8 @@ impl QueuedItem {
             group_id: Some(group_id),
             shard_info: Some(shard_info),
             revision: None,
-            queued_at: Instant::now(),
             completion_key,
         }
-    }
-
-    /// Get the canonical ID string.
-    pub(crate) fn canonical_id(&self) -> String {
-        self.id.to_string()
-    }
-
-    /// Convert to a core DTO for API responses.
-    ///
-    /// The row is named for the download alone: a row stands for every file
-    /// of it, and `shard_info` says which file this one is.
-    pub(crate) fn to_dto(
-        &self,
-        position: u32,
-        status: DownloadStatus,
-    ) -> gglib_core::download::QueuedDownload {
-        let mut dto = gglib_core::download::QueuedDownload::new(
-            self.canonical_id(),
-            self.id.model_id(),
-            self.canonical_id(),
-            position,
-            self.queued_at.elapsed().as_secs(), // Approximate queued_at as epoch
-        );
-        dto.status = status;
-        dto.group_id = self.group_id.as_ref().map(std::string::ToString::to_string);
-        dto.shard_info.clone_from(&self.shard_info);
-
-        dto
-    }
-}
-
-/// A failed download with error information.
-#[derive(Clone, Debug)]
-pub(crate) struct FailedItem {
-    /// The original queued download item.
-    pub item: QueuedItem,
-    /// Human-readable error message.
-    pub error: String,
-    /// When the failure occurred.
-    pub failed_at: Instant,
-}
-
-impl FailedItem {
-    /// Create a new failed download entry.
-    pub(crate) fn new(item: QueuedItem, error: impl Into<String>) -> Self {
-        Self {
-            item,
-            error: error.into(),
-            failed_at: Instant::now(),
-        }
-    }
-
-    /// Convert to a core DTO for API responses.
-    pub(crate) fn to_dto(&self) -> gglib_core::download::FailedDownload {
-        gglib_core::download::FailedDownload::new(
-            self.item.canonical_id(),
-            self.item.canonical_id(),
-            &self.error,
-            self.failed_at.elapsed().as_secs(),
-        )
     }
 }
 
@@ -157,89 +92,5 @@ mod tests {
 
         assert!(item.shard_info.is_some());
         assert_eq!(item.group_id.as_ref(), Some(&group_id));
-    }
-
-    #[test]
-    fn test_failed_item() {
-        let id = DownloadId::new("model/test", Some("Q4_K_M"));
-        let key = test_completion_key(&id);
-        let item = QueuedItem::new(id, key);
-        let failed = FailedItem::new(item, "Network timeout");
-
-        assert_eq!(failed.error, "Network timeout");
-    }
-
-    #[test]
-    fn test_failed_item_from_queued_item() {
-        let id = DownloadId::new("author/model-name", Some("Q8_0"));
-        let key = test_completion_key(&id);
-        let item = QueuedItem::new(id.clone(), key);
-        let error_msg = "Connection refused";
-        let failed = FailedItem::new(item, error_msg);
-
-        // Error message is captured
-        assert_eq!(failed.error, error_msg);
-
-        // Original queued item is preserved
-        assert_eq!(failed.item.id, id);
-
-        // DTO conversion propagates model info and error
-        let dto = failed.to_dto();
-        assert_eq!(dto.id, "author/model-name:Q8_0");
-        assert_eq!(dto.error, error_msg);
-        assert_eq!(dto.failed_at, 0);
-    }
-
-    #[test]
-    fn test_queued_item_to_dto_with_all_statuses() {
-        let id = DownloadId::new("model/test", Some("Q4_K_M"));
-        let key = test_completion_key(&id);
-        let item = QueuedItem::new(id, key);
-
-        let statuses = vec![
-            DownloadStatus::Queued,
-            DownloadStatus::Downloading,
-            DownloadStatus::Finalizing,
-            DownloadStatus::Registering,
-            DownloadStatus::Completed,
-            DownloadStatus::Failed,
-            DownloadStatus::Cancelled,
-        ];
-
-        for status in statuses {
-            let dto = item.to_dto(1, status);
-
-            // Status should match what was passed
-            assert_eq!(dto.status, status, "Status mismatch for {status:?}");
-
-            // Position should be preserved
-            assert_eq!(dto.position, 1);
-
-            // ID fields should be populated
-            assert_eq!(dto.id, "model/test:Q4_K_M");
-
-            // Model ID should match
-            assert_eq!(dto.model_id.as_str(), "model/test");
-        }
-    }
-
-    /// A file's row is named for its download, with no "(Part 2/3)" or
-    /// "(Projector)" after it.
-    #[test]
-    fn a_files_row_is_named_for_its_download() {
-        let id = DownloadId::new("model/test", Some("Q4_K_M"));
-        let place = ShardInfo::new(1, 3, "shard-00002.gguf".to_string());
-        let item = QueuedItem::new_shard(
-            id.clone(),
-            ShardGroupId::new("g"),
-            place.clone(),
-            test_completion_key(&id),
-        );
-
-        let dto = item.to_dto(2, DownloadStatus::Queued);
-
-        assert_eq!(dto.display_name, "model/test:Q4_K_M");
-        assert_eq!(dto.shard_info, Some(place));
-        assert_eq!(dto.group_id.as_deref(), Some("g"));
     }
 }

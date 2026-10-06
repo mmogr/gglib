@@ -17,6 +17,8 @@ import { createSSEStream, type SSEMessage } from '../../../utils/sse';
 import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
 import { renewAfterRefusal } from '../api/renew';
 import { getEventCategory } from './category';
+import { Backoff } from './backoff';
+import { OpenSignal } from './open';
 
 /**
  * Unified SSE endpoint path.
@@ -48,35 +50,13 @@ function parseAppEvent(msg: SSEMessage): unknown {
 }
 
 /**
- * Exponential backoff with jitter for reconnection.
- */
-class Backoff {
-  private ms = 500;
-  private readonly maxMs: number;
-
-  constructor(minMs = 500, maxMs = 30000) {
-    this.ms = minMs;
-    this.maxMs = maxMs;
-  }
-
-  next(): number {
-    const jitter = Math.floor(Math.random() * 250);
-    const out = Math.min(this.ms, this.maxMs) + jitter;
-    this.ms = Math.min(this.ms * 2, this.maxMs);
-    return out;
-  }
-
-  reset(): void {
-    this.ms = 500;
-  }
-}
-
-/**
  * SSE connection manager with automatic reconnection.
  * Supports multiple subscribers sharing a single connection.
  */
 export class SSEConnectionManager<T = unknown> {
   private listeners = new Set<EventHandler<T>>();
+  /** Announced each time the stream opens, reconnections included. */
+  readonly opened = new OpenSignal();
   private running = false;
   private abort: AbortController | null = null;
   private readonly path: string;
@@ -149,6 +129,7 @@ export class SSEConnectionManager<T = unknown> {
         for await (const msg of createSSEStream(url, {
           headers: getAuthHeaders(),
           signal: this.abort.signal,
+          onOpen: () => this.opened.announce(),
         })) {
           // Successful receipt => reset backoff
           backoff.reset();
@@ -328,7 +309,7 @@ export function subscribeSseEvent<K extends AppEventType>(
 
 /**
  * Create SSE-based event system.
- * Returns an object with a `subscribe` method.
+ * Returns an object with `subscribe` and `onEventStreamOpen`.
  */
 export function createSseEvents() {
   function subscribe<K extends AppEventType>(
@@ -338,5 +319,6 @@ export function createSseEvents() {
     return subscribeSseEvent(eventType, handler);
   }
 
-  return { subscribe };
+  const onEventStreamOpen = (handler: () => void) => getSharedManager().opened.listen(handler);
+  return { subscribe, onEventStreamOpen };
 }

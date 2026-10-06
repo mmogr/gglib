@@ -1,0 +1,35 @@
+{
+  "rates": [
+    { "bps": 0, "text": "0 B/s" },
+    { "bps": 2.5, "text": "3 B/s" },
+    { "bps": 999, "text": "999 B/s" },
+    { "bps": 999.5, "text": "1 kB/s" },
+    { "bps": 1000, "text": "1 kB/s" },
+    { "bps": 1499, "text": "1 kB/s" },
+    { "bps": 999999, "text": "1.0 MB/s" },
+    { "bps": 1000000, "text": "1.0 MB/s" },
+    { "bps": 1250000, "text": "1.3 MB/s" },
+    { "bps": 118400000, "text": "118.4 MB/s" },
+    { "bps": 999999999, "text": "1.00 GB/s" },
+    { "bps": 1000000000, "text": "1.00 GB/s" }
+  ],
+  "durations": [
+    { "seconds": 0, "text": "1s" },
+    { "seconds": 59.0, "text": "59s" },
+    { "seconds": 59.001, "text": "1m 00s" },
+    { "seconds": 3599.0, "text": "59m 59s" },
+    { "seconds": 3599.001, "text": "1h 00m" },
+    { "seconds": 1e18, "text": "99h 59m" }
+  ],
+  "sizes": [
+    { "bytes": 0, "text": "0 B" },
+    { "bytes": 1023, "text": "1023 B" },
+    { "bytes": 1024, "text": "1.00 KiB" },
+    { "bytes": 1536, "text": "1.50 KiB" },
+    { "bytes": 5248, "text": "5.13 KiB" },
+    { "bytes": 1048575, "text": "1.00 MiB" },
+    { "bytes": 5368709120, "text": "5.00 GiB" },
+    { "bytes": 29980000000, "text": "27.92 GiB" },
+    { "bytes": 2199023255552000, "text": "2000.00 TiB" }
+  ]
+}

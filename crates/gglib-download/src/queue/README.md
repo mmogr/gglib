@@ -27,6 +27,13 @@ No I/O is performed here; the orchestrator (`DownloadManager`) handles I/O.
 - Position 1 = the running download
 - Position 2+ = the waiting downloads, in the order they will run
 - With nothing running, the first waiting download is at position 1
-- Failed items have position 0 (not in active queue)
+- A download that has ended has no position: it is in the finished list
+
+# How downloads ended
+
+- The queue keeps the outcome of the latest 16 downloads, one entry per
+  download: completed, failed, or cancelled
+- Queued again, a download loses its old entry, so its new run is not read
+  as its last
 
 <!-- module-docs:end -->

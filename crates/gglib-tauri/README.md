@@ -105,8 +105,7 @@ daemon's token as the bearer, as every `/api` request carries it:
 | Event | Description |
 |-------|-------------|
 | `server:*` | Server lifecycle (start, ready, stop, error) |
-| `download:*` | Download progress and completion |
-| `log:*` | Server console output |
+| `download:*` | The download queue's snapshot, and how each download ended |
 
 ## Usage
 

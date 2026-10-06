@@ -5,7 +5,7 @@
 
 <!-- module-docs:start -->
 
-Type-safe runtime decoders for backend event payloads arriving over SSE streams. Converts raw JSON into typed TypeScript objects and validates against known event schemas. Failures throw in development (fast fail on contract drift) and degrade gracefully with a warning in production.
+The runtime check on download events arriving over the SSE stream. It looks at the event's `type` tag and nothing else: a payload that is not an object, has no string `type`, or has a `type` that is not one of the five known is logged as an error and dropped. It does not throw, and it does not check the fields beside the tag.
 
 ## Data Flow
 
@@ -13,20 +13,20 @@ Type-safe runtime decoders for backend event payloads arriving over SSE streams.
 SSE raw JSON payload
         ▼
 decodeDownloadEvent(raw)
-   ├── Is object?          → throw / warn
-   ├── Known event type?   → throw / warn
-   ├── Required fields?    → throw / warn
+   ├── Is object?          → log, return null
+   ├── Has a string type?  → log, return null
+   ├── Known event type?   → log, return null
    └── Cast to typed union
         ▼
-DownloadEvent  (typed, safe to use in UI)
+DownloadEvent  (typed by its tag; its fields are trusted)
 ```
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `downloadEvent.ts` | Validates and decodes SSE download event payloads against the `DownloadEventType` union |
+| `downloadEvent.ts` | Checks a download event's `type` against the five the daemon sends |
 
-Decoders act as the I/O boundary guard — if the Rust backend renames an event type, the decoder fails fast in development instead of silently producing `undefined` in production.
+The five are `queue_snapshot`, `download_completed`, `download_failed`, `download_cancelled` and `queue_run_complete`. `queue_snapshot` carries the whole queue, the same `QueueSnapshot` the REST route serves; the other four say that something ended. The list is a `Record` keyed by the generated `DownloadEvent['type']`, so a variant added or removed in Rust is a compile error here until the list follows.
 
 <!-- module-docs:end -->

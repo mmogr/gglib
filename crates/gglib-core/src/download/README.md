@@ -20,18 +20,21 @@ system. No I/O, networking, or runtime dependencies allowed.
 - `projector_choice` - Which of a repository's projectors a download fetches
   (`choose_projector`): the one of the download's own quantization, else the `F16` one,
   else the first by name.
-- `shard_info` - One file's place in its download group (`ShardInfo`). A group is the
-  model's weights followed by the projector fetched with them; shards are numbered among
-  the weights alone, and the byte offsets cover every file.
-- `events` - Download events and status types (`DownloadEvent`, `DownloadStatus`).
-  `DownloadEvent::DownloadNotice` is the one variant that isn't part of the
-  progress/lifecycle state machine: a transient, non-persisted, free-form note
-  (e.g. "preparing fast downloader…" while the first-run Python venv builds)
-  for renderers to show in place of progress that doesn't exist yet. Unlike
-  `DownloadStatusChanged`, it carries arbitrary text rather than a fixed
-  `DownloadStatus`, and the next progress or status event overwrites it.
+- `shard_info` - One file's place in its download group (`ShardInfo`), as the queue
+  records it. A group is the model's weights followed by the projector fetched with them;
+  shards are numbered among the weights alone, and the group's size covers every file.
+  It is not served: a client reads the `FilePlace` in a row's text.
+- `events` - `DownloadEvent`, five variants. `QueueSnapshot` carries the whole
+  queue, the same value the REST route serves. `DownloadCompleted`,
+  `DownloadFailed` and `DownloadCancelled` say a download ended, for a notice
+  to the user and a refresh of the library, and `QueueRunComplete` sums up a
+  run. Progress, phases and notes are not events: they are on the snapshot's
+  rows.
 - `errors` - Error types for download operations
-- `queue` - Queue snapshot DTOs (`QueueSnapshot`, `QueuedDownload`, `FailedDownload`)
+- `queue` - The queue as it is served (`QueueSnapshot`): the running download,
+  the waiting ones, and how the latest ended (`FinishedDownload`,
+  `DownloadOutcome`), with a `revision` that orders every snapshot a process
+  builds.
 - `completion` - Queue run completion tracking types
 - `rate` - `RateEstimator`, the single owner of download speed and ETA math.
   Decays bytes and elapsed time separately so `hf-xet`'s bursty on-disk writes
@@ -42,9 +45,16 @@ system. No I/O, networking, or runtime dependencies allowed.
   Two callers: the native download executor in `gglib-download`, and the
   llama.cpp pre-built install pipeline in `gglib-runtime`, which rate-limits
   its `LlamaProgressEvent` channel the same way.
-- `format` - `format_rate` / `format_duration`. Rates are **decimal**
+- `format` - `format_rate` / `format_duration` / `format_size`. Rates are **decimal**
   (`1 MB/s` = 1,000,000 B/s) to match what a system network monitor reports;
-  sizes stay binary and are rendered by `indicatif`'s `HumanBytes`. Mirrored
-  exactly by `formatRate` / `formatDuration` in `src/utils/format.ts`.
+  sizes are binary with two decimals. A value is rounded first and its unit
+  chosen after. `formatRate` / `formatDuration` / `formatSize` in
+  `src/utils/format.ts` are the same functions, and `format_vectors.json` is
+  the list of inputs and texts the tests of both read.
+- `row` - One download as one line (`DownloadRow`, `DownloadPhase`,
+  `DownloadRowText`). `row(&RowFacts)` builds it from the facts of a download
+  and `DownloadRowText::of` words it, so every surface prints the same text.
+  `download_title` is the one name a download goes by, and `FilePlace` the file
+  a row is about: `part 2/3`, `weights`, `projector`, or `3 parts`.
 
 <!-- module-docs:end -->

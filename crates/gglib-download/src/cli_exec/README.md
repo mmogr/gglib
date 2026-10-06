@@ -36,8 +36,8 @@ Every `println!`-shaped line this layer produces (venv setup notes, the
 `[fast-path]` passthrough for non-protocol Python output, `model upgrade`'s
 status lines) goes through `gglib_core::telemetry::console_println` instead
 of a direct `println!`/`eprintln!`. With no hook installed it's a plain
-`eprintln!`; the queued-download path installs a hook
-(`CliDownloadEventEmitter`) that routes it through the live
+`eprintln!`; the CLI installs a hook
+(`CliConsole`, in `gglib-cli`) that routes it through the live
 `MultiProgress::println` so it can't corrupt a bar's redraw bookkeeping. See
 [`gglib_core::telemetry`](../../../gglib-core/src/telemetry.rs) and the
 [`exec/`](exec/) submodule below for `FastDownloadRequest::notice`, which

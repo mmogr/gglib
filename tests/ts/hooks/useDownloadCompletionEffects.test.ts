@@ -27,10 +27,8 @@ vi.mock('../../../src/contexts/ToastContext', async () => {
 
 function createCompletionInfo(overrides: Partial<DownloadCompletionInfo> = {}): DownloadCompletionInfo {
   return {
-    modelId: 'test/model:Q4_K_M',
-    quantization: 'Q4_K_M',
-    displayName: 'Test Model Q4_K_M',
-    source: 'huggingface',
+    id: 'test/model:Q4_K_M',
+    title: 'test/model:Q4_K_M',
     ...overrides,
   };
 }
@@ -65,14 +63,14 @@ describe('useDownloadCompletionEffects', () => {
       expect(refreshModels).toHaveBeenCalledTimes(1);
     });
 
-    it('shows toast with display name for single completion', () => {
+    it('shows a toast naming the download for a single completion', () => {
       const refreshModels = vi.fn();
       const { result } = renderHook(() =>
         useDownloadCompletionEffects({ refreshModels, windowMs: 100 })
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ displayName: 'My Model' }));
+        result.current.onCompleted(createCompletionInfo({ title: 'My Model' }));
       });
 
       act(() => {
@@ -81,22 +79,24 @@ describe('useDownloadCompletionEffects', () => {
 
       expect(mockShowToast).toHaveBeenCalledWith('Downloaded My Model', 'success');
     });
+  });
 
-    it('falls back to modelId when displayName is missing', () => {
+  describe('a failure', () => {
+    it('raises an error toast at once, naming the download and the error, and refreshes nothing', () => {
       const refreshModels = vi.fn();
       const { result } = renderHook(() =>
         useDownloadCompletionEffects({ refreshModels, windowMs: 100 })
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ displayName: undefined, modelId: 'repo/model' }));
+        result.current.onFailed({ id: 'owner/b:Q4_K_M', title: 'owner/b:Q4_K_M', error: 'disk full' });
       });
 
+      expect(mockShowToast).toHaveBeenCalledWith('Download failed: owner/b:Q4_K_M: disk full', 'error');
       act(() => {
         vi.advanceTimersByTime(100);
       });
-
-      expect(mockShowToast).toHaveBeenCalledWith('Downloaded repo/model', 'success');
+      expect(refreshModels).not.toHaveBeenCalled();
     });
   });
 
@@ -108,17 +108,17 @@ describe('useDownloadCompletionEffects', () => {
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model1' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model1' }));
       });
 
       act(() => {
         vi.advanceTimersByTime(30);
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model2' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model2' }));
       });
 
       act(() => {
         vi.advanceTimersByTime(30);
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model3' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model3' }));
       });
 
       expect(refreshModels).not.toHaveBeenCalled();
@@ -138,9 +138,9 @@ describe('useDownloadCompletionEffects', () => {
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model1' }));
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model2' }));
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model3' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model1' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model2' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model3' }));
       });
 
       act(() => {
@@ -157,8 +157,8 @@ describe('useDownloadCompletionEffects', () => {
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model1' }));
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model2' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model1' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model2' }));
       });
 
       act(() => {
@@ -178,7 +178,7 @@ describe('useDownloadCompletionEffects', () => {
 
       // First completion
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model1' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model1' }));
       });
 
       act(() => {
@@ -189,7 +189,7 @@ describe('useDownloadCompletionEffects', () => {
 
       // Second completion (new window)
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ modelId: 'model2' }));
+        result.current.onCompleted(createCompletionInfo({ id: 'model2' }));
       });
 
       act(() => {
@@ -206,7 +206,7 @@ describe('useDownloadCompletionEffects', () => {
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ displayName: 'Model A' }));
+        result.current.onCompleted(createCompletionInfo({ title: 'Model A' }));
       });
 
       act(() => {
@@ -216,7 +216,7 @@ describe('useDownloadCompletionEffects', () => {
       expect(mockShowToast).toHaveBeenCalledWith('Downloaded Model A', 'success');
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ displayName: 'Model B' }));
+        result.current.onCompleted(createCompletionInfo({ title: 'Model B' }));
       });
 
       act(() => {

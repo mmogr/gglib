@@ -5,10 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { rust } from '../contracts/rustSource';
 import {
   formatBytes,
   formatDuration,
   formatRate,
+  formatSize,
   formatNumber,
   formatParamCount,
   getHuggingFaceUrl,
@@ -56,6 +58,38 @@ describe('formatBytes', () => {
 
   it('handles negative decimal places as 0', () => {
     expect(formatBytes(1536, -1)).toBe('2 KiB');
+  });
+});
+
+/**
+ * The vectors the Rust formatters are tested against, in
+ * `crates/gglib-core/src/download/format_tests.rs`. A download row's text is
+ * made by those; the functions here are the same rules for the numbers the
+ * GUI words itself, and reading one file keeps the two from drifting.
+ */
+const vectors = JSON.parse(rust('crates/gglib-core/src/download/format_vectors.json')) as {
+  rates: { bps: number; text: string }[];
+  durations: { seconds: number; text: string }[];
+  sizes: { bytes: number; text: string }[];
+};
+
+describe('format matches the Rust vectors', () => {
+  it('has vectors to check', () => {
+    expect(vectors.rates.length).toBeGreaterThan(0);
+    expect(vectors.durations.length).toBeGreaterThan(0);
+    expect(vectors.sizes.length).toBeGreaterThan(0);
+  });
+
+  it.each(vectors.rates)('rate $bps B/s reads $text', ({ bps, text }) => {
+    expect(formatRate(bps)).toBe(text);
+  });
+
+  it.each(vectors.durations)('duration $seconds s reads $text', ({ seconds, text }) => {
+    expect(formatDuration(seconds)).toBe(text);
+  });
+
+  it.each(vectors.sizes)('size $bytes bytes reads $text', ({ bytes, text }) => {
+    expect(formatSize(bytes)).toBe(text);
   });
 });
 

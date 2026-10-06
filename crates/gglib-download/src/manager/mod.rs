@@ -1,7 +1,9 @@
 #![doc = include_str!("README.md")]
 mod enqueue;
 mod group_completion;
+mod meter;
 mod paths;
+mod publish;
 mod running;
 mod shard_group_tracker;
 mod worker;
@@ -13,7 +15,7 @@ mod group_registration_tests;
 #[cfg(test)]
 mod projector_group_tests;
 #[cfg(test)]
-mod sample_tests;
+mod test_support;
 
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
@@ -25,11 +27,11 @@ use async_trait::async_trait;
 use indexmap::IndexMap;
 
 use tokio::sync::{Mutex, Notify, RwLock, watch};
-use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, ShardInfo,
+    DownloadError, DownloadEvent, DownloadId, DownloadOutcome, DownloadPhase, QueueSnapshot,
+    ShardInfo, download_title,
 };
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
@@ -38,19 +40,20 @@ use gglib_core::ports::{
 };
 
 use crate::executor::known_size;
-use crate::meter::Meter;
 use crate::quant_selector::QuantizationSelector;
 use crate::queue::{DownloadQueue, QueuedItem};
 use crate::resolver::HfQuantizationResolver;
 
+use meter::GroupMeter;
 use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
 
 pub(crate) use paths::DownloadDestination;
 pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 
-/// How often the progress bridge samples the worker and emits an event.
+/// How often a download's meter samples the file being fetched and a
+/// snapshot is published.
 ///
-/// Speed and ETA smoothing live in [`Meter`], not here; this is purely
+/// Speed and ETA smoothing live in the meter, not here; this is purely
 /// the display cadence. The GUI does not re-throttle on top of it.
 const PROGRESS_TICK: Duration = Duration::from_millis(250);
 
@@ -75,12 +78,11 @@ struct ActiveJob {
     lease: LeaseId,
     /// Cancellation token.
     cancel: CancellationToken,
-    /// Progress sender (bridges subscribe to this).
-    progress_tx: watch::Sender<ProgressUpdate>,
-    /// Shard information if this is a sharded download.
+    /// The file's place in its download.
     shard_info: Option<ShardInfo>,
-    /// Group ID if this is part of a shard group.
-    group_id: Option<String>,
+    /// What the download is doing: fetching this file, or, once its last
+    /// file is in, being finalized and registered.
+    phase: DownloadPhase,
 }
 
 // =============================================================================
@@ -240,6 +242,10 @@ pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl 
 ///
 /// Produced by [`build_download_manager`] and consumed as
 /// `Arc<dyn DownloadManagerPort>`; it is not nameable outside this crate.
+///
+/// Lock order: `publish` → `queue` → `active` → `shard_tracker` → `meters`.
+/// A task takes them in that order and never the other way; `meters` is a
+/// std mutex, taken last and never held across an await.
 pub struct DownloadManagerImpl {
     /// Model registrar for completed downloads.
     model_registrar: Arc<dyn ModelRegistrarPort>,
@@ -255,8 +261,10 @@ pub struct DownloadManagerImpl {
     queue: RwLock<DownloadQueue>,
     /// Configuration.
     config: DownloadManagerConfig,
+    /// The snapshot revision, and the lock every snapshot is built and sent
+    /// under. See `publish.rs`.
+    publish: Mutex<u64>,
     /// Active downloads (keyed by download ID).
-    /// Lock order: always acquire queue lock before active lock.
     active: Mutex<HashMap<DownloadId, ActiveJob>>,
     /// Shard group tracker for coordinating multi-shard downloads.
     shard_tracker: Mutex<ShardGroupTracker>,
@@ -272,12 +280,9 @@ pub struct DownloadManagerImpl {
     prev_is_drained: Mutex<bool>,
     /// File entries with OIDs for each download (keyed by download ID).
     file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
-    /// Meters, keyed by shard group (or by download ID when unsharded).
-    ///
-    /// Keyed by *group* rather than job so the estimate survives shard
-    /// boundaries. A per-job estimator restarted from zero on every shard,
-    /// which on a five-shard model meant five ramp-ups from a cold average.
-    rate_estimators: Mutex<HashMap<String, Arc<Mutex<Meter>>>>,
+    /// One meter per download that has started, kept from file to file so its
+    /// bytes and speed run on, until the download ends or is queued again.
+    meters: std::sync::Mutex<HashMap<DownloadId, GroupMeter>>,
 }
 
 impl DownloadManagerImpl {
@@ -300,6 +305,7 @@ impl DownloadManagerImpl {
             selector,
             queue: RwLock::new(DownloadQueue::new(config.max_queue_size)),
             config,
+            publish: Mutex::new(0),
             active: Mutex::new(HashMap::new()),
             shard_tracker: Mutex::new(ShardGroupTracker::new()),
             lease_counter: AtomicU64::new(0),
@@ -308,36 +314,8 @@ impl DownloadManagerImpl {
             current_run: Mutex::new(None),
             prev_is_drained: Mutex::new(true), // Start in drained state
             file_entries_map: Mutex::new(HashMap::new()),
-            rate_estimators: Mutex::new(HashMap::new()),
+            meters: std::sync::Mutex::new(HashMap::new()),
         }
-    }
-
-    /// Get (or create) the rate estimator covering this item's transfer.
-    ///
-    /// Sharded downloads share one estimator across the whole group so the
-    /// reported speed is continuous from the first shard to the last.
-    async fn rate_estimator_for(&self, item: &QueuedItem) -> Arc<Mutex<Meter>> {
-        let key = item
-            .group_id
-            .as_ref()
-            .map_or_else(|| item.id.to_string(), ToString::to_string);
-
-        Arc::clone(
-            self.rate_estimators
-                .lock()
-                .await
-                .entry(key)
-                .or_insert_with(|| Arc::new(Mutex::new(Meter::new(std::time::Instant::now())))),
-        )
-    }
-
-    /// Drop the estimator for a finished transfer.
-    async fn release_rate_estimator(&self, item: &QueuedItem) {
-        let key = item
-            .group_id
-            .as_ref()
-            .map_or_else(|| item.id.to_string(), ToString::to_string);
-        self.rate_estimators.lock().await.remove(&key);
     }
 
     /// Record a completion in the current queue run (if active).
@@ -351,8 +329,8 @@ impl DownloadManagerImpl {
             .try_into()
             .unwrap_or(0);
 
-        // Generate display name from completion key
-        let display_name = item.completion_key.to_string();
+        // The summary names the download as its row did
+        let display_name = download_title(&item.id);
 
         if let Some(run) = self.current_run.lock().await.as_mut() {
             tracing::debug!(
@@ -392,10 +370,7 @@ impl DownloadManagerImpl {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
         {
-            let manager = Arc::clone(self);
-            tokio::spawn(async move {
-                manager.run_loop().await;
-            });
+            tokio::spawn(Arc::clone(self).run_loop());
         }
     }
 
@@ -403,27 +378,23 @@ impl DownloadManagerImpl {
     ///
     /// This runs for the lifetime of the manager, waiting on `queue_notify`
     /// when there's no work and draining the queue when there is.
-    async fn run_loop(&self) {
+    async fn run_loop(self: Arc<Self>) {
         loop {
             // Try to get the next job
             if let Some((lease, item, cancel, progress_tx)) = self.next_job().await {
-                // Spawn progress bridge task, sharing the shard group's
-                // estimator so the reported speed does not restart per shard.
-                let estimator = self.rate_estimator_for(&item).await;
-                let bridge_finished = CancellationToken::new();
-                let bridge_handle = self.spawn_progress_bridge(
-                    &item.id,
-                    item.shard_info.as_ref(),
+                // The meter task samples this file into its download's meter
+                // and publishes a snapshot on every tick.
+                let finished = CancellationToken::new();
+                let meter_task = tokio::spawn(Arc::clone(&self).run_meter(
+                    item.id.clone(),
                     progress_tx.subscribe(),
                     cancel.clone(),
-                    estimator,
-                    bridge_finished.clone(),
-                );
+                    finished.clone(),
+                ));
 
                 // Create worker deps and job
                 let deps = WorkerDeps {
                     config: self.config.clone(),
-                    event_emitter: Arc::clone(&self.event_emitter),
                 };
 
                 let files = Self::extract_files(&item);
@@ -445,21 +416,14 @@ impl DownloadManagerImpl {
                     expected_size: known_size(item.shard_info.as_ref().and_then(|s| s.file_size)),
                 };
 
-                // Emit started event (include shard info if this is a sharded download)
-                self.emit_started_event(&item);
-
                 // Run the worker
                 let result = worker::run_job(job, &deps).await;
 
-                // Tell the bridge the worker is done, then actually join it.
-                // Dropping the JoinHandle only detaches the task, which let its
-                // final progress event race the terminal event emitted below.
-                //
-                // The signal is explicit rather than "wait for the senders to
-                // drop": the active-jobs map holds a `progress_tx` clone until
-                // `finalize_job` removes it, and that runs after this join.
-                bridge_finished.cancel();
-                let _ = bridge_handle.await;
+                // Tell the meter task the worker is done, then actually join
+                // it, so the meter has the file's final count before the
+                // file is finalized.
+                finished.cancel();
+                let _ = meter_task.await;
 
                 // Finalize the job with item context for shard tracking
                 self.finalize_job(&item, lease, result).await;
@@ -476,25 +440,6 @@ impl DownloadManagerImpl {
     /// Emit one download event through the application-wide emitter.
     fn emit(&self, event: DownloadEvent) {
         self.event_emitter.emit(app_event(event));
-    }
-
-    /// Emit a `DownloadStarted` event, with the shard's number for a weights
-    /// shard. A projector is not a shard and starts without one.
-    fn emit_started_event(&self, item: &QueuedItem) {
-        let shard = item.shard_info.as_ref();
-        if let Some(shard) = shard.filter(|s| !s.role.is_projector()) {
-            self.emit(DownloadEvent::started_shard(
-                item.id.to_string(),
-                shard.shard_index,
-                shard.total_shards,
-            ));
-        } else {
-            self.emit(DownloadEvent::DownloadStarted {
-                id: item.id.to_string(),
-                shard_index: None,
-                total_shards: None,
-            });
-        }
     }
 
     /// Validate a cached GGUF file and delete it if corrupt.
@@ -538,9 +483,10 @@ impl DownloadManagerImpl {
     ///
     /// The queue guard is held from the dequeue until the file is in
     /// `active`, so a reader holding the queue never finds the file in
-    /// neither place. It is dropped before the snapshot is emitted, which
-    /// reads the queue itself.
-    /// Lock order: queue → active.
+    /// neither place. The download's meter is made under it too, so a row
+    /// that is running always has one. The guard is dropped before the
+    /// snapshot is published, which reads the queue itself.
+    /// Lock order: queue → active → meters.
     async fn next_job(
         &self,
     ) -> Option<(
@@ -568,16 +514,25 @@ impl DownloadManagerImpl {
                 ActiveJob {
                     lease,
                     cancel: cancel.clone(),
-                    progress_tx: progress_tx.clone(),
                     shard_info: item.shard_info.clone(),
-                    group_id: item.group_id.as_ref().map(std::string::ToString::to_string),
+                    phase: DownloadPhase::Downloading,
                 },
             );
         }
+        // The first file of a download starts its meter; a later file finds
+        // the one its earlier files fed.
+        let place = item.shard_info.as_ref();
+        self.meters().entry(item.id.clone()).or_insert_with(|| {
+            GroupMeter::new(
+                place.and_then(|place| place.group_total_bytes),
+                place.is_none_or(ShardInfo::is_alone),
+                std::time::Instant::now(),
+            )
+        });
         drop(queue);
 
-        // Emit queue snapshot (item now active)
-        self.emit_queue_snapshot().await;
+        // Publish the queue with the file now active
+        self.publish().await;
 
         Some((lease, item, cancel, progress_tx))
     }
@@ -587,16 +542,22 @@ impl DownloadManagerImpl {
     /// Verifies the lease first (to prevent double-finalization), then runs
     /// `handle_job_result` (which includes model registration) while the item
     /// is **still present** in the active map. Only after that completes is the
-    /// item removed from `active` and the snapshot emitted.
+    /// item removed from `active` and the snapshot published.
     ///
-    /// This ordering is critical: the CLI interactive monitor exits as soon as
-    /// `active_count == 0`. Removing the item before registration completes
-    /// would allow the CLI to exit mid-insert, dropping the tokio runtime and
-    /// silently losing the DB row.
+    /// This ordering is critical: the CLI interactive monitor exits once
+    /// nothing is running or waiting. Removing the item before registration
+    /// completes would allow the CLI to exit mid-insert, dropping the tokio
+    /// runtime and silently losing the DB row.
     ///
-    /// Locks: the steps here take `active`, the tracker and the queue one at a
-    /// time. The snapshot emitted at the end nests them: queue → active →
-    /// tracker.
+    /// When the file was the download's last, or the download failed or was
+    /// cancelled, the download has ended. Its outcome is recorded and its
+    /// meter dropped under the same queue guard that takes the file out of
+    /// `active`, so no snapshot shows a download gone with no outcome, or
+    /// ended and still running.
+    ///
+    /// Locks: registration takes `active`, the tracker and the publish mutex
+    /// one at a time. The ending takes queue → active → meters, and the
+    /// snapshot published after it takes them all in order.
     async fn finalize_job(
         &self,
         item: &QueuedItem,
@@ -612,19 +573,23 @@ impl DownloadManagerImpl {
 
         // Step 2 — run registration while still in the active map so the
         // CLI monitor cannot race past registration.
-        self.handle_job_result(item, result).await;
+        let ended = self.handle_job_result(item, result).await;
 
         // Step 3 — now safe to remove from active map and notify watchers.
-        self.remove_from_active(&item.id).await;
+        let mut queue = self.queue.write().await;
+        self.active.lock().await.remove(&item.id);
+        if let Some(outcome) = &ended {
+            queue.record_outcome(&item.id, outcome.clone());
+            self.meters().remove(&item.id);
+        }
+        // Held over the whole ending, so no snapshot reads half of it.
+        drop(queue);
 
-        // A sharded download keeps its estimator until the whole group is
-        // done; the drain transition sweeps those. An unsharded one is finished
-        // here and there is nothing left to measure.
-        if item.group_id.is_none() {
-            self.release_rate_estimator(item).await;
+        if let Some(outcome) = &ended {
+            self.emit(DownloadEvent::ended(&item.id.to_string(), outcome));
         }
 
-        self.emit_queue_snapshot().await;
+        self.publish().await;
     }
 
     /// Check that the stored lease matches `lease` without removing the entry.
@@ -633,36 +598,50 @@ impl DownloadManagerImpl {
         active.get(id).is_some_and(|job| job.lease == lease)
     }
 
-    /// Remove an entry from the active map unconditionally.
-    async fn remove_from_active(&self, id: &DownloadId) {
-        self.active.lock().await.remove(id);
-    }
-
     /// Handle the result of a completed job.
+    ///
+    /// Returns how the download ended, when this file ended it: `None` while
+    /// it has files still to come.
     async fn handle_job_result(
         &self,
         item: &QueuedItem,
         result: Result<CompletedJob, DownloadError>,
-    ) {
+    ) -> Option<DownloadOutcome> {
         match result {
             Ok(completed) => self.handle_success(item, completed).await,
-            Err(DownloadError::Cancelled) => self.handle_cancellation(item).await,
-            Err(e) => self.handle_failure(item, e).await,
+            Err(DownloadError::Cancelled) => {
+                self.handle_cancellation(item).await;
+                Some(DownloadOutcome::Cancelled)
+            }
+            Err(e) => {
+                let error = e.to_string();
+                self.handle_failure(item, &e).await;
+                Some(DownloadOutcome::Failed { error })
+            }
         }
     }
 
     /// Handle successful download completion.
-    async fn handle_success(&self, item: &QueuedItem, completed: CompletedJob) {
+    async fn handle_success(
+        &self,
+        item: &QueuedItem,
+        completed: CompletedJob,
+    ) -> Option<DownloadOutcome> {
+        // The file's bytes join those of the files before it.
+        if let Some(meter) = self.meters().get_mut(&item.id) {
+            meter.file_done();
+        }
+
         if let Some(group_id) = &item.group_id {
             if let Some(shard_info) = &item.shard_info {
-                self.handle_shard_completion(item, group_id, shard_info, completed)
+                return self
+                    .handle_shard_completion(item, group_id, shard_info, completed)
                     .await;
-                return;
             }
         }
 
         // Single-file download - register immediately
-        self.handle_single_file_completion(item, completed).await;
+        Some(self.handle_single_file_completion(item, completed).await)
     }
 
     /// Handle completion of a shard in a multi-shard download.
@@ -672,7 +651,7 @@ impl DownloadManagerImpl {
         group_id: &ShardGroupId,
         shard_info: &ShardInfo,
         completed: CompletedJob,
-    ) {
+    ) -> Option<DownloadOutcome> {
         // Retrieve the group's file entries, with OIDs and roles, from map
         let file_entries = {
             let map = self.file_entries_map.lock().await;
@@ -703,18 +682,23 @@ impl DownloadManagerImpl {
             // Record completion ONCE per group (not per shard)
             self.record_completion_in_run(item, CompletionKind::Downloaded)
                 .await;
-            self.register_completed_model(complete).await;
+            Some(self.register_completed_model(&item.id, complete).await)
         } else {
             tracing::debug!(
                 id = %item.id,
                 shard = shard_info.shard_index,
                 "Shard downloaded, waiting for remaining shards"
             );
+            None
         }
     }
 
     /// Handle completion of a single-file download.
-    async fn handle_single_file_completion(&self, item: &QueuedItem, completed: CompletedJob) {
+    async fn handle_single_file_completion(
+        &self,
+        item: &QueuedItem,
+        completed: CompletedJob,
+    ) -> DownloadOutcome {
         tracing::info!(id = %item.id, "Single-file download completed");
 
         // Retrieve file entries with OIDs from map
@@ -730,7 +714,7 @@ impl DownloadManagerImpl {
         // Record completion before registering
         self.record_completion_in_run(item, CompletionKind::Downloaded)
             .await;
-        self.register_completed_model(complete).await;
+        self.register_completed_model(&item.id, complete).await
     }
 
     /// Handle download cancellation.
@@ -745,14 +729,10 @@ impl DownloadManagerImpl {
         // Record cancellation
         self.record_completion_in_run(item, CompletionKind::Cancelled)
             .await;
-
-        self.emit(DownloadEvent::DownloadCancelled {
-            id: item.id.to_string(),
-        });
     }
 
     /// Handle download failure.
-    async fn handle_failure(&self, item: &QueuedItem, e: DownloadError) {
+    async fn handle_failure(&self, item: &QueuedItem, e: &DownloadError) {
         tracing::warn!(id = %item.id, error = %e, "Download failed");
 
         // Clean up shard tracker if this was part of a group
@@ -763,32 +743,23 @@ impl DownloadManagerImpl {
         // Record failure
         self.record_completion_in_run(item, CompletionKind::Failed)
             .await;
-
-        let queued_item = QueuedItem::new(item.id.clone(), item.completion_key.clone());
-        self.queue
-            .write()
-            .await
-            .mark_failed(queued_item, e.to_string());
     }
 
     /// Register a completed model (all shards downloaded).
     ///
     /// This is the single point of model registration, called only when
     /// all shards in a group are complete (or for single-file downloads).
-    async fn register_completed_model(&self, complete: shard_group_tracker::GroupComplete) {
-        // Canonical event ID matches the one used for progress / completion.
-        let event_id = format!(
-            "{}:{}",
-            complete.metadata.repo_id, complete.metadata.quantization
-        );
-
+    /// Returns how the download ended: a model that could not be registered
+    /// is a failed download, whatever is on disk.
+    async fn register_completed_model(
+        &self,
+        id: &DownloadId,
+        complete: shard_group_tracker::GroupComplete,
+    ) -> DownloadOutcome {
         // Phase 1 of finalization: bytes are on disk, we are about to gather
-        // metadata (HF tags etc.). Emit a status transition so the UI shows
-        // "Finalizing" instead of looking frozen at 100%.
-        self.emit(DownloadEvent::DownloadStatusChanged {
-            id: event_id.clone(),
-            status: gglib_core::download::DownloadStatus::Finalizing,
-        });
+        // metadata (HF tags etc.). The phase is published so every surface
+        // reads "Finalizing" instead of a bar frozen at 100%.
+        self.set_phase(id, DownloadPhase::Finalizing).await;
 
         // Fetch HF model tags (nice-to-have metadata). Bounded by a strict
         // 5-second timeout: a stalled/slow connection must never delay the
@@ -823,10 +794,7 @@ impl DownloadManagerImpl {
         let completed = complete.into_completed_download(hf_tags);
 
         // Phase 2 of finalization: writing the model row to the database.
-        self.emit(DownloadEvent::DownloadStatusChanged {
-            id: event_id.clone(),
-            status: gglib_core::download::DownloadStatus::Registering,
-        });
+        self.set_phase(id, DownloadPhase::Registering).await;
 
         // Register model (soft-fail)
         match self.model_registrar.register_model(&completed).await {
@@ -846,11 +814,10 @@ impl DownloadManagerImpl {
                     );
                 }
 
-                // Emit completion event; it says so when the projector was not linked
-                self.emit(DownloadEvent::DownloadCompleted {
-                    id: event_id,
+                // The outcome says so when the projector was not linked
+                DownloadOutcome::Completed {
                     message: Some(group_completion::completion_message(&completed, refusal)),
-                });
+                }
             }
             Err(e) => {
                 tracing::warn!(
@@ -858,38 +825,13 @@ impl DownloadManagerImpl {
                     path = %completed.primary_path.display(),
                     "Failed to register model - files downloaded but won't appear in library"
                 );
-                // Surface the failure as a terminal event so the UI doesn't
-                // sit on "Registering" forever when registration soft-fails.
-                self.emit(DownloadEvent::DownloadFailed {
-                    id: event_id,
+                // The files are there and the model is not: the download
+                // failed, and says why.
+                DownloadOutcome::Failed {
                     error: format!("Registration failed: {e}"),
-                });
+                }
             }
         }
-    }
-
-    /// Spawn a progress bridge task that rate-limits event emission.
-    ///
-    /// See [`run_progress_bridge`] for the behaviour; this only supplies the
-    /// manager's event emitter.
-    fn spawn_progress_bridge(
-        &self,
-        id: &DownloadId,
-        shard_info: Option<&ShardInfo>,
-        rx: watch::Receiver<ProgressUpdate>,
-        cancel: CancellationToken,
-        estimator: Arc<Mutex<Meter>>,
-        finished: CancellationToken,
-    ) -> tokio::task::JoinHandle<()> {
-        let bridge = ProgressBridge {
-            event_emitter: Arc::clone(&self.event_emitter),
-            id: id.to_string(),
-            shard_info: shard_info.cloned(),
-            estimator,
-            cancel,
-            finished,
-        };
-        tokio::spawn(run_progress_bridge(bridge, rx))
     }
 
     /// Extract files from a queued item.
@@ -903,38 +845,6 @@ impl DownloadManagerImpl {
         )
     }
 
-    /// Emit a queue snapshot event.
-    async fn emit_queue_snapshot(&self) {
-        let Ok(snapshot) = self.get_queue_snapshot().await else {
-            return;
-        };
-
-        // Handle queue drain state transitions
-        let is_drained = self.check_queue_drained(&snapshot).await;
-        self.handle_drain_transitions(is_drained).await;
-
-        // Emit snapshot event
-        self.emit_snapshot_event(&snapshot);
-    }
-
-    /// Check if the queue is fully drained (no pending, no active, no open shard groups).
-    async fn check_queue_drained(&self, snapshot: &QueueSnapshot) -> bool {
-        let has_open_groups = self.shard_tracker.lock().await.has_open_groups();
-        let is_drained =
-            snapshot.pending_count == 0 && snapshot.active_count == 0 && !has_open_groups;
-
-        tracing::debug!(
-            target: "gglib.download",
-            pending = snapshot.pending_count,
-            active = snapshot.active_count,
-            has_open_groups,
-            is_drained,
-            "Queue drain check"
-        );
-
-        is_drained
-    }
-
     /// Handle state transitions between drained and busy queue states.
     #[allow(clippy::cognitive_complexity)]
     async fn handle_drain_transitions(&self, is_drained: bool) {
@@ -945,9 +855,6 @@ impl DownloadManagerImpl {
             self.start_new_queue_run().await;
         } else if !was_drained && is_drained {
             self.finalize_queue_run().await;
-            // Nothing is in flight, so no estimator is in use. This is the
-            // sweep for shard groups, which outlive their individual jobs.
-            self.rate_estimators.lock().await.clear();
         }
 
         *prev = is_drained;
@@ -975,35 +882,6 @@ impl DownloadManagerImpl {
                 tracing::warn!(target: "gglib.download", "Queue drained but no run state found");
             }
         }
-    }
-
-    /// Emit the `QueueSnapshot` event to subscribers.
-    fn emit_snapshot_event(&self, snapshot: &QueueSnapshot) {
-        let items: Vec<DownloadSummary> = snapshot
-            .items
-            .iter()
-            .map(|item| DownloadSummary {
-                id: item.id.clone(),
-                display_name: item.display_name.clone(),
-                status: item.status,
-                position: item.position,
-                error: None,
-                group_id: item.group_id.clone(),
-                shard_info: item.shard_info.clone(),
-            })
-            .collect();
-
-        tracing::debug!(
-            target: "gglib.download",
-            items_count = items.len(),
-            max_size = snapshot.max_size,
-            "Emitting QueueSnapshot event",
-        );
-
-        self.emit(DownloadEvent::QueueSnapshot {
-            items,
-            max_size: snapshot.max_size,
-        });
     }
 
     /// Emit queue run complete event with summary.
@@ -1112,249 +990,6 @@ impl DownloadManagerImpl {
     }
 }
 
-/// Everything the progress bridge needs, independent of the manager.
-struct ProgressBridge {
-    event_emitter: Arc<dyn AppEventEmitter>,
-    /// Canonical download ID, as it appears on emitted events.
-    id: String,
-    shard_info: Option<ShardInfo>,
-    /// Shared with the rest of the shard group.
-    estimator: Arc<Mutex<Meter>>,
-    /// User cancellation: stop without emitting further progress.
-    cancel: CancellationToken,
-    /// Worker finished: emit a final progress event, then stop.
-    finished: CancellationToken,
-}
-
-/// Translate worker progress into rate-limited download events.
-///
-/// Samples the worker's `watch` channel on a fixed tick and feeds every sample
-/// — including ticks where the byte count has not moved — into the shared
-/// [`Meter`]. Those idle samples are what let a stalled transfer decay
-/// toward zero instead of freezing the displayed speed while the ETA counts
-/// down against nothing. Events are emitted on every tick for the same reason.
-///
-/// The estimator belongs to the shard *group*, not the job, so it survives
-/// shard boundaries. Each shard's byte counter restarts at zero; the estimator
-/// re-baselines on that without disturbing its running average.
-///
-/// Termination is driven by `finished`, never by the `watch` senders dropping.
-/// The active-jobs map holds a `progress_tx` clone that is released only during
-/// finalization, which the run loop performs *after* joining this task — so
-/// waiting for sender-drop would deadlock the download runner on its first job.
-async fn run_progress_bridge(bridge: ProgressBridge, rx: watch::Receiver<ProgressUpdate>) {
-    let ProgressBridge {
-        event_emitter,
-        id,
-        shard_info,
-        estimator,
-        cancel,
-        finished,
-    } = bridge;
-
-    let mut tick = interval(PROGRESS_TICK);
-    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-    let mut last_emitted = ProgressUpdate::default();
-
-    loop {
-        tokio::select! {
-            biased;
-
-            () = cancel.cancelled() => {
-                // Don't emit progress on cancel — DownloadCancelled is final.
-                break;
-            }
-
-            () = finished.cancelled() => {
-                // Emit the last sample so the bar lands on its true final
-                // position, then exit.
-                let final_progress = rx.borrow().clone();
-                if final_progress.seq > last_emitted.seq {
-                    let now = std::time::Instant::now();
-                    let (speed, eta) =
-                        sample(&estimator, shard_info.as_ref(), &final_progress, now).await;
-                    emit_progress(
-                        &event_emitter,
-                        &id,
-                        shard_info.as_ref(),
-                        &final_progress,
-                        speed,
-                        eta,
-                    );
-                }
-                break;
-            }
-
-            _ = tick.tick() => {
-                let current = rx.borrow().clone();
-
-                // Sample unconditionally — a tick carrying no new bytes is a
-                // real observation of "nothing arrived".
-                let now = std::time::Instant::now();
-                let (speed, eta) = sample(&estimator, shard_info.as_ref(), &current, now).await;
-
-                // Nothing has been reported yet: no bar to update.
-                if current.seq > 0 {
-                    emit_progress(
-                        &event_emitter,
-                        &id,
-                        shard_info.as_ref(),
-                        &current,
-                        speed,
-                        eta,
-                    );
-                    last_emitted = current;
-                }
-            }
-        }
-    }
-}
-
-/// Feed one observation to the group's meter and read back its verdict.
-///
-/// The speed is taken from the bytes the file in flight has received. The
-/// time remaining is taken from *aggregate* bytes on disk, so that it covers
-/// the whole shard group as one continuous transfer.
-async fn sample(
-    estimator: &Arc<Mutex<Meter>>,
-    shard_info: Option<&ShardInfo>,
-    progress: &ProgressUpdate,
-    now: std::time::Instant,
-) -> (Option<f64>, Option<f64>) {
-    let (file_bytes, file_size) = file_counts(progress);
-    let (downloaded, total) = shard_info.map_or((file_bytes, file_size), |shard| {
-        aggregate_progress(shard, file_bytes, file_size)
-    });
-
-    let wire = progress.progress.wire;
-    let mut estimator = estimator.lock().await;
-    estimator.record(wire, downloaded, total, now);
-    (estimator.speed_bps(), estimator.eta_seconds())
-}
-
-/// A file's bytes on disk and its size, with 0 for a size nobody knows.
-const fn file_counts(progress: &ProgressUpdate) -> (u64, u64) {
-    let file = progress.progress;
-    (
-        file.bytes,
-        match file.size {
-            Some(size) => size,
-            None => 0,
-        },
-    )
-}
-
-/// Aggregate progress across a whole shard group.
-///
-/// Prefers the exact byte layout recorded on [`ShardInfo`] when `HuggingFace`
-/// supplied a size for every shard. Falls back to assuming equal-sized shards,
-/// which is close but not exact — real GGUF shard sets end with a smaller final
-/// shard, so the fallback percentage steps at each boundary.
-fn aggregate_progress(shard: &ShardInfo, downloaded: u64, shard_total: u64) -> (u64, u64) {
-    if let Some(exact) = shard.aggregate(downloaded) {
-        return exact;
-    }
-
-    shard.file_size.map_or_else(
-        // No size info at all: report this shard's own progress and scale the
-        // total by the shard count, so the UI at least shows a moving bar and
-        // the correct shard index.
-        || (downloaded, shard_total * u64::from(shard.total_shards)),
-        |shard_size| {
-            let completed = u64::from(shard.shard_index) * shard_size;
-            (
-                completed.saturating_add(downloaded),
-                shard_size * u64::from(shard.total_shards),
-            )
-        },
-    )
-}
-
-/// Build the queue-snapshot DTO for the active download from a live progress
-/// sample.
-///
-/// Bytes go through [`aggregate_progress`] for sharded downloads so the REST
-/// snapshot agrees with the SSE bridge. Before the first chunk lands
-/// (`progress.size` is `None`) the shard's known file size stands in for the
-/// per-shard total, so consumers can size a bar immediately.
-fn build_active_dto(
-    id: &DownloadId,
-    progress: &ProgressUpdate,
-    shard_info: Option<&ShardInfo>,
-    group_id: Option<&str>,
-    speed_bps: Option<f64>,
-    eta_seconds: Option<f64>,
-) -> gglib_core::download::QueuedDownload {
-    let (file_bytes, file_size) = file_counts(progress);
-    let (downloaded, total) = shard_info.map_or((file_bytes, file_size), |shard| {
-        let shard_total = if file_size == 0 {
-            shard.file_size.unwrap_or(0)
-        } else {
-            file_size
-        };
-        aggregate_progress(shard, file_bytes, shard_total)
-    });
-
-    let mut dto = gglib_core::download::QueuedDownload::new(
-        id.to_string(),
-        id.model_id(),
-        id.to_string(),
-        1,
-        0,
-    )
-    .with_status(gglib_core::download::DownloadStatus::Downloading);
-
-    if let (Some(shard), Some(group)) = (shard_info, group_id) {
-        dto = dto.with_shard_info(group.to_string(), shard.clone());
-    }
-
-    dto.update_progress(downloaded, total, speed_bps, eta_seconds);
-    dto
-}
-
-/// Emit a progress event.
-///
-/// Emits `ShardProgress` for a weights shard. A projector is no shard: its
-/// bytes are emitted as `DownloadProgress` of the whole group, as are those of
-/// a download with no `shard_info`.
-fn emit_progress(
-    emitter: &Arc<dyn AppEventEmitter>,
-    id: &str,
-    shard_info: Option<&ShardInfo>,
-    progress: &ProgressUpdate,
-    speed_bps: Option<f64>,
-    eta_seconds: Option<f64>,
-) {
-    let (file_bytes, file_size) = file_counts(progress);
-    let (aggregate_downloaded, aggregate_total) = shard_info
-        .map_or((file_bytes, file_size), |shard| {
-            aggregate_progress(shard, file_bytes, file_size)
-        });
-    if let Some(shard) = shard_info.filter(|shard| !shard.role.is_projector()) {
-        emitter.emit(app_event(DownloadEvent::shard_progress(
-            id,
-            shard.shard_index,
-            shard.total_shards,
-            &shard.filename,
-            file_bytes,
-            file_size,
-            aggregate_downloaded,
-            aggregate_total,
-            speed_bps,
-            eta_seconds,
-        )));
-    } else {
-        emitter.emit(app_event(DownloadEvent::progress(
-            id,
-            aggregate_downloaded,
-            aggregate_total,
-            speed_bps,
-            eta_seconds,
-        )));
-    }
-}
-
 /// GGUF magic number: "GGUF" in little-endian.
 const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
 
@@ -1426,9 +1061,9 @@ impl DownloadManagerPort for DownloadManagerImpl {
             "Download queued"
         );
 
-        // Notify runner and emit snapshot (outside lock)
+        // Notify runner and publish the queue (outside lock)
         self.queue_notify.notify_one();
-        self.emit_queue_snapshot().await;
+        self.publish().await;
 
         Ok(id)
     }
@@ -1444,53 +1079,10 @@ impl DownloadManagerPort for DownloadManagerImpl {
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
-        // The queue is held for the whole read, so a file cannot leave
-        // `pending` for `active` between the two being looked at. Lock order:
-        // queue → active → tracker.
-        let queue = self.queue.read().await;
-
-        // Sample the active job under its lock (short scope), then read the
-        // estimator afterwards, never nested.
-        let active_sample = {
-            let active = self.active.lock().await;
-            active.iter().next().map(|(id, job)| {
-                (
-                    id.clone(),
-                    job.progress_tx.borrow().clone(),
-                    job.shard_info.clone(),
-                    job.group_id.clone(),
-                )
-            })
-        };
-
-        let current_dto = match active_sample {
-            Some((id, progress, shard_info, group_id)) => {
-                let key = group_id.clone().unwrap_or_else(|| id.to_string());
-                let estimator = self.rate_estimators.lock().await.get(&key).map(Arc::clone);
-                // Read-only: `record()` here would let snapshot polling perturb
-                // the decayed average every consumer sees.
-                let (speed_bps, eta_seconds) = match estimator {
-                    Some(estimator) => {
-                        let estimator = estimator.lock().await;
-                        (estimator.speed_bps(), estimator.eta_seconds())
-                    }
-                    None => (None, None),
-                };
-                Some(build_active_dto(
-                    &id,
-                    &progress,
-                    shard_info.as_ref(),
-                    group_id.as_deref(),
-                    speed_bps,
-                    eta_seconds,
-                ))
-            }
-            // Nothing is being fetched. A download between two of its files
-            // is still the running one, and keeps its row.
-            None => self.between_files_row(&queue).await,
-        };
-
-        Ok(queue.snapshot(current_dto))
+        // Built by the builder the event stream is served from, under the
+        // same mutex, so this snapshot has its own place in their order.
+        let mut revision = self.publish.lock().await;
+        Ok(self.build_snapshot(&mut revision).await)
     }
 
     async fn cancel_download(&self, id: &DownloadId) -> Result<(), DownloadError> {
@@ -1507,7 +1099,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
         // Otherwise remove from queue
         self.queue.write().await.remove(id)?;
         tracing::info!(id = %id, "Removed download from queue");
-        self.emit_queue_snapshot().await;
+        self.publish().await;
         Ok(())
     }
 
@@ -1522,7 +1114,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
 
         // Clear queue (drops everything still pending).
         self.queue.write().await.clear();
-        self.emit_queue_snapshot().await;
+        self.publish().await;
 
         // Bounded drain: wait up to 5s for active downloads to actually
         // finalize so we don't return while the Python helper subprocesses
@@ -1557,6 +1149,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
     async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError> {
         self.queue.write().await.remove(id)?;
         tracing::info!(id = %id, "Removed download from queue");
+        self.publish().await;
         Ok(())
     }
 
@@ -1571,7 +1164,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
             queue.reorder(id, new_position, running.as_ref())?
         };
         tracing::info!(id = %id, position = actual_position, "Reordered download");
-        self.emit_queue_snapshot().await;
+        self.publish().await;
         Ok(actual_position)
     }
 
@@ -1580,7 +1173,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
 
         let shard_group_id = ShardGroupId::new(group_id);
         let removed = self.queue.write().await.remove_group(&shard_group_id);
-        self.emit_queue_snapshot().await;
+        self.publish().await;
         tracing::info!(group_id = %group_id, removed = removed, "Cancelled shard group");
         Ok(())
     }
@@ -1588,12 +1181,15 @@ impl DownloadManagerPort for DownloadManagerImpl {
     async fn clear_failed(&self) -> Result<(), DownloadError> {
         self.queue.write().await.clear_failed();
         tracing::info!("Cleared failed downloads");
+        self.publish().await;
         Ok(())
     }
 
     async fn set_max_queue_size(&self, size: u32) -> Result<(), DownloadError> {
         self.queue.write().await.set_max_size(size);
         tracing::info!(size = size, "Set max queue size");
+        // The snapshot carries the size and whether the queue is full.
+        self.publish().await;
         Ok(())
     }
 }
@@ -1662,7 +1258,7 @@ impl DownloadManagerImpl {
             );
 
             self.queue_notify.notify_one();
-            self.emit_queue_snapshot().await;
+            self.publish().await;
         }
 
         Ok(QueueAutoResult {
@@ -1685,182 +1281,5 @@ mod tests {
 
         assert_eq!(l1, l2);
         assert_ne!(l1, l3);
-    }
-
-    #[test]
-    fn progress_update_seq_comparison() {
-        let p1 = ProgressUpdate::new(100, 1000, 1);
-        let p2 = ProgressUpdate::new(200, 1000, 2);
-
-        assert!(p2.seq > p1.seq);
-    }
-
-    /// Build a shard with exact group offsets, as `create_shard_items` does.
-    fn shard_with_offsets(index: u32, preceding: u64, group_total: u64, size: u64) -> ShardInfo {
-        ShardInfo::with_size(index, 3, format!("shard-{index}.gguf"), size)
-            .with_group_offsets(preceding, group_total)
-    }
-
-    #[test]
-    fn exact_offsets_make_aggregate_progress_continuous_across_shards() {
-        // A realistic set: two full shards and a smaller tail.
-        let (a, b, c) = (4_000, 4_000, 1_500);
-        let group_total = a + b + c;
-
-        // End of shard 0 and start of shard 1 must agree.
-        let end_of_first = aggregate_progress(&shard_with_offsets(0, 0, group_total, a), a, a);
-        let start_of_second = aggregate_progress(&shard_with_offsets(1, a, group_total, b), 0, b);
-
-        assert_eq!(
-            end_of_first, start_of_second,
-            "aggregate progress must not jump at a shard boundary"
-        );
-        assert_eq!(end_of_first, (4_000, 9_500));
-    }
-
-    #[test]
-    fn exact_offsets_reach_exactly_one_hundred_percent() {
-        // The equal-shard-size estimate reported 3 * 4000 = 12000 as the group
-        // total, so a complete download of 9500 bytes stalled the bar at 79%.
-        let (a, b, c) = (4_000u64, 4_000u64, 1_500u64);
-        let group_total = a + b + c;
-
-        let (downloaded, total) =
-            aggregate_progress(&shard_with_offsets(2, a + b, group_total, c), c, c);
-
-        assert_eq!((downloaded, total), (group_total, group_total));
-    }
-
-    #[test]
-    fn falls_back_to_equal_sizes_when_offsets_are_unknown() {
-        // HuggingFace did not report every shard size; the estimate is the best
-        // available and must at least stay self-consistent.
-        let shard = ShardInfo::with_size(1, 3, "shard-1.gguf", 4_000);
-        assert_eq!(aggregate_progress(&shard, 2_000, 4_000), (6_000, 12_000));
-    }
-
-    #[test]
-    fn falls_back_to_shard_progress_when_no_size_is_known() {
-        let shard = ShardInfo::new(1, 3, "shard-1.gguf");
-        assert_eq!(aggregate_progress(&shard, 2_000, 4_000), (2_000, 12_000));
-    }
-
-    #[test]
-    fn active_dto_carries_live_progress() {
-        let id = DownloadId::new("owner/repo", Some("Q4_K_M"));
-        let progress = ProgressUpdate::new(2_500, 10_000, 7);
-
-        let dto = build_active_dto(&id, &progress, None, None, Some(1_000.0), Some(7.5));
-
-        assert_eq!(dto.downloaded_bytes, 2_500);
-        assert_eq!(dto.total_bytes, 10_000);
-        assert_eq!(dto.speed_bps, Some(1_000.0));
-        assert_eq!(dto.eta_seconds, Some(7.5));
-        assert!((dto.progress_percent - 25.0).abs() < f64::EPSILON);
-        assert_eq!(
-            dto.status,
-            gglib_core::download::DownloadStatus::Downloading
-        );
-    }
-
-    #[test]
-    fn active_dto_aggregates_sharded_progress() {
-        let id = DownloadId::new("owner/repo", Some("Q4_K_M"));
-        let (a, b, c) = (4_000, 4_000, 1_500);
-        let shard = shard_with_offsets(1, a, a + b + c, b);
-        let progress = ProgressUpdate::new(2_000, b, 3);
-
-        let dto = build_active_dto(&id, &progress, Some(&shard), Some("group-1"), None, None);
-
-        // Same numbers the SSE bridge derives via aggregate_progress.
-        assert_eq!(dto.downloaded_bytes, 6_000);
-        assert_eq!(dto.total_bytes, 9_500);
-        assert_eq!(dto.group_id.as_deref(), Some("group-1"));
-        assert!(dto.shard_info.is_some());
-    }
-
-    #[test]
-    fn active_dto_uses_shard_file_size_before_first_chunk() {
-        let id = DownloadId::new("owner/repo", Some("Q4_K_M"));
-        let shard = shard_with_offsets(0, 0, 9_500, 4_000);
-        let progress = ProgressUpdate::default();
-
-        let dto = build_active_dto(&id, &progress, Some(&shard), Some("group-1"), None, None);
-
-        assert_eq!(dto.downloaded_bytes, 0);
-        assert_eq!(
-            dto.total_bytes, 9_500,
-            "known shard sizes should size the bar immediately"
-        );
-    }
-
-    #[test]
-    fn active_dto_passes_through_unknowns_during_warmup() {
-        let id = DownloadId::new("owner/repo", None::<String>);
-        let progress = ProgressUpdate::default();
-
-        let dto = build_active_dto(&id, &progress, None, None, None, None);
-
-        assert_eq!(dto.total_bytes, 0);
-        assert_eq!(dto.speed_bps, None);
-        assert_eq!(dto.eta_seconds, None);
-        assert!(dto.progress_percent.abs() < f64::EPSILON);
-    }
-
-    fn test_bridge(cancel: CancellationToken, finished: CancellationToken) -> ProgressBridge {
-        ProgressBridge {
-            event_emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
-            id: "owner/repo:Q4_K_M".to_string(),
-            shard_info: None,
-            estimator: Arc::new(Mutex::new(Meter::new(std::time::Instant::now()))),
-            cancel,
-            finished,
-        }
-    }
-
-    /// The bridge must exit on its `finished` signal alone.
-    ///
-    /// It cannot wait for every `progress_tx` to drop: the active-jobs map
-    /// holds a clone released only during finalization, which the run loop
-    /// performs *after* joining this task. Waiting on sender-drop deadlocks the
-    /// download runner on its first job.
-    #[tokio::test]
-    async fn progress_bridge_exits_while_a_sender_is_still_alive() {
-        let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
-        let finished = CancellationToken::new();
-        let bridge = test_bridge(CancellationToken::new(), finished.clone());
-        let handle = tokio::spawn(run_progress_bridge(bridge, progress_tx.subscribe()));
-
-        finished.cancel();
-
-        // `progress_tx` is deliberately still alive here, standing in for the
-        // clone the active-jobs map holds.
-        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
-        assert!(
-            joined.is_ok(),
-            "bridge must exit on the finished signal even with a live sender"
-        );
-    }
-
-    #[tokio::test]
-    async fn progress_bridge_exits_on_cancellation() {
-        let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
-        let cancel = CancellationToken::new();
-        let bridge = test_bridge(cancel.clone(), CancellationToken::new());
-        let handle = tokio::spawn(run_progress_bridge(bridge, progress_tx.subscribe()));
-
-        cancel.cancel();
-
-        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
-        assert!(joined.is_ok(), "bridge must exit when the job is cancelled");
-    }
-
-    #[test]
-    fn aggregate_never_exceeds_the_group_total() {
-        // A finished file can be longer than its metadata said. Clamping keeps
-        // the percentage sane and stops the estimator seeing a phantom burst.
-        let shard = shard_with_offsets(2, 8_000, 9_500, 1_500);
-        let (downloaded, total) = aggregate_progress(&shard, 5_000, 1_500);
-        assert_eq!(downloaded, total, "must clamp to the group total");
     }
 }

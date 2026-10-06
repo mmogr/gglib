@@ -10,9 +10,36 @@
 //! pending files are not waiting: they stay at the head of `pending`, they
 //! are not a row of their own, and they do not count toward capacity.
 
-use gglib_core::download::{DownloadId, DownloadStatus, QueuedDownload};
+use gglib_core::download::{DownloadId, DownloadPhase, DownloadRow, RowFacts, ShardInfo, row};
 
-use super::{DownloadQueue, QueuedItem, ShardGroupId};
+use super::{DownloadQueue, QueuedItem, ShardGroupId, usize_to_u32_saturating};
+
+/// The running download, as the manager names it to the queue.
+#[derive(Clone, Debug)]
+pub(crate) struct Running {
+    /// Its id.
+    pub id: DownloadId,
+    /// What it is doing.
+    pub phase: DownloadPhase,
+    /// The file being fetched, or the one that is next while it is between
+    /// two.
+    pub file: Option<ShardInfo>,
+}
+
+/// What the running download's meter reads.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Reading {
+    /// Bytes on disk, over every file of the download.
+    pub bytes: u64,
+    /// The size of every file together, when known.
+    pub total: Option<u64>,
+    /// Bytes per second off the network, once measured.
+    pub speed_bps: Option<f64>,
+    /// Seconds remaining, once measured.
+    pub eta_seconds: Option<f64>,
+    /// A note standing in for progress while there is none.
+    pub notice: Option<String>,
+}
 
 /// The position of the first waiting download: 2 behind a running download,
 /// which holds position 1, and 1 otherwise.
@@ -30,32 +57,66 @@ impl DownloadQueue {
         Some((&head.id, head.group_id.as_ref()?))
     }
 
-    /// The row of the `running` download while it is between two of its
-    /// files: downloading, at position 1, with the place of its next file.
-    ///
-    /// The bytes are those in before that file, when the size of every file
-    /// of the group is known, so the bar stays where the last file left it.
-    pub(crate) fn between_files_row(&self, running: &DownloadId) -> Option<QueuedDownload> {
+    /// The next file of the `running` download while it is between two of
+    /// its files.
+    pub(crate) fn next_file_of(&self, running: &DownloadId) -> Option<&ShardInfo> {
         let next = self.pending.front().filter(|item| &item.id == running)?;
-        let mut row = next.to_dto(1, DownloadStatus::Downloading);
-        if let Some((downloaded, total)) = next.shard_info.as_ref().and_then(|s| s.aggregate(0)) {
-            row.update_progress(downloaded, total, None, None);
-        }
-        Some(row)
+        next.shard_info.as_ref()
+    }
+
+    /// The queue's rows: the running download's, and one for each waiting
+    /// download in the order they will run.
+    ///
+    /// The running row is at position 1 with what its meter reads, whether a
+    /// file of it is being fetched or it is between two. Without a reading it
+    /// has moved nothing yet, and its size is its group's.
+    pub(crate) fn download_rows(
+        &self,
+        running: Option<&Running>,
+        reading: Option<&Reading>,
+    ) -> (Option<DownloadRow>, Vec<DownloadRow>) {
+        let active = running.map(|running| {
+            let file = running.file.as_ref();
+            row(&RowFacts {
+                id: &running.id,
+                phase: running.phase,
+                position: 1,
+                place: file.and_then(ShardInfo::place),
+                bytes: reading.map_or(0, |reading| reading.bytes),
+                total: reading
+                    .and_then(|reading| reading.total)
+                    .or_else(|| file.and_then(|file| file.group_total_bytes)),
+                speed_bps: reading.and_then(|reading| reading.speed_bps),
+                eta_seconds: reading.and_then(|reading| reading.eta_seconds),
+                notice: reading.and_then(|reading| reading.notice.as_deref()),
+            })
+        });
+
+        let first = first_waiting_position(running.is_some());
+        let waiting = self
+            .waiting(running.map(|running| &running.id))
+            .into_iter()
+            .enumerate()
+            .map(|(idx, item)| {
+                let file = item.shard_info.as_ref();
+                row(&RowFacts::waiting(
+                    &item.id,
+                    first.saturating_add(usize_to_u32_saturating(idx)),
+                    file.and_then(ShardInfo::waiting_place),
+                    file.and_then(|file| file.group_total_bytes),
+                ))
+            })
+            .collect();
+
+        (active, waiting)
     }
 
     /// The first pending file of each waiting download, in the order they
     /// will run.
     pub(super) fn waiting(&self, running: Option<&DownloadId>) -> Vec<&QueuedItem> {
-        self.waiting_but(|item| Some(&item.id) == running)
-    }
-
-    /// [`Self::waiting`], with the running download named by a test of its
-    /// files.
-    pub(super) fn waiting_but(&self, is_running: impl Fn(&QueuedItem) -> bool) -> Vec<&QueuedItem> {
         let mut first_files: Vec<&QueuedItem> = Vec::new();
         for item in &self.pending {
-            if !is_running(item) && first_files.iter().all(|first| first.id != item.id) {
+            if Some(&item.id) != running && first_files.iter().all(|first| first.id != item.id) {
                 first_files.push(item);
             }
         }
@@ -72,6 +133,9 @@ impl DownloadQueue {
     }
 }
 
+#[cfg(test)]
+#[path = "placing_tests.rs"]
+mod placing_tests;
 #[cfg(test)]
 #[path = "rows_tests.rs"]
 mod tests;

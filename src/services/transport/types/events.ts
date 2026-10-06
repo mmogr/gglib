@@ -36,22 +36,6 @@ export type ServerWireEvent = Extract<AppEvent, { type: `server_${string}` }>;
 // ============================================================================
 
 /**
- * One row of the download queue.
- *
- * `status` is the full seven-member `DownloadStatus`, where the mirror named
- * five. A snapshot row only ever carries `downloading` or `queued` —
- * `gglib-download` hard-codes both — so the two the mirror omitted never
- * arrived, and nothing was misrendered. The type is simply the type.
- *
- * `error`, `group_id` and `shard_info` are optional and *not* nullable: each
- * carries `skip_serializing_if`, so the key is absent rather than `null`. The
- * mirror admitted both, which is why the normalizer reached for them through
- * `as any` casts.
- */
-import type { DownloadSummary } from '../../../types/generated/DownloadSummary';
-export type { DownloadSummary };
-
-/**
  * Result kind for a completion attempt.
  */
 export type { CompletionKind } from '../../../types/generated/CompletionKind';
@@ -150,9 +134,8 @@ export type RemoteEvent = Extract<AppEvent, { type: `remote_${string}` }>;
  * arms today, which `tests/ts/services/eventCategory.test.ts` is the
  * place to keep true.
  *
- * Download events arrive wrapped as `{ type: "download", event: DownloadEvent }`
- * to preserve shard-level detail, which is why that entry is the whole arm
- * rather than the inner event.
+ * Download events arrive wrapped as `{ type: "download", event: DownloadEvent }`,
+ * which is why that entry is the whole arm rather than the inner event.
  */
 export interface AppEventMap {
   'server': ServerWireEvent;

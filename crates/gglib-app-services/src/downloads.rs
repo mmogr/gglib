@@ -314,7 +314,7 @@ mod tests {
     async fn get_queue_snapshot_returns_empty_snapshot() {
         let ops = make_ops(MockDownloadManager::new());
         let snapshot = ops.get_queue_snapshot().await;
-        assert!(snapshot.items.is_empty());
+        assert!(snapshot.is_idle() && snapshot.finished.is_empty());
     }
 
     #[tokio::test]

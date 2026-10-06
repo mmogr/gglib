@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
-import type { DownloadQueueStatus } from '../../../services/transport/types/downloads';
+import type { QueueSnapshot } from '../../../services/transport/types/downloads';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { getTransport } from '../../../services/transport';
 
@@ -14,7 +14,7 @@ export interface HfDownloadState {
  * Queue a HuggingFace model for download from the inspector's preview, and
  * say whether the queue has room for another.
  */
-export function useHfDownload(queueStatus: DownloadQueueStatus | null | undefined): HfDownloadState {
+export function useHfDownload(downloadQueue: QueueSnapshot | null | undefined): HfDownloadState {
   const { showToast } = useToastContext();
 
   const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
@@ -28,12 +28,9 @@ export function useHfDownload(queueStatus: DownloadQueueStatus | null | undefine
     }
   }, [showToast]);
 
-  const maxQueueSize = queueStatus?.max_size ?? 3;
-  const currentQueueCount = (queueStatus?.current ? 1 : 0) + (queueStatus?.pending?.length ?? 0);
-  const downloadsDisabled = currentQueueCount >= maxQueueSize;
-  const disabledReason = downloadsDisabled
-    ? `Download queue is full (${currentQueueCount}/${maxQueueSize})`
-    : undefined;
+  // The daemon says whether it would refuse another; nothing is counted here.
+  const downloadsDisabled = downloadQueue?.full ?? false;
+  const disabledReason = downloadsDisabled ? 'Download queue is full' : undefined;
 
   return { handleHfDownload, downloadsDisabled, disabledReason };
 }

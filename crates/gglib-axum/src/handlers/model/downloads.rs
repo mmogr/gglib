@@ -51,10 +51,10 @@ pub(crate) async fn list(State(state): State<AppState>) -> Json<QueueSnapshot> {
 
     tracing::debug!(
         target: "gglib.download",
-        active_count = snapshot.active_count,
-        pending_count = snapshot.pending_count,
-        total_items = snapshot.items.len(),
-        items = ?snapshot.items.iter().map(|i| (&i.id, &i.status)).collect::<Vec<_>>(),
+        revision = snapshot.revision,
+        active = ?snapshot.active.as_ref().map(|row| (&row.id, row.phase)),
+        waiting = snapshot.waiting.len(),
+        finished = snapshot.finished.len(),
         "Queue snapshot returned from /api/downloads/queue",
     );
 

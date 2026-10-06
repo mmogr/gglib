@@ -233,7 +233,7 @@ pub trait DownloadManagerPort: Send + Sync {
     /// Cancel all downloads in a shard group.
     ///
     /// Used for canceling multi-file model downloads where shards are
-    /// queued together. The `group_id` matches `QueuedDownload.group_id`.
+    /// queued together.
     async fn cancel_group(&self, group_id: &str) -> Result<(), DownloadError>;
 
     /// Clear all failed downloads from the failures list.

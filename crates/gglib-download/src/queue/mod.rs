@@ -7,12 +7,14 @@ mod types;
 use std::collections::VecDeque;
 
 use gglib_core::download::{
-    CompletionKey, DownloadError, DownloadId, DownloadStatus, QueueSnapshot, QueuedDownload,
+    CompletionKey, DownloadError, DownloadId, DownloadOutcome, FINISHED_LIMIT, FinishedDownload,
+    QueueSnapshot, download_title,
 };
 use gglib_core::ports::ResolvedFile;
 
+pub(crate) use rows::{Reading, Running};
 pub(crate) use shard_group::ShardGroupId;
-pub(crate) use types::{FailedItem, QueuedItem};
+pub(crate) use types::QueuedItem;
 
 /// Saturating conversion from usize to u32 for queue positions.
 /// Returns `u32::MAX` if the value exceeds `u32::MAX`.
@@ -26,7 +28,9 @@ fn usize_to_u32_saturating(n: usize) -> u32 {
 /// (`DownloadManager`) is responsible for synchronization.
 pub(crate) struct DownloadQueue {
     pending: VecDeque<QueuedItem>,
-    failed: Vec<FailedItem>,
+    /// How the most recent downloads ended, oldest first: one entry per
+    /// download, and at most [`FINISHED_LIMIT`].
+    finished: Vec<FinishedDownload>,
     max_size: u32,
 }
 
@@ -35,7 +39,7 @@ impl DownloadQueue {
     pub(crate) const fn new(max_size: u32) -> Self {
         Self {
             pending: VecDeque::new(),
-            failed: Vec::new(),
+            finished: Vec::new(),
             max_size,
         }
     }
@@ -57,10 +61,10 @@ impl DownloadQueue {
         self.pending.len()
     }
 
-    /// Get the number of failed items.
+    /// How the most recent downloads ended, oldest first.
     #[cfg(test)]
-    pub(crate) const fn failed_len(&self) -> usize {
-        self.failed.len()
+    pub(crate) fn finished(&self) -> &[FinishedDownload] {
+        &self.finished
     }
 
     /// Check if a download ID is waiting in `pending`.
@@ -70,12 +74,6 @@ impl DownloadQueue {
     /// guarding against duplicate work need to check both.
     pub(crate) fn is_queued(&self, id: &DownloadId) -> bool {
         self.pending.iter().any(|item| &item.id == id)
-    }
-
-    /// Check if a download ID is in the failed list.
-    #[cfg(test)]
-    pub(crate) fn is_failed(&self, id: &DownloadId) -> bool {
-        self.failed.iter().any(|item| &item.item.id == id)
     }
 
     /// Queue a single (non-sharded) download.
@@ -93,7 +91,7 @@ impl DownloadQueue {
     ) -> Result<u32, DownloadError> {
         self.check_not_queued(&id)?;
         self.check_capacity(None)?;
-        self.remove_from_failed(&id);
+        self.forget_outcome(&id);
 
         let item = QueuedItem::new(id, completion_key);
         self.pending.push_back(item);
@@ -127,7 +125,7 @@ impl DownloadQueue {
 
         self.check_not_queued(id)?;
         self.check_capacity(running)?;
-        self.remove_from_failed(id);
+        self.forget_outcome(id);
 
         let position = rows::first_waiting_position(running.is_some())
             .saturating_add(usize_to_u32_saturating(self.waiting(running).len()));
@@ -143,13 +141,15 @@ impl DownloadQueue {
         self.pending.pop_front()
     }
 
-    /// Clear all items from the queue (pending and failed).
+    /// Clear the queue: every pending file, and the record of how earlier
+    /// downloads ended.
     pub(crate) fn clear(&mut self) {
         self.pending.clear();
-        self.failed.clear();
+        self.finished.clear();
     }
 
-    /// Remove an item from the pending queue or failed list.
+    /// Remove a download from the pending queue, or else its entry from the
+    /// finished list.
     pub(crate) fn remove(&mut self, id: &DownloadId) -> Result<(), DownloadError> {
         let initial_pending = self.pending.len();
         self.pending.retain(|item| &item.id != id);
@@ -158,10 +158,10 @@ impl DownloadQueue {
             return Ok(());
         }
 
-        let initial_failed = self.failed.len();
-        self.failed.retain(|item| &item.item.id != id);
+        let initial_finished = self.finished.len();
+        self.forget_outcome(id);
 
-        if self.failed.len() < initial_failed {
+        if self.finished.len() < initial_finished {
             Ok(())
         } else {
             Err(DownloadError::not_in_queue(id.to_string()))
@@ -203,57 +203,48 @@ impl DownloadQueue {
         Ok(first.saturating_add(usize_to_u32_saturating(slot)))
     }
 
-    /// Get a snapshot of the current queue state for API responses.
+    /// The queue as it is served: the running download, the waiting ones
+    /// behind it, and how the latest ended.
     ///
-    /// `running` is the row of the running download, if any: the one being
-    /// fetched, or between two of its files. Each waiting download is one
-    /// row behind it, however many files it has, and the pending files of
-    /// the running download are no row at all.
-    pub(crate) fn snapshot(&self, running: Option<QueuedDownload>) -> QueueSnapshot {
-        let first = rows::first_waiting_position(running.is_some());
-
-        let waiting: Vec<_> = self
-            .waiting_but(|item| {
-                running
-                    .as_ref()
-                    .is_some_and(|row| row.id == item.canonical_id())
-            })
-            .into_iter()
-            .enumerate()
-            .map(|(idx, item)| {
-                item.to_dto(
-                    first.saturating_add(usize_to_u32_saturating(idx)),
-                    DownloadStatus::Queued,
-                )
-            })
-            .collect();
-
-        let failed: Vec<_> = self.failed.iter().map(types::FailedItem::to_dto).collect();
-
-        let active_count = u32::from(running.is_some());
-        let pending_count = usize_to_u32_saturating(waiting.len());
-
-        let mut items = Vec::with_capacity(1 + waiting.len());
-        items.extend(running);
-        items.extend(waiting);
-
+    /// `running` names the running download, being fetched or between two of
+    /// its files, and `reading` is its meter's. Each waiting download is one
+    /// row however many files it has, and the pending files of the running
+    /// download are no row at all.
+    pub(crate) fn snapshot(
+        &self,
+        revision: u64,
+        running: Option<&Running>,
+        reading: Option<&Reading>,
+    ) -> QueueSnapshot {
+        let (active, waiting) = self.download_rows(running, reading);
         QueueSnapshot {
-            items,
+            revision,
+            active,
+            full: waiting.len() >= self.max_size as usize,
+            waiting,
+            finished: self.finished.clone(),
             max_size: self.max_size,
-            active_count,
-            pending_count,
-            recent_failures: failed,
         }
     }
 
-    /// Mark a download as failed and add to the failed list.
-    pub(crate) fn mark_failed(&mut self, item: QueuedItem, error: impl Into<String>) {
-        self.failed.push(FailedItem::new(item, error));
+    /// Record how the download `id` ended, in place of any earlier ending of
+    /// the same download. The oldest entries make way past
+    /// [`FINISHED_LIMIT`].
+    pub(crate) fn record_outcome(&mut self, id: &DownloadId, outcome: DownloadOutcome) {
+        self.forget_outcome(id);
+        self.finished.push(FinishedDownload {
+            id: id.to_string(),
+            title: download_title(id),
+            outcome,
+        });
+        let excess = self.finished.len().saturating_sub(FINISHED_LIMIT);
+        self.finished.drain(..excess);
     }
 
-    /// Clear all failed downloads.
+    /// Drop the failures from the finished list.
     pub(crate) fn clear_failed(&mut self) {
-        self.failed.clear();
+        self.finished
+            .retain(|entry| !matches!(entry.outcome, DownloadOutcome::Failed { .. }));
     }
 
     // --- Shard group helpers ---
@@ -286,8 +277,11 @@ impl DownloadQueue {
         }
     }
 
-    fn remove_from_failed(&mut self, id: &DownloadId) {
-        self.failed.retain(|item| &item.item.id != id);
+    /// Drop what is recorded of an earlier run of `id`. A download queued
+    /// again starts clean: its old ending is not this run's.
+    fn forget_outcome(&mut self, id: &DownloadId) {
+        let id = id.to_string();
+        self.finished.retain(|entry| entry.id != id);
     }
 }
 
@@ -300,6 +294,21 @@ impl Default for DownloadQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn failed(error: &str) -> DownloadOutcome {
+        DownloadOutcome::Failed {
+            error: error.to_string(),
+        }
+    }
+
+    /// Name the download of `item`, just dequeued, as the running one.
+    fn running(item: QueuedItem) -> Running {
+        Running {
+            id: item.id,
+            phase: gglib_core::download::DownloadPhase::Downloading,
+            file: item.shard_info,
+        }
+    }
 
     fn test_id(model: &str, quant: Option<&str>) -> DownloadId {
         DownloadId::new(model, quant)
@@ -425,14 +434,14 @@ mod tests {
 
         // Simulate "a" is now active
         let current = queue.dequeue().unwrap();
-        let current_dto = current.to_dto(1, DownloadStatus::Downloading);
-        let snapshot = queue.snapshot(Some(current_dto));
+        let current = running(current);
+        let snapshot = queue.snapshot(0, Some(&current), None);
 
-        assert_eq!(snapshot.items.len(), 2); // 1 active + 1 pending
-        assert_eq!(snapshot.items[0].position, 1);
-        assert_eq!(snapshot.items[1].position, 2);
-        assert_eq!(snapshot.active_count, 1);
-        assert_eq!(snapshot.pending_count, 1);
+        assert_eq!(snapshot.rows().count(), 2); // 1 active + 1 pending
+        assert_eq!(snapshot.rows().next().unwrap().position, 1);
+        assert_eq!(snapshot.rows().nth(1).unwrap().position, 2);
+        assert_eq!(u32::from(snapshot.active.is_some()), 1);
+        assert_eq!(snapshot.waiting.len(), 1);
     }
 
     #[test]
@@ -452,10 +461,9 @@ mod tests {
         // Both files share one group, and the two of them are one row
         let group_id = queue.pending[0].group_id.clone().unwrap();
         assert_eq!(queue.pending[1].group_id.as_ref(), Some(&group_id));
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.items.len(), 1);
-        assert_eq!(snapshot.items[0].group_id, Some(group_id.to_string()));
-        assert_eq!(snapshot.pending_count, 1);
+        let snapshot = queue.snapshot(0, None, None);
+        assert_eq!(snapshot.rows().count(), 1);
+        assert_eq!(snapshot.waiting.len(), 1);
     }
 
     #[test]
@@ -497,15 +505,15 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_failed_item() {
+    fn removing_a_finished_download_drops_its_outcome() {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("a", None);
-        let item = QueuedItem::new(id.clone(), test_completion_key(&id));
-        queue.mark_failed(item, "error");
+        queue.record_outcome(&id, failed("error"));
 
-        assert!(queue.is_failed(&id));
+        assert_eq!(queue.finished().len(), 1);
         queue.remove(&id).unwrap();
-        assert!(!queue.is_failed(&id));
+        assert!(queue.finished().is_empty());
+        assert!(queue.remove(&id).is_err(), "nothing left to remove");
     }
 
     #[test]
@@ -638,25 +646,103 @@ mod tests {
         assert_eq!(ids, vec!["sharded", "sharded", "a", "b"]);
     }
 
+    /// Clearing the failures leaves the other outcomes where they were.
     #[test]
-    fn test_clear_failed() {
+    fn clear_failed_drops_only_the_failures() {
         let mut queue = DownloadQueue::new(10);
-        let id_a = test_id("a", None);
-        let id_b = test_id("b", None);
-        queue.mark_failed(
-            QueuedItem::new(id_a.clone(), test_completion_key(&id_a)),
-            "err1",
-        );
-        queue.mark_failed(
-            QueuedItem::new(id_b.clone(), test_completion_key(&id_b)),
-            "err2",
-        );
-
-        assert_eq!(queue.failed_len(), 2);
+        queue.record_outcome(&test_id("a", None), failed("err1"));
+        queue.record_outcome(&test_id("b", None), DownloadOutcome::Cancelled);
+        queue.record_outcome(&test_id("c", None), failed("err2"));
+        assert_eq!(queue.snapshot(0, None, None).finished.len(), 3);
 
         queue.clear_failed();
 
-        assert_eq!(queue.failed_len(), 0);
+        let left: Vec<_> = queue.finished().iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(left, ["b"]);
+    }
+
+    /// An outcome carries the download's id and title, and the snapshot
+    /// serves the list oldest first.
+    #[test]
+    fn an_outcome_is_served_with_the_downloads_title() {
+        let mut queue = DownloadQueue::new(3);
+        let id = test_id("owner/model-a", Some("Q8_0"));
+        queue.record_outcome(&id, failed("connection timeout"));
+        queue.record_outcome(&test_id("b", None), DownloadOutcome::Cancelled);
+
+        let snapshot = queue.snapshot(0, None, None);
+
+        assert!(snapshot.is_idle());
+        assert_eq!(snapshot.finished.len(), 2);
+        assert_eq!(snapshot.finished[0].id, "owner/model-a:Q8_0");
+        assert_eq!(snapshot.finished[0].title, "owner/model-a:Q8_0");
+        assert_eq!(snapshot.finished[0].outcome, failed("connection timeout"));
+        assert_eq!(snapshot.finished[1].outcome, DownloadOutcome::Cancelled);
+    }
+
+    /// A download that ends again has one entry, its latest, and it is the
+    /// newest in the list.
+    #[test]
+    fn the_newest_outcome_of_a_download_replaces_its_last() {
+        let mut queue = DownloadQueue::new(3);
+        let (a, b) = (test_id("a", None), test_id("b", None));
+        queue.record_outcome(&a, failed("first try"));
+        queue.record_outcome(&b, DownloadOutcome::Cancelled);
+
+        queue.record_outcome(&a, DownloadOutcome::Completed { message: None });
+
+        let ended: Vec<_> = queue
+            .finished()
+            .iter()
+            .map(|f| (f.id.as_str(), &f.outcome))
+            .collect();
+        assert_eq!(
+            ended,
+            [
+                ("b", &DownloadOutcome::Cancelled),
+                ("a", &DownloadOutcome::Completed { message: None }),
+            ]
+        );
+    }
+
+    /// The list keeps the latest `FINISHED_LIMIT`, and the oldest make way.
+    #[test]
+    fn the_finished_list_is_bounded() {
+        let mut queue = DownloadQueue::new(3);
+        for n in 0..FINISHED_LIMIT + 4 {
+            queue.record_outcome(&test_id(&format!("m{n}"), None), DownloadOutcome::Cancelled);
+        }
+
+        let finished = queue.finished();
+
+        assert_eq!(finished.len(), FINISHED_LIMIT);
+        assert_eq!(finished[0].id, "m4");
+        assert_eq!(
+            finished[FINISHED_LIMIT - 1].id,
+            format!("m{}", FINISHED_LIMIT + 3)
+        );
+    }
+
+    /// Queued again, a download starts clean: the monitor watching it would
+    /// otherwise read its last run's failure as this one's.
+    #[test]
+    fn queueing_a_download_again_forgets_its_old_outcome() {
+        let mut queue = DownloadQueue::new(3);
+        let id = test_id("a", Some("Q8_0"));
+        queue.record_outcome(&id, failed("first try"));
+        queue.record_outcome(&test_id("b", None), failed("another"));
+
+        queue
+            .queue_sharded(
+                &id,
+                &test_completion_key(&id),
+                &[ResolvedFile::new("a.gguf")],
+                None,
+            )
+            .unwrap();
+
+        let left: Vec<_> = queue.finished().iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(left, ["b"]);
     }
 
     #[test]
@@ -748,26 +834,26 @@ mod tests {
             .unwrap();
 
         // Snapshot: positions should be 1, 2, 3
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.items.len(), 3);
-        assert_eq!(snapshot.items[0].position, 1);
-        assert_eq!(snapshot.items[0].id, "a");
-        assert_eq!(snapshot.items[1].position, 2);
-        assert_eq!(snapshot.items[1].id, "b");
-        assert_eq!(snapshot.items[2].position, 3);
-        assert_eq!(snapshot.items[2].id, "c");
+        let snapshot = queue.snapshot(0, None, None);
+        assert_eq!(snapshot.rows().count(), 3);
+        assert_eq!(snapshot.rows().next().unwrap().position, 1);
+        assert_eq!(snapshot.rows().next().unwrap().id, "a");
+        assert_eq!(snapshot.rows().nth(1).unwrap().position, 2);
+        assert_eq!(snapshot.rows().nth(1).unwrap().id, "b");
+        assert_eq!(snapshot.rows().nth(2).unwrap().position, 3);
+        assert_eq!(snapshot.rows().nth(2).unwrap().id, "c");
 
         // Dequeue "a"
         let dequeued = queue.dequeue().unwrap();
         assert_eq!(dequeued.id.model_id(), "a");
 
         // Snapshot again: positions should have shifted down
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.items.len(), 2);
-        assert_eq!(snapshot.items[0].position, 1);
-        assert_eq!(snapshot.items[0].id, "b");
-        assert_eq!(snapshot.items[1].position, 2);
-        assert_eq!(snapshot.items[1].id, "c");
+        let snapshot = queue.snapshot(0, None, None);
+        assert_eq!(snapshot.rows().count(), 2);
+        assert_eq!(snapshot.rows().next().unwrap().position, 1);
+        assert_eq!(snapshot.rows().next().unwrap().id, "b");
+        assert_eq!(snapshot.rows().nth(1).unwrap().position, 2);
+        assert_eq!(snapshot.rows().nth(1).unwrap().id, "c");
     }
 
     /// Test that `snapshot()` produces correct DTOs with active/pending counts.
@@ -787,96 +873,24 @@ mod tests {
             .unwrap();
 
         // Snapshot with nothing active: 0 active, 2 pending
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.items.len(), 2);
-        assert_eq!(snapshot.active_count, 0);
-        assert_eq!(snapshot.pending_count, 2);
-        assert_eq!(snapshot.items[0].position, 1);
-        assert_eq!(snapshot.items[0].id, "model-x");
-        assert_eq!(snapshot.items[1].position, 2);
-        assert_eq!(snapshot.items[1].id, "model-y");
+        let snapshot = queue.snapshot(0, None, None);
+        assert_eq!(snapshot.rows().count(), 2);
+        assert_eq!(u32::from(snapshot.active.is_some()), 0);
+        assert_eq!(snapshot.waiting.len(), 2);
+        assert_eq!(snapshot.rows().next().unwrap().position, 1);
+        assert_eq!(snapshot.rows().next().unwrap().id, "model-x");
+        assert_eq!(snapshot.rows().nth(1).unwrap().position, 2);
+        assert_eq!(snapshot.rows().nth(1).unwrap().id, "model-y");
 
         // Dequeue "model-x" and mark it as downloading
         let current = queue.dequeue().unwrap();
         assert_eq!(current.id.model_id(), "model-x");
-        let current_dto = current.to_dto(1, DownloadStatus::Downloading);
+        let current = running(current);
 
         // Snapshot with active item: 1 active, 1 pending
-        let snapshot = queue.snapshot(Some(current_dto));
-        assert_eq!(snapshot.active_count, 1);
-        assert_eq!(snapshot.pending_count, 1);
-    }
-
-    /// Test that `mark_failed()` moves an item to the failed list correctly.
-    #[test]
-    fn test_remove_item_moves_to_failed() {
-        let mut queue = DownloadQueue::new(3);
-
-        // Enqueue 2 items: "model-a" and "model-b"
-        let id_a = test_id("model-a", None);
-        let id_b = test_id("model-b", None);
-
-        queue
-            .queue(id_a.clone(), test_completion_key(&id_a), false)
-            .unwrap();
-        queue
-            .queue(id_b.clone(), test_completion_key(&id_b), false)
-            .unwrap();
-
-        // Dequeue "model-a" then mark it as failed
-        let item = queue.dequeue().unwrap();
-        assert_eq!(item.id.model_id(), "model-a");
-
-        let error_msg = "connection timeout";
-        queue.mark_failed(item, error_msg);
-
-        // Snapshot: only "model-b" remains in pending, failed item in recent_failures
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.items.len(), 1);
-        assert_eq!(snapshot.items[0].id, "model-b");
-        assert_eq!(snapshot.pending_count, 1);
-
-        // Verify the failed item appears in recent_failures
-        assert_eq!(snapshot.recent_failures.len(), 1);
-        assert_eq!(snapshot.recent_failures[0].id, "model-a");
-        assert_eq!(snapshot.recent_failures[0].error, error_msg);
-    }
-
-    /// Test that `clear_failed()` drains the failed list.
-    #[test]
-    fn test_clear_failed_drains_list() {
-        let mut queue = DownloadQueue::new(5);
-
-        // Enqueue 2 items: "a" and "b"
-        let id_a = test_id("a", None);
-        let id_b = test_id("b", None);
-
-        queue
-            .queue(id_a.clone(), test_completion_key(&id_a), false)
-            .unwrap();
-        queue
-            .queue(id_b.clone(), test_completion_key(&id_b), false)
-            .unwrap();
-
-        // Dequeue both, then mark each as failed with different errors
-        let item_a = queue.dequeue().unwrap();
-        let item_b = queue.dequeue().unwrap();
-
-        queue.mark_failed(item_a, "error for a");
-        queue.mark_failed(item_b, "error for b");
-
-        // Verify 2 failed items
-        assert_eq!(queue.failed_len(), 2);
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.recent_failures.len(), 2);
-
-        // Clear the failed list
-        queue.clear_failed();
-
-        // Verify list is drained
-        assert_eq!(queue.failed_len(), 0);
-        let snapshot = queue.snapshot(None);
-        assert_eq!(snapshot.recent_failures.len(), 0);
+        let snapshot = queue.snapshot(0, Some(&current), None);
+        assert_eq!(u32::from(snapshot.active.is_some()), 1);
+        assert_eq!(snapshot.waiting.len(), 1);
     }
 
     /// Test that dequeue on an empty queue returns None gracefully.
@@ -913,20 +927,20 @@ mod tests {
 
         // Launch 3 concurrent tasks, each reading a snapshot
         let (s1, s2, s3) = tokio::join!(
-            async { queue.read().await.snapshot(None) },
-            async { queue.read().await.snapshot(None) },
-            async { queue.read().await.snapshot(None) },
+            async { queue.read().await.snapshot(0, None, None) },
+            async { queue.read().await.snapshot(0, None, None) },
+            async { queue.read().await.snapshot(0, None, None) },
         );
 
         // All three snapshots should succeed and agree on queued items count
-        assert_eq!(s1.items.len(), 2);
-        assert_eq!(s2.items.len(), 2);
-        assert_eq!(s3.items.len(), 2);
+        assert_eq!(s1.rows().count(), 2);
+        assert_eq!(s2.rows().count(), 2);
+        assert_eq!(s3.rows().count(), 2);
 
         // Each snapshot should have the same pending count
-        assert_eq!(s1.pending_count, 2);
-        assert_eq!(s2.pending_count, 2);
-        assert_eq!(s3.pending_count, 2);
+        assert_eq!(s1.waiting.len(), 2);
+        assert_eq!(s2.waiting.len(), 2);
+        assert_eq!(s3.waiting.len(), 2);
     }
 
     /// Test that enqueue can proceed while a snapshot reader is active.
@@ -950,7 +964,7 @@ mod tests {
         let reader_queue = Arc::clone(&queue);
         let reader = tokio::spawn(async move {
             let guard = reader_queue.read().await;
-            let snapshot = guard.snapshot(None);
+            let snapshot = guard.snapshot(0, None, None);
             drop(guard); // Release read lock before sleeping
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             snapshot
@@ -971,15 +985,15 @@ mod tests {
         let enqueued_id = enqueuer.await.unwrap();
 
         // Reader saw 1 item (before enqueue)
-        assert_eq!(reader_snapshot.items.len(), 1);
+        assert_eq!(reader_snapshot.rows().count(), 1);
 
         // Enqueuer completed successfully
         assert_eq!(enqueued_id.model_id(), "writer-item");
 
         // Final snapshot should show 2 items
-        let final_snapshot = queue.read().await.snapshot(None);
-        assert_eq!(final_snapshot.items.len(), 2);
-        assert_eq!(final_snapshot.pending_count, 2);
+        let final_snapshot = queue.read().await.snapshot(0, None, None);
+        assert_eq!(final_snapshot.rows().count(), 2);
+        assert_eq!(final_snapshot.waiting.len(), 2);
     }
 
     /// Test that concurrent enqueue writes are serialized safely by `RwLock`.

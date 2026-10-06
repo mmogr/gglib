@@ -1,16 +1,15 @@
-//! Tests that the queue counts downloads: its rows, positions, capacity and
-//! reordering.
+//! Tests that the queue counts downloads: its rows.
 
-use gglib_core::download::{CompletionKey, DownloadError, DownloadId, DownloadStatus};
+use gglib_core::download::{CompletionKey, DownloadId, DownloadPhase};
 use gglib_core::ports::ResolvedFile;
 
-use super::super::DownloadQueue;
+use super::super::{DownloadQueue, Reading, Running};
 
-fn id(model: &str) -> DownloadId {
+pub(super) fn id(model: &str) -> DownloadId {
     DownloadId::new(model, Some("Q8_0"))
 }
 
-fn key(id: &DownloadId) -> CompletionKey {
+pub(super) fn key(id: &DownloadId) -> CompletionKey {
     CompletionKey::HfFile {
         repo_id: id.model_id().to_string(),
         revision: "unspecified".to_string(),
@@ -20,7 +19,12 @@ fn key(id: &DownloadId) -> CompletionKey {
 }
 
 /// Queue `model` as one download of `files` files of 100 bytes each.
-fn add(queue: &mut DownloadQueue, model: &str, files: usize, running: Option<&DownloadId>) -> u32 {
+pub(super) fn add(
+    queue: &mut DownloadQueue,
+    model: &str,
+    files: usize,
+    running: Option<&DownloadId>,
+) -> u32 {
     let id = id(model);
     let files: Vec<_> = (0..files)
         .map(|n| ResolvedFile::with_size(format!("{model}-{n}.gguf"), 100))
@@ -31,7 +35,7 @@ fn add(queue: &mut DownloadQueue, model: &str, files: usize, running: Option<&Do
 }
 
 /// The pending files, each as its download and its number in the group.
-fn files(queue: &DownloadQueue) -> Vec<String> {
+pub(super) fn files(queue: &DownloadQueue) -> Vec<String> {
     queue
         .pending
         .iter()
@@ -42,12 +46,26 @@ fn files(queue: &DownloadQueue) -> Vec<String> {
         .collect()
 }
 
-/// Take the head of `pending` as the runner does, and answer its active row.
-fn start(queue: &mut DownloadQueue) -> gglib_core::download::QueuedDownload {
-    queue
-        .dequeue()
-        .unwrap()
-        .to_dto(1, DownloadStatus::Downloading)
+/// Take the head of `pending` as the runner does, and name its download as
+/// the running one.
+fn start(queue: &mut DownloadQueue) -> Running {
+    let item = queue.dequeue().unwrap();
+    Running {
+        id: item.id,
+        phase: DownloadPhase::Downloading,
+        file: item.shard_info,
+    }
+}
+
+/// Queue `model` as `shards` weights files of 100 bytes and a projector of
+/// 50.
+fn add_with_projector(queue: &mut DownloadQueue, model: &str, shards: usize) {
+    let id = id(model);
+    let mut files: Vec<_> = (0..shards)
+        .map(|n| ResolvedFile::with_size(format!("{model}-{n}.gguf"), 100))
+        .collect();
+    files.push(ResolvedFile::projector("mmproj-F16.gguf", 50, None));
+    queue.queue_sharded(&id, &key(&id), &files, None).unwrap();
 }
 
 // ── Rows ─────────────────────────────────────────────────────────────────
@@ -59,21 +77,21 @@ fn a_waiting_file_of_the_running_download_is_not_a_row() {
     add(&mut queue, "b", 1, None);
     let running = start(&mut queue);
 
-    let snapshot = queue.snapshot(Some(running));
+    let snapshot = queue.snapshot(1, Some(&running), None);
 
     let rows: Vec<_> = snapshot
-        .items
-        .iter()
-        .map(|row| (row.id.as_str(), row.status, row.position))
+        .rows()
+        .map(|row| (row.id.as_str(), row.phase, row.position))
         .collect();
     assert_eq!(
         rows,
         [
-            ("a:Q8_0", DownloadStatus::Downloading, 1),
-            ("b:Q8_0", DownloadStatus::Queued, 2),
+            ("a:Q8_0", DownloadPhase::Downloading, 1),
+            ("b:Q8_0", DownloadPhase::Queued, 2),
         ]
     );
-    assert_eq!((snapshot.active_count, snapshot.pending_count), (1, 1));
+    assert_eq!(snapshot.active.map(|row| row.id).as_deref(), Some("a:Q8_0"));
+    assert_eq!(snapshot.waiting.len(), 1);
 }
 
 #[test]
@@ -85,174 +103,144 @@ fn waiting_downloads_are_numbered_by_download() {
     let running = start(&mut queue);
     assert_eq!(files(&queue), ["a1", "a2", "b1"]);
 
-    let snapshot = queue.snapshot(Some(running));
+    let snapshot = queue.snapshot(1, Some(&running), None);
 
     let positions: Vec<_> = snapshot
-        .items
-        .iter()
+        .rows()
         .map(|row| (row.id.as_str(), row.position))
         .collect();
     assert_eq!(positions, [("z:Q8_0", 1), ("a:Q8_0", 2), ("b:Q8_0", 3)]);
-    assert_eq!(snapshot.pending_count, 2);
+    assert_eq!(snapshot.waiting.len(), 2);
 }
 
-/// A waiting row is the download's first file, so it says how many shards
-/// the download has.
+/// A waiting row says how many shards its download has and how big it is,
+/// and has moved nothing.
 #[test]
-fn a_waiting_row_carries_the_place_of_its_first_file() {
+fn a_waiting_row_carries_its_parts_and_its_size() {
     let mut queue = DownloadQueue::new(10);
     add(&mut queue, "a", 3, None);
 
-    let snapshot = queue.snapshot(None);
+    let snapshot = queue.snapshot(1, None, None);
 
-    assert_eq!(snapshot.items.len(), 1);
-    assert_eq!(snapshot.items[0].position, 1);
-    assert_eq!((snapshot.active_count, snapshot.pending_count), (0, 1));
-    let place = snapshot.items[0].shard_info.as_ref().unwrap();
-    assert_eq!((place.shard_index, place.total_shards), (0, 3));
+    assert!(snapshot.active.is_none());
+    let [row] = &snapshot.waiting[..] else {
+        panic!("one waiting row, not {:?}", snapshot.waiting);
+    };
+    assert_eq!((row.position, row.phase), (1, DownloadPhase::Queued));
+    assert_eq!((row.downloaded_bytes, row.total_bytes), (0, Some(300)));
+    assert_eq!(row.text.file.as_deref(), Some("3 parts"));
 }
 
-/// Between two files the running download is a downloading row at position
-/// 1, holding the bytes of the files already in.
+/// The running row carries what the meter reads, at position 1, and names
+/// the file it is on. Without a reading it has its group's size and no
+/// bytes.
 #[test]
-fn the_row_between_files_keeps_the_bytes_already_in() {
+fn the_running_row_carries_the_reading() {
     let mut queue = DownloadQueue::new(10);
     add(&mut queue, "a", 3, None);
-    queue.dequeue().unwrap();
+    let running = start(&mut queue);
+    let reading = Reading {
+        bytes: 150,
+        total: Some(300),
+        speed_bps: Some(2_000_000.0),
+        eta_seconds: Some(75.0),
+        notice: None,
+    };
 
-    let row = queue.between_files_row(&id("a")).unwrap();
+    let (row, _) = queue.download_rows(Some(&running), Some(&reading));
+    let row = row.unwrap();
 
-    assert_eq!(row.id, "a:Q8_0");
-    assert_eq!((row.status, row.position), (DownloadStatus::Downloading, 1));
-    assert_eq!((row.downloaded_bytes, row.total_bytes), (100, 300));
-    assert_eq!(row.shard_info.map(|place| place.shard_index), Some(1));
-    assert!(queue.between_files_row(&id("b")).is_none());
+    assert_eq!((row.downloaded_bytes, row.total_bytes), (150, Some(300)));
+    assert_eq!(row.percent, Some(50.0));
+    assert_eq!(row.speed_bps, Some(2_000_000.0));
+    assert_eq!(row.text.file.as_deref(), Some("part 1/3"));
+    assert_eq!(row.text.speed, "2.0 MB/s");
+
+    let (unread, _) = queue.download_rows(Some(&running), None);
+    let unread = unread.unwrap();
+    assert_eq!(
+        (unread.downloaded_bytes, unread.total_bytes),
+        (0, Some(300))
+    );
 }
 
-// ── Positions and capacity ───────────────────────────────────────────────
-
+/// Three shards and a projector: the shards are parts of three, the
+/// projector is the projector, and waiting it is a download of three parts.
 #[test]
-fn a_new_download_is_placed_behind_the_downloads_not_the_files() {
+fn shards_read_part_i_of_n_and_never_count_the_projector() {
     let mut queue = DownloadQueue::new(10);
-    let running = id("z");
+    add_with_projector(&mut queue, "a", 3);
 
-    assert_eq!(add(&mut queue, "a", 3, Some(&running)), 2);
-    assert_eq!(add(&mut queue, "b", 1, Some(&running)), 3);
+    let (_, waiting) = queue.download_rows(None, None);
+    assert_eq!(waiting[0].text.file.as_deref(), Some("3 parts"));
+    assert_eq!(waiting[0].total_bytes, Some(350));
 
-    let mut idle = DownloadQueue::new(10);
-    assert_eq!(add(&mut idle, "a", 3, None), 1);
-    assert_eq!(add(&mut idle, "b", 1, None), 2);
-}
-
-/// Ten shards and a projector are one download: they fit an empty queue of
-/// ten, and so do nine more downloads. The eleventh is refused.
-#[test]
-fn capacity_counts_waiting_downloads() {
-    let mut queue = DownloadQueue::new(10);
-    add(&mut queue, "big", 11, None);
-    for n in 1..10 {
-        add(&mut queue, &format!("m{n}"), 1, None);
+    let mut named = Vec::new();
+    while !queue.pending.is_empty() {
+        let running = start(&mut queue);
+        let (row, _) = queue.download_rows(Some(&running), None);
+        named.push(row.unwrap().text.file.unwrap());
     }
-
-    let eleventh = id("one-more");
-    let refused = queue.queue_sharded(
-        &eleventh,
-        &key(&eleventh),
-        &[ResolvedFile::new("f.gguf")],
-        None,
-    );
-
-    assert!(matches!(
-        refused,
-        Err(DownloadError::QueueFull { max_size: 10 })
-    ));
-    assert_eq!(queue.pending_len(), 20);
+    assert_eq!(named, ["part 1/3", "part 2/3", "part 3/3", "projector"]);
 }
 
-/// The running download's own pending files take no place in the queue.
+/// One weights file and a projector: the row says which of the two it is on.
+/// Waiting, it names no file: it is not a download in parts.
 #[test]
-fn the_running_downloads_files_take_no_place() {
+fn one_shard_plus_projector_reads_weights_then_projector() {
+    let mut queue = DownloadQueue::new(10);
+    add_with_projector(&mut queue, "a", 1);
+
+    let (_, waiting) = queue.download_rows(None, None);
+    assert_eq!(waiting[0].text.file, None);
+
+    let weights = start(&mut queue);
+    let (row, _) = queue.download_rows(Some(&weights), None);
+    assert_eq!(row.unwrap().text.file.as_deref(), Some("weights"));
+
+    let projector = start(&mut queue);
+    let (row, _) = queue.download_rows(Some(&projector), None);
+    assert_eq!(row.unwrap().text.file.as_deref(), Some("projector"));
+}
+
+/// A download of one file names no file at all.
+#[test]
+fn a_download_of_one_file_names_no_file() {
+    let mut queue = DownloadQueue::new(10);
+    add(&mut queue, "a", 1, None);
+    let running = start(&mut queue);
+
+    let (row, _) = queue.download_rows(Some(&running), None);
+
+    assert_eq!(row.unwrap().text.file, None);
+}
+
+/// Between two files the next file of the running download is the head of
+/// the queue, and of no other download.
+#[test]
+fn the_next_file_of_the_running_download_heads_the_queue() {
+    let mut queue = DownloadQueue::new(10);
+    add(&mut queue, "a", 3, None);
+    queue.dequeue().unwrap();
+
+    let next = queue.next_file_of(&id("a")).unwrap();
+
+    assert_eq!(next.shard_index, 1);
+    assert!(queue.next_file_of(&id("b")).is_none());
+}
+
+/// The queue is full when as many downloads wait as may, and the running
+/// download is not one of them.
+#[test]
+fn full_counts_the_waiting_downloads() {
     let mut queue = DownloadQueue::new(1);
-    add(&mut queue, "a", 3, None);
-    queue.dequeue().unwrap();
-    let running = id("a");
-
-    add(&mut queue, "b", 1, Some(&running));
-
-    let full = id("c");
-    let refused = queue.queue_sharded(
-        &full,
-        &key(&full),
-        &[ResolvedFile::new("f.gguf")],
-        Some(&running),
-    );
-    assert!(matches!(refused, Err(DownloadError::QueueFull { .. })));
-}
-
-// ── Reordering ───────────────────────────────────────────────────────────
-
-#[test]
-fn reorder_by_download_position() {
-    let mut queue = DownloadQueue::new(10);
-    let running = id("z");
-    add(&mut queue, "a", 2, Some(&running));
-    add(&mut queue, "b", 1, Some(&running));
-    add(&mut queue, "c", 1, Some(&running));
-
-    let position = queue.reorder(&id("c"), 3, Some(&running)).unwrap();
-
-    assert_eq!(position, 3);
-    assert_eq!(files(&queue), ["a1", "a2", "c1", "b1"]);
-}
-
-#[test]
-fn reorder_never_splits_the_running_download() {
-    let mut queue = DownloadQueue::new(10);
     add(&mut queue, "a", 2, None);
-    add(&mut queue, "b", 1, None);
-    add(&mut queue, "c", 1, None);
-    queue.dequeue().unwrap();
-    let running = id("a");
-    assert_eq!(files(&queue), ["a2", "b1", "c1"]);
+    let running = start(&mut queue);
+    assert!(!queue.snapshot(1, Some(&running), None).full);
 
-    let position = queue.reorder(&id("c"), 2, Some(&running)).unwrap();
+    add(&mut queue, "b", 3, Some(&running.id));
 
-    assert_eq!(position, 2);
-    assert_eq!(files(&queue), ["a2", "c1", "b1"]);
-
-    // Position 1 is the running download's: a request for it lands on the
-    // first waiting place.
-    let position = queue.reorder(&id("b"), 1, Some(&running)).unwrap();
-
-    assert_eq!(position, 2);
-    assert_eq!(files(&queue), ["a2", "b1", "c1"]);
-}
-
-#[test]
-fn the_running_download_is_not_moved() {
-    let mut queue = DownloadQueue::new(10);
-    add(&mut queue, "a", 3, None);
-    add(&mut queue, "b", 1, None);
-    queue.dequeue().unwrap();
-    let running = id("a");
-
-    let position = queue.reorder(&running, 3, Some(&running)).unwrap();
-
-    assert_eq!(position, 1);
-    assert_eq!(files(&queue), ["a2", "a3", "b1"]);
-}
-
-/// A position past the end is the last place, and that is the position
-/// answered.
-#[test]
-fn a_position_past_the_end_is_the_last_place() {
-    let mut queue = DownloadQueue::new(10);
-    add(&mut queue, "a", 2, None);
-    add(&mut queue, "b", 1, None);
-    add(&mut queue, "c", 2, None);
-
-    let position = queue.reorder(&id("a"), 9, None).unwrap();
-
-    assert_eq!(position, 3);
-    assert_eq!(files(&queue), ["b1", "c1", "c2", "a1", "a2"]);
+    let snapshot = queue.snapshot(2, Some(&running), None);
+    assert!(snapshot.full);
+    assert_eq!((snapshot.revision, snapshot.max_size), (2, 1));
 }
