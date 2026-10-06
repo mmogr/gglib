@@ -37,7 +37,6 @@ const conversation: ConversationSummary = {
   title: 'Test',
   model_id: null,
   system_prompt: null,
-  settings: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 };

@@ -10,16 +10,15 @@
 import type { LoadResponse } from '../../../types/generated/LoadResponse';
 import type { ModelLookup } from '../../../types/generated/ModelLookup';
 import type { PairedModels } from '../../../types/generated/PairedModels';
-import { REMOTE_MODELS_PATH } from '../../api/routes';
 import { get, post } from './client';
 
 function pairedModelPath(id: number): string {
-  return `${REMOTE_MODELS_PATH}/${encodeURIComponent(String(id))}`;
+  return `/api/remote/models/${encodeURIComponent(String(id))}`;
 }
 
 /** Every model the paired machine lists, with that machine and what may be done there. */
 export async function listPairedModels(): Promise<PairedModels> {
-  return get<PairedModels>(REMOTE_MODELS_PATH);
+  return get<PairedModels>('/api/remote/models');
 }
 
 /** One of the paired machine's models, by its id there. */

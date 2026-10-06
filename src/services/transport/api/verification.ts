@@ -10,6 +10,7 @@ import type {
   UpdateCheckResult,
   CheckUpdatesResponse,
 } from '../types/verification';
+import type { RepairRequest } from '../../../types/generated/RepairRequest';
 
 /**
  * Verify the integrity of a model by computing SHA256 hashes.
@@ -41,5 +42,7 @@ export async function repairModel(
   modelId: ModelId,
   shards?: number[]
 ): Promise<{ message: string }> {
-  return post<{ message: string }>(`/api/models/${modelId}/repair`, { shards });
+  // An absent `shards` is `None` to the daemon: repair every corrupt shard.
+  const body: Partial<RepairRequest> = { shards };
+  return post<{ message: string }>(`/api/models/${modelId}/repair`, body);
 }

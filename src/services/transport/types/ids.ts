@@ -1,6 +1,6 @@
 /**
- * Shared ID types for transport layer.
- * Using branded types for type safety while keeping numeric/string underlying types.
+ * Shared ID types for transport layer. Plain aliases: they name what a number
+ * or a string identifies, and the compiler treats one as any other.
  */
 
 // Core entity IDs (database-backed, always numeric)

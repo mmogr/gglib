@@ -24,10 +24,10 @@ The services module contains the TypeScript client layer for the gglib GUI front
 │  │  API layer  │  │ HTTP + SSE  │  │ OS-specific │  │MCP tooling  │                 │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
 │                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │   server/   │  │    api/     │  │  registry   │  │  decoders/  │                 │
-│  │ Safe calls  │  │   Routes    │  │Server state │  │Event decode │                 │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                                  │
+│  │   server/   │  │  registry   │  │  decoders/  │                                  │
+│  │ Safe calls  │  │Server state │  │Event decode │                                  │
+│  └─────────────┘  └─────────────┘  └─────────────┘                                  │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                        │
@@ -58,7 +58,6 @@ not because it belongs here.
 | [`platform/`](platform/) | Platform-specific utilities (file dialogs, URL opening, menu sync) |
 | [`tools/`](tools/) | MCP tool integration and builtin tool registry |
 | [`server/`](server/) | Safe action wrappers for server operations |
-| [`api/`](api/) | Route definitions for API endpoints |
 | [`decoders/`](decoders/) | Runtime decoders that validate event payloads before ingestion |
 
 ## Key Files

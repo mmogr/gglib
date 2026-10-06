@@ -20,35 +20,38 @@ import {
 import type {
   AgenticEvalReport,
   AgenticTaskComparison,
+  ArmDelta,
   ArmScores,
   TuneTaskResult,
 } from '../../../src/types/benchmark';
+import { agenticReport, armDelta, armScores, taskResult } from '../fixtures/agentic';
 
 function arm(composite: number): ArmScores {
-  return {
+  return armScores({
     tool_accuracy: 0.5,
     loop_eligible: 1,
     task_completion: 0.5,
     composite,
     total_wall_ms: 1000,
-  } as ArmScores;
+  });
+}
+
+/** A delta on the two axes these fixtures score, and their composite. */
+function delta(composite: number): ArmDelta {
+  return armDelta({ tool_accuracy: 0, task_completion: 0, composite });
 }
 
 function report(overrides: Partial<AgenticEvalReport>): AgenticEvalReport {
-  return {
-    model_name: 'm',
-    param_count_b: 4,
-    ctx_size: 8192,
+  return agenticReport({
     raw: arm(0.5),
     gglib: arm(0.6),
-    delta: { tool_accuracy: 0, task_completion: 0, composite: 0.1 },
-    tasks: [],
+    delta: delta(0.1),
     ...overrides,
-  } as AgenticEvalReport;
+  });
 }
 
 function run(passed: boolean): TuneTaskResult {
-  return { passed } as TuneTaskResult;
+  return taskResult({ passed });
 }
 
 function comparison(raw: boolean[], gglib: boolean[]): AgenticTaskComparison {
@@ -94,11 +97,11 @@ describe('effectVerdict', () => {
     const base = { raw: arm(0.5), raw_replicate: arm(0.53125) };
     expect(EFFECT_NOISE_RATIO).toBe(2.0);
     const exceeds = effectVerdict(
-      report({ ...base, delta: { tool_accuracy: 0, task_completion: 0, composite: 0.0625 } }),
+      report({ ...base, delta: delta(0.0625) }),
     );
     expect(exceeds?.kind).toBe('exceeds_noise');
     const within = effectVerdict(
-      report({ ...base, delta: { tool_accuracy: 0, task_completion: 0, composite: 0.046875 } }),
+      report({ ...base, delta: delta(0.046875) }),
     );
     expect(within?.kind).toBe('within_noise');
   });
@@ -108,7 +111,7 @@ describe('effectVerdict', () => {
       report({
         raw: arm(0.5),
         raw_replicate: arm(0.5),
-        delta: { tool_accuracy: 0, task_completion: 0, composite: 0 },
+        delta: delta(0),
       }),
     );
     expect(v?.kind).toBe('within_noise');

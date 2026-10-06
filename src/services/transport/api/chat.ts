@@ -15,6 +15,7 @@ import type {
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
 import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
+import type { UpdateConversationRequest } from '../../../types/generated/UpdateConversationRequest';
 
 // Re-export the constant for convenience
 export { DEFAULT_TITLE_GENERATION_PROMPT };
@@ -49,7 +50,8 @@ export async function updateConversationTitle(
   id: ConversationId,
   title: string
 ): Promise<void> {
-  await put<void>(`/api/conversations/${id}`, { title });
+  const body: UpdateConversationRequest = { title };
+  await put<void>(`/api/conversations/${id}`, body);
 }
 
 /**
@@ -59,7 +61,9 @@ export async function updateConversationSystemPrompt(
   id: ConversationId,
   systemPrompt: string | null
 ): Promise<void> {
-  await put<void>(`/api/conversations/${id}`, { system_prompt: systemPrompt });
+  // No `title` key: the daemon leaves a field it is not sent as it is.
+  const body: Partial<UpdateConversationRequest> = { system_prompt: systemPrompt };
+  await put<void>(`/api/conversations/${id}`, body);
 }
 
 /**

@@ -98,7 +98,6 @@ describe('every place a database time is shown', () => {
         title: 'A chat',
         model_id: null,
         system_prompt: null,
-        settings: null,
         created_at: SAVED,
         updated_at: SAVED,
       };

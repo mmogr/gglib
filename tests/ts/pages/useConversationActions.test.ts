@@ -29,7 +29,6 @@ const open: ConversationSummary = {
   title: 'Why the build broke',
   model_id: null,
   system_prompt: null,
-  settings: null,
   created_at: '2026-09-30 09:12:30',
   updated_at: '2026-09-30 09:13:07',
 };

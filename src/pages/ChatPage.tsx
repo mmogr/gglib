@@ -244,7 +244,6 @@ export default function ChatPage(props: ChatPageProps) {
         title,
         model_id: null,
         system_prompt: systemPrompt,
-        settings: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

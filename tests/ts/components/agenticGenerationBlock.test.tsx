@@ -16,9 +16,10 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { AgenticReport } from '../../../src/components/Benchmark/Agentic/AgenticReport';
 import type { AgenticEvalReport, ArmScores, GeneratedOutput } from '../../../src/types/benchmark';
+import { agenticReport, armScores } from '../fixtures/agentic';
 
 const arm = (generated: Partial<GeneratedOutput>, overrides: Partial<ArmScores> = {}): ArmScores =>
-  ({
+  armScores({
     tool_accuracy: 0.9,
     loop_eligible: 2,
     loop_avoidance: 1.0,
@@ -41,19 +42,17 @@ const arm = (generated: Partial<GeneratedOutput>, overrides: Partial<ArmScores> 
       ...generated,
     },
     ...overrides,
-  }) as ArmScores;
+  });
 
 const report = (gglib: ArmScores): AgenticEvalReport =>
-  ({
+  agenticReport({
     model_name: 'Qwen3-4B',
     param_count_b: 4,
     ctx_size: 32768,
     seeds: [1, 2, 3],
     raw: arm({ reasoning_chars: 100, answer_chars: 400 }),
     gglib,
-    delta: {},
-    tasks: [],
-  }) as AgenticEvalReport;
+  });
 
 describe('AgenticReport — what was generated', () => {
   it('separates a thinking run from a repeating one', () => {

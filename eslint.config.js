@@ -184,6 +184,27 @@ export default [
     },
   },
   {
+    // `src/types` sits below the services and imports none of them. That is
+    // what keeps the two type barrels apart: `services/transport/types` may
+    // import a shape from here, so a re-export in the other direction would
+    // give one type two homes and the pair an import cycle.
+    files: ['src/types/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/services/**'],
+              message:
+                'src/types imports nothing from src/services. A type the transport owns is imported from services/transport/types where it is used.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Allow specific patterns
     files: ['src/**/*.{ts,tsx}'],
     rules: {

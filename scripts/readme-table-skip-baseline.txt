@@ -22,7 +22,6 @@ tests/ts/components/README.md
 tests/ts/hooks/README.md
 tests/ts/hooks/useGglibRuntime/README.md
 tests/ts/services/README.md
-tests/ts/services/api/README.md
 tests/ts/services/clients/README.md
 tests/ts/services/server/README.md
 tests/ts/services/tools/README.md

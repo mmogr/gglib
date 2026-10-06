@@ -3,6 +3,7 @@
  * Handles conversations and messages for the chat feature.
  */
 
+import type { Conversation } from '../../../types/generated/Conversation';
 import type { ConversationSettings } from '../../../types/generated/ConversationSettings';
 import type { Message } from '../../../types/generated/Message';
 import type { ModelRef } from '../../../types/generated/ModelRef';
@@ -27,17 +28,11 @@ export type { ConversationSettings };
 export type ChatSource = 'this' | 'far';
 
 /**
- * Summary of a conversation for listing.
+ * A conversation as `GET /api/conversations` lists one: the Rust
+ * `Conversation`, as generated from it. One with no settings has no
+ * `settings` key.
  */
-export interface ConversationSummary {
-  id: ConversationId;
-  title: string;
-  model_id: ModelId | null;
-  system_prompt: string | null;
-  settings: ConversationSettings | null;
-  created_at: string;
-  updated_at: string;
-}
+export type ConversationSummary = Conversation;
 
 /**
  * Metadata attached to a chat message.

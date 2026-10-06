@@ -6,21 +6,24 @@
 import { del, get, patch, post, put } from '../client';
 import { TransportError } from '../../errors';
 import type { ModelId } from '../../types/ids';
+import type { AddModelParams, UpdateModelBody, UpdateModelParams } from '../../types/models';
 import type {
   GgufModel,
   ModelDetail,
-  AddModelParams,
-  UpdateModelParams,
   ModelFilterOptions,
-  ProjectorChoice,
-  SystemMemoryInfo,
   ModelsDirectoryInfo,
   RetagResponse,
+  SamplingExplanation,
   SetCapabilitiesRequest,
+  SystemMemoryInfo,
   UpgradeCheck,
   UpgradeOutcome,
-} from '../../types/models';
-import type { SamplingExplanation } from '../../../../types';
+} from '../../../../types';
+import type { AddModelRequest } from '../../../../types/generated/AddModelRequest';
+import type { ProjectorChoice } from '../../../../types/generated/ProjectorChoice';
+import type { RemoveModelRequest } from '../../../../types/generated/RemoveModelRequest';
+import type { RetagBody } from '../../../../types/generated/RetagBody';
+import type { UpdateModelsDirectoryRequest } from '../../../../types/generated/UpdateModelsDirectoryRequest';
 
 /**
  * List all local models.
@@ -88,31 +91,31 @@ export async function explainModelSampling(
  * Add a new model from a local file.
  */
 export async function addModel(params: AddModelParams): Promise<GgufModel> {
-  return post<GgufModel>('/api/models', {
-    file_path: params.filePath,
-    name: params.name,
-  });
+  const body: AddModelRequest = { file_path: params.filePath };
+  return post<GgufModel>('/api/models', body);
 }
 
 /**
  * Remove a model.
  */
 export async function removeModel(id: ModelId): Promise<void> {
-  await del<void>(`/api/models/${id}`, { force: false });
+  const body: RemoveModelRequest = { force: false };
+  await del<void>(`/api/models/${id}`, body);
 }
 
 /**
  * Update model metadata.
  */
 export async function updateModel(params: UpdateModelParams): Promise<GgufModel> {
-  return put<GgufModel>(`/api/models/${params.id}`, {
+  const body: UpdateModelBody = {
     name: params.name,
     quantization: params.quantization,
     filePath: params.filePath,
     inferenceDefaults: params.inferenceDefaults,
     serverDefaults: params.serverDefaults,
     projectorPath: params.projectorPath,
-  });
+  };
+  return put<GgufModel>(`/api/models/${params.id}`, body);
 }
 
 /**
@@ -129,7 +132,8 @@ export async function listProjectorChoices(id: ModelId): Promise<ProjectorChoice
  * (`gglib model retag`). `full` rebuilds the system-tag namespace.
  */
 export async function retagModel(modelId: number, full = false): Promise<RetagResponse> {
-  return post<RetagResponse>(`/api/models/${modelId}/retag`, { full });
+  const body: RetagBody = { full };
+  return post<RetagResponse>(`/api/models/${modelId}/retag`, body);
 }
 
 /** Set or clear a model's capability flags. Returns the updated model. */
@@ -179,5 +183,6 @@ export async function getModelsDirectory(): Promise<ModelsDirectoryInfo> {
  * Set models directory path.
  */
 export async function setModelsDirectory(path: string): Promise<void> {
-  await put<void>('/api/config/system/models-directory', { path });
+  const body: UpdateModelsDirectoryRequest = { path };
+  await put<void>('/api/config/system/models-directory', body);
 }

@@ -5,6 +5,7 @@
 
 import { get, post, del } from './client';
 import type { ModelId } from '../types/ids';
+import type { AddTagRequest } from '../../../types/generated/AddTagRequest';
 
 /**
  * List all available tags.
@@ -24,7 +25,8 @@ export async function getModelTags(modelId: ModelId): Promise<string[]> {
  * Add a tag to a model (creates tag if it doesn't exist).
  */
 export async function addModelTag(modelId: ModelId, tag: string): Promise<void> {
-  await post<void>(`/api/models/${modelId}/tags`, { tag });
+  const body: AddTagRequest = { tag };
+  await post<void>(`/api/models/${modelId}/tags`, body);
 }
 
 /**
