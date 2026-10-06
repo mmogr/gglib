@@ -1,8 +1,5 @@
 # normalize
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-normalize-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-normalize-complexity.json)
-
 <!-- module-docs:start -->
 
 Universal local-LLM consistency layer.

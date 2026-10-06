@@ -1,8 +1,5 @@
 # Loop Detection
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-loop_detection-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-loop_detection-complexity.json)
-
 <!-- module-docs:start -->
 
 Tool-call loop detection via FNV-1a batch signatures.

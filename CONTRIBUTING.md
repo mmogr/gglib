@@ -390,9 +390,6 @@ If part of a streaming pipeline, a table of consumers.
 ```markdown
 # download
 
-![LOC](https://img.shields.io/endpoint?url=...)
-![Complexity](https://img.shields.io/endpoint?url=...)
-
 <!-- module-docs:start -->
 
 Pre-built llama.cpp binary download support.
@@ -430,6 +427,8 @@ A new single-file module needs only its `//!` block. A new directory module:
 2. Add `#![doc = include_str!("README.md")]` as the **first line** of `mod.rs`.
 3. Fill the `<!-- module-docs:start/end -->` section with a description, ownership boundaries, and any consumer tables.
 4. Run `bash scripts/check_readmes.sh --strict` locally — CI enforces this and will fail if the README is missing, incomplete (contains `TODO:`), or if `mod.rs` is missing the `include_str!` attribute.
+
+`./scripts/generate_submodule_readmes.sh --create` writes a stub wherever a README is missing in a directory below a crate's `src/`, below `src-tauri/src/` or below the TypeScript `src/` (except `src/types/generated/`, which is ts-rs output that `check_readmes.sh` also skips); `--dry-run` lists them without writing. A stub has a title and the `module-docs` markers around the `//!` text of the directory's `mod.rs`, or around a `TODO:` line when there is none. In a directory it stubs whose `mod.rs` lacks the `include_str!` line, the script adds the line and puts a `// MIGRATION` comment above any `//!` block: delete that block and the comment yourself. It never touches a README that already exists.
 
 #### Clippy and README content
 
@@ -526,70 +525,32 @@ A brief that carries work between sessions is not an ADR and does not need one's
 
 ## Badges Pipeline
 
-Badges in crate READMEs are **not** static images. They are shields.io endpoint badges that read JSON files from a dedicated `badges` branch. Do not author or edit badge JSON files manually.
+The version, test, coverage, LOC and complexity badges in the root README, in `crates/README.md` and in each crate's own `README.md` are shields.io endpoint badges that read JSON files from the `badges` branch. `badges.yml` writes those files when a CI or Coverage run on `main` completes: do not write or edit one by hand. No README below a crate's top level carries such a badge, because `badges.yml` writes no file for a directory.
 
-### How the pipeline works
+For each crate named in `ALL_CRATES` in `badges.yml` it writes `<crate>-<metric>.json`:
 
+| `<metric>` | Counted from |
+|---|---|
+| `tests` | The CI run's `rust-test-<crate>.txt` (see below) |
+| `coverage` | The Coverage run's `<crate>-lcov.info`, which `coverage.yml` makes only for the crates in its own lists |
+| `loc`, `complexity` | `scc` over `crates/<crate>` on `main` |
+
+The root README's version badge reads `version.json`, written from `Cargo.toml`.
+
+A new crate's README carries one line per metric, with its own name in place of `gglib-core`:
+
+```markdown
+![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json)
 ```
-CI run (ci.yml)
-  └─ cargo test --no-run --message-format=json   (builds, and names each binary's crate)
-  └─ cargo test --no-fail-fast | tee rust-test-output.txt
-  └─ scripts/split_test_output.py                (divides that output per crate)
-  └─ uploads artifacts: test-results, boundary-status.json, ts-test-results.json
-        │
-        ▼
-badges.yml (triggers after ci.yml completes)
-  └─ downloads CI artifacts
-  └─ generates badge JSON files (tests, boundaries, TS tests)
-  └─ commits JSON to the 'badges' branch
 
-coverage.yml (runs on push to main)
-  └─ generates lcov.info via cargo-llvm-cov
-  └─ triggers badges.yml (coverage variant)
-  └─ per-crate and per-module coverage JSONs pushed to 'badges' branch
-```
+Add the crate to `ALL_CRATES`, and to the lists in `coverage.yml` if it is to have a coverage badge. A badge has nothing to read until the first run on `main` that writes its file.
 
 ### Where the per-crate test numbers come from
 
-`badges.yml` counts tests out of one `rust-test-<crate>.txt` per crate. Those files used to
-come from running `cargo test -p <crate>` fifteen times after the aggregate run — 23m15s of a
-57m job, and wrong besides: naming a crate with `-p` changes feature unification, so
-`cargo test -p gglib-runtime` ran 329 tests where the workspace build runs 352.
+`scripts/split_test_output.py` cuts one `rust-test-<crate>.txt` per crate out of the single workspace `cargo test` run, by the package each test binary belongs to. Two consequences worth knowing:
 
-They now come from `scripts/split_test_output.py`, which divides the single workspace run's
-output by the package each test binary belongs to. Two consequences worth knowing:
-
-* **The crate list is no longer hand-kept.** Every package with test targets gets a file. If
-  you add a crate, its badge works as soon as you add its name to `ALL_CRATES` in
-  `badges.yml` — nothing needs adding to `ci.yml`.
-* **Do not add `--all-targets` to the test run.** It would silently drop the doctests, which
-  that run is now the only thing executing. `split_test_output.py` fails a green run that
-  produced no `Doc-tests` sections, so the mistake is caught rather than absorbed.
-
-Shields.io resolves badge URLs like:
-```
-https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json
-```
-
-### Adding a badge to a new crate README
-
-Badge URLs follow the pattern `gglib-{crate-name}-{metric}.json` on the `badges` branch. For a new crate `gglib-foo`:
-
-```markdown
-![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-tests.json)
-![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-coverage.json)
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-complexity.json)
-```
-
-The badge JSON files will appear on the `badges` branch automatically after the first CI run that includes the new crate. Until then, the badges render as "unknown" — that is expected.
-
-To scaffold READMEs for new directories, use `scripts/generate_submodule_readmes.sh --create`. It writes a stub wherever a README is missing in a directory below a crate's `src/`, below `src-tauri/src/` or below the TypeScript `src/` (except `src/types/generated/` and the directories below it, which are ts-rs output that `scripts/check_readmes.sh` also skips), and in `tests/` or a directory below it. A stub under a `src/` has a title, LOC and complexity badges, and the `module-docs` markers around the `//!` text of the directory's `mod.rs`, or around a `TODO:` line when there is none; a stub under `tests/` has a title and a `TODO:` line. For each directory it stubs whose `mod.rs` lacks `#![doc = include_str!("README.md")]`, it adds that line and puts a `// MIGRATION` comment above any `//!` block. It never deletes a `//!` block: delete it, and the comment, yourself, since a module with a README carries no `//!` block (see Surface 2). It never touches a README that already exists.
-
-```bash
-./scripts/generate_submodule_readmes.sh --create           # create missing READMEs
-./scripts/generate_submodule_readmes.sh --create --dry-run # preview without writing
-```
+* **The `test` job keeps no crate list.** Every package with test targets gets a file.
+* **Do not add `--all-targets` to the test run.** It would silently drop the doctests, which that run is the only thing executing. `split_test_output.py` fails a green run that produced no `Doc-tests` sections, so the mistake is caught rather than absorbed.
 
 ---
 
@@ -745,7 +706,7 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 | Job | Runs | What it enforces |
 |---|---|---|
 | `fmt` | `cargo fmt --all -- --check` | Consistent code style |
-| `quality` | `./scripts/check_workflow_yaml.sh`, `npm run lint -- --max-warnings 0`, `npm run typecheck` | No duplicate key in any YAML file under `.github/`, plus that script's `bump-version.yml` and `badges.yml` checks; the ESLint rules, warnings included; TypeScript types |
+| `quality` | `./scripts/check_workflow_yaml.sh`, `npm run lint -- --max-warnings 0`, `npm run typecheck` | No duplicate key in any YAML file under `.github/`, plus that script's `bump-version.yml` check; the ESLint rules, warnings included; TypeScript types |
 | `boundaries` | `./scripts/check_boundaries.sh`, which also runs `check_readmes.sh --strict`; `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
 | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_context_floor.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_lint_inheritance.sh`, `check_ts_bindings.sh`, `check_readme_tables.py`, all in `scripts/` | Tauri commands only in the approved files; frontend `invoke()` only with allowlisted commands; no transport branching in frontend client modules; no catch-all over `ParamSource`; nothing outside the resolver fabricates the context floor; every setting reachable from a surface; no discarded `sqlx` result; the Rust and TypeScript/CSS file-size ratchets; every crate inherits the workspace lints, and allows no more lints than its baseline; the ts-rs binding annotations; TypeScript README tables that match their directories |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |

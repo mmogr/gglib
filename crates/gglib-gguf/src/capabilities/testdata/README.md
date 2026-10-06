@@ -1,8 +1,5 @@
 # testdata
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-testdata-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-testdata-complexity.json)
-
 <!-- module-docs:start -->
 
 Fixture chat templates for `template_probe` tests, modeled on the

@@ -1,8 +1,5 @@
 # ConsoleLogPanel
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ConsoleLogPanel-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ConsoleLogPanel-complexity.json)
-
 <!-- module-docs:start -->
 
 Terminal-style log viewer for live llama-server output. Parses ANSI escape codes for colour rendering, implements smart auto-scroll (follows tail unless the user has scrolled up), and provides copy-to-clipboard and clear controls.

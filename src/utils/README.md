@@ -2,9 +2,6 @@
 
 # Utilities
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-utils-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-utils-complexity.json)
-
 Shared TypeScript helpers used across the React frontend.
 
 ## Files

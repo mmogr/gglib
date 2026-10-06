@@ -1,8 +1,5 @@
 # parsers
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-normalize-parsers-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-normalize-parsers-complexity.json)
-
 <!-- module-docs:start -->
 
 Submodule index for concrete [`super::parser::ToolCallParser`] implementations.

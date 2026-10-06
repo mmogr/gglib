@@ -1,8 +1,5 @@
 # api
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-api-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-api-complexity.json)
-
 <!-- module-docs:start -->
 
 HTTP API transport implementations for all backend domains. Wraps `fetch` with automatic bearer-token injection, retry logic on 401/network failures, and API session discovery in Tauri environments. A request `client.ts`'s JSON helpers cannot carry (a stream, raw bytes) goes through its `apiFetch`, the one authenticated `fetch`; a stream's events are read by `readSse` in `utils/sse.ts`. `createApiTransport()` spreads these modules into the object `getTransport()` returns — the models pair through `createModelsApi()`, the rest as namespaces.

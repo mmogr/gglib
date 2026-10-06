@@ -1,8 +1,5 @@
 # GlobalDownloadStatus
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-GlobalDownloadStatus-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-GlobalDownloadStatus-complexity.json)
-
 <!-- module-docs:start -->
 
 Page-level download card: the running download's bar and words, a chip for the downloads waiting behind it, and a dismissible summary of the last queue run.

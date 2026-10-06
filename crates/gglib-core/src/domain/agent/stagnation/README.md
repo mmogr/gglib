@@ -1,8 +1,5 @@
 # stagnation
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-stagnation-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-stagnation-complexity.json)
-
 <!-- module-docs:start -->
 
 Text stagnation detection for the agentic loop.

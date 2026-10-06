@@ -1,8 +1,5 @@
 # useChatPersistence
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-hooks-useChatPersistence-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-hooks-useChatPersistence-complexity.json)
-
 <!-- module-docs:start -->
 
 Turning a conversation's saved rows into the messages the thread shows. The daemon writes every turn: the user's message when a run starts and the reply when it ends (`PUT /api/runs/{id}?kind=agent`). The page saves no turn; it loads rows, deletes them (the delete button), and renames conversations. An edit or a regenerate replaces rows through the run itself (`replace_from`).

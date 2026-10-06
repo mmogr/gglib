@@ -1,8 +1,5 @@
 # mcp
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-mcp-complexity.json)
-
 <!-- module-docs:start -->
 
 MCP Streamable HTTP gateway for the proxy.

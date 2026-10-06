@@ -1,8 +1,5 @@
 # events
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-events-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-events-complexity.json)
-
 <!-- module-docs:start -->
 
 Real-time event subscription layer over SSE (Server-Sent Events), the one implementation for every mode — no Tauri-event branch remains *in this layer*. Presents a unified `subscribe(eventType, handler)` interface, and `onEventStreamOpen(handler)`, which fires each time the connection opens, reconnections included. The SSE implementation uses a single pooled connection to avoid exhausting the browser's HTTP/1.1 per-origin connection limit (6 slots).

@@ -1,8 +1,5 @@
 # messages
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-utils-messages-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-utils-messages-complexity.json)
-
 <!-- module-docs:start -->
 
 Message conversion and serialization utilities — the single source of truth for translating between the `@assistant-ui/react` runtime's `ThreadMessage`, database persistence rows, and markdown transcripts. Ensures identical transformation logic everywhere, preventing inconsistencies between display, storage, and export.

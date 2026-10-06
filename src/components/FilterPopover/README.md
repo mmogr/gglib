@@ -1,8 +1,5 @@
 # FilterPopover
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-FilterPopover-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-FilterPopover-complexity.json)
-
 <!-- module-docs:start -->
 
 Popover containing model library filter controls: sort field and direction selectors, dual-handle `RangeSlider` components for parameter count, context length, and token generation speed, plus checkboxes for quantization types and user tags.

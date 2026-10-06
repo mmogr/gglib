@@ -22,11 +22,10 @@ the package for every artifact it builds. That stream is emitted on a fully
 warm build too, with `"fresh": true` and `executable` still populated, so the
 map does not evaporate when nothing recompiles.
 
-Lines are copied out **verbatim**, ANSI escapes and all. `badges.yml` parses
-two different things out of these files — `test result: ok. N passed` for the
-per-crate badges and `^test <module>::<name> ... ok` for some fifty per-module
-ones — and the cheapest guarantee that both keep working is that the bytes are
-the ones cargo wrote.
+Lines are copied out **verbatim**, ANSI escapes and all. `badges.yml` counts
+`test result: ok. N passed` and `N failed` out of these files for the
+per-crate badges, and the cheapest guarantee that it keeps working is that the
+bytes are the ones cargo wrote.
 
 What this does NOT do, so nobody reads more into a pass than is there:
 

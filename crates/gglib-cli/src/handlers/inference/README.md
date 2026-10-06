@@ -1,8 +1,5 @@
 # inference
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-inference-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-inference-complexity.json)
-
 <!-- module-docs:start -->
 
 Inference command handlers.

@@ -1,8 +1,5 @@
 # ConversationListPanel
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ConversationListPanel-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ConversationListPanel-complexity.json)
-
 <!-- module-docs:start -->
 
 The chat page's left side: a narrow rail (new chat, search, the list's fold, the machine that answers) and the conversation list beside the notebook, with search filtering, relative timestamps and per-item delete. The list is visible by default; `LIST_POLICY` in `useListFold.ts` is the one line that makes it rail-only or always visible.

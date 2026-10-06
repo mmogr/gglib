@@ -1,8 +1,5 @@
 # Context Pruning
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-context_pruning-complexity.json)
-
 <!-- module-docs:start -->
 
 Context-budget pruning for the agentic loop.

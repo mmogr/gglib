@@ -1,8 +1,5 @@
 # platform
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-platform-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-platform-complexity.json)
-
 <!-- module-docs:start -->
 
 OS-specific utilities that cannot be cleanly abstracted through the transport layer: shell integration (URL opening, native file dialogs), menu bar state synchronization, llama.cpp binary management, and the unified application logger. Modules here are intentionally marked `TRANSPORT_EXCEPTION` — they touch OS APIs directly rather than routing through the standard transport interface.

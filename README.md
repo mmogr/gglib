@@ -289,6 +289,7 @@ facades → infrastructure → `gglib-agent` → core, and
 
 ## Documentation
 
+- [CLI command reference](docs/cli.md)
 - [Client configuration and images](docs/clients.md)
 - [Sampling resolution](docs/sampling.md)
 - [Tags & capability detection](docs/tags.md)

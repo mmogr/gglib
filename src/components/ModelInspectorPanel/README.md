@@ -1,8 +1,5 @@
 # ModelInspectorPanel
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-complexity.json)
-
 <!-- module-docs:start -->
 
 Right-hand detail panel for viewing, editing, and serving a selected GGUF model. Manages metadata display, inline editing, tag management, inference default overrides, serve configuration, and model deletion. A model of the paired machine is shown instead by `FarModelInspector`, which changes nothing there.

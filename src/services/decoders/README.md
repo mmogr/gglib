@@ -1,8 +1,5 @@
 # decoders
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-decoders-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-decoders-complexity.json)
-
 <!-- module-docs:start -->
 
 The runtime check on download events arriving over the SSE stream. It looks at the event's `type` tag and nothing else: a payload that is not an object, has no string `type`, or has a `type` that is not one of the five known is logged as an error and dropped. It does not throw, and it does not check the fields beside the tag.

@@ -1,8 +1,5 @@
 # tune
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-benchmark-tune-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-benchmark-tune-complexity.json)
-
 <!-- module-docs:start -->
 
 Tune-mode benchmark service — sweeps a model's sampling parameters against

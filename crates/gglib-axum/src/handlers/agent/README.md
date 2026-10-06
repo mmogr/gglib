@@ -1,8 +1,5 @@
 # agent
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-handlers-agent-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-handlers-agent-complexity.json)
-
 <!-- module-docs:start -->
 
 POST /api/agent/chat — server-side agentic loop with SSE streaming.

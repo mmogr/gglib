@@ -13,7 +13,7 @@ This directory contains helper scripts for development, CI enforcement, and docu
 | [check_rust_complexity.sh](#check_rust_complexitysh) | Rust file-size ratchet | CI |
 | [check_lint_inheritance.sh](#check_lint_inheritancesh) | Every crate inherits the workspace lints; allowed lints may not grow | CI |
 | [check_param_source_exhaustive.sh](#check_param_source_exhaustivesh) | No catch-all arm over `ParamSource` | CI |
-| [check_workflow_yaml.sh](#check_workflow_yamlsh) | Workflow sanity: duplicate YAML keys under `.github/`, bump-version.yml re-locking, and badges.yml module paths | CI |
+| [check_workflow_yaml.sh](#check_workflow_yamlsh) | Workflow sanity: duplicate YAML keys under `.github/`, and bump-version.yml re-locking | CI |
 | [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
 | [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
 | [check_swallowed_db_errors.sh](#check_swallowed_db_errorssh) | No `sqlx` query has its `Result` discarded | CI |
@@ -170,19 +170,12 @@ adding a variant a silent behaviour change instead of a compile error.
 
 ### `check_workflow_yaml.sh`
 
-Three checks:
+Two checks:
 
 1. no duplicate mapping keys in any YAML file under `.github/`: the
    workflows, and the other files there, such as the issue forms;
 2. `bump-version.yml` re-locks the workspace with `cargo update --workspace`
-   rather than re-resolving every dependency;
-3. every module and coverage path named in `badges.yml` still resolves to a
-   directory or file under `crates/`.
-
-The third lives here rather than in `badges.yml` because the two jobs that
-extract test and coverage badges check out the `badges` branch, not the source,
-so they cannot see `crates/`. This script runs under `make enforce`, where the
-source is present.
+   rather than re-resolving every dependency.
 
 Fails on a duplicate mapping key in any YAML file under `.github/`. GitHub
 rejects such a workflow file outright — the run is marked "failed because of a
@@ -333,9 +326,9 @@ Requires [scc](https://github.com/boyter/scc) (`brew install scc`).
 
 Creates missing README stubs: one wherever a README is missing in a
 directory below a crate's `src/`, below `src-tauri/src/` or below the
-TypeScript `src/` (with the `module-docs` markers), and in `tests/` or a
-directory below it. It skips `src/types/generated/` and the directories
-below it, which are ts-rs output that `check_readmes.sh` also skips. A
+TypeScript `src/` (with the `module-docs` markers). It skips
+`src/types/generated/` and the directories below it, which are ts-rs
+output that `check_readmes.sh` also skips. A
 Rust stub takes its text from the `//!` block of the directory's `mod.rs`
 when it has one. For each directory it stubs whose `mod.rs` lacks
 `#![doc = include_str!("README.md")]`, the script adds that line and puts

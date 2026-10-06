@@ -1,8 +1,5 @@
 # sse
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-sse-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-sse-complexity.json)
-
 <!-- module-docs:start -->
 
 Server-Sent Events (SSE) codec for `OpenAI`-compatible chat completion

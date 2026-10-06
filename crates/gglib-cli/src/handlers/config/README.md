@@ -1,8 +1,5 @@
 # config
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-config-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-config-complexity.json)
-
 <!-- module-docs:start -->
 
 Configuration, tooling, and system management handlers.

@@ -1,8 +1,5 @@
 # SetupWizard
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-SetupWizard-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-SetupWizard-complexity.json)
-
 <!-- module-docs:start -->
 
 Multi-step first-run setup wizard: welcome, models directory configuration, llama.cpp binary installation (with live streaming install output), Python helper setup, and completion. Driven by a step-state machine.

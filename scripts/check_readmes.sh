@@ -6,7 +6,7 @@
 #   [always]  Rust subdir READMEs have <!-- module-docs:start/end --> markers
 #   [always]  Crate-level READMEs have ## Architecture + ## Internal Structure headings
 #   [always]  TypeScript src/ subdirs have README.md with <!-- module-docs --> markers
-#   [always]  tests/ and all its subdirs have README.md
+#   [always]  tests/README.md exists
 #   [--strict] module-docs block does not contain "TODO:" placeholder text
 #   [--strict] mod.rs with a sibling README.md uses #![doc = include_str!("README.md")]
 #   [--strict] a mod.rs that includes its README.md has no //! lines of its own
@@ -22,7 +22,7 @@
 #   --verbose  Print each passing check in addition to failures.
 #
 # Failure fix hint (printed on detection):
-#   Missing README.md:  ./scripts/generate_submodule_readmes.sh --create
+#   Missing README.md under a src/:  ./scripts/generate_submodule_readmes.sh --create
 #
 # Exit codes:
 #   0  All README checks pass
@@ -328,11 +328,11 @@ check_ts_subdir_readmes() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CHECK 4: tests/ subdir READMEs — existence only
-# No marker requirements: test directories are documentation, not modules.
+# CHECK 4: tests/README.md — existence only
+# It says where the tests live. No README is required below it.
 # ─────────────────────────────────────────────────────────────────────────────
-check_tests_readmes() {
-    log "${CYAN}🧪 tests/ subdir READMEs${NC}"
+check_tests_readme() {
+    log "${CYAN}🧪 tests/README.md${NC}"
 
     if [[ ! -d "$TESTS_DIR" ]]; then
         log "  ${YELLOW}SKIP${NC}: tests/ directory not found at $TESTS_DIR"
@@ -341,40 +341,17 @@ check_tests_readmes() {
         return
     fi
 
-    local -a violations=()
-    local any_fail=0
-
-    # Check tests/ root itself and all nested subdirs
-    local -a check_dirs=("$TESTS_DIR")
-    while IFS= read -r d; do
-        check_dirs+=("$d")
-    done < <(find "$TESTS_DIR" -mindepth 1 -type d | sort)
-
-    for dir in "${check_dirs[@]}"; do
-        local rel="${dir#"$ROOT_DIR"/}"
-        if [[ ! -f "$dir/README.md" ]]; then
-            log "  ${RED}MISSING${NC}    $rel/"
-            violations+=("$(json_escape "$rel/: README.md missing")")
-            (( HARD_FAIL++ )) || true
-            any_fail=1
-        else
-            log_v "  ${GREEN}OK${NC}         $rel/"
-        fi
-    done
-
-    if [[ $any_fail -eq 0 ]]; then
-        log "  ${GREEN}PASS${NC}: all tests/ subdirs have READMEs"
-    else
+    if [[ ! -f "$TESTS_DIR/README.md" ]]; then
+        log "  ${RED}MISSING${NC}    tests/README.md"
         log ""
-        log "  → Fix missing: ./scripts/generate_submodule_readmes.sh --create"
+        (( HARD_FAIL++ )) || true
+        add_result "readme-tests" "fail" "$(json_escape "tests/: README.md missing")"
+        return
     fi
-    log ""
 
-    if [[ ${#violations[@]} -gt 0 ]]; then
-        add_result "readme-tests" "fail" "${violations[@]}"
-    else
-        add_result "readme-tests" "pass"
-    fi
+    log "  ${GREEN}PASS${NC}: tests/README.md is present"
+    log ""
+    add_result "readme-tests" "pass"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -388,7 +365,7 @@ main() {
     check_rust_subdir_readmes
     check_rust_crate_readmes
     check_ts_subdir_readmes
-    check_tests_readmes
+    check_tests_readme
 
     if $JSON_MODE; then
         printf '%s\n' "${RESULTS[@]}" > "$JSON_OUTPUT_FILE"

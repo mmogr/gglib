@@ -1,8 +1,5 @@
 # builtin
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-builtin-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-builtin-complexity.json)
-
 <!-- module-docs:start -->
 
 In-process built-in tool executor.

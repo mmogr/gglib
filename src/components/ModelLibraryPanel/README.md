@@ -1,8 +1,5 @@
 # ModelLibraryPanel
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelLibraryPanel-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelLibraryPanel-complexity.json)
-
 <!-- module-docs:start -->
 
 Two-tab left sidebar combining the model library ("Your Models") with model acquisition ("Add Models"). The library tab lists this machine's models, with search, sort, and filter controls and running-server status badges, and after them the paired machine's, read-only. The add tab embeds the HuggingFace browser and a local file uploader.

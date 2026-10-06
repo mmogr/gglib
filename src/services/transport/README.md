@@ -1,8 +1,5 @@
 # transport
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-complexity.json)
-
 <!-- module-docs:start -->
 
 The core platform abstraction layer. Provides `getTransport()` — a factory that spreads the HTTP API client and the SSE event bus into one instance, memoised after the first call. Its type is inferred from those two rather than restated as an interface, so it cannot drift from what they are.

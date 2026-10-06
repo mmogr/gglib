@@ -1,8 +1,5 @@
 # primitives
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-primitives-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-primitives-complexity.json)
-
 <!-- module-docs:start -->
 
 Low-level layout and display primitives built on Tailwind design tokens. These are the foundational building blocks used throughout all other components — pure composition, no business logic, no state.

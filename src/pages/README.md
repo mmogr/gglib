@@ -2,9 +2,6 @@
 
 # Pages Module
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-pages-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-pages-complexity.json)
-
 Top-level page components for the gglib GUI application.
 
 ## Architecture
