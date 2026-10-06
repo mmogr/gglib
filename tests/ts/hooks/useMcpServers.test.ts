@@ -16,7 +16,6 @@ const transport = vi.hoisted(() => ({
   removeMcpServer: vi.fn(),
   startMcpServer: vi.fn(),
   stopMcpServer: vi.fn(),
-  callMcpTool: vi.fn(),
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({

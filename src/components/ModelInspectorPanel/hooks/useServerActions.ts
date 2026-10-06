@@ -32,7 +32,6 @@ export interface ServerActionsConfig {
   onStopServer: (modelId: number) => Promise<void>;
   onRemoveModel: (id: number, force: boolean) => void;
   onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: SparseInferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
-  onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerViewModel) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
   // State setters
@@ -77,7 +76,6 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     onStopServer,
     onRemoveModel,
     onUpdateModel,
-    onStartServer,
     onServerStarted,
     onLlamaServerNotInstalled,
     setIsServing,
@@ -189,8 +187,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
 
       const result = await getTransport().serveModel(serveConfig);
       closeServeModal();
-      onStartServer();
-      
+
       if (onServerStarted && result) {
         onServerStarted({
           modelId: model.id,
@@ -221,7 +218,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
+  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

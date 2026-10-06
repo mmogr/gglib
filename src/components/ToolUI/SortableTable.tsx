@@ -152,5 +152,3 @@ export const SortableTable: React.FC<SortableTableProps> = ({ rows, columns: col
     </div>
   );
 };
-
-export default SortableTable;

@@ -218,5 +218,3 @@ export const TrayPanel: FC = () => {
     </div>
   );
 };
-
-export default TrayPanel;

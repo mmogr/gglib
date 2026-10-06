@@ -4,18 +4,18 @@
  * Bridges MCP servers to the tool registry, handling:
  * - Registering/unregistering tools when servers start/stop
  * - Converting MCP tool definitions to registry format
- * - Creating executors that call MCP servers
+ * - Recording each sanitized name's server and original name, which is how
+ *   a run's tool filter names the tool to the daemon
  */
 
 import { getTransport } from '../transport';
 import type { McpTool, McpServerId } from '../transport';
 import { isServerRunning } from '../../utils/mcp';
 import { getToolRegistry, ToolSource } from './registry';
-import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
+import type { ToolDefinition } from './types';
 import { sanitizeToolName, detectCollisions } from './nameUtils';
 import { mcpGenericRenderer } from './renderers';
 import { appLogger } from '../platform';
-import { formatError } from '../../utils/errors';
 
 /**
  * Convert an MCP tool to a ToolDefinition.
@@ -28,38 +28,6 @@ function mcpToolToDefinition(tool: McpTool): ToolDefinition {
       description: tool.description || `MCP tool: ${tool.name}`,
       parameters: tool.input_schema as ToolDefinition['function']['parameters'],
     },
-  };
-}
-
-/**
- * Create an executor that calls an MCP tool.
- * IMPORTANT: The executor must always call the MCP server with the original
- * raw tool name, never the sanitized registry key. The MCP server only knows
- * its own naming scheme.
- */
-function createMcpExecutor(serverId: McpServerId, toolName: string): ToolExecutor {
-  return async (args: Record<string, unknown>): Promise<ToolResult> => {
-    try {
-      const result = await getTransport().callMcpTool(serverId, toolName, args);
-      
-      if (result.success) {
-        return {
-          success: true,
-          data: result.data,
-        };
-      } else {
-        return {
-          success: false,
-          error: result.error || 'Unknown error from MCP tool',
-        };
-      }
-    } catch (err) {
-      const message = formatError(err);
-      return {
-        success: false,
-        error: `MCP call failed: ${message}`,
-      };
-    }
   };
 }
 
@@ -122,9 +90,6 @@ export function registerMcpTools(serverId: McpServerId, tools: McpTool[]): numbe
     }
 
     const definition = mcpToolToDefinition(tool);
-    // The executor closes over tool.name (raw) — it must never receive the
-    // sanitized name because the MCP server only understands its own naming.
-    const executor = createMcpExecutor(serverId, tool.name);
 
     try {
       const namespacedDef: ToolDefinition = {
@@ -138,7 +103,9 @@ export function registerMcpTools(serverId: McpServerId, tools: McpTool[]): numbe
         },
       };
 
-      registry.registerWithNameMapping(tool.name, String(serverId), sanitizedName, namespacedDef, executor, source, mcpGenericRenderer);
+      // The name map keeps tool.name (raw), never the sanitized key: it is the
+      // name the daemon is given, and the MCP server only understands its own.
+      registry.registerWithNameMapping(tool.name, String(serverId), sanitizedName, namespacedDef, source, mcpGenericRenderer);
       count++;
     } catch (err) {
       // Tool might already exist from another source — log and continue.

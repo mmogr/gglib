@@ -67,7 +67,6 @@ function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfi
     onStopServer: vi.fn(),
     onRemoveModel: vi.fn(),
     onUpdateModel: vi.fn().mockResolvedValue(undefined),
-    onStartServer: vi.fn(),
     setIsServing: vi.fn(),
     setIsDeleting: vi.fn(),
     closeServeModal: vi.fn(),

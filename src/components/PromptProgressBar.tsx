@@ -52,5 +52,3 @@ export const PromptProgressBar: FC<PromptProgressBarProps> = ({ processed, total
     </div>
   );
 };
-
-export default PromptProgressBar;

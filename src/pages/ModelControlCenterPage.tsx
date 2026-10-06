@@ -29,7 +29,6 @@ import { getTransport } from '../services/transport';
 
 interface ModelControlCenterPageProps {
   servers: ServerViewModel[];
-  loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;
   onRegisterMenuActions?: (actions: {
     refreshModels: () => void;
@@ -45,7 +44,6 @@ interface ModelControlCenterPageProps {
 
 export default function ModelControlCenterPage({
   servers,
-  loadServers,
   stopServer,
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
@@ -121,7 +119,6 @@ export default function ModelControlCenterPage({
     selectedModelId,
     servers,
     models,
-    loadServers,
     stopServer,
     removeModel,
     selectModel: pickLocal,
@@ -301,7 +298,6 @@ export default function ModelControlCenterPage({
               <ModelInspectorPanel
                 model={selectedModel}
                 selectedHfModel={selectedHfModel}
-                onStartServer={loadServers}
                 onServerStarted={handleServerStarted}
                 onOpenChat={(modelId) => openChatSession(modelId, 'chat')}
                 onStopServer={stopServer}

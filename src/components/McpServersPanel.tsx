@@ -445,5 +445,3 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
     </div>
   );
 };
-
-export default McpServersPanel;

@@ -149,5 +149,3 @@ export const TuneActivityCard: FC = () => {
     </div>
   );
 };
-
-export default TuneActivityCard;

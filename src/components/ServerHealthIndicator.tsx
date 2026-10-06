@@ -42,5 +42,3 @@ export function ServerHealthIndicator({ modelId, className, showLabel = false }:
     </span>
   );
 }
-
-export default ServerHealthIndicator;

@@ -89,5 +89,3 @@ export const ContextUsageDonut: FC<ContextUsageDonutProps> = ({
     </span>
   );
 };
-
-export default ContextUsageDonut;

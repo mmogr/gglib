@@ -15,7 +15,6 @@ describe('Header', () => {
   const mockOnOpenSettings = vi.fn();
   const mockOnStopServer = vi.fn().mockResolvedValue(undefined);
   const mockOnSelectModel = vi.fn();
-  const mockOnRefreshServers = vi.fn();
 
   const mockServers: ServerViewModel[] = [
     { modelId: 1, modelName: 'Test Model 1', port: MOCK_PROXY_PORT, status: 'running' },
@@ -27,14 +26,12 @@ describe('Header', () => {
     servers: [] as ServerViewModel[],
     onStopServer: mockOnStopServer,
     onSelectModel: mockOnSelectModel,
-    onRefreshServers: mockOnRefreshServers,
   };
 
   beforeEach(() => {
     mockOnOpenSettings.mockClear();
     mockOnStopServer.mockClear();
     mockOnSelectModel.mockClear();
-    mockOnRefreshServers.mockClear();
   });
 
   describe('rendering', () => {

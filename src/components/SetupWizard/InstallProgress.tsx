@@ -53,5 +53,3 @@ export const InstallProgress: FC<{ progress: LlamaProgressEvent | null }> = ({ p
     </div>
   );
 };
-
-export default InstallProgress;

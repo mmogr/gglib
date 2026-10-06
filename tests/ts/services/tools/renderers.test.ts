@@ -108,7 +108,6 @@ describe('ToolRegistry.getRenderer', () => {
       'dummy',
       'A dummy tool',
       undefined,
-      () => ({ success: true, data: 'ok' }),
       'builtin',
       mockRenderer,
     );
@@ -121,7 +120,6 @@ describe('ToolRegistry.getRenderer', () => {
       'no_renderer',
       'A tool without a renderer',
       undefined,
-      () => ({ success: true, data: 'ok' }),
     );
     expect(registry.getRenderer('no_renderer')).toBeUndefined();
   });

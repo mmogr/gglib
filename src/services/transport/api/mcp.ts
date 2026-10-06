@@ -1,6 +1,6 @@
 /**
  * MCP API module.
- * Handles Model Context Protocol server lifecycle and tool invocation.
+ * Handles Model Context Protocol server configuration and lifecycle.
  */
 
 import { get, post, put, del } from './client';
@@ -9,14 +9,11 @@ import type {
   NewMcpServer,
   UpdateMcpServer,
   McpServerInfo,
-  McpToolResult,
   ResolutionStatus,
   McpTestResult,
 } from '../types/mcp';
-import type { CallToolRequest } from '../../../types/generated/CallToolRequest';
 import type { CreateMcpServerRequest } from '../../../types/generated/CreateMcpServerRequest';
 import type { UpdateMcpServerRequest } from '../../../types/generated/UpdateMcpServerRequest';
-import { formatError } from '../../../utils/errors';
 
 /**
  * List all configured MCP servers with their status.
@@ -90,55 +87,6 @@ export async function startMcpServer(id: McpServerId): Promise<McpServerInfo> {
  */
 export async function stopMcpServer(id: McpServerId): Promise<McpServerInfo> {
   return post<McpServerInfo>(`/api/mcp/servers/${id}/stop`);
-}
-
-/**
- * Call an MCP tool on a specific server.
- * 
- * Note: The backend returns {success, data, error} but the HTTP client's readData()
- * function unwraps the `data` field. We handle both wrapped and unwrapped responses.
- */
-export async function callMcpTool(
-  serverId: McpServerId,
-  toolName: string,
-  args: Record<string, unknown>
-): Promise<McpToolResult> {
-  try {
-    const body: CallToolRequest = {
-      server_id: serverId,
-      tool_name: toolName,
-      arguments: args,
-    };
-    const result = await post<unknown>('/api/mcp/tools/call', body);
-    
-    // Check if result is already the full McpToolResult structure
-    if (typeof result === 'object' && result !== null && 'success' in result) {
-      return result as McpToolResult;
-    }
-    
-    // Result was unwrapped by readData() - it's just the data field
-    // This means the call succeeded (otherwise readData would have thrown)
-    return {
-      success: true,
-      data: result,
-      // `null`, not `undefined`: the handler builds this field on both paths,
-      // so a successful call sends `"error": null` and the client's own
-      // success value has to look like the one the wire produces.
-      error: null,
-    };
-  } catch (error) {
-    // Network or HTTP error - convert to McpToolResult format
-    const message = formatError(error);
-    return {
-      success: false,
-      // `null` for the same reason `error` is on the success path: the handler
-      // builds both fields on both paths, so a real failure carries
-      // `"data": null`. `undefined` serialises to an absent key — a third
-      // shape neither side describes.
-      data: null,
-      error: message,
-    };
-  }
 }
 
 /**

@@ -85,5 +85,3 @@ export const TuneLiveProgress: FC<TuneLiveProgressProps> = ({
     </div>
   );
 };
-
-export default TuneLiveProgress;

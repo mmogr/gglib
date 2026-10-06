@@ -155,5 +155,3 @@ export const ProxyAdmissionPanel: FC<ProxyAdmissionPanelProps> = ({ admission })
     </div>
   );
 };
-
-export default ProxyAdmissionPanel;

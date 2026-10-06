@@ -31,7 +31,7 @@ Axum backend (HTTP response) → typed result
 | `chat.ts` | Conversations and messages |
 | `servers.ts` | llama.cpp server lifecycle and proxy |
 | `downloads.ts` | Download queue management |
-| `mcp.ts` | MCP server config and tool execution |
+| `mcp.ts` | MCP server config, lifecycle and config test |
 | `settings.ts` | Application settings |
 | `tags.ts` | Model tags |
 | `builtin.ts` | Built-in tool listing |

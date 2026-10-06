@@ -33,6 +33,7 @@ const GENERATED = join(REPO_ROOT, 'src/types/generated');
 const NOT_IMPORTED = [
   'AgentChatRequest',
   'AssistantContent',
+  'CallToolRequest',
   'ChatChoice',
   'ChatCompletionResponse',
   'ChatMessage',
@@ -45,6 +46,7 @@ const NOT_IMPORTED = [
   'GgufFileRole',
   'ListRunsQuery',
   'McpToolCallRequest',
+  'McpToolCallResponse',
   'ModelAgenticHistoryQuery',
   'ModelBenchmarkQuery',
   'ModelBenchmarkResponse',

@@ -211,5 +211,3 @@ export const ProxyReasoningRows: FC<ProxyReasoningRowsProps> = ({ reasoning }) =
     </div>
   );
 };
-
-export default ProxyReasoningRows;

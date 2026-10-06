@@ -23,7 +23,6 @@ const srv = (id: string) => id as unknown as McpServerId;
 // Mock the transport so we never make real IPC/HTTP calls in unit tests.
 const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
-  callMcpTool: vi.fn(),
 }));
 
 vi.mock('../../../../src/services/transport', async (importOriginal) => ({
@@ -171,22 +170,15 @@ describe('registerMcpTools', () => {
     expect(registry.has('mcp_s_list_files')).toBe(true);
   });
 
-  // ── Executor uses raw tool name ────────────────────────────────────────────
+  // ── The daemon is told the raw tool name ───────────────────────────────────
 
-  it('executor calls callMcpTool with the raw original tool name, not the sanitized name', async () => {
-    const mockCallMcpTool = transport.callMcpTool;
-    mockCallMcpTool.mockResolvedValueOnce({ success: true, data: 'result' });
-
+  it('getBackendName names the server and the raw original tool name, not the sanitized name', () => {
     registerMcpTools(srv('my.server'), [makeTool('get data!')]);
 
     const registry = getToolRegistry();
-    // Execute via the sanitized key
-    await registry.execute('mcp_my_server_get_data', {});
-
-    expect(mockCallMcpTool).toHaveBeenCalledWith(
-      'my.server',
-      'get data!',  // raw name, not 'mcp_my_server_get_data'
-      {},
+    // Looked up by the sanitized key
+    expect(registry.getBackendName('mcp_my_server_get_data')).toBe(
+      'my.server:get data!',  // raw names, not 'mcp_my_server_get_data'
     );
   });
 

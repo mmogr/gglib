@@ -1,17 +1,17 @@
 /**
  * Tool registry module.
- * Provides a centralized registry for tools that can be called by the LLM.
+ * Provides a centralized registry of the tools the LLM can call. The daemon
+ * runs them; the registry holds their definitions, enablement and renderers.
  *
  * @example
  * ```typescript
  * import { getToolRegistry, ToolDefinition } from '../services/tools';
  *
- * // Get tool definitions for LLM request
+ * // The tools the person has enabled, by the names the daemon knows them by
  * const registry = getToolRegistry();
- * const tools = registry.getDefinitions();
- *
- * // Execute a tool call from LLM response
- * const result = await registry.execute('get_current_time', { timezone: 'UTC' });
+ * const toolFilter = registry
+ *   .getEnabledDefinitions()
+ *   .map((d) => registry.getBackendName(d.function.name));
  * ```
  */
 
@@ -19,17 +19,10 @@
 export type {
   ToolDefinition,
   FunctionDefinition,
-  ToolExecutor,
-  ToolResult,
   RegisteredTool,
-  ToolCall,
-  ToolCallFunction,
-  ParsedToolCall,
   JSONSchema,
   JSONSchemaProperty,
 } from './types';
-
-export { parseToolCall } from './types';
 
 // Re-export registry
 export {

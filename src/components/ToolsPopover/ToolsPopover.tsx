@@ -251,5 +251,3 @@ export const ToolsPopover: React.FC<ToolsPopoverProps> = ({ opensUpward = false,
     </div>
   );
 };
-
-export default ToolsPopover;

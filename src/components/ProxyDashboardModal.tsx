@@ -134,5 +134,3 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
     </Modal>
   );
 };
-
-export default ProxyDashboardModal;
