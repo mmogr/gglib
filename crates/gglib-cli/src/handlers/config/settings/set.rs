@@ -1,95 +1,25 @@
 //! `gglib config settings set` — write the fields a person named, and print them.
 //!
-//! Its own module because the flag list is long and repetitive by nature: each
-//! field appears in the `changed` set (for the confirmation print), in the
-//! `SettingsUpdate` (for the write), and in the prospective merge (so
-//! validation rejects a bad value before anything is persisted). Three
-//! mentions per setting is what makes this file grow with every knob, and what
-//! made `tool_call_repair` easy to miss in one of the three for months.
+//! Each flag is named once here, where it becomes a field of the
+//! [`SettingsUpdate`]. The merge, the validation and the write are the
+//! settings service's, in one step, so a refused value stores nothing and
+//! there is no second merge here to keep in step with the real one. The keys
+//! to print are read back off the update.
 
 use std::collections::BTreeSet;
 
 use anyhow::Result;
 
-use gglib_core::{SettingsUpdate, validate_settings};
+use gglib_core::SettingsUpdate;
 
 use super::resolve_model_display;
 use super::settings_display::{print_display_rows, settings_display_rows};
 use crate::bootstrap::CliContext;
 use crate::config_commands::SettingsSetArgs;
 
-/// Apply the flags a person passed, then print only what changed.
-#[allow(
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Result<()> {
-    // Collect the kebab-case keys of every flag that was provided.
-    let mut changed: BTreeSet<&str> = BTreeSet::new();
-    if args.default_download_path.is_some() {
-        changed.insert("default-download-path");
-    }
-    if args.default_context_size.is_some() {
-        changed.insert("default-context-size");
-    }
-    if args.proxy_port.is_some() {
-        changed.insert("proxy-port");
-    }
-    if args.llama_base_port.is_some() {
-        changed.insert("llama-base-port");
-    }
-    if args.max_download_queue_size.is_some() {
-        changed.insert("max-download-queue-size");
-    }
-    if args.max_tool_iterations.is_some() {
-        changed.insert("max-tool-iterations");
-    }
-    if args.max_stagnation_steps.is_some() {
-        changed.insert("max-stagnation-steps");
-    }
-    if args.show_memory_fit_indicators.is_some() {
-        changed.insert("show-memory-fit-indicators");
-    }
-    if args.bind_host.is_some() {
-        changed.insert("bind-host");
-    }
-    if args.share_lan.is_some() {
-        changed.insert("share-lan");
-    }
-    if args.proxy_api_key.is_some() {
-        changed.insert("proxy-api-key");
-    }
-    if args.trust_client_sampling.is_some() {
-        changed.insert("trust-client-sampling");
-    }
-    if args.loop_guard_mode.is_some() {
-        changed.insert("loop-guard-mode");
-    }
-    if args.proxy_loop_detection.is_some() {
-        changed.insert("proxy-loop-detection");
-    }
-    if args.agentic_sampling.is_some() {
-        changed.insert("agentic-sampling");
-    }
-    if args.tool_call_repair.is_some() {
-        changed.insert("tool-call-repair");
-    }
-    if args.proxy_autostart.is_some() {
-        changed.insert("proxy-autostart");
-    }
-    if args.close_to_tray.is_some() {
-        changed.insert("close-to-tray");
-    }
-    if args.start_at_login.is_some() {
-        changed.insert("start-at-login");
-    }
-
-    if changed.is_empty() {
-        println!("No settings provided. Use --help to see available options.");
-        return Ok(());
-    }
-
-    let update = SettingsUpdate {
+/// The update the flags a person passed amount to.
+fn update_from(args: SettingsSetArgs) -> SettingsUpdate {
+    SettingsUpdate {
         default_download_path: args.default_download_path.map(Some),
         default_context_size: args.default_context_size.map(Some),
         proxy_port: args.proxy_port.map(Some),
@@ -122,69 +52,32 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
         remote_serve: None,
         // Written by inviting and forgetting devices, not by a settings flag.
         remote_devices: None,
-    };
+    }
+}
 
-    // Pre-validate: merge the prospective update into a local copy and validate
-    // before persisting, so the user gets a clear error without a partial write.
-    let mut prospective = ctx.app.settings().get().await?;
-    if let Some(Some(v)) = &update.default_download_path {
-        prospective.default_download_path = Some(v.clone());
+/// The kebab-case key of every field `update` writes.
+///
+/// A field the update leaves alone serialises as `null`. So would one it
+/// clears, which no flag here can ask for.
+fn changed_keys(update: &SettingsUpdate) -> Result<BTreeSet<String>> {
+    let fields = serde_json::to_value(update)?;
+    Ok(fields
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, value)| !value.is_null())
+        .map(|(key, _)| key.replace('_', "-"))
+        .collect())
+}
+
+/// Apply the flags a person passed, then print only what changed.
+pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Result<()> {
+    let update = update_from(args);
+    let changed = changed_keys(&update)?;
+    if changed.is_empty() {
+        println!("No settings provided. Use --help to see available options.");
+        return Ok(());
     }
-    if let Some(Some(v)) = update.default_context_size {
-        prospective.default_context_size = Some(v);
-    }
-    if let Some(Some(v)) = update.proxy_port {
-        prospective.proxy_port = Some(v);
-    }
-    if let Some(Some(v)) = update.llama_base_port {
-        prospective.llama_base_port = Some(v);
-    }
-    if let Some(Some(v)) = update.max_download_queue_size {
-        prospective.max_download_queue_size = Some(v);
-    }
-    if let Some(Some(v)) = update.max_tool_iterations {
-        prospective.max_tool_iterations = Some(v);
-    }
-    if let Some(Some(v)) = update.max_stagnation_steps {
-        prospective.max_stagnation_steps = Some(v);
-    }
-    if let Some(Some(v)) = update.show_memory_fit_indicators {
-        prospective.show_memory_fit_indicators = Some(v);
-    }
-    if let Some(Some(v)) = &update.bind_host {
-        prospective.bind_host = Some(v.clone());
-    }
-    if let Some(Some(v)) = update.share_lan {
-        prospective.share_lan = Some(v);
-    }
-    if let Some(Some(v)) = &update.proxy_api_key {
-        prospective.proxy_api_key = Some(v.clone());
-    }
-    if let Some(Some(v)) = update.trust_client_sampling {
-        prospective.trust_client_sampling = Some(v);
-    }
-    if let Some(Some(v)) = update.loop_guard_mode {
-        prospective.loop_guard_mode = Some(v);
-    }
-    if let Some(Some(v)) = update.proxy_loop_detection {
-        prospective.proxy_loop_detection = Some(v);
-    }
-    if let Some(Some(v)) = update.agentic_sampling {
-        prospective.agentic_sampling = Some(v);
-    }
-    if let Some(Some(v)) = update.tool_call_repair {
-        prospective.tool_call_repair = Some(v);
-    }
-    if let Some(Some(v)) = update.proxy_autostart {
-        prospective.proxy_autostart = Some(v);
-    }
-    if let Some(Some(v)) = update.close_to_tray {
-        prospective.close_to_tray = Some(v);
-    }
-    if let Some(Some(v)) = update.start_at_login {
-        prospective.start_at_login = Some(v);
-    }
-    validate_settings(&prospective)?;
 
     let updated = ctx.app.settings().update(update).await?;
     let model_display = resolve_model_display(ctx, &updated).await?;
@@ -205,3 +98,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
     print_display_rows(&changed_rows);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "set_tests.rs"]
+mod tests;

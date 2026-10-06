@@ -278,9 +278,9 @@ person has. Pick one:
 
   1. Give it a CLI flag: add it to `SettingsSetArgs` in
      `crates/gglib-cli/src/config_commands/settings_args.rs` and map it in
-     `crates/gglib-cli/src/handlers/config/settings/mod.rs` — all four places
-     (the destructure, the `changed` set, the `SettingsUpdate`, the
-     pre-validate merge).
+     `update_from`, in
+     `crates/gglib-cli/src/handlers/config/settings/set.rs`. That is the one
+     place: a test there fails for a flag left out of it.
   2. Give it a GUI control: add the camelCase field to `src/types/index.ts`
      and a control in the settings modal.
   3. Delete the setting, and whatever reads it.

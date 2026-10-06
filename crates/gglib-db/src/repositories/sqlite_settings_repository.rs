@@ -26,8 +26,10 @@ impl SqliteSettingsRepository {
 
     /// Ensure the settings table exists.
     ///
-    /// Call this during initialization to set up the schema.
-    pub async fn ensure_table(&self) -> Result<(), RepositoryError> {
+    /// The one definition of the table. `create_schema` runs it once as the
+    /// database opens; a table already there, and its rows, are left as they
+    /// are. Private to the crate, so that call is the only one a build makes.
+    pub(crate) async fn ensure_table(&self) -> Result<(), RepositoryError> {
         sqlx::query(
             r"
             CREATE TABLE IF NOT EXISTS settings_kv (
@@ -166,3 +168,7 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
 #[cfg(test)]
 #[path = "sqlite_settings_repository_tests.rs"]
 mod sqlite_settings_repository_tests;
+
+#[cfg(test)]
+#[path = "sqlite_settings_table_tests.rs"]
+mod sqlite_settings_table_tests;

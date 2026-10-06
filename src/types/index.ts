@@ -376,7 +376,8 @@ export type UpdateSettingsRequest = Omit<
 // ============================================================================
 
 /**
- * What the host has to run a model on — `GET /api/system/memory`.
+ * What the host has to run a model on — `GET /api/config/system/memory`, and
+ * the `systemMemory` of the setup status, which is the same Rust type.
  *
  * `gpuMemoryBytes` is optional and *not* nullable, which is the correction:
  * it is the one field carrying `skip_serializing_if`, so a machine with no
@@ -384,8 +385,7 @@ export type UpdateSettingsRequest = Omit<
  * admitted both, so a reader had two absent-shapes to handle and only one
  * could ever arrive.
  */
-import type { SystemMemoryInfoDto as SystemMemoryInfo } from './generated/SystemMemoryInfoDto';
-export type { SystemMemoryInfo };
+export type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
 
 /**
  * Fit status for a model quantization based on available memory.

@@ -16,6 +16,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
+dotenvy = { workspace = true }
 bitflags = { version = "2.6", features = ["serde"] }
 uuid = { workspace = true, features = ["serde", "v4"] }
 getrandom = "0.4"

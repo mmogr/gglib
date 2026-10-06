@@ -146,7 +146,7 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 |--------|-------|
 | `downloads.rs` | 7 — queue snapshot, cancel, remove, reorder, clear, cancel-all |
 | `models.rs` | 6 — list empty, get not-found, add+list, missing file, remove not-found, tags |
-| `settings.rs` | 4 — get defaults, directory info, memory threshold (Some/None) |
+| `settings.rs` | 16 — get defaults, profiles and nulls through the API, memory threshold (Some/None), and the models directory: saved and read back, its default, a refused path |
 | `mcp.rs` | 4 — list empty, add+list, invalid type, remove |
-| `setup.rs` | 1 — smoke test (get_status returns Ok) |
+| `setup.rs` | 3 — smoke test (get_status returns Ok), and the memory floor and the directory and memory shapes the status shares with the settings routes |
 | `servers.rs` | 9 — 6 registry unit tests + list empty + stop not-found + stop-all no-op |

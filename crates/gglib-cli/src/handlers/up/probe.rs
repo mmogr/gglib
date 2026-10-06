@@ -96,12 +96,7 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
         }
     }
 
-    Some(SystemMemoryInfo {
-        total_ram_bytes: mem.total_ram_bytes,
-        gpu_memory_bytes: mem.gpu_memory_bytes,
-        is_unified_memory: mem.is_unified_memory,
-        has_nvidia_gpu: status.gpu_info.has_nvidia,
-    })
+    Some(mem.clone())
 }
 
 /// Name the acceleration backend from what the GPU probe found.

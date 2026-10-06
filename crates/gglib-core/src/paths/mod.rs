@@ -42,7 +42,7 @@ pub use llama::{
 pub use models::DEFAULT_MODELS_DIR_RELATIVE;
 pub use models::{
     ModelsDirResolution, ModelsDirSource, canonical_model_path, canonical_model_path_string,
-    default_models_dir, resolve_models_dir,
+    default_models_dir, resolve_models_dir, set_models_dir,
 };
 
 // PID tracking
@@ -56,9 +56,6 @@ pub use private::{create_private_dir, create_private_file, make_private};
 
 // Directory operations
 pub use ensure::{DirectoryCreationStrategy, ensure_directory};
-
-// Configuration persistence
-pub use config::persist_models_dir;
 
 // Pure resolver for testing and CLI
 pub use resolver::ResolvedPaths;

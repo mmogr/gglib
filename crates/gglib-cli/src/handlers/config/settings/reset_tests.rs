@@ -1,13 +1,21 @@
-//! Unit tests for [`super`], against the settings store the CLI's bootstrap
-//! wires over a database file.
+//! Unit tests for the write [`super`] makes, against the settings store the
+//! CLI's bootstrap wires over a database file.
 
 use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use gglib_bootstrap::{BootstrapConfig, CoreBootstrap};
-use gglib_core::{Device, NoopEmitter, RemotePairing, RemoteServe, Settings, SettingsRepository};
+use gglib_core::services::SettingsService;
+use gglib_core::{
+    CoreError, Device, NoopEmitter, RemotePairing, RemoteServe, Settings, SettingsRepository,
+};
 
-use super::reset;
+/// The reset `handle_reset` runs: the settings service's, over `repo`.
+async fn reset(repo: &Arc<dyn SettingsRepository>) -> Result<Settings, CoreError> {
+    SettingsService::new(Arc::clone(repo))
+        .reset_preferences()
+        .await
+}
 
 fn device(id: &str) -> Device {
     Device {
@@ -83,7 +91,7 @@ async fn a_reset_keeps_the_remote_record_and_the_proxy_key_in_the_store() {
     let repo = store(&dir).await;
     seed(repo.as_ref()).await;
 
-    reset(repo.as_ref()).await.expect("the reset is stored");
+    reset(&repo).await.expect("the reset is stored");
 
     let stored = repo.load().await.expect("load");
     assert_eq!(
@@ -132,7 +140,7 @@ async fn a_device_recorded_while_a_reset_waits_is_kept() {
     });
     meet(&entered).await;
 
-    let resetting = tokio::spawn(async move { reset(cli.as_ref()).await });
+    let resetting = tokio::spawn(async move { reset(&cli).await });
     tokio::time::sleep(Duration::from_millis(300)).await;
     meet(&released).await;
 

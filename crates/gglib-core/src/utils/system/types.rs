@@ -91,13 +91,22 @@ pub struct GpuInfo {
 }
 
 /// System memory information for model fit calculations.
+///
+/// Also the one shape memory goes over HTTP in, from the settings route and
+/// inside the setup status: camelCase, and no `gpuMemoryBytes` key at all
+/// where the figure could not be read.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
 pub struct SystemMemoryInfo {
     /// Total system RAM in bytes.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub total_ram_bytes: u64,
     /// GPU memory in bytes: VRAM on a discrete card, or the addressable share
     /// of host RAM on a unified-memory device (Apple Silicon, or an integrated
     /// GPU). None if no GPU was detected or its memory could not be read.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_memory_bytes: Option<u64>,
     /// Whether the GPU shares host memory — Apple Silicon, or an integrated
     /// GPU whose heaps are GTT rather than its own VRAM. Decides whether the
@@ -105,4 +114,47 @@ pub struct SystemMemoryInfo {
     pub is_unified_memory: bool,
     /// Whether the system has an NVIDIA GPU.
     pub has_nvidia_gpu: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The names the frontend reads memory by, on every route that sends it.
+    #[test]
+    fn memory_goes_over_the_wire_in_camel_case() {
+        let json = serde_json::to_value(SystemMemoryInfo {
+            total_ram_bytes: 1024,
+            gpu_memory_bytes: Some(512),
+            is_unified_memory: true,
+            has_nvidia_gpu: false,
+        })
+        .unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "totalRamBytes": 1024,
+                "gpuMemoryBytes": 512,
+                "isUnifiedMemory": true,
+                "hasNvidiaGpu": false,
+            })
+        );
+    }
+
+    /// A GPU figure that could not be read has no key, not a `null`: the
+    /// generated type says the key is optional, and a reader has one absent
+    /// shape to handle.
+    #[test]
+    fn an_unread_gpu_figure_has_no_key() {
+        let json = serde_json::to_value(SystemMemoryInfo {
+            total_ram_bytes: 1024,
+            gpu_memory_bytes: None,
+            is_unified_memory: false,
+            has_nvidia_gpu: false,
+        })
+        .unwrap();
+
+        assert!(json.get("gpuMemoryBytes").is_none(), "{json}");
+    }
 }

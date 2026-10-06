@@ -15,8 +15,7 @@ use crate::bootstrap::CliContext;
 use crate::config_commands::{ModelsDirCommand, SettingsCommand};
 use crate::utils::input::prompt_string_with_default;
 use gglib_core::paths::{
-    DirectoryCreationStrategy, default_models_dir, ensure_directory, persist_models_dir,
-    resolve_models_dir,
+    DirectoryCreationStrategy, default_models_dir, resolve_models_dir, set_models_dir,
 };
 use gglib_core::{Settings, SettingsUpdate};
 
@@ -112,9 +111,7 @@ pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
                 "Where should gglib store downloaded models?",
                 Some(&default_path),
             )?;
-            let resolved = resolve_models_dir(Some(&answer))?;
-            ensure_directory(&resolved.path, DirectoryCreationStrategy::AutoCreate)?;
-            persist_models_dir(&resolved.path)?;
+            let resolved = set_models_dir(&answer, DirectoryCreationStrategy::AutoCreate)?;
             println!(
                 "✓ Models directory updated to {} (interactive)",
                 resolved.path.display()
@@ -122,14 +119,12 @@ pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
             Ok(())
         }
         ModelsDirCommand::Set { path, no_create } => {
-            let resolved = resolve_models_dir(Some(&path))?;
             let strategy = if no_create {
                 DirectoryCreationStrategy::Disallow
             } else {
                 DirectoryCreationStrategy::AutoCreate
             };
-            ensure_directory(&resolved.path, strategy)?;
-            persist_models_dir(&resolved.path)?;
+            let resolved = set_models_dir(&path, strategy)?;
             println!(
                 "✓ Models directory updated to {} (non-interactive)",
                 resolved.path.display()

@@ -134,9 +134,6 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
     // Create all tables and indexes
     create_schema(&pool).await?;
 
-    // Initialize settings table
-    init_settings_table(&pool).await?;
-
     // No setting has the key `auto_tune`; reclaim that row.
     //
     // `Settings` is `#[serde(default)]` and nothing validates the key set, so
@@ -159,7 +156,6 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
 pub async fn setup_test_database() -> Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite::memory:").await?;
     create_schema(&pool).await?;
-    init_settings_table(&pool).await?;
     Ok(pool)
 }
 
@@ -217,18 +213,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     model_files::create_model_files_table(pool).await?;
     model_files::add_projector_column(pool).await?;
 
-    // Create settings table
-    sqlx::query(
-        r"
-        CREATE TABLE IF NOT EXISTS settings_kv (
-            key TEXT PRIMARY KEY NOT NULL,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        ",
-    )
-    .execute(pool)
-    .await?;
+    // The settings table, from the one place that defines it. Here and not
+    // after the schema, because the models rebuild below reads it.
+    crate::SqliteSettingsRepository::new(pool.clone())
+        .ensure_table()
+        .await?;
 
     // A `chat_messages` table predating the 'tool' role cannot store a
     // tool-role message: its CHECK constraint rejects the insert. Startup
@@ -571,15 +560,6 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Last, after every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;
 
-    Ok(())
-}
-
-/// Initialize the settings table with default values if empty.
-async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
-    use crate::SqliteSettingsRepository;
-
-    let repo = SqliteSettingsRepository::new(pool.clone());
-    repo.ensure_table().await?;
     Ok(())
 }
 

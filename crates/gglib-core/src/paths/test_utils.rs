@@ -41,6 +41,22 @@ impl EnvVarGuard {
             previous,
         }
     }
+
+    /// Remove an environment variable and return a guard that will restore it.
+    #[allow(
+        unsafe_code,
+        reason = "a test changes its own environment, under ENV_LOCK"
+    )]
+    pub(super) fn unset(key: &str) -> Self {
+        let previous = env::var(key).ok();
+        unsafe {
+            env::remove_var(key);
+        }
+        Self {
+            key: key.to_string(),
+            previous,
+        }
+    }
 }
 
 impl Drop for EnvVarGuard {

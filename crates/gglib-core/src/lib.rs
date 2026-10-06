@@ -69,5 +69,5 @@ pub use utils::timing::{elapsed_ms, format_duration_human};
 pub use paths::{
     DirectoryCreationStrategy, ModelsDirSource, PathError, data_root, database_path,
     default_models_dir, ensure_directory, is_prebuilt_binary, llama_config_path, llama_cpp_dir,
-    llama_server_path, persist_models_dir, resolve_models_dir, resource_root,
+    llama_server_path, resolve_models_dir, resource_root, set_models_dir,
 };
