@@ -97,9 +97,54 @@ impl From<gglib_core::download::DownloadError> for GuiError {
     }
 }
 
+/// What a core error is to a caller: a rejected setting or input is the
+/// caller's to fix, a missing row is not found, a duplicate is a conflict,
+/// and only a failure of the store itself is internal. The same table as
+/// `gglib-axum`'s `From<CoreError> for HttpError`, so an error is the same
+/// status whether or not it passed through here.
 impl From<gglib_core::CoreError> for GuiError {
     fn from(err: gglib_core::CoreError) -> Self {
-        Self::Internal(err.to_string())
+        use gglib_core::CoreError;
+        match err {
+            CoreError::Repository(repository) => repository.into(),
+            CoreError::Settings(refused) => Self::ValidationFailed(refused.to_string()),
+            CoreError::Validation(msg) => Self::ValidationFailed(msg),
+        }
+    }
+}
+
+impl From<gglib_core::ports::RepositoryError> for GuiError {
+    fn from(err: gglib_core::ports::RepositoryError) -> Self {
+        use gglib_core::ports::RepositoryError;
+        match err {
+            // A repository names what it missed in its own words, not by id.
+            RepositoryError::NotFound(what) => Self::NotFound {
+                entity: "record",
+                id: what,
+            },
+            RepositoryError::AlreadyExists(msg) => Self::Conflict(msg),
+            RepositoryError::Constraint(msg) => Self::ValidationFailed(msg),
+            RepositoryError::Storage(_) | RepositoryError::Serialization(_) => {
+                Self::Internal(err.to_string())
+            }
+        }
+    }
+}
+
+impl GuiError {
+    /// This error, its message led by what was being done when it happened.
+    /// The kind is kept, so a refusal stays a refusal; a not-found already
+    /// names what was missing and is left as it is.
+    #[must_use]
+    pub fn context(self, doing: &str) -> Self {
+        let led = |msg: String| format!("{doing}: {msg}");
+        match self {
+            Self::ValidationFailed(msg) => Self::ValidationFailed(led(msg)),
+            Self::Conflict(msg) => Self::Conflict(led(msg)),
+            Self::Unavailable(msg) => Self::Unavailable(led(msg)),
+            Self::Internal(msg) => Self::Internal(led(msg)),
+            named @ (Self::NotFound { .. } | Self::LlamaServerNotInstalled { .. }) => named,
+        }
     }
 }
 
@@ -115,3 +160,7 @@ impl From<gglib_core::McpServiceError> for GuiError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

@@ -250,7 +250,7 @@ impl RemoteOps {
             .settings()
             .get()
             .await
-            .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))
+            .map_err(|e| GuiError::from(e).context("could not read settings"))
     }
 }
 

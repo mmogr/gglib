@@ -70,7 +70,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`downloads.rs`** — `DownloadOps` download queue and progress operations
 - **`hf_quantizations.rs`** — A repository's quantizations as the `HuggingFace` browser shows them, each with the projector its download fetches
 - **`hub_chats.rs`** — `HubChats`, the hub's chats as a paired device reads them, with each chat's live run
-- **`error.rs`** — `GuiError` semantic error type for all app-service operations
+- **`error.rs`** — `GuiError` semantic error type for all app-service operations, and what a core error becomes in it (`From<CoreError>`): a refused input is a validation failure, a missing row is not found, a duplicate is a conflict, and only a failure of the store is internal
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`models.rs`** — `ModelOps` model CRUD and listing operations
 - **`models_projector.rs`** — The projector link on `ModelOps`: an update's `projector_path` applied through `ModelService::set_projector`, and the choices the inspector's picker offers
@@ -79,7 +79,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
 - **`settings.rs`** — `SettingsOps` application settings persistence
 - **`setup.rs`** — `SetupOps` first-run setup and dependency checking
-- **`types.rs`** — Shared DTOs and type definitions for the service layer. Includes `UpdateModelRequest` with triple-Option semantics for `server_defaults`: `Some(Some(cfg))` sets per-model server config, `Some(None)` clears it, and `None` (field omitted) is a no-op. `projector_path` has the same three states: a path links the model to that projector, `null` unlinks it, and an omitted key leaves the link alone.
+- **`types.rs`** — Shared DTOs and type definitions for the service layer. Includes `UpdateModelRequest` (in `types_model_update.rs`), the request the inspector sends and `gglib model update` builds; its `apply_to` is what `ModelOps::update` writes it onto a model's row with. An omitted field is a no-op, and an empty `inference_defaults` returns the model to inheriting. It has triple-Option semantics for `server_defaults`: `Some(Some(cfg))` sets per-model server config, `Some(None)` clears it, and `None` (field omitted) is a no-op. `projector_path` has the same three states: a path links the model to that projector, `null` unlinks it, and an omitted key leaves the link alone.
 
 ## Design Principles
 

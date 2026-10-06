@@ -14,6 +14,9 @@ pub use types_hf::{
     HfModelSummary, HfProjector, HfQuantization, HfQuantizationsResponse, HfSearchRequest,
     HfSearchResponse, HfSortField, ToolSupportResponse,
 };
+#[path = "types_model_update.rs"]
+mod types_model_update;
+pub use types_model_update::UpdateModelRequest;
 
 // ============================================================================
 // GUI Model Types
@@ -229,43 +232,6 @@ pub struct AddModelRequest {
 pub struct RemoveModelRequest {
     #[serde(default)]
     pub force: bool,
-}
-
-/// Request body for updating a model.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateModelRequest {
-    pub name: Option<String>,
-    pub quantization: Option<String>,
-    pub file_path: Option<String>,
-    pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
-    /// Per-model server startup defaults.
-    /// - Some(Some(config)) — set/replace the model's server defaults
-    /// - Some(None) — clear the override (NULL in DB, revert to global default)
-    /// - None — don't touch this field (key omitted from payload)
-    ///
-    /// ts-rs cannot read a nested `Option`, so the three states are spelled
-    /// out by hand: absent, `null`, or a value.
-    // `as` rather than `type`: ts-rs registers a field's dependencies from its
-    // Rust type, and a `type = "…"` override replaces the type without
-    // registering anything, so the emitted file names `ServerConfig` and never
-    // imports it. `as` states a substitute type, which is both rendered and
-    // followed for imports. `optional = nullable` then gives `field?: T | null`
-    // — the same three states, with the import.
-    #[cfg_attr(
-        feature = "ts-bindings",
-        ts(as = "Option<gglib_core::domain::ServerConfig>", optional = nullable)
-    )]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
-    /// The projector the model loads beside its weights, by path.
-    /// - Some(Some(path)) — link the model to the projector at `path`
-    /// - Some(None) — unlink it
-    /// - None — don't touch the link (key omitted from payload)
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<String>", optional = nullable))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub projector_path: Option<Option<String>>,
 }
 
 /// One projector file the inspector's picker offers for a model.

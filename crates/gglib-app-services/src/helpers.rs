@@ -9,8 +9,7 @@ use crate::error::GuiError;
 pub(crate) async fn resolve_model(models: &ModelService, id: i64) -> Result<Model, GuiError> {
     models
         .get_by_id(id)
-        .await
-        .map_err(|e| GuiError::Internal(format!("Failed to query model: {e}")))?
+        .await?
         .ok_or_else(|| GuiError::NotFound {
             entity: "model",
             id: id.to_string(),

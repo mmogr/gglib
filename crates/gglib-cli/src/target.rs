@@ -225,7 +225,7 @@ impl Target {
     /// name describes a different file.
     pub(crate) async fn local_model(self, ctx: &CliContext, identifier: &str) -> Option<Model> {
         match self {
-            Self::Local => ctx.app.models().find_by_identifier(identifier).await.ok(),
+            Self::Local => ctx.app.models().get(identifier).await.ok().flatten(),
             Self::Remote => None,
         }
     }

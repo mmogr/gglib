@@ -1,71 +1,36 @@
 //! `--projector` and `--no-projector` against a real library and real GGUF
-//! headers.
+//! headers, from the command line to the stored row.
 
 use std::path::PathBuf;
 
-use gglib_core::services::ImportMode;
-
+use super::super::test_library::{library, run, stored, write_gguf};
 use super::*;
-use crate::bootstrap::test_context;
 
-/// A GGUF v3 file in `dir` holding only `pairs` as string metadata, under its
-/// canonical path.
-fn write_gguf(dir: &Path, name: &str, pairs: &[(&str, &str)]) -> PathBuf {
-    let string = |text: &str| {
-        let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
-        bytes.extend_from_slice(text.as_bytes());
-        bytes
-    };
-    let mut bytes = b"GGUF".to_vec();
-    bytes.extend_from_slice(&3_u32.to_le_bytes());
-    bytes.extend_from_slice(&0_u64.to_le_bytes());
-    bytes.extend_from_slice(&(pairs.len() as u64).to_le_bytes());
-    for (key, value) in pairs {
-        bytes.extend(string(key));
-        bytes.extend_from_slice(&8_u32.to_le_bytes());
-        bytes.extend(string(value));
-    }
-    let path = dir.join(name);
-    std::fs::write(&path, bytes).unwrap();
-    path.canonicalize().unwrap()
-}
-
-/// A library in `dir` holding one model, and that model.
-async fn library(dir: &Path) -> (CliContext, Model) {
-    let ctx = test_context(dir).await;
-    let weights = write_gguf(dir, "qwen.Q8_0.gguf", &[("general.architecture", "qwen3")]);
-    let model = ctx
-        .app
-        .models()
-        .import_from_file(&weights, ctx.gguf_parser.as_ref(), None, ImportMode::Fresh)
-        .await
-        .expect("the model imports");
-    (ctx, model)
-}
-
-async fn stored(ctx: &CliContext, id: i64) -> Model {
-    ctx.app
-        .models()
-        .get_by_id(id)
-        .await
-        .unwrap()
-        .expect("stored")
-}
-
-/// `--projector` links, and the update's own write that follows, made from
-/// the row as it was read before the link, does not undo it.
+/// `--projector` links, and the rest of the same update is written beside
+/// the link, not over it.
 #[tokio::test]
 async fn a_projector_is_linked_and_survives_the_rest_of_the_update() {
     let dir = tempfile::tempdir().unwrap();
     let (ctx, model) = library(dir.path()).await;
     let projector = write_gguf(dir.path(), "mmproj-F16.gguf", &[("general.type", "mmproj")]);
-    let mut updated = model.clone();
-    updated.name = "Renamed".to_owned();
+    let id = model.id.to_string();
 
-    apply(&ctx, &mut updated, Some(ProjectorChange::Link(&projector)))
-        .await
-        .unwrap();
-    ctx.app.models().update(&updated).await.unwrap();
+    run(
+        &ctx,
+        &[
+            "gglib",
+            "model",
+            "update",
+            &id,
+            "--force",
+            "--name",
+            "Renamed",
+            "--projector",
+            projector.to_str().unwrap(),
+        ],
+    )
+    .await
+    .unwrap();
 
     let row = stored(&ctx, model.id).await;
     assert_eq!(row.projector_path.as_deref(), Some(projector.as_path()));
@@ -73,39 +38,24 @@ async fn a_projector_is_linked_and_survives_the_rest_of_the_update() {
     assert_eq!(row.name, "Renamed");
 }
 
-#[tokio::test]
-async fn no_projector_unlinks() {
-    let dir = tempfile::tempdir().unwrap();
-    let (ctx, model) = library(dir.path()).await;
-    let projector = write_gguf(dir.path(), "mmproj-F16.gguf", &[("general.type", "mmproj")]);
-    let mut linked = model.clone();
-    apply(&ctx, &mut linked, Some(ProjectorChange::Link(&projector)))
-        .await
-        .unwrap();
-
-    apply(&ctx, &mut linked, Some(ProjectorChange::Unlink))
-        .await
-        .unwrap();
-
-    assert_eq!(linked.projector_path, None);
-    assert!(!stored(&ctx, model.id).await.image_input());
-}
-
-/// Neither flag: the link the model has is carried through untouched.
+/// Neither flag: the link the model has is carried through an update of
+/// something else untouched.
 #[tokio::test]
 async fn neither_flag_leaves_the_link() {
     let dir = tempfile::tempdir().unwrap();
     let (ctx, model) = library(dir.path()).await;
     let projector = write_gguf(dir.path(), "mmproj-F16.gguf", &[("general.type", "mmproj")]);
-    let mut linked = model.clone();
-    apply(&ctx, &mut linked, Some(ProjectorChange::Link(&projector)))
+    let id = model.id.to_string();
+    let update = ["gglib", "model", "update", &id, "--force"];
+    let link = [&update[..], &["--projector", projector.to_str().unwrap()]].concat();
+    run(&ctx, &link).await.unwrap();
+
+    run(&ctx, &[&update[..], &["--name", "Renamed"]].concat())
         .await
         .unwrap();
 
-    apply(&ctx, &mut linked, None).await.unwrap();
-    ctx.app.models().update(&linked).await.unwrap();
-
     let row = stored(&ctx, model.id).await;
+    assert_eq!(row.name, "Renamed");
     assert_eq!(row.projector_path.as_deref(), Some(projector.as_path()));
 }
 
@@ -120,16 +70,16 @@ async fn a_weights_file_is_refused_by_name() {
         "mmproj-fake.gguf",
         &[("general.architecture", "llama")],
     );
-    let mut updated = model.clone();
+    let id = model.id.to_string();
+    let argv = ["gglib", "model", "update", &id, "--force", "--projector"];
 
-    let refused = apply(&ctx, &mut updated, Some(ProjectorChange::Link(&weights)))
+    let refused = run(&ctx, &[&argv[..], &[weights.to_str().unwrap()]].concat())
         .await
         .unwrap_err()
         .to_string();
 
     assert!(refused.contains("mmproj-fake.gguf"), "{refused}");
     assert!(refused.contains("not a projector"), "{refused}");
-    assert_eq!(updated.projector_path, None);
     assert!(!stored(&ctx, model.id).await.image_input());
 }
 
@@ -174,16 +124,6 @@ fn the_preview_is_silent_when_nothing_would_change() {
         ),
         None
     );
-}
-
-/// `argv` parsed as the CLI parses it and run as `gglib model …` runs it.
-async fn run(ctx: &CliContext, argv: &[&str]) -> Result<()> {
-    use clap::Parser as _;
-    let cli = crate::Cli::try_parse_from(argv)?;
-    let Some(crate::Commands::Model { command }) = cli.command else {
-        panic!("{argv:?} is not a model command");
-    };
-    super::super::dispatch(ctx, command, crate::target::Target::Local).await
 }
 
 /// From the command line to the stored row: the flags reach the handler, the

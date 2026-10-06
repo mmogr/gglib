@@ -3,9 +3,23 @@ import type { InferenceConfig } from "./InferenceConfig";
 import type { ServerConfig } from "./ServerConfig";
 
 /**
- * Request body for updating a model.
+ * Request body for updating a model. A field that is absent leaves its part
+ * of the row alone.
  */
-export type UpdateModelRequest = { name: string | null, quantization: string | null, filePath: string | null, inferenceDefaults: InferenceConfig | null, 
+export type UpdateModelRequest = { name: string | null, quantization: string | null, filePath: string | null, 
+/**
+ * Parameter count, in billions.
+ */
+paramCountB: number | null, architecture: string | null, contextLength: number | null, 
+/**
+ * The model's metadata, whole: the map it holds afterwards.
+ */
+metadata: { [key in string]: string } | null, 
+/**
+ * The model's own sampling defaults, whole, as a person set them. An
+ * empty config clears them, and the model inherits again.
+ */
+inferenceDefaults: InferenceConfig | null, 
 /**
  * Per-model server startup defaults.
  * - Some(Some(config)) — set/replace the model's server defaults

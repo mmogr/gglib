@@ -144,7 +144,7 @@ impl ModelOps {
             core.models()
                 .update(&model)
                 .await
-                .map_err(|e| GuiError::Internal(format!("Failed to update model row: {e}")))?;
+                .map_err(|e| GuiError::from(e).context("Failed to update model row"))?;
 
             // The widest staleness window in the file: this lands minutes
             // after the request that started it, having rewritten `file_path`

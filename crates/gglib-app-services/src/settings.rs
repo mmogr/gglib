@@ -106,13 +106,7 @@ impl SettingsOps {
 
     /// Get current application settings.
     pub async fn get(&self) -> Result<AppSettings, GuiError> {
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get settings: {e}")))?;
+        let settings = self.deps.core.settings().get().await?;
 
         Ok(settings.into())
     }
@@ -121,13 +115,7 @@ impl SettingsOps {
     pub async fn update(&self, request: UpdateSettingsRequest) -> Result<AppSettings, GuiError> {
         let update: SettingsUpdate = request.clone().into();
 
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .update(update)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to update settings: {e}")))?;
+        let settings = self.deps.core.settings().update(update).await?;
 
         if let Some(Some(queue_size)) = request.max_download_queue_size {
             let _ = self.deps.downloads.set_max_queue_size(queue_size).await;

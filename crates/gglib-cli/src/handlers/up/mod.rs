@@ -223,6 +223,25 @@ mod tests {
         assert_eq!(started.port, 8123);
     }
 
+    /// `--model` names a model that has to be here, and one that is not is
+    /// missed in the sentence every other command misses in.
+    #[tokio::test]
+    async fn a_requested_model_that_is_not_here_is_missed_as_everywhere_else() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::bootstrap::test_context(dir.path()).await;
+
+        let missed = choose::run(&ctx, &None, Some("__no_such_model__"), true)
+            .await
+            .expect_err("no such model")
+            .to_string();
+
+        assert_eq!(
+            missed,
+            "No model found matching: '__no_such_model__'\n\
+             Use 'gglib model list' to see available models."
+        );
+    }
+
     #[test]
     fn a_note_renders_in_parentheses_after_the_value() {
         let lines = render_row("VRAM", "24.0 GiB", Some("nvidia-smi"), false);
