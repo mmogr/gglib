@@ -16,8 +16,7 @@ on:
 # `cancel-in-progress` says, so one group shared by main's pushes would drop
 # runs merged in quick succession, and the push run is the one that runs
 # `release`. One job inside it is still exposed: release.yml's `deploy-docs`
-# shares the `pages` group with docs.yml, where a newer deploy cancels one in
-# progress.
+# runs in the `pages` group, where a newer deploy cancels one in progress.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-main-{0}', github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -56,13 +55,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Catches duplicate mapping keys, which GitHub rejects outright — the run
-      # is marked "failed because of a workflow file issue" and no jobs start.
-      # Note the limit: if THIS file is the broken one, this step never runs.
-      # `make pre-commit` is where that case gets caught, before the push.
-      - name: Validate workflow YAML
-        run: ./scripts/check_workflow_yaml.sh
-
       # The design-system guardrails in eslint.config.js (the raw <button> ban,
       # the emoji ban, the @tauri-apps import boundary) were advisory until this
       # job existed — nothing in CI ran eslint. --max-warnings 0 also keeps
@@ -76,6 +68,10 @@ jobs:
   # No `needs:` — nothing here compiles the workspace, so gating these behind
   # `fmt` only lengthened the critical path. `ci-success` still requires every
   # job, so nothing loses enforcement.
+  #
+  # This job and `enforcement` below run the Makefile targets
+  # `make pre-commit` runs and name no check of their own, so CI and a local
+  # run cannot check different things.
   boundaries:
     name: Check Boundaries
     runs-on: ubuntu-24.04
@@ -84,18 +80,16 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Check crate boundaries
-        run: ./scripts/check_boundaries.sh
+        run: make boundaries
 
       # A dependency a manifest declares and none of that crate's targets
       # names. cargo-shear reads the source as text and compiles nothing, so
       # code for another platform or behind a feature counts as a use.
-      # `--deny-warnings` also fails an optional dependency nothing uses and an
-      # `ignored` entry that is no longer needed.
       - name: Install cargo-shear
         uses: taiki-e/install-action@cargo-shear
 
       - name: Check for unused dependencies
-        run: cargo shear --deny-warnings
+        run: make unused-deps
 
       - name: Upload boundary results
         uses: actions/upload-artifact@v7
@@ -111,60 +105,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Check Tauri command placement
-        run: ./scripts/check-tauri-commands.sh
-
-      - name: Check frontend IPC allowlist
-        run: ./scripts/check-frontend-ipc.sh
-
-      - name: Check transport branching
-        run: ./scripts/check_transport_branching.sh
-
-      - name: Check ParamSource matches are exhaustive
-        run: ./scripts/check_param_source_exhaustive.sh
-
-      - name: Check nothing fabricates the context floor
-        run: ./scripts/check_context_floor.sh
-
-      - name: Check every setting has a surface
-        run: ./scripts/check_settings_surfaces.sh
-
-      # `let _ = sqlx::query(…)` discards a locked database and a missing table
-      # on the same terms as the duplicate column it claims to be ignoring.
-      # #796 shipped that way and nothing reported it, because the discard is
-      # what removes the evidence.
-      - name: Check no sqlx error is swallowed
-        run: ./scripts/check_swallowed_db_errors.sh
-
-      # Added to `make enforce` but not here, so it only ever ran locally —
-      # which is the same decorative enforcement it was written to end.
-      - name: Check the Rust file-size ratchet
-        run: ./scripts/check_rust_complexity.sh
-
-      - name: Check the TypeScript file-size ratchet
-        run: ./scripts/check_file_complexity.sh
-
-      - name: Check every crate inherits the workspace lints
-        run: ./scripts/check_lint_inheritance.sh
-
-      # Here rather than beside `make bindings-check`, which cannot substitute
-      # for it: a field missing `ts(optional)` or a numeric override
-      # regenerates *consistently*, so the diff stays clean and that step goes
-      # green with `bigint` sitting in the tree. This reads the annotations and
-      # the emitted output directly, and needs no cargo.
-      - name: Check ts-rs binding annotations
-        run: ./scripts/check_ts_bindings.sh
-
-      # The TypeScript tables are hand-written, and `check_readmes.sh` only
-      # asks whether a README exists and carries its markers — never whether
-      # what it says is true, which is how files get added without reaching one.
-      - name: Check README tables match their directories
-        run: ./scripts/check_readme_tables.py
-
-      # A link into docs/adr/ breaks when an ADR or a heading is renamed, and
-      # nothing else in CI checks it: rustdoc does not follow a URL.
-      - name: Check links into the ADRs resolve
-        run: ./scripts/check_adrs.py --check
+      # Every architecture script, in the order the Makefile's `enforce` recipe
+      # lists them. The first to fail ends the step, and its output is the end
+      # of the log. Among them is the workflow YAML check, which cannot catch a
+      # break in this file: GitHub starts no job from a workflow it will not
+      # parse, so `make pre-commit` is where that case is caught, before the
+      # push.
+      - name: Run the architecture checks
+        run: make enforce
 
   test:
     name: Test (Rust)
@@ -408,11 +356,10 @@ jobs:
     # and the job log shows 137 crates recompiling, so the four and a half
     # minutes it took were four and a half minutes of critical path.
     #
-    # The same invocation `docs.yml` and `release.yml` deploy with, run on
+    # The same invocation release.yml's `deploy-docs` publishes with, run on
     # every PR so a broken link is caught by the change that breaks it rather
-    # than by whoever next cuts a release. Both of those only fire on a
-    # published release or a manual dispatch, so nothing checked rustdoc on the
-    # way in until this existed, and the workspace had drifted accordingly.
+    # than by whoever next cuts a release: `deploy-docs` runs only for a
+    # release, so nothing else checks rustdoc on the way in.
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0

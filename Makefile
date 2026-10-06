@@ -87,13 +87,18 @@ help: ## Show this help
 
 ##@ Build and install
 
+# Where `install` puts the binary, and so what `uninstall` removes. It is a
+# plain copy: no `cargo install` ever ran, so `cargo uninstall` has nothing to
+# remove.
+INSTALLED_BIN := $$HOME/.cargo/bin/gglib
+
 # Uses pre-built binary from target/release/ (built by build-tauri or cargo build)
 install: ## Build and install gglib to ~/.cargo/bin/
 	@echo "Installing gglib..."
 	@mkdir -p "$$HOME/.cargo/bin"
-	@cp target/release/gglib "$$HOME/.cargo/bin/gglib"
+	@cp target/release/gglib "$(INSTALLED_BIN)"
 ifeq ($(UNAME_S),Darwin)
-	@codesign --force --sign - "$$HOME/.cargo/bin/gglib"
+	@codesign --force --sign - "$(INSTALLED_BIN)"
 endif
 	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
 
@@ -111,7 +116,7 @@ uninstall: ## Uninstall gglib and remove local state
 	read REPLY; \
 	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
 		echo "Uninstalling binary..."; \
-		$(CARGO) uninstall gglib || true; \
+		rm -f "$(INSTALLED_BIN)"; \
 		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
 			echo "Removing system data..."; \
 			rm -rf "$$HOME/Library/Application Support/gglib" 2>/dev/null || true; \
@@ -229,7 +234,7 @@ doc-check: export RUSTDOCFLAGS := -D warnings
 
 doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@echo "Checking rustdoc..."
-	@# The same invocation as ci.yml, docs.yml and release.yml. Every flag
+	@# The same invocation as ci.yml and release.yml. Every flag
 	@# matters: `--document-private-items` is what makes these docs worth
 	@# reading (most of this codebase is private), and it is also what the
 	@# workspace's `private_intra_doc_links = "allow"` is predicated on.
@@ -259,24 +264,28 @@ test-web: ## Run the frontend test suite
 	@echo "Running frontend tests..."
 	npm run test:run
 
+# `boundaries`, `unused-deps` and `enforce` are what ci.yml runs: its
+# `boundaries` job calls the first two and its `enforcement` job the third, so
+# a check added to one of these recipes runs in CI and in `pre-commit` alike.
 boundaries: ## Check crate boundaries
 	@./scripts/check_boundaries.sh
 
-# The Rust sibling of `deadcode-web`, and the second step of CI's `boundaries`
-# job. cargo-shear is a tool of its own: CI installs a prebuilt binary, and
-# `cargo binstall cargo-shear` or `brew install cargo-shear` does the same
-# here. Building it with `cargo install` can need a newer rustc than
-# rust-toolchain.toml pins.
+# The Rust sibling of `deadcode-web`. cargo-shear is a tool of its own: CI
+# installs a prebuilt binary, and `cargo binstall cargo-shear` or
+# `brew install cargo-shear` does the same here. Building it with
+# `cargo install` can need a newer rustc than rust-toolchain.toml pins.
 unused-deps: ## Find dependencies no crate uses (needs cargo-shear)
 	@echo "Checking for unused dependencies..."
 	@$(CARGO) shear --version >/dev/null 2>&1 || { \
 		echo "✗ cargo-shear is not installed: cargo binstall cargo-shear, or brew install cargo-shear"; \
 		exit 1; \
 	}
-	@# `--deny-warnings` as in ci.yml: an optional dependency nothing uses and
-	@# an `ignored` entry that is no longer needed fail too.
+	@# `--deny-warnings`: an optional dependency nothing uses and an `ignored`
+	@# entry that is no longer needed fail too.
 	$(CARGO) shear --deny-warnings
 
+# The architecture checks. This recipe is the only list of them: CONTRIBUTING
+# and scripts/README point here and keep no list of their own.
 enforce: ## Run the architecture enforcement checks
 	@./scripts/check-tauri-commands.sh
 	@./scripts/check-frontend-ipc.sh
@@ -296,15 +305,12 @@ enforce: ## Run the architecture enforcement checks
 	@# fitted rung. The same construct shipped in #925, #926 and #934, each time
 	@# found months later by reading. The construct is the tell.
 	@./scripts/check_context_floor.sh
-	@# The repo's "small files" constraint was enforced only over src/ (TS and
-	@# CSS); Rust was never checked, and 175 files are already over the same
-	@# budget. A ratchet rather than a threshold, so the rule can bite today
-	@# instead of after a refactor nobody has scheduled.
-	@./scripts/check_rust_complexity.sh
-	@# Its TypeScript sibling, which CONTRIBUTING documented and nothing ran:
-	@# a hard 300-LOC threshold cannot be switched on when 24 files are already
-	@# over it. Same ratchet, same escape hatch.
-	@./scripts/check_file_complexity.sh
+	@# The repo's "small files" constraint, once per language with that
+	@# language's baseline. A ratchet rather than a threshold, so the rule can
+	@# bite today instead of after a refactor nobody has scheduled: well over a
+	@# hundred files are already past the 300-LOC budget.
+	@./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt
+	@./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt
 	@./scripts/check_lint_inheritance.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
@@ -561,13 +567,14 @@ build-tauri: ## Build Tauri desktop app
 ##@ Workflows
 
 # Full setup from scratch
-# Note: build-tauri builds both gglib-app and gglib-cli, install just copies the binary
+# Note: build-tauri builds the web UI, gglib-app and gglib-cli, so nothing
+# else here builds; install just copies the binary
 # llama-install-auto runs last and is REQUIRED to succeed when a GPU
 # runtime is detected: it would otherwise silently produce a CPU-only
 # llama-server, which is almost certainly not what the user wants if
 # they have a GPU. The script itself short-circuits to --cpu-only on
 # bare-CPU machines.
-setup: check-deps build-gui build-tauri install ## Full setup (check deps + build + install)
+setup: check-deps build-tauri install ## Full setup (check deps + build + install)
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt
 	@# Optional accelerator. The command already refuses to fail — it skips
@@ -598,7 +605,7 @@ dev: fmt lint test ## Format, lint and test
 # Without it, adding a Rust wire field and forgetting `make bindings` passed
 # a target whose help text reads "everything CI requires" and then cost a
 # full Rust CI leg to discover.
-pre-commit: fmt lint check test lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce bindings-check doc-check ## Run everything CI requires
+pre-commit: fmt lint test lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce bindings-check doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow

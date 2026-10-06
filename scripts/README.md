@@ -6,18 +6,8 @@ This directory contains helper scripts for development, CI enforcement, and docu
 
 | Script | Purpose | Used By |
 |--------|---------|---------|
-| [check_boundaries.sh](#check_boundariessh) | Validate crate dependency rules | CI |
-| [check-frontend-ipc.sh](#check-frontend-ipcsh) | Enforce Tauri invoke() allowlist | CI |
-| [check-tauri-commands.sh](#check-tauri-commandssh) | Enforce HTTP-first Tauri policy | CI |
-| [check_file_complexity.sh](#check_file_complexitysh) | TypeScript/CSS file-size ratchet | CI |
-| [check_rust_complexity.sh](#check_rust_complexitysh) | Rust file-size ratchet | CI |
-| [check_lint_inheritance.sh](#check_lint_inheritancesh) | Every crate inherits the workspace lints; allowed lints may not grow | CI |
-| [check_param_source_exhaustive.sh](#check_param_source_exhaustivesh) | No catch-all arm over `ParamSource` | CI |
-| [check_workflow_yaml.sh](#check_workflow_yamlsh) | Workflow sanity: duplicate YAML keys under `.github/`, and bump-version.yml re-locking | CI |
-| [check_transport_branching.sh](#check_transport_branchingsh) | Enforce transport layer unification | CI |
-| [check_settings_surfaces.sh](#check_settings_surfacessh) | Every `Settings` field is settable from somewhere | CI |
-| [check_swallowed_db_errors.sh](#check_swallowed_db_errorssh) | No `sqlx` query has its `Result` discarded | CI |
-| [check_adrs.py](#check_adrspy) | Every link into `docs/adr/` resolves; every ADR reference is defined | CI |
+| [check_boundaries.sh](#check_boundariessh) | Validate crate dependency rules | `make boundaries` |
+| [The architecture checks](#architecture-enforcement-scripts) | The repository rules that neither the compiler nor a linter checks | `make enforce`, whose recipe in the [Makefile](../Makefile) is the only list of them |
 | [check-deps.sh](#check-depssh) | Verify system dependencies | `make check-deps` |
 | [install-llama.sh](#install-llamash) | Install llama.cpp with GPU detection | `make llama-install-auto` |
 | [generate_submodule_readmes.sh](#generate_submodule_readmessh) | Create missing README stubs | Manual |
@@ -30,7 +20,10 @@ This directory contains helper scripts for development, CI enforcement, and docu
 
 ## Architecture Enforcement Scripts
 
-These scripts are run in CI to enforce architectural boundaries and prevent regression.
+CI runs these through `make boundaries` and `make enforce`, the targets
+`make pre-commit` runs. The `enforce` recipe in the [Makefile](../Makefile)
+lists every check it runs. This section describes the scripts whose rules need
+more room than a header, and is not that list.
 
 ### `check_boundaries.sh`
 
@@ -99,25 +92,32 @@ existed as code, and an empty scan is indistinguishable from a clean one.
 ./scripts/check_transport_branching.sh
 ```
 
-### `check_file_complexity.sh` / `check_rust_complexity.sh`
+### `check_file_size.sh`
 
-The file-size ratchets, one per language. A file already over the 300-LOC
-budget is recorded in a baseline at its current size and may shrink freely;
-growing it fails. A file not in the baseline may not cross the line at all.
+The file-size ratchet, run once per language. A file already over the 300-LOC
+budget is recorded in that language's baseline at its size and may shrink
+freely; growing it fails. A file not in the baseline may not cross the line at
+all.
 
 A ratchet rather than a threshold because a threshold could not be switched on:
-174 Rust files and 24 TypeScript ones are already over. A gate that fails on
-every commit gets switched off within a day, which is how a constraint becomes
-decorative — and `check_file_complexity.sh` *was* decorative, documented in
-CONTRIBUTING and run by nothing at all.
+well over a hundred Rust files and more than a dozen TypeScript ones are
+already over. A gate that fails on every commit gets switched off within a day,
+which is how a constraint becomes decorative.
 
-`--update` rewrites the baseline. Use it when a file legitimately grew and the
-growth is the point: the diff then shows the number going up.
+`--update` rewrites the baseline to the tree's sizes. Use it when a file
+legitimately grew and the growth is the point: the diff then shows the number
+going up. On a tree that passes, it can only lower a row or drop one, and the
+check says when a row is above its file.
 
 ```bash
-./scripts/check_file_complexity.sh [--update]   # src/**/*.{ts,tsx,css}
-./scripts/check_rust_complexity.sh [--update]   # crates/ and src-tauri/
+# crates/ and src-tauri/
+./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt [--update]
+# src/**/*.{ts,tsx,css}, except src/types/generated/
+./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt [--update]
 ```
+
+`check_rust_complexity.sh` and `check_file_complexity.sh` run those two
+commands, under the names that module docs cite.
 
 ### `check_lint_inheritance.sh`
 
@@ -409,9 +409,9 @@ The main CI workflows that use these scripts:
 
 | Workflow | Job | Scripts Used |
 |----------|-----|--------------|
-| `ci.yml` | `boundaries` | `check_boundaries.sh` |
-| `ci.yml` | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_lint_inheritance.sh`, `check_adrs.py` |
-| `ci.yml` | `quality` | `check_workflow_yaml.sh` |
+| `ci.yml` | `boundaries` | `make boundaries`, `make unused-deps` |
+| `ci.yml` | `enforcement` | `make enforce` |
+| `ci.yml` | `test` | `split_test_output.py` |
 | `check-issue-form.yml` | — | `check_issue_form_mapping.mjs` |
 | `bump-version.yml` | — | `sync_versions.py` |
 | `update-deps.yml` | — | `lock_changes.py` |

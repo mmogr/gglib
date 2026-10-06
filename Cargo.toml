@@ -183,7 +183,7 @@ unreachable_pub = "deny"
 # the ones that do not take sibling crates from `[workspace.dependencies]`
 # below, where they are bare `path` entries carrying no version — which
 # `cargo publish` refuses outright. So no docs.rs build exists, and the only
-# doc builds that do are `docs.yml` and `release.yml`, both of which pass
+# doc builds that do are in `ci.yml` and `release.yml`, both of which pass
 # `--document-private-items`.
 # Under that flag these links resolve; the lint fires anyway, to warn that they
 # would break without it.

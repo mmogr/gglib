@@ -207,10 +207,9 @@ updates:
     #
     # actions/github-script is on the list although Label Check runs it on
     # every pull request: on a pull request Dependabot opens, Label Check's
-    # scripts stop at the bot exemption, so the deployment scripts in
-    # release.yml and docs.yml would meet a new major first in a real
-    # release. Bumped by hand, Label Check runs its whole script on the pull
-    # request.
+    # scripts stop at the bot exemption, so the deployment script in
+    # release.yml would meet a new major first in a real release. Bumped by
+    # hand, Label Check runs its whole script on the pull request.
     #
     # peaceiris/actions-gh-pages (badges.yml) and
     # stefanbuck/github-issue-parser (issue-labels.yml) are not exercised
