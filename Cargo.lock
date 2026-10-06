@@ -2588,7 +2588,6 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
- "dashmap",
  "futures-util",
  "gglib-build-info",
  "gglib-core",

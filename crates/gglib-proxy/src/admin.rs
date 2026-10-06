@@ -14,7 +14,6 @@ use axum::{
 use serde::Deserialize;
 use tracing::{info, warn};
 
-use crate::cache_lifecycle::clear_cache;
 use crate::server::AppState;
 
 /// Handle cache clear requests via `POST /v1/proxy/cache/clear`.
@@ -56,9 +55,7 @@ pub(crate) async fn handle_proxy_cache_clear(
 
     // ── Disk slot layer ───────────────────────────────────────────────────
     let disk = if state.cache_enabled {
-        // base_url is unused by clear_cache; model_id 0 is a sentinel — it only
-        // touches flags and hot-cache invalidation, not any specific model's slots.
-        let Some(config) = state.build_stream_config(String::new(), 0) else {
+        let Some(slot_dir) = state.slot_dir.as_deref() else {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
@@ -66,21 +63,27 @@ pub(crate) async fn handle_proxy_cache_clear(
                 })),
             );
         };
-        match clear_cache(&config, session_id.as_deref()).await {
-            Ok(()) => {
-                if session_id.is_some() {
-                    "session cleared"
-                } else {
-                    "all slots cleared"
-                }
+        // Not behind the slot gate: a clear answers at once, with no spinner
+        // in the CLI or the GUI. A cycle that is generating as it runs holds
+        // the gate and would write back the file deleted here, so the slot
+        // cache is told what was cleared, and that cycle's save is skipped.
+        let cleared = crate::slots::clear_slot_files(slot_dir, session_id.as_deref()).await;
+        let disk = if let Some(sid) = session_id.as_deref() {
+            if let Ok(sanitized) = crate::slots::sanitize_session_id(sid) {
+                state.slot_cache.clear_session(&sanitized);
             }
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                );
-            }
+            "session cleared"
+        } else {
+            state.slot_cache.clear_all();
+            "all slots cleared"
+        };
+        if let Err(e) = cleared {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            );
         }
+        disk
     } else {
         "disk cache not enabled"
     };

@@ -29,8 +29,8 @@
 //!
 //! # Where it goes in the pipeline
 //!
-//! Applied in `server.rs` after the scan and before `body_for_retry` is
-//! cloned, which puts it on the primary forward, the `UpstreamDead` retry, the
+//! Applied in `server.rs` after the scan and before the body is handed to the
+//! first attempt, which puts it on that attempt, the `UpstreamDead` retry, the
 //! unary path and the repair re-issue, all of which derive from that body.
 //!
 //! One path carries the trip and never delivers the note: a request that also

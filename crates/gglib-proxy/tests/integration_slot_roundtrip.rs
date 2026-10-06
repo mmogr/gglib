@@ -8,11 +8,10 @@ mod fixtures;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime};
 
 use axum::{Router, body::Body, http::Response, routing::post};
-use dashmap::DashSet;
 use reqwest::Client;
 use serde_json::json;
 use tokio::net::TcpListener;
@@ -52,7 +51,7 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
     // returns model_id 1.
     //
     // Written *after* the proxy starts, deliberately. `serve()` stamps
-    // `server_start_time` with `now()`, and the mtime guard compares whole
+    // the server's start time with `now()`, and the mtime guard compares whole
     // seconds (`mtime_secs < server_start_secs` in
     // `slots::slot_file_is_stale`). Creating the file first leaves it one
     // second-boundary away from reading as stale, which silently skips the
@@ -315,13 +314,11 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
     std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
     std::fs::write(&bin_path, b"fake kv state").unwrap();
 
-    let config = StreamConfig {
-        client: Client::new(),
-        base_url: format!("http://127.0.0.1:{port}"),
+    let config = StreamConfig::standalone(
+        Client::new(),
+        format!("http://127.0.0.1:{port}"),
         slot_dir,
-        model_id: 0,
-        clear_all_pending: Arc::new(AtomicBool::new(false)),
-        per_session_cleared: Arc::new(DashSet::new()),
+        0, // model_id
         // Server "started" well before the file was written, so the mtime
         // guard cannot classify it as stale. Using a bare `now()` here races
         // the guard's whole-second comparison (`mtime_secs <
@@ -330,15 +327,8 @@ async fn retry_backoff_exhausts_max_retries_then_succeeds() {
         // second boundary falls between them the file reads as stale and the
         // restore short-circuits to `NotFound` before any retry happens.
         // Matches `test_restore_with_retry_does_not_skip_fresh_slot_file`.
-        server_start_time: Arc::new(AtomicU64::new(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                .saturating_sub(3600),
-        )),
-        last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-    };
+        SystemTime::now() - Duration::from_hours(1),
+    );
 
     let result = restore_with_retry(&config, "backoff-session").await;
 
@@ -417,17 +407,13 @@ async fn save_retry_backoff_exhausts_max_retries_then_succeeds() {
 
     let client = Client::new();
     let base_url = format!("http://127.0.0.1:{port}");
-    let clear_all_pending = AtomicBool::new(false);
-    let per_session_cleared = DashSet::new();
 
     attempt_save(
         &client,
         &base_url,
-        std::path::Path::new("/tmp"), // slot_dir (not used — DashSet guard fires first)
+        std::path::Path::new("/tmp"), // slot_dir
         0,                            // model_id
         "save-backoff-session",
-        &clear_all_pending,
-        &per_session_cleared,
     )
     .await;
 
@@ -480,7 +466,7 @@ async fn partial_kv_model_bypasses_disk_slot_layer_entirely() {
     // cache miss.
     //
     // Written after the proxy starts for the same reason as that test: a file
-    // predating `server_start_time` is skipped by the mtime guard, which would
+    // predating the server's start time is skipped by the mtime guard, which would
     // drive the restore count to zero on its own and let this test pass
     // vacuously without ever exercising the gate.
     let bin_path = slot_bin_path(&slot_dir, 1, session_id);
@@ -553,7 +539,7 @@ async fn pinned_proxy_persists_kv_cache_across_the_session() {
     // Written after the proxy starts — see the identical comment on
     // `slot_roundtrip_non_streaming_verify_order_and_counts` for why the
     // ordering matters (the mtime staleness guard compares whole seconds
-    // against `server_start_time`).
+    // against the server's start time).
     let bin_path = slot_bin_path(&slot_dir, 1, session_id);
     std::fs::create_dir_all(bin_path.parent().unwrap()).unwrap();
     std::fs::write(&bin_path, b"fake kv state").unwrap();

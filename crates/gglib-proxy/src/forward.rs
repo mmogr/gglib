@@ -527,10 +527,9 @@ fn shape_request_body(
 }
 
 /// Bundles the arguments to [`forward_chat_completion`] that stay constant
-/// across the cache-branching in `chat_completions` — only the trailing
-/// `(permit, config, session_id)` triple passed to [`Self::send`] varies
-/// between the non-streaming/streaming/fail-open/cache-disabled branches, and
-/// between a request's primary attempt and its post-`UpstreamDead` retry.
+/// across the cache-branching of one attempt at a request (`server::attempt`)
+/// — only the trailing `(permit, config, session_id)` triple varies between
+/// its non-streaming/streaming/fail-open/cache-disabled branches.
 pub(crate) struct ForwardRequest<'a> {
     /// HTTP client to use for the request.
     pub client: &'a Client,
@@ -580,10 +579,11 @@ pub(crate) struct ForwardRequest<'a> {
     /// [`crate::token_calibration::TokenCalibration::session_chars_per_token`]);
     /// `None` when no session id was resolved, which falls back to the live
     /// per-model ratio. Distinct from the `session_id` parameter of
-    /// [`Self::send`]: that one is only populated when disk KV-slot caching is
-    /// enabled, but the frozen budget must hold even when it's off (e.g. for
-    /// hybrid/sliding-window-attention models, where disk caching is disabled
-    /// but the host-RAM prompt cache it protects still applies).
+    /// [`forward_chat_completion`]: that one is only populated when disk
+    /// KV-slot caching is enabled, but the frozen budget must hold even when
+    /// it's off (e.g. for hybrid/sliding-window-attention models, where disk
+    /// caching is disabled but the host-RAM prompt cache it protects still
+    /// applies).
     pub calibration_session_id: Option<&'a str>,
     /// Cache-hit telemetry sink, fed from both the streaming and
     /// non-streaming response paths.
@@ -612,35 +612,23 @@ pub(crate) struct ForwardRequest<'a> {
     pub loop_guard_trip: Option<LoopGuardTrip>,
 }
 
-impl ForwardRequest<'_> {
-    /// Forward this request to the upstream llama-server, participating in
-    /// the disk KV cache according to `(permit, config, session_id)`.
-    ///
-    /// * `permit` - KV cache semaphore permit (streaming path only), moved
-    ///   into the spawned task and held for its entire lifetime. `None`
-    ///   when the KV cache is disabled.
-    /// * `config` - KV cache lifecycle configuration (streaming path only).
-    ///   `None` when the KV cache is disabled.
-    /// * `session_id` - Session identifier used to key the KV cache save
-    ///   (streaming path only). `None` when the KV cache is disabled.
-    ///
-    /// Returns the response from llama-server, with the streaming SSE body
-    /// re-emitted through the universal normalization pipeline when
-    /// `is_streaming` is true.
-    pub(crate) async fn send(
-        self,
-        permit: Option<tokio::sync::OwnedSemaphorePermit>,
-        config: Option<crate::cache_lifecycle::StreamConfig>,
-        session_id: Option<String>,
-    ) -> Result<Response, ForwardError> {
-        forward_chat_completion(self, permit, config, session_id).await
-    }
-}
-
-/// Forward a chat completion request to the upstream llama-server.
+/// Forward a chat completion request to the upstream llama-server,
+/// participating in the disk KV cache according to
+/// `(permit, config, session_id)`.
 ///
-/// See [`ForwardRequest`] for what `req`'s fields mean, and
-/// [`ForwardRequest::send`] (its sole caller) for the trailing cache triple.
+/// See [`ForwardRequest`] for what `req`'s fields mean.
+///
+/// * `permit` - KV cache semaphore permit (streaming path only), moved
+///   into the spawned task and held for its entire lifetime. `None`
+///   when the KV cache is disabled.
+/// * `config` - KV cache lifecycle configuration (streaming path only).
+///   `None` when the KV cache is disabled.
+/// * `session_id` - Session identifier used to key the KV cache save
+///   (streaming path only). `None` when the KV cache is disabled.
+///
+/// Returns the response from llama-server, with the streaming SSE body
+/// re-emitted through the universal normalization pipeline when
+/// `is_streaming` is true.
 pub(crate) async fn forward_chat_completion(
     req: ForwardRequest<'_>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,

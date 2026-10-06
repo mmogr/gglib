@@ -5,7 +5,8 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::time::SystemTime;
 
 use axum::{
     Json,
@@ -18,28 +19,31 @@ use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
+use gglib_core::Settings;
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::domain::InferenceConfig;
+use gglib_core::domain::defects::LoopGuardTrip;
+use gglib_core::ports::{Admission, ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
 use gglib_core::ports::{AgentRunStarter, HubChatsPort, RemoteGatewayPort, RunsPort};
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
-use gglib_core::request_pipeline::{ModelRoute, SamplingLayers, resolve_route};
+use gglib_core::request_pipeline::{ModelContext, ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
 
 use crate::cache_lifecycle::{StreamConfig, resolve_cache_triple, run_with_cache};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
-use crate::forward::{ForwardError, ForwardRequest};
+use crate::forward::{ForwardError, ForwardRequest, forward_chat_completion};
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse};
 use crate::profiles::configured_names;
 use crate::sampling_audit::SamplingAuditStore;
 use crate::serve_config::ServeConfig;
+use crate::slot_cache_state::SlotCacheState;
 use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::StreamBounds;
-use dashmap::DashSet;
 use gglib_core::services::SettingsCache;
 use gglib_sse::SseOptions;
 
@@ -120,28 +124,15 @@ pub(crate) struct AppState {
     pub(crate) slot_dir: Option<PathBuf>,
     /// Semaphore gating restore→forward→save cycles to prevent interleaving.
     slot_gate: Arc<Semaphore>,
-    /// When true, all pending saves are skipped (set on restart or explicit clear).
-    pub(crate) clear_all_pending: Arc<AtomicBool>,
-    /// Sessions that have been explicitly cleared (skip save for these).
-    pub(crate) per_session_cleared: Arc<DashSet<String>>,
-    /// Unix timestamp (seconds) when the current llama-server process started.
-    /// Updated on each restart detection. Used by mtime guard to skip stale slots.
-    server_start_time: Arc<AtomicU64>,
-    /// Last session successfully loaded into RAM (hot in KV cache).
-    /// Composite key (`model_id` + `session_id`) used to bypass disk restore
-    /// when the same model+session is already hot.
-    last_loaded_session:
-        Arc<tokio::sync::RwLock<Option<crate::cache_lifecycle::LastLoadedSession>>>,
+    /// What is remembered of the slot cache between requests: the session hot
+    /// in RAM, what has been cleared, and when the server now running started.
+    pub(crate) slot_cache: Arc<SlotCacheState>,
     /// Where the loop guard records each decision and each scanned request,
     /// to outlive the process. `None` records nothing.
     pub(crate) loop_guard_trips: Option<Arc<dyn gglib_core::ports::LoopGuardTripSink>>,
 }
 
 impl AppState {
-    /// Build a [`StreamConfig`] for `base_url`/`model_id`, sourced from this
-    /// state's cache-lifecycle fields. Returns `None` when `slot_dir` isn't
-    /// configured — the one condition under which a `StreamConfig` cannot be
-    /// built, since it holds `slot_dir` as an owned (not `Option`) `PathBuf`.
     /// The daemon's cancellation token, when this proxy runs under one.
     pub(crate) fn daemon_shutdown(&self) -> Option<CancellationToken> {
         self.daemon_shutdown.clone()
@@ -152,20 +143,17 @@ impl AppState {
         self.remote.clone()
     }
 
-    pub(crate) fn build_stream_config(
-        &self,
-        base_url: String,
-        model_id: u32,
-    ) -> Option<StreamConfig> {
+    /// Build a [`StreamConfig`] for `base_url`/`model_id`, sharing this
+    /// state's slot cache. Returns `None` when `slot_dir` isn't configured —
+    /// the one condition under which a `StreamConfig` cannot be built, since
+    /// it holds `slot_dir` as an owned (not `Option`) `PathBuf`.
+    fn build_stream_config(&self, base_url: String, model_id: u32) -> Option<StreamConfig> {
         self.slot_dir.as_ref().map(|dir| StreamConfig {
             client: self.client.clone(),
             base_url,
             slot_dir: dir.clone(),
             model_id,
-            clear_all_pending: self.clear_all_pending.clone(),
-            per_session_cleared: self.per_session_cleared.clone(),
-            server_start_time: self.server_start_time.clone(),
-            last_loaded_session: self.last_loaded_session.clone(),
+            state: Arc::clone(&self.slot_cache),
         })
     }
 }
@@ -262,15 +250,6 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
     // Shared cache state (constructed once, shared across all requests).
     // Always initialized; the `cache_enabled` guard prevents acquire() when disabled.
     let slot_gate = Arc::new(Semaphore::new(1));
-    let clear_all_pending = Arc::new(AtomicBool::new(false));
-    let per_session_cleared = Arc::new(DashSet::new());
-    let server_start_time = Arc::new(AtomicU64::new(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-    ));
-    let last_loaded_session = Arc::new(tokio::sync::RwLock::new(None));
 
     // Background byte-budget eviction, so cached session slot files don't
     // accumulate without bound. Only runs when there's a slot_dir to sweep;
@@ -321,10 +300,9 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         cache_enabled,
         slot_dir,
         slot_gate,
-        clear_all_pending,
-        per_session_cleared,
-        server_start_time,
-        last_loaded_session,
+        // Until an admission reports a fresh server, slot files older than
+        // this proxy are taken to be an earlier server's.
+        slot_cache: Arc::new(SlotCacheState::new(SystemTime::now())),
         loop_guard_trips: observers.loop_guard_trips,
     };
 
@@ -509,8 +487,8 @@ pub(crate) async fn chat_completions(
     .await
     {
         // A bare name takes the endpoint's default profile, if one was set.
-        // Applied here rather than at the two `SamplingLayers` constructions
-        // below, which would drift the moment a third one appears.
+        // Applied here, once, rather than where `attempt` builds the
+        // `SamplingLayers` of each attempt.
         //
         // A default whose profile has since been deleted degrades to
         // unprofiled rather than 404ing: the client never named it and cannot
@@ -641,9 +619,9 @@ pub(crate) async fn chat_completions(
     // an OpenAI-compatible client, which treats 503 as terminal (see the
     // UpstreamDead path below, which already avoids 503 for that reason).
     //
-    // `admission.lease` is held for the whole of this request — moved into
-    // `ForwardRequest` below — and is what stops the model being swapped out
-    // from under a response that is still streaming.
+    // `admission.lease` is held for the whole of this request — `attempt`
+    // moves it onto the connection guard — and is what stops the model being
+    // swapped out from under a response that is still streaming.
     //
     // Admitted by id, so the runtime serves and pins the model resolved above
     // rather than whichever row a name finds first.
@@ -675,39 +653,118 @@ pub(crate) async fn chat_completions(
             Err(e) => return handle_runtime_error(e),
         };
     }
-    let target = admission.target.clone();
-    let lease = admission.lease;
+
+    // The note goes on here, before the body is handed to an attempt, so every
+    // path that derives from it carries it: both attempts, the unary path and
+    // the repair re-issue. After the scan above, so it can never trip the
+    // guard that wrote it.
+    let body = match guard_note {
+        Some(note) => note.append_to(body),
+        None => body,
+    };
+
+    let ctx = RequestCtx {
+        headers: &headers,
+        is_streaming,
+        session_id: sanitized_session_id.as_deref(),
+        profile: request_profile,
+        context: model_context,
+    };
+
+    // The first attempt gets a clone of the body, so the original is still in
+    // hand if the upstream turns out to be dead. `Bytes` is reference-counted,
+    // so the clone is O(1).
+    let first = body.clone();
+    match attempt(&state, &ctx, admission, &settings, first, loop_guard_trip).await {
+        Ok(response) => response,
+        Err(ForwardError::UpstreamDead) => {
+            // llama-server was dead after admission returned a stale port.
+            // Strategy:
+            //   1. Clear stale state via stop_current().
+            //   2. Re-admit — the queue does the waiting, so one request
+            //      drives the restart and concurrent requests are batched
+            //      behind it rather than surfacing a 503 to the client (the VS
+            //      Code LLM Gateway treats 503 as a terminal error).
+            //   3. Run the attempt again, once, against the new admission.
+            warn!(
+                model = %model.name,
+                "upstream dead — clearing stale state and restarting model for transparent retry"
+            );
+            let _ = state.runtime_port.stop_current().await;
+
+            // AdmissionTimeout is deliberately not retried here: it means the
+            // GPU is oversubscribed rather than that this model is still
+            // loading, so it falls through to a 503 + Retry-After and the
+            // client controls its own backoff.
+            let admission = match admit().await {
+                Ok(admission) => admission,
+                Err(e) => return handle_runtime_error(e),
+            };
+            // Settings are read again: the model was just relaunched, so this
+            // is a fresh point in time.
+            let settings = state.settings.get().await;
+            // No trip. The first attempt already recorded it, and the ledger
+            // counts one intervention per request the guard acted on, not one
+            // per attempt. (`requests` is counted per attempt on this path.)
+            // The retry does carry the note, which is in `body`.
+            match attempt(&state, &ctx, admission, &settings, body, None).await {
+                Ok(response) => response,
+                // Dead again straight after a restart: give up, with the 503
+                // and the Retry-After a model that is still loading gets.
+                Err(ForwardError::UpstreamDead) => {
+                    handle_runtime_error(ModelRuntimeError::ModelLoading)
+                }
+            }
+        }
+    }
+}
+
+/// What one chat completion carries into each of its attempts: the parts no
+/// admission and no settings read can change.
+struct RequestCtx<'a> {
+    headers: &'a HeaderMap,
+    is_streaming: bool,
+    /// The sanitized session id, from the header or the content hash.
+    session_id: Option<&'a str>,
+    /// The profile the request's model id resolved to. A retry does not
+    /// resolve it again: the client asked for a specific one.
+    profile: Option<InferenceConfig>,
+    /// The model's stored capabilities, read once before admission. A retry
+    /// follows a restart of the same model, so reading the catalog again
+    /// could only return what is already in hand.
+    context: ModelContext,
+}
+
+/// Forward `body` to the server `admission` names: one attempt at the request
+/// `ctx` describes.
+///
+/// A request's first attempt and the one after a dead upstream's restart are
+/// both this function, so neither can do a step the other leaves out. They
+/// differ only in what they are handed: the admission, the `settings` read at
+/// the time, and `trip`, which the first alone carries.
+///
+/// # Errors
+///
+/// [`ForwardError::UpstreamDead`] when the admitted server could not be
+/// reached.
+async fn attempt(
+    state: &AppState,
+    ctx: &RequestCtx<'_>,
+    admission: Admission,
+    settings: &Settings,
+    body: Bytes,
+    trip: Option<LoopGuardTrip>,
+) -> Result<Response, ForwardError> {
+    let Admission { target, lease } = admission;
     // Every key from here on — the connection, the forward, calibration, the
     // dashboard's per-model rows and the SSE echo — is the admitted model's
     // own name, never the string the request happened to spell it with.
-    let model_name = target.model_name.clone();
+    let model_name = target.model_name.as_str();
 
-    // If the model was just restarted, invalidate all pending cache slots.
-    //
-    // A single fresh spawn can satisfy several requests that were queued
-    // waiting on it, and each carries `just_started = true`. Dedup so exactly
-    // one performs the invalidation: CAS the stored server-start time from the
-    // value we observed to `now`. Only the first request wins the swap; the
-    // rest see the already-updated value and skip (no repeated WARN, no
-    // redundant re-invalidation). The stored start time doubles as the mtime
-    // guard's cutoff, so the winning swap sets it in the same step.
+    // A freshly started server holds nothing in RAM, and the slot files on
+    // disk are an earlier server's. See `SlotCacheState::on_restart`.
     if target.just_started {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let prev = state.server_start_time.load(AtomicOrdering::SeqCst);
-        if now > prev
-            && state
-                .server_start_time
-                .compare_exchange(prev, now, AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
-                .is_ok()
-        {
-            tracing::warn!("Llama-server restart detected — invalidating KV cache slots");
-            state.clear_all_pending.store(true, AtomicOrdering::SeqCst);
-            // Invalidate hot cache — the server state is fresh, nothing is loaded.
-            *state.last_loaded_session.write().await = None;
-        }
+        state.slot_cache.on_restart(SystemTime::now());
     }
 
     // Build upstream URL
@@ -736,10 +793,12 @@ pub(crate) async fn chat_completions(
         state.dashboard.launch.set(narration);
     }
 
-    // Register this request in the active-connections dashboard registry.
+    // Register this attempt in the active-connections dashboard registry.
     // The returned guard unregisters on drop (see `connections` module docs)
     // — normal completion, early return, client disconnect, or panic all
-    // clean up without any explicit unregister call at each exit point.
+    // clean up without any explicit unregister call at each exit point. An
+    // attempt that finds the upstream dead drops it on the way out, and its
+    // admission lease with it.
     //
     // The admission lease rides along on the guard (see `connections` module
     // docs): it must outlive the response, including across the streaming
@@ -747,33 +806,25 @@ pub(crate) async fn chat_completions(
     let connection = state
         .dashboard
         .connections
-        .register(model_name.clone(), is_streaming, Some(target.effective_ctx))
+        .register(
+            model_name.to_owned(),
+            ctx.is_streaming,
+            Some(target.effective_ctx),
+        )
         .holding(lease);
 
-    // Global defaults come from the same snapshot the profile list did.
+    // Global defaults come from `settings`: on a first attempt, the same
+    // snapshot the profile list did.
     let sampling = SamplingLayers {
         cli_override: state.inference_override.clone(),
-        profile: request_profile.clone(),
+        profile: ctx.profile.clone(),
         global: settings.inference_defaults.clone(),
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
         // Opt-out: absent means on. See `Settings::agentic_sampling`.
         agentic_adjustments: settings.agentic_sampling != Some(false),
     };
 
-    // The note goes on here, before the retry's clone, so every path that
-    // derives from this body carries it: the primary forward, the
-    // `UpstreamDead` retry, the unary path and the repair re-issue. After the
-    // scan above, so it can never trip the guard that wrote it.
-    let body = match guard_note {
-        Some(note) => note.append_to(body),
-        None => body,
-    };
-
-    // Clone body before forwarding — Bytes is reference-counted so this is
-    // O(1).  Needed to retry with the original payload if the upstream dies.
-    let body_for_retry = body.clone();
-
-    // Build StreamConfig for this request (Some only when cache is enabled).
+    // Build StreamConfig for this attempt (Some only when cache is enabled).
     //
     // `slot_restore_supported` is false for sliding-window/hybrid/recurrent
     // models, where a disk restore cannot resume the prompt and actively
@@ -793,22 +844,22 @@ pub(crate) async fn chat_completions(
         repair_enabled: settings.tool_call_repair != Some(false),
         client: &state.client,
         upstream_url: &upstream_url,
-        headers: &headers,
+        headers: ctx.headers,
         body,
-        is_streaming,
-        model_name: &model_name,
+        is_streaming: ctx.is_streaming,
+        model_name,
         effective_ctx: target.effective_ctx,
-        context: model_context.clone(),
+        context: ctx.context.clone(),
         metrics: state.dashboard.metrics.clone(),
         sampling,
         connection,
         upstream_health: state.upstream_health.clone(),
         stream_bounds: state.stream_bounds,
         calibration: state.calibration.clone(),
-        calibration_session_id: sanitized_session_id.as_deref(),
+        calibration_session_id: ctx.session_id,
         cache_metrics: state.dashboard.cache_metrics.clone(),
         sampling_audit: state.dashboard.sampling_audit.clone(),
-        loop_guard_trip,
+        loop_guard_trip: trip,
     };
 
     // Forward the request, optionally wrapped in cache lifecycle. `Some(cfg)`
@@ -817,157 +868,30 @@ pub(crate) async fn chat_completions(
     // alone — without a redundant outer `cache_enabled` check — covers every
     // case: cache disabled, cache enabled but no session id/config, and
     // cache enabled with both all fall into the same "no triple" arm below.
-    let response = match (&sanitized_session_id, &stream_config) {
+    //
+    // Every arm can return `UpstreamDead`: the streaming one from its TCP
+    // probe, the others from the send.
+    match (ctx.session_id, &stream_config) {
         (Some(sid), Some(cfg)) => {
-            if is_streaming {
+            if ctx.is_streaming {
                 // Streaming with cache: use prepare_streaming_cycle + sse_stream::spawn_and_return
                 let (permit, cfg, sid) =
                     resolve_cache_triple(cfg, state.slot_gate.clone(), sid).await;
-                req.send(permit, cfg, sid).await
+                forward_chat_completion(req, permit, cfg, sid).await
             } else {
                 // Non-streaming with cache: wrap in run_with_cache (fail-open internally)
-                let (resp, _restore_result) =
-                    run_with_cache(cfg, &state.slot_gate, sid, || req.send(None, None, None))
-                        .await
-                        .expect(
-                        "run_with_cache only returns Err on sanitization failure, which is already checked",
-                    );
+                let (resp, _restore_result) = run_with_cache(cfg, &state.slot_gate, sid, || {
+                    forward_chat_completion(req, None, None, None)
+                })
+                .await
+                .expect(
+                    "run_with_cache only returns Err on sanitization failure, which is already checked",
+                );
                 resp
             }
         }
         // Cache disabled, or cache enabled but no session id/config: direct call
-        _ => req.send(None, None, None).await,
-    };
-
-    // Handle UpstreamDead from the primary forward (only possible when cache is disabled
-    // or no session ID — cache-wrapped paths return Ok(Response) internally)
-    match response {
-        Ok(resp) => resp,
-        Err(ForwardError::UpstreamDead) => {
-            // llama-server was dead after admission returned a stale port.
-            // Strategy:
-            //   1. Clear stale state via stop_current().
-            //   2. Re-admit — the queue does the waiting, so one request
-            //      drives the restart and concurrent requests are batched
-            //      behind it rather than surfacing a 503 to the client (the VS
-            //      Code LLM Gateway treats 503 as a terminal error).
-            //   3. Retry the forward once with the cloned body.
-            warn!(
-                upstream = %upstream_url,
-                "upstream dead — clearing stale state and restarting model for transparent retry"
-            );
-            let _ = state.runtime_port.stop_current().await;
-
-            // AdmissionTimeout is deliberately not retried here: it means the
-            // GPU is oversubscribed rather than that this model is still
-            // loading, so it falls through to a 503 + Retry-After and the
-            // client controls its own backoff.
-            let retry_admission = match admit().await {
-                Ok(admission) => admission,
-                Err(e) => return handle_runtime_error(e),
-            };
-            let new_target = retry_admission.target.clone();
-            let retry_lease = retry_admission.lease;
-
-            let retry_url = format!("{}/v1/chat/completions", new_target.base_url);
-            // Re-read settings for the retry: the model was just relaunched,
-            // so this is a fresh point in time. The profile is deliberately
-            // not re-resolved — the client asked for a specific one.
-            let retry_settings = state.settings.get().await;
-            let retry_sampling = SamplingLayers {
-                cli_override: state.inference_override.clone(),
-                profile: request_profile.clone(),
-                global: retry_settings.inference_defaults.clone(),
-                trust_client_sampling: retry_settings.trust_client_sampling.unwrap_or(false),
-                agentic_adjustments: retry_settings.agentic_sampling != Some(false),
-            };
-
-            // Fresh connection for the retried attempt — the original guard
-            // (moved into the first `forward_chat_completion` call above)
-            // was already dropped when that call returned `UpstreamDead`,
-            // taking the first attempt's admission lease with it.
-            let retry_connection = state
-                .dashboard
-                .connections
-                .register(
-                    model_name.clone(),
-                    is_streaming,
-                    Some(new_target.effective_ctx),
-                )
-                .holding(retry_lease);
-
-            // Compute cache-aware permit/config/session_id for the retry.
-            // Mirrors the normal-path pattern: acquire permit via
-            // prepare_streaming_cycle, fail-open on error. Deliberately does
-            // NOT branch on `is_streaming` the way the primary attempt does
-            // above — a non-streaming retry still resolves the triple this
-            // way rather than going through `run_with_cache`, matching this
-            // path's existing behavior.
-            // The disk-layer gate also applies here: the retry targets a freshly
-            // spawned instance of the same model, so a partial-KV model stays on
-            // the RAM-cache-only path (see the initial attempt above).
-            let (retry_permit, retry_cfg, retry_session) = match (
-                state.cache_enabled && new_target.slot_restore_supported,
-                sanitized_session_id.as_ref(),
-                state.build_stream_config(new_target.base_url.clone(), new_target.model_id),
-            ) {
-                (true, Some(sid), Some(cfg)) => {
-                    resolve_cache_triple(&cfg, state.slot_gate.clone(), sid).await
-                }
-                _ => (None, None, None),
-            };
-
-            let retry_req = ForwardRequest {
-                // `retry_settings`, not `settings` — the sibling sampling
-                // layers above already read the fresh snapshot this block
-                // deliberately took, and this one was still on the stale one.
-                repair_enabled: retry_settings.tool_call_repair != Some(false),
-                client: &state.client,
-                upstream_url: &retry_url,
-                headers: &headers,
-                body: body_for_retry,
-                is_streaming,
-                model_name: &model_name,
-                effective_ctx: new_target.effective_ctx,
-                // The same context the first attempt used. A retry follows a
-                // restart of the same model, so re-reading the catalog could
-                // only return what is already in hand.
-                context: model_context.clone(),
-                metrics: state.dashboard.metrics.clone(),
-                sampling: retry_sampling,
-                connection: retry_connection,
-                upstream_health: state.upstream_health.clone(),
-                stream_bounds: state.stream_bounds,
-                calibration: state.calibration.clone(),
-                calibration_session_id: sanitized_session_id.as_deref(),
-                cache_metrics: state.dashboard.cache_metrics.clone(),
-                sampling_audit: state.dashboard.sampling_audit.clone(),
-                // Not the trip. The first attempt already recorded it, and
-                // this is a second attempt at the same client request: the
-                // ledger counts one intervention per request the guard acted
-                // on, not one per attempt. (`requests` is counted per attempt
-                // on this path.) The retry does carry the
-                // note, which is in `body_for_retry`.
-                loop_guard_trip: None,
-            };
-
-            match retry_req.send(retry_permit, retry_cfg, retry_session).await {
-                Ok(resp) => resp,
-                Err(_) => {
-                    // Server failed immediately after a fresh restart —
-                    // genuinely pathological; give up.
-                    let mut resp = (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        Json(ErrorResponse::model_loading()),
-                    )
-                        .into_response();
-                    if let Ok(value) = "5".parse() {
-                        resp.headers_mut().insert("retry-after", value);
-                    }
-                    resp
-                }
-            }
-        }
+        _ => forward_chat_completion(req, None, None, None).await,
     }
 }
 
