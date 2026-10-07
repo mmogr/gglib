@@ -78,7 +78,8 @@ pub(crate) fn restore_profile(
 ///
 /// CLI-provided values always win; saved settings fill in blanks. The one
 /// exception is the chat's Thinking choice, which is read by the rule the
-/// daemon reads a turn by: a chat switched off stays off.
+/// daemon reads a turn by: a chat switched off stays off, and says so when
+/// that sets aside a budget the command line typed.
 #[allow(
     clippy::assigning_clones,
     clippy::ref_option,
@@ -155,12 +156,29 @@ pub(crate) fn apply_saved_settings(
 
     // A command line says neither `off` nor `default`, so the chat runs as
     // it remembers: switched off, its budget is 0 whatever
-    // `--reasoning-budget-tokens` says.
-    let own_budget = merged.sampling.reasoning_budget_tokens;
-    merged.sampling.reasoning_budget_tokens =
-        thinking::settle(None, saved.thinking, own_budget).budget;
+    // `--reasoning-budget-tokens` says. With nothing said the rule changes a
+    // budget only for a chat switched off, so a typed budget that is not the
+    // one settled was set aside by that choice.
+    let typed = merged.sampling.reasoning_budget_tokens;
+    let budget = thinking::settle(None, saved.thinking, typed).budget;
+    if let Some(typed) = typed.filter(|_| budget != typed) {
+        note_budget_set_aside(typed);
+    }
+    merged.sampling.reasoning_budget_tokens = budget;
 
     merged
+}
+
+/// Say that a resumed chat has Thinking switched off, that the budget its
+/// command line typed was not applied, and where the choice is changed.
+///
+/// On stderr, with a session's other notices, and from the one place a
+/// resume reads the choice: once a session, before its first turn.
+fn note_budget_set_aside(typed: i32) {
+    eprintln!(
+        "  This chat has Thinking switched off, so --reasoning-budget-tokens {typed} was not \
+         applied. Switch Thinking back on from the chat page or a paired device."
+    );
 }
 
 /// Create a new conversation for a fresh session on `turn`'s model.

@@ -35,6 +35,8 @@ here. A session's iteration and stagnation limits are
 the limit a resumed chat saved, then the stored settings, then the default. A
 new chat saves only the limit its command line named. A resumed chat's
 Thinking choice is `gglib_core::domain::thinking::settle`
-(`resume_settings`): a chat switched off runs with a thinking budget of `0`.
+(`resume_settings`): a chat switched off runs with a thinking budget of `0`,
+and the resume says so on stderr when that sets aside a budget its command
+line typed.
 
 <!-- module-docs:end -->

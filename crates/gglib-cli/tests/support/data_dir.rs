@@ -1,5 +1,6 @@
 //! A data directory for a test to point `GGLIB_DATA_DIR` at, with its
-//! settings written and read through the store the binary's bootstrap wires.
+//! settings written and read, and a chat saved, through the stores the
+//! binary's bootstrap wires.
 //!
 //! Lives in a subdirectory because anything directly under `tests/` is built
 //! as its own test binary; `#[path]`-included from the suites that need it.
@@ -10,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
+use gglib_core::domain::chat::NewConversation;
 use gglib_core::{NoopEmitter, Settings};
 
 /// The database the binary opens when `GGLIB_DATA_DIR` is `root`.
@@ -47,6 +49,17 @@ pub(crate) fn read_settings(root: &Path) -> Settings {
             .expect("the settings load");
         built.pool.close().await;
         settings
+    })
+}
+
+/// Save `chat` in `root`'s database, creating the database first if there
+/// is none: the conversation's id.
+pub(crate) fn save_chat(root: &Path, chat: NewConversation) -> i64 {
+    runtime().block_on(async {
+        let built = open(root).await;
+        let saved = built.app.chat_history().create_conversation(chat).await;
+        built.pool.close().await;
+        saved.expect("the chat is saved")
     })
 }
 
