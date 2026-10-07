@@ -127,7 +127,7 @@ pub(crate) async fn run_repl_with_history(
     mut messages: Vec<AgentMessage>,
     config: AgentConfig,
     verbose: bool,
-    mut persistence: Option<Conversation<'_>>,
+    persistence: Option<Conversation<'_>>,
     mut images: TurnImages<'_>,
 ) -> Result<()> {
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
@@ -194,13 +194,10 @@ pub(crate) async fn run_repl_with_history(
         // Move `messages` into the turn; the function moves it into the
         // spawned task and returns either the updated history (success) or
         // the original snapshot (failure / Ctrl+C) — one clone total instead
-        // of the previous two.
-        messages = run_single_turn(&agent_loop, messages, config.clone(), verbose).await;
-
-        // Persist new messages (best-effort).
-        if let Some(ref mut conv) = persistence {
-            conv.save_new(&messages).await;
-        }
+        // of the previous two. The turn saves itself as it runs: what comes
+        // back is the model's context, not a record of what was said.
+        let saved_to = persistence.as_ref();
+        messages = run_single_turn(&agent_loop, messages, config.clone(), verbose, saved_to).await;
     }
 
     if let Some(ref conv) = persistence {
@@ -223,6 +220,12 @@ pub(crate) async fn run_repl_with_history(
 /// Run one agent turn: spawn the loop task, consume events, handle Ctrl+C,
 /// and return the updated conversation history.
 ///
+/// With `saved_to`, the turn is saved there as the daemon saves an agent
+/// run's: its last message, the user's, before the loop starts, and the
+/// reply once the loop has ended, from the events it sent. A turn that
+/// failed or was cancelled saves what arrived of its reply, marked
+/// incomplete. Best-effort: a turn that cannot be saved still runs.
+///
 /// Takes ownership of `messages` to avoid a redundant clone at the call site.
 /// A single clone is made internally as a backup (`pre_turn`); the original
 /// is moved into the spawned task.
@@ -237,11 +240,17 @@ async fn run_single_turn(
     messages: Vec<AgentMessage>,
     config: AgentConfig,
     verbose: bool,
+    saved_to: Option<&Conversation<'_>>,
 ) -> Vec<AgentMessage> {
     // Single clone: keep a backup so a failed or cancelled turn restores the
     // exact conversation state (including the user message that triggered
     // this turn).  The original `messages` is moved into the spawned task.
     let pre_turn = messages.clone();
+
+    let mut reply = saved_to.map(Conversation::reply);
+    if let Some(conversation) = saved_to {
+        conversation.save_user(messages.last()).await;
+    }
 
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let agent = Arc::clone(agent_loop);
@@ -257,7 +266,7 @@ async fn run_single_turn(
 
     let completed = tokio::select! {
         biased;
-        result = drain_event_stream(&mut rx, verbose, false) => result,
+        result = drain_event_stream(&mut rx, verbose, false, reply.as_mut()) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}
@@ -270,8 +279,19 @@ async fn run_single_turn(
     // silently dropped and the task is fully cleaned up.
     let loop_result = handle.await;
 
+    if let Some((conversation, reply)) = saved_to.zip(reply.as_ref()) {
+        conversation.save_reply(reply, completed).await;
+    }
+
     if completed && let Ok(Some(new_messages)) = loop_result {
         return new_messages;
     }
     pre_turn
 }
+
+#[cfg(test)]
+#[path = "turn_resumed_tests.rs"]
+mod turn_resumed_tests;
+#[cfg(test)]
+#[path = "turn_rows_tests.rs"]
+mod turn_rows_tests;

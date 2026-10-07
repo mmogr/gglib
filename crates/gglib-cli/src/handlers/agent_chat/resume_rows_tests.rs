@@ -7,11 +7,11 @@
 //! shape that the service no longer writes is written past it, as the store
 //! keeps it.
 
-use gglib_core::domain::agent::{AgentMessage, AssistantContent};
+use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::{Machine, ModelRef};
 
-use super::super::{Session, prepare};
+use super::super::prepare;
 use super::tests::chat_args;
 use super::*;
 use crate::bootstrap::{CliContext, test_context};
@@ -101,7 +101,8 @@ async fn a_saved_session_stores_the_id_of_this_machines_model_and_not_the_paired
             ..TurnModel::here("qwen".to_owned(), None)
         };
         let settings = session_settings(&chat_args(), None, &turn);
-        let saved = Conversation::create(ctx.app.chat_history(), None, Some(settings.clone()));
+        let (chats, made_by) = (ctx.app.chat_history(), turn.made_by());
+        let saved = Conversation::create(chats, None, Some(settings.clone()), made_by);
         let made = row(&ctx, saved.await.expect("saved").id).await;
         assert_eq!((made.model_id, made.settings), (stored, Some(settings)));
     }
@@ -247,46 +248,5 @@ async fn a_resume_reads_the_history_as_the_daemon_reads_it() {
     for blank in [None, Some("  \n")] {
         let id = chat(&ctx, blank, true).await;
         assert_eq!(resumed(&ctx, id, None).await, turns, "{blank:?}");
-    }
-}
-
-/// A resumed session saves what its turn adds and nothing it resumed with:
-/// not the prompt, which is never a row, and not the chat's last row again,
-/// whether or not the chat holds a system row.
-#[tokio::test]
-async fn a_resumed_session_saves_only_what_its_turn_adds() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = test_context(dir.path()).await;
-    let history = ctx.app.chat_history();
-
-    for (prompt, system_row) in [
-        (Some("Be brief."), false),
-        (Some("Be brief."), true),
-        (None, false),
-        (None, true),
-    ] {
-        let id = chat(&ctx, prompt, system_row).await;
-        let stored = history.get_messages(id).await.expect("read").len();
-        let Session {
-            persistence,
-            prior_messages: mut turn,
-            ..
-        } = prepare(&ctx, &resume(id)).await.expect("resumed");
-        turn.push(AgentMessage::User {
-            content: "second".to_owned(),
-            images: Vec::new(),
-        });
-        turn.push(AgentMessage::Assistant {
-            content: AssistantContent {
-                text: Some("reply".to_owned()),
-                tool_calls: Vec::new(),
-            },
-        });
-
-        persistence.expect("resumed").save_new(&turn).await;
-
-        let rows = history.get_messages(id).await.expect("read");
-        let added: Vec<&str> = rows[stored..].iter().map(|m| m.content.as_str()).collect();
-        assert_eq!(added, ["second", "reply"], "{prompt:?}, {system_row}");
     }
 }

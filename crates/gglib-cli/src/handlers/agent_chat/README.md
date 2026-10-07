@@ -13,6 +13,10 @@ independently readable:
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
 - [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
 - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
+- [`persistence`] — the saved conversation a session's turns are written to,
+  through `gglib_app_services::transcript` as the daemon's agent runs are:
+  the user's message when it is sent, and the reply when its turn ends,
+  finished or not, rebuilt from the events the turn sent
 - [`repl_line`] — what one line typed at the prompt asks for: a command, or
   the next message with the images attached to it
 - [`images`]   — the images a turn carries: `--image` and the REPL's `/image`,

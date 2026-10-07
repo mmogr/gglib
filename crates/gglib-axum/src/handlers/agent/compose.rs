@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
+use gglib_app_services::transcript::MadeBy;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
@@ -31,7 +32,9 @@ pub(crate) struct Prepared {
     /// The model the loop is counted under: the request's, or the one
     /// running on its port.
     pub(crate) model: String,
-    /// The model each turn was made by, for its `turn_usage` event.
+    /// The model each turn was made by, for its `turn_usage` event. Its
+    /// context's size is read once the run holds the model
+    /// (`remote_upstream::hold_model`).
     pub(crate) made_by: MadeBy,
     /// The port and id of the local model the loop drives; otherwise none.
     pub(crate) local_model: Option<(u16, i64)>,
@@ -41,33 +44,6 @@ pub(crate) struct Prepared {
     /// A run's hold on that model (`remote_upstream::hold`); `prepare` takes
     /// none.
     pub(crate) hold: Option<AdmissionLease>,
-}
-
-/// The model a run drives, the context it was launched with, and the paired
-/// device whose turn it answers, which the loop does not know: stamped on
-/// each turn's usage before it is logged.
-pub(crate) struct MadeBy {
-    pub(crate) model: String,
-    pub(crate) quantization: Option<String>,
-    /// Absent for this machine's own turns.
-    pub(crate) device: Option<String>,
-    /// The context the model was launched with, read once the run holds it
-    /// (`remote_upstream::hold_model`). Absent when that is not known: a
-    /// paired machine's model, or one outside the primary slot.
-    pub(crate) context_size: Option<u64>,
-}
-
-impl MadeBy {
-    /// Name the model and its context's size on a `turn_usage` event; any
-    /// other passes unchanged.
-    pub(crate) fn stamp(&self, event: &mut AgentEvent) {
-        if let AgentEvent::TurnUsage(usage) = event {
-            usage.model = Some(self.model.clone());
-            usage.quantization.clone_from(&self.quantization);
-            usage.device.clone_from(&self.device);
-            usage.reading.context_size = self.context_size;
-        }
-    }
 }
 
 /// One slot of the agent semaphore, or `None` when every slot is taken.

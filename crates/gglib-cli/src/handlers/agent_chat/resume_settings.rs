@@ -166,6 +166,7 @@ pub(super) async fn new_conversation<'a>(
         ctx.app.chat_history(),
         args.system_prompt.clone(),
         Some(settings),
+        turn.made_by(),
     )
     .await
     {
@@ -182,4 +183,4 @@ pub(super) async fn new_conversation<'a>(
 mod resume_rows_tests;
 #[cfg(test)]
 #[path = "resume_settings_tests.rs"]
-mod tests;
+pub(super) mod tests;

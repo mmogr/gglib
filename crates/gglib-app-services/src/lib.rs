@@ -49,6 +49,7 @@ mod settings;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub mod setup;
+pub mod transcript;
 pub mod types;
 
 // Primary exports

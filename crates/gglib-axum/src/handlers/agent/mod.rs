@@ -149,6 +149,9 @@ mod run_privacy_tests;
 #[path = "run_replace_tests.rs"]
 mod run_replace_tests;
 #[cfg(test)]
+#[path = "run_rows_tests.rs"]
+mod run_rows_tests;
+#[cfg(test)]
 #[path = "run_tests.rs"]
 mod run_tests;
 #[cfg(test)]

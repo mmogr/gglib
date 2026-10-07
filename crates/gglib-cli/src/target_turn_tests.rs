@@ -108,6 +108,39 @@ fn a_turn_here_names_its_catalogue_entry_by_id() {
     assert_eq!(far_wire(3, Some("coding")), "3:coding");
 }
 
+/// A saved turn's replies name its model as the machine that serves it has
+/// it: the catalogue's name and quantisation here, the far machine's there,
+/// and what was typed for a server this catalogue does not hold. Never a
+/// device, nor a context, which only the daemon knows.
+#[tokio::test]
+async fn a_turns_replies_are_named_for_its_model_and_its_quantisation() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = crate::bootstrap::test_context(dir.path()).await;
+    let path = dir.path().join("qwen3.gguf");
+    let mut entry =
+        gglib_core::domain::NewModel::new("qwen3".to_owned(), path, 8.0, chrono::Utc::now());
+    entry.quantization = Some("Q4_K_M".to_owned());
+    let id = ctx.app.models().add(entry).await.expect("registered").id;
+    let here = Target::Local.resolve_turn(&ctx, id.to_string()).await;
+    let mut there = found(3, "far-qwen", None);
+    there.detail.quantization = Some("Q8_0".to_owned());
+    let (there, _) = far_turn("3", there).await;
+    let typed = TurnModel::here("external".to_owned(), None);
+
+    let named = |turn: &TurnModel| {
+        let made_by = turn.made_by();
+        assert_eq!((made_by.device, made_by.context_size), (None, None));
+        (made_by.model, made_by.quantization)
+    };
+    let quantised = |name: &str, q: &str| (name.to_owned(), Some(q.to_owned()));
+    assert_eq!(
+        named(&here.expect("resolved")),
+        quantised("qwen3", "Q4_K_M")
+    );
+    assert_eq!(named(&there), quantised("far-qwen", "Q8_0"));
+    assert_eq!(named(&typed), ("external".to_owned(), None));
+}
+
 // ── Remembering the model ────────────────────────────────────────────────
 
 /// Machine A's ticket, the minimal v0 vector, and the fingerprint it

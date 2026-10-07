@@ -15,9 +15,9 @@ Inline `<think>` reclassification is handled upstream by
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
 
 An agent run stamps each turn's `turn_usage` event with the model it drove
-(`compose::MadeBy`: locally the model on the port and its catalogue
-quantisation, on the paired machine the name and quantisation that machine
-has for the model) before logging it, so the
+(`gglib_app_services::transcript::MadeBy`: locally the model on the port and
+its catalogue quantisation, on the paired machine the name and quantisation
+that machine has for the model) before logging it, so the
 frame a page draws and the row the reply is saved as say the same. A local
 run also stamps the context its model was launched with
 (`remote_upstream::hold_model`): read once the run holds the model, so it
@@ -60,7 +60,9 @@ spawned `AgentLoop` task at its next `await` point — immediately stopping
 LLM token generation and any in-flight tool calls without leaking compute
 or resources. An agent run (`run.rs`, `PUT /api/runs/{id}?kind=agent`)
 runs the same prepared loop detached from any response, so only cancel or
-shutdown stops it, and saves the transcript to the request's conversation.
+shutdown stops it, and saves the transcript to the request's conversation,
+through `gglib_app_services::transcript`, the one writer of a turn's rows,
+which the CLI's chat saves through too.
 Before it takes a slot, its messages' images, history included, are checked
 by their sizes alone (`AttachmentService::check_request`): an id not stored
 is `400 attachment_not_found`, and images over 16 MiB together `400

@@ -15,19 +15,21 @@ use gglib_core::domain::agent::AgentEvent;
 use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
+use super::persistence::Reply;
 use super::renderer::render_event;
 use super::thinking_dispatch::{
     RenderContext, close_thinking, emit_content, emit_reasoning, suspend_or_run,
 };
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
-/// arrives, rendering each event.
+/// arrives, rendering each event. Each is first added to `reply`, when the
+/// turn is saved: what is saved of a turn is what arrived here, in order.
 ///
 /// Returns `true` only when the turn completed with a [`AgentEvent::FinalAnswer`]
 /// event.  Returns `false` when the channel closes without one (e.g. the loop
 /// hit max iterations or stagnated).  Cancellation (Ctrl+C) is handled by the
-/// caller via `tokio::select!`; this function has no side effects beyond
-/// rendering.
+/// caller via `tokio::select!`; beyond rendering, this function's only side
+/// effect is that record in `reply`.
 ///
 /// When stdout is a TTY and `quiet` is `false`, tokens are buffered and
 /// rendered through [`termimad`] on completion (Rich mode).  An
@@ -48,13 +50,17 @@ pub(crate) async fn drain_event_stream(
     rx: &mut mpsc::Receiver<AgentEvent>,
     verbose: bool,
     quiet: bool,
+    mut reply: Option<&mut Reply>,
 ) -> bool {
     let rich = !quiet && io::stdout().is_terminal();
     let stderr_tty = io::stderr().is_terminal();
     let mut ctx = RenderContext::new(rich, stderr_tty, quiet);
     let mut had_text = false;
 
-    while let Some(event) = rx.recv().await {
+    while let Some(mut event) = rx.recv().await {
+        if let Some(reply) = reply.as_deref_mut() {
+            reply.heard(&mut event);
+        }
         match &event {
             // ── Content tokens ───────────────────────────────────────
             AgentEvent::TextDelta { content } => {

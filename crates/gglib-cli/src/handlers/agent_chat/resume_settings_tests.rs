@@ -16,7 +16,7 @@ use super::*;
 use crate::bootstrap::{CliContext, test_context};
 
 /// A `ChatArgs` with every knob at rest.
-pub(super) fn chat_args() -> ChatArgs {
+pub(crate) fn chat_args() -> ChatArgs {
     ChatArgs {
         identifier: "qwen".to_owned(),
         context: crate::shared_args::ContextArgs::default(),

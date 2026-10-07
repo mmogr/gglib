@@ -1,12 +1,19 @@
 //! Conversation persistence for CLI agent sessions.
 //!
-//! Saves agent messages to the `chat_conversations` / `chat_messages` tables
+//! A session's turns go to the `chat_conversations` / `chat_messages` tables
 //! so they appear in the GUI conversation list and can later be resumed.
+//! The rows are `gglib_app_services::transcript`'s to write, as they are for
+//! the daemon's agent runs: the user's message when it is sent, and the
+//! reply when its turn ends, finished or not, rebuilt from the events the
+//! turn sent ([`Reply`]). The loop's own history is never what is saved: it
+//! is pruned to the context budget, so it holds neither every row of a long
+//! turn nor a count of the rows already saved.
 
 use anyhow::{Result, anyhow};
 use chrono::Local;
 
-use gglib_core::domain::agent::{AgentMessage, to_new_message};
+use gglib_app_services::transcript::{self, FrameTimes, MadeBy};
+use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::chat::{self, ConversationSettings, NewConversation};
 use gglib_core::services::ChatHistoryService;
 
@@ -28,12 +35,41 @@ pub(crate) async fn continued(
         .ok_or_else(|| anyhow!("conversation {id} not found"))
 }
 
-/// Tracks a persisted conversation and the number of messages already saved,
-/// so subsequent calls to [`Conversation::save_new`] only write the delta.
+/// A turn's reply as it arrives: each event as the frame an agent run logs
+/// for it, its usage naming the model the turn is made by, and when it came.
+pub(crate) struct Reply {
+    made_by: MadeBy,
+    frames: Vec<String>,
+    times: FrameTimes,
+}
+
+impl Reply {
+    /// The reply of a turn that starts now.
+    pub(crate) fn new(made_by: MadeBy) -> Self {
+        Self {
+            made_by,
+            frames: Vec::new(),
+            times: FrameTimes::new(),
+        }
+    }
+
+    /// `event` arrived now.
+    pub(crate) fn heard(&mut self, event: &mut AgentEvent) {
+        self.made_by.stamp(event);
+        // One time per frame: an event that will not serialise logs neither.
+        if let Ok(frame) = serde_json::to_string(event) {
+            self.frames.push(frame);
+            self.times.logged();
+        }
+    }
+}
+
+/// The saved conversation a session's turns are written to, and the model
+/// those turns are made by.
 pub(crate) struct Conversation<'a> {
     service: &'a ChatHistoryService,
     pub id: i64,
-    saved: usize,
+    made_by: MadeBy,
 }
 
 impl<'a> Conversation<'a> {
@@ -43,6 +79,7 @@ impl<'a> Conversation<'a> {
         service: &'a ChatHistoryService,
         system_prompt: Option<String>,
         settings: Option<ConversationSettings>,
+        made_by: MadeBy,
     ) -> Result<Conversation<'a>> {
         let title = format!("Agent session {}", Local::now().format("%Y-%m-%d %H:%M"));
         let id = service
@@ -56,28 +93,16 @@ impl<'a> Conversation<'a> {
         Ok(Conversation {
             service,
             id,
-            saved: 0,
+            made_by,
         })
     }
 
-    /// Resume an existing conversation for continued persistence.
-    ///
-    /// `existing_message_count` is the length of the history the session
-    /// resumes with, its system prompt included, so
-    /// [`Conversation::save_new`] only persists what a turn adds to it.
-    #[allow(
-        clippy::unused_async,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    pub(crate) async fn resume(
-        service: &'a ChatHistoryService,
-        id: i64,
-        existing_message_count: usize,
-    ) -> Conversation<'a> {
-        Conversation {
+    /// The existing conversation `id`, for a session that continues it.
+    pub(crate) fn resume(service: &'a ChatHistoryService, id: i64, made_by: MadeBy) -> Self {
+        Self {
             service,
             id,
-            saved: existing_message_count,
+            made_by,
         }
     }
 
@@ -94,25 +119,36 @@ impl<'a> Conversation<'a> {
         self
     }
 
-    /// Persist any messages added since the last call.
+    /// An empty [`Reply`] for a turn of this session's that starts now.
+    pub(crate) fn reply(&self) -> Reply {
+        Reply::new(self.made_by.clone())
+    }
+
+    /// Save `message`, the one a turn starts with, when it is the user's.
     ///
-    /// System messages are **not** persisted — the system prompt lives on the
-    /// `chat_conversations` row (`system_prompt` column) and is the canonical
-    /// source for both CLI and GUI resume.  Persisting it as a message row
-    /// would cause duplicates when the GUI hydrates from both sources.
+    /// The system prompt is never a row: it lives on the conversation, which
+    /// is where every surface reads it back from.
     ///
-    /// Errors are logged as warnings and swallowed — persistence must never
+    /// Errors are logged as warnings and swallowed: persistence must never
     /// break the interactive session.
-    pub(crate) async fn save_new(&mut self, messages: &[AgentMessage]) {
-        for msg in messages.iter().skip(self.saved) {
-            if matches!(msg, AgentMessage::System { .. }) {
-                continue;
-            }
-            let new_msg = to_new_message(msg, self.id);
-            if let Err(e) = self.service.save_message(new_msg).await {
-                tracing::warn!("failed to persist agent message: {e}");
-            }
+    pub(crate) async fn save_user(&self, message: Option<&AgentMessage>) {
+        let saved = transcript::save_user(self.service, self.id, None, message, None).await;
+        if let Err(e) = saved {
+            tracing::warn!("failed to persist the user's message: {e}");
         }
-        self.saved = messages.len();
+    }
+
+    /// Save a turn's `reply` once the turn has ended: every row or none.
+    /// `finished` is whether it gave its answer; the reply of a turn that
+    /// failed or was cancelled is saved as far as it got, and says so.
+    ///
+    /// Errors are logged as warnings and swallowed, as a message's are.
+    pub(crate) async fn save_reply(&self, reply: &Reply, finished: bool) {
+        let frames = reply.frames.iter().map(String::as_str);
+        let saved =
+            transcript::save_reply(self.service, self.id, frames, &reply.times, finished).await;
+        if let Err(e) = saved {
+            tracing::warn!("failed to persist the agent's reply: {e}");
+        }
     }
 }

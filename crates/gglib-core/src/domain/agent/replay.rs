@@ -1,12 +1,13 @@
 //! A reply's saved rows, rebuilt from the events it logged.
 //!
-//! An agent run logs each [`AgentEvent`](super::AgentEvent) as its JSON
-//! frame. Once the run ends, whatever the end, those frames are all there is
-//! of the reply: the loop's own history is pruned to its context budget and
-//! carries no reasoning, and a cancelled or failed loop returns none. So the
-//! rows are rebuilt from the frames: one assistant row per model turn (its
-//! text, its tool calls, its reasoning) followed by one tool row per result,
-//! in the shape [`to_new_message`] gives the CLI's sessions.
+//! An agent run, and a turn of the CLI's chat, logs each
+//! [`AgentEvent`](super::AgentEvent) as its JSON frame. Once it ends,
+//! whatever the end, those frames are all there is of the reply: the loop's
+//! own history is pruned to its context budget and carries no reasoning, and
+//! a cancelled or failed loop returns none. So the rows are rebuilt from the
+//! frames: one assistant row per model turn (its text, its tool calls, its
+//! reasoning) followed by one tool row per result, each in the shape
+//! [`to_new_message`] gives a message.
 //!
 //! Only the fields read here are parsed, so a frame this does not know is
 //! skipped rather than failing the whole transcript.
