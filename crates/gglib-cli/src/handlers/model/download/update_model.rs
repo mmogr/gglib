@@ -26,9 +26,8 @@ use super::board::SoloBoard;
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
-    // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
-    // no shared `ProcessManager`, and the upgrade path never touches serving
-    // status. Same construction as `model capabilities`.
+    // Same construction as `model capabilities`. The upgrade path never
+    // reads serving status.
     let ops = crate::handlers::model::one_shot_model_ops(ctx);
 
     println!("Updating model {} (ID: {})...", model.name, model.id);

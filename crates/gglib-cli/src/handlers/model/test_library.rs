@@ -3,7 +3,7 @@
 //! clap parses it, and a `ModelOps` whose events and runtime the test holds.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use anyhow::Result;
@@ -98,15 +98,26 @@ impl AppEventEmitter for Heard {
 #[derive(Debug, Default)]
 pub(super) struct Runtime {
     pub(super) serving: Option<(i64, u16)>,
+    /// How many times it is asked what is running before `serving` shows.
+    quiet_for: usize,
+    asked: AtomicUsize,
     stopped: AtomicBool,
 }
 
 impl Runtime {
     /// A runtime with model `id` being served on `port`.
     pub(super) fn serving(id: i64, port: u16) -> Self {
+        Self::serving_after(0, id, port)
+    }
+
+    /// A runtime that answers "nothing" the first `asks` times it is asked
+    /// what is running, and from then on has model `id` served on `port`: a
+    /// server that came up in between.
+    pub(super) fn serving_after(asks: usize, id: i64, port: u16) -> Self {
         Self {
             serving: Some((id, port)),
-            stopped: AtomicBool::new(false),
+            quiet_for: asks,
+            ..Self::default()
         }
     }
 
@@ -133,6 +144,9 @@ impl ModelRuntimePort for Runtime {
     }
 
     async fn list_running(&self) -> Vec<ProcessHandle> {
+        if self.asked.fetch_add(1, Ordering::SeqCst) < self.quiet_for {
+            return Vec::new();
+        }
         self.serving
             .iter()
             .map(|&(id, port)| ProcessHandle::new(id, "served".to_owned(), None, port, 0))

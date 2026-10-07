@@ -5,6 +5,7 @@ pub(crate) mod download;
 pub(crate) mod explain;
 pub(crate) mod inspect;
 pub(crate) mod list;
+mod recorded_servers;
 pub(crate) mod remove;
 pub(crate) mod resolver;
 pub(crate) mod retag;
@@ -33,6 +34,7 @@ use gglib_app_services::{ModelDeps, ModelOps};
 use crate::bootstrap::CliContext;
 use crate::model_commands::ModelCommand;
 use crate::target::Target;
+use recorded_servers::RecordedServers;
 
 /// `ModelOps` for a one-shot CLI command.
 ///
@@ -41,18 +43,19 @@ use crate::target::Target;
 /// change and an upgrade do.
 /// The reasons for what it is built with live here once:
 ///
-/// - `NoopModelRuntime` rather than `ctx.runner`: a one-shot command has no
-///   shared `ProcessManager` to consult, and a runner scoped to this single
-///   invocation could only ever answer "nothing is running". So the refusal
-///   to remove a model that is being served never fires from here: what the
-///   daemon is serving is the daemon's to know.
+/// - [`RecordedServers`] rather than a runner of this process's own: a
+///   one-shot command starts no llama-server, so a runner scoped to this
+///   single invocation could only ever answer "nothing is running". What is
+///   being served is read from the pid files kept under this data root, so
+///   `model remove` refuses a model that is being served and `model inspect`
+///   says that it is.
 /// - `NoopEmitter`: library events exist to tell *other* clients what changed.
 ///   A CLI process that is about to exit has no broadcast channel to tell
 ///   them on, so the events `ModelOps` emits end here.
 pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
     ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
-        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
+        runtime: Arc::new(RecordedServers),
         gguf_parser: ctx.gguf_parser.clone(),
         emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
     })

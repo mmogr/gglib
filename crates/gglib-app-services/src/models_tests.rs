@@ -293,6 +293,7 @@ struct RunningRuntime {
     model_id: i64,
     port: u16,
     stopped: std::sync::atomic::AtomicBool,
+    asked: std::sync::atomic::AtomicUsize,
 }
 
 impl RunningRuntime {
@@ -301,11 +302,17 @@ impl RunningRuntime {
             model_id,
             port,
             stopped: std::sync::atomic::AtomicBool::new(false),
+            asked: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
     fn stopped(&self) -> bool {
         self.stopped.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// How many times it has been asked what is running.
+    fn asked(&self) -> usize {
+        self.asked.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 
@@ -326,6 +333,7 @@ impl gglib_core::ports::ModelRuntimePort for RunningRuntime {
     }
 
     async fn list_running(&self) -> Vec<gglib_core::ports::ProcessHandle> {
+        self.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         vec![gglib_core::ports::ProcessHandle::new(
             self.model_id,
             "running-model".to_string(),
@@ -639,6 +647,37 @@ async fn remove_with_force_stops_the_server_through_the_shared_runtime() {
         runtime.stopped(),
         "force=true must stop the server via the shared runtime"
     );
+}
+
+/// A listing says which of its models is being served, and asks the runtime
+/// once for all of them: a runtime that has to look, as the CLI's does in
+/// the pid files, would otherwise look once a row.
+#[tokio::test]
+async fn a_listing_asks_once_what_is_running_and_reads_every_row_off_the_answer() {
+    let core = test_core().await;
+    let (first_dir, second_dir) = (tempdir().unwrap(), tempdir().unwrap());
+    let idle = add_placeholder_model(Arc::clone(&core), &first_dir).await;
+    let served = add_placeholder_model(Arc::clone(&core), &second_dir).await;
+
+    let runtime = Arc::new(RunningRuntime::new(served.id, 5500));
+    let ops = ModelOps::new(ModelDeps {
+        core,
+        runtime: Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>,
+        gguf_parser: Arc::new(NoopGgufParser),
+        emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
+    });
+
+    let listed = ops.list_with_query(ModelListQuery::default()).await;
+
+    let mut rows: Vec<_> = (listed.unwrap().iter())
+        .map(|m| (m.id, m.is_serving, m.port))
+        .collect();
+    rows.sort_unstable();
+    assert_eq!(
+        rows,
+        [(idle.id, false, None), (served.id, true, Some(5500))]
+    );
+    assert_eq!(runtime.asked(), 1);
 }
 
 #[tokio::test]

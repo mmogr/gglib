@@ -6,8 +6,8 @@ crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1355
-crates/gglib-app-services/src/models.rs 360
-crates/gglib-app-services/src/models_tests.rs 857
+crates/gglib-app-services/src/models.rs 372
+crates/gglib-app-services/src/models_tests.rs 896
 crates/gglib-app-services/src/proxy.rs 409
 crates/gglib-app-services/src/sampling_explain.rs 444
 crates/gglib-app-services/src/sampling_explain_tests.rs 731

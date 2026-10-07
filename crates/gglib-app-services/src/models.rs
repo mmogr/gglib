@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort};
+use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
 use gglib_core::services::AppCore;
 use gglib_core::{
     ModelCapabilities, ModelFilterOptions,
@@ -24,6 +24,11 @@ pub struct ModelDeps {
     /// The runtime backing server lifecycle — the same one `ServerOps` starts
     /// models through, so serving status here agrees with what `ServerOps`
     /// actually has running rather than a second, independent registry.
+    ///
+    /// A `gglib model …` command in a terminal is a separate process with no
+    /// such runtime. It holds a read-only view of the pid files this one's
+    /// servers leave under the data root — see `one_shot_model_ops` in
+    /// `gglib-cli`.
     pub runtime: Arc<dyn ModelRuntimePort>,
     pub gguf_parser: Arc<dyn GgufParserPort>,
     /// Broadcasts library changes to every client attached to this daemon.
@@ -72,15 +77,17 @@ impl ModelOps {
         }
     }
 
-    /// Check if a model is currently being served.
-    async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
-        self.deps
-            .runtime
-            .list_running()
-            .await
-            .into_iter()
+    /// Whether `model_id` is among `running`, and the port it is served on.
+    fn serving_status(running: &[ProcessHandle], model_id: i64) -> (bool, Option<u16>) {
+        running
+            .iter()
             .find(|h| h.model_id == model_id)
             .map_or((false, None), |h| (true, Some(h.port)))
+    }
+
+    /// Check if a model is currently being served.
+    async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
+        Self::serving_status(&self.deps.runtime.list_running().await, model_id)
     }
 
     /// List models filtered and sorted by the given query.
@@ -89,18 +96,23 @@ impl ModelOps {
     /// single source of truth for filter/sort semantics), then enriches each
     /// surviving model with its current serving status. The one listing, for
     /// `gglib model list` and `GET /api/models` alike.
+    ///
+    /// The runtime is asked what is running once, and every row is read off
+    /// that answer: a runtime that has to look, as the CLI's does in the pid
+    /// files, looks once for the listing and not once a row.
     pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
         let models = self.deps.core.models().list().await?;
 
         let filtered = apply_query(models, &query);
 
-        let mut gui_models = Vec::new();
-        for model in filtered {
-            let (is_serving, port) = self.get_server_status(model.id).await;
-            gui_models.push(GuiModel::from_model(model, is_serving, port));
-        }
-
-        Ok(gui_models)
+        let running = self.deps.runtime.list_running().await;
+        Ok(filtered
+            .into_iter()
+            .map(|model| {
+                let (is_serving, port) = Self::serving_status(&running, model.id);
+                GuiModel::from_model(model, is_serving, port)
+            })
+            .collect())
     }
 
     /// Get a specific model by ID.
