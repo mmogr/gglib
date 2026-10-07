@@ -107,7 +107,7 @@ fn every_line_of_the_disable_notice_fits_a_narrow_terminal() {
 /// `disable` itself cannot be reached without a daemon or a whole CLI context.
 async fn app() -> AppCore {
     let pool = gglib_db::setup_test_database().await.expect("in-memory DB");
-    gglib_db::CoreFactory::build_app_core(pool)
+    AppCore::bare(gglib_db::CoreFactory::build_repos(pool))
 }
 
 /// The state `enable` leaves behind.

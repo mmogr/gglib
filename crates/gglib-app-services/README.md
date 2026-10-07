@@ -139,7 +139,7 @@ let model_ops = ModelOps::new(ModelDeps {
 
 Each ops module has an inline `#[cfg(test)] mod tests` block.  Tests run against an
 in-memory `SQLite` database provisioned by `gglib_db::setup_test_database()` and
-`CoreFactory::build_app_core()`.  All external dependencies are replaced by
+`CoreFactory::build_repos()`, under an `AppCore::bare()`.  All external dependencies are replaced by
 handwritten mock structs in `src/test_support.rs` (no external mocking framework).
 
 | Module | Tests |

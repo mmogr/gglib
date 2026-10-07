@@ -9,24 +9,32 @@ use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
 use super::*;
-use crate::domain::{Model, NewModel};
+use crate::domain::{Model, NewModel, NewModelFile};
+use crate::ports::ModelFilesRepositoryPort;
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use crate::services::DownloadTriggerPort;
 use crate::services::model_projector::tests::OneModelRepo;
-use crate::services::{DownloadTriggerPort, ModelFilesReaderPort};
 
 const REPO: &str = "owner/zeta-GGUF";
 pub(super) const WEIGHTS: &str = "zeta.Q8_0.gguf";
 pub(super) const PROJECTOR: &str = "mmproj-F16.gguf";
 
 /// Answers the rows it was made with.
-struct Rows(Vec<ModelFile>);
+pub(crate) struct Rows(pub(crate) Vec<ModelFile>);
 
 #[async_trait]
-impl ModelFilesReaderPort for Rows {
-    async fn get_by_model_id(&self, _model_id: i64) -> anyhow::Result<Vec<ModelFile>> {
+impl ModelFilesRepositoryPort for Rows {
+    async fn insert(&self, _file: &NewModelFile) -> Result<(), RepositoryError> {
+        unimplemented!("the rows are the ones it was made with")
+    }
+    async fn get_by_model_id(&self, _model_id: i64) -> Result<Vec<ModelFile>, RepositoryError> {
         Ok(self.0.clone())
     }
-    async fn update_verification_time(&self, _id: i64, _at: DateTime<Utc>) -> anyhow::Result<()> {
+    async fn update_verification_time(
+        &self,
+        _id: i64,
+        _at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
         Ok(())
     }
 }
@@ -78,11 +86,20 @@ pub(super) struct Fixture {
 }
 
 pub(super) fn fixture(dir: &Path, rows: Vec<ModelFile>, hub: FakeHub) -> Fixture {
+    fixture_over(dir, Arc::new(Rows(rows)), hub)
+}
+
+/// [`fixture`] over a store of the caller's.
+pub(super) fn fixture_over(
+    dir: &Path,
+    store: Arc<dyn ModelFilesRepositoryPort>,
+    hub: FakeHub,
+) -> Fixture {
     let hub = Arc::new(hub);
     let queued = Arc::new(Queued::default());
     let service = ModelVerificationService::new(
         Arc::new(OneModelRepo(Mutex::new(model_in(dir)))),
-        Arc::new(Rows(rows)),
+        store,
         hub.clone(),
         queued.clone(),
     );

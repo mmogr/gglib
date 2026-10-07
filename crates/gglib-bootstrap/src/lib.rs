@@ -4,11 +4,11 @@
 //! adapter (CLI, Axum, Tauri) needs:
 //!
 //! 1. Database pool + repository set
-//! 2. GGUF parser + model-files repository + model registrar
+//! 2. GGUF parser + model registrar
 //! 3. `HuggingFace` HTTP client
 //! 4. Download manager (accepting an injected event emitter)
 //! 5. `DownloadTriggerAdapter` (bridges `DownloadManagerPort` → `DownloadTriggerPort`)
-//! 6. `ModelVerificationService` + fully wired `AppCore`
+//! 6. `AppCore`, with the `ModelVerificationService` it builds from the above
 //!
 //! Each adapter then adds its own concerns on top of the returned [`BuiltCore`]
 //! (MCP service, proxy supervisor, SSE broadcaster, 7 domain `*Ops`, etc.).

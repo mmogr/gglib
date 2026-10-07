@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gglib_core::GgufFileRole;
-use gglib_core::domain::ModelListQuery;
+use gglib_core::domain::{ModelListQuery, NewModelFile};
 use gglib_core::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopEmitter, NoopModelRuntime,
 };
+use gglib_core::services::AppCore;
+use gglib_db::{CoreFactory, setup_test_database};
 use tempfile::TempDir;
 
 use super::*;
@@ -40,8 +42,12 @@ impl GgufParserPort for FirstBytesParser {
 }
 
 async fn ops() -> ModelOps {
+    ops_over(test_core().await)
+}
+
+fn ops_over(core: Arc<AppCore>) -> ModelOps {
     ModelOps::new(ModelDeps {
-        core: test_core().await,
+        core,
         runtime: Arc::new(NoopModelRuntime),
         gguf_parser: Arc::new(FirstBytesParser),
         emitter: Arc::new(NoopEmitter::new()),
@@ -193,6 +199,28 @@ async fn the_picker_offers_a_projector_another_model_loads() {
     }];
     assert_eq!(ops.projector_choices(other.id).await.unwrap(), expected);
     assert_eq!(ops.projector_choices(linked.id).await.unwrap(), expected);
+}
+
+/// A projector downloaded with a model is one of that model's file rows:
+/// the picker offers it though no model is linked to it.
+#[tokio::test]
+async fn the_picker_offers_a_projector_among_the_models_own_files() {
+    gglib_core::paths::isolate_data_root();
+    let repos = CoreFactory::build_repos(setup_test_database().await.unwrap());
+    let ops = ops_over(Arc::new(AppCore::bare(repos.clone())));
+    let dir = tempfile::tempdir().unwrap();
+    let model = add(&ops, &dir, "qwen.gguf").await;
+    let projector = file(&dir, "mmproj-F16.gguf", b"projector");
+    let row = NewModelFile::new(model.id, "mmproj-F16.gguf".to_owned(), 1, 9, None);
+    repos.model_files.insert(&row).await.unwrap();
+
+    let offered = ops.projector_choices(model.id).await.unwrap();
+
+    let expected = vec![ProjectorChoice {
+        path: projector.to_string_lossy().into_owned(),
+        name: "mmproj-F16.gguf".to_owned(),
+    }];
+    assert_eq!(offered, expected);
 }
 
 #[tokio::test]

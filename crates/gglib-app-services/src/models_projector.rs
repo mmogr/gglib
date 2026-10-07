@@ -45,10 +45,7 @@ impl ModelOps {
         let core = &self.deps.core;
         let model = resolve_model(core.models(), id).await?;
         let library = core.models().list().await?;
-        let files = match core.verification() {
-            Some(verification) => verification.files_of(id).await?,
-            None => Vec::new(),
-        };
+        let files = core.verification().files_of(id).await?;
         Ok(projector_choices(&model, &files, &library)
             .into_iter()
             .map(|path| ProjectorChoice {

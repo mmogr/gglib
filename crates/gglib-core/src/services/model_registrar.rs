@@ -15,19 +15,9 @@ use super::{HfOrigin, ModelOrigin, build_new_model};
 use crate::domain::NewModelFile;
 use crate::ports::huggingface::HfClientPort;
 use crate::ports::{
-    CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RegisteredDownload,
-    RepositoryError,
+    CompletedDownload, GgufParserPort, ModelFilesRepositoryPort, ModelRegistrarPort,
+    ModelRepository, RegisteredDownload, RepositoryError,
 };
-
-/// Repository trait for model files metadata.
-///
-/// We don't depend on `gglib_db` directly - adapters inject the implementation.
-/// This type is re-exported from `gglib_db` for use in adapters.
-#[async_trait]
-pub trait ModelFilesRepositoryPort: Send + Sync {
-    /// Store a model file record, replacing the one held for that model and path.
-    async fn insert(&self, model_file: &NewModelFile) -> anyhow::Result<()>;
-}
 
 /// Implementation of the model registrar port.
 ///

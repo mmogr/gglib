@@ -3,11 +3,12 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
-use crate::ports::Repos;
+use crate::ports::{HfClientPort, Repos};
 use std::sync::Arc;
 
 use super::{
-    AttachmentService, ChatHistoryService, ModelService, ModelVerificationService, SettingsService,
+    AttachmentService, ChatHistoryService, DownloadTriggerPort, ModelService,
+    ModelVerificationService, SettingsService,
 };
 
 /// The core application facade.
@@ -19,8 +20,8 @@ use super::{
 /// # Example
 ///
 /// ```ignore
-/// let repos = Repos::new(models, settings, mcp_servers, chat_history, attachments);
-/// let core = AppCore::new(repos);
+/// let repos = Repos::new(models, model_files, settings, mcp_servers, chat_history, attachments);
+/// let core = AppCore::new(repos, hf_client, download_trigger);
 ///
 /// // Access services
 /// let models = core.models().list().await?;
@@ -30,28 +31,29 @@ pub struct AppCore {
     settings: SettingsService,
     chat_history: ChatHistoryService,
     attachments: AttachmentService,
-    verification: Option<Arc<ModelVerificationService>>,
+    verification: ModelVerificationService,
 }
 
 impl AppCore {
-    /// Create a new `AppCore` with the given repositories.
-    pub fn new(repos: Repos) -> Self {
+    /// Create a new `AppCore` with the given repositories. Its verification
+    /// service asks `hf_client` for updates and repairs through `download_trigger`.
+    pub fn new(
+        repos: Repos,
+        hf_client: Arc<dyn HfClientPort>,
+        download_trigger: Arc<dyn DownloadTriggerPort>,
+    ) -> Self {
         Self {
+            verification: ModelVerificationService::new(
+                Arc::clone(&repos.models),
+                repos.model_files,
+                hf_client,
+                download_trigger,
+            ),
             models: ModelService::new(repos.models),
             settings: SettingsService::new(repos.settings),
             chat_history: ChatHistoryService::new(repos.chat_history),
             attachments: AttachmentService::new(repos.attachments),
-            verification: None,
         }
-    }
-
-    /// Set the verification service (optional).
-    ///
-    /// This should be called during bootstrap if verification features are needed.
-    #[must_use]
-    pub fn with_verification(mut self, verification: Arc<ModelVerificationService>) -> Self {
-        self.verification = Some(verification);
-        self
     }
 
     /// Access the model service.
@@ -74,14 +76,15 @@ impl AppCore {
         &self.attachments
     }
 
-    /// Access the verification service (if available).
-    pub fn verification(&self) -> Option<&ModelVerificationService> {
-        self.verification.as_deref()
+    /// Access the verification service.
+    pub const fn verification(&self) -> &ModelVerificationService {
+        &self.verification
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::model_verification_remote::tests::Rows;
     use super::*;
     use crate::domain::chat::{
         Conversation, ConversationUpdate, Message, NewConversation, NewMessage,
@@ -275,13 +278,14 @@ mod tests {
     async fn test_app_core_creation() {
         let repos = Repos {
             models: Arc::new(MockModelRepo),
+            model_files: Arc::new(Rows(Vec::new())),
             settings: Arc::new(MockSettingsRepo::new()),
             mcp_servers: Arc::new(MockMcpRepo),
             chat_history: Arc::new(MockChatHistoryRepo),
             attachments: Arc::new(MockAttachmentStore),
         };
 
-        let core = AppCore::new(repos);
+        let core = AppCore::bare(repos);
 
         // Verify services are accessible
         let models = core.models().list().await.unwrap();

@@ -17,6 +17,7 @@ pub(crate) mod mcp_dto;
 pub(crate) mod mcp_error;
 pub(crate) mod mcp_repository;
 pub mod model_catalog;
+pub(crate) mod model_files;
 pub(crate) mod model_registrar;
 pub(crate) mod model_repository;
 pub mod model_runtime;
@@ -65,6 +66,7 @@ pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};
 pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
+pub use model_files::ModelFilesRepositoryPort;
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{
@@ -100,12 +102,14 @@ pub use usage_sink::UsageSink;
 ///
 /// // In gglib-bootstrap:
 /// let repos = gglib_db::CoreFactory::build_repos(pool);
-/// let core = AppCore::new(repos);
+/// let core = AppCore::new(repos, hf_client, download_trigger);
 /// ```
 #[derive(Clone)]
 pub struct Repos {
     /// Model repository for CRUD operations on models.
     pub models: Arc<dyn ModelRepository>,
+    /// Model files repository for the per-file rows of each model.
+    pub model_files: Arc<dyn ModelFilesRepositoryPort>,
     /// Settings repository for application settings.
     pub settings: Arc<dyn SettingsRepository>,
     /// MCP server repository for MCP server configurations.
@@ -120,6 +124,7 @@ impl Repos {
     /// Create a new Repos container.
     pub fn new(
         models: Arc<dyn ModelRepository>,
+        model_files: Arc<dyn ModelFilesRepositoryPort>,
         settings: Arc<dyn SettingsRepository>,
         mcp_servers: Arc<dyn McpServerRepository>,
         chat_history: Arc<dyn ChatHistoryRepository>,
@@ -127,6 +132,7 @@ impl Repos {
     ) -> Self {
         Self {
             models,
+            model_files,
             settings,
             mcp_servers,
             chat_history,
