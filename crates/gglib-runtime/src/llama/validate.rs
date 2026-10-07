@@ -73,33 +73,24 @@ pub async fn handle_status() -> Result<()> {
         }
     }
 
-    match (&status.build, &status.build_error) {
-        (Some(build), _) => {
-            println!();
+    println!();
+    match (&status.build, &status.prebuilt, &status.build_error) {
+        (Some(build), _, _) => {
             println!("Build Information:");
             println!("  Version: {}", build.version);
             println!("  Commit: {}", build.commit_sha);
-            // The DTO carries RFC 3339 for the wire; this command has always
-            // printed a human timestamp, so format it back at the print site.
-            match chrono::DateTime::parse_from_rfc3339(&build.build_date) {
-                Ok(dt) => println!(
-                    "  Built: {}",
-                    dt.with_timezone(&chrono::Utc)
-                        .format("%Y-%m-%d %H:%M:%S UTC")
-                ),
-                Err(_) => println!("  Built: {}", build.build_date),
-            }
+            println!("  Built: {}", human_time(&build.build_date));
             println!("  Acceleration: {}", build.acceleration);
             println!("  CMake flags: {}", build.cmake_flags.join(" "));
         }
-        (None, Some(e)) => {
-            println!();
-            println!("Warning: Could not load build config: {e}");
+        (None, Some(prebuilt), _) => {
+            println!("Pre-built download:");
+            println!("  Version: {}", prebuilt.version);
+            println!("  Platform: {}", prebuilt.platform);
+            println!("  Installed: {}", human_time(&prebuilt.installed_at));
         }
-        (None, None) => {
-            println!();
-            println!("Warning: Build configuration not found");
-        }
+        (None, None, Some(e)) => println!("Warning: Could not load build config: {e}"),
+        (None, None, None) => println!("Warning: Build configuration not found"),
     }
 
     if let Some(caps) = &status.runtime {
@@ -113,6 +104,20 @@ pub async fn handle_status() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// An RFC 3339 time as this command has always printed one. The status
+/// carries RFC 3339 for the wire, so it is turned back at the print site;
+/// anything that is not RFC 3339 is printed as it stands.
+fn human_time(rfc3339: &str) -> String {
+    chrono::DateTime::parse_from_rfc3339(rfc3339).map_or_else(
+        |_| rfc3339.to_string(),
+        |time| {
+            time.with_timezone(&chrono::Utc)
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string()
+        },
+    )
 }
 
 #[cfg(test)]
@@ -136,6 +141,15 @@ mod tests {
         let dir = tempdir().unwrap();
         let result = validate_llama_binary(dir.path());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_recorded_time_prints_as_a_utc_timestamp_and_anything_else_as_it_stands() {
+        assert_eq!(
+            human_time("2026-08-10T14:34:56+02:00"),
+            "2026-08-10 12:34:56 UTC"
+        );
+        assert_eq!(human_time("last Tuesday"), "last Tuesday");
     }
 
     #[cfg(unix)]

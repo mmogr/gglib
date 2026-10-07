@@ -1,9 +1,8 @@
-//! Llama.cpp uninstall and rebuild handlers.
+//! Removing the llama.cpp installation.
 
 use anyhow::Result;
 use gglib_core::paths::gglib_data_dir;
 use serde::Serialize;
-use std::io::{self, Write};
 
 /// What an uninstall removed.
 #[derive(Debug, Clone, Serialize)]
@@ -26,7 +25,7 @@ pub async fn uninstall_llama() -> Result<UninstallOutcome> {
     let bin_dir = gglib_dir.join("bin");
     let config_path = gglib_dir.join("llama-config.json");
 
-    if !llama_dir.exists() && !bin_dir.exists() {
+    if !llama_files_present()? {
         return Ok(UninstallOutcome {
             was_installed: false,
             removed_paths: Vec::new(),
@@ -56,34 +55,12 @@ pub async fn uninstall_llama() -> Result<UninstallOutcome> {
     })
 }
 
-/// Handle the uninstall command.
+/// Whether there is anything for [`uninstall_llama`] to remove: a source
+/// checkout or a binary directory.
 ///
-/// Prompts unless `force`, then prints what [`uninstall_llama`] removed.
-pub async fn handle_uninstall(force: bool) -> Result<()> {
+/// A caller that asks before uninstalling asks this first, so that it does
+/// not ask about an install that is not there.
+pub fn llama_files_present() -> Result<bool> {
     let gglib_dir = gglib_data_dir()?;
-    if !gglib_dir.join("llama.cpp").exists() && !gglib_dir.join("bin").exists() {
-        println!("llama.cpp is not installed.");
-        return Ok(());
-    }
-
-    if !force {
-        print!("This will remove llama.cpp and llama-server. Continue? [y/N]: ");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        if !input.trim().eq_ignore_ascii_case("y") {
-            println!("Uninstall cancelled.");
-            return Ok(());
-        }
-    }
-
-    println!("Removing llama.cpp installation...");
-
-    let outcome = uninstall_llama().await?;
-    for path in &outcome.removed_paths {
-        println!("✓ Removed {path}");
-    }
-
-    println!("llama.cpp uninstalled successfully.");
-    Ok(())
+    Ok(gglib_dir.join("llama.cpp").exists() || gglib_dir.join("bin").exists())
 }

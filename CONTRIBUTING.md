@@ -70,8 +70,8 @@ Concrete examples of established patterns:
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
-| llama install | `LlamaProgressEvent` | spinner + progress bar via `consume_install_events_cli` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
-| llama build | `BuildEvent` | spinner + progress bar via `consume_build_events_cli` for an install; plain lines for an update | SSE at `POST /api/config/system/update-llama` | same SSE stream — no Tauri event |
+| llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
+| llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike | SSE at `POST /api/config/system/update-llama` | same SSE stream — no Tauri event |
 
 Every row is a claim about code that exists. The `llama install` row was not
 one for a long time: the event type was declared private inside `gglib-axum`,
@@ -524,9 +524,9 @@ Add the crate to `ALL_CRATES`, and to the lists in `coverage.yml` if it is to ha
 
 - Rust 1.97.1 (managed via `rust-toolchain.toml` — `rustup` will install it automatically)
 - Node.js 22.12+ (see below)
-- Platform system libraries (see `scripts/check-deps.sh` for a live dependency check)
+- Platform system libraries (`gglib config check-deps` is the live dependency check; `make check-deps` runs it once gglib is built, after checking the toolchains itself)
 
-Run `make setup` for a one-command first-time setup on macOS. On Linux, review `scripts/check-deps.sh` first to install system packages.
+Run `make setup` for a one-command first-time setup on macOS. On Linux, run `cargo run -p gglib-cli -- config check-deps` first: it lists the system packages to install.
 
 ### Node Version Management
 

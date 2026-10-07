@@ -6,7 +6,7 @@
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         bindings bindings-check \
         clean clean-gui clean-llama clean-db clean-all \
-        check-deps check-deps-bootstrap check-deps-verify check-rust \
+        check-deps check-deps-bootstrap check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
         run-serve run-proxy run-gui run-web
 
@@ -40,8 +40,10 @@ CARGO := $(CARGO_ENV) $(CARGO_BIN)
 
 ##@ Dependencies
 
-# Bootstrap dependency check - runs WITHOUT requiring Rust compilation
-check-deps-bootstrap: ## Run the bash dependency check (no Rust needed)
+# Bootstrap dependency check - runs WITHOUT requiring Rust compilation.
+# It checks the toolchains a build needs, and then, when a gglib binary
+# exists, hands over to `gglib config check-deps` for the rest of the list.
+check-deps-bootstrap: ## Check the build toolchains, then the rest if gglib is built
 	@chmod +x scripts/check-deps.sh
 	@./scripts/check-deps.sh
 
@@ -58,21 +60,10 @@ check-rust: ## Verify Rust and Cargo are installed
 		exit 1; \
 	fi
 
-# Comprehensive dependency check.
-# `setup` only depends on the bootstrap (bash) check, which is fast,
-# pre-build, and authoritative for SPIR-V/Vulkan readiness. The Rust
-# `config check-deps` adds extra parity checks for the GUI bootstrap
-# path; run it explicitly via `make check-deps-verify` when you want
-# both reports.
+# The dependency check `setup` starts with. The list of what gglib needs is
+# `gglib config check-deps`'s, in Rust, and the bash script holds only what
+# has to be there before that command can be built.
 check-deps: check-deps-bootstrap ## Check system dependencies
-
-# Run BOTH the bash bootstrap check and the Rust `config check-deps`
-# command. Useful for cross-validating that the two implementations
-# agree on which deps are missing. Not part of `make setup`.
-check-deps-verify: check-deps-bootstrap ## Cross-validate the bash and Rust dependency checks
-	@echo ""
-	@echo "Running detailed dependency verification..."
-	@$(CARGO) run -p gglib-cli --quiet -- config check-deps
 
 ##@ Help
 
@@ -481,12 +472,15 @@ clean-all: ## Remove everything (git clean -xffd)
 
 ##@ llama.cpp
 
+# The gglib a llama.cpp target runs: the release build, else the debug build,
+# else one `cargo run` builds first. Expanded when a recipe runs, so it sees a
+# binary built earlier in the same `make`.
+GGLIB = $(or $(addprefix ./,$(firstword $(wildcard target/release/gglib target/debug/gglib))),$(CARGO) run -p gglib-cli --)
+
 # llama.cpp management targets
 llama-install: ## Install llama.cpp (manual)
 	@echo "Installing llama.cpp (manual)..."
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama install; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama install; \
-	else $(CARGO) run -p gglib-cli -- config llama install; fi
+	@$(GGLIB) config llama install
 
 llama-install-auto: ## Install llama.cpp (auto-detect GPU)
 	@echo "Installing llama.cpp with auto-detected GPU support..."
@@ -494,14 +488,10 @@ llama-install-auto: ## Install llama.cpp (auto-detect GPU)
 
 llama-update: ## Update llama.cpp
 	@echo "Updating llama.cpp..."
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama update; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama update; \
-	else $(CARGO) run -p gglib-cli -- config llama update; fi
+	@$(GGLIB) config llama update
 
 llama-status: ## Show llama.cpp status
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama status; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama status; \
-	else $(CARGO) run -p gglib-cli -- config llama status; fi
+	@$(GGLIB) config llama status
 
 llama-rebuild: clean-llama llama-install-auto ## Reinstall llama.cpp from scratch
 	@echo "✓ llama.cpp rebuilt"
@@ -569,11 +559,9 @@ build-tauri: ## Build Tauri desktop app
 # Full setup from scratch
 # Note: build-tauri builds the web UI, gglib-app and gglib-cli, so nothing
 # else here builds; install just copies the binary
-# llama-install-auto runs last and is REQUIRED to succeed when a GPU
-# runtime is detected: it would otherwise silently produce a CPU-only
-# llama-server, which is almost certainly not what the user wants if
-# they have a GPU. The script itself short-circuits to --cpu-only on
-# bare-CPU machines.
+# llama-install-auto runs last and is REQUIRED to succeed: the command it
+# runs refuses a machine with no GPU, and one whose GPU lacks what building
+# for it needs, sooner than produce a CPU-only llama-server.
 setup: check-deps build-tauri install ## Full setup (check deps + build + install)
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt

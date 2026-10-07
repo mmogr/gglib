@@ -1,7 +1,7 @@
 #![doc = include_str!("README.md")]
 use super::build::build_llama_cpp;
 use super::build_events::{BuildEvent, BuildPhase};
-use super::config::BuildConfig;
+use super::config::{BuildConfig, InstallRecord};
 use super::detect::Acceleration;
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_bench_path, llama_config_path};
@@ -76,8 +76,7 @@ pub async fn run_llama_source_build(
 
     // Step 4: Persist build configuration.
     let config = BuildConfig::new(version.clone(), commit_sha, acceleration);
-    let config_path = llama_config_path()?;
-    config.save(&config_path)?;
+    InstallRecord::Built(config).save(&llama_config_path()?)?;
 
     // Step 5: Signal successful completion.
     let _ = tx

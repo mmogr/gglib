@@ -118,6 +118,8 @@ export interface LlamaStatus {
   healthError?: string | null;
   build?: LlamaBuildInfo | null;
   buildError?: string | null;
+  /** The download's record, for an install that was not built on this machine. */
+  prebuilt?: { version: string; platform: string; installedAt: string } | null;
   runtime?: LlamaRuntimeCapabilities | null;
 }
 
@@ -146,7 +148,6 @@ export interface LlamaUninstallOutcome {
 
 /** Build pipeline phases, in order. */
 export type BuildPhase =
-  | 'dependency_check'
   | 'clone_or_update_repo'
   | 'configure'
   | 'compile'

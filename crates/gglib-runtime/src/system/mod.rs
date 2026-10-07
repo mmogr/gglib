@@ -1,5 +1,4 @@
 #![doc = include_str!("README.md")]
-mod commands;
 mod deps;
 pub(crate) mod gpu;
 
@@ -9,13 +8,7 @@ use gglib_core::utils::system::{
     packages_for, parse_os_release,
 };
 
-#[cfg(target_os = "linux")]
-use commands::get_patchelf_version;
-use commands::{
-    get_cargo_version, get_cmake_version, get_gcc_version, get_git_version, get_gxx_version,
-    get_make_version, get_node_version, get_npm_version, get_pkgconfig_version,
-    get_python3_version, get_rustc_version,
-};
+use crate::llama::detect::tools::{compiler_version, python3_version, version_line, version_word};
 use deps::check_libssl;
 #[cfg(target_os = "linux")]
 use deps::{
@@ -268,57 +261,57 @@ impl SystemProbePort for DefaultSystemProbe {
                 "cargo",
                 "Required for building Rust code",
                 "https://rustup.rs",
-                get_cargo_version(),
+                version_word("cargo", 1),
             ),
             hosted_dep(
                 "rustc",
                 "Rust compiler",
                 "https://rustup.rs",
-                get_rustc_version(),
+                version_word("rustc", 1),
             ),
             // Node.js ecosystem (required for GUI)
             hosted_dep(
                 "node",
                 "Required for building web UI and Tauri",
                 "https://nodejs.org",
-                get_node_version(),
+                version_line("node").map(|v| v.trim_start_matches('v').to_string()),
             ),
             hosted_dep(
                 "npm",
                 "Node package manager",
                 "https://nodejs.org",
-                get_npm_version(),
+                version_line("npm"),
             ),
             // Build tools (required)
             system_dep(
                 "git",
                 "Required for llama.cpp installation",
                 distro,
-                get_git_version(),
+                version_word("git", 2),
             ),
             system_dep(
                 "make",
                 "Required for llama.cpp build",
                 distro,
-                get_make_version(),
+                version_word("make", 2),
             ),
             system_dep(
                 "gcc",
                 "Required for llama.cpp compilation",
                 distro,
-                get_gcc_version(),
+                compiler_version("gcc"),
             ),
             system_dep(
                 "g++",
                 "Required for llama.cpp compilation",
                 distro,
-                get_gxx_version(),
+                compiler_version("g++"),
             ),
             system_dep(
                 "pkg-config",
                 "Required for building with system libraries",
                 distro,
-                get_pkgconfig_version(),
+                version_line("pkg-config"),
             ),
             system_dep(
                 "libssl-dev",
@@ -330,7 +323,7 @@ impl SystemProbePort for DefaultSystemProbe {
                 "cmake",
                 "Required for llama.cpp build",
                 distro,
-                get_cmake_version(),
+                version_word("cmake", 2),
             ),
             // Optional, not required: downloads run natively over HTTP. Python
             // only enables the hf_xet accelerator, and only if the user opts in
@@ -339,7 +332,7 @@ impl SystemProbePort for DefaultSystemProbe {
                 "python3",
                 "Optional: enables the hf_xet download accelerator",
                 distro,
-                get_python3_version(),
+                python3_version(),
             ),
         ];
 
@@ -351,7 +344,7 @@ impl SystemProbePort for DefaultSystemProbe {
                     "patchelf",
                     "Required for Tauri AppImage bundling",
                     distro,
-                    get_patchelf_version(),
+                    version_word("patchelf", 1),
                 ),
                 system_dep(
                     "webkit2gtk-4.1",

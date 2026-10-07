@@ -1,21 +1,22 @@
 //! llama.cpp management command handler.
 //!
-//! Thin dispatcher that routes `LlamaCommand` variants to the appropriate
-//! functions in `gglib_runtime::llama`. Contains no business logic — all
-//! installation and update behaviour lives in the runtime crate.
+//! Routes each `LlamaCommand` variant to what carries it out. Installing and
+//! updating have adapters of their own beside this file, because they ask a
+//! question and draw progress; `status` and `check-updates` are printed by
+//! `gglib_runtime::llama`; and uninstalling is short enough to live here.
 
 use anyhow::Result;
 
 use crate::llama_commands::LlamaCommand;
+use crate::utils::input;
 
 use super::llama_detect;
 use super::llama_install;
+use super::llama_update;
 
-/// Dispatch a `llama` sub-command to the appropriate `gglib_runtime` handler.
+/// Dispatch a `llama` sub-command to its handler.
 pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
-    use gglib_runtime::llama::{
-        handle_check_updates, handle_status, handle_uninstall, handle_update,
-    };
+    use gglib_runtime::llama::{handle_check_updates, handle_status};
 
     match command {
         LlamaCommand::Install {
@@ -31,7 +32,7 @@ pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
             handle_check_updates().await?;
         }
         LlamaCommand::Update => {
-            handle_update().await?;
+            llama_update::handle_update().await?;
         }
         LlamaCommand::Status => {
             handle_status().await?;
@@ -44,11 +45,39 @@ pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
             llama_install::handle_install(cuda, metal, vulkan, true, true).await?;
         }
         LlamaCommand::Uninstall { force } => {
-            handle_uninstall(force).await?;
+            uninstall(force).await?;
         }
         LlamaCommand::Detect { json } => {
             llama_detect::execute(json)?;
         }
     }
+    Ok(())
+}
+
+/// Remove the llama.cpp installation, asking first unless `force`, and print
+/// what was removed.
+async fn uninstall(force: bool) -> Result<()> {
+    use gglib_runtime::llama::{llama_files_present, uninstall_llama};
+
+    if !llama_files_present()? {
+        println!("llama.cpp is not installed.");
+        return Ok(());
+    }
+
+    if !force
+        && !input::prompt_confirmation("This will remove llama.cpp and llama-server. Continue?")?
+    {
+        println!("Uninstall cancelled.");
+        return Ok(());
+    }
+
+    println!("Removing llama.cpp installation...");
+
+    let outcome = uninstall_llama().await?;
+    for path in &outcome.removed_paths {
+        println!("✓ Removed {path}");
+    }
+
+    println!("llama.cpp uninstalled successfully.");
     Ok(())
 }

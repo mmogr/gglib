@@ -47,7 +47,7 @@ pub(crate) fn execute(json: bool) -> Result<()> {
     }
 }
 
-/// JSON output for machine consumption by shell scripts.
+/// JSON output for machine consumption.
 #[allow(
     clippy::option_if_let_else,
     reason = "grandfathered at lint inheritance, #1157"
@@ -66,8 +66,8 @@ fn print_json(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanSta
 
     // Emit the Vulkan status block whenever the loader is detected,
     // even if the strict detector rejected Vulkan because of missing
-    // build deps. This keeps `check-deps.sh` and the GUI able to
-    // surface the *specific* missing component (e.g. SPIR-V headers).
+    // build deps. A reader of the JSON can then name the *specific*
+    // missing component (e.g. SPIR-V headers).
     let vulkan_status = if vk.has_loader {
         Some(serde_json::to_value(vk).unwrap())
     } else {

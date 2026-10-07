@@ -25,7 +25,6 @@ use gglib_app_services::types::StartServerRequest;
 use gglib_core::domain::ModelAction;
 use gglib_core::ports::PinnedSpec;
 use gglib_core::server_config::parse_ctx_size_flag;
-use gglib_runtime::llama::{CliPrompt, ensure_llama_initialized};
 use gglib_runtime::proxy::ProxyConfig;
 use serve_far::serve_far;
 
@@ -92,7 +91,7 @@ async fn serve_here(
     verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed before the daemon needs it.
-    ensure_llama_initialized(&CliPrompt::new()).await?;
+    crate::handlers::config::llama_ensure::ensure_installed(false).await?;
 
     let settings = ctx.app.settings().get().await?;
 

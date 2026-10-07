@@ -1,9 +1,11 @@
-//! Shared utilities for hardware acceleration detection.
+//! How this crate asks a tool on `PATH` what it is.
 //!
 //! This module centralises command-execution helpers and version-parsing
 //! routines used across the acceleration-detection submodules (`cuda`,
-//! `metal`, `vulkan`). Every submodule should import from here rather
-//! than duplicating `std::process::Command` boilerplate or version logic.
+//! `metal`, `vulkan`), by the llama.cpp build-tool check and by the system
+//! dependency list. Every one of them imports from here rather than
+//! duplicating `std::process::Command` boilerplate or version logic, so two
+//! reports about the same tool cannot disagree about whether it is there.
 //!
 //! # Design rationale
 //!
@@ -13,7 +15,6 @@
 //! DRY. The helpers here provide a small, typed API on top of
 //! [`gglib_core::utils::process::cmd`].
 
-use anyhow::Result;
 use gglib_core::utils::process::cmd;
 
 // ============================================================================
@@ -35,6 +36,7 @@ pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
 ///
 /// Returns `None` if the command cannot be found, exits with a non-zero
 /// status, or produces non-UTF-8 output.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
     let output = cmd(program).args(args).output().ok()?;
     if !output.status.success() {
@@ -77,73 +79,69 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 }
 
 // ============================================================================
-// Build-tool detection
+// Version banners
 // ============================================================================
 
-/// Check if git is installed, returning its version string on success.
-#[allow(
-    clippy::option_if_let_else,
-    clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) fn has_git() -> Result<Option<String>> {
-    match command_stdout("git", &["--version"]) {
-        Some(v) => {
-            let version = v.strip_prefix("git version ").unwrap_or(&v).to_string();
-            Ok(Some(version))
-        }
-        None => Ok(None),
-    }
-}
-
-/// Check if cmake is installed, returning its version string on success.
-#[allow(
-    clippy::option_if_let_else,
-    clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) fn has_cmake() -> Result<Option<String>> {
-    match command_stdout("cmake", &["--version"]) {
-        Some(v) => {
-            let version = v
-                .lines()
-                .next()
-                .and_then(|line| line.split_whitespace().nth(2))
-                .unwrap_or("unknown")
-                .to_string();
-            Ok(Some(version))
-        }
-        None => Ok(None),
-    }
-}
-
-/// Check if a C++ compiler is installed, returning a description on success.
+/// The first line `program --version` prints, when the program runs and
+/// exits successfully.
 ///
-/// Tries compilers in platform-preferred order:
-/// - **Windows**: `cl`, `g++`, `clang++`
-/// - **macOS**: `clang++`, `g++`
-/// - **Linux**: `g++`, `clang++`
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) fn has_cpp_compiler() -> Result<Option<String>> {
-    let compilers = if cfg!(target_os = "windows") {
-        vec!["cl", "g++", "clang++"]
-    } else if cfg!(target_os = "macos") {
-        vec!["clang++", "g++"]
+/// Read from stdout, or from stderr when stdout is empty: some tools write
+/// their banner there.
+pub(crate) fn version_line(program: &str) -> Option<String> {
+    first_line(&cmd(program).arg("--version").output().ok()?)
+}
+
+fn first_line(output: &std::process::Output) -> Option<String> {
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = if stdout.trim().is_empty() {
+        stderr
     } else {
-        vec!["g++", "clang++"]
+        stdout
     };
 
-    for compiler in compilers {
-        if let Some(stdout) = command_stdout(compiler, &["--version"]) {
-            let first_line = stdout.lines().next().unwrap_or("unknown");
-            return Ok(Some(format!("{} ({})", compiler, first_line.trim())));
-        }
-    }
+    text.lines().next().map(|line| line.trim().to_string())
+}
 
-    Ok(None)
+/// One whitespace-separated word of [`version_line`], counted from zero:
+/// word 1 of `cargo 1.75.0 (1d8b05cdd 2023-11-20)`, word 2 of
+/// `git version 2.43.0`.
+pub(crate) fn version_word(program: &str, index: usize) -> Option<String> {
+    word(&version_line(program)?, index)
+}
+
+fn word(line: &str, index: usize) -> Option<String> {
+    line.split_whitespace().nth(index).map(str::to_string)
+}
+
+/// The version `gcc` or `g++` reports, whichever compiler answers to the name.
+pub(crate) fn compiler_version(program: &str) -> Option<String> {
+    compiler_version_in(&version_line(program)?)
+}
+
+/// The version in a compiler's banner: its first word that starts with a
+/// digit and holds a dot, or else what follows `clang version`.
+fn compiler_version_in(line: &str) -> Option<String> {
+    line.split_whitespace()
+        .find(|word| word.starts_with(|c: char| c.is_ascii_digit()) && word.contains('.'))
+        .or_else(|| {
+            line.split_once("clang version")
+                .and_then(|(_, rest)| rest.split_whitespace().next())
+        })
+        .map(str::to_string)
+}
+
+/// The version of Python 3, asked of `python3` and then of `python`, which
+/// is Python 3 on some systems.
+pub(crate) fn python3_version() -> Option<String> {
+    ["python3", "python"]
+        .into_iter()
+        .filter_map(|program| version_word(program, 1))
+        .find(|version| version.starts_with('3'))
 }
 
 /// Get the number of CPU cores available for parallel compilation.
@@ -170,6 +168,71 @@ mod tests {
     fn test_parse_version_tuple_invalid() {
         assert_eq!(parse_version_tuple("12"), None);
         assert_eq!(parse_version_tuple(""), None);
+    }
+
+    /// The banners are the ones each tool prints. `gcc` on Ubuntu shows that
+    /// the first word with a digit and a dot wins, bracket and all: the
+    /// dependency check has always printed it that way.
+    #[test]
+    fn a_compiler_version_is_the_first_dotted_number_in_its_banner() {
+        for (banner, version) in [
+            ("gcc (GCC) 14.2.1 20240910", Some("14.2.1")),
+            ("g++ (Debian 12.2.0-14) 12.2.0", Some("12.2.0-14)")),
+            (
+                "gcc (Ubuntu 13.2.0-4ubuntu3) 13.2.0",
+                Some("13.2.0-4ubuntu3)"),
+            ),
+            (
+                "Apple clang version 15.0.0 (clang-1500.1.0.2.5)",
+                Some("15.0.0"),
+            ),
+            ("gcc.exe (MinGW.org GCC-6.3.0-1) 6.3.0", Some("6.3.0")),
+            ("clang version trunk", Some("trunk")),
+            ("cc", None),
+            ("", None),
+        ] {
+            assert_eq!(
+                compiler_version_in(banner).as_deref(),
+                version,
+                "{banner:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_version_word_is_counted_from_zero_and_may_be_absent() {
+        let banner = "cmake version 3.28.1";
+        assert_eq!(word(banner, 2).as_deref(), Some("3.28.1"));
+        assert_eq!(word(banner, 0).as_deref(), Some("cmake"));
+        assert_eq!(word(banner, 3), None);
+        assert_eq!(word("  GNU   Make  4.4.1 ", 2).as_deref(), Some("4.4.1"));
+    }
+
+    /// A run that fails has no banner, and one that answers on stderr alone
+    /// is still heard.
+    #[cfg(unix)]
+    #[test]
+    fn a_banner_is_the_first_line_a_successful_run_prints() {
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::{ExitStatus, Output};
+
+        let run = |code: i32, stdout: &str, stderr: &str| Output {
+            status: ExitStatus::from_raw(code << 8),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        };
+
+        assert_eq!(
+            first_line(&run(0, "  tool 1.2.3  \nsecond line\n", "a warning\n")).as_deref(),
+            Some("tool 1.2.3")
+        );
+        assert_eq!(
+            first_line(&run(0, " \n", "tool 4.5.6\n")).as_deref(),
+            Some("tool 4.5.6")
+        );
+        assert_eq!(first_line(&run(3, "tool 7.8.9\n", "")), None);
+        assert_eq!(first_line(&run(0, "", "")), None);
+        assert_eq!(version_line("gglib-no-such-program-on-any-path"), None);
     }
 
     #[test]

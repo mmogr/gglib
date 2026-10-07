@@ -5,7 +5,7 @@
 //!
 //! | Consumer    | Crate         | Output                                                              |
 //! |-------------|---------------|---------------------------------------------------------------------|
-//! | CLI         | `gglib-cli`   | `indicatif` progress bar via `consume_install_events_cli`            |
+//! | CLI         | `gglib-cli`   | `indicatif` progress bar via `render_install_events`                 |
 //! | Axum        | `gglib-axum`  | SSE stream at `POST /api/config/system/install-llama`               |
 //!
 //! The desktop app has no consumer of its own: its `WebView` reads the Axum

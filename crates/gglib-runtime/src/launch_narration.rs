@@ -89,14 +89,14 @@ pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
 
 /// Which acceleration the installed llama.cpp build was compiled for.
 ///
-/// Read from the build config written at install time. `None` when llama.cpp
-/// was never installed through gglib or the file is unreadable — a missing
-/// backend line is the honest outcome there, since gglib genuinely does not
-/// know what the binary on `PATH` was built with.
+/// Read from the record a source build writes when it installs. `None` when
+/// llama.cpp was not built here — a pre-built download, or a binary gglib did
+/// not install — or the file is unreadable: a missing backend line is the
+/// honest outcome there, since gglib genuinely does not know what the binary
+/// was built with.
 fn backend() -> Option<String> {
     let path = gglib_core::paths::llama_config_path().ok()?;
-    let config = crate::llama::BuildConfig::load(&path).ok()?;
-    Some(config.acceleration)
+    crate::llama::recorded_acceleration(&path)
 }
 
 /// Which llama.cpp build is being spawned, and what it does natively.

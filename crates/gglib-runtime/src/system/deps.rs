@@ -30,74 +30,52 @@ pub(super) fn check_libcurl() -> Option<String> {
 /// Check if libclang-dev is installed (needed by bindgen for FFI bindings).
 ///
 /// libclang doesn't have a pkg-config file, so we check for the shared library
-/// directly in standard paths or via llvm-config.
+/// directly: where llvm-config says it is, then the standard library paths,
+/// then the per-version LLVM directories.
 #[cfg(target_os = "linux")]
 pub(super) fn check_libclang() -> Option<String> {
-    // Method 1: Try llvm-config
+    use std::path::Path;
+
     if let Ok(output) = cmd("llvm-config").arg("--libdir").output()
         && output.status.success()
+        && dir_has_libclang(Path::new(String::from_utf8_lossy(&output.stdout).trim()))
     {
-        let libdir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let libdir_path = std::path::Path::new(&libdir);
-        if libdir_path.exists()
-            && let Ok(entries) = std::fs::read_dir(libdir_path)
+        // The LLVM version, for display.
+        if let Ok(ver_output) = cmd("llvm-config").arg("--version").output()
+            && ver_output.status.success()
         {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("libclang") && name_str.contains(".so") {
-                    // Get LLVM version for display
-                    if let Ok(ver_output) = cmd("llvm-config").arg("--version").output()
-                        && ver_output.status.success()
-                    {
-                        return Some(
-                            String::from_utf8_lossy(&ver_output.stdout)
-                                .trim()
-                                .to_string(),
-                        );
-                    }
-                    return Some("installed".to_string());
-                }
-            }
+            return Some(
+                String::from_utf8_lossy(&ver_output.stdout)
+                    .trim()
+                    .to_string(),
+            );
         }
+        return Some("installed".to_string());
     }
 
-    // Method 2: Check standard library paths
-    let search_patterns = ["/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu"];
-
-    for dir in &search_patterns {
-        let path = std::path::Path::new(dir);
-        if path.exists()
-            && let Ok(entries) = std::fs::read_dir(path)
-        {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("libclang") && name_str.contains(".so") {
-                    return Some("installed".to_string());
-                }
-            }
-        }
+    if ["/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu"]
+        .iter()
+        .any(|dir| dir_has_libclang(Path::new(dir)))
+    {
+        return Some("installed".to_string());
     }
 
-    // Method 3: Check llvm-specific paths
-    for major in (11..=20).rev() {
-        let llvm_lib = format!("/usr/lib/llvm-{major}/lib");
-        let path = std::path::Path::new(&llvm_lib);
-        if path.exists()
-            && let Ok(entries) = std::fs::read_dir(path)
-        {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("libclang") && name_str.contains(".so") {
-                    return Some(major.to_string());
-                }
-            }
-        }
-    }
+    (11..=20)
+        .rev()
+        .find(|major| dir_has_libclang(Path::new(&format!("/usr/lib/llvm-{major}/lib"))))
+        .map(|major| major.to_string())
+}
 
-    None
+/// Whether `dir` holds a libclang shared library.
+#[cfg(any(target_os = "linux", test))]
+fn dir_has_libclang(dir: &std::path::Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("libclang") && name.contains(".so")
+        })
+    })
 }
 
 /// Check for a library using pkg-config.
@@ -158,6 +136,22 @@ pub(super) fn check_gtk_layer_shell() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A directory that is not there holds none, and neither does one whose
+    /// only matches are libclang's static archive or another library's `.so`.
+    #[test]
+    fn a_directory_holds_libclang_when_a_shared_library_of_that_name_is_in_it() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!dir_has_libclang(&dir.path().join("absent")));
+        assert!(!dir_has_libclang(dir.path()));
+
+        std::fs::write(dir.path().join("libclang.a"), "").unwrap();
+        std::fs::write(dir.path().join("libLLVM-18.so"), "").unwrap();
+        assert!(!dir_has_libclang(dir.path()));
+
+        std::fs::write(dir.path().join("libclang-18.so.1"), "").unwrap();
+        assert!(dir_has_libclang(dir.path()));
+    }
 
     #[test]
     fn test_check_pkg_config_lib_nonexistent() {
