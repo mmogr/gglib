@@ -167,13 +167,7 @@ impl ServerOps {
             )));
         }
 
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        let settings = self.deps.core.settings().get().await?;
 
         // The proxy must be up before the model: it owns the runtime the model
         // will run under, and its dashboard and cache lifecycle are the reason

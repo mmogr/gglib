@@ -22,6 +22,9 @@ pub(crate) mod update;
 mod update_projector;
 pub(crate) mod verification;
 
+#[cfg(test)]
+mod test_library;
+
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -33,15 +36,18 @@ use crate::target::Target;
 
 /// `ModelOps` for a one-shot CLI command.
 ///
-/// Three handlers built this identically, each with a comment pointing at the
-/// last one, so the reasons live here once:
+/// An edit and a removal made in a terminal go through it, so each runs the
+/// operation the inspector's runs, as a capability change and an upgrade do.
+/// The reasons for what it is built with live here once:
 ///
 /// - `NoopModelRuntime` rather than `ctx.runner`: a one-shot command has no
 ///   shared `ProcessManager` to consult, and a runner scoped to this single
-///   invocation could only ever answer "nothing is running".
+///   invocation could only ever answer "nothing is running". So the refusal
+///   to remove a model that is being served never fires from here: what the
+///   daemon is serving is the daemon's to know.
 /// - `NoopEmitter`: library events exist to tell *other* clients what changed.
-///   A CLI process that is about to exit has nobody to tell, and no broadcast
-///   channel to tell them on.
+///   A CLI process that is about to exit has no broadcast channel to tell
+///   them on, so the events `ModelOps` emits end here.
 pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
     ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
@@ -52,12 +58,23 @@ pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
 }
 
 /// Dispatch a `model` subcommand to its handler.
+pub(crate) async fn dispatch(
+    ctx: &CliContext,
+    command: ModelCommand,
+    target: Target,
+) -> Result<()> {
+    dispatch_with(ctx, &one_shot_model_ops(ctx), command, target).await
+}
+
+/// [`dispatch`], with the `ModelOps` an update and a removal are made
+/// through, so a test can watch what either does with them.
 #[allow(
     clippy::too_many_lines,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-pub(crate) async fn dispatch(
+async fn dispatch_with(
     ctx: &CliContext,
+    ops: &ModelOps,
     command: ModelCommand,
     target: Target,
 ) -> Result<()> {
@@ -72,7 +89,7 @@ pub(crate) async fn dispatch(
             list::execute(target, ctx, args).await?;
         }
         ModelCommand::Remove { identifier, force } => {
-            remove::execute(ctx, &identifier, force).await?;
+            remove::execute(ctx, ops, &identifier, force).await?;
         }
         ModelCommand::Update {
             identifier,
@@ -140,7 +157,7 @@ pub(crate) async fn dispatch(
                 force,
                 projector,
             };
-            update::execute(ctx, args).await?;
+            update::execute(ctx, ops, args).await?;
         }
         ModelCommand::Retag {
             identifier,

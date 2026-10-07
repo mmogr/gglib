@@ -46,10 +46,7 @@ impl ModelOps {
         let model = resolve_model(core.models(), id).await?;
         let library = core.models().list().await?;
         let files = match core.verification() {
-            Some(verification) => verification
-                .files_of(id)
-                .await
-                .map_err(|e| GuiError::Internal(format!("Failed to read model files: {e}")))?,
+            Some(verification) => verification.files_of(id).await?,
             None => Vec::new(),
         };
         Ok(projector_choices(&model, &files, &library)
@@ -67,16 +64,15 @@ impl ModelOps {
 }
 
 /// A file that may not be linked is the caller's mistake, named as the rule
-/// names it; an unknown model is not found; the rest is internal.
+/// names it; an unknown model is not found; any other failure of the store
+/// is what `From<RepositoryError>` makes of it.
 fn refusal(id: i64, error: ProjectorError) -> GuiError {
     match error {
         ProjectorError::Repository(RepositoryError::NotFound(_)) => GuiError::NotFound {
             entity: "model",
             id: id.to_string(),
         },
-        ProjectorError::Repository(other) => {
-            GuiError::Internal(format!("Failed to update model: {other}"))
-        }
+        ProjectorError::Repository(other) => other.into(),
         refused => GuiError::ValidationFailed(refused.to_string()),
     }
 }

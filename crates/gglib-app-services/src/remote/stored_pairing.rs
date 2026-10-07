@@ -90,9 +90,9 @@ impl Settled {
 ///
 /// # Errors
 ///
-/// Whatever `redeem` says, and `Internal` when settings cannot be written —
-/// in [`store_redeemed`]'s wording on the redeemed arm, because by then the
-/// code is gone.
+/// Whatever `redeem` says, and whatever [`remember`] says of a pairing it
+/// cannot store — as `Internal`, in [`store_redeemed`]'s wording, on the
+/// redeemed arm, because by then the code is gone.
 #[allow(
     clippy::similar_names,
     reason = "grandfathered at lint inheritance, #1157"
@@ -140,8 +140,8 @@ pub(super) async fn settle(
 ///
 /// # Errors
 ///
-/// `Internal` when settings cannot be written, including when the result
-/// does not validate.
+/// `ValidationFailed` when the result does not validate, and `Internal` when
+/// settings cannot be written.
 pub(super) async fn remember(
     core: &AppCore,
     change: impl Fn(&mut Option<RemotePairing>) + Send + Sync,
@@ -154,7 +154,7 @@ pub(super) async fn remember(
         })
         .await
         .map(drop)
-        .map_err(|e| GuiError::Internal(format!("could not store the pairing: {e}")))
+        .map_err(|e| GuiError::from(e).context("could not store the pairing"))
 }
 
 /// The ticket and the port a codeless dial used, filed on the record of the
@@ -194,7 +194,7 @@ fn follow(stored: &mut Option<RemotePairing>, ticket: &Ticket, port: u16) {
 ///
 /// # Errors
 ///
-/// `Internal` when settings cannot be written, in the wording below.
+/// `Internal` when the pairing cannot be stored, in the wording below.
 pub(super) async fn store_redeemed(
     core: &AppCore,
     api_key: String,

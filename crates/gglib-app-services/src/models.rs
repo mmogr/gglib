@@ -85,13 +85,7 @@ impl ModelOps {
 
     /// List all models with their serving status.
     pub async fn list(&self) -> Result<Vec<GuiModel>, GuiError> {
-        let models = self
-            .deps
-            .core
-            .models()
-            .list()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to list models: {e}")))?;
+        let models = self.deps.core.models().list().await?;
 
         let mut gui_models = Vec::new();
         for model in models {
@@ -108,13 +102,7 @@ impl ModelOps {
     /// single source of truth for filter/sort semantics), then enriches each
     /// surviving model with its current serving status.
     pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
-        let models = self
-            .deps
-            .core
-            .models()
-            .list()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to list models: {e}")))?;
+        let models = self.deps.core.models().list().await?;
 
         let filtered = apply_query(models, &query);
 
@@ -162,13 +150,7 @@ impl ModelOps {
         profile: Option<&str>,
     ) -> Result<SamplingExplanationDto, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        let settings = self.deps.core.settings().get().await?;
 
         let selected = profile
             .map(|name| {
@@ -197,17 +179,7 @@ impl ModelOps {
                 None,
                 gglib_core::services::ImportMode::Fresh,
             )
-            .await
-            .map_err(|e| match e {
-                gglib_core::ports::CoreError::Validation(msg) => GuiError::ValidationFailed(msg),
-                gglib_core::ports::CoreError::Repository(
-                    gglib_core::ports::RepositoryError::AlreadyExists(_),
-                ) => GuiError::Conflict(format!(
-                    "Model at path '{}' already exists in database",
-                    request.file_path
-                )),
-                _ => GuiError::Internal(format!("Failed to add model: {e}")),
-            })?;
+            .await?;
 
         self.deps
             .emitter
@@ -218,38 +190,14 @@ impl ModelOps {
         Ok(GuiModel::from_model(model, is_serving, port))
     }
 
-    /// Update a model in the database.
+    /// Update a model in the database: `request` is written onto its row by
+    /// [`UpdateModelRequest::apply_to`], which is also what `gglib model
+    /// update` previews an edit with.
     pub async fn update(&self, id: i64, request: UpdateModelRequest) -> Result<GuiModel, GuiError> {
         self.link_projector(id, &request).await?;
         let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-
-        if let Some(name) = request.name {
-            model.name = name;
-        }
-        if let Some(quantization) = request.quantization {
-            model.quantization = Some(quantization);
-        }
-        if let Some(file_path) = request.file_path {
-            model.file_path = PathBuf::from(file_path);
-        }
-        if let Some(inference_defaults) = request.inference_defaults {
-            model.inference_defaults = Some(inference_defaults);
-            // A deliberate WebUI edit, so this is a user-set value from
-            // here on — even if it happens to land on the same numbers
-            // gglib would have guessed. See `DefaultsOrigin`.
-            model.defaults_origin = Some(gglib_core::domain::DefaultsOrigin::User);
-        }
-        // `None` leaves the stored defaults alone; `Some(None)` clears them.
-        if let Some(server_defaults) = request.server_defaults {
-            model.server_defaults = server_defaults;
-        }
-
-        self.deps
-            .core
-            .models()
-            .update(&model)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to update model: {e}")))?;
+        request.apply_to(&mut model);
+        self.deps.core.models().update(&model).await?;
 
         // Answer with the row as stored, not as sent. `update` canonicalises
         // `file_path` on write, so echoing the in-memory copy would hand back
@@ -293,12 +241,7 @@ impl ModelOps {
                 .map_err(|e| GuiError::Internal(format!("Failed to stop server: {e}")))?;
         }
 
-        self.deps
-            .core
-            .models()
-            .delete(id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to delete model: {e}")))?;
+        self.deps.core.models().delete(id).await?;
 
         self.deps.emitter.emit(AppEvent::model_removed(id));
 
@@ -307,22 +250,12 @@ impl ModelOps {
 
     /// List all unique tags.
     pub async fn list_tags(&self) -> Result<Vec<String>, GuiError> {
-        self.deps
-            .core
-            .models()
-            .list_tags()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to list tags: {e}")))
+        Ok(self.deps.core.models().list_tags().await?)
     }
 
     /// Add a tag to a model.
     pub async fn add_tag(&self, model_id: i64, tag: String) -> Result<(), GuiError> {
-        self.deps
-            .core
-            .models()
-            .add_tag(model_id, tag)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to add tag: {e}")))?;
+        self.deps.core.models().add_tag(model_id, tag).await?;
 
         // Tags are on `GuiModel` and drive the library filters, so a client
         // that missed this shows both the wrong chips and the wrong filter set.
@@ -332,12 +265,7 @@ impl ModelOps {
 
     /// Remove a tag from a model.
     pub async fn remove_tag(&self, model_id: i64, tag: String) -> Result<(), GuiError> {
-        self.deps
-            .core
-            .models()
-            .remove_tag(model_id, &tag)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to remove tag: {e}")))?;
+        self.deps.core.models().remove_tag(model_id, &tag).await?;
 
         self.announce_updated(model_id).await;
         Ok(())
@@ -345,22 +273,12 @@ impl ModelOps {
 
     /// Get all tags for a specific model.
     pub async fn get_tags(&self, model_id: i64) -> Result<Vec<String>, GuiError> {
-        self.deps
-            .core
-            .models()
-            .get_tags(model_id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get tags: {e}")))
+        Ok(self.deps.core.models().get_tags(model_id).await?)
     }
 
     /// Get filter options for the model library UI.
     pub async fn get_filter_options(&self) -> Result<ModelFilterOptions, GuiError> {
-        self.deps
-            .core
-            .models()
-            .get_filter_options()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get filter options: {e}")))
+        Ok(self.deps.core.models().get_filter_options().await?)
     }
 
     /// Override one or more capability flags on a model.
@@ -397,12 +315,7 @@ impl ModelOps {
 
         model.capabilities = caps;
 
-        self.deps
-            .core
-            .models()
-            .update(&model)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to update model capabilities: {e}")))?;
+        self.deps.core.models().update(&model).await?;
 
         // The same `models().update()` `Self::update` calls, so the same
         // announcement — capabilities are a field of `GuiModel`, and the
@@ -428,8 +341,7 @@ impl ModelOps {
             .core
             .models()
             .retag_model(id, self.deps.gguf_parser.as_ref(), full)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Retag failed: {e}")))?;
+            .await?;
 
         Ok(match diff {
             Some(diff) => {

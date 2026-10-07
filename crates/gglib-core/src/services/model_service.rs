@@ -104,14 +104,6 @@ impl ModelService {
         }
     }
 
-    /// Find a model by identifier — a numeric id, then an exact name (not an
-    /// HF id, despite what this said for a long time). Errors if not found.
-    pub async fn find_by_identifier(&self, identifier: &str) -> Result<Model, CoreError> {
-        self.get(identifier)
-            .await?
-            .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
-    }
-
     /// Add a new model from an already-built row.
     ///
     /// This is the raw registration door: it inherits
@@ -1114,13 +1106,15 @@ mod tests {
         assert_eq!(found.unwrap().id, created.id);
     }
 
+    /// A miss is no model, not an error: what to say about one is the
+    /// caller's.
     #[tokio::test]
-    async fn test_find_by_identifier_not_found() {
-        let repo = Arc::new(MockRepo::new());
-        let service = ModelService::new(repo);
+    async fn an_identifier_that_matches_nothing_is_no_model() {
+        let service = ModelService::new(Arc::new(MockRepo::new()));
 
-        let result = service.find_by_identifier("nonexistent").await;
-        assert!(result.is_err());
+        let found = service.get("nonexistent").await.unwrap();
+
+        assert!(found.is_none());
     }
 
     #[tokio::test]

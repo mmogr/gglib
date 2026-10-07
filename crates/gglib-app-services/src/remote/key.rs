@@ -101,7 +101,7 @@ pub(super) async fn settle(proxy: &ProxyOps, core: &AppCore) -> Result<Settled, 
         .settings()
         .get()
         .await
-        .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))?;
+        .map_err(|e| GuiError::from(e).context("could not read settings"))?;
     Ok(
         match decide(proxy.effective_api_key(), settings.proxy_api_key.as_deref()) {
             KeyDecision::Use { key, pinned } => Settled {
@@ -173,7 +173,7 @@ impl Settled {
                 ..SettingsUpdate::default()
             })
             .await
-            .map_err(|e| GuiError::Internal(format!("could not store the API key: {e}")))?;
+            .map_err(|e| GuiError::from(e).context("could not store the API key"))?;
         info!("minted an API key for the proxy; waiting for it to take effect");
         tokio::select! {
             () = cancel.cancelled() => {}

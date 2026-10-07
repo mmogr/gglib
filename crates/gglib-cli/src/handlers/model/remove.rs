@@ -1,9 +1,12 @@
 //! Remove command handler.
 //!
-//! Removes a GGUF model from the database. The actual model file
-//! remains on disk unchanged - only the database entry is removed.
+//! Removes a GGUF model from the database, through `ModelOps::remove`, the
+//! operation the inspector's remove runs. The actual model file remains on
+//! disk unchanged - only the database entry is removed.
 
 use anyhow::Result;
+use gglib_app_services::ModelOps;
+use gglib_app_services::types::RemoveModelRequest;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
@@ -19,6 +22,7 @@ use crate::utils::input;
 /// # Arguments
 ///
 /// * `ctx` - The CLI context providing access to `AppCore`
+/// * `ops` - The model operations the removal is made through
 /// * `identifier` - The name or ID of the model to remove
 /// * `force` - If true, skips confirmation prompt
 ///
@@ -31,8 +35,14 @@ use crate::utils::input;
 /// This function will return an error if:
 /// - Model not found
 /// - User input fails
+/// - The model is being served, as `ops` sees it
 /// - Database removal operation fails
-pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
+pub(crate) async fn execute(
+    ctx: &CliContext,
+    ops: &ModelOps,
+    identifier: &str,
+    force: bool,
+) -> Result<()> {
     // First, try to find the model to show it to the user
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
@@ -49,10 +59,14 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
         }
     }
 
-    // Delete by the id resolved above rather than handing the raw identifier
+    // Removed by the id resolved above rather than handing the raw identifier
     // to a second lookup: the confirmation prompt sits between the two, so
     // they can disagree, and the second one reports in core's vocabulary.
-    ctx.app.models().delete(model.id).await?;
+    //
+    // Never the request's `force`. That one stops the server a model is being
+    // served from; `--force` here only skips the prompt above.
+    ops.remove(model.id, RemoveModelRequest { force: false })
+        .await?;
     let removed = &model;
 
     println!(
@@ -71,17 +85,5 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn test_identifier_type_detection() {
-        fn is_numeric_id(identifier: &str) -> bool {
-            identifier.parse::<i64>().is_ok()
-        }
-
-        assert!(is_numeric_id("123"));
-        assert!(is_numeric_id("0"));
-        assert!(!is_numeric_id("model_name"));
-        assert!(!is_numeric_id("123abc"));
-        assert!(!is_numeric_id(""));
-    }
-}
+#[path = "remove_tests.rs"]
+mod tests;

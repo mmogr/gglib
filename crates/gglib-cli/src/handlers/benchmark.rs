@@ -19,6 +19,7 @@ use gglib_core::domain::benchmark::{
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
+use crate::handlers::model::resolver;
 use crate::presentation::style;
 
 #[path = "benchmark_verdicts.rs"]
@@ -156,13 +157,7 @@ async fn run_on_daemon(
 async fn resolve_model_ids(ctx: &CliContext, identifiers: &[String]) -> Result<Vec<i64>> {
     let mut ids = Vec::with_capacity(identifiers.len());
     for name in identifiers {
-        let model = ctx
-            .app
-            .models()
-            .find_by_identifier(name)
-            .await
-            .with_context(|| format!("model not found: {name}"))?;
-        ids.push(model.id);
+        ids.push(resolver::resolve_model_identifier(ctx, name).await?.id);
     }
     Ok(ids)
 }
@@ -261,11 +256,7 @@ async fn cmd_tune(
     ctx_size: Option<u64>,
     apply: bool,
 ) -> Result<()> {
-    let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("model not found: {model}"))?;
+    let model_id = resolver::resolve_model_identifier(ctx, &model).await?.id;
 
     let sweep_spec = parse_sweep_args(&sweep)?;
     let resolved_task_suite = load_task_suite(&task_suite)?;
@@ -392,11 +383,7 @@ async fn cmd_agentic(
     json: bool,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("model not found: {model}"))?;
+    let model_id = resolver::resolve_model_identifier(ctx, &model).await?.id;
 
     let seeds = crate::benchmark_commands::resolve_seeds(seeds);
     let config = AgenticEvalConfig {

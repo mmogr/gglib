@@ -1,13 +1,16 @@
 //! Update command handler.
 //!
-//! Handles updating model metadata in the database.
+//! Turns the flags into the request the inspector sends too, shows what it
+//! would change, and hands it to `ModelOps::update`, which writes the row.
 
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
+use gglib_app_services::ModelOps;
+use gglib_app_services::types::UpdateModelRequest;
 use gglib_core::{
     Model,
-    domain::{DefaultsOrigin, InferenceConfig, ReasoningEffort},
+    domain::{InferenceConfig, ReasoningEffort},
 };
 
 use super::{resolver, update_projector};
@@ -60,12 +63,13 @@ pub(crate) struct UpdateArgs {
 /// # Arguments
 ///
 /// * `ctx` - The CLI context providing access to `AppCore`
+/// * `ops` - The model operations the update is written through
 /// * `args` - The update command arguments
 ///
 /// # Returns
 ///
 /// Returns `Result<()>` indicating the success or failure of the operation.
-pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) -> Result<()> {
     // Get the existing model by name or ID
     let existing_model = resolver::resolve_model_identifier(ctx, &args.identifier).await?;
 
@@ -81,17 +85,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
         }
     }
 
-    // Parse metadata changes
-    let metadata_updates = parse_metadata_updates(&args.metadata)?;
-    let metadata_removals = parse_metadata_removals(&args.remove_metadata)?;
-
-    // Create the updated model
-    let mut updated_model = create_updated_model(
-        &existing_model,
-        &args,
-        &metadata_updates,
-        &metadata_removals,
-    )?;
+    // The preview is the row the request leaves, made by the merge
+    // `ModelOps::update` writes with.
+    let request = build_request(&existing_model, &args)?;
+    let mut updated_model = existing_model.clone();
+    request.apply_to(&mut updated_model);
 
     // Show preview of changes
     show_changes_preview(&existing_model, &updated_model);
@@ -114,8 +112,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     }
 
     // Apply the updates
-    update_projector::apply(ctx, &mut updated_model, args.projector.change()).await?;
-    ctx.app.models().update(&updated_model).await?;
+    ops.update(existing_model.id, request).await?;
 
     println!("✓ Model updated successfully!");
     Ok(())
@@ -144,158 +141,154 @@ pub(crate) fn parse_metadata_removals(remove_arg: &Option<String>) -> Result<Vec
     }
 }
 
-/// Create updated model with new values.
-pub(crate) fn create_updated_model(
+/// The request `args` make of `existing`: each flag as the field it sets.
+///
+/// A request carries a model's metadata and its sampling defaults whole, so
+/// the flags that change part of either are applied here to what the model
+/// holds now.
+pub(crate) fn build_request(existing: &Model, args: &UpdateArgs) -> Result<UpdateModelRequest> {
+    Ok(UpdateModelRequest {
+        name: args.name.clone(),
+        quantization: args.quantization.clone(),
+        param_count_b: args.param_count,
+        architecture: args.architecture.clone(),
+        context_length: args.context_length,
+        metadata: metadata_after(existing, args)?,
+        inference_defaults: inference_defaults_after(existing, args)?,
+        // The path to link, an explicit nothing to unlink, and no field at
+        // all when neither flag was passed.
+        projector_path: args.projector.change().map(|change| {
+            change
+                .path()
+                .map(|path| path.to_string_lossy().into_owned())
+        }),
+        ..UpdateModelRequest::default()
+    })
+}
+
+/// The metadata the model holds once the flags are applied, or `None` when no
+/// flag touches it.
+fn metadata_after(existing: &Model, args: &UpdateArgs) -> Result<Option<HashMap<String, String>>> {
+    let updates = parse_metadata_updates(&args.metadata)?;
+    let removals = parse_metadata_removals(&args.remove_metadata)?;
+    if updates.is_empty() && removals.is_empty() && !args.replace_metadata {
+        return Ok(None);
+    }
+
+    let mut metadata = if args.replace_metadata {
+        HashMap::new()
+    } else {
+        existing.metadata.clone()
+    };
+    metadata.extend(updates);
+    for key in &removals {
+        metadata.remove(key);
+    }
+    Ok(Some(metadata))
+}
+
+/// The sampling defaults the model holds once the flags are applied, or
+/// `None` when no flag touches them.
+///
+/// Cleared defaults are the empty config, here and when `--unset` takes the
+/// last parameter: `ModelOps::update` stores that as a model that inherits,
+/// so one `--unset` at a time reaches the state `--clear-inference-defaults`
+/// reaches in one step.
+fn inference_defaults_after(
     existing: &Model,
     args: &UpdateArgs,
-    metadata_updates: &HashMap<String, String>,
-    metadata_removals: &[String],
-) -> Result<Model> {
-    let mut updated = existing.clone();
-
-    // Update basic fields
-    if let Some(name) = &args.name {
-        updated.name = name.clone();
-    }
-    if let Some(param_count) = args.param_count {
-        updated.param_count_b = param_count;
-    }
-    if let Some(architecture) = &args.architecture {
-        updated.architecture = Some(architecture.clone());
-    }
-    if let Some(quantization) = &args.quantization {
-        updated.quantization = Some(quantization.clone());
-    }
-    if let Some(context_length) = args.context_length {
-        updated.context_length = Some(context_length);
-    }
-
-    // Handle metadata updates
-    if args.replace_metadata {
-        // Replace entire metadata with new values
-        updated.metadata = metadata_updates.clone();
-    } else {
-        // Merge metadata updates
-        for (key, value) in metadata_updates {
-            updated.metadata.insert(key.clone(), value.clone());
-        }
-    }
-
-    // Remove specified metadata keys
-    for key in metadata_removals {
-        updated.metadata.remove(key);
-    }
-
-    // Handle inference parameter defaults
+) -> Result<Option<InferenceConfig>> {
     if args.clear_inference_defaults {
-        // Clear all inference defaults (revert to inherit mode). No value
-        // left to have an origin either.
-        updated.inference_defaults = None;
-        updated.defaults_origin = None;
-    } else {
-        // Check if any inference parameters were provided
-        let has_inference_updates = args.temperature.is_some()
-            || args.top_p.is_some()
-            || args.top_k.is_some()
-            || args.max_tokens.is_some()
-            || args.repeat_penalty.is_some()
-            || args.presence_penalty.is_some()
-            || args.min_p.is_some()
-            || args.dry_multiplier.is_some()
-            || args.dry_base.is_some()
-            || args.dry_allowed_length.is_some()
-            || args.dry_penalty_last_n.is_some()
-            || args.dynatemp_range.is_some()
-            || args.dynatemp_exponent.is_some()
-            || args.top_n_sigma.is_some()
-            || args.frequency_penalty.is_some()
-            || args.reasoning_effort.is_some()
-            || args.reasoning_budget_tokens.is_some()
-            || !args.unset.is_empty();
-
-        if has_inference_updates {
-            // Start with existing inference defaults or create new
-            let mut inference_config = updated.inference_defaults.clone().unwrap_or_default();
-
-            // Update only the fields that were provided
-            if let Some(temp) = args.temperature {
-                inference_config.temperature = Some(temp);
-            }
-            if let Some(top_p) = args.top_p {
-                inference_config.top_p = Some(top_p);
-            }
-            if let Some(top_k) = args.top_k {
-                inference_config.top_k = Some(top_k);
-            }
-            if let Some(max_tokens) = args.max_tokens {
-                inference_config.max_tokens = Some(max_tokens);
-            }
-            if let Some(repeat_penalty) = args.repeat_penalty {
-                inference_config.repeat_penalty = Some(repeat_penalty);
-            }
-            if let Some(presence_penalty) = args.presence_penalty {
-                inference_config.presence_penalty = Some(presence_penalty);
-            }
-            if let Some(min_p) = args.min_p {
-                inference_config.min_p = Some(min_p);
-            }
-            if let Some(dry_multiplier) = args.dry_multiplier {
-                inference_config.dry_multiplier = Some(dry_multiplier);
-            }
-            if let Some(dry_base) = args.dry_base {
-                inference_config.dry_base = Some(dry_base);
-            }
-            if let Some(dry_allowed_length) = args.dry_allowed_length {
-                inference_config.dry_allowed_length = Some(dry_allowed_length);
-            }
-            if let Some(dry_penalty_last_n) = args.dry_penalty_last_n {
-                inference_config.dry_penalty_last_n = Some(dry_penalty_last_n);
-            }
-            if let Some(dynatemp_range) = args.dynatemp_range {
-                inference_config.dynatemp_range = Some(dynatemp_range);
-            }
-            if let Some(dynatemp_exponent) = args.dynatemp_exponent {
-                inference_config.dynatemp_exponent = Some(dynatemp_exponent);
-            }
-            if let Some(top_n_sigma) = args.top_n_sigma {
-                inference_config.top_n_sigma = Some(top_n_sigma);
-            }
-            if let Some(frequency_penalty) = args.frequency_penalty {
-                inference_config.frequency_penalty = Some(frequency_penalty);
-            }
-            if let Some(reasoning_effort) = args.reasoning_effort {
-                inference_config.reasoning_effort = Some(reasoning_effort);
-            }
-            if let Some(reasoning_budget_tokens) = args.reasoning_budget_tokens {
-                inference_config.reasoning_budget_tokens = Some(reasoning_budget_tokens);
-            }
-
-            // Clears run after sets, so `--top-k 40 --unset top-k` ends
-            // cleared. The order is the one the flags read in: the last thing
-            // said about a parameter is what holds.
-            for param in &args.unset {
-                clear_param(&mut inference_config, param)?;
-            }
-
-            // A deliberate flag from the user, so this is a user-set value
-            // from here on — even if it happens to land on the same
-            // numbers gglib would have guessed. See `DefaultsOrigin`.
-            updated.defaults_origin = Some(DefaultsOrigin::User);
-
-            updated.inference_defaults = Some(inference_config);
-
-            // Unsetting the last parameter must land back at *inherit*, not at
-            // an empty row that outranks global settings while saying nothing.
-            // `--unset` one at a time therefore reaches the same state
-            // `--clear-inference-defaults` reaches in one step.
-            if updated.inference_defaults.as_ref() == Some(&InferenceConfig::default()) {
-                updated.inference_defaults = None;
-                updated.defaults_origin = None;
-            }
-        }
+        return Ok(Some(InferenceConfig::default()));
     }
 
-    Ok(updated)
+    let has_inference_updates = args.temperature.is_some()
+        || args.top_p.is_some()
+        || args.top_k.is_some()
+        || args.max_tokens.is_some()
+        || args.repeat_penalty.is_some()
+        || args.presence_penalty.is_some()
+        || args.min_p.is_some()
+        || args.dry_multiplier.is_some()
+        || args.dry_base.is_some()
+        || args.dry_allowed_length.is_some()
+        || args.dry_penalty_last_n.is_some()
+        || args.dynatemp_range.is_some()
+        || args.dynatemp_exponent.is_some()
+        || args.top_n_sigma.is_some()
+        || args.frequency_penalty.is_some()
+        || args.reasoning_effort.is_some()
+        || args.reasoning_budget_tokens.is_some()
+        || !args.unset.is_empty();
+
+    if !has_inference_updates {
+        return Ok(None);
+    }
+
+    // Start with existing inference defaults or create new
+    let mut inference_config = existing.inference_defaults.clone().unwrap_or_default();
+
+    // Update only the fields that were provided
+    if let Some(temp) = args.temperature {
+        inference_config.temperature = Some(temp);
+    }
+    if let Some(top_p) = args.top_p {
+        inference_config.top_p = Some(top_p);
+    }
+    if let Some(top_k) = args.top_k {
+        inference_config.top_k = Some(top_k);
+    }
+    if let Some(max_tokens) = args.max_tokens {
+        inference_config.max_tokens = Some(max_tokens);
+    }
+    if let Some(repeat_penalty) = args.repeat_penalty {
+        inference_config.repeat_penalty = Some(repeat_penalty);
+    }
+    if let Some(presence_penalty) = args.presence_penalty {
+        inference_config.presence_penalty = Some(presence_penalty);
+    }
+    if let Some(min_p) = args.min_p {
+        inference_config.min_p = Some(min_p);
+    }
+    if let Some(dry_multiplier) = args.dry_multiplier {
+        inference_config.dry_multiplier = Some(dry_multiplier);
+    }
+    if let Some(dry_base) = args.dry_base {
+        inference_config.dry_base = Some(dry_base);
+    }
+    if let Some(dry_allowed_length) = args.dry_allowed_length {
+        inference_config.dry_allowed_length = Some(dry_allowed_length);
+    }
+    if let Some(dry_penalty_last_n) = args.dry_penalty_last_n {
+        inference_config.dry_penalty_last_n = Some(dry_penalty_last_n);
+    }
+    if let Some(dynatemp_range) = args.dynatemp_range {
+        inference_config.dynatemp_range = Some(dynatemp_range);
+    }
+    if let Some(dynatemp_exponent) = args.dynatemp_exponent {
+        inference_config.dynatemp_exponent = Some(dynatemp_exponent);
+    }
+    if let Some(top_n_sigma) = args.top_n_sigma {
+        inference_config.top_n_sigma = Some(top_n_sigma);
+    }
+    if let Some(frequency_penalty) = args.frequency_penalty {
+        inference_config.frequency_penalty = Some(frequency_penalty);
+    }
+    if let Some(reasoning_effort) = args.reasoning_effort {
+        inference_config.reasoning_effort = Some(reasoning_effort);
+    }
+    if let Some(reasoning_budget_tokens) = args.reasoning_budget_tokens {
+        inference_config.reasoning_budget_tokens = Some(reasoning_budget_tokens);
+    }
+
+    // Clears run after sets, so `--top-k 40 --unset top-k` ends cleared. The
+    // order is the one the flags read in: the last thing said about a
+    // parameter is what holds.
+    for param in &args.unset {
+        clear_param(&mut inference_config, param)?;
+    }
+
+    Ok(Some(inference_config))
 }
 
 /// Show a preview of the changes that will be applied.
@@ -613,3 +606,7 @@ fn show_field_change(field_name: &str, old_value: &str, new_value: &str) {
 #[cfg(test)]
 #[path = "update_tests.rs"]
 mod update_tests;
+
+#[cfg(test)]
+#[path = "update_surface_tests.rs"]
+mod update_surface_tests;

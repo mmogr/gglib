@@ -74,13 +74,7 @@ impl SetupOps {
     /// Get the full setup status for the wizard.
     pub async fn get_status(&self) -> Result<SetupStatus, GuiError> {
         // Check if setup was previously completed
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get settings: {e}")))?;
+        let settings = self.deps.core.settings().get().await?;
         let mut setup_completed = settings.setup_completed.unwrap_or(false);
 
         // Check llama installation

@@ -157,12 +157,7 @@ impl ProxyOps {
         globals: crate::launch_options::ProxyGlobals,
     ) -> Result<crate::launch_options::PinnedLaunch, GuiError> {
         let model = crate::helpers::resolve_model(self.core.models(), model_id).await?;
-        let settings = self
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        let settings = self.core.settings().get().await?;
         Ok(crate::launch_options::plan_pinned_launch(
             &model, &settings, request, globals,
         ))
@@ -314,12 +309,7 @@ impl ProxyOps {
             return Ok(address);
         }
 
-        let settings = self
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        let settings = self.core.settings().get().await?;
         let config = ProxyConfig {
             port: settings.effective_proxy_port(),
             // Passed through, not resolved: resolving here turned "the user

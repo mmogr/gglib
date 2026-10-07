@@ -2,9 +2,12 @@
 //!
 //! The one entry-point for resolving a user-supplied identifier (either a
 //! numeric ID or a model name) to a [`Model`] record in this machine's
-//! catalogue. Every command that looks a model up here goes through it, so
-//! all of them fail the same way: one message, on stderr, with a non-zero
-//! exit.
+//! catalogue. Every command that needs the model its identifier names goes
+//! through it, so all of them fail the same way: one message, on stderr, with
+//! a non-zero exit. A lookup that has something to do on a miss is not a
+//! resolution and does not come here: `Target::local_model` answers `None`,
+//! because a session on `--port` may name a model this catalogue does not
+//! hold.
 //!
 //! A bare identifier means this machine, and is never sent anywhere else.
 //! When it misses here and this machine is paired, a command that

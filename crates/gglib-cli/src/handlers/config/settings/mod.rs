@@ -13,6 +13,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::config_commands::{ModelsDirCommand, SettingsCommand};
+use crate::handlers::model::resolver;
 use crate::utils::input::prompt_string_with_default;
 use gglib_core::paths::{
     DirectoryCreationStrategy, default_models_dir, resolve_models_dir, set_models_dir,
@@ -64,7 +65,7 @@ pub(crate) async fn handle_default_model(
     match identifier {
         Some(id) => {
             // Set the default model
-            let model = ctx.app.models().find_by_identifier(&id).await?;
+            let model = resolver::resolve_model_identifier(ctx, &id).await?;
             let update = SettingsUpdate {
                 default_model_id: Some(Some(model.id)),
                 ..Default::default()
