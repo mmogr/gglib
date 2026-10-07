@@ -138,6 +138,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability
 - **`fallback_session.rs`** — The session id of a request that names none: a hash of its system prompt and its first user message, that message's images included
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
+- **`slot_cache_state.rs`** — `SlotCacheState`, the one value holding what is remembered of the slot cache between requests: the session held in RAM, what was cleared, and when the running llama-server started; a clear and a restart each change it through one method
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
 - **`usage_reading.rs`** — What a streamed reply's usage frame also says of its context (the answering server's launched context and how many messages were shortened to fit), and that only a client whose own body set `return_progress` is told (see [The context reading](#the-context-reading))
 - **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
@@ -171,7 +172,10 @@ resume from prior context without re-computation.
   runs at a time (single-slot llama-server constraint).
 - **Fail-open mtime guard:** If a cached slot file predates the current
   llama-server process's start time (indicating a stale cache from a prior
-  server instance), restore is skipped.
+  server instance), restore is skipped. The start is recorded wherever an
+  admission reports a freshly started server: a chat completion's first
+  attempt, its retry after it found the upstream dead, and
+  `POST /v1/models/{name}/load`.
 - **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
   recurrent/SSM architectures keep only part of the token history in KV memory.
   llama-server's slot files omit the context checkpoints those models need to

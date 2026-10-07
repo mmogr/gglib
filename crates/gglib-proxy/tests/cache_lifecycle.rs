@@ -2,7 +2,7 @@
 //!
 //! `slots::slot_file_is_stale` + its call site in
 //! `cache_lifecycle::restore_with_retry` skip a restore when a saved slot
-//! `.bin` file's mtime predates the current server's `server_start_time` —
+//! `.bin` file's mtime predates the current server's recorded start time —
 //! the file was written by some earlier llama-server instance and can't be
 //! trusted. This is already covered at the unit level (`cache_lifecycle.rs`'s
 //! `test_restore_with_retry_skips_stale_slot_file` and `slots.rs`'s
@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 use fixtures::common::{spawn_mock_upstream_with_slots, spawn_proxy_with_cache};
 use gglib_proxy::slots::slot_bin_path;
 
-/// A slot file whose mtime predates the proxy's `server_start_time` must be
+/// A slot file whose mtime predates the proxy's recorded server start must be
 /// treated as stale: restore is skipped (no network call to the upstream's
 /// `/slots/0?action=restore`), and the request still completes successfully
 /// — fail-open, per the guard's doc contract in `slots::slot_file_is_stale`.
@@ -39,12 +39,12 @@ async fn stale_slot_file_skips_restore_and_fails_open() {
 
     let session_id = "stale-mtime-session";
 
-    // `serve()` stamps `server_start_time` with `now()` at this call.
+    // `serve()` stamps the server's start time with `now()` at this call.
     let (proxy_base, proxy_cancel) =
         spawn_proxy_with_cache(upstream_port, "test-model", slot_dir.clone()).await;
 
     // Write the slot file after the proxy starts, then explicitly back-date
-    // its mtime well before `server_start_time` — this is what actually
+    // its mtime well before that start time — this is what actually
     // proves staleness, rather than relying on the write happening to land
     // before startup (which the mtime guard's whole-second comparison would
     // otherwise race).

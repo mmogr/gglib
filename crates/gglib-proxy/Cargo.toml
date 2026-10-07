@@ -67,9 +67,6 @@ regex = "1"
 # Content-derived fallback session ID hashing (cache_lifecycle)
 sha2 = { workspace = true }
 
-# Concurrent collections
-dashmap = "6"
-
 # Session ID generation
 uuid = { workspace = true, features = ["v4"] }
 

@@ -144,7 +144,7 @@ async fn an_upstream_dead_retry_of_a_noted_request_counts_one_trip() {
         "the first admission was dead and the request was re-admitted"
     );
 
-    // The retry carries the note — it is in `body_for_retry`.
+    // The retry carries the note — it is in the body both attempts are handed.
     let forwarded: Value = serde_json::from_slice(
         &seen
             .lock()

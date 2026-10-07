@@ -23,12 +23,11 @@ pub(crate) mod client_send;
 // `server` is internal too — the root re-exports `serve`, which is all
 // anyone needs from it.
 // Without `test-support` the re-export below is absent, which is the point of
-// gating it — but that also leaves `StreamConfig`, `restore_with_retry` and
-// `LastLoadedSession` (a public field type of the first, so it rides along) with
-// no public path, and this crate denies `unreachable_pub`. Said once here rather
-// than at each of the three, and only for the configuration where it is true:
-// with the feature on the lint applies normally, which is the configuration CI's
-// `--all-features` clippy run checks.
+// gating it — but that also leaves `StreamConfig` and `restore_with_retry`
+// with no public path, and this crate denies `unreachable_pub`. Said once
+// here rather than at each of the two, and only for the configuration where
+// it is true: with the feature on the lint applies normally, which is the
+// configuration CI's `--all-features` clippy run checks.
 #[cfg_attr(not(any(test, feature = "test-support")), allow(unreachable_pub))]
 #[allow(
     clippy::redundant_clone,
@@ -123,6 +122,7 @@ pub(crate) mod serve_config;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod server;
+pub(crate) mod slot_cache_state;
 pub mod slot_eviction;
 #[allow(
     clippy::cast_precision_loss,

@@ -32,10 +32,9 @@
 //! samples rather than censuses.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use dashmap::DashSet;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use tokio::time as tokio_time;
@@ -965,25 +964,16 @@ pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std:
 pub(crate) const MAX_RETRIES: u32 = 2;
 pub(crate) const RETRY_BACKOFF: Duration = Duration::from_millis(100);
 
-/// Shared save function — called by both streaming and non-streaming paths.
+/// Shared save function — called by both streaming and non-streaming paths,
+/// through `cache_lifecycle::save_after_generation`, which decides whether
+/// the session may be saved at all.
 pub async fn attempt_save(
     client: &Client,
     base_url: &str,
     slot_dir: &Path,
     model_id: u32,
     session_id: &str,
-    clear_all_pending: &AtomicBool,
-    per_session_cleared: &DashSet<String>,
 ) {
-    if clear_all_pending.load(Ordering::SeqCst) {
-        debug!("skipping save for {session_id} — clear_all_pending");
-        return;
-    }
-    if per_session_cleared.contains(session_id) {
-        debug!("skipping save for {session_id} — cleared mid-generation");
-        return;
-    }
-
     let mut result = save_slot(client, base_url, slot_dir, model_id, session_id).await;
     if matches!(result, SlotIoResult::Transient(_)) {
         for attempt in 1..=MAX_RETRIES {
@@ -1179,27 +1169,6 @@ mod slot_io_tests {
 
         assert!(!slot_bin_path(d, 1, "planner").exists());
         assert!(!slot_bin_path(d, 2, "coder").exists());
-    }
-
-    #[tokio::test]
-    async fn test_attempt_save_race_guard() {
-        let client = Client::new();
-        let clear_all = AtomicBool::new(false);
-        let per_session = DashSet::new();
-
-        per_session.insert("planner".to_string());
-
-        // This will return immediately due to the DashSet guard.
-        attempt_save(
-            &client,
-            "http://127.0.0.1:0",
-            Path::new("/tmp"),
-            0, // model_id
-            "planner",
-            &clear_all,
-            &per_session,
-        )
-        .await;
     }
 
     fn unix_secs_now() -> u64 {

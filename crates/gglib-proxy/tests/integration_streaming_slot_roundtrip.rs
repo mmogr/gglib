@@ -149,7 +149,7 @@ async fn streaming_cache_saves_after_generation_with_no_prior_cache() {
 
 /// A repeat streaming request for a session must restore its KV cache from
 /// disk before generating — but only once that session is no longer the
-/// proxy's single in-RAM "hot" slot. `StreamConfig::last_loaded_session`
+/// proxy's single in-RAM "hot" slot. `SlotCacheState`'s hot marker
 /// tracks only the *most recently saved* session, so a request for session
 /// "a", followed by a request for a *different* session "b" (which evicts
 /// "a" from the hot slot — the multi-agent workflow #595 targets), followed

@@ -6,23 +6,14 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use dashmap::DashSet;
 use reqwest::Client;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio::time::sleep;
 use tracing::{debug, warn};
 
+use crate::slot_cache_state::SlotCacheState;
 use crate::slots::{self, SlotIoResult};
-
-/// Composite key for the hot-cache bypass: (`model_id`, `session_id`).
-/// Both fields must match to consider a session "hot" in RAM.
-#[derive(Clone, Debug)]
-pub struct LastLoadedSession {
-    pub model_id: u32,
-    pub session_id: String,
-}
 
 // Retry budget for pre-generation restore failures — shared with
 // `slots::attempt_save`'s retry loop; see `slots::MAX_RETRIES` for why.
@@ -31,7 +22,7 @@ use slots::{MAX_RETRIES, RETRY_BACKOFF};
 
 /// Owned configuration bundle for cache lifecycle operations.
 ///
-/// Holds `Arc`-wrapped shared state so it can be cloned and moved across
+/// Holds the shared state behind an `Arc` so it can be cloned and moved across
 /// `tokio::spawn` boundaries. Deliberately does NOT hold the semaphore —
 /// that is an `AppState` concurrency control, passed as `&Semaphore`.
 #[derive(Clone)]
@@ -43,23 +34,40 @@ pub struct StreamConfig {
     /// Used to namespace slot files via the flat `{model_id}__{session}.bin`
     /// filename prefix (see `gglib_core::paths::slot_file_name`).
     pub model_id: u32,
-    pub clear_all_pending: Arc<AtomicBool>,
-    pub per_session_cleared: Arc<DashSet<String>>,
-    /// Unix timestamp (seconds) when the current llama-server process started.
-    /// Used by mtime guard to skip restoring stale slot files.
-    pub server_start_time: Arc<AtomicU64>,
-    /// Last session successfully loaded into RAM (hot in KV cache).
-    /// Composite key (`model_id` + `session_id`) used to bypass disk restore
-    /// when the same model+session is already hot.
-    pub last_loaded_session: Arc<tokio::sync::RwLock<Option<LastLoadedSession>>>,
+    /// What the proxy remembers of the slot cache between requests: the one
+    /// value every request, the clear route and the load route share.
+    pub(crate) state: Arc<SlotCacheState>,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl StreamConfig {
+    /// A config with a slot cache state of its own, whose server started at
+    /// `started`: for a test that drives the lifecycle without a proxy
+    /// around it. The epoch leaves the mtime guard uninitialised, so it
+    /// fails open.
+    #[must_use]
+    pub fn standalone(
+        client: Client,
+        base_url: String,
+        slot_dir: PathBuf,
+        model_id: u32,
+        started: std::time::SystemTime,
+    ) -> Self {
+        Self {
+            client,
+            base_url,
+            slot_dir,
+            model_id,
+            state: Arc::new(SlotCacheState::new(started)),
+        }
+    }
 }
 
 /// Restore KV cache for a session, with retry on transient failures.
 ///
-/// Always removes the per-session cleared flag AND resets the global clear
-/// flag afterward, unconditionally. This prevents the global
-/// clear deadlock: once a restore attempt occurs (success or failure), the
-/// system is back to "live" state and should accept future saves.
+/// Always tells the state a restore was attempted, whatever came of it (see
+/// [`SlotCacheState::restore_attempted`]): once one has been, the session is
+/// back to "live" and its saves are accepted again.
 pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> SlotIoResult {
     let sanitized = match slots::sanitize_session_id(session_id) {
         Ok(s) => s,
@@ -78,7 +86,7 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
 
     // mtime guard: skip restoring a slot file written by a prior llama-server
     // instance (see `slots::slot_file_is_stale` for the fail-open contract).
-    let server_start_secs = config.server_start_time.load(Ordering::SeqCst);
+    let server_start_secs = config.state.server_start_secs();
 
     let mut result = if file_exists {
         let is_stale = slots::slot_file_is_stale(
@@ -130,12 +138,8 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
         }
     }
 
-    // UNCONDITIONAL after every restore attempt (success, NotFound, exhausted, permanent):
-    // 1. Remove per-session cleared flag — session is now "live" again
-    // 2. Reset global clear flag — prevents deadlock where clear_all_pending
-    //    stays true forever, blocking all saves across all sessions
-    config.per_session_cleared.remove(&sanitized);
-    config.clear_all_pending.swap(false, Ordering::SeqCst);
+    // UNCONDITIONAL after every restore attempt (success, NotFound, exhausted, permanent).
+    config.state.restore_attempted(&sanitized);
 
     match &result {
         SlotIoResult::Ok => debug!("restored KV cache for {session_id}"),
@@ -155,26 +159,29 @@ pub async fn restore_with_retry(config: &StreamConfig, session_id: &str) -> Slot
 
 /// Save KV cache after generation completes. Awaited (not detached).
 ///
+/// Skipped for a session cleared since its restore: the clear never waits for
+/// the slot permit, so a cycle that was generating when it ran would otherwise
+/// write back the file it had just deleted.
+///
 /// Takes the already-sanitized session ID — both calling paths (streaming and
 /// non-streaming) sanitize once at cycle start, so this avoids redundant work.
 pub(crate) async fn save_after_generation(config: &StreamConfig, sanitized_session_id: &str) {
-    slots::attempt_save(
-        &config.client,
-        &config.base_url,
-        &config.slot_dir,
-        config.model_id,
-        sanitized_session_id,
-        &config.clear_all_pending,   // Arc<AtomicBool> → &AtomicBool
-        &config.per_session_cleared, // Arc<DashSet<String>> → &DashSet<String>
-    )
-    .await;
+    if config.state.may_save(sanitized_session_id) {
+        slots::attempt_save(
+            &config.client,
+            &config.base_url,
+            &config.slot_dir,
+            config.model_id,
+            sanitized_session_id,
+        )
+        .await;
+    } else {
+        debug!("skipping save for {sanitized_session_id} — cleared since its restore");
+    }
 
-    // Mark this session as hot in RAM — next request for the same session
-    // can skip the disk restore.
-    *config.last_loaded_session.write().await = Some(LastLoadedSession {
-        model_id: config.model_id,
-        session_id: sanitized_session_id.to_string(),
-    });
+    // This session is what the server holds in RAM now, saved or not. See
+    // `SlotCacheState::mark_hot` for which session that leaves hot.
+    config.state.mark_hot(config.model_id, sanitized_session_id);
 }
 
 /// Non-streaming cache lifecycle: acquire permit, restore→generate→save, release.
@@ -201,13 +208,7 @@ where
     let _permit = slot_gate.acquire().await.unwrap();
 
     // Hot cache bypass: skip disk restore if session is already in RAM
-    let is_hot = {
-        let last = config.last_loaded_session.read().await;
-        last.as_ref().map(|l| (l.model_id, l.session_id.as_str()))
-            == Some((config.model_id, sanitized.as_str()))
-    };
-
-    let restore_result = if is_hot {
+    let restore_result = if config.state.is_hot(config.model_id, &sanitized) {
         debug!(
             "Session {} is already hot in RAM — skipping disk restore",
             sanitized
@@ -266,13 +267,7 @@ pub(crate) async fn prepare_streaming_cycle(
     let permit = slot_gate.acquire_owned().await.unwrap();
 
     // Hot cache bypass: skip disk restore if session is already in RAM
-    let is_hot = {
-        let last = config.last_loaded_session.read().await;
-        last.as_ref().map(|l| (l.model_id, l.session_id.as_str()))
-            == Some((config.model_id, sanitized.as_str()))
-    };
-
-    let restore_result = if is_hot {
+    let restore_result = if config.state.is_hot(config.model_id, &sanitized) {
         debug!(
             "Session {} is already hot in RAM — skipping disk restore",
             sanitized
@@ -285,9 +280,9 @@ pub(crate) async fn prepare_streaming_cycle(
     Ok((permit, sanitized, restore_result))
 }
 
-/// Resolve the `(permit, config, session_id)` triple [`crate::forward::ForwardRequest::send`]
-/// needs for a streaming forward attempt — either a request's primary
-/// attempt, or a fresh disk-cache retry after `UpstreamDead`. Fails open:
+/// Resolve the `(permit, config, session_id)` triple
+/// [`crate::forward::forward_chat_completion`] needs for a streaming forward
+/// attempt. Fails open:
 /// any [`prepare_streaming_cycle`] error degrades to `(None, None, None)` —
 /// the caller proceeds without disk cache participation for this cycle.
 pub(crate) async fn resolve_cache_triple(
@@ -306,64 +301,23 @@ pub(crate) async fn resolve_cache_triple(
     }
 }
 
-/// Clear slot files for a session (or all sessions if None).
-///
-/// Deliberately does NOT acquire the semaphore — clears are instant
-/// from CLI/GUI with no spinner. The cleared flag prevents subsequent saves.
-///
-/// Without a flag, a cycle already mid-generation when the clear runs (started
-/// before the clear, holding the slot permit, which the clear never waits
-/// for) would have its `save_after_generation` re-write the very file
-/// this call just deleted. Setting `clear_all_pending` for the global case
-/// closes that race: `attempt_save` checks it before writing, and the next
-/// cycle's `restore_with_retry` clears it again once it's no longer needed.
-pub(crate) async fn clear_cache(
-    config: &StreamConfig,
-    session_id: Option<&str>,
-) -> std::io::Result<()> {
-    // NO semaphore acquire: the clear is instant
-    let result = slots::clear_slot_files(&config.slot_dir, session_id).await;
-
-    match session_id {
-        Some(id) => {
-            if let Ok(sanitized) = slots::sanitize_session_id(id) {
-                config.per_session_cleared.insert(sanitized.clone());
-                // Invalidate hot cache if the cleared session was the one in RAM
-                let mut last = config.last_loaded_session.write().await;
-                if last.as_ref().map(|l| (l.model_id, l.session_id.as_str()))
-                    == Some((config.model_id, sanitized.as_str()))
-                {
-                    *last = None;
-                }
-            }
-        }
-        None => {
-            config.clear_all_pending.store(true, Ordering::SeqCst);
-            // Global clear invalidates the hot cache entirely
-            *config.last_loaded_session.write().await = None;
-        }
-    }
-
-    result
-}
-
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
     use tokio::time::Duration;
 
+    /// A config for model 0 whose server started at `started`.
+    fn config(base_url: &str, slot_dir: &Path, started: SystemTime) -> StreamConfig {
+        let slot_dir = slot_dir.to_path_buf();
+        StreamConfig::standalone(Client::new(), base_url.to_string(), slot_dir, 0, started)
+    }
+
     #[test]
     fn test_stream_config_is_clone() {
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://localhost:8080".to_string(),
-            slot_dir: PathBuf::from("/tmp/slots"),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(0)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
+        let config = config("http://localhost:8080", Path::new("/tmp/slots"), UNIX_EPOCH);
         let _clone = config.clone();
     }
 
@@ -373,68 +327,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_clear_cache_sets_per_session_flag() {
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://localhost:8080".to_string(),
-            slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(0)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
-
-        let _ = clear_cache(&config, Some("test_session")).await;
-        assert!(config.per_session_cleared.contains("test_session"));
-    }
-
-    /// Regression test for the race where a global clear (no session id) set
-    /// no guard at all, letting a concurrent in-flight generation's save
-    /// silently resurrect the file the clear just deleted.
-    #[tokio::test]
-    async fn test_clear_cache_with_no_session_sets_clear_all_pending() {
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://localhost:8080".to_string(),
-            slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(0)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
-
-        let _ = clear_cache(&config, None).await;
-        assert!(config.clear_all_pending.load(Ordering::SeqCst));
-    }
-
-    #[tokio::test]
     async fn test_restore_removes_flags_unconditionally() {
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://127.0.0.1:0".to_string(), // Non-existent server
-            slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(true)), // Simulate pending global clear
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(0)), // 0 → fail-open (always proceed)
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
+        // Non-existent server.
+        let config = config(
+            "http://127.0.0.1:0",
+            Path::new("/tmp/test-slots"),
+            UNIX_EPOCH,
+        );
 
-        config
-            .per_session_cleared
-            .insert("test_session".to_string());
-        assert!(config.per_session_cleared.contains("test_session"));
-        assert!(config.clear_all_pending.load(Ordering::SeqCst));
+        // A pending global clear, and this session cleared too.
+        config.state.clear_all();
+        config.state.clear_session("test_session");
+        assert!(!config.state.may_save("test_session"));
+        assert!(!config.state.may_save("another_session"));
 
         // Restore will fail (no server), but both flags are reset unconditionally
         let _ = restore_with_retry(&config, "test_session").await;
 
         // Per-session flag removed
-        assert!(!config.per_session_cleared.contains("test_session"));
+        assert!(config.state.may_save("test_session"));
         // Global clear flag reset — prevents deadlock
-        assert!(!config.clear_all_pending.load(Ordering::SeqCst));
+        assert!(config.state.may_save("another_session"));
+    }
+
+    /// A save the state forbids never reaches the server, and leaves nothing
+    /// hot: not the session, whose next request has to restore, and not the
+    /// one hot before it, which the server no longer holds.
+    #[tokio::test]
+    async fn a_cleared_sessions_save_is_skipped_and_leaves_nothing_hot() {
+        // Refused if ever called: three tries and two backoffs, 200ms+.
+        let config = config("http://127.0.0.1:0", Path::new("/tmp/slots"), UNIX_EPOCH);
+        config.state.mark_hot(0, "coder");
+        config.state.clear_session("planner");
+
+        let started = tokio::time::Instant::now();
+        save_after_generation(&config, "planner").await;
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed < Duration::from_millis(150),
+            "a cleared session's save should not reach the network, took {elapsed:?}"
+        );
+        assert!(!config.state.is_hot(0, "planner"));
+        assert!(!config.state.is_hot(0, "coder"));
     }
 
     /// Regression test for the existence precheck: a session with no slot
@@ -450,16 +385,8 @@ mod tests {
     async fn test_restore_with_retry_skips_missing_slot_file() {
         let dir = tempfile::tempdir().unwrap();
         // No file ever written for this session — dir doesn't even exist yet.
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://127.0.0.1:0".to_string(), // refused if ever called
-            slot_dir: dir.path().to_path_buf(),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(0)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
+        // The server is refused if ever called.
+        let config = config("http://127.0.0.1:0", dir.path(), UNIX_EPOCH);
 
         let started = tokio::time::Instant::now();
         let result = restore_with_retry(&config, "never-cached-session").await;
@@ -490,23 +417,10 @@ mod tests {
         )
         .unwrap();
 
-        // Any timestamp after the file's real mtime marks it stale.
-        let server_start_secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            + 3600;
-
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://127.0.0.1:0".to_string(), // refused if ever called
-            slot_dir: dir.path().to_path_buf(),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
+        // Any timestamp after the file's real mtime marks it stale. The
+        // server is refused if ever called.
+        let server_start = SystemTime::now() + Duration::from_hours(1);
+        let config = config("http://127.0.0.1:0", dir.path(), server_start);
 
         let started = tokio::time::Instant::now();
         let result = restore_with_retry(&config, session_id).await;
@@ -532,23 +446,10 @@ mod tests {
         let session_id = "fresh-session";
         std::fs::write(slots::slot_bin_path(dir.path(), 0, session_id), b"kv state").unwrap();
 
-        // Server "started" long before the file was written.
-        let server_start_secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            .saturating_sub(3600);
-
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://127.0.0.1:0".to_string(), // refused — proves the call was attempted
-            slot_dir: dir.path().to_path_buf(),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(server_start_secs)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
+        // Server "started" long before the file was written. It is refused,
+        // which proves the call was attempted.
+        let server_start = SystemTime::now() - Duration::from_hours(1);
+        let config = config("http://127.0.0.1:0", dir.path(), server_start);
 
         let result = restore_with_retry(&config, session_id).await;
 
@@ -562,16 +463,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_streaming_cycle_rejects_bad_session_id() {
-        let config = StreamConfig {
-            client: Client::new(),
-            base_url: "http://localhost:8080".to_string(),
-            slot_dir: PathBuf::from("/tmp/test-slots"),
-            model_id: 0,
-            clear_all_pending: Arc::new(AtomicBool::new(false)),
-            per_session_cleared: Arc::new(DashSet::new()),
-            server_start_time: Arc::new(AtomicU64::new(0)),
-            last_loaded_session: Arc::new(tokio::sync::RwLock::new(None)),
-        };
+        let config = config(
+            "http://localhost:8080",
+            Path::new("/tmp/test-slots"),
+            UNIX_EPOCH,
+        );
         let gate = Arc::new(Semaphore::new(1));
 
         // Path traversal attempt — should return Err without touching semaphore
