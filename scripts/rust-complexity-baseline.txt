@@ -88,8 +88,6 @@ crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 423
 crates/gglib-hf/src/http.rs 381
 crates/gglib-hf/src/parsing.rs 429
-crates/gglib-integration-tests/tests/integration_huggingface.rs 339
-crates/gglib-integration-tests/tests/integration_models.rs 309
 crates/gglib-mcp/src/builtin/mod.rs 337
 crates/gglib-mcp/src/client.rs 526
 crates/gglib-mcp/src/manager.rs 326
@@ -118,7 +116,7 @@ crates/gglib-proxy/src/server.rs 977
 crates/gglib-proxy/src/slots.rs 1213
 crates/gglib-proxy/src/slots_poller.rs 806
 crates/gglib-proxy/src/sse_stream.rs 381
-crates/gglib-proxy/tests/fixtures/common.rs 1025
+crates/gglib-proxy/tests/fixtures/common.rs 973
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 409
 crates/gglib-proxy/tests/integration_loop_guard.rs 376

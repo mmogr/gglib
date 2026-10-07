@@ -87,6 +87,9 @@ gglib-sse = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 # The port doubles the tests implement.
 async-trait = { workspace = true }
+# `test-utils` for the doubles the tests share with other crates:
+# `ModelSummary::bare`, `NamedCatalog` and `InMemorySettings`.
+gglib-core = { workspace = true, features = ["test-utils"] }
 http-body-util = { workspace = true }
 tempfile = { workspace = true }
 serde_json = { workspace = true }

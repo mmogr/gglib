@@ -17,40 +17,21 @@ fn models_response_from_empty_summaries() {
 fn models_response_from_summaries_maps_fields() {
     let summaries = vec![
         ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id: 1,
-            name: "llama-3-8b-q4".into(),
             tags: vec!["chat".into()],
-            capabilities: ModelCapabilities::empty(),
-            image_input: false,
             param_count: "8B".into(),
             quantization: Some("Q4_K_M".into()),
             architecture: Some("llama".into()),
             created_at: 1700000000,
             file_size: 4_000_000_000,
             context_length: Some(8192),
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(1, "llama-3-8b-q4")
         },
         ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id: 2,
-            name: "mistral-7b-q8".into(),
-            tags: vec![],
-            capabilities: ModelCapabilities::empty(),
-            image_input: false,
-            param_count: "7B".into(),
             quantization: Some("Q8_0".into()),
             architecture: Some("mistral".into()),
             created_at: 1700000001,
             file_size: 7_000_000_000,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(2, "mistral-7b-q8")
         },
     ];
 
@@ -66,24 +47,7 @@ fn models_response_from_summaries_maps_fields() {
 #[test]
 fn models_response_serializes_to_openai_format() {
     let resp = ModelsResponse::from_summaries(
-        vec![ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id: 1,
-            name: "test-model".into(),
-            tags: vec![],
-            capabilities: ModelCapabilities::empty(),
-            image_input: false,
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-        }],
+        vec![ModelSummary::bare(1, "test-model")],
         Some(DEFAULT_CONTEXT_SIZE),
         true,
     );
@@ -101,22 +65,9 @@ fn models_response_serializes_to_openai_format() {
 
 fn summary_with_tags(name: &str, tags: &[&str]) -> ModelSummary {
     ModelSummary {
-        dialect: None,
-        template_caps: None,
-        id: 1,
-        name: name.into(),
         tags: tags.iter().map(|t| (*t).to_string()).collect(),
-        capabilities: ModelCapabilities::empty(),
-        image_input: false,
         param_count: "1B".into(),
-        quantization: None,
-        architecture: None,
-        created_at: 0,
-        file_size: 0,
-        context_length: None,
-        inference_defaults: None,
-        defaults_origin: None,
-        server_defaults: None,
+        ..ModelSummary::bare(1, name)
     }
 }
 

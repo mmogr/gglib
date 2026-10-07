@@ -2431,6 +2431,7 @@ dependencies = [
  "gglib-core",
  "gglib-db",
  "gglib-download",
+ "gglib-gguf",
  "gglib-mcp",
  "gglib-proxy",
  "gglib-runtime",
@@ -2553,11 +2554,9 @@ dependencies = [
  "gglib-core",
  "gglib-db",
  "gglib-gguf",
- "gglib-hf",
  "serde_json",
  "tempfile",
  "tokio",
- "urlencoding",
 ]
 
 [[package]]

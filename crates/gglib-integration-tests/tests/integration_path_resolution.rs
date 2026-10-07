@@ -1,10 +1,5 @@
-//! Integration tests for path resolution parity across adapters.
-//!
-//! These tests ensure that Tauri (GUI) and Axum (Web) adapters resolve
-//! paths identically when given the same environment. This prevents
-//! the "models downloaded in Tauri don't appear in Web UI" class of bugs.
-//!
-//! See: <https://github.com/mmogr/gglib/issues/259>
+//! `ResolvedPaths::resolve` in one process, with no adapter involved: what
+//! it answers twice running, where each path sits, and how it prints.
 //!
 //! Each test resolves in this binary's own data root, set first, and checks
 //! that it did: resolving the database path makes `<data root>/data`, which
@@ -13,10 +8,7 @@
 
 use gglib_core::paths::{ModelsDirSource, ResolvedPaths, isolate_data_root};
 
-/// Both adapters should resolve identical paths under the same environment.
-///
-/// This is the core parity assertion - if this fails, models/database/etc
-/// will be split between adapters.
+/// Two calls under the same environment resolve identical paths.
 #[test]
 fn path_resolution_is_deterministic() {
     let root = isolate_data_root();
@@ -99,19 +91,5 @@ fn explicit_models_dir_override_is_respected() {
         paths.models_source,
         ModelsDirSource::Explicit,
         "source should be Explicit when path is provided"
-    );
-}
-
-/// Models dir should have a valid source.
-#[test]
-fn models_dir_has_valid_source() {
-    let root = isolate_data_root();
-    let paths = ResolvedPaths::resolve().expect("resolve failed");
-    assert_eq!(paths.data_root, root);
-
-    // Source should be one of the valid variants
-    matches!(
-        paths.models_source,
-        ModelsDirSource::Explicit | ModelsDirSource::EnvVar | ModelsDirSource::Default
     );
 }

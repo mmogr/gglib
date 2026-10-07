@@ -20,13 +20,13 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::ports::{InMemorySettings, ModelCatalogPort, ModelRuntimePort};
 use gglib_core::{LoopGuardMode, Settings};
 
 mod fixtures;
 use fixtures::common::{
-    CountingRuntime, StaticSettingsRepo, TaggedCatalog, spawn_mock_upstream, spawn_proxy,
-    spawn_proxy_with_runtime, spawn_proxy_with_settings,
+    CountingRuntime, TaggedCatalog, spawn_mock_upstream, spawn_proxy, spawn_proxy_with_runtime,
+    spawn_proxy_with_settings,
 };
 use fixtures::loop_guard::{
     assistant_call, chat_body, looping_history, repeated_read_history, spawn_proxy_in_mode,
@@ -348,12 +348,12 @@ async fn disabled_guard_forwards_looping_history() {
         tags: vec![],
         dialect: None,
     });
-    let settings = Settings {
+    let settings = InMemorySettings::with(Settings {
         loop_guard_mode: Some(LoopGuardMode::Off),
         ..Settings::with_defaults()
-    };
+    });
     let (proxy_url, proxy_cancel) =
-        spawn_proxy_with_settings(runtime, catalog, Arc::new(StaticSettingsRepo(settings))).await;
+        spawn_proxy_with_settings(runtime, catalog, Arc::new(settings)).await;
 
     let mut body = chat_body("test-model", looping_history(5));
     body["stream"] = json!(true);

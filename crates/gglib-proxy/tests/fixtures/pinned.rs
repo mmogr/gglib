@@ -110,22 +110,11 @@ impl StaticCatalog {
 
     fn summary(id: u32, name: &str) -> ModelSummary {
         ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id,
-            name: name.to_string(),
-            tags: vec![],
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
             image_input: name.ends_with("-vision"),
-            param_count: "7B".to_string(),
             quantization: Some("Q4_K_M".to_string()),
             architecture: Some("llama".to_string()),
-            created_at: 0,
-            file_size: 0,
             context_length: Some(8192),
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(id, name)
         }
     }
 }

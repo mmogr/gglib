@@ -10,13 +10,14 @@ use std::time::Duration;
 
 use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
+use gglib_core::ports::InMemorySettings;
 use gglib_proxy::slot_eviction::DiskBudget;
 use gglib_proxy::{ProxyObservers, ServeConfig, StreamBounds, TEST_STREAM_BOUNDS};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use super::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
+use super::common::{EmptyCatalog, NoopRuntime, make_mcp_service};
 
 /// A proxy that is being served.
 pub(crate) struct Spawned {
@@ -44,7 +45,7 @@ pub(crate) async fn defaults() -> ServeConfig {
         mcp: make_mcp_service(),
         cancel: CancellationToken::new(),
         daemon_cancel: None,
-        settings_repo: Arc::new(MockSettingsRepo),
+        settings_repo: Arc::new(InMemorySettings::default()),
         inference_override: None,
         default_profile: None,
         cache_enabled: false,

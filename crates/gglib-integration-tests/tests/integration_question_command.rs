@@ -13,22 +13,8 @@ use std::sync::Arc;
 use chrono::Utc;
 use gglib_core::{ModelRepository, NewModel, Settings, SettingsUpdate, services::SettingsService};
 use gglib_db::{SqliteModelRepository, SqliteSettingsRepository};
-use std::fs;
+use gglib_gguf::write_string_gguf;
 use tempfile::tempdir;
-
-/// Create a test GGUF file with minimal valid header
-fn create_test_gguf_file(temp_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
-    let file_path = temp_dir.join(format!("{name}.gguf"));
-    // Create a minimal GGUF file with correct header
-    let gguf_header = [
-        0x47, 0x47, 0x55, 0x46, // Magic "GGUF"
-        0x03, 0x00, 0x00, 0x00, // Version 3
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Tensor count (1)
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Metadata count (1)
-    ];
-    fs::write(&file_path, gguf_header).unwrap();
-    file_path
-}
 
 // =============================================================================
 // Settings: default_model_id persistence tests
@@ -144,7 +130,8 @@ async fn test_find_model_by_id() {
     let pool = setup_test_pool().await.unwrap();
     let model_repo = SqliteModelRepository::new(pool);
     let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "test_model");
+    let file_path = temp_dir.path().join("test_model.gguf");
+    write_string_gguf(&file_path, &[]);
 
     // Add a model
     let new_model = NewModel::new("Test Model".to_string(), file_path.clone(), 7.0, Utc::now());
@@ -164,7 +151,8 @@ async fn test_find_model_by_name() {
     let pool = setup_test_pool().await.unwrap();
     let model_repo = SqliteModelRepository::new(pool);
     let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "named_model");
+    let file_path = temp_dir.path().join("named_model.gguf");
+    write_string_gguf(&file_path, &[]);
 
     // Add a model
     let new_model = NewModel::new(

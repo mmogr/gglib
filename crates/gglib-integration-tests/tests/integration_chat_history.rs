@@ -1,6 +1,6 @@
-//! Chat parity integration tests.
-//!
-//! Verifies that chat history operations work correctly across the stack.
+//! The chat history repository against a migrated database: what a
+//! conversation and its messages read back as, and what deleting one takes
+//! with it.
 
 use gglib_core::domain::chat::{MessageRole, NewMessage};
 use gglib_core::ports::chat_history::ChatHistoryRepository;
@@ -114,48 +114,6 @@ async fn test_save_and_list_messages() {
     assert_eq!(messages[1].id, assistant_msg_id);
     assert_eq!(messages[1].role, MessageRole::Assistant);
     assert_eq!(messages[1].content, "I'm doing well, thank you!");
-}
-
-/// Test conversation update.
-#[tokio::test]
-async fn test_update_conversation() {
-    let pool = setup_test_database()
-        .await
-        .expect("Failed to setup test db");
-    let repo = SqliteChatHistoryRepository::new(pool);
-
-    // Create a conversation
-    let conv_id = repo
-        .create_conversation(gglib_core::domain::chat::NewConversation {
-            title: "Original Title".to_string(),
-            model_id: None,
-            system_prompt: None,
-            settings: None,
-        })
-        .await
-        .expect("Failed to create conversation");
-
-    // Update title
-    repo.update_conversation(
-        conv_id,
-        gglib_core::domain::chat::ConversationUpdate {
-            title: Some("Updated Title".to_string()),
-            system_prompt: None,
-            settings: None,
-            model_id: None,
-        },
-    )
-    .await
-    .expect("Failed to update conversation");
-
-    // Verify update
-    let conv = repo
-        .get_conversation(conv_id)
-        .await
-        .expect("Failed to get conversation")
-        .expect("Conversation should exist");
-
-    assert_eq!(conv.title, "Updated Title");
 }
 
 /// Test deleting a conversation removes all messages.

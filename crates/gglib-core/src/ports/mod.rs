@@ -17,6 +17,8 @@ pub(crate) mod mcp_dto;
 pub(crate) mod mcp_error;
 pub(crate) mod mcp_repository;
 pub mod model_catalog;
+#[cfg(any(test, feature = "test-utils"))]
+mod model_catalog_fixture;
 pub(crate) mod model_files;
 pub(crate) mod model_registrar;
 pub(crate) mod model_repository;
@@ -29,6 +31,8 @@ pub(crate) mod remote_gateway;
 pub(crate) mod retry_observer;
 pub(crate) mod runs;
 pub(crate) mod server_health;
+#[cfg(any(test, feature = "test-utils"))]
+mod settings_fixture;
 pub(crate) mod settings_repository;
 pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
@@ -67,6 +71,8 @@ pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};
 pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
+#[cfg(any(test, feature = "test-utils"))]
+pub use model_catalog_fixture::NamedCatalog;
 pub use model_files::ModelFilesRepositoryPort;
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 pub use model_repository::ModelRepository;
@@ -79,6 +85,8 @@ pub use remote_gateway::RemoteGatewayPort;
 pub use retry_observer::RetryObserver;
 pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
 pub use server_health::ServerHealthStatus;
+#[cfg(any(test, feature = "test-utils"))]
+pub use settings_fixture::InMemorySettings;
 pub use settings_repository::{SettingsChange, SettingsRepository};
 pub use system_probe::SystemProbePort;
 pub use tool_support::{

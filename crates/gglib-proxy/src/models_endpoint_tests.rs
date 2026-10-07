@@ -4,27 +4,13 @@
 //! ordinary state: `Settings::with_defaults` writes no floor.
 
 use crate::models::ModelsResponse;
-use gglib_core::domain::ModelCapabilities;
 use gglib_core::ports::ModelSummary;
 
 fn summary(trained: Option<u64>) -> ModelSummary {
     ModelSummary {
-        dialect: None,
-        template_caps: None,
-        id: 1,
-        name: "qwen3-8b".into(),
-        tags: Vec::new(),
-        capabilities: ModelCapabilities::empty(),
-        image_input: false,
         param_count: "8B".into(),
-        quantization: None,
-        architecture: None,
-        created_at: 0,
-        file_size: 0,
         context_length: trained,
-        inference_defaults: None,
-        defaults_origin: None,
-        server_defaults: None,
+        ..ModelSummary::bare(1, "qwen3-8b")
     }
 }
 

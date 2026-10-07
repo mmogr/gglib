@@ -1,60 +1,10 @@
 use super::*;
 
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 
 use crate::domain::InferenceConfig;
+use crate::ports::NamedCatalog;
 use crate::ports::model_catalog::{CatalogError, ModelLaunchSpec, ModelSummary};
-
-/// behaviour of the real `SQLite` repository (`WHERE name = ?`).
-#[derive(Debug)]
-struct NamedCatalog {
-    names: HashSet<String>,
-}
-
-impl NamedCatalog {
-    fn new(names: &[&str]) -> Self {
-        Self {
-            names: names.iter().map(|n| (*n).to_owned()).collect(),
-        }
-    }
-}
-
-#[async_trait]
-impl ModelCatalogPort for NamedCatalog {
-    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-        Ok(Vec::new())
-    }
-
-    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(self.names.contains(name).then(|| ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id: 1,
-            name: name.to_owned(),
-            tags: Vec::new(),
-            capabilities: crate::domain::ModelCapabilities::empty(),
-            image_input: false,
-            param_count: "7B".to_owned(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
-        }))
-    }
-
-    async fn resolve_for_launch(
-        &self,
-        _name: &str,
-    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        Ok(None)
-    }
-}
 
 /// Catalog whose every query fails, to pin the fail-open behaviour.
 #[derive(Debug)]

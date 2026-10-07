@@ -2,7 +2,7 @@
 name = "gglib-integration-tests"
 version.workspace = true
 edition.workspace = true
-description = "Cross-crate integration tests for gglib (add/question command flows, chat parity, HuggingFace client, model serialization, path resolution, server defaults, validation)"
+description = "Cross-crate integration tests for gglib (model import, naming, quantization and serialization, the model and chat repositories, settings, path resolution, server defaults, validation)"
 license.workspace = true
 publish = false
 
@@ -13,10 +13,9 @@ workspace = true
 # `test-utils` for a data root of each test binary's own (#955).
 gglib-core = { workspace = true, features = ["test-utils"] }
 gglib-db = { workspace = true, features = ["test-utils"] }
-gglib-hf = { workspace = true }
-gglib-gguf = { workspace = true }
+# `test-utils` for the GGUF file the import tests parse.
+gglib-gguf = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 chrono = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
-urlencoding = { workspace = true }

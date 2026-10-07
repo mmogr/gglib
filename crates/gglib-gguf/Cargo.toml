@@ -6,6 +6,11 @@ description = "GGUF file format parsing for gglib"
 license.workspace = true
 publish = false
 
+[features]
+# `write_string_gguf`, a GGUF file written without a model. Other crates
+# enable it from `[dev-dependencies]` only.
+test-utils = []
+
 [dependencies]
 # Core domain types and port definitions
 gglib-core = { workspace = true }
