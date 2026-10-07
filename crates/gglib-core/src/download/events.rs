@@ -91,21 +91,6 @@ impl DownloadEvent {
             | Self::DownloadCancelled { id, .. } => Some(id),
         }
     }
-
-    /// Colon-separated names — five, reached through `AppEvent`'s one download
-    /// arm; `download_event_names_are_stable` pins them. **Not the wire
-    /// format**: `AppEvent`'s `type` tag is `download`, and these retired
-    /// Tauri-bus spellings are read by nothing.
-    #[must_use]
-    pub const fn event_name(&self) -> &'static str {
-        match self {
-            Self::QueueSnapshot(_) => "download:queue_snapshot",
-            Self::DownloadCompleted { .. } => "download:completed",
-            Self::DownloadFailed { .. } => "download:failed",
-            Self::DownloadCancelled { .. } => "download:cancelled",
-            Self::QueueRunComplete { .. } => "download:queue_run_complete",
-        }
-    }
 }
 
 #[cfg(test)]

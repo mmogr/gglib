@@ -13,27 +13,8 @@ use tokio::fs;
 use super::*;
 use crate::error::GuiError;
 use crate::sampling_explain::ProvenanceKindDto;
-use crate::test_support::test_core;
+use crate::test_support::{RecordingEmitter, test_core};
 use gglib_core::ports::{NoopGgufParser, NoopModelRuntime};
-
-/// An emitter that keeps what it was handed, so a test can assert on what
-/// a mutation broadcast rather than only on what it returned.
-#[derive(Default)]
-struct RecordingEmitter {
-    events: std::sync::Mutex<Vec<AppEvent>>,
-}
-
-impl RecordingEmitter {
-    fn events(&self) -> Vec<AppEvent> {
-        self.events.lock().expect("emitter lock").clone()
-    }
-}
-
-impl AppEventEmitter for RecordingEmitter {
-    fn emit(&self, event: AppEvent) {
-        self.events.lock().expect("emitter lock").push(event);
-    }
-}
 
 fn make_ops(core: Arc<AppCore>) -> ModelOps {
     make_ops_with_emitter(core, Arc::new(gglib_core::ports::NoopEmitter::new()))
@@ -386,8 +367,8 @@ async fn add_placeholder_model_with(ops: &ModelOps, dir: &tempfile::TempDir) -> 
 /// A GUI refetches its own list after its own edit, which makes a single tab
 /// look correct and hides the real gap: a second window or browser tab
 /// against the same daemon stays on the old row until someone hits refresh.
-/// `AppEvent` has carried these three variants — and `event_name()` has
-/// mapped them — since before anything emitted one.
+/// `AppEvent` has carried these three variants since before anything
+/// emitted one.
 #[tokio::test]
 async fn adding_a_model_broadcasts_it() {
     let core = test_core().await;

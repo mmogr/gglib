@@ -44,65 +44,19 @@ function coerceUnixTimeToMs(value: unknown): number | null {
   return Math.floor(value * 1000); // seconds -> ms
 }
 
-/**
- * One `snapshot` entry, from the fields both producers supply under their own
- * spellings. Shared so the two entry points below cannot drift on how a
- * server becomes a registry row — only on how they read one off the wire.
- */
-function snapshotEntry(fields: {
-  modelId: unknown;
-  modelName?: string;
-  port?: number;
-  startedAt?: number;
-}): ServerStateInfo | null {
-  const modelId = coerceModelId(fields.modelId);
-  if (!modelId) return null;
-
-  return {
-    modelId,
-    // Both producers list only running servers.
-    status: 'running',
-    port: fields.port,
-    updatedAt: coerceUnixTimeToMs(fields.startedAt) ?? Date.now(),
-    modelName: fields.modelName,
-  };
-}
-
 const present = <T,>(x: T | null): x is T => x !== null;
 
-function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
-  const servers = data.servers;
-  if (!Array.isArray(servers)) return null;
-
-  return {
-    type: 'snapshot',
-    servers: servers
-      .map((s) => {
-        if (typeof s !== 'object' || s === null) return null;
-        const entry = s as Record<string, unknown>;
-
-        return snapshotEntry({
-          modelId: entry.modelId,
-          modelName: typeof entry.modelName === 'string' ? entry.modelName : undefined,
-          port: typeof entry.port === 'number' ? entry.port : undefined,
-          startedAt: typeof entry.startedAt === 'number' ? entry.startedAt : undefined,
-        });
-      })
-      .filter(present),
-  };
-}
-
 /**
- * Hydration from `GET /api/servers`.
+ * Hydration from `GET /api/servers`: the servers already running when the
+ * page loads, which no event carries.
  *
  * A separate entry point rather than a snake_case fallback inside
  * [`normalizeServerEventFromAppEvent`], because this is not an `AppEvent` and
- * never was — it is a REST list the caller re-wrapped to look like one. The
- * two producers really do disagree: `ServerSnapshotEntry` is camelCase, while
- * `ServerInfo` is snake_case and carries a `pid` the registry has no use for.
- * Naming both paths is what lets each read exactly the shape its own producer
- * sends, instead of one tolerant reader accepting either and documenting
- * neither.
+ * never was. The two producers really do disagree: the event frames are
+ * camelCase, while `ServerInfo` is snake_case and carries a `pid` the
+ * registry has no use for. Naming both paths is what lets each read exactly
+ * the shape its own producer sends, instead of one tolerant reader accepting
+ * either and documenting neither.
  *
  * Total, not `null`-returning: there is no whole-payload failure to report,
  * only individual entries — malformed, or with an id that will not coerce —
@@ -114,21 +68,25 @@ export function normalizeServerSnapshotFromList(
   return {
     type: 'snapshot',
     servers: servers
-      .map((s) =>
+      .map((s): ServerStateInfo | null => {
         // `ServerInfo[]` is what the endpoint promises, not what it
         // guarantees — the fetch behind it is an unchecked cast. A null entry
         // would throw on property access, and the caller swallows rejections,
         // so one bad row would silently cost the whole hydration. The event
         // path drops the row and keeps the rest; so does this.
-        toRecord(s) === null
-          ? null
-          : snapshotEntry({
-              modelId: s.model_id,
-              modelName: s.model_name,
-              port: s.port,
-              startedAt: s.started_at,
-            }),
-      )
+        if (toRecord(s) === null) return null;
+        const modelId = coerceModelId(s.model_id);
+        if (!modelId) return null;
+
+        return {
+          modelId,
+          // The list holds only running servers.
+          status: 'running',
+          port: s.port,
+          updatedAt: coerceUnixTimeToMs(s.started_at) ?? Date.now(),
+          modelName: s.model_name,
+        };
+      })
       .filter(present),
   };
 }
@@ -205,8 +163,6 @@ export function normalizeServerEventFromAppEvent(payload: unknown): ServerEvent 
   if (typeof t !== 'string') return null;
 
   switch (t) {
-    case 'server_snapshot':
-      return normalizeSnapshot(data);
     case 'server_started':
       return normalizeLifecycle('running', data);
     case 'server_stopped':

@@ -23,11 +23,9 @@ import type { AppEventType } from '../types/events';
  */
 export function getEventCategory(outerType: string): AppEventType | null {
   if (outerType === 'download') return 'download';
-  if (outerType.startsWith('server_') || outerType === 'server_snapshot') return 'server';
+  if (outerType.startsWith('server_')) return 'server';
   if (outerType.startsWith('model_')) return 'model';
-  if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) {
-    return 'verification';
-  }
+  if (outerType.startsWith('verification_')) return 'verification';
   if (outerType.startsWith('proxy_')) return 'proxy';
   if (outerType.startsWith('remote_')) return 'remote';
   return null;

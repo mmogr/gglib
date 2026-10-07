@@ -28,7 +28,6 @@ pub(crate) mod remote_gateway;
 pub(crate) mod retry_observer;
 pub(crate) mod runs;
 pub(crate) mod server_health;
-pub(crate) mod server_log_sink;
 pub(crate) mod settings_repository;
 pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
@@ -43,7 +42,7 @@ pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 pub use agent_guard_sink::{AgentGuardReporter, AgentGuardSink};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
 pub use llm_completion::LlmCompletionPort;
-pub use loop_guard_trips::{LoopGuardTripLog, LoopGuardTripSink};
+pub use loop_guard_trips::LoopGuardTripSink;
 // Re-export tool-executor filter decorators
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
@@ -77,7 +76,6 @@ pub use remote_gateway::RemoteGatewayPort;
 pub use retry_observer::RetryObserver;
 pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
 pub use server_health::ServerHealthStatus;
-pub use server_log_sink::ServerLogSinkPort;
 pub use settings_repository::{SettingsChange, SettingsRepository};
 pub use system_probe::SystemProbePort;
 pub use tool_support::{

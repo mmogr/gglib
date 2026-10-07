@@ -1,4 +1,4 @@
-//! `SQLite` implementation of [`LoopGuardTripLog`], and the statements the
+//! The loop guard's log read back from `SQLite`, and the statements the
 //! [`LoopGuardTripWriter`](crate::LoopGuardTripWriter) flushes and prunes
 //! through.
 //!
@@ -13,13 +13,12 @@
 
 use std::collections::HashMap;
 
-use async_trait::async_trait;
 use sqlx::{Row, SqliteConnection, SqlitePool};
 
 use gglib_core::LoopGuardMode;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::{LoopGuardTripDay, LoopGuardTripEvent, epoch_day};
-use gglib_core::ports::{LoopGuardTripLog, RepositoryError};
+use gglib_core::ports::RepositoryError;
 
 /// What one day's scans are counted under: the epoch day, the bounded model
 /// name and the mode. The gglib version is the writer's own, added at flush.
@@ -27,7 +26,8 @@ pub(crate) type ScanKey = (i64, String, LoopGuardMode);
 
 const SECS_PER_DAY: i64 = 86_400;
 
-/// `SQLite` implementation of [`LoopGuardTripLog`].
+/// Reads the loop guard's log back: what the daemon's route and
+/// `gglib proxy trips` answer with.
 pub struct SqliteLoopGuardTripLog {
     pool: SqlitePool,
 }
@@ -168,9 +168,18 @@ async fn delete_days_before(
     Ok(())
 }
 
-#[async_trait]
-impl LoopGuardTripLog for SqliteLoopGuardTripLog {
-    async fn summary(&self, first_day: i64) -> Result<Vec<LoopGuardTripDay>, RepositoryError> {
+impl SqliteLoopGuardTripLog {
+    /// Every day from `first_day` on (an [`epoch_day`]) that either table
+    /// holds a row for, one entry per model, gglib version and mode, newest
+    /// day first. A day with scans and no trips is included, with `trips` at
+    /// zero; so is a trip whose scan was lost, with `scanned` at zero.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::Storage`] when the database refuses the read, and
+    /// [`RepositoryError::Serialization`] for a mode or a count the writer
+    /// cannot have written.
+    pub async fn summary(&self, first_day: i64) -> Result<Vec<LoopGuardTripDay>, RepositoryError> {
         let rows = sqlx::query(
             "WITH t AS ( \
                  SELECT recorded_at / 86400 AS day, model_name, gglib_version, mode, \

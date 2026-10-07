@@ -18,10 +18,11 @@ use gglib_core::events::AppEvent;
 use gglib_core::services::AppCore;
 use gglib_runtime::proxy::ProxyStatus;
 
-use super::enable_tests::{Recording, ops};
+use super::enable_tests::ops;
 use super::*;
 use crate::error::GuiError;
 use crate::proxy::ProxyOps;
+use crate::test_support::RecordingEmitter;
 
 /// Held for as long as one test has a real tunnel armed.
 ///
@@ -55,7 +56,7 @@ static ARMING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 pub(super) async fn ops_with_key() -> (
     Arc<AppCore>,
     Arc<ProxyOps>,
-    Arc<Recording>,
+    Arc<RecordingEmitter>,
     RemoteOps,
     tokio::sync::MutexGuard<'static, ()>,
 ) {
@@ -140,7 +141,7 @@ async fn a_proxy_that_goes_away_while_the_tunnel_binds_refuses_the_enable() {
         "a refused enable armed a pairing code anyway"
     );
     assert!(
-        events.0.lock().unwrap().is_empty(),
+        events.events().is_empty(),
         "a refused enable announced itself"
     );
 }
@@ -170,9 +171,7 @@ async fn a_tunnel_comes_down_with_the_proxy_it_fronts() {
     let announced = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
             let seen = events
-                .0
-                .lock()
-                .unwrap()
+                .events()
                 .iter()
                 .any(|e| matches!(e, AppEvent::RemoteDisabled));
             if seen {
@@ -230,9 +229,7 @@ async fn a_proxy_that_leaves_during_the_key_wait_does_not_outlive_its_tunnel() {
     let announced = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
             let seen = events
-                .0
-                .lock()
-                .unwrap()
+                .events()
                 .iter()
                 .any(|e| matches!(e, AppEvent::RemoteDisabled));
             if seen {

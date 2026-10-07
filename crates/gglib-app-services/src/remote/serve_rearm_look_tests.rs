@@ -27,8 +27,8 @@ use crate::proxy::ProxyOps;
 use crate::remote::RemoteGateway;
 use crate::remote::enable_tests::free_port;
 use crate::remote::serve_watch_tests::{arming, offline, ops_with_key};
-use crate::test_support::test_core_and_proxy_over;
-use crate::test_support_remote::{RecordingEmitter, scratch_device_keys};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy_over};
+use crate::test_support_remote::scratch_device_keys;
 
 /// The state `enable` leaves behind, which is what a re-arm arms from.
 pub(super) async fn switched_on(core: &AppCore) {

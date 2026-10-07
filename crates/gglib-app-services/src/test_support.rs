@@ -7,8 +7,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
+use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    DownloadManagerPort, DownloadRequest, SystemProbePort, ToolSupportDetection,
+    AppEventEmitter, DownloadManagerPort, DownloadRequest, SystemProbePort, ToolSupportDetection,
     ToolSupportDetectionInput, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
@@ -16,6 +17,37 @@ use gglib_core::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
 use gglib_db::{CoreFactory, setup_test_database};
 
 pub(crate) use crate::test_support_hf::MockHfClient;
+
+// ---------------------------------------------------------------------------
+// RecordingEmitter
+// ---------------------------------------------------------------------------
+
+/// An emitter that keeps what it was told, in the order it was told.
+///
+/// The one recording emitter this crate's tests share. "Emitted nothing" is
+/// as much a claim worth asserting as "emitted this": a refused mutation
+/// that still announced itself would be a lie no return value catches.
+#[derive(Default)]
+pub(crate) struct RecordingEmitter(Mutex<Vec<AppEvent>>);
+
+impl RecordingEmitter {
+    /// Everything emitted so far, oldest first.
+    pub(crate) fn events(&self) -> Vec<AppEvent> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl AppEventEmitter for RecordingEmitter {
+    fn emit(&self, event: AppEvent) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // MockDownloadManager
@@ -217,33 +249,37 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
 pub(crate) fn test_core_and_proxy_over(
     repos: &gglib_core::ports::Repos,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
-    use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+    use gglib_core::ports::ModelCatalogPort;
     use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
-    use gglib_mcp::McpService;
     use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
     use gglib_runtime::process::ProcessManager;
-    use gglib_runtime::proxy::ProxySupervisor;
 
     gglib_core::paths::isolate_data_root();
-    let core = Arc::new(AppCore::new(repos.clone()));
-
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
-    let runtime: Arc<dyn ModelRuntimePort> =
-        Arc::new(RuntimePortImpl::new(Arc::new(ProcessManager::new(
-            9000,
-            "llama-server",
-            catalog,
-            ServerConfigOptions::default(),
-            CacheRamSetting::Auto,
-        ))));
+    let runtime = Arc::new(RuntimePortImpl::new(Arc::new(ProcessManager::new(
+        9000,
+        "llama-server",
+        catalog,
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+    ))));
+    test_core_and_proxy_on(repos, runtime)
+}
 
+/// [`test_core_and_proxy_over`] with the runtime the proxy drives models
+/// through supplied too, so a test can script what a start and a stop meet.
+pub(crate) fn test_core_and_proxy_on(
+    repos: &gglib_core::ports::Repos,
+    runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
+) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
+    gglib_core::paths::isolate_data_root();
+    let core = Arc::new(AppCore::new(repos.clone()));
     let proxy = Arc::new(crate::proxy::ProxyOps::new(crate::proxy::ProxyDeps {
-        supervisor: Arc::new(ProxySupervisor::new()),
+        supervisor: Arc::new(gglib_runtime::proxy::ProxySupervisor::new()),
         model_repo: repos.models.clone(),
-        mcp: Arc::new(McpService::new(repos.mcp_servers.clone())),
+        mcp: Arc::new(gglib_mcp::McpService::new(repos.mcp_servers.clone())),
         core: Arc::clone(&core),
         runtime,
     }));
-
     (core, proxy)
 }

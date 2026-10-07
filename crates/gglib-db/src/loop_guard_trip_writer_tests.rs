@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::domain::loop_guard_log::{LoopGuardTripDay, epoch_day};
-use gglib_core::ports::LoopGuardTripLog;
 
 use super::*;
 use crate::repositories::SqliteLoopGuardTripLog;

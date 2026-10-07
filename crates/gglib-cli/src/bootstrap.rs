@@ -12,8 +12,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, GgufParserPort, LoopGuardTripLog, ModelCatalogPort,
-    ModelRegistrarPort, ModelRepository, NoopEmitter, SettingsRepository,
+    AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, ModelRegistrarPort,
+    ModelRepository, NoopEmitter, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
@@ -86,7 +86,7 @@ pub struct CliContext {
     pub bench_repo: Arc<SqliteBenchmarkRepository>,
     /// The loop guard's log, read straight from this machine's database, so
     /// `gglib proxy trips` answers whether or not a daemon is running.
-    pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
+    pub loop_guard_trips: Arc<SqliteLoopGuardTripLog>,
     /// Settings repository for user preferences and inference defaults.
     pub settings_repo: Arc<dyn SettingsRepository>,
     /// The console progress bars are drawn on.

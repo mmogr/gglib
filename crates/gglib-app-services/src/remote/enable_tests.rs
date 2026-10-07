@@ -13,26 +13,15 @@
 //! proxy demands. It is bound on loopback, so the supervisor settles on no
 //! token — which is the state this whole file is about.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gglib_core::SettingsUpdate;
 
 use crate::test_support_remote::test_remote_ops;
-use gglib_core::events::AppEvent;
-use gglib_core::ports::AppEventEmitter;
 
 use super::*;
 use crate::error::GuiError;
-use crate::test_support::test_core_and_proxy;
-
-#[derive(Default)]
-pub(super) struct Recording(pub(super) Mutex<Vec<AppEvent>>);
-
-impl AppEventEmitter for Recording {
-    fn emit(&self, event: AppEvent) {
-        self.0.lock().unwrap().push(event);
-    }
-}
+use crate::test_support::{RecordingEmitter, test_core_and_proxy};
 
 /// A port nothing is listening on, so `ensure_running` binds rather than
 /// colliding with whatever holds the default 8080 on this machine — a
@@ -47,7 +36,12 @@ pub(super) async fn free_port() -> u16 {
 /// A `RemoteOps` over the fixture, with the proxy port pointed somewhere
 /// free. Nothing is running yet: `enable` starts the proxy itself, which is
 /// the path being tested.
-pub(super) async fn ops() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recording>, RemoteOps) {
+pub(super) async fn ops() -> (
+    Arc<AppCore>,
+    Arc<ProxyOps>,
+    Arc<RecordingEmitter>,
+    RemoteOps,
+) {
     let (core, proxy) = test_core_and_proxy().await;
     core.settings()
         .update(SettingsUpdate {
@@ -57,7 +51,7 @@ pub(super) async fn ops() -> (Arc<AppCore>, Arc<ProxyOps>, Arc<Recording>, Remot
         .await
         .expect("settings update");
 
-    let events = Arc::new(Recording::default());
+    let events = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(RemoteGateway::new(Arc::clone(&events) as Arc<_>));
     let ops = RemoteOps::new(
         Arc::clone(&proxy),
@@ -138,9 +132,9 @@ async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
         "least of all the /mcp grant this enable asked for"
     );
     assert!(
-        events.0.lock().unwrap().is_empty(),
+        events.events().is_empty(),
         "nothing happened, so nothing is announced: {:?}",
-        events.0.lock().unwrap()
+        events.events()
     );
 
     proxy.stop().await.expect("the proxy the test started");
