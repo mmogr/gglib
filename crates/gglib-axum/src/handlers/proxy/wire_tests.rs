@@ -4,7 +4,9 @@
 //! the 300-line budget with a new contract test due.
 
 use super::*;
-use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS};
+use gglib_core::contracts::http::daemon_bodies::{
+    PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS,
+};
 
 /// An omitted port must come from settings, not from the compile-time
 /// default. The tray panel sends no port at all, and starting it on 8080
@@ -103,18 +105,26 @@ fn cache_true_without_slot_dir_uses_the_default_directory() {
     );
 }
 
-/// `default_context` resolution is untouched by the cache wiring — still
-/// falls through explicit → settings → nothing, the floor being collapsed to
-/// `None` so the launch can reach the fitted rung.
+/// `default_context` is the context somebody chose: the request's, then the
+/// stored default, and none when neither is set, so the launch can reach the
+/// fitted rung rather than be handed the built-in floor as a choice.
 #[test]
-fn default_context_falls_through_to_settings() {
-    let cfg = StartProxyConfig::default();
-    let settings = AppSettings {
-        default_context_size: Some(16_384),
-        ..AppSettings::default()
-    };
-    let runtime_cfg = to_runtime_config(&cfg, &settings);
-    assert_eq!(runtime_cfg.default_context, Some(16_384));
+fn default_context_is_the_context_somebody_chose() {
+    for (requested, stored, want) in [
+        (Some(32_768), Some(16_384), Some(32_768)),
+        (None, Some(16_384), Some(16_384)),
+        (None, None, None),
+    ] {
+        let cfg = StartProxyConfig {
+            default_context: requested,
+            ..Default::default()
+        };
+        let settings = AppSettings {
+            default_context_size: stored,
+            ..AppSettings::default()
+        };
+        assert_eq!(to_runtime_config(&cfg, &settings).default_context, want);
+    }
 }
 
 /// A crashed proxy must not look reachable. It reports stopped, with no

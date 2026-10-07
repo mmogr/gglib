@@ -58,7 +58,6 @@ function makeConfig(overrides: Partial<ServerActionsConfig>): ServerActionsConfi
     customPort: '',
     jinjaOverride: null,
     hasAgentTag: false,
-    hasMtpTag: false,
     pinProxy: false,
     mtpNMaxOverride: null,
     mtpPMinOverride: null,

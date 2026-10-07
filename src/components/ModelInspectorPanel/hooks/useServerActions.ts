@@ -21,7 +21,6 @@ export interface ServerActionsConfig {
   customPort: string;
   jinjaOverride: boolean | null;
   hasAgentTag: boolean;
-  hasMtpTag: boolean;
   mtpNMaxOverride: number | null;
   mtpPMinOverride: number | null;
   inferenceParams: SparseInferenceConfig | undefined;
@@ -69,7 +68,6 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     customPort,
     jinjaOverride,
     hasAgentTag,
-    hasMtpTag,
     mtpNMaxOverride,
     mtpPMinOverride,
     inferenceParams,
@@ -145,8 +143,8 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         mlock: false,
         jinja: jinjaOverride === null ? (hasAgentTag ? true : undefined) : jinjaOverride,
         // MTP: null = auto-detect from tag; 0 = disable; >0 = explicit token count
-        specDraftNMax: mtpNMaxOverride !== null ? mtpNMaxOverride : (hasMtpTag ? undefined : undefined),
-        specDraftPMin: mtpPMinOverride !== null ? mtpPMinOverride : undefined,
+        mtpDraftNMax: mtpNMaxOverride ?? undefined,
+        mtpDraftPMin: mtpPMinOverride ?? undefined,
       };
 
       if (pinProxy) {
@@ -218,7 +216,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
+  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

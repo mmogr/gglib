@@ -12,19 +12,14 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{
-    AppEventEmitter, LaunchOverrides, ModelRuntimeError, ProcessHandle, ServerHealthStatus,
-    ToolSupportDetectorPort,
-};
-use gglib_core::server_config::{
-    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
+    AppEventEmitter, ModelRuntimeError, ProcessHandle, ServerHealthStatus, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
-use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 
 use crate::error::GuiError;
+use crate::launch_options::plan_bare_launch;
 use crate::proxy::ProxyOps;
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
 
@@ -155,49 +150,6 @@ impl ServerOps {
         }
     }
 
-    /// Translate a GUI start request into per-call launch overrides.
-    ///
-    /// Expresses the request as the explicit tier of a [`UnifiedServerConfig`]
-    /// and lets the cascade resolve it, so a GUI-started model receives
-    /// exactly the arguments the CLI and proxy would give it.
-    ///
-    /// Cache sizing is deliberately absent: the process manager resolves the
-    /// RAM budget and KV cache types at spawn, against live system memory and
-    /// the model's actual KV footprint; a copy of that arithmetic here could
-    /// only drift from it.
-    fn launch_overrides(
-        model: &Model,
-        request: &StartServerRequest,
-        default_context_size: Option<u64>,
-    ) -> LaunchOverrides {
-        let unified = UnifiedServerConfig {
-            explicit: ServerConfigOptions {
-                context_size: request.context_length,
-                model_server_ctx: model
-                    .server_defaults
-                    .as_ref()
-                    .and_then(|s| s.context_length),
-                port: request.port,
-                jinja: request.jinja,
-                reasoning_format: request.reasoning_format.clone(),
-                mtp_draft_n_max: request.mtp_draft_n_max,
-                mtp_draft_p_min: request.mtp_draft_p_min,
-                inference_params: request.inference_params.clone(),
-                mlock: request.mlock.then_some(true),
-                ..Default::default()
-            },
-            globals: GlobalDefaults {
-                default_ctx: default_context_size,
-                ..Default::default()
-            },
-        };
-
-        LaunchOverrides {
-            options: unified.resolved_options(),
-            cache_ram: None,
-        }
-    }
-
     /// Start serving a model.
     pub async fn start(
         &self,
@@ -229,14 +181,9 @@ impl ServerOps {
         let proxy_addr = self.deps.proxy.ensure_running().await?;
         debug!(%proxy_addr, "proxy ready for model start");
 
-        let overrides = Self::launch_overrides(&model, &request, settings.default_context_size);
-        // Only a value somebody chose: falling through to the built-in floor
-        // would hand admission `Some(4096)` and make the fitted rung
-        // unreachable for a GUI-started model.
-        let default_ctx = match resolve_context_size_with_source(&overrides.options) {
-            (_, ContextSizeSource::BuiltInDefault) => None,
-            (ctx, _) => Some(ctx),
-        };
+        // The cascade `gglib serve` and a pinned start run, less their proxy
+        // inputs, so a request means the same launch options here as there.
+        let (default_ctx, overrides) = plan_bare_launch(&model, &settings, &request);
 
         // The lease is dropped as soon as the model is up: this is a "start
         // this model" request, not a request being served. The model stays

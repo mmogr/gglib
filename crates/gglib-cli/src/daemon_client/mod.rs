@@ -243,4 +243,4 @@ mod remote;
 pub(crate) mod runs;
 pub(crate) mod wire;
 
-pub(crate) use wire::{QueueDownloadBody, StartProxyBody};
+pub(crate) use wire::{QueueDownloadBody, StartProxyBody, StartServerBody};

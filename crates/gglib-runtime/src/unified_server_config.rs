@@ -41,9 +41,7 @@
 use std::path::PathBuf;
 
 use gglib_core::domain::InferenceConfig;
-use gglib_core::server_config::{
-    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
-};
+use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_proxy::slot_eviction::DiskBudget;
 
 use crate::proxy::ProxyConfig;
@@ -197,13 +195,7 @@ impl UnifiedServerConfig {
         ProxyConfig {
             host: self.globals.host.clone(),
             port: self.globals.proxy_port,
-            // Only a value somebody actually chose. Falling through to the
-            // built-in floor here would hand the proxy `Some(4096)` and make
-            // the fitted rung unreachable in pinned mode.
-            default_context: match resolve_context_size_with_source(&self.resolved_options()) {
-                (_, ContextSizeSource::BuiltInDefault) => None,
-                (ctx, _) => Some(ctx),
-            },
+            default_context: chosen_context_size(&self.resolved_options()),
             cache_enabled: self.globals.cache_enabled,
             slot_dir: self.resolved_slot_dir(),
             disk_budget: self.globals.disk_budget,
@@ -462,17 +454,25 @@ mod tests {
         );
     }
 
-    /// The proxy advertises the model's own resolved context, not the bare
-    /// global setting — in pinned mode that is the only model it will serve.
+    /// The proxy advertises the context somebody chose for this model, from
+    /// whichever rung holds one — in pinned mode that is the only model it
+    /// will serve — and none when nobody chose: never the built-in floor.
     #[test]
-    fn proxy_config_default_context_is_the_resolved_context() {
-        let mut cfg = bare(GlobalDefaults {
-            default_ctx: Some(4096),
-            ..Default::default()
-        });
-        cfg.explicit.context_size = Some(32_768);
-
-        assert_eq!(cfg.to_proxy_config().default_context, Some(32_768));
+    fn proxy_config_default_context_is_the_chosen_context() {
+        for (explicit, model, global, fitted, want) in [
+            (Some(32_768), Some(16_384), Some(4096), None, Some(32_768)),
+            (None, Some(16_384), Some(4096), None, Some(16_384)),
+            (None, None, Some(4096), None, Some(4096)),
+            (None, None, None, Some(65_536), Some(65_536)),
+            (None, None, None, None, None),
+        ] {
+            let mut cfg = bare(GlobalDefaults::default());
+            cfg.globals.default_ctx = global;
+            cfg.explicit.context_size = explicit;
+            cfg.explicit.model_server_ctx = model;
+            cfg.explicit.fitted_ctx = fitted;
+            assert_eq!(cfg.to_proxy_config().default_context, want);
+        }
     }
 
     /// `GlobalDefaults::default` is defined *as* `ProxyConfig::default`, so a

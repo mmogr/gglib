@@ -147,3 +147,7 @@ pub(crate) async fn stream_logs(
             .text("ping"),
     )
 }
+
+#[cfg(test)]
+#[path = "servers_tests.rs"]
+mod tests;
