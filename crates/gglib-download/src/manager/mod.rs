@@ -16,6 +16,8 @@ mod group_registration_tests;
 #[cfg(test)]
 mod projector_group_tests;
 #[cfg(test)]
+mod runner_tests;
+#[cfg(test)]
 mod test_support;
 
 use crate::queue::ShardGroupId;
@@ -36,8 +38,8 @@ use gglib_core::download::{
 };
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, DownloadRequest, HfClientPort,
-    ModelRegistrarPort, QuantizationResolver, ResolvedFile,
+    AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort, ModelRegistrarPort,
+    QuantizationResolver, ResolvedFile,
 };
 
 use crate::executor::known_size;
@@ -997,37 +999,6 @@ fn validate_cached_gguf(path: &std::path::Path, expected_size: Option<u64>) -> R
 
 #[async_trait]
 impl DownloadManagerPort for DownloadManagerImpl {
-    async fn queue_download(&self, request: DownloadRequest) -> Result<DownloadId, DownloadError> {
-        let id = DownloadId::new(&request.repo_id, Some(request.quantization.to_string()));
-
-        // Resolve files (outside lock)
-        let resolution = self
-            .resolver
-            .resolve(&request.repo_id, request.quantization)
-            .await?;
-
-        let Some(position) = self
-            .enqueue_group(&id, request.revision.as_deref(), &resolution)
-            .await?
-        else {
-            return Ok(id);
-        };
-
-        tracing::info!(
-            id = %id,
-            position = position,
-            sharded = resolution.is_sharded,
-            files = resolution.files.len(),
-            "Download queued"
-        );
-
-        // Notify runner and publish the queue (outside lock)
-        self.queue_notify.notify_one();
-        self.publish().await;
-
-        Ok(id)
-    }
-
     async fn queue_smart(
         self: Arc<Self>,
         repo_id: String,
@@ -1123,13 +1094,16 @@ impl DownloadManagerPort for DownloadManagerImpl {
 }
 
 // =============================================================================
-// Convenience methods for GUI / AppCore compatibility
+// Queueing
 // =============================================================================
 
 impl DownloadManagerImpl {
     /// Queue a download with smart quantization selection, and answer its
     /// ID. A request for a download already waiting or running answers that
     /// download's ID.
+    ///
+    /// This queues and does not start the runner: `queue_smart`, the port's
+    /// one way in, does both.
     pub async fn queue_download_smart(
         &self,
         repo_id: impl Into<String>,
@@ -1161,7 +1135,7 @@ impl DownloadManagerImpl {
 
         // `None` is a repeat request, attached to the download already in
         // flight: the same answer, and nothing new to announce.
-        if let Some(position) = self.enqueue_group(&id, None, &resolution).await? {
+        if let Some(position) = self.enqueue_group(&id, &resolution).await? {
             tracing::info!(
                 id = %id,
                 position = position,

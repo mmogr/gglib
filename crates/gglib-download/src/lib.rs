@@ -7,8 +7,7 @@ pub use gglib_core::download::{
     FinishedDownload, Quantization, QueueSnapshot, ShardInfo,
 };
 pub use gglib_core::ports::{
-    CompletedDownload, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
-    ModelRegistrarPort,
+    CompletedDownload, DownloadManagerConfig, DownloadManagerPort, ModelRegistrarPort,
 };
 
 // Internal modules (pub(crate) to keep implementation private)

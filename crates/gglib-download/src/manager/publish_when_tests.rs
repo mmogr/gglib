@@ -2,9 +2,6 @@
 
 use std::time::Instant;
 
-use gglib_core::download::Quantization;
-use gglib_core::ports::DownloadRequest;
-
 use super::super::duplicate_guard_tests::NoRegistrar;
 use super::super::group_registration_tests::RecordingRegistrar;
 use super::super::test_support::{End, reading, run_next};
@@ -41,14 +38,14 @@ async fn starting_a_file_publishes_the_running_row() {
     assert!(started.waiting.is_empty());
 }
 
-/// Both ways of queueing publish the new row.
+/// Queueing publishes the new row.
 #[tokio::test]
 async fn queueing_publishes_the_new_row() {
     let f = queued(Arc::new(NoRegistrar)).await;
     let (before, _) = sent(&f);
 
     f.manager
-        .queue_download(DownloadRequest::new("owner/other", Quantization::Q8_0))
+        .queue_download_smart("owner/other", Some("Q8_0".to_string()))
         .await
         .unwrap();
 

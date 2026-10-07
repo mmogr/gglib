@@ -62,9 +62,7 @@ impl DownloadOps {
 
     /// Cancel a download that is waiting or running, every file of it.
     pub async fn cancel_download(&self, model_id: &str) -> Result<(), GuiError> {
-        let id: DownloadId = model_id
-            .parse()
-            .unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let id = DownloadId::from(model_id);
         self.downloads
             .cancel_download(&id)
             .await
@@ -84,9 +82,7 @@ impl DownloadOps {
 
     /// Cancel a waiting or running download, or drop the entry of an ended one.
     pub async fn remove_from_queue(&self, model_id: &str) -> Result<(), GuiError> {
-        let id: DownloadId = model_id
-            .parse()
-            .unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let id = DownloadId::from(model_id);
         self.downloads
             .remove_from_queue(&id)
             .await
@@ -102,9 +98,7 @@ impl DownloadOps {
         model_id: &str,
         new_position: usize,
     ) -> Result<usize, GuiError> {
-        let id: DownloadId = model_id
-            .parse()
-            .unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let id = DownloadId::from(model_id);
         let actual_position = self
             .downloads
             .reorder_queue(&id, new_position as u32)
@@ -122,9 +116,7 @@ impl DownloadOps {
     /// is skipped.
     pub async fn reorder_queue_full(&self, ids: &[String]) -> Result<(), GuiError> {
         for (position, model_id) in ids.iter().enumerate() {
-            let id: DownloadId = model_id
-                .parse()
-                .unwrap_or_else(|_| DownloadId::from_model(model_id));
+            let id = DownloadId::from(model_id.as_str());
             let _ = self
                 .downloads
                 .reorder_queue(&id, (position + 1) as u32)

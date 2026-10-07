@@ -31,7 +31,7 @@ async fn of_two_corrupt_projectors_only_the_fetched_one_is_deleted() {
     assert!(!dir.path().join(fetched).exists(), "it is fetched again");
     assert!(dir.path().join(other).exists(), "nothing brings it back");
     assert!(dir.path().join(WEIGHTS).exists(), "healthy weights stay");
-    assert_eq!(f.queued.0.lock().unwrap().len(), 1);
+    assert_eq!(f.queued.asked().len(), 1);
 }
 
 /// The only unhealthy files are projectors no download fetches: each is
@@ -61,5 +61,5 @@ async fn projectors_no_download_fetches_are_all_named_and_left_in_place() {
         "{refused}"
     );
     assert!(dir.path().join(first).exists() && dir.path().join(second).exists());
-    assert!(f.queued.0.lock().unwrap().is_empty(), "nothing is queued");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
 }

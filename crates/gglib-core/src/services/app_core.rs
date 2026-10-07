@@ -3,12 +3,11 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
-use crate::ports::{HfClientPort, Repos};
+use crate::ports::{DownloadManagerPort, HfClientPort, Repos};
 use std::sync::Arc;
 
 use super::{
-    AttachmentService, ChatHistoryService, DownloadTriggerPort, ModelService,
-    ModelVerificationService, SettingsService,
+    AttachmentService, ChatHistoryService, ModelService, ModelVerificationService, SettingsService,
 };
 
 /// The core application facade.
@@ -21,7 +20,7 @@ use super::{
 ///
 /// ```ignore
 /// let repos = Repos::new(models, model_files, settings, mcp_servers, chat_history, attachments);
-/// let core = AppCore::new(repos, hf_client, download_trigger);
+/// let core = AppCore::new(repos, hf_client, downloads);
 ///
 /// // Access services
 /// let models = core.models().list().await?;
@@ -37,18 +36,19 @@ pub struct AppCore {
 
 impl AppCore {
     /// Create a new `AppCore` with the given repositories. Its verification
-    /// service asks `hf_client` for updates and repairs through `download_trigger`.
+    /// service asks `hf_client` for updates, and a repair queues its download
+    /// on `downloads`.
     pub fn new(
         repos: Repos,
         hf_client: Arc<dyn HfClientPort>,
-        download_trigger: Arc<dyn DownloadTriggerPort>,
+        downloads: Arc<dyn DownloadManagerPort>,
     ) -> Self {
         Self {
             verification: ModelVerificationService::new(
                 Arc::clone(&repos.models),
                 repos.model_files,
                 hf_client,
-                download_trigger,
+                downloads,
             ),
             models: ModelService::new(repos.models),
             settings: SettingsService::new(repos.settings),

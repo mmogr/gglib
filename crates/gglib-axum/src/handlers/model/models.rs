@@ -199,9 +199,10 @@ pub(crate) async fn retag(
 }
 
 /// Commit-SHA update check — the one `gglib model upgrade` runs before it
-/// downloads, distinct from the shard-level diff on `/{id}/updates`. Not
-/// `gglib model check-updates`, which declines to answer for a model with no
-/// recorded revision where this reports an update.
+/// downloads, distinct from the shard-level diff on `/{id}/updates`. It is
+/// the comparison `gglib model check-updates` makes, for a model an upgrade
+/// can be applied to: with no recorded revision it reports an update and no
+/// `currentSha`, which that command prints as nothing to compare with.
 pub(crate) async fn check_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,

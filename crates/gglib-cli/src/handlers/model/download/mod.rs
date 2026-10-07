@@ -23,5 +23,8 @@ pub(crate) use exec::{DownloadArgs, execute as download};
 // this rendering and completion behaviour. A second monitor would be a second
 // set of progress-bar and TTY bugs.
 pub(crate) use interactive::run_interactive_monitor;
+// For `gglib model repair`, whose download is the daemon's as a queued one's
+// is, and is watched to its end the same way.
+pub(in crate::handlers::model) use remote::monitor_repair;
 pub(crate) use search::execute as search;
 pub(crate) use update_model::execute as update_model;

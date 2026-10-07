@@ -52,7 +52,6 @@ const NOT_IMPORTED = [
   'QueueDownloadRequest',
   'ReorderFullRequest',
   'ReorderRequest',
-  'RepairResponse',
   'SaveMessageRequest',
   'StartServerBody',
   'UpdateMessageRequest',

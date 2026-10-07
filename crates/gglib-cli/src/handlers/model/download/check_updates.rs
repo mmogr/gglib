@@ -1,17 +1,24 @@
 //! Check updates handler.
 //!
-//! Checks for updates to locally downloaded models.
+//! Checks for updates to locally downloaded models. The comparison is
+//! [`ModelOps::check_update`], the one `gglib model upgrade` and the daemon's
+//! upgrade check make; what is here is which models are asked about, and the
+//! words printed.
+//!
+//! [`ModelOps::check_update`]: gglib_app_services::ModelOps::check_update
 
 use anyhow::Result;
+use gglib_app_services::ModelOps;
 
 use crate::bootstrap::CliContext;
-use crate::handlers::model::resolver;
+use crate::handlers::model::{one_shot_model_ops, resolver};
 use crate::presentation::short_sha;
 
 /// Execute the check-updates command.
 ///
 /// Checks if locally downloaded models have updates available on `HuggingFace`.
 pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: bool) -> Result<()> {
+    let ops = one_shot_model_ops(ctx);
     if all {
         println!("Checking updates for all models...");
         let models = ctx.app.models().list().await?;
@@ -22,8 +29,8 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
         }
 
         for model in models {
-            if let Some(hf_repo) = &model.hf_repo_id {
-                check_model_update(ctx, &model, hf_repo).await?;
+            if model.hf_repo_id.is_some() {
+                check_model_update(&ops, &model).await;
             } else {
                 println!(
                     "Model '{}' is not from HuggingFace, skipping update check.",
@@ -33,8 +40,8 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
         }
     } else if let Some(ident) = identifier {
         let model = resolver::resolve_model_identifier(ctx, ident).await?;
-        if let Some(hf_repo) = &model.hf_repo_id {
-            check_model_update(ctx, &model, hf_repo).await?;
+        if model.hf_repo_id.is_some() {
+            check_model_update(&ops, &model).await;
         } else {
             println!(
                 "Model '{}' is not from HuggingFace, cannot check for updates.",
@@ -48,23 +55,12 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
     Ok(())
 }
 
-/// Check if a single model needs updates, asking the Hub with the token the
-/// core was built with.
-async fn check_model_update(
-    ctx: &CliContext,
-    model: &gglib_core::domain::Model,
-    hf_repo: &str,
-) -> Result<()> {
+/// Check if a single model needs updates, and print what was found. The Hub
+/// is asked with the token the core was built with.
+async fn check_model_update(ops: &ModelOps, model: &gglib_core::domain::Model) {
     println!("Checking updates for: {}", model.name);
 
-    let check = gglib_download::cli_exec::check_update(
-        hf_repo,
-        model.hf_commit_sha.as_deref(),
-        ctx.app.hf_token(),
-    )
-    .await;
-
-    match check {
+    match ops.check_update(model.id).await {
         Ok(check) => {
             let latest_sha = short_sha(&check.latest_sha);
             if let Some(stored_sha) = &check.current_sha {
@@ -84,6 +80,4 @@ async fn check_model_update(
             println!("  ✗ Failed to check repository: {e}");
         }
     }
-
-    Ok(())
 }

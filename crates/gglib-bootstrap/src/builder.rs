@@ -16,10 +16,10 @@ use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
 use gglib_hf::{DefaultHfClient, HfClientConfig};
+use sqlx::SqlitePool;
 
 use crate::built::BuiltCore;
 use crate::config::BootstrapConfig;
-use crate::download_trigger::DownloadTriggerAdapter;
 
 /// What `build` makes from the Hub token, one for each thing that holds it.
 struct TokenHolders {
@@ -69,26 +69,20 @@ impl CoreBootstrap {
         config: BootstrapConfig,
         emitter: Arc<dyn AppEventEmitter>,
     ) -> Result<BuiltCore> {
-        // 1. Database pool + repositories. The model-files repository among
-        //    them is the one the registrar and the verification service share.
+        // 1. Database pool
         let pool = setup_database(&config.db_path).await?;
-        let repos = CoreFactory::build_repos(pool.clone());
 
-        // 2. GGUF parser (shared: model registrar + capability detection)
-        let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
-
-        // 5. HuggingFace client. Built before the registrar because the
-        //    registrar uses it to look up a model author's published sampling
-        //    recipe at import time.
+        // 2. HuggingFace client.
         //
         //    It carries the token, so a gated base repo — Llama and Gemma,
-        //    routinely — can answer that lookup for a user who has
-        //    configured one. Without it the lookup 401s and the import falls
-        //    back to the tag guess, which is the designed degradation.
+        //    routinely — can answer the registrar's recipe lookup for a user
+        //    who has configured one. Without it the lookup 401s and the
+        //    import falls back to the tag guess, which is the designed
+        //    degradation.
         //
         //    The token is read here and nowhere else, and no adapter is
         //    asked for it. `token_holders` hands it to this client, to the
-        //    download manager's transfers (9) and to `AppCore` (11).
+        //    download manager's transfers and to `AppCore`.
         let TokenHolders {
             client_config,
             download_config,
@@ -96,53 +90,69 @@ impl CoreBootstrap {
         } = token_holders(gglib_core::hf_token::from_env(), config.models_dir);
         let hf_client: Arc<dyn HfClientPort> = Arc::new(DefaultHfClient::new(&client_config));
 
-        // 6. Model registrar — composes model repository + GGUF parser so
-        //    that both GUI and CLI download paths use the identical
-        //    registration logic.
-        let model_registrar: Arc<dyn ModelRegistrarPort> = Arc::new(
-            ModelRegistrar::new(
-                repos.models.clone(),
-                gguf_parser.clone(),
-                Some(Arc::clone(&repos.model_files)),
-            )
-            .with_hf_client(hf_client.clone()),
-        );
-
-        // 9. Download manager, with the configuration made in (5)
-        let downloads: Arc<dyn DownloadManagerPort> =
-            Arc::new(build_download_manager(DownloadManagerDeps {
-                model_registrar,
-                hf_client: Arc::clone(&hf_client),
-                event_emitter: emitter,
-                config: download_config,
-            }));
-
-        // 10. Download trigger adapter (bridges DownloadManagerPort →
-        //     DownloadTriggerPort for the verification service)
-        let download_trigger = Arc::new(DownloadTriggerAdapter {
-            download_manager: Arc::clone(&downloads),
-        });
-
-        // 11. AppCore, whose verification service checks for updates against
-        //     the HF client and queues a repair through the trigger
-        let app = Arc::new(
-            AppCore::new(repos.clone(), hf_client.clone(), download_trigger)
-                .with_hf_token(core_token),
-        );
+        let built = wire(pool, hf_client, download_config, core_token, emitter);
 
         tracing::debug!(
             db_path = %config.db_path.display(),
             "CoreBootstrap: infrastructure wired successfully"
         );
 
-        Ok(BuiltCore {
-            app,
-            downloads,
-            hf_client,
-            gguf_parser,
-            repos,
-            pool,
-        })
+        Ok(built)
+    }
+}
+
+/// Everything [`CoreBootstrap::build`] wires once it has the database and the
+/// Hub client.
+fn wire(
+    pool: SqlitePool,
+    hf_client: Arc<dyn HfClientPort>,
+    download_config: DownloadManagerConfig,
+    core_token: Option<String>,
+    emitter: Arc<dyn AppEventEmitter>,
+) -> BuiltCore {
+    // 3. Repositories. The model-files repository among them is the one the
+    //    registrar and the verification service share.
+    let repos = CoreFactory::build_repos(pool.clone());
+
+    // 4. GGUF parser (shared: model registrar + capability detection)
+    let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
+
+    // 5. Model registrar — composes model repository + GGUF parser so that
+    //    both GUI and CLI download paths use the identical registration
+    //    logic. It holds the Hub client to look up a model author's
+    //    published sampling recipe at import time.
+    let model_registrar: Arc<dyn ModelRegistrarPort> = Arc::new(
+        ModelRegistrar::new(
+            repos.models.clone(),
+            gguf_parser.clone(),
+            Some(Arc::clone(&repos.model_files)),
+        )
+        .with_hf_client(hf_client.clone()),
+    );
+
+    // 6. Download manager
+    let downloads: Arc<dyn DownloadManagerPort> =
+        Arc::new(build_download_manager(DownloadManagerDeps {
+            model_registrar,
+            hf_client: Arc::clone(&hf_client),
+            event_emitter: emitter,
+            config: download_config,
+        }));
+
+    // 7. AppCore, whose verification service checks for updates against the
+    //    HF client and queues a repair's download on that same manager
+    let app = Arc::new(
+        AppCore::new(repos.clone(), hf_client.clone(), Arc::clone(&downloads))
+            .with_hf_token(core_token),
+    );
+
+    BuiltCore {
+        app,
+        downloads,
+        hf_client,
+        gguf_parser,
+        repos,
+        pool,
     }
 }
 
@@ -184,3 +194,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "builder_repair_tests.rs"]
+mod repair_tests;

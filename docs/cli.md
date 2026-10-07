@@ -149,13 +149,19 @@ monitor automatically.
 Set `HF_TOKEN` in the environment for private and gated repos. A command and
 the daemon each read it once, as they start. `search`, `browse`,
 `check-updates` and `upgrade` ask the Hub with the command's own; a queued
-download runs on the daemon and uses the daemon's, so the daemon must have
-been started with it. `download --list-quants` takes `--token` instead.
+download, a repair's among them, runs on the daemon and uses the daemon's, so
+the daemon must have been started with it. `download --list-quants` takes
+`--token` instead.
 
 Transfers run natively over HTTP, resumable and checksum-verified; no Python is
 required. See the [Download Module](../crates/gglib-cli/src/handlers/model/download/README.md).
 
 **Integrity** — `verify` (SHA-256), `repair` (re-download failed shards).
+
+`repair` runs on the daemon, as a download does: the daemon deletes the
+model's unhealthy files and queues their download, and the command watches it
+to its end. It fails when the download does, naming the files still missing
+and the `gglib model download` command that fetches them.
 
 **Metadata and capability** — `capabilities`, `inspect`, `retag`, `explain`.
 

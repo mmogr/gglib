@@ -2391,7 +2391,6 @@ name = "gglib-bootstrap"
 version = "0.23.2"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "gglib-core",
  "gglib-db",

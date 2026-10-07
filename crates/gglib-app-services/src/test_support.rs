@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, DownloadRequest, SystemProbePort, ToolSupportDetection,
+    AppEventEmitter, DownloadManagerPort, SystemProbePort, ToolSupportDetection,
     ToolSupportDetectionInput, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
@@ -95,10 +95,6 @@ impl MockDownloadManager {
 
 #[async_trait]
 impl DownloadManagerPort for MockDownloadManager {
-    async fn queue_download(&self, _request: DownloadRequest) -> Result<DownloadId, DownloadError> {
-        Ok(DownloadId::from_model("mock-model"))
-    }
-
     async fn queue_smart(
         self: Arc<Self>,
         _repo_id: String,

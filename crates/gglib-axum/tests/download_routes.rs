@@ -18,7 +18,7 @@ use common::origin::authed;
 use gglib_app_services::{DownloadDeps, DownloadOps};
 use gglib_core::CorsConfig;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
-use gglib_core::ports::{DownloadManagerPort, DownloadRequest};
+use gglib_core::ports::DownloadManagerPort;
 use gglib_gguf::ToolSupportDetector;
 
 /// The id the manager answers a queue request with: a quantization chosen
@@ -44,19 +44,13 @@ impl Recording {
 
 #[async_trait]
 impl DownloadManagerPort for Recording {
-    async fn queue_download(&self, request: DownloadRequest) -> Result<DownloadId, DownloadError> {
-        self.record(format!("queue_download {}", request.repo_id));
-        Ok(DownloadId::from_model(request.repo_id))
-    }
-
     async fn queue_smart(
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
     ) -> Result<DownloadId, DownloadError> {
         self.record(format!("queue_smart {repo_id} {quantization:?}"));
-        let Ok(id) = QUEUED.parse();
-        Ok(id)
+        Ok(DownloadId::from(QUEUED))
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {

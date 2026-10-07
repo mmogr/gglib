@@ -99,7 +99,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/mcp/servers/:id/start` | Start MCP server |
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
-| `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
+| `POST` | `/api/models/:id/repair` | Delete a model's unhealthy files and queue the download that fetches them again; answers that download's id and the files |
 | `POST` | `/api/chat` | A chat's title: the text the model on a port answers a title request with (messages, a temperature and a token cap, and no other key) |
 | `POST` | `/api/attachments` | Store an image, the raw body (a PNG or a JPEG of at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
 | `GET` | `/api/attachments/:id` | A stored image's bytes, as they were sent |

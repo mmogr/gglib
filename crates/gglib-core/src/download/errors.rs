@@ -172,15 +172,6 @@ impl DownloadError {
         }
     }
 
-    /// Check if this error is recoverable (can retry).
-    #[must_use]
-    pub const fn is_recoverable(&self) -> bool {
-        matches!(
-            self,
-            Self::Network { .. } | Self::Interrupted { .. } | Self::Io { .. }
-        )
-    }
-
     /// Check if this is a cancellation.
     #[must_use]
     pub const fn is_cancelled(&self) -> bool {
@@ -240,24 +231,6 @@ mod tests {
 
         let parsed: DownloadError = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, err);
-    }
-
-    #[test]
-    fn test_is_recoverable() {
-        assert!(DownloadError::network("timeout").is_recoverable());
-        assert!(
-            DownloadError::Interrupted {
-                bytes_downloaded: 100
-            }
-            .is_recoverable()
-        );
-        assert!(!DownloadError::Cancelled.is_recoverable());
-        assert!(
-            !DownloadError::InvalidQuantization {
-                value: "bad".to_string(),
-            }
-            .is_recoverable()
-        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
-//! `apply_upgrade_with`, with a hand-written check and download in place of
-//! the Hub.
+//! `apply_upgrade_with` and `check_update_with`, with a hand-written check
+//! and download in place of the Hub.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -175,4 +175,74 @@ async fn an_upgrade_asks_the_hub_with_the_cores_token() {
             [("check", token.clone()), ("download", token)]
         );
     }
+}
+
+/// A second model of [`REPO`], recorded at [`RECORDED`], as `edit` leaves it.
+async fn another_model(core: &AppCore, edit: impl FnOnce(&mut NewModel)) -> i64 {
+    let path = PathBuf::from("/models/other/other.gguf");
+    let mut model = NewModel::new("other".to_string(), path, 8.0, chrono::Utc::now());
+    model.hf_repo_id = Some(REPO.to_string());
+    model.hf_commit_sha = Some(RECORDED.to_string());
+    edit(&mut model);
+    core.models().add(model).await.expect("a model").id
+}
+
+/// The check asks about the repository alone. A model with no stored
+/// quantization is checked, with the core's token, where an upgrade of it
+/// is refused before the Hub is asked.
+#[tokio::test]
+async fn a_model_with_no_stored_quantization_is_checked_and_not_upgraded() {
+    let (core, ops, _) = library_asking_as(Some(FAKE_TOKEN)).await;
+    let id = another_model(&core, |model| model.quantization = None).await;
+
+    let check = ops
+        .check_update_with(id, |repo, recorded, token| {
+            assert_eq!(token.as_deref(), Some(FAKE_TOKEN));
+            finds(&repo, recorded, NEWER)
+        })
+        .await
+        .expect("a check");
+
+    assert!(check.has_update);
+    assert_eq!(check.current_sha.as_deref(), Some(RECORDED));
+    assert_eq!(check.latest_sha, NEWER);
+    let refused = ops.check_upgrade(id).await.unwrap_err();
+    assert!(
+        matches!(&refused, GuiError::ValidationFailed(why) if why.contains("quantization")),
+        "{refused}"
+    );
+}
+
+/// With no recorded revision the check still answers: there is an update,
+/// and no baseline it was compared with.
+#[tokio::test]
+async fn a_model_with_no_recorded_revision_has_an_update_and_no_baseline() {
+    let (core, ops, _) = library().await;
+    let id = another_model(&core, |model| model.hf_commit_sha = None).await;
+
+    let check = ops
+        .check_update_with(id, |repo, recorded, _| finds(&repo, recorded, NEWER))
+        .await
+        .expect("a check");
+
+    assert!(check.has_update);
+    assert_eq!(check.current_sha, None);
+}
+
+/// A model that did not come from the Hub has no repository to ask about,
+/// and the Hub is not asked.
+#[tokio::test]
+async fn a_model_with_no_repository_is_not_checked() {
+    let (core, ops, _) = library().await;
+    let id = another_model(&core, |model| model.hf_repo_id = None).await;
+
+    let asked = |_, _, _| -> std::future::Ready<anyhow::Result<UpdateCheckResult>> {
+        panic!("the Hub was asked about a model with no repository")
+    };
+    let refused = ops.check_update_with(id, asked).await.unwrap_err();
+
+    assert!(
+        matches!(&refused, GuiError::ValidationFailed(why) if why.contains("HuggingFace")),
+        "{refused}"
+    );
 }

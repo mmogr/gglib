@@ -21,10 +21,9 @@ impl DownloadManagerImpl {
     pub(super) async fn enqueue_group(
         &self,
         id: &DownloadId,
-        revision: Option<&str>,
         resolution: &Resolution,
     ) -> Result<Option<u32>, DownloadError> {
-        let completion_key = completion_key(id, revision, resolution)?;
+        let completion_key = completion_key(id, resolution)?;
 
         // Minimal lock scope: find what is running and mutate the queue
         let position = {
@@ -68,10 +67,9 @@ impl DownloadManagerImpl {
 }
 
 /// The identity a group completes under: its first file, which is a weights
-/// file, with any shard numbering removed.
+/// file, with any shard numbering removed. No request names a revision.
 fn completion_key(
     id: &DownloadId,
-    revision: Option<&str>,
     resolution: &Resolution,
 ) -> Result<CompletionKey, DownloadError> {
     let first_path = resolution
@@ -86,7 +84,7 @@ fn completion_key(
         .unwrap_or(first_path);
     Ok(CompletionKey::HfFile {
         repo_id: id.model_id().to_string(),
-        revision: revision.unwrap_or("unspecified").to_string(),
+        revision: "unspecified".to_string(),
         filename_canon: base_shard_filename(filename),
         quantization: Some(resolution.quantization.to_string()),
     })
@@ -116,7 +114,7 @@ mod tests {
             ResolvedFile::projector("mmproj-F16.gguf", 300, None),
         ]);
 
-        let key = completion_key(&id, None, &group).unwrap();
+        let key = completion_key(&id, &group).unwrap();
 
         assert_eq!(
             key,
@@ -130,21 +128,15 @@ mod tests {
     }
 
     #[test]
-    fn the_completion_key_carries_a_given_revision_and_the_file_name_alone() {
+    fn the_completion_key_carries_the_file_name_alone() {
         let id = DownloadId::new("owner/zeta-GGUF", Some("Q8_0"));
         let group = resolution(vec![ResolvedFile::new("Q8_0/zeta.Q8_0.gguf")]);
 
-        let key = completion_key(&id, Some("v2"), &group).unwrap();
+        let key = completion_key(&id, &group).unwrap();
 
-        let CompletionKey::HfFile {
-            revision,
-            filename_canon,
-            ..
-        } = key
-        else {
+        let CompletionKey::HfFile { filename_canon, .. } = key else {
             panic!("a Hub file key, not {key:?}");
         };
-        assert_eq!(revision, "v2");
         assert_eq!(filename_canon, "zeta.Q8_0.gguf");
     }
 
@@ -152,6 +144,6 @@ mod tests {
     fn a_resolution_without_files_has_no_key() {
         let id = DownloadId::new("owner/zeta-GGUF", Some("Q8_0"));
 
-        assert!(completion_key(&id, None, &resolution(vec![])).is_err());
+        assert!(completion_key(&id, &resolution(vec![])).is_err());
     }
 }

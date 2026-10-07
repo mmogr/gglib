@@ -28,14 +28,6 @@ impl DownloadId {
         }
     }
 
-    /// Create a download ID from `model_id` only (no quantization).
-    pub fn from_model(model_id: impl Into<String>) -> Self {
-        Self {
-            model_id: model_id.into(),
-            quantization: None,
-        }
-    }
-
     /// Get the model ID (e.g., "unsloth/Llama-3").
     #[must_use]
     pub fn model_id(&self) -> &str {
@@ -46,12 +38,6 @@ impl DownloadId {
     #[must_use]
     pub fn quantization(&self) -> Option<&str> {
         self.quantization.as_deref()
-    }
-
-    /// Check if this ID has a quantization specified.
-    #[must_use]
-    pub const fn has_quantization(&self) -> bool {
-        self.quantization.is_some()
     }
 }
 
@@ -64,10 +50,10 @@ impl fmt::Display for DownloadId {
     }
 }
 
-impl FromStr for DownloadId {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+/// The ID a canonical string names: `model_id:quantization`, or a model ID
+/// alone. Every string is one, so this cannot fail.
+impl From<&str> for DownloadId {
+    fn from(s: &str) -> Self {
         // Find the LAST colon that's not part of the model_id
         if let Some(colon_pos) = s.rfind(':') {
             let (model, quant) = s.split_at(colon_pos);
@@ -75,17 +61,25 @@ impl FromStr for DownloadId {
 
             // Only treat as quantization if it looks like one (no slashes)
             if !quant.is_empty() && !quant.contains('/') {
-                return Ok(Self {
+                return Self {
                     model_id: model.to_string(),
                     quantization: Some(quant.to_string()),
-                });
+                };
             }
         }
 
-        Ok(Self {
+        Self {
             model_id: s.to_string(),
             quantization: None,
-        })
+        }
+    }
+}
+
+impl FromStr for DownloadId {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s))
     }
 }
 
@@ -525,7 +519,7 @@ mod tests {
         let id = DownloadId::new("unsloth/Llama-3", Some("Q4_K_M"));
         assert_eq!(id.to_string(), "unsloth/Llama-3:Q4_K_M");
 
-        let id_no_quant = DownloadId::from_model("owner/repo");
+        let id_no_quant = DownloadId::from("owner/repo");
         assert_eq!(id_no_quant.to_string(), "owner/repo");
     }
 

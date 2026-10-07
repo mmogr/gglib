@@ -6,6 +6,8 @@ pub(crate) mod benchmark;
 pub mod chat_history;
 pub(crate) mod download;
 pub(crate) mod download_manager;
+#[cfg(any(test, feature = "test-utils"))]
+mod download_manager_fixture;
 pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
 pub(crate) mod hub_chats;
@@ -56,7 +58,9 @@ pub use attachment_store::{AttachmentError, AttachmentStore};
 pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
-pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
+pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
+#[cfg(any(test, feature = "test-utils"))]
+pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,
@@ -111,7 +115,7 @@ pub use usage_sink::UsageSink;
 ///
 /// // In gglib-bootstrap:
 /// let repos = gglib_db::CoreFactory::build_repos(pool);
-/// let core = AppCore::new(repos, hf_client, download_trigger);
+/// let core = AppCore::new(repos, hf_client, downloads);
 /// ```
 #[derive(Clone)]
 pub struct Repos {

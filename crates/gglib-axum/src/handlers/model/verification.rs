@@ -8,7 +8,7 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_core::Model;
 use gglib_core::ports::AppEventEmitter;
-use gglib_core::services::{UpdateCheckResult, VerificationReport};
+use gglib_core::services::{RepairStarted, UpdateCheckResult, VerificationReport};
 
 /// Response from verify endpoint.
 #[derive(Debug, Serialize)]
@@ -31,13 +31,6 @@ pub(crate) struct CheckUpdatesResponse {
 pub(crate) struct RepairRequest {
     /// Optional list of shard indices to repair. If None, repairs all corrupt shards.
     pub shards: Option<Vec<usize>>,
-}
-
-/// Response from repair endpoint.
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RepairResponse {
-    pub message: String,
 }
 
 /// The model a verification route is asked about, whose name its logs and
@@ -188,11 +181,15 @@ pub(crate) async fn check_updates(
 /// Repair model by re-downloading corrupt shards.
 ///
 /// POST /api/models/{id}/repair
+///
+/// Answers once the unhealthy files are deleted and their download is queued
+/// and started: the download's ID, and the files it is to bring back. A
+/// client follows the download in the queue, as it does one it queued.
 pub(crate) async fn repair(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<RepairRequest>,
-) -> Result<Json<RepairResponse>, HttpError> {
+) -> Result<Json<RepairStarted>, HttpError> {
     let model = model_named(&state, id).await?;
 
     tracing::info!(
@@ -204,7 +201,7 @@ pub(crate) async fn repair(
     );
 
     // Repair model
-    let message = state
+    let started = state
         .core
         .verification()
         .repair_model(id, req.shards)
@@ -214,10 +211,12 @@ pub(crate) async fn repair(
     tracing::info!(
         target: "gglib.verification",
         model_id = id,
+        download = %started.id,
+        files = started.files.len(),
         "Repair initiated successfully",
     );
 
-    Ok(Json(RepairResponse { message }))
+    Ok(Json(started))
 }
 
 #[cfg(test)]

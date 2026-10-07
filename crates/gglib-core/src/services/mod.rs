@@ -11,6 +11,7 @@ mod model_service;
 mod model_verification;
 mod model_verification_remote;
 mod projector_choices;
+mod repair_started;
 mod settings_cache;
 mod settings_service;
 
@@ -24,9 +25,10 @@ pub use model_projector::ProjectorError;
 pub use model_registrar::ModelRegistrar;
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
-    DownloadTriggerPort, ModelVerificationService, OverallHealth, ShardHealth, ShardHealthReport,
-    ShardProgress, UpdateCheckResult, UpdateDetails, VerificationProgress, VerificationReport,
+    ModelVerificationService, OverallHealth, ShardHealth, ShardHealthReport, ShardProgress,
+    UpdateCheckResult, UpdateDetails, VerificationProgress, VerificationReport,
 };
 pub use projector_choices::projector_choices;
+pub use repair_started::{RepairStarted, missing_after_repair};
 pub use settings_cache::{DEFAULT_TTL as SETTINGS_CACHE_TTL, SettingsCache};
 pub use settings_service::{SettingsService, TemplateInstall};

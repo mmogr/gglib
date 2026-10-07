@@ -19,9 +19,6 @@ gglib-download = { workspace = true }
 gglib-gguf = { workspace = true }
 gglib-hf = { workspace = true }
 
-# The download trigger implements an async port
-async-trait = { workspace = true }
-
 # Error handling
 anyhow = { workspace = true }
 
@@ -31,9 +28,10 @@ sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 chrono = { workspace = true }
-async-trait = { workspace = true }
+# `FakeHub`, the Hub a wired core asks in a test.
+gglib-core = { workspace = true, features = ["test-utils"] }
 
 [lints]
 workspace = true
