@@ -118,16 +118,8 @@ impl McpService {
         let servers = self.repository.list().await?;
 
         for mut server in servers {
-            let (is_valid, last_error) = match Self::validate_server(&server) {
-                Ok(()) => (true, None),
-                Err(e) => (false, Some(e)),
-            };
-
             // Only update if status changed
-            if server.is_valid != is_valid || server.last_error != last_error {
-                server.is_valid = is_valid;
-                server.last_error.clone_from(&last_error);
-
+            if Self::stamp_validity(&mut server) {
                 if let Err(e) = self.repository.update(&server).await {
                     tracing::warn!(
                         server_id = server.id,
@@ -140,14 +132,28 @@ impl McpService {
                 tracing::debug!(
                     server_id = server.id,
                     server_name = %server.name,
-                    is_valid = is_valid,
-                    error = ?last_error,
+                    is_valid = server.is_valid,
+                    error = ?server.last_error,
                     "Updated MCP server validation status"
                 );
             }
         }
 
         Ok(())
+    }
+
+    /// Validate `server` and record the verdict on it, in `is_valid` and
+    /// `last_error`. Returns whether that changed either.
+    fn stamp_validity(server: &mut McpServer) -> bool {
+        let (is_valid, last_error) = match Self::validate_server(server) {
+            Ok(()) => (true, None),
+            Err(e) => (false, Some(e)),
+        };
+
+        let changed = server.is_valid != is_valid || server.last_error != last_error;
+        server.is_valid = is_valid;
+        server.last_error = last_error;
+        changed
     }
 
     /// Validate a single MCP server configuration and paths.
@@ -284,7 +290,11 @@ impl McpService {
             .config
             .path_extra
             .as_ref()
-            .map(|p| p.split(':').map(String::from).collect())
+            .map(|p| {
+                p.split(crate::resolver::PATH_SEPARATOR)
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -432,13 +442,7 @@ impl McpService {
         let mut saved = self.repository.insert(new_server).await?;
 
         // Validate immediately after creation
-        let (is_valid, last_error) = match Self::validate_server(&saved) {
-            Ok(()) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
-
-        saved.is_valid = is_valid;
-        saved.last_error.clone_from(&last_error);
+        Self::stamp_validity(&mut saved);
 
         // Update validation status in database
         if let Err(e) = self.repository.update(&saved).await {
@@ -452,7 +456,7 @@ impl McpService {
 
         tracing::info!(
             server_name = %saved.name,
-            is_valid = is_valid,
+            is_valid = saved.is_valid,
             "Added MCP server configuration"
         );
         Ok(saved)
@@ -494,18 +498,12 @@ impl McpService {
         }
 
         // Validate before saving
-        let (is_valid, last_error) = match Self::validate_server(&server) {
-            Ok(()) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
-
-        server.is_valid = is_valid;
-        server.last_error = last_error;
+        Self::stamp_validity(&mut server);
 
         self.repository.update(&server).await?;
         tracing::info!(
             server_name = %server.name,
-            is_valid = is_valid,
+            is_valid = server.is_valid,
             "Updated MCP server configuration"
         );
         Ok(())
@@ -564,7 +562,7 @@ impl McpService {
 
         let tools = self
             .manager
-            .start_server(server)
+            .start_server(&server)
             .await
             .map_err(|e| McpServiceError::StartFailed(e.to_string()))?;
 
@@ -589,21 +587,26 @@ impl McpService {
         self.manager.get_status(id).await
     }
 
-    /// Get full server info including runtime status and tools.
-    pub async fn get_server_info(&self, id: i64) -> Result<McpServerInfo, McpServiceError> {
-        let server = self.repository.get_by_id(id).await?;
-        let status = self.manager.get_status(id).await;
+    /// A server with its runtime status, and its tools while it runs.
+    async fn info_for(&self, server: McpServer) -> McpServerInfo {
+        let status = self.manager.get_status(server.id).await;
         let tools = if status == McpServerStatus::Running {
-            self.manager.get_tools(id).await.unwrap_or_default()
+            self.manager.get_tools(server.id).await.unwrap_or_default()
         } else {
             Vec::new()
         };
 
-        Ok(McpServerInfo {
+        McpServerInfo {
             server,
             status,
             tools,
-        })
+        }
+    }
+
+    /// Get full server info including runtime status and tools.
+    pub async fn get_server_info(&self, id: i64) -> Result<McpServerInfo, McpServiceError> {
+        let server = self.repository.get_by_id(id).await?;
+        Ok(self.info_for(server).await)
     }
 
     /// List all servers with their runtime status.
@@ -612,19 +615,7 @@ impl McpService {
         let mut infos = Vec::with_capacity(servers.len());
 
         for server in servers {
-            let id = server.id;
-            let status = self.manager.get_status(id).await;
-            let tools = if status == McpServerStatus::Running {
-                self.manager.get_tools(id).await.unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            infos.push(McpServerInfo {
-                server,
-                status,
-                tools,
-            });
+            infos.push(self.info_for(server).await);
         }
 
         Ok(infos)
@@ -699,7 +690,7 @@ impl McpService {
             ))),
             McpLifecycle::Eager | McpLifecycle::Lazy => self
                 .manager
-                .ensure_started(server)
+                .ensure_started(&server)
                 .await
                 .map(|_| ())
                 .map_err(|e| McpServiceError::StartFailed(e.to_string())),
@@ -741,7 +732,7 @@ impl McpService {
 
         let started = self
             .manager
-            .start_server(test_server)
+            .start_server(&test_server)
             .await
             .map_err(|e| McpServiceError::StartFailed(e.to_string()));
 
