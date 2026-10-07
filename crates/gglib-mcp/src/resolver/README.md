@@ -17,6 +17,11 @@ The resolver is split into small, focused modules:
 - `search`: Platform-specific search strategies
 - `resolve`: Main resolution logic and orchestration
 
+The crate has one check that a file is an executable, one `PATH` separator and
+one list of default directories per platform. They are this module's:
+`path.rs` takes the check and the separator from here, and on macOS the
+directory list; `McpService` takes the separator.
+
 ## Usage
 
 This module is crate-internal, so the example below is illustrative rather than

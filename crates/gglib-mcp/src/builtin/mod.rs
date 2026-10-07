@@ -225,10 +225,10 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
 // Shared helpers
 // =============================================================================
 
-/// Parse a [`ToolCall`]'s arguments into a `HashMap`.
+/// Parse a [`ToolCall`]'s arguments into a `HashMap`, for either executor.
 ///
-/// Accepts a JSON object or null (empty map).  Returns an error for any
-/// other JSON type.
+/// Accepts a JSON object, or null for no arguments: LLMs often emit `null`
+/// instead of `{}`.  Returns an error for any other JSON type.
 pub(crate) fn parse_args(call: &ToolCall) -> anyhow::Result<HashMap<String, Value>> {
     match &call.arguments {
         Value::Object(map) => Ok(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()),

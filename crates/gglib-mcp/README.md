@@ -149,8 +149,8 @@ See [`resolver/mod.rs`](src/resolver/mod.rs) for detailed documentation and usag
 ### `path` Module
 
 Path validation and environment utilities:
-- **Validation functions**: Check executable paths, working directories
-- **PATH building**: Construct effective PATH from user paths and executable directory
+- **Validation functions**: Check executable paths, working directories. The executable check is the resolver's
+- **PATH building**: Construct effective PATH from user paths and executable directory. On macOS the resolver's default directories are added, and `/usr/sbin` and `/sbin` after them
 - **De-duplication**: Ensures no duplicate entries in PATH
 
 ## Usage
@@ -193,4 +193,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.

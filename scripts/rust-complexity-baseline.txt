@@ -89,10 +89,9 @@ crates/gglib-hf/src/http.rs 381
 crates/gglib-hf/src/parsing.rs 429
 crates/gglib-mcp/src/builtin/mod.rs 337
 crates/gglib-mcp/src/client.rs 526
-crates/gglib-mcp/src/manager.rs 326
-crates/gglib-mcp/src/resolver/search.rs 393
-crates/gglib-mcp/src/service.rs 762
-crates/gglib-mcp/src/service_tests.rs 339
+crates/gglib-mcp/src/manager.rs 313
+crates/gglib-mcp/src/service.rs 753
+crates/gglib-mcp/src/service_tests.rs 518
 crates/gglib-proxy/src/audit_records.rs 309
 crates/gglib-proxy/src/cache_lifecycle.rs 480
 crates/gglib-proxy/src/canonicalization.rs 601

@@ -30,14 +30,11 @@ pub(crate) enum McpManagerError {
     InvalidConfig(String),
 }
 
-/// Running MCP server instance.
+/// Running MCP server instance. A server has one while it runs and none
+/// otherwise, so being in the map is its status.
 struct RunningServer {
-    /// Server configuration (kept for debugging/future use)
-    _server: McpServer,
     /// MCP client for communication
     client: McpClient,
-    /// Current status
-    status: McpServerStatus,
     /// Discovered tools
     tools: Vec<McpTool>,
 }
@@ -72,7 +69,7 @@ impl McpManager {
     /// tools without spawning a new process.
     pub(crate) async fn ensure_started(
         &self,
-        server: McpServer,
+        server: &McpServer,
     ) -> Result<Vec<McpTool>, McpManagerError> {
         let server_id = server.id;
 
@@ -106,10 +103,11 @@ impl McpManager {
     /// Start an MCP server.
     ///
     /// For stdio servers, spawns the process and initializes the MCP session.
-    /// For SSE servers, establishes the HTTP connection.
+    /// An SSE server can be stored but not started: starting one is refused
+    /// with [`McpManagerError::InvalidConfig`].
     pub(crate) async fn start_server(
         &self,
-        server: McpServer,
+        server: &McpServer,
     ) -> Result<Vec<McpTool>, McpManagerError> {
         let server_id = server.id;
 
@@ -123,7 +121,7 @@ impl McpManager {
 
         // Start based on server type
         let (client, tools) = match server.server_type {
-            McpServerType::Stdio => self.start_stdio_server(&server).await?,
+            McpServerType::Stdio => self.start_stdio_server(server).await?,
             McpServerType::Sse => {
                 // SSE not yet implemented
                 return Err(McpManagerError::InvalidConfig(
@@ -138,9 +136,7 @@ impl McpManager {
             servers.insert(
                 server_id,
                 RunningServer {
-                    _server: server,
                     client,
-                    status: McpServerStatus::Running,
                     tools: tools.clone(),
                 },
             );
@@ -217,7 +213,6 @@ impl McpManager {
 
         // Disconnect cleanly
         server.client.disconnect();
-        server.status = McpServerStatus::Stopped;
 
         tracing::info!(server_id = %server_id, "MCP server stopped");
 
@@ -226,11 +221,11 @@ impl McpManager {
 
     /// Get the status of a server.
     pub(crate) async fn get_status(&self, server_id: i64) -> McpServerStatus {
-        let servers = self.servers.read().await;
-
-        servers
-            .get(&server_id)
-            .map_or(McpServerStatus::Stopped, |s| s.status.clone())
+        if self.is_running(server_id).await {
+            McpServerStatus::Running
+        } else {
+            McpServerStatus::Stopped
+        }
     }
 
     /// Get tools for a running server.
@@ -295,14 +290,6 @@ impl McpManager {
 impl Default for McpManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl Drop for McpManager {
-    fn drop(&mut self) {
-        // Note: We can't call async stop_all in Drop.
-        // Servers will be cleaned up when their clients are dropped.
-        // For proper cleanup, call stop_all() before dropping.
     }
 }
 

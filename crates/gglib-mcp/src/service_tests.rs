@@ -10,6 +10,8 @@ use std::sync::Mutex;
 struct MockMcpRepository {
     servers: Mutex<Vec<McpServer>>,
     next_id: Mutex<i64>,
+    /// How many updates were written.
+    updates: Mutex<usize>,
 }
 
 impl MockMcpRepository {
@@ -17,6 +19,7 @@ impl MockMcpRepository {
         Self {
             servers: Mutex::new(Vec::new()),
             next_id: Mutex::new(1),
+            updates: Mutex::new(0),
         }
     }
 }
@@ -75,6 +78,7 @@ impl McpServerRepository for MockMcpRepository {
     }
 
     async fn update(&self, server: &McpServer) -> Result<(), McpRepositoryError> {
+        *self.updates.lock().unwrap() += 1;
         let mut servers = self.servers.lock().unwrap();
         servers.iter_mut().find(|s| s.id == server.id).map_or_else(
             || Err(McpRepositoryError::NotFound(server.id.to_string())),
@@ -336,4 +340,179 @@ async fn testing_a_server_that_is_not_there_is_not_found() {
         result,
         Err(McpServiceError::Repository(McpRepositoryError::NotFound(_)))
     ));
+}
+
+/// What a command with a space in it is refused with.
+const SPACED_COMMAND: &str = "Command must be an executable name/path only (e.g., 'npx'). \
+                              Put flags and arguments in the 'args' field.";
+
+async fn stored_verdict(service: &McpService, id: i64) -> (bool, Option<String>) {
+    let stored = service.get_server(id).await.unwrap();
+    (stored.is_valid, stored.last_error)
+}
+
+#[tokio::test]
+async fn a_server_is_stamped_valid_or_not_when_it_is_added_and_when_it_is_updated() {
+    let (service, _) = service();
+
+    let mut server = service.add_server(stdio("good", "echo")).await.unwrap();
+    assert_eq!((server.is_valid, server.last_error.clone()), (true, None));
+    assert_eq!(stored_verdict(&service, server.id).await, (true, None));
+
+    let spaced = service
+        .add_server(stdio("spaced", "echo hello"))
+        .await
+        .unwrap();
+    let refused = (false, Some(SPACED_COMMAND.to_string()));
+    assert_eq!((spaced.is_valid, spaced.last_error.clone()), refused);
+    assert_eq!(stored_verdict(&service, spaced.id).await, refused);
+
+    server.config.command = Some("echo hello".to_string());
+    service.update_server(server.clone()).await.unwrap();
+    assert_eq!(stored_verdict(&service, server.id).await, refused);
+
+    // The verdict is the service's: what the caller's copy claims is not kept.
+    server.config.command = Some("echo".to_string());
+    server.is_valid = false;
+    server.last_error = Some("stale".to_string());
+    service.update_server(server.clone()).await.unwrap();
+    assert_eq!(stored_verdict(&service, server.id).await, (true, None));
+}
+
+/// Both rows are stored by hand, as the repository hands them back: not yet
+/// valid, with no error. Neither is eager, so nothing is started.
+#[tokio::test]
+async fn starting_up_restamps_each_server_whose_verdict_changed_and_writes_no_other() {
+    let (service, repo) = service();
+    let fresh = repo.insert(stdio("fresh", "echo")).await.unwrap();
+    let spaced = repo.insert(stdio("spaced", "echo hello")).await.unwrap();
+
+    service.initialize().await.unwrap();
+
+    assert_eq!(stored_verdict(&service, fresh.id).await, (true, None));
+    assert_eq!(
+        stored_verdict(&service, spaced.id).await,
+        (false, Some(SPACED_COMMAND.to_string()))
+    );
+    assert_eq!(*repo.updates.lock().unwrap(), 2);
+
+    service.initialize().await.unwrap();
+
+    assert_eq!(
+        *repo.updates.lock().unwrap(),
+        2,
+        "a verdict that has not changed is not written again"
+    );
+}
+
+/// A server's info as its name, its status and the names of its tools.
+#[cfg(unix)]
+fn summary(info: McpServerInfo) -> (String, McpServerStatus, Vec<String>) {
+    let tools = info.tools.into_iter().map(|tool| tool.name).collect();
+    (info.server.name, info.status, tools)
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_servers_info_is_its_status_and_its_tools_while_it_runs() {
+    let (service, _) = service();
+    let stand_in = service
+        .add_server(NewMcpServer::new_stdio(
+            "stand-in",
+            "sh",
+            vec!["-c".to_string(), STAND_IN_SERVER.to_string()],
+            None,
+        ))
+        .await
+        .unwrap();
+    service.add_server(stdio("idle", "echo")).await.unwrap();
+    let idle = ("idle".to_string(), McpServerStatus::Stopped, vec![]);
+
+    service.start_server(stand_in.id).await.unwrap();
+
+    let running = (
+        "stand-in".to_string(),
+        McpServerStatus::Running,
+        vec!["echo".to_string()],
+    );
+    assert_eq!(
+        service.get_server_status(stand_in.id).await,
+        McpServerStatus::Running
+    );
+    let info = service.get_server_info(stand_in.id).await.unwrap();
+    assert_eq!(summary(info), running);
+    let listed = service.list_servers_with_status().await.unwrap();
+    let listed: Vec<_> = listed.into_iter().map(summary).collect();
+    assert_eq!(listed, [running, idle.clone()]);
+
+    service.stop_server(stand_in.id).await.unwrap();
+
+    let stopped = ("stand-in".to_string(), McpServerStatus::Stopped, vec![]);
+    assert_eq!(
+        service.get_server_status(stand_in.id).await,
+        McpServerStatus::Stopped
+    );
+    let info = service.get_server_info(stand_in.id).await.unwrap();
+    assert_eq!(summary(info), stopped);
+    let listed = service.list_servers_with_status().await.unwrap();
+    let listed: Vec<_> = listed.into_iter().map(summary).collect();
+    assert_eq!(listed, [stopped, idle]);
+}
+
+#[tokio::test]
+async fn a_tool_calls_arguments_are_an_object_or_nothing_for_an_mcp_tool_as_for_a_builtin_one() {
+    use gglib_core::ToolCall;
+    use gglib_core::ports::ToolExecutorPort;
+
+    let (service, _) = service();
+    let executor = crate::CombinedToolExecutor::new(Arc::new(service));
+    let call = |name: &str, arguments: serde_json::Value| ToolCall {
+        id: "call".to_string(),
+        name: name.to_string(),
+        arguments,
+    };
+
+    for name in ["7:echo", "builtin:get_current_time"] {
+        let refused = executor
+            .execute(&call(name, serde_json::json!([1])))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            format!("tool '{name}' arguments must be a JSON object; got [1]")
+        );
+    }
+
+    // No arguments is not a refusal: the builtin runs, and the MCP call gets as
+    // far as asking for its server, which is not there.
+    let ran = executor
+        .execute(&call("builtin:get_current_time", serde_json::Value::Null))
+        .await
+        .unwrap();
+    assert!(ran.success);
+    let no_server = executor
+        .execute(&call("7:echo", serde_json::Value::Null))
+        .await
+        .unwrap_err();
+    assert!(
+        no_server.to_string().starts_with("MCP call_tool failed: "),
+        "got {no_server}"
+    );
+}
+
+#[tokio::test]
+async fn a_servers_extra_path_is_split_on_the_platforms_separator() {
+    let (_, repo) = service();
+    let (extra, expected) = if cfg!(windows) {
+        (r"C:\tools;D:\bin", [r"C:\tools", r"D:\bin"])
+    } else {
+        (
+            "/gglib-test/one:/gglib-test/two",
+            ["/gglib-test/one", "/gglib-test/two"],
+        )
+    };
+    let added = NewMcpServer::new_stdio("files", "npx", vec![], Some(extra.to_string()));
+    let server = repo.insert(added).await.unwrap();
+
+    assert_eq!(McpService::extract_user_search_paths(&server), expected);
 }
