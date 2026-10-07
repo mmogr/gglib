@@ -67,7 +67,7 @@ TypeScript type definitions shared across the gglib GUI.
 | Type | Description |
 |------|-------------|
 | `ServerEvent` | Server lifecycle events (running, stopped, crashed) |
-| `DownloadProgress` | Download progress updates |
+| `DownloadEvent` | The download queue's snapshot, and how each download ended |
 
 ## Generated bindings (`generated/`)
 

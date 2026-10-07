@@ -1,27 +1,23 @@
 import { FC, useState } from 'react';
 import { Box, CheckCircle2, Download, RotateCcw } from 'lucide-react';
-import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
-import type { DownloadProgressView, DownloadUiState } from '../../hooks/useDownloadManager';
+import type { QueueSnapshot } from '../../services/transport/types/downloads';
 import type { QueueRunSummary } from '../../services/transport/types/events';
-import { formatBytes, formatDuration, formatRate } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
-import { Readout, Stack } from '../primitives';
+import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 import { Chip } from '../ui/Chip';
 
 interface GlobalDownloadStatusProps {
-  /** Current download progress from useDownloadManager hook */
-  progress: DownloadProgressView | null;
-  /** Queue status from useDownloadManager hook */
-  queueStatus: DownloadQueueStatus | null;
-  /** Single source of truth for UI state (replaces derived currentId logic) */
-  downloadUiState: DownloadUiState;
+  /** The download queue from useDownloadManager, or null before it is known */
+  snapshot: QueueSnapshot | null;
+  /** The download a cancel is out for, if any */
+  cancellingId: string | null;
   /** Summary of last completed queue run (null if none or dismissed) */
   lastQueueSummary: QueueRunSummary | null;
-  /** Callback to cancel the current download */
-  onCancel: (modelId: string) => void;
+  /** Callback to cancel the running download, by its id */
+  onCancel: (id: string) => void;
   /** Callback when user dismisses completion summary */
   onDismissSummary: () => void;
   /** Callback to refresh queue status */
@@ -31,14 +27,18 @@ interface GlobalDownloadStatusProps {
 /**
  * Global download status component for page-level display.
  * Shows:
- * - Active download progress with shard support
- * - Queue status (X more queued)
+ * - The running download: one bar, and the row's own words around it
+ * - How many downloads wait behind it, with a popover to manage them
  * - Completion summary with ALL downloaded models from queue run (dismissible)
+ *
+ * The card is the snapshot's `active` row and nothing else. Every string on
+ * it about the download is the row's `text`, printed as it arrived, which is
+ * what the CLI prints for the same download. The chip's count is the number
+ * of waiting rows.
  */
 const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
-  progress,
-  queueStatus,
-  downloadUiState,
+  snapshot,
+  cancellingId,
   lastQueueSummary,
   onCancel,
   onDismissSummary,
@@ -46,14 +46,11 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
 }) => {
   const [isQueuePopoverOpen, setIsQueuePopoverOpen] = useState(false);
   
-  // Single source of truth for what should be displayed
-  const isActive = !!downloadUiState.activeId;
-  const currentId = downloadUiState.activeId || '';
-  const isCancelling = downloadUiState.phase === 'cancelling';
-  const queueCount = queueStatus?.pending?.length || 0;
+  const row = snapshot?.active;
+  const waiting = snapshot?.waiting ?? [];
 
-  // Show completion summary (priority over active progress)
-  if (lastQueueSummary && !isActive) {
+  // The last run's summary shows once nothing is running
+  if (lastQueueSummary && !row) {
     const downloaded = lastQueueSummary.items.filter(
       (item) => item.last_result === 'downloaded'
     );
@@ -129,23 +126,10 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
     );
   }
 
-  if (!isActive) return null;
+  if (!row) return null;
 
-  const percentage = progress?.percentage ?? undefined;
-  const shard = progress?.shard;
-  const isSharded = !!(shard && shard.total > 1);
-  // Lifecycle label: surfaces Finalizing/Registering between bytes-on-disk
-  // and the terminal Completed event so the UI doesn't look frozen at 100%.
-  // `notice` is the same idea for transient setup notes (e.g. first-run
-  // Python env creation for the fast downloader) that carry no byte
-  // progress — shown verbatim since the message itself is the label.
-  const phaseLabel = (() => {
-    if (progress?.status === 'notice' && progress.message) return progress.message;
-    if (progress?.status === 'finalizing') return 'Finalizing';
-    if (progress?.status === 'registering') return 'Registering';
-    if (isSharded && shard) return `Downloading shard ${shard.index + 1}/${shard.total}`;
-    return 'Downloading';
-  })();
+  const { text } = row;
+  const isCancelling = cancellingId === row.id;
 
   return (
     <div className="bg-background border-b border-border-light rounded-none p-base mb-0">
@@ -156,9 +140,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               <Icon icon={Download} size={16} />
             </span>
             <span className="text-sm font-medium text-text">
-              {phaseLabel}
+              {text.status}
             </span>
-            {queueCount > 0 && (
+            {text.file && (
+              <span className="text-sm font-mono tabular-nums text-text-secondary">
+                {text.file}
+              </span>
+            )}
+            {waiting.length > 0 && (
               <div className="relative">
                 <Chip
                   variant="primary"
@@ -166,31 +155,29 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
                   onClick={() => setIsQueuePopoverOpen((prev) => !prev)}
                   title="Click to view and manage queue"
                 >
-                  +{queueCount} queued
+                  +{waiting.length} queued
                 </Chip>
                 <DownloadQueuePopover
                   isOpen={isQueuePopoverOpen}
                   onClose={() => setIsQueuePopoverOpen(false)}
-                  pendingItems={queueStatus?.pending || []}
+                  waiting={waiting}
                   onRefresh={onRefreshQueue}
                 />
               </div>
             )}
           </div>
-          {currentId && (
-            <Button
-              variant="dangerGhost"
-              size="sm"
-              onClick={() => onCancel(currentId)}
-              disabled={isCancelling}
-            >
-              {isCancelling ? 'Cancelling...' : 'Cancel'}
-            </Button>
-          )}
+          <Button
+            variant="dangerGhost"
+            size="sm"
+            onClick={() => onCancel(row.id)}
+            disabled={isCancelling}
+          >
+            {isCancelling ? 'Cancelling...' : 'Cancel'}
+          </Button>
         </div>
 
-        <div className="text-sm text-text-secondary font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={currentId}>
-          {currentId.length > 50 ? `${currentId.substring(0, 47)}...` : currentId}
+        <div className="text-sm text-text-secondary font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={text.title}>
+          {text.title}
         </div>
 
         <div className="flex items-center gap-sm">
@@ -198,60 +185,26 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             <div
               className={cn(
                 'h-full bg-primary rounded-sm transition-[width] duration-200 ease-linear',
-                percentage === undefined && 'w-[30%] animate-indeterminate'
+                row.percent === undefined && 'w-[30%] animate-indeterminate'
               )}
-              style={percentage !== undefined ? { width: `${percentage}%` } : {}}
+              style={row.percent !== undefined ? { width: `${row.percent}%` } : {}}
             />
           </div>
           <span className="text-sm font-mono font-medium tabular-nums text-text min-w-[48px] text-right">
-            {percentage !== undefined ? `${percentage.toFixed(1)}%` : '…'}
+            {text.percent}
           </span>
         </div>
 
         {/*
-          Speed and ETA always occupy a slot, showing a placeholder while the
-          estimator warms up. Conditionally rendering them made the row reflow
-          a second or two into every download.
+          Bytes, speed and time remaining, in the row's words. The speed and
+          the time remaining are empty once the bytes are in, while the model
+          is finalized and registered.
         */}
-        <div className="flex gap-lg flex-wrap">
-          <Readout
-            size="sm"
-            label="Downloaded"
-            value={
-              progress?.downloaded !== undefined && progress?.total !== undefined
-                ? `${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)}`
-                : '—'
-            }
-          />
-          <Readout size="sm" label="Speed" value={formatRate(progress?.speedBps)} />
-          <Readout size="sm" label="ETA" value={formatDuration(progress?.etaSeconds)} />
+        <div className="flex gap-lg flex-wrap min-h-[1.25rem] text-sm font-mono tabular-nums text-text">
+          <span>{text.bytes}</span>
+          <span>{text.speed}</span>
+          <span>{text.eta}</span>
         </div>
-
-        {isSharded && shard && (
-          <div className="bg-surface-elevated rounded-base p-sm mt-xs">
-            <div className="flex items-center justify-between mb-xs">
-              <span className="text-xs text-text-muted">
-                Shard <span className="font-mono tabular-nums">{shard.index + 1}/{shard.total}</span>
-              </span>
-              {shard.filename && (
-                <span className="text-xs text-text-secondary font-mono" title={shard.filename}>
-                  {shard.filename.length > 25 ? `...${shard.filename.slice(-22)}` : shard.filename}
-                </span>
-              )}
-            </div>
-            <div className="h-1 bg-surface-hover rounded-sm overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-sm transition-[width] duration-200 ease-linear"
-                style={{
-                  width:
-                    shard.totalBytes && shard.totalBytes > 0
-                      ? `${((shard.downloaded || 0) / shard.totalBytes) * 100}%`
-                      : '0%',
-                }}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

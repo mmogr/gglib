@@ -232,6 +232,6 @@ describe('serverEvents.normalize', () => {
 
   it('ignores an event type it does not know', () => {
     expect(normalizeServerEventFromAppEvent({ type: 'server:snapshot' })).toBeNull();
-    expect(normalizeServerEventFromAppEvent({ type: 'download_progress' })).toBeNull();
+    expect(normalizeServerEventFromAppEvent({ type: 'download_completed' })).toBeNull();
   });
 });

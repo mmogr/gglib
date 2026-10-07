@@ -12,10 +12,22 @@
 export const UNKNOWN = '—';
 
 /**
- * Format a byte *size* in binary units (KiB, MiB, GiB).
+ * `value` rounded to `decimals` places, half up. Nothing negative is rounded
+ * here, so this agrees with `rounded` in
+ * `crates/gglib-core/src/download/format.rs`, which rounds half away from zero.
+ */
+const rounded = (value: number, decimals: number): number => {
+  const scale = 10 ** decimals;
+  return Math.round(value * scale) / scale;
+};
+
+/**
+ * Format a byte *size* in binary units (KiB, MiB, GiB), trailing zeros
+ * dropped: "1.5 KiB", "28 GiB".
  *
  * Sizes stay binary because that is the convention for model files on disk.
- * For transfer *rates* use {@link formatRate}, which is decimal.
+ * For transfer *rates* use {@link formatRate}, which is decimal. A download
+ * row's bytes are not formatted here at all: they arrive as text on the row.
  */
 export const formatBytes = (bytes: number, decimals = 2): string => {
   if (bytes === 0) return '0 Bytes';
@@ -27,25 +39,50 @@ export const formatBytes = (bytes: number, decimals = 2): string => {
 };
 
 /**
+ * Format a byte size in binary units with two decimals, e.g. "27.92 GiB".
+ *
+ * The same function as `format_size` in
+ * `crates/gglib-core/src/download/format.rs`, which words the sizes on a
+ * download row. A size below 1024 bytes is a whole number of bytes; the unit
+ * is the first whose rounded value is below 1024, and TiB is the last.
+ */
+export const formatSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+
+  let value = bytes;
+  let shown = value;
+  let unit = '';
+  for (const next of ['KiB', 'MiB', 'GiB', 'TiB']) {
+    value /= 1024;
+    shown = rounded(value, 2);
+    unit = next;
+    if (shown < 1024) break;
+  }
+  return `${shown.toFixed(2)} ${unit}`;
+};
+
+/**
  * Format a transfer rate in decimal units, e.g. "118.4 MB/s".
  *
  * Decimal (1 MB/s = 1,000,000 B/s) so the number agrees with Activity Monitor,
  * nettop and every ISP — which is what a download speed gets compared against.
- * Must stay byte-for-byte identical to `format_rate` in
- * `crates/gglib-core/src/download/format.rs` so the CLI and the GUI never
- * disagree about the same transfer.
+ *
+ * The same function as `format_rate` in
+ * `crates/gglib-core/src/download/format.rs`: the value is rounded first and
+ * its unit chosen after, so 999,999 B/s reads "1.0 MB/s" and never
+ * "1000 kB/s". `tests/ts/utils/format.test.ts` reads the vectors the Rust
+ * test reads.
  */
 export const formatRate = (bps: number | undefined | null): string => {
   if (bps == null || !isFinite(bps) || bps < 0) return UNKNOWN;
 
-  const KB = 1_000;
-  const MB = 1_000_000;
-  const GB = 1_000_000_000;
-
-  if (bps >= GB) return `${(bps / GB).toFixed(2)} GB/s`;
-  if (bps >= MB) return `${(bps / MB).toFixed(1)} MB/s`;
-  if (bps >= KB) return `${(bps / KB).toFixed(0)} kB/s`;
-  return `${bps.toFixed(0)} B/s`;
+  const bytes = rounded(bps, 0);
+  if (bytes < 1_000) return `${bytes.toFixed(0)} B/s`;
+  const kilo = rounded(bps / 1_000, 0);
+  if (kilo < 1_000) return `${kilo.toFixed(0)} kB/s`;
+  const mega = rounded(bps / 1_000_000, 1);
+  if (mega < 1_000) return `${mega.toFixed(1)} MB/s`;
+  return `${rounded(bps / 1_000_000_000, 2).toFixed(2)} GB/s`;
 };
 
 /**

@@ -35,6 +35,7 @@ pub(crate) mod benchmark_commands;
 pub(crate) mod bootstrap;
 pub(crate) mod commands;
 pub(crate) mod config_commands;
+pub(crate) mod console;
 pub(crate) mod conversation_settings;
 pub(crate) mod daemon_client;
 pub(crate) mod dispatch;

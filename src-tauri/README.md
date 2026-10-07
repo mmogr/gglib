@@ -44,7 +44,7 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
 
 6. **Real-Time Events**: The daemon's `/api/events` endpoint streams Server-Sent Events to each webview:
    - `server:*` events - Server lifecycle updates
-   - `download:*` events - Download progress
+   - `download:*` events - The download queue's snapshot, and how each download ended
    - `proxy:*` events - Proxy lifecycle
 
    The Rust side deliberately does not subscribe: it polls instead, because the lifecycle events are deltas that a lagging subscriber drops silently, and a tray rebuilt from deltas drifts. See `src/daemon/watch.rs`.

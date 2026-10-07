@@ -55,8 +55,8 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useDownloadManager.ts`](useDownloadManager.ts) | Download queue operations and progress |
-| [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Side effects on download completion |
+| [`useDownloadManager.ts`](useDownloadManager.ts) | Holds the daemon's queue snapshot, from the queue route and the event stream, newest `revision` winning; queue, cancel and clear |
+| [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Batches download completions into one library refresh and one toast; raises an error toast for each failure |
 | [`useDownloadSystemStatus.ts`](useDownloadSystemStatus.ts) | Whether the desktop download backend has finished initialising, or failed |
 
 ### System Hooks

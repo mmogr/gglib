@@ -15,6 +15,8 @@ impl DownloadManagerImpl {
     ///
     /// Every way of queueing comes through here, so an id is on the queue or
     /// running at most once, and a row or a progress bar can be keyed by it.
+    /// A download queued here starts with no meter, whatever an earlier run
+    /// of the same id left.
     pub(super) async fn enqueue_group(
         &self,
         id: &DownloadId,
@@ -37,8 +39,8 @@ impl DownloadManagerImpl {
             //
             // Deliberately narrower than "does the queue know this id": a
             // check that also matched a *failed* download would make failures
-            // permanently un-retryable, hence the `remove_from_failed` inside
-            // `queue_sharded`.
+            // permanently un-retryable. `queue_sharded` forgets the id's old
+            // outcome instead, so a download that ended can be queued again.
             //
             // The check and the enqueue share one queue guard, taken before
             // `active`, so two requests for one id cannot both pass it.
@@ -49,6 +51,13 @@ impl DownloadManagerImpl {
                 );
                 return Ok(None);
             }
+
+            // A download queued again starts from nothing. The id is neither
+            // waiting nor running here, so a meter under it is left over: a
+            // run that ended with a file still to come, or was taken off the
+            // queue between two files. It goes under the queue guard, before
+            // `next_job` can find it. Lock order: queue → meters.
+            self.meters().remove(id);
 
             queue.queue_sharded(id, &completion_key, &resolution.files, running.as_ref())?
         };

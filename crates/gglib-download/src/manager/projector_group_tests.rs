@@ -1,12 +1,13 @@
 //! Tests for a download group that carries a projector: what is queued, and
 //! which events its files are reported with.
 
-use std::sync::Mutex as StdMutex;
+use std::time::Instant;
 
 use gglib_core::download::{GgufFileRole, Quantization};
 use gglib_core::ports::NoopEmitter;
 
 use super::duplicate_guard_tests::NoRegistrar;
+use super::test_support::{reading, size_of};
 use super::*;
 use crate::test_hub::RepoHub;
 
@@ -28,32 +29,6 @@ fn manager() -> DownloadManagerImpl {
     )
 }
 
-/// Keeps every download event emitted.
-#[derive(Default)]
-struct Recorded(StdMutex<Vec<DownloadEvent>>);
-
-impl AppEventEmitter for Recorded {
-    fn emit(&self, event: AppEvent) {
-        if let AppEvent::Download { event } = event {
-            self.0.lock().unwrap().push(event);
-        }
-    }
-}
-
-impl Recorded {
-    fn events(&self) -> Vec<DownloadEvent> {
-        self.0.lock().unwrap().clone()
-    }
-}
-
-/// The projector's place in a group of three shards of 1000, 1000 and 500
-/// bytes: it follows them, and its 300 bytes end the group's 2800.
-fn projector_place() -> ShardInfo {
-    ShardInfo::with_size(3, 3, "mmproj-F16.gguf", 300)
-        .with_role(GgufFileRole::Projector)
-        .with_group_offsets(2_500, 2_800)
-}
-
 // ── What is queued ───────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -68,12 +43,13 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
     assert_eq!(queued.queued, 3, "three shards, whatever else is fetched");
     assert_eq!(queued.root_id.to_string(), "owner/zeta-GGUF:Q8_0");
     let snapshot = manager.get_queue_snapshot().await.unwrap();
-    assert_eq!(snapshot.items.len(), 1, "one row for the model");
-    assert_eq!((snapshot.active_count, snapshot.pending_count), (0, 1));
-    let row = &snapshot.items[0];
+    assert!(snapshot.active.is_none());
+    assert_eq!(snapshot.waiting.len(), 1, "one row for the model");
+    let row = &snapshot.waiting[0];
     assert_eq!(row.id, "owner/zeta-GGUF:Q8_0");
-    assert_eq!(row.display_name, "owner/zeta-GGUF:Q8_0", "no file's name");
-    assert_eq!(row.shard_info.as_ref().unwrap().total_shards, 3);
+    assert_eq!(row.text.title, "owner/zeta-GGUF:Q8_0", "no file's name");
+    assert_eq!(row.text.file.as_deref(), Some("3 parts"));
+    assert_eq!(row.total_bytes, Some(2_800), "the projector's bytes too");
 
     // The four files behind that row, in the order they will run
     let mut queue = manager.queue.write().await;
@@ -82,10 +58,6 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
     for file in &files {
         assert_eq!(file.id.to_string(), "owner/zeta-GGUF:Q8_0");
         assert_eq!(file.group_id, files[0].group_id, "one group for the model");
-        assert_eq!(
-            file.group_id.as_ref().map(ToString::to_string),
-            row.group_id
-        );
         let place = file.shard_info.as_ref().unwrap();
         assert_eq!(place.total_shards, 3);
         assert_eq!(place.group_total_bytes, Some(2_800));
@@ -127,121 +99,43 @@ async fn both_ways_of_queueing_keep_the_groups_files_for_registration() {
 
 // ── How its files are reported ───────────────────────────────────────────
 
-fn emit(place: &ShardInfo, downloaded: u64) -> DownloadEvent {
-    let recorded = Arc::new(Recorded::default());
-    let emitter: Arc<dyn AppEventEmitter> = recorded.clone();
-    let progress = ProgressUpdate::new(downloaded, place.file_size.unwrap_or(0), 1);
-    emit_progress(
-        &emitter,
-        "owner/zeta-GGUF:Q8_0",
-        Some(place),
-        &progress,
-        None,
-        None,
-    );
-    let mut events = recorded.events();
-    assert_eq!(events.len(), 1);
-    events.remove(0)
-}
-
-/// The projector's bytes move the model's bar on: plain progress over the
-/// whole group, with no shard number that would read "shard 4/3".
-#[test]
-fn a_projectors_progress_is_the_groups_progress_without_a_shard_number() {
-    let event = emit(&projector_place(), 150);
-
-    let DownloadEvent::DownloadProgress {
-        id,
-        downloaded,
-        total,
-        ..
-    } = event
-    else {
-        panic!("plain progress, not {event:?}");
-    };
-    assert_eq!(id, "owner/zeta-GGUF:Q8_0");
-    assert_eq!((downloaded, total), (2_650, 2_800));
-}
-
-#[test]
-fn a_weights_shards_progress_keeps_its_shard_number() {
-    let third = ShardInfo::with_size(2, 3, "zeta.Q8_0-00003-of-00003.gguf", 500)
-        .with_group_offsets(2_000, 2_800);
-
-    let event = emit(&third, 250);
-
-    let DownloadEvent::ShardProgress {
-        shard_index,
-        total_shards,
-        aggregate_downloaded,
-        aggregate_total,
-        ..
-    } = event
-    else {
-        panic!("shard progress, not {event:?}");
-    };
-    assert_eq!((shard_index, total_shards), (2, 3));
-    assert_eq!((aggregate_downloaded, aggregate_total), (2_250, 2_800));
-}
-
+/// The row while each file of the group is fetched: which file it names, and
+/// the bytes it has when that file is half in.
 #[tokio::test]
-async fn a_projector_starts_without_a_shard_number_and_a_shard_with_one() {
-    let recorded = Arc::new(Recorded::default());
-    let manager = DownloadManagerImpl::new(
-        Arc::new(NoRegistrar),
-        Arc::new(RepoHub::new(&[])),
-        recorded.clone(),
-        DownloadManagerConfig::default(),
-    );
-    let id = DownloadId::new(REPO, Some("Q8_0"));
-    let key = gglib_core::download::CompletionKey::HfFile {
-        repo_id: REPO.to_string(),
-        revision: "unspecified".to_string(),
-        filename_canon: "zeta.Q8_0.gguf".to_string(),
-        quantization: Some("Q8_0".to_string()),
-    };
-    let item = |place: ShardInfo| {
-        QueuedItem::new_shard(id.clone(), ShardGroupId::new("g"), place, key.clone())
-    };
+async fn the_row_names_each_file_and_carries_the_groups_bytes() {
+    let manager = manager();
+    manager
+        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .await
+        .unwrap();
 
-    manager.emit_started_event(&item(projector_place()));
-    manager.emit_started_event(&item(ShardInfo::new(1, 3, "zeta-00002-of-00003.gguf")));
+    let mut seen = Vec::new();
+    for _ in 0..4 {
+        let (_lease, item, _cancel, _progress) = manager.next_job().await.unwrap();
+        let size = size_of(&item);
+        manager.observe(&item.id, &reading(size / 2, size), Instant::now());
 
-    let started: Vec<_> = recorded
-        .events()
-        .into_iter()
-        .map(|event| match event {
-            DownloadEvent::DownloadStarted {
-                shard_index,
-                total_shards,
-                ..
-            } => (shard_index, total_shards),
-            other => panic!("a started event, not {other:?}"),
-        })
-        .collect();
-    assert_eq!(started, [(None, None), (Some(1), Some(3))]);
-}
+        let snapshot = manager.get_queue_snapshot().await.unwrap();
+        let row = snapshot.active.expect("the model's row");
+        assert_eq!(row.id, "owner/zeta-GGUF:Q8_0");
+        assert_eq!(row.total_bytes, Some(2_800));
+        seen.push((row.text.file.unwrap(), row.downloaded_bytes));
 
-/// The snapshot of a projector being downloaded: the model's bytes so far,
-/// under the model's id.
-#[test]
-fn the_active_projector_reports_the_groups_bytes() {
-    let id = DownloadId::new(REPO, Some("Q8_0"));
-    let progress = ProgressUpdate::new(150, 300, 1);
+        // The file ends, without the registration its last would bring.
+        manager.observe(&item.id, &reading(size, size), Instant::now());
+        manager.meters().get_mut(&item.id).unwrap().file_done();
+        manager.active.lock().await.remove(&item.id);
+    }
 
-    let dto = build_active_dto(
-        &id,
-        &progress,
-        Some(&projector_place()),
-        Some("g"),
-        None,
-        None,
-    );
-
-    assert_eq!(dto.id, "owner/zeta-GGUF:Q8_0");
-    assert_eq!((dto.downloaded_bytes, dto.total_bytes), (2_650, 2_800));
+    // The projector's bytes move the model's row on, and it is not "part 4/3".
+    let named = |file: &str, bytes: u64| (file.to_string(), bytes);
     assert_eq!(
-        dto.shard_info.map(|place| place.role),
-        Some(GgufFileRole::Projector)
+        seen,
+        [
+            named("part 1/3", 500),
+            named("part 2/3", 1_500),
+            named("part 3/3", 2_250),
+            named("projector", 2_650),
+        ]
     );
 }

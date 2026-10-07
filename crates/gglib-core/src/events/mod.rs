@@ -75,10 +75,10 @@ pub enum AppEvent {
     },
 
     // ========== Download Events ==========
-    /// Download lifecycle + progress events (including shard progress).
+    /// The download queue's snapshot, and the events that say a download
+    /// ended.
     ///
-    /// Wraps `DownloadEvent` verbatim to preserve all detail including
-    /// shard-specific progress information.
+    /// Wraps `DownloadEvent` verbatim.
     #[serde(rename = "download")]
     Download {
         /// The download event payload.

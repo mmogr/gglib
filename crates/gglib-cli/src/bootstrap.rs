@@ -3,7 +3,7 @@
 //! Shared infrastructure (DB, download manager, model registrar,
 //! verification service, …) is wired by [`gglib_bootstrap::CoreBootstrap`].
 //! This module is the only place where CLI-specific concerns are added on
-//! top: the indicatif-based download emitter, the MCP service, and the
+//! top: the console the progress bars draw on, the MCP service, and the
 //! shared HTTP client.
 
 use std::path::PathBuf;
@@ -13,15 +13,16 @@ use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, LoopGuardTripLog, ModelCatalogPort,
-    ModelRegistrarPort, ModelRepository, SettingsRepository,
+    ModelRegistrarPort, ModelRepository, NoopEmitter, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
-use gglib_download::CliDownloadEventEmitter;
 use gglib_mcp::McpService;
 use gglib_runtime::CatalogPortImpl;
 
 use gglib_core::settings::DEFAULT_LLAMA_BASE_PORT;
+
+use crate::console::CliConsole;
 
 // Path utilities from core
 use gglib_core::paths::{database_path, llama_server_path, resolve_models_dir};
@@ -88,20 +89,18 @@ pub struct CliContext {
     pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
     /// Settings repository for user preferences and inference defaults.
     pub settings_repo: Arc<dyn SettingsRepository>,
-    /// Terminal progress emitter used by the interactive download monitor.
+    /// The console progress bars are drawn on.
     ///
-    /// Shared with the download manager so bar updates flow from manager events,
-    /// and with the interactive monitor so it can suspend rendering while
-    /// prompting for additional model IDs.
-    pub download_emitter: Arc<CliDownloadEventEmitter>,
+    /// The download monitors draw the queue on it, and the interactive one
+    /// suspends it while prompting for additional model IDs.
+    pub console: Arc<CliConsole>,
 }
 
 /// Bootstrap the CLI application.
 ///
 /// Delegates all shared wiring to [`CoreBootstrap::build`] and adds the
-/// CLI-specific layer: the indicatif emitter (which doubles as the
-/// `AppEventEmitter` for the shared bootstrap, ignoring non-download
-/// variants), the MCP service, and the shared HTTP client.
+/// CLI-specific layer: the console, the MCP service, and the shared HTTP
+/// client.
 pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
     let models_resolution = resolve_models_dir(None)?;
@@ -120,13 +119,12 @@ pub(crate) async fn bootstrap_with(
     config: CliConfig,
     bootstrap_config: BootstrapConfig,
 ) -> Result<CliContext> {
-    // CLI terminal emitter — renders indicatif progress bars and exposes
-    // the MultiProgress handle for interactive suspend/resume. It is an
-    // `AppEventEmitter` like Axum's and Tauri's, so it plugs straight into
-    // the shared bootstrap event pipeline; non-download AppEvent variants
-    // are ignored — the CLI has no UI surface for them.
-    let download_emitter = Arc::new(CliDownloadEventEmitter::new());
-    let emitter: Arc<dyn AppEventEmitter> = Arc::clone(&download_emitter) as _;
+    // The console owns the progress bars and routes log lines around them.
+    // The CLI subscribes to no application events: a download monitor reads
+    // the queue snapshot it draws, from the daemon or from the download
+    // manager, so the shared bootstrap is handed an emitter that drops them.
+    let console = Arc::new(CliConsole::new());
+    let emitter: Arc<dyn AppEventEmitter> = Arc::new(NoopEmitter::new());
 
     let BuiltCore {
         app,
@@ -157,7 +155,7 @@ pub(crate) async fn bootstrap_with(
         bench_repo,
         loop_guard_trips,
         settings_repo: repos.settings,
-        download_emitter,
+        console,
     })
 }
 

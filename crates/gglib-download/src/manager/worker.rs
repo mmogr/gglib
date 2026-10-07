@@ -7,7 +7,7 @@
 //! # Design Principles
 //!
 //! - Worker receives a `DownloadJob` (value type) and `WorkerDeps` (cloned Arcs)
-//! - Worker only writes to `watch::Sender` for progress, never emits events directly
+//! - Worker only writes to `watch::Sender`, progress and notes alike, and never emits events
 //! - Cancellation is handled via `tokio::select!` around IO operations
 //! - Registration is deferred to the manager after shard group completion
 
@@ -18,30 +18,21 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::download::{DownloadError, DownloadEvent, DownloadId, Quantization};
-use gglib_core::ports::{AppEventEmitter, DownloadManagerConfig};
+use gglib_core::download::{DownloadError, DownloadId, Quantization};
+use gglib_core::ports::DownloadManagerConfig;
 
 use crate::executor::{DownloadPlan, FileProgress, download_file};
 
-use super::{app_event, paths::DownloadDestination};
+use super::paths::DownloadDestination;
 
 /// Dependencies for the download worker.
 ///
-/// These are cloned Arc references to ports, allowing the worker
-/// to operate independently of the manager's state.
-///
-/// `event_emitter` is a narrow, deliberate exception to "worker only writes
-/// to `watch::Sender`" above: it exists solely so `execute_download` can
-/// surface [`DownloadEvent::DownloadNotice`] — a one-off, cosmetic note
-/// (e.g. "preparing fast downloader") that isn't part of the progress or
-/// completion state the manager sequences. Progress and terminal events
-/// still flow exclusively through the watch channel and `finalize_job`.
+/// The worker operates independently of the manager's state: what it has to
+/// say, progress or a note, it writes to the job's `watch::Sender`.
 #[derive(Clone)]
 pub(crate) struct WorkerDeps {
     /// Configuration (models directory, HF token, etc.).
     pub config: DownloadManagerConfig,
-    /// Event sink for [`DownloadEvent::DownloadNotice`] only.
-    pub event_emitter: Arc<dyn AppEventEmitter>,
 }
 
 /// A download job to be executed by the worker.
@@ -72,27 +63,9 @@ pub(crate) struct ProgressUpdate {
     /// A note standing in for progress while there is none to show, e.g. the
     /// accelerator's environment being prepared.
     pub notice: Option<String>,
-    /// Monotonically increasing sequence number for change detection.
-    pub seq: u64,
 }
 
 impl ProgressUpdate {
-    /// Test-only: production seeds the watch channel with `default()` and moves
-    /// it forward with `send_modify`, never constructing one this way. Gated so
-    /// `dead_code` keeps telling the truth about production reach.
-    #[cfg(test)]
-    pub(crate) fn new(downloaded: u64, total: u64, seq: u64) -> Self {
-        Self {
-            progress: FileProgress {
-                bytes: downloaded,
-                wire: downloaded,
-                size: crate::executor::known_size(Some(total)),
-            },
-            notice: None,
-            seq,
-        }
-    }
-
     /// Take the file's latest progress.
     ///
     /// A notice is dropped once bytes arrive again, on disk or off the
@@ -104,7 +77,6 @@ impl ProgressUpdate {
             self.notice = None;
         }
         self.progress = progress;
-        self.seq += 1;
     }
 }
 
@@ -156,7 +128,7 @@ fn percent_encode_revision(revision: &str) -> String {
 /// 2. Downloads files with progress reporting
 ///
 /// Progress is reported through `job.progress_tx` only; no events are emitted.
-/// The bridge task (spawned by the manager) handles event emission.
+/// The meter task (spawned by the manager) samples it and publishes the queue.
 /// Model registration is deferred to the manager after all shards complete.
 ///
 /// # Cancellation
@@ -219,19 +191,13 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
             progress_tx.send_modify(|state| state.advance(progress));
         });
 
-    // Notice callback: surfaces transient notes that carry no byte progress of
-    // their own — e.g. the accelerator being unavailable and the transfer
-    // falling back — instead of leaving the bar looking frozen. See the doc
-    // comment on `WorkerDeps`.
-    let notice_id = job.id.to_string();
-    let notice_emitter = Arc::clone(&deps.event_emitter);
+    // Notice callback: a transient note that carries no byte progress of its
+    // own — e.g. the accelerator being unavailable and the transfer falling
+    // back. It rides the watch channel beside the progress, and is shown on
+    // the download's row until bytes arrive again.
     let notice_tx = job.progress_tx.clone();
     let notice_callback: crate::cli_exec::NoticeCallback = Arc::new(move |message: &str| {
         notice_tx.send_modify(|state| state.notice = Some(message.to_string()));
-        notice_emitter.emit(app_event(DownloadEvent::DownloadNotice {
-            id: notice_id.clone(),
-            message: message.to_string(),
-        }));
     });
 
     // A job is one file of its download.

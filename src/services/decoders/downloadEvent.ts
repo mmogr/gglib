@@ -12,30 +12,27 @@ import type { DownloadEvent } from '../transport/types/events';
  * Known download event types.
  * Used for runtime validation to catch unknown/new event types early.
  * 
- * These match the Rust `DownloadEvent` enum variants with `#[serde(rename_all = "snake_case")]`:
- * - QueueSnapshot → "queue_snapshot"
- * - DownloadStarted → "download_started"
- * - QueueRunComplete → "queue_run_complete"
- * - etc.
+ * These are the five variants of the Rust `DownloadEvent` enum, tagged with
+ * `#[serde(rename_all = "snake_case")]`. The `Record` is keyed by the
+ * generated union's tags, so a variant added or removed in Rust fails to
+ * compile here until this list follows.
  */
-const KNOWN_DOWNLOAD_EVENT_TYPES = new Set([
-  'queue_snapshot',
-  'download_started',
-  'download_progress',
-  'shard_progress',
-  'download_completed',
-  'download_failed',
-  'download_cancelled',
-  'download_status_changed',
-  'download_notice',
-  'queue_run_complete',
-]);
+const DOWNLOAD_EVENT_TYPES: Record<DownloadEvent['type'], true> = {
+  queue_snapshot: true,
+  download_completed: true,
+  download_failed: true,
+  download_cancelled: true,
+  queue_run_complete: true,
+};
+const KNOWN_DOWNLOAD_EVENT_TYPES = new Set<string>(Object.keys(DOWNLOAD_EVENT_TYPES));
 
 /**
  * Validate and decode a raw SSE payload into a DownloadEvent.
  * 
- * - In development: throws on unknown event types or missing required fields
- * - In production: logs warnings but returns null for invalid events
+ * Only the `type` tag is checked: a payload that is not an object, has no
+ * string `type`, or has a `type` that is not one of the known five is logged
+ * as an error and decodes to null, in development and production alike.
+ * Nothing throws, and the fields beside the tag are not checked.
  * 
  * @param payload - Raw JSON payload from SSE
  * @returns Decoded DownloadEvent or null if invalid
@@ -65,15 +62,14 @@ export function decodeDownloadEvent(payload: unknown): DownloadEvent | null {
 }
 
 /**
- * Log an invalid event payload.
- * In dev: throws an error. In prod: logs a warning.
+ * Log an invalid event payload as an error.
  */
 function logInvalidEvent(reason: string, payload: unknown): void {
   appLogger.error('service.download', 'Invalid download event', { reason, payload });
 }
 
 /**
- * Log an unknown event type.
+ * Log an unknown event type as an error.
  * This indicates the backend added a new event type that the frontend doesn't know about yet.
  */
 function logUnknownEventType(type: string, payload: unknown): void {

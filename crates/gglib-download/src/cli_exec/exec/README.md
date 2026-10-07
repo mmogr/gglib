@@ -36,8 +36,8 @@ interpreter is older than 3.10 is built again first.
 
 `PythonEnvironment::prepare` takes an optional `NoticeCallback`
 (`Option<&NoticeCallback>`, aliased in `python_bridge.rs`): with one supplied,
-venv creation and dependency install surface as a
-`DownloadEvent::DownloadNotice` on a progress bar instead of a console line;
+venv creation and dependency install surface as the status of the download's
+row instead of a console line;
 without one (preflight, `model upgrade`) they fall back to
 `gglib_core::telemetry::console_println`. The environment build runs via
 `.output()`, not `.status()`, so its own stdio is captured rather than
@@ -59,7 +59,7 @@ packages, and `make test-helper` does where a venv holding them exists.
 
 `progress.rs`'s `CliProgressPrinter` draws each file of a `model upgrade`,
 which downloads without the download manager. It draws to **stderr**, matching
-`CliDownloadEventEmitter`'s `MultiProgress` (indicatif's stderr default) — see
+the CLI's download board (indicatif's stderr default) — see
 the doc comment on `CliProgressPrinter::new`.
 
 <!-- module-docs:end -->

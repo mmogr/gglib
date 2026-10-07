@@ -13,8 +13,8 @@ use super::usize_to_u32_saturating;
 /// weights, then the projector fetched with them.
 ///
 /// Each item carries its place in the group. Shards are numbered among the
-/// weights alone, so a projector never raises the shard total; the byte
-/// offsets cover every file, so progress runs over the whole group.
+/// weights alone, so a projector never raises the shard total; the group's
+/// size covers every file, so progress runs over the whole group.
 pub(super) fn group_items(
     id: &DownloadId,
     completion_key: &CompletionKey,
@@ -24,13 +24,11 @@ pub(super) fn group_items(
     let total_shards =
         usize_to_u32_saturating(files.iter().filter(|f| !f.role.is_projector()).count());
 
-    // Exact byte offsets, but only when HuggingFace gave us a size for
-    // every file. A partial layout is worse than none: the consumer's
-    // equal-size fallback is at least self-consistent. A size of 0 is one
-    // it did not give.
+    // The size of the whole group, but only when HuggingFace gave a size
+    // for every file: a sum that leaves one out would be a total the bytes
+    // run past. A size of 0 is one it did not give.
     let group_total: Option<u64> = files.iter().map(|f| known_size(f.size)).sum();
-
-    let mut preceding: u64 = 0;
+    let has_projector = files.iter().any(|f| f.role.is_projector());
 
     files
         .iter()
@@ -42,15 +40,8 @@ pub(super) fn group_items(
                     || ShardInfo::new(index, total_shards, &file.path),
                     |size| ShardInfo::with_size(index, total_shards, &file.path, size),
                 )
-                .with_role(file.role);
-            let shard_info = match group_total {
-                Some(total) => {
-                    let info = shard_info.with_group_offsets(preceding, total);
-                    preceding = preceding.saturating_add(file.size.unwrap_or(0));
-                    info
-                }
-                None => shard_info,
-            };
+                .with_role(file.role)
+                .in_group(group_total, has_projector);
             QueuedItem::new_shard(
                 id.clone(),
                 group_id.clone(),
@@ -64,7 +55,7 @@ pub(super) fn group_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::download::GgufFileRole;
+    use gglib_core::download::{FilePlace, GgufFileRole};
 
     fn items(files: &[ResolvedFile]) -> Vec<ShardInfo> {
         let id = DownloadId::new("owner/zeta-GGUF", Some("Q8_0"));
@@ -95,7 +86,9 @@ mod tests {
         assert_eq!(group[1].role, GgufFileRole::Projector);
         assert_eq!(group[1].filename, "mmproj-F16.gguf");
         assert_eq!(group[1].total_shards, 1, "the projector is not a shard");
-        assert_eq!(group[1].display(), "Projector");
+        assert_eq!(group[0].place(), Some(FilePlace::Weights));
+        assert_eq!(group[1].place(), Some(FilePlace::Projector));
+        assert!(group.iter().all(|file| file.has_projector));
     }
 
     #[test]
@@ -112,33 +105,22 @@ mod tests {
             .map(|file| (file.shard_index, file.total_shards))
             .collect();
         assert_eq!(numbering, [(0, 3), (1, 3), (2, 3), (3, 3)]);
-        assert_eq!(group[2].display(), "Part 3/3");
-        assert_eq!(group[3].display(), "Projector");
+        assert_eq!(group[2].place(), Some(FilePlace::Part { number: 3, of: 3 }));
+        assert_eq!(group[3].place(), Some(FilePlace::Projector));
+        assert_eq!(group[0].waiting_place(), Some(FilePlace::Parts(3)));
     }
 
     /// Download progress covers every file: the projector's bytes are in the
-    /// group total, and it starts where the weights end.
+    /// group total, which every file of the group carries.
     #[test]
-    fn the_byte_offsets_cover_the_projector() {
+    fn the_group_total_covers_the_projector() {
         let group = items(&[
             ResolvedFile::with_size("z-00001-of-00002.gguf", 1_000),
             ResolvedFile::with_size("z-00002-of-00002.gguf", 500),
             ResolvedFile::projector("mmproj-F16.gguf", 300, None),
         ]);
 
-        let offsets: Vec<_> = group
-            .iter()
-            .map(|file| (file.preceding_bytes, file.group_total_bytes))
-            .collect();
-        assert_eq!(
-            offsets,
-            [
-                (Some(0), Some(1_800)),
-                (Some(1_000), Some(1_800)),
-                (Some(1_500), Some(1_800))
-            ]
-        );
-        assert_eq!(group[2].aggregate(300), Some((1_800, 1_800)));
+        assert!(group.iter().all(|f| f.group_total_bytes == Some(1_800)));
     }
 
     #[test]
@@ -151,11 +133,12 @@ mod tests {
         assert!(group.iter().all(|f| f.role == GgufFileRole::Weights));
         assert_eq!((group[1].shard_index, group[1].total_shards), (1, 2));
         assert_eq!(group[1].group_total_bytes, Some(1_500));
+        assert!(group.iter().all(|f| !f.has_projector));
     }
 
-    /// One unknown size and no file gets offsets.
+    /// One unknown size and the group has no total.
     #[test]
-    fn a_file_of_unknown_size_leaves_the_group_without_offsets() {
+    fn a_file_of_unknown_size_leaves_the_group_without_a_total() {
         let group = items(&[
             ResolvedFile::new("zeta.Q8_0.gguf"),
             ResolvedFile::projector("mmproj-F16.gguf", 300, None),

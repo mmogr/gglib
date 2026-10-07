@@ -92,15 +92,13 @@ async fn start_head(manager: &DownloadManagerImpl) -> DownloadId {
         .dequeue()
         .expect("something must be pending");
     let id = item.id.clone();
-    let (progress_tx, _rx) = watch::channel(ProgressUpdate::new(0, 0, 0));
     manager.active.lock().await.insert(
         id.clone(),
         ActiveJob {
             lease: LeaseId(1),
             cancel: CancellationToken::new(),
-            progress_tx,
             shard_info: None,
-            group_id: None,
+            phase: DownloadPhase::Downloading,
         },
     );
     id
@@ -220,7 +218,12 @@ async fn a_failed_download_can_still_be_requeued() {
     {
         let mut queue = manager.queue.write().await;
         let item = queue.dequeue().expect("something must be pending");
-        queue.mark_failed(item, "network died");
+        queue.record_outcome(
+            &item.id,
+            DownloadOutcome::Failed {
+                error: "network died".to_string(),
+            },
+        );
     }
     assert_eq!(manager.queue.read().await.pending_len(), 0);
 
@@ -233,5 +236,9 @@ async fn a_failed_download_can_still_be_requeued() {
         manager.queue.read().await.pending_len(),
         1,
         "retry after failure must enqueue again"
+    );
+    assert!(
+        manager.queue.read().await.finished().is_empty(),
+        "and the retry starts without the old failure"
     );
 }

@@ -109,7 +109,7 @@ impl RateEstimator {
     /// not per-tick deltas. `total` may be `0` when the size is not yet known,
     /// in which case no ETA is produced.
     ///
-    /// Call this on every tick of the progress bridge. Ticks where `downloaded`
+    /// Call this on every tick of the download's meter. Ticks where `downloaded`
     /// has not moved are meaningful samples: they are how a stall pulls the
     /// reported rate down.
     pub fn record(&mut self, downloaded: u64, total: u64, now: Instant) {

@@ -1,23 +1,32 @@
+/**
+ * The download queue the GUI holds is the daemon's snapshot, taken whole.
+ *
+ * It arrives two ways, from `GET /api/models/downloads/queue` and in
+ * `queue_snapshot` events, numbered in one sequence. What is pinned here is
+ * which snapshot wins: the one with the higher `revision`, until the event
+ * stream opens again, when the numbering may have started over.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useDownloadManager } from '../../../src/hooks/useDownloadManager';
+import type { DownloadEvent } from '../../../src/services/transport/types/events';
+import type { QueueSnapshot } from '../../../src/services/transport/types/downloads';
+import { queueSnapshot, runningRow, waitingRow } from '../fixtures/downloads';
 
-// Mock platform detection to force web/SSE mode
-vi.mock('../../../src/utils/platform', () => ({
-  isTauriApp: false,
-}));
-
-// Transport mock: queue operations plus the (sync) event subscription.
-let mockSubscribeHandler: ((event: any) => void) | null = null;
-let unsubscribeCalled = false;
+// The transport: the queue routes, the event subscription and the signal
+// that the stream opened. The test plays the daemon through the two handlers.
+let sendEvent: ((event: { type: 'download'; event: DownloadEvent }) => void) | null = null;
+let streamOpened: (() => void) | null = null;
+let unsubscribed: string[] = [];
 
 const transport = vi.hoisted(() => ({
   queueDownload: vi.fn(),
   getDownloadQueue: vi.fn(),
   cancelDownload: vi.fn(),
-  cancelShardGroup: vi.fn(),
   clearFailedDownloads: vi.fn(),
   subscribe: vi.fn(),
+  onEventStreamOpen: vi.fn(),
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -25,109 +34,208 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
   getTransport: () => transport,
 }));
 
-const mockQueueDownload = transport.queueDownload;
-const mockCancelDownload = transport.cancelDownload;
-const mockCancelShardGroup = transport.cancelShardGroup;
-const mockClearFailedDownloads = transport.clearFailedDownloads;
-const mockGetDownloadQueue = transport.getDownloadQueue;
-const mockSubscribeToEvent = transport.subscribe;
+/** Deliver a download event as the stream does. */
+function emit(event: DownloadEvent) {
+  act(() => sendEvent?.({ type: 'download', event }));
+}
 
-mockSubscribeToEvent.mockImplementation((_eventType: string, handler: (event: any) => void) => {
-  mockSubscribeHandler = handler;
-  return () => {
-    unsubscribeCalled = true;
-  };
-});
+/** A `queue_snapshot` event carrying `snapshot`. */
+const snapshotEvent = (snapshot: QueueSnapshot): DownloadEvent => ({ type: 'queue_snapshot', ...snapshot });
 
-const emptySnapshot = { current: null, pending: [], failed: [], max_size: 3 };
+/** A REST answer the test settles when it chooses. */
+function heldAnswer() {
+  let settle!: (snapshot: QueueSnapshot) => void;
+  transport.getDownloadQueue.mockImplementationOnce(() => new Promise((resolve) => { settle = resolve; }));
+  return (snapshot: QueueSnapshot) => act(async () => settle(snapshot));
+}
 
 describe('useDownloadManager', () => {
   beforeEach(() => {
-    unsubscribeCalled = false;
-    mockSubscribeHandler = null;
-    mockQueueDownload.mockReset();
-    mockCancelDownload.mockReset();
-    mockCancelShardGroup.mockReset();
-    mockClearFailedDownloads.mockReset();
-    mockSubscribeToEvent.mockClear();
-    mockGetDownloadQueue.mockReset();
-    mockGetDownloadQueue.mockResolvedValue(emptySnapshot);
+    sendEvent = null;
+    streamOpened = null;
+    unsubscribed = [];
+    for (const mock of Object.values(transport)) mock.mockReset();
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot());
+    transport.subscribe.mockImplementation((_type: string, handler: typeof sendEvent) => {
+      sendEvent = handler;
+      return () => unsubscribed.push('events');
+    });
+    transport.onEventStreamOpen.mockImplementation((handler: () => void) => {
+      streamOpened = handler;
+      return () => unsubscribed.push('open');
+    });
   });
 
-  it('initializes queue and sets connection mode', async () => {
+  it('seeds from REST on mount', async () => {
+    const seeded = queueSnapshot({ revision: 7, active: runningRow(), waiting: [waitingRow('owner/b:Q4_K_M', 2)] });
+    transport.getDownloadQueue.mockResolvedValue(seeded);
+
     const { result } = renderHook(() => useDownloadManager());
 
-    await waitFor(() => expect(mockGetDownloadQueue).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(result.current.queueStatus).toEqual(emptySnapshot));
-    await waitFor(() => expect(result.current.connectionMode).toBe('Web (SSE)'));
+    // No event has arrived: the running download is known from the read alone.
+    await waitFor(() => expect(result.current.snapshot).toEqual(seeded));
+    expect(transport.getDownloadQueue).toHaveBeenCalledTimes(1);
   });
 
-  it('handles progress and completion events', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { result } = renderHook(() => useDownloadManager({ onCompleted: vi.fn() }));
-    await waitFor(() => expect(mockSubscribeHandler).toBeTruthy());
-
-    act(() => {
-      mockSubscribeHandler?.({
-        type: 'download',
-        event: {
-          type: 'download_progress',
-          id: 'model1',
-          downloaded: 10,
-          total: 100,
-          speed_bps: 5,
-          eta_seconds: 18,
-          percentage: 10,
-        },
-      });
-    });
-
-    await waitFor(() => expect(result.current.currentProgress?.status).toBe('progress'));
-    expect(result.current.currentProgress?.percentage).toBe(10);
-
-    act(() => {
-      mockSubscribeHandler?.({
-        type: 'download',
-        event: { type: 'download_completed', id: 'model1', message: 'done' },
-      });
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    await waitFor(() => expect(result.current.currentProgress).toBeNull());
-    vi.useRealTimers();
-  });
-
-  it('queues model and refreshes snapshot', async () => {
-    let snapshot = emptySnapshot;
-    mockGetDownloadQueue.mockImplementation(async () => snapshot);
-    mockQueueDownload.mockResolvedValue('m2:q4');
-
+  it('replaces the snapshot with each one the stream sends', async () => {
     const { result } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(result.current.queueStatus).toEqual(emptySnapshot));
+    await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));
 
-    snapshot = {
-      current: { id: 'm1', status: 'downloading', message: undefined },
-      pending: [{ id: 'm2', status: 'queued' }],
-      failed: [],
-      max_size: 3,
-    } as any;
+    emit(snapshotEvent(queueSnapshot({ revision: 2, active: runningRow() })));
+    expect(result.current.snapshot?.active?.text.percent).toBe('25.0%');
 
-    await act(async () => {
-      await result.current.queueModel('m2', 'q4');
-    });
-
-    await waitFor(() => expect(mockQueueDownload).toHaveBeenCalledWith({ modelId: 'm2', quantization: 'q4' }));
-    expect(result.current.queueStatus?.pending?.length).toBe(1);
-    expect(result.current.queueLength).toBe(1); // pending only (activeId set via SSE, not queue refresh)
+    const later = runningRow({ percent: 50, text: { ...runningRow().text, percent: '50.0%' } });
+    emit(snapshotEvent(queueSnapshot({ revision: 3, active: later })));
+    expect(result.current.snapshot?.active).toEqual(later);
   });
 
-  it('cleans up subscription on unmount', async () => {
+  it('drops an older revision', async () => {
+    const answerLate = heldAnswer();
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+
+    emit(snapshotEvent(queueSnapshot({ revision: 5, active: runningRow() })));
+    emit(snapshotEvent(queueSnapshot({ revision: 4 })));
+    expect(result.current.snapshot?.revision).toBe(5);
+    expect(result.current.snapshot?.active).toBeDefined();
+
+    // The same snapshot again is not newer either.
+    emit(snapshotEvent(queueSnapshot({ revision: 5 })));
+    expect(result.current.snapshot?.active).toBeDefined();
+
+    // Nor is the read sent at mount, answered after the stream moved on.
+    await answerLate(queueSnapshot({ revision: 3 }));
+    expect(result.current.snapshot?.revision).toBe(5);
+  });
+
+  it("takes a restarted daemon's first snapshot, and reads the queue again", async () => {
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    emit(snapshotEvent(queueSnapshot({ revision: 40, active: runningRow() })));
+    expect(transport.getDownloadQueue).toHaveBeenCalledTimes(1);
+
+    // The stream opens again on a daemon that counts from 1: its queue is empty.
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 1 }));
+    await act(async () => streamOpened?.());
+
+    expect(transport.getDownloadQueue).toHaveBeenCalledTimes(2);
+    expect(result.current.snapshot?.revision).toBe(1);
+    expect(result.current.snapshot?.active).toBeUndefined();
+
+    emit(snapshotEvent(queueSnapshot({ revision: 2, active: runningRow() })));
+    expect(result.current.snapshot?.revision).toBe(2);
+  });
+
+  it("reports a completion under the row's own title", async () => {
+    const onCompleted = vi.fn();
+    renderHook(() => useDownloadManager({ onCompleted }));
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const row = runningRow({ text: { ...runningRow().text, title: 'Zeta, eight bit' } });
+    emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
+
+    emit({ type: 'download_completed', id: row.id });
+
+    expect(onCompleted).toHaveBeenCalledWith({ id: row.id, title: 'Zeta, eight bit' });
+  });
+
+  it('reports a failure with its error, titled from the finished list once the row is gone', async () => {
+    const onFailed = vi.fn();
+    renderHook(() => useDownloadManager({ onFailed }));
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    emit(snapshotEvent(queueSnapshot({
+      revision: 2,
+      finished: [{ id: 'owner/b:Q4_K_M', title: 'B, four bit', outcome: { kind: 'failed', error: 'disk full' } }],
+    })));
+
+    emit({ type: 'download_failed', id: 'owner/b:Q4_K_M', error: 'disk full' });
+    emit({ type: 'download_failed', id: 'owner/unseen', error: 'gone' });
+
+    expect(onFailed).toHaveBeenNthCalledWith(1, { id: 'owner/b:Q4_K_M', title: 'B, four bit', error: 'disk full' });
+    expect(onFailed).toHaveBeenNthCalledWith(2, { id: 'owner/unseen', title: 'owner/unseen', error: 'gone' });
+  });
+
+  it("keeps a run's summary until a download runs again", async () => {
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const summary = { run_id: 'r1', items: [] } as unknown as Extract<DownloadEvent, { type: 'queue_run_complete' }>['summary'];
+
+    emit({ type: 'queue_run_complete', summary });
+    emit(snapshotEvent(queueSnapshot({ revision: 2 })));
+    expect(result.current.lastQueueSummary).toBe(summary);
+
+    emit(snapshotEvent(queueSnapshot({ revision: 3, active: runningRow() })));
+    expect(result.current.lastQueueSummary).toBeNull();
+  });
+
+  it('shows a cancel as out until the download ends', async () => {
+    transport.cancelDownload.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const row = runningRow();
+    emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
+    // The daemon has the cancel but the download has not ended yet.
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 3, active: row }));
+
+    await act(async () => { await result.current.cancel(row.id); });
+
+    expect(transport.cancelDownload).toHaveBeenCalledWith(row.id);
+    expect(result.current.cancellingId).toBe(row.id);
+
+    emit({ type: 'download_cancelled', id: row.id });
+    expect(result.current.cancellingId).toBeNull();
+  });
+
+  it('settles a cancel when the download fails, or when another is the one running', async () => {
+    transport.cancelDownload.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const row = runningRow();
+    emit(snapshotEvent(queueSnapshot({ revision: 2, active: row })));
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 3, active: row }));
+
+    // The download failed before the cancel reached it: no `download_cancelled` comes.
+    await act(async () => { await result.current.cancel(row.id); });
+    expect(result.current.cancellingId).toBe(row.id);
+    emit({ type: 'download_failed', id: row.id, error: 'no route' });
+    expect(result.current.cancellingId).toBeNull();
+
+    // The ending event was missed: a snapshot with another download running says as much.
+    await act(async () => { await result.current.cancel(row.id); });
+    expect(result.current.cancellingId).toBe(row.id);
+    const next = runningRow({ id: 'owner/b:Q4_K_M', model_id: 'owner/b', quantization: 'Q4_K_M' });
+    emit(snapshotEvent(queueSnapshot({ revision: 4, active: next })));
+    expect(result.current.cancellingId).toBeNull();
+  });
+
+  it('lets a cancel be tried again when the request for it fails', async () => {
+    transport.cancelDownload.mockRejectedValue(new Error('500 internal error'));
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+    const row = runningRow();
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 2, active: row }));
+
+    await act(async () => { await result.current.cancel(row.id); });
+
+    expect(result.current.cancellingId).toBeNull();
+    expect(result.current.snapshot?.active?.id).toBe(row.id);
+  });
+
+  it('queues a model and reads the queue again', async () => {
+    transport.queueDownload.mockResolvedValue({ position: 1 });
+    const { result } = renderHook(() => useDownloadManager());
+    await waitFor(() => expect(result.current.snapshot?.revision).toBe(1));
+    transport.getDownloadQueue.mockResolvedValue(queueSnapshot({ revision: 2, waiting: [waitingRow('m2:q4', 1)] }));
+
+    await act(async () => { await result.current.queueModel('m2', 'q4'); });
+
+    expect(transport.queueDownload).toHaveBeenCalledWith({ modelId: 'm2', quantization: 'q4' });
+    expect(result.current.snapshot?.waiting.map((row) => row.id)).toEqual(['m2:q4']);
+  });
+
+  it('stops listening on unmount', async () => {
     const { unmount } = renderHook(() => useDownloadManager());
-    await waitFor(() => expect(mockSubscribeHandler).toBeTruthy());
+    await waitFor(() => expect(sendEvent).toBeTruthy());
     unmount();
-    expect(unsubscribeCalled).toBe(true);
+    expect(unsubscribed.sort()).toEqual(['events', 'open']);
   });
 });

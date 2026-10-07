@@ -35,8 +35,8 @@ impl CoreBootstrap {
     ///
     /// * `config` — Resolved paths and runtime parameters.
     /// * `emitter` — Adapter-specific event emitter (SSE broadcaster for
-    ///   Axum, `TauriEventEmitter` for Tauri, `CliDownloadEventEmitter` for
-    ///   CLI, or `NoopEmitter` for tests/early init). Download events flow
+    ///   Axum, `TauriEventEmitter` for Tauri, or `NoopEmitter` for the CLI,
+    ///   tests and early init). Download events flow
     ///   through this emitter to the adapter's transport.
     ///
     /// # Errors

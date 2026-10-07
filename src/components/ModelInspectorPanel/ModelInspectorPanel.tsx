@@ -2,7 +2,7 @@ import { FC, useCallback, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 import { GgufModel, ModelDetail, HfModelSummary } from '../../types';
 import type { ServerViewModel } from '../../hooks/useServers';
-import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
+import type { QueueSnapshot } from '../../services/transport/types/downloads';
 import { useSettings } from '../../hooks/useSettings';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
@@ -54,7 +54,8 @@ interface ModelInspectorPanelProps {
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelDetail: (modelId: number) => Promise<ModelDetail | null>;
   onRefresh?: () => Promise<void>;
-  queueStatus?: DownloadQueueStatus | null;
+  /** The download queue, which says whether it has room for another */
+  downloadQueue?: QueueSnapshot | null;
   onRegisterServeModalOpener?: (opener: () => void) => void;
   onBenchmark?: (modelId: number) => void;
 }
@@ -73,7 +74,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onRemoveTag,
   getModelDetail,
   onRefresh,
-  queueStatus,
+  downloadQueue,
   onRegisterServeModalOpener,
   onBenchmark,
 }) => {
@@ -145,7 +146,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   });
 
   // Download handler and queue room for HF models
-  const { handleHfDownload, downloadsDisabled, disabledReason } = useHfDownload(queueStatus);
+  const { handleHfDownload, downloadsDisabled, disabledReason } = useHfDownload(downloadQueue);
 
   // Handle toggle server (open modal or stop)
   const handleToggleServer = useCallback(() => {

@@ -11,18 +11,6 @@ const fn at(bytes: u64, wire: u64) -> FileProgress {
 }
 
 #[test]
-fn each_reading_moves_the_sequence_on() {
-    let mut update = ProgressUpdate::default();
-    assert_eq!(update.seq, 0);
-
-    update.advance(at(100, 100));
-    update.advance(at(100, 100));
-
-    assert_eq!(update.progress, at(100, 100));
-    assert_eq!(update.seq, 2);
-}
-
-#[test]
 fn a_notice_clears_on_the_next_advance() {
     let mut update = ProgressUpdate::default();
     update.advance(at(500, 500));

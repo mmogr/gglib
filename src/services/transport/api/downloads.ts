@@ -4,38 +4,18 @@
  */
 
 import { get, post, del } from './client';
-import { bucketQueue } from '../downloadQueue';
 import type { DownloadId } from '../types/ids';
 import type {
-  DownloadQueueStatus,
-  DownloadQueueItem,
+  QueueSnapshot,
   QueueDownloadParams,
   QueueDownloadResponse,
 } from '../types/downloads';
 
 /**
- * Raw backend response shape for queue snapshot.
- * Backend returns a flat list of all items that we need to split.
+ * Get the download queue: the same snapshot a `queue_snapshot` event carries.
  */
-interface QueueSnapshotResponse {
-  items: DownloadQueueItem[];
-  max_size: number;
-  active_count: number;
-  pending_count: number;
-}
-
-/**
- * Get current download queue status.
- * Transforms the backend's flat item list into categorized current/pending/failed.
- */
-export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
-  const snapshot = await get<QueueSnapshotResponse>('/api/models/downloads/queue');
-  
-  // Bucketed by the same function the SSE `queue_snapshot` path uses. The
-  // comment here claimed that before it was true — this path read the raw
-  // status while the SSE side normalised first. The two agreed on every frame
-  // the server sends, so nothing was broken; they were two copies of one rule.
-  return bucketQueue(snapshot.items || [], snapshot.max_size);
+export async function getDownloadQueue(): Promise<QueueSnapshot> {
+  return get<QueueSnapshot>('/api/models/downloads/queue');
 }
 
 /**
@@ -68,13 +48,6 @@ export async function removeFromQueue(id: DownloadId): Promise<void> {
  */
 export async function clearFailedDownloads(): Promise<void> {
   await post<void>('/api/models/downloads/failed/clear');
-}
-
-/**
- * Cancel all shards in a download group.
- */
-export async function cancelShardGroup(groupId: string): Promise<void> {
-  await post<void>(`/api/models/downloads/shard-group/${encodeURIComponent(groupId)}/cancel`);
 }
 
 /**

@@ -5,31 +5,43 @@
 
 <!-- module-docs:start -->
 
-Page-level download progress indicator showing the active download's progress bar, queue depth, and a dismissible completion summary banner. Groups multi-shard downloads into a single logical entry so the queue count is not inflated.
+Page-level download card: the running download's bar and words, a chip for the downloads waiting behind it, and a dismissible summary of the last queue run.
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `GlobalDownloadStatus.tsx` | Active progress bar or completion summary; queue popover toggle |
-| `DownloadQueuePopover.tsx` | Pending items grouped by model; up/down reorder; per-item cancel |
-| `groupPendingItems.ts` | Collapses a model's queued files into one entry |
+| `GlobalDownloadStatus.tsx` | The running download's card, or the last run's summary; queue popover toggle |
+| `DownloadQueuePopover.tsx` | The waiting downloads; up/down reorder; remove from the queue |
+| `index.ts` | Barrel |
 
-`groupPendingItems()` collapses all items sharing a `group_id` (a model's shards and the projector fetched with them) into one queue entry. Its "N parts" counts weights files; a projector is not a part.
+The card draws the `active` row of the daemon's `QueueSnapshot`, which
+`useDownloadManager` holds as it arrived. A row is a whole download: every
+file of one model, with one bar. The card has no state of its own beyond
+whether the popover is open.
 
-Speed and ETA are displayed exactly as the backend reports them, via
-`formatRate` / `formatDuration` from `src/utils/format.ts`. Both are optional:
-absent means the rate estimator has not warmed up, and renders as a placeholder
-rather than `0`. This component computes no rate of its own — the download
-manager's `RateEstimator` is the single source, so the CLI and the GUI always
-agree.
+Every string on the card about the download is the row's `text`, printed as
+it arrived: `status` (`Downloading`, `Finalizing…`, `Registering…`, or a note
+from the downloader such as "preparing fast downloader…"), `file` (`part 2/3`,
+`weights`, `projector`), `title`, `bytes`, `percent`, `speed` and `eta`. The
+CLI's download board prints the same fields of the same row, with one
+difference: it leaves out the status of a plain transfer, `Downloading`, which
+the card shows. Nothing here formats a byte count, a rate or a duration, picks
+a label for a phase, or shortens a title; a long title is cut by CSS, with the
+whole of it in the tooltip. The bar's width is the row's `percent`, as the
+CLI's bar is, and the bar is indeterminate when the row has none, which is
+when the download's size is not known.
 
-The phase label above the bar (`Downloading` / `Finalizing` / `Registering`)
-also covers `notice`: a transient, free-form setup note from the backend's
-`DownloadEvent::DownloadNotice` (e.g. "preparing fast downloader…" while the
-CLI/backend builds the fast downloader's first-run Python environment) shown
-verbatim in place of a fixed phase label, mirroring what the CLI shows on its
-own progress bar for the same event. It carries no byte progress; the next
-progress or status event overwrites it.
+Between two files of one download the row stays `active` and `downloading`,
+with the speed and the time remaining it last had, so the card stays up.
+While the model is finalized and registered the row is still `active`, with
+an empty `speed` and `eta`.
+
+The chip reads `+N queued`, where N is the number of rows in the snapshot's
+`waiting` list, and the popover's header counts the same rows. Both counts
+are the length of that list, worked out here. The popover lists those rows by `text.title`, with `text.file`
+(`3 parts`) where the row has one. Reorder sends the row's `position` plus or
+minus one, and remove sends the row's `id`, which takes every file of that
+download out of the queue.
 
 <!-- module-docs:end -->

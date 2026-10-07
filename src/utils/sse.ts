@@ -30,6 +30,8 @@ export interface SSEStreamOptions {
   signal?: AbortSignal;
   /** Last event ID (for resuming from a specific point) */
   lastEventId?: string;
+  /** Called once the server has accepted the stream, before its first message. */
+  onOpen?: () => void;
 }
 
 /**
@@ -70,7 +72,7 @@ export async function* createSSEStream(
   url: string,
   options: SSEStreamOptions = {}
 ): AsyncGenerator<SSEMessage, void, unknown> {
-  const { headers = {}, signal, lastEventId } = options;
+  const { headers = {}, signal, lastEventId, onOpen } = options;
 
   // Add Last-Event-ID header if resuming
   const fetchHeaders = new Headers(headers);
@@ -91,6 +93,8 @@ export async function* createSSEStream(
   if (!response.body) {
     throw new Error('SSE response has no body');
   }
+
+  onOpen?.();
 
   // Read the stream
   const reader = response.body.getReader();

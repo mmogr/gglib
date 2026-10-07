@@ -106,11 +106,7 @@ async fn download_recommended(
     Arc::clone(&ctx.downloads)
         .queue_smart(repo.clone(), Some(quant))
         .await?;
-    run_interactive_monitor(
-        Arc::clone(&ctx.downloads),
-        Arc::clone(&ctx.download_emitter),
-    )
-    .await?;
+    run_interactive_monitor(Arc::clone(&ctx.downloads), Arc::clone(&ctx.console)).await?;
 
     // The monitor reports its own failures and still returns `Ok`, so the
     // catalog — not its return value — is what says whether this worked.

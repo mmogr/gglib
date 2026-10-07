@@ -7,6 +7,7 @@ pub(crate) mod format;
 pub(crate) mod projector_choice;
 pub mod queue;
 pub(crate) mod rate;
+pub(crate) mod row;
 pub(crate) mod shard_info;
 pub(crate) mod throttle;
 pub(crate) mod types;
@@ -16,12 +17,16 @@ pub use completion::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, QueueRunSummary,
 };
 pub use errors::DownloadError;
-pub use events::{DownloadEvent, DownloadStatus, DownloadSummary};
+pub use events::DownloadEvent;
 pub use file_role::GgufFileRole;
-pub use format::{format_duration, format_rate};
+pub use format::{format_duration, format_rate, format_size};
 pub use projector_choice::choose_projector;
-pub use queue::{FailedDownload, QueueSnapshot, QueuedDownload};
+pub use queue::{DownloadOutcome, FINISHED_LIMIT, FinishedDownload, QueueSnapshot};
 pub use rate::RateEstimator;
+pub use row::{
+    DownloadPhase, DownloadRow, DownloadRowText, FilePlace, RowFacts, STATUS_DOWNLOADING,
+    download_title, row,
+};
 pub use shard_info::ShardInfo;
 pub use throttle::ProgressThrottle;
 pub use types::{DownloadId, Quantization};

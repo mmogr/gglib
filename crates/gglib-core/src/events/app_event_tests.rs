@@ -43,11 +43,25 @@ fn test_event_names() {
 /// the frontend listened for the wrong event names.
 #[test]
 fn download_event_names_are_stable() {
+    use crate::download::{QueueRunSummary, QueueSnapshot};
+
+    let summary = QueueRunSummary {
+        run_id: uuid::Uuid::nil(),
+        started_at_ms: 0,
+        completed_at_ms: 0,
+        total_attempts_downloaded: 0,
+        total_attempts_failed: 0,
+        total_attempts_cancelled: 0,
+        unique_models_downloaded: 0,
+        unique_models_failed: 0,
+        unique_models_cancelled: 0,
+        truncated: false,
+        items: Vec::new(),
+    };
     let cases = [
-        (DownloadEvent::started("id"), "download:started"),
         (
-            DownloadEvent::progress("id", 50, 100, Some(1024.0), Some(10.0)),
-            "download:progress",
+            DownloadEvent::queue_snapshot(QueueSnapshot::default()),
+            "download:queue_snapshot",
         ),
         (
             DownloadEvent::completed("id", None::<String>),
@@ -55,6 +69,10 @@ fn download_event_names_are_stable() {
         ),
         (DownloadEvent::failed("id", "error"), "download:failed"),
         (DownloadEvent::cancelled("id"), "download:cancelled"),
+        (
+            DownloadEvent::queue_run_complete(summary),
+            "download:queue_run_complete",
+        ),
     ];
 
     for (event, expected_name) in cases {

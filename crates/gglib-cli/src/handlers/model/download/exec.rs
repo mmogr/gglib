@@ -5,6 +5,8 @@
 //! The daemon owns the download and registers the model when it completes, so
 //! detaching this command does not interrupt anything.
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use gglib_download::cli_exec::list_quantizations;
 
@@ -28,12 +30,11 @@ pub(crate) struct DownloadArgs<'a> {
 
 /// Execute the download command.
 ///
-/// Queues `model_id` on the daemon and watches the queue until it drains.
+/// Queues `model_id` on the daemon and watches the queue until that download
+/// has ended.
 /// Ctrl-C detaches; the daemon keeps downloading and registers the model
 /// itself.
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
-    let _ = ctx;
-
     // --list-quants: show available quantizations and exit (uses cli_exec directly).
     if args.list_quants {
         list_quantizations(args.model_id, args.token.map(String::from)).await?;
@@ -48,5 +49,5 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
             quant: args.quantization.map(String::from),
         })
         .await?;
-    remote::monitor(&handle).await
+    remote::monitor(&handle, Arc::clone(&ctx.console), args.model_id).await
 }

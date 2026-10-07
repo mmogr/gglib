@@ -20,28 +20,55 @@ This module handles all download-related commands that interact with `HuggingFac
 │                    download Module                               │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  CLI → exec.rs ──queue_smart()──► DownloadManagerPort           │
-│              └───────────────────► interactive.rs (TUI monitor) │
-│                                        ↕  [a]/[q] hotkeys        │
-│                                   CliDownloadEventEmitter        │
-│                                   (indicatif MultiProgress,      │
-│                                    stderr, footer-pinned hint)   │
-│                                        ↕  console hook           │
-│                                   gglib_core::telemetry          │
-│                                   (tracing fmt layer, notices)   │
+│  model download → exec.rs ──► daemon queue ──► remote.rs         │
+│  gglib up ──► DownloadManagerPort ──► interactive.rs             │
+│                                          ↕  [a]/[q] hotkeys      │
+│        both read a QueueSnapshot every 250 ms, and hand it to    │
+│                                                                  │
+│        monitor.rs  QueueWatch::take     draw it; have they ended?│
+│                    MonitorState::step   the one rule for that    │
+│        board.rs    DownloadBoard::sync  one line per download    │
+│                          ↓                                       │
+│        crate::console::CliConsole                                │
+│        (indicatif MultiProgress, stderr, footer-pinned hint,     │
+│         console hook for gglib_core::telemetry)                  │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Flow:**
-1. User issues `gglib model download <repo>` command
-2. `exec.rs` queues it via `DownloadManagerPort::queue_smart` (same code path as the GUI)
-3. `interactive.rs` renders progress via `CliDownloadEventEmitter` (indicatif bars,
-   drawn to **stderr** — TTY detection and the `console::Term` used for hotkeys and
-   the `[a]` prompt check stderr too, so a redirected stdout doesn't silently disable
-   either).
-4. In TTY mode: `[a]` prompts for another model to add to the queue.
-   `[q]` (or `Esc` / `Ctrl-C`) is **two-step**:
+1. `gglib model download <repo>`: `exec.rs` queues the download on the gglib
+   daemon and `remote.rs` polls the daemon's queue. `gglib up` queues on this
+   process's own download manager and runs `interactive.rs`. Neither subscribes
+   to events: each reads the queue snapshot four times a second.
+2. `board.rs` draws the snapshot, one line per download, from the row's own
+   text (`DownloadRowText`), which is the text the GUI shows. The line leaves
+   out one word of it: the status of a plain transfer, `Downloading`
+   (`STATUS_DOWNLOADING`), whose numbers say as much. On a terminal a
+   row is a bar, `name · file [bar] numbers`, kept from the download's first
+   file to its last; the file reads `part 2/3`, `weights` or `projector`. The
+   bar's fill is the row's `percent`, as the GUI's is.
+   When **stderr** is not a terminal a row is a plain, undated line, printed
+   every two seconds. TTY detection and the `console::Term` used for hotkeys
+   and the `[a]` prompt check stderr too, so a redirected stdout doesn't
+   silently disable either.
+3. `monitor.rs` holds the one rule for when a monitor is done,
+   `MonitorState::step`. `remote.rs` and both loops of `interactive.rs` reach
+   it through `QueueWatch::take`, which draws the snapshot, takes the step and
+   prints the outcomes. A monitor goes on while a download of its own is a
+   row: running, between two of its files, or waiting. It exits on its own
+   outcome in the snapshot's finished list, which covers a failure before the
+   first poll. The daemon monitor counts the downloads of its repository as
+   its own, and once it has seen one as a row, only the outcomes of the rows
+   it saw: the daemon also lists how earlier downloads ended. The in-process
+   monitor counts every download.
+4. How each download ended is printed when its monitor exits that way. The
+   daemon monitor exits non-zero when one failed or was cancelled, and a model
+   the library refused is a failure. It also exits non-zero when its download
+   left the queue with no outcome recorded, as one removed while it waited
+   does. A forced quit of the in-process monitor prints no outcomes.
+5. In TTY mode, `interactive.rs`: `[a]` prompts for another model to add to
+   the queue. `[q]` (or `Esc` / `Ctrl-C`) is **two-step**:
    - First press → arms drain mode (hint becomes
      `Draining... press q again to force quit`); active downloads
      continue running until they finish naturally and the queue auto-
@@ -50,24 +77,23 @@ This module handles all download-related commands that interact with `HuggingFac
      and waits up to 5 s for in-flight Python helpers to actually
      finalize before returning.
 
-   The `[a]/[q]` hint bar is created eagerly and registered as the emitter's
-   *footer* (`CliDownloadEventEmitter::set_footer`); every download bar is
+   The `[a]/[q]` hint bar is created eagerly and registered as the console's
+   *footer* (`CliConsole::set_footer`); every download bar is
    inserted above it via `MultiProgress::insert_before`, so it stays pinned
    to the bottom without ever being removed and re-added.
-5. Lifecycle states surfaced on the bar:
-   `Downloading` → `Finalizing` (gathering HF metadata) →
-   `Registering` (writing model row) → terminal `Completed` /
-   `Failed` / `Cancelled`. The `Finalizing` / `Registering` labels
-   keep the UI from looking frozen at 100 %. A first-run-only phase
-   (`DownloadEvent::DownloadNotice`, e.g. "preparing fast downloader…")
-   covers the tens of seconds the fast downloader's Python venv can take
-   to build, before any bytes exist to show progress for.
-6. Each file is counted once, whichever transport moves it: the bytes on
+6. What a row says it is doing:
+   `Downloading` → `Finalizing…` (gathering HF metadata) →
+   `Registering…` (writing model row). The last two keep the line from
+   looking frozen at 100 %. A note from the transfer (e.g.
+   "preparing fast downloader…") stands in for the status until bytes
+   arrive, covering the tens of seconds the fast downloader's Python venv
+   can take to build.
+7. Each file is counted once, whichever transport moves it: the bytes on
    disk fill the bar. See
    [`gglib-download/src/executor/progress.rs`](../../../../../gglib-download/src/executor/progress.rs).
-7. Model registration on completion is handled by the download manager
+8. Model registration on completion is handled by the download manager
    (via `ModelRegistrarPort`).
-8. `CliDownloadEventEmitter` also installs itself as the process-wide
+9. `CliConsole` installs itself as the process-wide
    console hook (`gglib_core::telemetry::set_console_hook`): any `tracing`
    log line emitted while bars are live is routed through
    `MultiProgress::println` instead of a raw write, so it can't desync the
@@ -110,10 +136,11 @@ gglib model browse popular --limit 10
 gglib model browse recent --size 7B
 ```
 
-### `download` (exec + interactive)
-Download a model from `HuggingFace` Hub with interactive queue support.
+### `download` (exec + remote)
+Download a model from `HuggingFace` Hub, on the gglib daemon.
 
-**Module:** `exec.rs` (orchestrator), `interactive.rs` (TUI monitor)
+**Module:** `exec.rs` (orchestrator), `remote.rs` (daemon queue monitor);
+`interactive.rs` is the in-process monitor `gglib up` uses
 
 **Options:**
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "`Q4_K_M`")
@@ -121,19 +148,19 @@ Download a model from `HuggingFace` Hub with interactive queue support.
 - `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
 - `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
 
-**Interactive mode (TTY):**
+**Interactive mode (TTY, the in-process monitor):**
 - `[a]` — add another model to the queue while a download is running
 - `[q]` / Ctrl-C — cancel all pending downloads and exit cleanly
 - Falls back to a plain polling monitor when **stderr** is not a TTY (CI, pipes) —
   stderr, not stdout, since that's where the bars themselves draw
 
 **Flow:**
-1. Queue initial model via `DownloadManagerPort::queue_smart` (same path as GUI)
-2. Enter the interactive monitor loop
-3. Download manager handles progress events → `CliDownloadEventEmitter` renders indicatif bars
+1. Queue the model on the daemon (`POST /api/models/downloads/queue`, the route the GUI uses)
+2. Poll the daemon's queue snapshot and draw it on the download board
+3. Exit when the model's download has ended, printing how
 4. On completion, model is registered automatically (via `ModelRegistrarPort`)
 
-A repository that has projectors gets one fetched with the model, and the model is linked to it: the projector of the download's own quantization, else the `F16` one, else the first by name. There is no flag to leave it out; `gglib model update <model> --no-projector` unlinks it afterwards. The queue monitor labels its file `[projector]`.
+A repository that has projectors gets one fetched with the model, and the model is linked to it: the projector of the download's own quantization, else the `F16` one, else the first by name. There is no flag to leave it out; `gglib model update <model> --no-projector` unlinks it afterwards. The queue monitor names its file `projector`.
 
 **Example:**
 ```bash

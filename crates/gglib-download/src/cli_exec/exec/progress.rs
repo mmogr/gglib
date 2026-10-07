@@ -2,10 +2,10 @@
 //!
 //! Pure sync, presentation-only module — no knowledge of Python or protocol.
 //! Used by `model upgrade`, which downloads without the download manager and
-//! so has nobody else to draw its files. The queued path renders through
-//! [`crate::cli_emitter::CliDownloadEventEmitter`] instead.
+//! so has nobody else to draw its files. The queued path is drawn by the
+//! CLI's download board, from the queue snapshot, instead.
 //!
-//! Both renderers get their speed and ETA from [`Meter`] and format them with
+//! Both get their speed and ETA from [`Meter`] and format them with
 //! the shared [`format_rate`] / [`format_duration`]. This module owns no rate
 //! math of its own — an earlier private exponentially-weighted average here
 //! was one of three competing implementations that disagreed with each other.
@@ -43,7 +43,7 @@ impl CliProgressPrinter {
     ///
     /// Checks stderr, not stdout: the bar itself draws to stderr (see
     /// [`FancyProgress::new`]), matching the queued-download path's
-    /// `CliDownloadEventEmitter`, which uses indicatif's stderr default. A
+    /// board, which uses indicatif's stderr default. A
     /// redirected stdout (`gglib model upgrade ... > file.txt`) should not
     /// silently downgrade the bar when stderr is still an attended terminal.
     #[must_use]
@@ -112,8 +112,8 @@ struct FancyProgress {
 
 impl FancyProgress {
     fn new() -> Self {
-        // Stderr, matching CliDownloadEventEmitter's MultiProgress (indicatif's
-        // stderr default) — see the module doc on `CliProgressPrinter::new`.
+        // Stderr, matching the CLI's download board (indicatif's stderr
+        // default) — see the module doc on `CliProgressPrinter::new`.
         let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
         bar.set_style(Self::spinner_style());
         bar.set_message("Preparing download".to_string());

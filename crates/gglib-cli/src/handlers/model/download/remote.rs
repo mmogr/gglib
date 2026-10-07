@@ -1,34 +1,46 @@
 //! Progress monitor for downloads running on the gglib daemon.
 //!
 //! Presentation only: the queue snapshot arrives from
-//! [`DaemonHandle::download_queue`], and this module turns it into progress
-//! bars. The download itself belongs to the daemon — Ctrl-C here (or a closed
-//! terminal) detaches the monitor and the download keeps going, which is the
-//! point of daemon ownership.
+//! [`DaemonHandle::download_queue`], and this module hands it to the download
+//! board. The download itself belongs to the daemon — Ctrl-C here (or a
+//! closed terminal) detaches the monitor and the download keeps going, which
+//! is the point of daemon ownership.
 
-use std::collections::HashMap;
+use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use gglib_core::download::{DownloadStatus, QueuedDownload};
-use gglib_download::{rate_suffix, total_bytes_key};
+use gglib_core::download::QueueSnapshot;
 
+use crate::console::CliConsole;
 use crate::daemon_client::DaemonHandle;
+
+use super::monitor::{QueueWatch, model_result};
 
 /// Poll interval for queue snapshots. Matches the daemon's own progress
 /// sampling tick (250ms), so the bars are at most one tick behind without
 /// hammering the loopback API.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-/// Watch the daemon's download queue until it drains, drawing progress bars.
+/// Watch the daemon's download queue until the downloads of `model_id` have
+/// ended, drawing the queue on `console`.
 ///
-/// Exits successfully once at least one item has been observed and the queue
-/// is empty again; a failure recorded for anything observed is reported as
-/// an error. Ctrl-C detaches — the daemon keeps downloading.
-pub(super) async fn monitor(handle: &DaemonHandle) -> Result<()> {
-    let watch = watch_queue(handle);
+/// Exits successfully when they completed. It is an error when one failed or
+/// was cancelled, and when they left the queue with no outcome recorded.
+/// Ctrl-C detaches — the daemon keeps downloading.
+pub(super) async fn monitor(
+    handle: &DaemonHandle,
+    console: Arc<CliConsole>,
+    model_id: &str,
+) -> Result<()> {
+    let watch = watch_model(console, model_id, POLL_INTERVAL, || async {
+        handle
+            .download_queue()
+            .await
+            .context("polling the daemon download queue")
+    });
     tokio::select! {
         result = watch => result,
         _ = tokio::signal::ctrl_c() => {
@@ -40,166 +52,32 @@ pub(super) async fn monitor(handle: &DaemonHandle) -> Result<()> {
     }
 }
 
-#[allow(
-    clippy::literal_string_with_formatting_args,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-async fn watch_queue(handle: &DaemonHandle) -> Result<()> {
-    let multi = MultiProgress::new();
-    // No `{bytes_per_sec}`: that's indicatif's own estimate, derived from our
-    // `set_position` calls, and it disagrees with the rate the daemon's
-    // estimator computed for the same transfer (see the BAR_TEMPLATE comment
-    // in gglib_download::cli_emitter). The daemon's rate arrives on the
-    // snapshot and is rendered into the message instead.
-    //
-    // `{wide_msg}` gives the message the rest of the line. A fixed width cut
-    // a long model name off before its shard, rate and ETA.
-    let style = ProgressStyle::with_template("  {wide_msg} [{bar:30}] {bytes}/{total_bytes}")
-        .unwrap_or_else(|_| ProgressStyle::default_bar())
-        .progress_chars("=> ")
-        .with_key("total_bytes", total_bytes_key);
-
-    let mut bars: HashMap<String, ProgressBar> = HashMap::new();
-    let mut seen_items = false;
-    let mut observed: Vec<String> = Vec::new();
+/// Read the queue with `poll`, once and then again after each wait of
+/// `every`, until the downloads of `model_id` have ended. The result is
+/// [`model_result`] of how they ended; a read that fails ends the watch with
+/// its error.
+async fn watch_model<F, Fut>(
+    console: Arc<CliConsole>,
+    model_id: &str,
+    every: Duration,
+    mut poll: F,
+) -> Result<()>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<QueueSnapshot>>,
+{
+    let mut watch = QueueWatch::model(console, model_id);
 
     loop {
-        let snapshot = handle
-            .download_queue()
-            .await
-            .context("polling the daemon download queue")?;
-
-        // One item per download, so one bar per id: a model's waiting files
-        // are not items of their own to redraw its bar as queued.
-        for item in &snapshot.items {
-            seen_items = true;
-            if !observed.contains(&item.id) {
-                observed.push(item.id.clone());
-            }
-            let bar = bars.entry(item.id.clone()).or_insert_with(|| {
-                // `no_length()`, never `new(0)`: indicatif renders an explicit
-                // length of 0 as 100% full. Unknown totals draw an empty bar
-                // and `—` (via `total_bytes_key`) until the first snapshot
-                // carries a real total.
-                let bar = multi.add(ProgressBar::no_length());
-                bar.set_style(style.clone());
-                bar
-            });
-            if item.total_bytes > 0 && bar.length() != Some(item.total_bytes) {
-                bar.set_length(item.total_bytes);
-            }
-            bar.set_position(item.downloaded_bytes);
-            bar.set_message(item_message(item));
+        let snapshot = poll().await?;
+        if let Some(ended) = watch.take(&snapshot) {
+            return model_result(model_id, &ended).map_err(anyhow::Error::msg);
         }
 
-        // Items that left the queue are finished (or failed — checked below).
-        let live: Vec<String> = snapshot.items.iter().map(|i| i.id.clone()).collect();
-        bars.retain(|id, bar| {
-            if live.contains(id) {
-                true
-            } else {
-                bar.finish_and_clear();
-                false
-            }
-        });
-
-        // A failure recorded for something this session observed is this
-        // session's failure to report.
-        if let Some(failure) = snapshot
-            .recent_failures
-            .iter()
-            .find(|f| observed.contains(&f.id))
-            && seen_items
-            && snapshot.items.is_empty()
-        {
-            anyhow::bail!(
-                "download failed: {} \u{2014} {}",
-                failure.display_name,
-                failure.error
-            );
-        }
-
-        if seen_items && snapshot.items.is_empty() {
-            eprintln!("  \u{2713} download complete \u{2014} model registered by the daemon");
-            return Ok(());
-        }
-
-        tokio::time::sleep(POLL_INTERVAL).await;
+        tokio::time::sleep(every).await;
     }
-}
-
-/// Label for a queue item: name, shard position, and — while downloading —
-/// the rate and ETA the daemon's estimator computed. A projector is not a
-/// shard and is labeled as what it is.
-fn item_message(item: &QueuedDownload) -> String {
-    if matches!(item.status, DownloadStatus::Queued) {
-        return format!("{} (queued)", item.display_name);
-    }
-
-    let shard = item.shard_info.as_ref().map_or_else(String::new, |shard| {
-        if shard.role.is_projector() {
-            " [projector]".to_string()
-        } else {
-            format!(" [shard {}/{}]", shard.shard_index + 1, shard.total_shards)
-        }
-    });
-
-    format!(
-        "{}{} {}",
-        item.display_name,
-        shard,
-        rate_suffix(item.speed_bps, item.eta_seconds)
-    )
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use gglib_core::download::{GgufFileRole, ShardInfo};
-
-    fn item(status: DownloadStatus) -> QueuedDownload {
-        QueuedDownload::new("owner/repo:Q8_0", "owner/repo", "owner/repo:Q8_0", 1, 0)
-            .with_status(status)
-    }
-
-    #[test]
-    fn queued_items_are_labeled_queued() {
-        let msg = item_message(&item(DownloadStatus::Queued));
-        assert_eq!(msg, "owner/repo:Q8_0 (queued)");
-    }
-
-    #[test]
-    fn downloading_items_render_placeholder_rate_during_warmup() {
-        // speed/eta are None until the daemon's estimator warms up — the
-        // message must show a placeholder, not 0 B/s (reads as stalled).
-        let msg = item_message(&item(DownloadStatus::Downloading));
-        assert!(msg.starts_with("owner/repo:Q8_0 "));
-        assert!(
-            !msg.contains("0 B/s"),
-            "warmup must not render a zero rate: {msg}"
-        );
-    }
-
-    #[test]
-    fn downloading_items_render_manager_rate_and_shard() {
-        let mut item = item(DownloadStatus::Downloading)
-            .with_shard_info("group".into(), ShardInfo::new(0, 3, "shard-0.gguf"));
-        item.update_progress(500, 1_000, Some(1_048_576.0), Some(90.0));
-
-        let msg = item_message(&item);
-        assert!(msg.contains("[shard 1/3]"), "{msg}");
-        assert!(msg.contains("MB/s") || msg.contains("MiB/s"), "{msg}");
-        assert!(msg.contains("ETA"), "{msg}");
-    }
-
-    /// The projector follows the three shards. It is not "shard 4/3".
-    #[test]
-    fn a_projector_is_labeled_as_a_projector_not_as_a_shard() {
-        let projector = ShardInfo::new(3, 3, "mmproj-F16.gguf").with_role(GgufFileRole::Projector);
-        let item = item(DownloadStatus::Downloading).with_shard_info("group".into(), projector);
-
-        let msg = item_message(&item);
-        assert!(msg.contains("[projector]"), "{msg}");
-        assert!(!msg.contains("shard"), "{msg}");
-    }
-}
+#[path = "remote_tests.rs"]
+mod tests;

@@ -1,13 +1,11 @@
 //! Tests for which download the manager reports as running, and what the
 //! queue does around it.
 
-use std::path::Path;
-
-use gglib_core::download::{DownloadStatus, Quantization};
+use gglib_core::download::DownloadPhase;
 use gglib_core::ports::NoopEmitter;
 
 use super::super::duplicate_guard_tests::NoRegistrar;
-use super::super::worker::CompletedJob;
+use super::super::test_support::{End, run_next};
 use super::super::*;
 use crate::test_hub::RepoHub;
 
@@ -33,45 +31,23 @@ async fn queue(manager: &DownloadManagerImpl, repo: &str) -> DownloadId {
     queued.root_id
 }
 
-/// Take the next file off the queue and finish it as the worker reports it:
-/// on disk, or failed.
+/// Run the next file off the queue to its end: on disk, or failed.
 async fn finish_next(manager: &DownloadManagerImpl, on_disk: bool) {
-    let item = manager.queue.write().await.dequeue().unwrap();
-    let name = item.shard_info.as_ref().unwrap().filename.clone();
-    let path = Path::new("models").join(&name);
-    let result = if on_disk {
-        Ok(CompletedJob {
-            primary_path: path.clone(),
-            all_paths: vec![path],
-            repo_id: item.id.model_id().to_string(),
-            commit_sha: "abc123".to_string(),
-            quantization: Quantization::Q8_0,
-            files: vec![name],
-        })
-    } else {
-        Err(DownloadError::network("connection reset"))
-    };
-    manager.handle_job_result(&item, result).await;
+    let end = if on_disk { End::OnDisk } else { End::Failed };
+    run_next(manager, end).await;
 }
 
-/// Each row as its repository, status and position.
-async fn rows(manager: &DownloadManagerImpl) -> Vec<(String, DownloadStatus, u32)> {
+/// Each row as its repository, phase and position.
+async fn rows(manager: &DownloadManagerImpl) -> Vec<(String, DownloadPhase, u32)> {
     let snapshot = manager.get_queue_snapshot().await.unwrap();
     snapshot
-        .items
-        .into_iter()
-        .map(|row| (row.model_id, row.status, row.position))
+        .rows()
+        .map(|row| (row.model_id.clone(), row.phase, row.position))
         .collect()
 }
 
-fn row(repo: &str, status: DownloadStatus, position: u32) -> (String, DownloadStatus, u32) {
-    (repo.to_string(), status, position)
-}
-
-/// What both of the in-process monitors exit on: nothing active and nothing
-/// pending (`is_queue_finished` in the CLI's `interactive.rs`).
-const fn the_monitor_would_exit(snapshot: &QueueSnapshot) -> bool {
-    snapshot.active_count == 0 && snapshot.pending_count == 0
+fn row(repo: &str, phase: DownloadPhase, position: u32) -> (String, DownloadPhase, u32) {
+    (repo.to_string(), phase, position)
 }
 
 #[tokio::test]
@@ -81,10 +57,10 @@ async fn a_download_that_has_not_started_is_waiting() {
 
     let snapshot = manager.get_queue_snapshot().await.unwrap();
 
-    assert_eq!((snapshot.active_count, snapshot.pending_count), (0, 1));
-    assert_eq!(snapshot.items.len(), 1);
-    assert_eq!(snapshot.items[0].status, DownloadStatus::Queued);
-    assert_eq!(snapshot.items[0].position, 1);
+    assert!(snapshot.active.is_none());
+    assert_eq!(snapshot.waiting.len(), 1);
+    assert_eq!(snapshot.waiting[0].phase, DownloadPhase::Queued);
+    assert_eq!(snapshot.waiting[0].position, 1);
 }
 
 /// The weights are in and the projector has not started: nothing is in
@@ -99,23 +75,38 @@ async fn a_download_between_its_files_stays_active() {
 
     let snapshot = manager.get_queue_snapshot().await.unwrap();
 
-    assert_eq!((snapshot.active_count, snapshot.pending_count), (1, 1));
-    assert_eq!(snapshot.items.len(), 2);
-    let running = &snapshot.items[0];
+    let running = snapshot.active.as_ref().expect("a running download");
     assert_eq!(running.id, "owner/a:Q8_0");
     assert_eq!(
-        (running.status, running.position),
-        (DownloadStatus::Downloading, 1)
+        (running.phase, running.position),
+        (DownloadPhase::Downloading, 1)
     );
+    assert_eq!(running.text.file.as_deref(), Some("projector"), "its next");
+    assert_eq!(snapshot.waiting.len(), 1);
+    assert_eq!(snapshot.waiting[0].id, "owner/b:Q8_0");
+    assert_eq!(snapshot.waiting[0].position, 2);
+}
+
+/// Between two files the row is read from the download's meter, which has
+/// the bytes of the file that is in: the bar stays where that file left it.
+/// The row is still downloading, and names the file that is next.
+#[tokio::test]
+async fn the_gap_row_is_active_at_the_meter_reading() {
+    let manager = manager();
+    queue(&manager, "owner/a").await;
+    finish_next(&manager, true).await;
+
+    let snapshot = manager.get_queue_snapshot().await.unwrap();
+
+    let running = snapshot.active.expect("a running download");
     assert_eq!(
         (running.downloaded_bytes, running.total_bytes),
-        (1_000, 1_300),
+        (1_000, Some(1_300)),
         "the weights' bytes stay on the bar"
     );
-    let next = running.shard_info.as_ref().unwrap();
-    assert_eq!(next.filename, "mmproj-F16.gguf");
-    assert_eq!(snapshot.items[1].id, "owner/b:Q8_0");
-    assert_eq!(snapshot.items[1].position, 2);
+    assert_eq!(running.text.bytes, "1000 B / 1.27 KiB");
+    assert_eq!(running.phase, DownloadPhase::Downloading);
+    assert_eq!(running.text.file.as_deref(), Some("projector"));
 }
 
 #[tokio::test]
@@ -126,8 +117,8 @@ async fn the_monitor_does_not_exit_between_files() {
 
     let snapshot = manager.get_queue_snapshot().await.unwrap();
 
-    assert_eq!(snapshot.active_count, 1);
-    assert!(!the_monitor_would_exit(&snapshot));
+    assert!(snapshot.active.is_some());
+    assert!(!snapshot.is_idle(), "idle is what the monitors exit on");
 }
 
 /// The weights failed and the projector then arrived, which leaves the
@@ -140,7 +131,7 @@ async fn a_download_with_nothing_left_waiting_is_not_active() {
     finish_next(&manager, false).await;
     assert_eq!(
         rows(&manager).await,
-        [row("owner/a", DownloadStatus::Queued, 1)],
+        [row("owner/a", DownloadPhase::Queued, 1)],
         "after a failure the file left over is waiting, not running"
     );
     finish_next(&manager, true).await;
@@ -148,9 +139,11 @@ async fn a_download_with_nothing_left_waiting_is_not_active() {
 
     let snapshot = manager.get_queue_snapshot().await.unwrap();
 
-    assert!(snapshot.items.is_empty(), "{:?}", snapshot.items);
-    assert_eq!((snapshot.active_count, snapshot.pending_count), (0, 0));
-    assert!(the_monitor_would_exit(&snapshot));
+    assert!(
+        snapshot.is_idle(),
+        "{:?}",
+        snapshot.rows().collect::<Vec<_>>()
+    );
 }
 
 /// Nothing is in `active`, and the head of the queue is the running
@@ -169,9 +162,9 @@ async fn reorder_in_the_gap_keeps_the_running_download_first() {
     assert_eq!(
         rows(&manager).await,
         [
-            row("owner/a", DownloadStatus::Downloading, 1),
-            row("owner/c", DownloadStatus::Queued, 2),
-            row("owner/b", DownloadStatus::Queued, 3),
+            row("owner/a", DownloadPhase::Downloading, 1),
+            row("owner/c", DownloadPhase::Queued, 2),
+            row("owner/b", DownloadPhase::Queued, 3),
         ]
     );
 
@@ -182,9 +175,9 @@ async fn reorder_in_the_gap_keeps_the_running_download_first() {
     assert_eq!(
         rows(&manager).await,
         [
-            row("owner/a", DownloadStatus::Downloading, 1),
-            row("owner/b", DownloadStatus::Queued, 2),
-            row("owner/c", DownloadStatus::Queued, 3),
+            row("owner/a", DownloadPhase::Downloading, 1),
+            row("owner/b", DownloadPhase::Queued, 2),
+            row("owner/c", DownloadPhase::Queued, 3),
         ]
     );
     let head = manager.queue.write().await.dequeue().unwrap();
@@ -204,8 +197,8 @@ async fn a_download_queued_in_the_gap_is_second() {
     assert_eq!(
         rows(&manager).await,
         [
-            row("owner/a", DownloadStatus::Downloading, 1),
-            row("owner/b", DownloadStatus::Queued, 2),
+            row("owner/a", DownloadPhase::Downloading, 1),
+            row("owner/b", DownloadPhase::Queued, 2),
         ]
     );
 }
@@ -277,7 +270,7 @@ async fn a_snapshot_holds_the_queue_while_it_reads_active() {
 
     assert!(manager.queue.try_write().is_err(), "the queue is not held");
     drop(active);
-    assert_eq!(read.await.unwrap().pending_count, 1);
+    assert_eq!(read.await.unwrap().waiting.len(), 1);
 }
 
 /// The snapshot `next_job` emits reads the queue, so the guard must be gone
@@ -295,6 +288,6 @@ async fn next_job_returns_after_publishing() {
     assert_eq!(item.id.model_id(), "owner/a");
     assert_eq!(
         rows(&manager).await,
-        [row("owner/a", DownloadStatus::Downloading, 1)]
+        [row("owner/a", DownloadPhase::Downloading, 1)]
     );
 }

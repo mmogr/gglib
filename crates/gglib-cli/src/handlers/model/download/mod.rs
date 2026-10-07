@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+mod board;
 mod browse;
 mod check_updates;
 mod exec;
@@ -8,6 +9,7 @@ mod exec;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod interactive;
+mod monitor;
 mod remote;
 mod search;
 mod update_model;

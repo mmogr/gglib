@@ -460,15 +460,14 @@ export function getHealthDisplay(health?: ServerHealthStatus): { tone: HealthTon
 // ============================================================================
 
 export type {
-  DownloadStatus,
-  ShardInfo,
-  DownloadQueueItem,
-  DownloadQueueStatus,
+  QueueSnapshot,
+  DownloadRow,
+  FinishedDownload,
   DownloadCompletionInfo,
+  DownloadFailureInfo,
 } from '../services/transport/types/downloads';
 
 export type {
-  DownloadSummary,
   DownloadEvent,
 } from '../services/transport/types/events';
 

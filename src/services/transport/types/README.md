@@ -17,7 +17,7 @@ All TypeScript types and DTOs forming the contract between the frontend and back
 | `models.ts` | Model shapes |
 | `chat.ts` | `ConversationSummary`, `ChatMessage`, `SaveMessageParams` |
 | `servers.ts` | `ServeConfig`, `ServerInfo`, `ServeResponse` |
-| `downloads.ts` | Download queue types |
+| `downloads.ts` | The download queue as served: `QueueSnapshot`, `DownloadRow` and its `DownloadRowText`, `FinishedDownload` (all re-exported bindings); the queue request and response; what a finished download hands the toast |
 | `events.ts` | `ServerWireEvent`, `DownloadEvent`, `AppEventMap` |
 | `settings.ts` | Application settings shapes |
 | `mcp.ts` | MCP server and tool shapes |
