@@ -45,7 +45,7 @@ use crate::quant_selector::QuantizationSelector;
 use crate::queue::{DownloadQueue, QueuedItem};
 use crate::resolver::HfQuantizationResolver;
 
-use meter::GroupMeter;
+pub(crate) use meter::GroupMeter;
 use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
 
 pub(crate) use paths::DownloadDestination;
@@ -56,7 +56,7 @@ pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 ///
 /// Speed and ETA smoothing live in the meter, not here; this is purely
 /// the display cadence. The GUI does not re-throttle on top of it.
-const PROGRESS_TICK: Duration = Duration::from_millis(250);
+pub(crate) const PROGRESS_TICK: Duration = Duration::from_millis(250);
 
 /// Wrap a download event for the application-wide emitter.
 ///
@@ -525,13 +525,8 @@ impl DownloadManagerImpl {
         }
         // The first file of a download starts its meter; a later file finds
         // the one its earlier files fed.
-        let place = item.shard_info.as_ref();
         self.meters().entry(item.id.clone()).or_insert_with(|| {
-            GroupMeter::new(
-                place.and_then(|place| place.group_total_bytes),
-                place.is_none_or(ShardInfo::is_alone),
-                std::time::Instant::now(),
-            )
+            GroupMeter::for_group(item.shard_info.as_ref(), std::time::Instant::now())
         });
         drop(queue);
 

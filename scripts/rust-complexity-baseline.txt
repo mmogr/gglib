@@ -7,7 +7,7 @@ crates/gglib-app-services/src/benchmark/compare.rs 374
 crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1355
 crates/gglib-app-services/src/mcp.rs 397
-crates/gglib-app-services/src/models.rs 573
+crates/gglib-app-services/src/models.rs 460
 crates/gglib-app-services/src/models_tests.rs 876
 crates/gglib-app-services/src/proxy.rs 445
 crates/gglib-app-services/src/sampling_explain.rs 454
@@ -80,13 +80,12 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 348
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 564
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1053
 crates/gglib-db/src/setup.rs 748
-crates/gglib-download/src/cli_exec/exec/progress.rs 330
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 379
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1624
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 350
 crates/gglib-download/src/executor/native.rs 579
 crates/gglib-download/src/executor/native_tests.rs 859
-crates/gglib-download/src/manager/mod.rs 1199
+crates/gglib-download/src/manager/mod.rs 1194
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1088
 crates/gglib-gguf/src/capabilities/template_probe.rs 501

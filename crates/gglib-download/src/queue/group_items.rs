@@ -12,15 +12,33 @@ use super::usize_to_u32_saturating;
 /// One queue item per file of a download group, in the order given: the
 /// weights, then the projector fetched with them.
 ///
-/// Each item carries its place in the group. Shards are numbered among the
-/// weights alone, so a projector never raises the shard total; the group's
-/// size covers every file, so progress runs over the whole group.
+/// Each item carries its place in the group, as [`group_files`] gives it.
 pub(super) fn group_items(
     id: &DownloadId,
     completion_key: &CompletionKey,
     files: &[ResolvedFile],
 ) -> Vec<QueuedItem> {
     let group_id = ShardGroupId::generate(id);
+    group_files(files)
+        .into_iter()
+        .map(|shard_info| {
+            QueuedItem::new_shard(
+                id.clone(),
+                group_id.clone(),
+                shard_info,
+                completion_key.clone(),
+            )
+        })
+        .collect()
+}
+
+/// The place of each of `files` in the group they make, in the order given.
+///
+/// This is the one place a group's files are numbered and sized, for the
+/// queue and for a download fetched without it. Shards are numbered among
+/// the weights alone, so a projector never raises the shard total; the
+/// group's size covers every file, so progress runs over the whole group.
+pub(crate) fn group_files(files: &[ResolvedFile]) -> Vec<ShardInfo> {
     let total_shards =
         usize_to_u32_saturating(files.iter().filter(|f| !f.role.is_projector()).count());
 
@@ -35,19 +53,13 @@ pub(super) fn group_items(
         .enumerate()
         .map(|(idx, file)| {
             let index = usize_to_u32_saturating(idx);
-            let shard_info = known_size(file.size)
+            known_size(file.size)
                 .map_or_else(
                     || ShardInfo::new(index, total_shards, &file.path),
                     |size| ShardInfo::with_size(index, total_shards, &file.path, size),
                 )
                 .with_role(file.role)
-                .in_group(group_total, has_projector);
-            QueuedItem::new_shard(
-                id.clone(),
-                group_id.clone(),
-                shard_info,
-                completion_key.clone(),
-            )
+                .in_group(group_total, has_projector)
         })
         .collect()
 }

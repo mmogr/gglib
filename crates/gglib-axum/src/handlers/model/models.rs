@@ -209,11 +209,14 @@ pub(crate) async fn check_upgrade(
 
 /// Re-download at the latest `HuggingFace` revision and rewrite the row —
 /// `gglib model upgrade`. Blocking for the download's duration, like the CLI.
+/// No progress is reported for the download: it is on no queue snapshot, and
+/// its row is handed to nobody. A client gets the reply, and the
+/// `model_updated` event sent when the model's row is rewritten.
 pub(crate) async fn apply_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<gglib_app_services::types::UpgradeOutcome>, HttpError> {
-    Ok(Json(state.models.apply_upgrade(id).await?))
+    Ok(Json(state.models.apply_upgrade(id, None).await?))
 }
 
 pub(crate) async fn set_capabilities(

@@ -67,6 +67,15 @@ impl CliConsole {
         ))
     }
 
+    /// A console whose bars are live, drawn on a terminal nobody sees, and
+    /// which installs no hook, for a test of what is drawn.
+    #[cfg(test)]
+    pub(crate) fn unseen() -> Self {
+        Self::over(MultiProgress::with_draw_target(
+            indicatif::ProgressDrawTarget::term_like(Box::new(UnseenTerm)),
+        ))
+    }
+
     fn over(multi_progress: MultiProgress) -> Self {
         Self {
             multi_progress: Arc::new(multi_progress),
@@ -140,9 +149,50 @@ fn print_through(multi_progress: &MultiProgress, line: &str) {
     }
 }
 
+/// A terminal 80 columns wide that keeps nothing written to it.
+#[cfg(test)]
+#[derive(Debug)]
+struct UnseenTerm;
+
+#[cfg(test)]
+impl indicatif::TermLike for UnseenTerm {
+    fn width(&self) -> u16 {
+        80
+    }
+    fn move_cursor_up(&self, _: usize) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn move_cursor_down(&self, _: usize) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn move_cursor_right(&self, _: usize) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn move_cursor_left(&self, _: usize) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn write_line(&self, _: &str) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn write_str(&self, _: &str) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn clear_line(&self) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn flush(&self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unseen_console_draws_bars() {
+        assert!(CliConsole::unseen().draws_bars());
+    }
 
     /// A footer and then a bar must not panic or lose the bar — the actual
     /// bottom-pinned ordering is `MultiProgress::insert_before`'s contract

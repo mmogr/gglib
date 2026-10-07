@@ -2534,7 +2534,6 @@ dependencies = [
  "gglib-core",
  "gglib-hf",
  "indexmap 2.14.2",
- "indicatif",
  "mockall",
  "reqwest",
  "serde",

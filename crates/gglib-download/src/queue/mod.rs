@@ -1,5 +1,5 @@
 #![doc = include_str!("README.md")]
-mod group_items;
+pub(crate) mod group_items;
 mod rows;
 mod shard_group;
 mod types;
@@ -12,7 +12,7 @@ use gglib_core::download::{
 };
 use gglib_core::ports::ResolvedFile;
 
-pub(crate) use rows::{Reading, Running};
+pub(crate) use rows::{Reading, Running, running_row};
 pub(crate) use shard_group::ShardGroupId;
 pub(crate) use types::QueuedItem;
 

@@ -6,10 +6,13 @@
 //! row is a plain line, printed again every two seconds.
 //!
 //! The board draws whatever snapshot it is handed: the daemon's, polled over
-//! HTTP, or this process's own download manager's.
+//! HTTP, or this process's own download manager's. A download fetched
+//! without a queue is drawn here too, by [`SoloBoard`], from the row it is
+//! handed.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::future::Future;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -17,6 +20,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use gglib_core::download::{
     DownloadOutcome, DownloadRow, FinishedDownload, QueueSnapshot, STATUS_DOWNLOADING,
 };
+
+use gglib_download::cli_exec::RowCallback;
 
 use crate::console::CliConsole;
 
@@ -138,6 +143,14 @@ impl DownloadBoard {
         }
     }
 
+    /// Show `row` and no other, as the queue whose running download it is.
+    fn show(&mut self, row: &DownloadRow) {
+        self.sync(&QueueSnapshot {
+            active: Some(row.clone()),
+            ..QueueSnapshot::default()
+        });
+    }
+
     /// Keep one bar per row, keyed by the row's id: a download keeps its bar
     /// from its first file to its last.
     fn sync_bars(&mut self, snapshot: &QueueSnapshot) {
@@ -177,6 +190,49 @@ impl DownloadBoard {
         for ended in ended {
             self.console.println(&outcome_line(ended));
         }
+    }
+}
+
+/// The board of one download that this process fetches without a queue,
+/// such as `gglib model upgrade`'s. Its row is made where the download is
+/// fetched, and drawn here as a queue's is.
+pub(crate) struct SoloBoard(Arc<Mutex<DownloadBoard>>);
+
+impl SoloBoard {
+    /// A board on `console`, with nothing on it yet.
+    pub(crate) fn new(console: Arc<CliConsole>) -> Self {
+        Self(Arc::new(Mutex::new(DownloadBoard::new(console))))
+    }
+
+    /// Run `fetch` with a sink that draws each row it is handed, and take
+    /// the download's line off the screen once `fetch` is over, whatever it
+    /// came to.
+    pub(crate) async fn during<T, Fut>(&self, fetch: impl FnOnce(RowCallback) -> Fut) -> T
+    where
+        Fut: Future<Output = T>,
+    {
+        let ended = fetch(self.rows()).await;
+        self.clear();
+        ended
+    }
+
+    /// A sink that draws each row it is handed.
+    fn rows(&self) -> RowCallback {
+        let board = Arc::clone(&self.0);
+        Arc::new(move |row| {
+            board
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .show(row);
+        })
+    }
+
+    /// Take the download's line off the screen.
+    fn clear(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 }
 

@@ -193,3 +193,32 @@ fn a_notice_is_read_until_its_file_is_done() {
     meter.file_done();
     assert_eq!(meter.reading().notice, None);
 }
+
+/// A group's meter has the size of every file from its first file's place,
+/// before a byte of any has moved.
+#[test]
+fn a_groups_meter_starts_with_the_groups_size() {
+    let start = Instant::now();
+    let first = ShardInfo::with_size(0, 2, "z-00001-of-00002.gguf", 100).in_group(Some(300), false);
+    let mut meter = GroupMeter::for_group(Some(&first), start);
+    assert_eq!(meter.reading().total, Some(300));
+
+    // The file's own size is not the download's.
+    let unsized_group = ShardInfo::new(0, 2, "z-00001-of-00002.gguf");
+    meter = GroupMeter::for_group(Some(&unsized_group), start);
+    meter.observe(at(10, 10, 100), None, start);
+    assert_eq!(meter.reading().total, None);
+}
+
+/// A download of one file, placed or not, is as big as that file turns out
+/// to be when the metadata had no size for it.
+#[test]
+fn a_lone_files_meter_takes_the_size_the_transfer_reports() {
+    let start = Instant::now();
+    let alone = ShardInfo::new(0, 1, "z.gguf");
+    for place in [None, Some(&alone)] {
+        let mut meter = GroupMeter::for_group(place, start);
+        meter.observe(at(10, 10, 100), None, start);
+        assert_eq!(meter.reading().total, Some(100));
+    }
+}

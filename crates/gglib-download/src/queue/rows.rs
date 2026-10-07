@@ -47,6 +47,29 @@ pub(super) const fn first_waiting_position(has_running: bool) -> u32 {
     if has_running { 2 } else { 1 }
 }
 
+/// The row of the `running` download, at position 1 with what its meter
+/// reads.
+///
+/// This is the one place a running download's row is put together, for the
+/// queue and for a download fetched without it. Without a reading the
+/// download has moved nothing yet, and its size is its group's.
+pub(crate) fn running_row(running: &Running, reading: Option<&Reading>) -> DownloadRow {
+    let file = running.file.as_ref();
+    row(&RowFacts {
+        id: &running.id,
+        phase: running.phase,
+        position: 1,
+        place: file.and_then(ShardInfo::place),
+        bytes: reading.map_or(0, |reading| reading.bytes),
+        total: reading
+            .and_then(|reading| reading.total)
+            .or_else(|| file.and_then(|file| file.group_total_bytes)),
+        speed_bps: reading.and_then(|reading| reading.speed_bps),
+        eta_seconds: reading.and_then(|reading| reading.eta_seconds),
+        notice: reading.and_then(|reading| reading.notice.as_deref()),
+    })
+}
+
 impl DownloadQueue {
     /// The download and group of the file at the head of `pending`.
     ///
@@ -67,30 +90,14 @@ impl DownloadQueue {
     /// The queue's rows: the running download's, and one for each waiting
     /// download in the order they will run.
     ///
-    /// The running row is at position 1 with what its meter reads, whether a
-    /// file of it is being fetched or it is between two. Without a reading it
-    /// has moved nothing yet, and its size is its group's.
+    /// The running row is [`running_row`]'s, whether a file of the download
+    /// is being fetched or it is between two.
     pub(crate) fn download_rows(
         &self,
         running: Option<&Running>,
         reading: Option<&Reading>,
     ) -> (Option<DownloadRow>, Vec<DownloadRow>) {
-        let active = running.map(|running| {
-            let file = running.file.as_ref();
-            row(&RowFacts {
-                id: &running.id,
-                phase: running.phase,
-                position: 1,
-                place: file.and_then(ShardInfo::place),
-                bytes: reading.map_or(0, |reading| reading.bytes),
-                total: reading
-                    .and_then(|reading| reading.total)
-                    .or_else(|| file.and_then(|file| file.group_total_bytes)),
-                speed_bps: reading.and_then(|reading| reading.speed_bps),
-                eta_seconds: reading.and_then(|reading| reading.eta_seconds),
-                notice: reading.and_then(|reading| reading.notice.as_deref()),
-            })
-        });
+        let active = running.map(|running| running_row(running, reading));
 
         let first = first_waiting_position(running.is_some());
         let waiting = self

@@ -16,6 +16,7 @@ pub(crate) mod executor;
 mod meter;
 pub(crate) mod queue;
 mod resolver;
+mod solo;
 
 // Quantization selection service
 mod quant_selector;

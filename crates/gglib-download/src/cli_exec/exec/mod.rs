@@ -1,30 +1,36 @@
 #![doc = include_str!("README.md")]
-mod progress;
 pub(crate) mod python_bridge;
 pub(crate) mod python_env;
 mod python_protocol;
 mod python_requirements;
 
 use std::fs;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::future::Future;
+use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
-use gglib_core::ports::{HfClientPort, QuantizationResolver};
+use gglib_core::download::{DownloadError, DownloadId};
+use gglib_core::ports::{HfClientPort, QuantizationResolver, ResolvedFile};
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
 use super::utils::model_directory;
-use crate::executor::{DownloadPlan, FileProgress, ProgressCallback, download_file};
+use crate::executor::{DownloadPlan, download_file};
+use crate::manager::PROGRESS_TICK;
 use crate::resolver::HfQuantizationResolver;
-use progress::CliProgressPrinter;
+use crate::solo::{RowCallback, fetch_solo};
 
-/// Execute a download request and return the result.
+/// Execute a download request and return the result, handing `rows` the
+/// download's row while its files are fetched.
 ///
 /// Used internally by [`update_model`] for the force-redownload path.
 /// Interactive CLI downloads now route through
 /// [`DownloadManagerPort::queue_smart`](gglib_core::ports::DownloadManagerPort::queue_smart)
 /// instead of calling this function directly.
-pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadResult> {
+pub(super) async fn download(
+    request: CliDownloadRequest,
+    rows: Option<RowCallback>,
+) -> Result<CliDownloadResult> {
     let quant = request.quantization.as_ref().ok_or_else(|| {
         anyhow!("Please specify a quantization. Use --list-quants to see available options.")
     })?;
@@ -75,28 +81,17 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         fs::create_dir_all(&model_dir)?;
     }
 
-    // Download the files one at a time, each drawn on a bar of its own.
-    for file in &resolution.files {
-        let printer = Arc::new(Mutex::new(CliProgressPrinter::new()));
-        let plan = DownloadPlan {
-            repo_id: &request.model_id,
-            revision: &commit_sha,
-            destination: &model_dir,
-            file: &file.path,
-            token: request.token.as_deref(),
-            force: request.force,
-            progress: Some(draw_on(&printer, &file.path)),
-            notice: None,
-            expected_size: file.size,
-            cancel: None,
-        };
-
-        let result = download_file(&plan).await;
-        if let Ok(mut printer) = printer.lock() {
-            printer.finish();
-        }
-        result?;
-    }
+    // Download the files one at a time, as one download with one row.
+    let id = DownloadId::new(request.model_id.as_str(), Some(quant.as_str()));
+    let transfer = Transfer {
+        repo_id: &request.model_id,
+        revision: &commit_sha,
+        destination: &model_dir,
+        token: request.token.as_deref(),
+        force: request.force,
+    };
+    let fetch_one = |plan| async move { download_file(&plan).await };
+    fetch_files(id, &resolution.files, &transfer, rows.as_ref(), fetch_one).await?;
 
     let primary_path = model_dir.join(&files[0]);
     let all_paths: Vec<_> = files.iter().map(|f| model_dir.join(f)).collect();
@@ -116,15 +111,56 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
     })
 }
 
-/// A progress sink that draws `file`'s progress on `printer`.
-fn draw_on(printer: &Arc<Mutex<CliProgressPrinter>>, file: &str) -> ProgressCallback {
-    let printer = Arc::clone(printer);
-    let label = file.to_string();
-    Arc::new(move |progress: FileProgress| {
-        if let Ok(mut printer) = printer.lock() {
-            printer.update(Some(&label), progress, Instant::now());
-        }
-    })
+/// What every file of one download is fetched with.
+struct Transfer<'a> {
+    /// `owner/name` on `HuggingFace`.
+    repo_id: &'a str,
+    /// The commit the files are read at.
+    revision: &'a str,
+    /// Directory the files land in.
+    destination: &'a Path,
+    /// Bearer token for private repositories.
+    token: Option<&'a str>,
+    /// Re-fetch a file that is already on disk.
+    force: bool,
+}
+
+/// Fetch the download `id` of `files` with `fetch_one`, one file after
+/// another, handing `rows` the download's row while they are fetched.
+///
+/// Each file's plan carries the sink the row's bytes are read from. It
+/// carries a sink for notes only when there is a `rows` to show them on.
+/// Without one the plan has none: the accelerator's environment setup then
+/// prints its notes to the console, and a note of the transfer's own is not
+/// shown.
+async fn fetch_files<'a, F, Fut>(
+    id: DownloadId,
+    files: &'a [ResolvedFile],
+    transfer: &Transfer<'a>,
+    rows: Option<&RowCallback>,
+    fetch_one: F,
+) -> Result<(), DownloadError>
+where
+    F: Fn(DownloadPlan<'a>) -> Fut + Send + Sync,
+    Fut: Future<Output = Result<(), DownloadError>> + Send,
+{
+    let shown = rows.is_some();
+    let fetch = |index: usize, progress, notice| {
+        let file = &files[index];
+        fetch_one(DownloadPlan {
+            repo_id: transfer.repo_id,
+            revision: transfer.revision,
+            destination: transfer.destination,
+            file: &file.path,
+            token: transfer.token,
+            force: transfer.force,
+            progress: Some(progress),
+            notice: shown.then_some(notice),
+            expected_size: file.size,
+            cancel: None,
+        })
+    };
+    fetch_solo(id, files, rows, PROGRESS_TICK, fetch).await
 }
 
 /// Check if a model has an update available, asking the Hub with `token`
@@ -162,8 +198,12 @@ async fn check_update_with(
     })
 }
 
-/// Update a model to the latest version.
-pub async fn update_model(request: CliUpdateRequest) -> Result<CliDownloadResult> {
+/// Update a model to the latest version, handing `rows` the download's row
+/// while its files are fetched. Without `rows` its progress is not shown.
+pub async fn update_model(
+    request: CliUpdateRequest,
+    rows: Option<RowCallback>,
+) -> Result<CliDownloadResult> {
     // Reuse the download logic with force=true
     let download_request = CliDownloadRequest {
         model_id: request.repo_id,
@@ -173,9 +213,13 @@ pub async fn update_model(request: CliUpdateRequest) -> Result<CliDownloadResult
         token: request.token,
     };
 
-    download(download_request).await
+    download(download_request, rows).await
 }
 
 #[cfg(test)]
 #[path = "check_update_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "fetch_files_tests.rs"]
+mod fetch_files_tests;

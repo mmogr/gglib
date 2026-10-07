@@ -4,8 +4,8 @@
 //! The check, the download and the row rewrite all live in
 //! [`ModelOps::check_upgrade`]/[`ModelOps::apply_upgrade`], the single shared
 //! implementation consumed by this CLI, the Axum `WebUI` and the Tauri app.
-//! What stays here is what only a terminal has: the plan, the prompt and the
-//! printed result.
+//! What stays here is what only a terminal has: the plan, the prompt, the
+//! printed result, and the download board the upgrade's row is drawn on.
 //!
 //! [`ModelOps::check_upgrade`]: gglib_app_services::ModelOps::check_upgrade
 //! [`ModelOps::apply_upgrade`]: gglib_app_services::ModelOps::apply_upgrade
@@ -14,6 +14,8 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
+
+use super::board::SoloBoard;
 
 /// Execute the update-model command.
 ///
@@ -79,7 +81,13 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
         }
     }
 
-    let outcome = ops.apply_upgrade(model.id).await?;
+    // The upgrade is not on the download queue, so it hands over its own
+    // row, and the board draws it as it draws a queued download's, until
+    // the upgrade is over.
+    let board = SoloBoard::new(std::sync::Arc::clone(&ctx.console));
+    let outcome = board
+        .during(|rows| ops.apply_upgrade(model.id, Some(rows)))
+        .await?;
 
     if outcome.updated {
         println!("✓ Model updated successfully");

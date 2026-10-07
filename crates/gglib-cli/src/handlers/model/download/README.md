@@ -28,6 +28,8 @@ This module handles all download-related commands that interact with `HuggingFac
 │        monitor.rs  QueueWatch::take     draw it; have they ended?│
 │                    MonitorState::step   the one rule for that    │
 │        board.rs    DownloadBoard::sync  one line per download    │
+│                                                                  │
+│  model upgrade → update_model.rs ──► board.rs SoloBoard, its row │
 │                          ↓                                       │
 │        crate::console::CliConsole                                │
 │        (indicatif MultiProgress, stderr, footer-pinned hint,     │
@@ -103,6 +105,13 @@ This module handles all download-related commands that interact with `HuggingFac
    log line emitted while bars are live is routed through
    `MultiProgress::println` instead of a raw write, so it can't desync the
    bars' redraw bookkeeping and strand old frames in scrollback.
+10. `gglib model upgrade` is the one download that goes through no queue:
+    `ModelOps::apply_upgrade` fetches the files in this process. There is no
+    snapshot to read, so it hands over the download's row, made by the row
+    builder the queue uses, and `update_model.rs` draws it with `SoloBoard`
+    (`board.rs`), which shows it on a `DownloadBoard` as the queue's running
+    download. The line is the one a queued download of the same files would
+    have, on a terminal and piped alike.
 
 ## Commands
 
@@ -206,7 +215,7 @@ Update a model to the latest version from `HuggingFace` Hub.
 **Flow:**
 1. Check if model has `HuggingFace` source
 2. Query Hub for latest version
-3. Download new version
+3. Download new version, drawn as one line on the download board
 4. Replace old file
 5. Update database metadata
 
@@ -219,12 +228,10 @@ gglib model upgrade 1 --force
 ## Architecture Details
 
 ### Download Execution
-Uses `gglib-download::cli_exec::execute_download()` which provides:
-- Progress bars via indicatif
-- Resumable downloads
-- Parallel chunk downloads
-- Automatic retry on failure
-- Validation of downloaded files
+`model download` and `gglib up` queue on a download manager, the daemon's or
+this process's own, and draw its snapshots. `model upgrade` fetches with
+`gglib_download::cli_exec::update_model` and draws the row that hands over.
+Every model download's line on the terminal is drawn by `board.rs`.
 
 ### Database Integration
 After successful download:
