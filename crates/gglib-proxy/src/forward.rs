@@ -918,16 +918,15 @@ fn host_port_from_url(url: &str) -> String {
         )
 }
 
-/// Build a single SSE `chat.completion.chunk` frame carrying visible assistant
-/// `content`.
+/// The whole body a streaming client is sent when its turn fails before any
+/// of the answer is streamed: `notice` as a `chat.completion.chunk` of visible
+/// assistant text, then `error_frame`, then `[DONE]`.
 ///
-/// Used to surface proxy/upstream failures as text the human can actually read
-/// in the chat pane. Some clients (notably the VS Code LLM Gateway) do not
-/// render bare inline `{"error": {...}}` frames inside an already-committed
-/// 200 stream, so an error delivered only as a structured error frame looks
-/// like an empty response. Pairing every such error with a visible content
-/// frame guarantees the cause is shown.
-pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
+/// The notice is what a person reads in the chat pane. Some clients (notably
+/// the VS Code LLM Gateway) do not render bare inline `{"error": {...}}`
+/// frames inside an already-committed 200 stream, so an error delivered only
+/// as a structured error frame looks like an empty response.
+pub(crate) fn failed_turn_body(model: &str, notice: &str, error_frame: &str) -> String {
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -939,11 +938,11 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
         "model": model,
         "choices": [{
             "index": 0,
-            "delta": { "content": content },
+            "delta": { "content": notice },
             "finish_reason": serde_json::Value::Null,
         }],
     });
-    format!("data: {value}\n\n")
+    format!("data: {value}\n\n{error_frame}{DONE_SENTINEL}")
 }
 
 /// [`drain_events`] over a whole upstream response, under the production idle
@@ -1235,14 +1234,11 @@ pub(crate) async fn drain_events(
                     }
                     None => {
                         outcome.saw_visible_output = true;
-                        let payload = serde_json::json!({
-                            "error": {
-                                "message": e.to_string(),
-                                "type": "server_error",
-                                "code": "upstream_error",
-                            }
-                        });
-                        Some(Bytes::from(format!("data: {payload}\n\n")))
+                        Some(Bytes::from(SseEncoder::upstream_error_frame(
+                            &e.to_string(),
+                            "server_error",
+                            "upstream_error",
+                        )))
                     }
                 }
             }
@@ -1485,8 +1481,8 @@ mod forward_repair_grammar_tests;
 #[path = "forward_stall_fixtures.rs"]
 mod forward_stall_fixtures;
 
-/// What the client is sent when the upstream goes silent mid-reply, and what
-/// is not mistaken for that.
+/// What the client is sent when the upstream goes silent or its connection
+/// breaks mid-reply, and what is not mistaken for silence.
 #[cfg(test)]
 #[path = "forward_stall_tests.rs"]
 mod forward_stall_tests;

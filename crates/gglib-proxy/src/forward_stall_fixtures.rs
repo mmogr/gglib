@@ -60,6 +60,8 @@ pub(super) enum Then {
     Close,
     /// It keeps the connection open and never sends another byte.
     Silence,
+    /// Its connection breaks: the body ends in a transport error.
+    Break,
 }
 
 /// An upstream that sends each chunk once its delay has passed, then does
@@ -79,6 +81,9 @@ pub(super) fn upstream(
     let rest: BoxStream<'static, _> = match then {
         Then::Close => stream::empty().boxed(),
         Then::Silence => stream::pending().boxed(),
+        Then::Break => {
+            stream::once(async { Err(std::io::Error::other("connection reset")) }).boxed()
+        }
     };
     sent.chain(rest)
 }

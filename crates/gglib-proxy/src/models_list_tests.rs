@@ -133,6 +133,21 @@ fn an_embedding_tagged_model_advertises_the_embeddings_capability() {
     );
 }
 
+/// A hand edit stores a tag as typed. The launch passes `--embeddings` for
+/// `Embedding` too, so the list says what that server serves.
+#[test]
+fn a_model_whose_tag_differs_only_in_case_advertises_embeddings_too() {
+    let resp = ModelsResponse::from_summaries(
+        vec![summary_with_tags("bge-small", &["Embedding"])],
+        Some(DEFAULT_CONTEXT_SIZE),
+        true,
+    );
+    assert_eq!(
+        resp.data[0].capabilities.as_deref(),
+        Some(["embeddings".to_string()].as_slice())
+    );
+}
+
 /// A chat model that neither sees nor thinks has an entry exactly as it
 /// was before this field existed — a picker built from it must not change
 /// shape. Retargeted on purpose: this model was tagged `reasoning` until

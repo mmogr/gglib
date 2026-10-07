@@ -346,7 +346,10 @@ started without it answers `/v1/embeddings` with a 501.  The mode is therefore
 a property of the launch, not of the request, and gglib decides it from the
 model's `"embedding"` tag — detected at import time from the GGUF's
 `{arch}.pooling_type` or an encoder-only `general.architecture`, and
-re-derivable at any point with `gglib model retag`.
+re-derivable at any point with `gglib model retag`.  The launch and the
+endpoints here read the tag through one predicate,
+`capability_tags::is_embedding`, which ignores case: a model hand-tagged
+`Embedding` is an embedding model to all of them.
 
 Two consequences follow, both deliberate:
 

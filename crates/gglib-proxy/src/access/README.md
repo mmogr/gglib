@@ -55,6 +55,9 @@ protected group — stays reachable without a token, and a 404 stays a 404
 instead of becoming a 401 that tells an unauthenticated caller which paths
 exist. It is installed whether or not a token is set, and decides on each
 request which token, if any, it asks for; with none set it asks nothing.
+Whether a request presents that token is for
+[`gglib_core::access::bearer_matches`] to say; the comparison is
+constant-time, and [`gglib_core::access::constant_time_eq`] says why.
 
 # Failure responses
 
@@ -71,13 +74,5 @@ its `type`. `/mcp` is the exception on paper: it answers errors as JSON-RPC. A
 middleware runs before the body is parsed, so it has no request `id` to echo
 back and cannot construct a valid JSON-RPC error anyway — MCP clients key off
 the status code, and 401/403 are unambiguous there.
-
-# Comparing the token
-
-`constant_time_eq` folds every byte rather than returning at the first
-mismatch. A `==` leaks, through timing, how many leading bytes an attacker got
-right, which over enough requests recovers the token a byte at a time. The
-length is compared first and does leak, which is fine — the token's length is
-not the secret.
 
 <!-- module-docs:end -->

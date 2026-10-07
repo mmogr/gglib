@@ -21,9 +21,9 @@ use futures_util::{Stream, StreamExt as _};
 use tracing::warn;
 
 use gglib_core::LlmStreamEvent;
-use gglib_core::sse::SseStreamDecoder;
+use gglib_core::sse::{SseEncoder, SseStreamDecoder};
 
-use crate::forward::{FIRST_BYTE_DEADLINE_SECS, visible_content_frame};
+use crate::forward::{FIRST_BYTE_DEADLINE_SECS, failed_turn_body};
 
 /// How long one read of a streamed reply may wait for the upstream's next
 /// bytes before the turn is ended as stalled.
@@ -242,14 +242,7 @@ pub(crate) fn prefill_comment(processed: u32, total: u32) -> Bytes {
 /// proxy writes that code. Clients match on it (ggchat reads it as "wait and
 /// retry") and show the message.
 fn timeout_error_frame(message: &str) -> String {
-    let payload = serde_json::json!({
-        "error": {
-            "message": message,
-            "type": "server_error",
-            "code": "upstream_timeout",
-        }
-    });
-    format!("data: {payload}\n\n")
+    SseEncoder::upstream_error_frame(message, "server_error", "upstream_timeout")
 }
 
 /// The body a streaming client is sent when the first-byte deadline (`after`)
@@ -258,17 +251,14 @@ fn timeout_error_frame(message: &str) -> String {
 /// `upstream_timeout` error frame, then `[DONE]`.
 ///
 /// The notice rides alongside because some clients do not render an inline
-/// error frame at all; see [`visible_content_frame`].
+/// error frame at all; see [`failed_turn_body`].
 pub(crate) fn first_byte_timeout_frame(model: &str, after: Duration) -> String {
     let secs = after.as_secs();
-    let visible = visible_content_frame(
-        model,
-        &format!(
-            "⚠️ [proxy] upstream model server did not begin responding within {secs}s — it may be overloaded or wedged. Retry; if it persists the model will be recycled."
-        ),
+    let notice = format!(
+        "⚠️ [proxy] upstream model server did not begin responding within {secs}s — it may be overloaded or wedged. Retry; if it persists the model will be recycled."
     );
     let error = timeout_error_frame(&format!("upstream did not respond within {secs}s"));
-    format!("{visible}{error}data: [DONE]\n\n")
+    failed_turn_body(model, &notice, &error)
 }
 
 #[cfg(test)]
