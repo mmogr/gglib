@@ -140,7 +140,6 @@ fn profiles_use_camel_case_on_the_wire() {
         proxy_api_key: None,
         trust_client_sampling: None,
         loop_guard_mode: None,
-        proxy_loop_detection: None,
         tool_call_repair: None,
         agentic_sampling: Some(false),
         proxy_autostart: None,
@@ -173,6 +172,41 @@ fn profiles_use_camel_case_on_the_wire() {
     let parsed = request.inference_profiles.flatten().expect("present");
     assert_eq!(parsed[0].name, "chat");
     assert!(!parsed[0].list_in_models);
+}
+
+/// `proxyLoopDetection` was the loop guard's switch before `loopGuardMode`,
+/// and is a key of the request no longer. A client that still sends it, in
+/// either spelling, gets what any key the request does not carry gets: the
+/// key is passed over, the rest of the request is applied, and the loop guard
+/// is left as stored. So `false` no longer switches the guard off;
+/// `loopGuardMode: "off"` does.
+#[tokio::test]
+async fn the_retired_loop_detection_key_is_passed_over_and_the_guard_left_as_stored() {
+    use gglib_core::LoopGuardMode;
+    let still_sent =
+        r#"{"proxyLoopDetection": false, "proxy_loop_detection": false, "proxyPort": 9191}"#;
+    let core = test_core().await;
+    let ops = make_ops(Arc::clone(&core), MockSystemProbePort::default());
+
+    let request: UpdateSettingsRequest = serde_json::from_str(still_sent).expect("accepted");
+    let answered = ops.update(request).await.expect("update should succeed");
+
+    assert_eq!(answered.proxy_port, Some(9191));
+    assert_eq!(answered.loop_guard_mode, None);
+    let stored = core.settings().get().await.expect("settings");
+    assert_eq!(stored.effective_loop_guard_mode(), LoopGuardMode::Note);
+    let wire = serde_json::to_value(&answered).expect("serializes");
+    assert!(wire.get("proxyLoopDetection").is_none(), "nor is it sent");
+
+    ops.update(UpdateSettingsRequest {
+        loop_guard_mode: Some(Some(LoopGuardMode::Refuse)),
+        ..Default::default()
+    })
+    .await
+    .expect("a stored mode");
+    let request: UpdateSettingsRequest = serde_json::from_str(still_sent).expect("accepted");
+    let answered = ops.update(request).await.expect("update should succeed");
+    assert_eq!(answered.loop_guard_mode, Some(LoopGuardMode::Refuse));
 }
 
 #[tokio::test]

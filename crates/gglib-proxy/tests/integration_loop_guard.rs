@@ -330,8 +330,8 @@ async fn observation_tool_repetition_passes() {
 
 // ─── The off switch ────────────────────────────────────────────────────────
 
-/// With `proxy_loop_detection = Some(false)`, even a blatantly looping
-/// history must be forwarded — the escape hatch has to actually work.
+/// With the mode `off`, even a blatantly looping history must be forwarded —
+/// the escape hatch has to actually work.
 #[tokio::test]
 async fn disabled_guard_forwards_looping_history() {
     let upstream_cancel = CancellationToken::new();
@@ -349,7 +349,7 @@ async fn disabled_guard_forwards_looping_history() {
         dialect: None,
     });
     let settings = Settings {
-        proxy_loop_detection: Some(false),
+        loop_guard_mode: Some(LoopGuardMode::Off),
         ..Settings::with_defaults()
     };
     let (proxy_url, proxy_cancel) =

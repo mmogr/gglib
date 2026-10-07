@@ -21,4 +21,4 @@ defaultModelId?: number | null, inferenceDefaults?: InferenceConfig | null,
  * it untouched, so a client updating an unrelated setting cannot drop
  * profiles it never knew about.
  */
-inferenceProfiles?: Array<InferenceProfile> | null, setupCompleted?: boolean | null, titleGenerationPrompt?: string | null, bindHost?: string | null, shareLan?: boolean | null, proxyApiKey?: string | null, trustClientSampling?: boolean | null, loopGuardMode?: LoopGuardMode | null, proxyLoopDetection?: boolean | null, toolCallRepair?: boolean | null, agenticSampling?: boolean | null, proxyAutostart?: boolean | null, closeToTray?: boolean | null, startAtLogin?: boolean | null, };
+inferenceProfiles?: Array<InferenceProfile> | null, setupCompleted?: boolean | null, titleGenerationPrompt?: string | null, bindHost?: string | null, shareLan?: boolean | null, proxyApiKey?: string | null, trustClientSampling?: boolean | null, loopGuardMode?: LoopGuardMode | null, toolCallRepair?: boolean | null, agenticSampling?: boolean | null, proxyAutostart?: boolean | null, closeToTray?: boolean | null, startAtLogin?: boolean | null, };

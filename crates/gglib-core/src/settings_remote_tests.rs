@@ -193,7 +193,6 @@ fn a_remote_machine() -> Settings {
         share_lan: Some(true),
         trust_client_sampling: Some(true),
         loop_guard_mode: Some(LoopGuardMode::Refuse),
-        proxy_loop_detection: Some(false),
         tool_call_repair: Some(false),
         agentic_sampling: Some(true),
         proxy_autostart: Some(true),

@@ -3,11 +3,10 @@
 /**
  * What the loop guard does with a request whose replayed history trips it.
  *
- * Replaces the boolean [`proxy_loop_detection`](super::Settings::proxy_loop_detection),
- * which could only say "scan" or "do not scan" and made the scan's only
- * answer a terminal HTTP 400. ADR 0011 records that 400 ending a Copilot
- * session on its sixth turn: an external agentic client has no recovery path
- * from a refusal, and because it replays the whole conversation every turn,
- * the refusal repeats for the rest of the session.
+ * Three answers rather than a switch, because "scan" or "do not scan" leaves
+ * the scan one answer, a terminal HTTP 400. ADR 0011 records that 400 ending
+ * a Copilot session on its sixth turn: an external agentic client has no
+ * recovery path from a refusal, and because it replays the whole
+ * conversation every turn, the refusal repeats for the rest of the session.
  */
 export type LoopGuardMode = "off" | "note" | "refuse";

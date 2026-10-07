@@ -20,6 +20,8 @@ mod attachments;
 mod model_files;
 #[path = "setup_models.rs"]
 mod models;
+#[path = "setup_settings.rs"]
+mod settings;
 
 /// `PRAGMA user_version` once the canonical-path backfills have run.
 ///
@@ -134,17 +136,7 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
     // Create all tables and indexes
     create_schema(&pool).await?;
 
-    // No setting has the key `auto_tune`; reclaim that row.
-    //
-    // `Settings` is `#[serde(default)]` and nothing validates the key set, so
-    // a stale row is silently dropped at load and would never break anything —
-    // but `save()` iterates only the serialised struct, so it would also never
-    // be swept. House style reclaims dropped *tables*; an orphan key would
-    // otherwise sit in every existing database forever, reading like a setting
-    // that still does something.
-    sqlx::query("DELETE FROM settings_kv WHERE key = 'auto_tune'")
-        .execute(&pool)
-        .await?;
+    settings::reclaim_auto_tune(&pool).await?;
 
     Ok(pool)
 }
@@ -556,6 +548,10 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // A setting's row carried over into the setting that replaced it. After
+    // every table exists, so a schema refused above has had no row rewritten.
+    settings::fold_loop_guard_switch_into_mode(pool).await?;
 
     // Last, after every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;

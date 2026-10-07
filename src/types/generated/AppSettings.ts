@@ -18,7 +18,7 @@ defaultModelId: number | null, inferenceDefaults: InferenceConfig | null,
 /**
  * Named sampling profiles, selectable per request as `{model}:{profile}`.
  */
-inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, proxyApiKey: string | null, trustClientSampling: boolean | null, loopGuardMode: LoopGuardMode | null, proxyLoopDetection: boolean | null, 
+inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, proxyApiKey: string | null, trustClientSampling: boolean | null, loopGuardMode: LoopGuardMode | null, 
 /**
  * Whether a tool call failing schema validation is re-issued, with
  * `tool_choice: "required"` or under gglib's grammar. Absent means on.

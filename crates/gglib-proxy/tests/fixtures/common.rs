@@ -101,8 +101,8 @@ impl SettingsRepository for MockSettingsRepo {
 }
 
 /// Settings repository returning a caller-supplied [`Settings`] verbatim —
-/// for tests exercising settings-gated proxy behaviour (e.g. the
-/// `proxy_loop_detection` off switch).
+/// for tests exercising settings-gated proxy behaviour (e.g. the loop
+/// guard's `off` mode).
 pub(crate) struct StaticSettingsRepo(pub Settings);
 
 #[async_trait]
