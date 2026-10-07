@@ -68,7 +68,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`chat_api.rs`** — Conversations and their messages
 - **`error.rs`** — HTTP error types and JSON error responses
 - **`routes.rs`** — Route definitions and handler mounting
-- **`routes_config.rs`** — The `/api/config` routes: settings, the starter profiles, system setup
 - **`sse.rs`** — Server-Sent Events utilities for streaming
 - **`ui.rs`** — The dashboard, compiled into the binary, and its HTTP contract
 - **`dto/`** — Request/response DTOs for API endpoints

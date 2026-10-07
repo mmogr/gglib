@@ -14,7 +14,7 @@ use std::sync::Arc;
 use super::*;
 use crate::test_support::{MockDownloadManager, MockSystemProbePort, test_core};
 
-pub(super) fn make_ops(core: Arc<AppCore>, probe: MockSystemProbePort) -> SettingsOps {
+fn make_ops(core: Arc<AppCore>, probe: MockSystemProbePort) -> SettingsOps {
     SettingsOps::new(SettingsDeps {
         core,
         system_probe: Arc::new(probe),
@@ -31,7 +31,7 @@ async fn get_returns_default_settings() {
     assert!(settings.default_download_path.is_none());
 }
 
-pub(super) fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
+fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
     gglib_core::domain::InferenceProfile {
         name: name.to_owned(),
         description: None,
@@ -114,6 +114,33 @@ async fn an_invalid_profile_is_rejected_by_the_api() {
         read_back.inference_profiles.is_none(),
         "a rejected update must not persist anything"
     );
+}
+
+/// The settings page's install: the nine starter profiles, and a profile the
+/// user already has under one of their names left exactly as it was.
+#[tokio::test]
+async fn installing_the_templates_adds_the_nine_and_keeps_a_profile_of_the_same_name() {
+    let core = test_core().await;
+    let ops = make_ops(core, MockSystemProbePort::default());
+    let mine = UpdateSettingsRequest {
+        inference_profiles: Some(Some(vec![profile("chat", 0.123)])),
+        ..Default::default()
+    };
+    ops.update(mine).await.expect("update should succeed");
+
+    let done = ops.install_profile_templates().await.expect("installs");
+
+    assert_eq!(done.kept, ["chat"]);
+    assert_eq!(
+        done.installed,
+        [
+            "coding", "creative", "minimal", "low", "medium", "high", "xhigh", "max"
+        ]
+    );
+    let stored = ops.get().await.unwrap().inference_profiles.unwrap();
+    assert_eq!(stored, done.settings.inference_profiles.unwrap());
+    assert_eq!(stored.len(), 9);
+    assert_eq!(stored[0], profile("chat", 0.123), "the stored chat changed");
 }
 
 /// The HTTP handlers pass these DTOs through verbatim, so their serde

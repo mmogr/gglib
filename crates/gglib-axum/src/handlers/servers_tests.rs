@@ -1,7 +1,7 @@
 //! Tests for the start-server body: every key the CLI sends, read.
 
 use super::*;
-use gglib_core::contracts::http::daemon_bodies::SERVERS_START_CLI_FIELDS;
+use gglib_core::contracts::http::daemon::SERVERS_START_CLI_FIELDS;
 
 /// A JSON value for each name in the shared contract, none of them the value
 /// its field has when the key is dropped.

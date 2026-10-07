@@ -9,7 +9,6 @@ pub mod registry;
 pub mod residue;
 pub(crate) mod stream;
 pub mod tags;
-mod think_tags;
 
 pub use error::{NormalizationError, NormalizationErrorKind};
 pub use history::strip_thinking_debt;

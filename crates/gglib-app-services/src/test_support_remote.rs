@@ -1,7 +1,7 @@
 //! The fixture the remote tunnel's tests are built on (ADR 0012).
 //!
 //! Beside `test_support.rs` rather than inside it. That file is 285 of the
-//! 300 lines `scripts/check_rust_complexity.sh` allows, and a file that
+//! 300 lines `scripts/check_file_size.sh` allows, and a file that
 //! crosses the line *joins* the baseline — the one thing the ratchet exists
 //! to stop. Splitting is the house answer to a file at its budget, the same
 //! answer `gglib-core`'s `settings_remote_tests.rs` is.

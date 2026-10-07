@@ -31,7 +31,7 @@ pub struct AppCore {
     chat_history: ChatHistoryService,
     attachments: AttachmentService,
     verification: ModelVerificationService,
-    pub(crate) hf_token: Option<String>, // set and read in `crate::hf_token`
+    hf_token: Option<String>,
 }
 
 impl AppCore {
@@ -81,6 +81,21 @@ impl AppCore {
     /// Access the verification service.
     pub const fn verification(&self) -> &ModelVerificationService {
         &self.verification
+    }
+
+    /// This core, holding the token its process asks the Hub with.
+    #[must_use]
+    pub fn with_hf_token(mut self, token: Option<String>) -> Self {
+        self.hf_token = token;
+        self
+    }
+
+    /// The Hub token, for a request to `HuggingFace` that this core's own
+    /// Hub client does not make: an upgrade's check and its download. `None`
+    /// asks as nobody.
+    #[must_use]
+    pub fn hf_token(&self) -> Option<String> {
+        self.hf_token.clone()
     }
 }
 

@@ -32,14 +32,14 @@
 //! per dialect, chosen by the same [`super::registry::get_parser`], and the
 //! one step the stream takes outside the parser, removing a stray think tag
 //! from the text, is taken here by the same function
-//! ([`super::think_tags`]).
+//! ([`super::stream::strip_think_tags`]).
 
 use serde_json::{Value, json};
 
 use super::error::NormalizationError;
 use super::parser::ParserOutput;
 use super::registry::get_parser;
-use super::think_tags::strip_think_tags;
+use super::stream::strip_think_tags;
 use crate::domain::dialect::DialectSpec;
 
 /// Normalize a complete (non-streaming) `chat.completion` response body in

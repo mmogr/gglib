@@ -75,10 +75,11 @@ The same rule decides when a CSS module is allowed; the tree has none
 A new primitive replaces what it supersedes in one change: every usage moves to
 it and the old asset is deleted, with no period in which both exist.
 
-Files stay small: the file-size ratchet covers every `.ts`, `.tsx` and `.css`
-file under `src/` outside `src/types/generated/`, and CONTRIBUTING's
-[UI Conventions](../../CONTRIBUTING.md#ui-conventions) say what it holds and
-how to split a component that outgrows it.
+A file holds one responsibility. The file-size check covers every `.ts`,
+`.tsx` and `.css` file under `src/` outside `src/types/generated/`:
+CONTRIBUTING's [File size](../../CONTRIBUTING.md#file-size) says what its
+budget is for, and its [UI Conventions](../../CONTRIBUTING.md#ui-conventions)
+how to split a component that has taken on a second job.
 
 ---
 

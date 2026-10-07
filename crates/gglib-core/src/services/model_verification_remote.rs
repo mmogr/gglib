@@ -1,5 +1,6 @@
 //! The two verification operations that ask the repository: the update
-//! check, and repair.
+//! check, and repair. With the repair, what it answers with, and what is said
+//! of its files when the download does not bring them back.
 //!
 //! A model's files are its weights and, when it was downloaded with one, a
 //! projector. Both operations cover both: the update check compares the
@@ -9,13 +10,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use super::model_verification::{
     ModelVerificationService, OperationType, ShardHealth, ShardUpdate, UpdateCheckResult,
     UpdateDetails,
 };
-use super::repair_started::{RepairStarted, missing_after_repair};
 use crate::domain::ModelFile;
 use crate::download::{DownloadId, GgufFileRole, Quantization};
 use crate::ports::RepositoryError;
@@ -24,6 +25,34 @@ use crate::ports::huggingface::download_group;
 /// Whether a model's file row is its projector's.
 fn is_projector(file: &ModelFile) -> bool {
     GgufFileRole::classify(Path::new(&file.file_path)).is_projector()
+}
+
+/// A repair under way: its unhealthy files are off the disk, and the
+/// download that fetches them again is queued and started.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct RepairStarted {
+    /// The download's canonical ID: the row to watch in the queue.
+    pub id: String,
+    /// The files the download is to bring back, as the model's rows name
+    /// them. None of them is on disk when the repair answers.
+    pub files: Vec<String>,
+}
+
+/// What to say of `files`, missing from a model's folder since a repair, when
+/// `download` did not bring them back: their names, and the command that
+/// fetches them.
+#[must_use]
+pub fn missing_after_repair(download: &DownloadId, files: &[String]) -> String {
+    let quantization = download
+        .quantization()
+        .map_or_else(String::new, |q| format!(" --quantization {q}"));
+    format!(
+        "Missing from the model's folder: {}. Run `gglib model download {}{quantization}` to \
+         fetch what is missing.",
+        files.join(", "),
+        download.model_id()
+    )
 }
 
 impl ModelVerificationService {

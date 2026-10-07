@@ -2,14 +2,13 @@
 //!
 //! [`from_env`] is the one place it is read. `CoreBootstrap::build` calls it
 //! once and hands the answer to the Hub client, to the download manager and
-//! to [`AppCore`]; a caller that needs it later asks `AppCore`. So no surface
-//! built on the shared bootstrap can be wired without it.
+//! to [`AppCore`](crate::services::AppCore); a caller that needs it later asks
+//! `AppCore`. So no surface built on the shared bootstrap can be wired
+//! without it.
 //!
 //! The token is a secret: it goes to the Hub as a request header, and to the
 //! download helper in its environment. Whatever holds it must keep it out of
 //! every log line and every error's text.
-
-use crate::services::AppCore;
 
 /// The token in this process's environment, `HF_TOKEN`, when it holds one.
 #[must_use]
@@ -23,23 +22,6 @@ fn token_in(value: Option<String>) -> Option<String> {
     value
         .map(|token| token.trim().to_owned())
         .filter(|token| !token.is_empty())
-}
-
-impl AppCore {
-    /// This core, holding the token its process asks the Hub with.
-    #[must_use]
-    pub fn with_hf_token(mut self, token: Option<String>) -> Self {
-        self.hf_token = token;
-        self
-    }
-
-    /// The Hub token, for a request to `HuggingFace` that this core's own
-    /// Hub client does not make: an upgrade's check and its download. `None`
-    /// asks as nobody.
-    #[must_use]
-    pub fn hf_token(&self) -> Option<String> {
-        self.hf_token.clone()
-    }
 }
 
 #[cfg(test)]

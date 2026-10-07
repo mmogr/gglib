@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# File-size ratchet: no file over the budget may grow, and no file under it may
-# cross.
+# File-size check: stops when a file is longer than the size recorded for it,
+# or crosses the budget with no size recorded.
+#
+# The budget is a guide, not a limit. It is there so that a file which has
+# taken on a second job is noticed. Stopping asks one question, whether the
+# file is still one thing, and CONTRIBUTING's "File size" says what follows
+# from each answer: split at the seam, or keep the file whole and raise its
+# row. Nothing is to be shaped to fit the number.
 #
 # Usage: ./scripts/check_file_size.sh <rust|ts> <baseline> [--update]
 #
@@ -12,20 +18,21 @@
 #   ./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt
 #   ./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt
 #
-# A ratchet and not a threshold. The repo's constraint is small files, and well
-# over a hundred are already past the budget. A hard gate would fail on every
-# commit and be switched off within a day, which is how a constraint becomes
+# A ratchet and not a threshold. Well over a hundred files are past the
+# budget, and many of them are one thing. A gate on size would fail on every
+# commit and be switched off within a day, which is how a check becomes
 # decorative.
 #
 # So this checks the derivative instead of the value. The baseline holds one
 # row per file over the budget, `<path> <lines>`. A file with a row may shrink
-# freely and fails when it is longer than its row. A file without a row fails
-# as soon as it is over the budget.
+# freely and stops the check when it is longer than its row. A file without a
+# row stops it as soon as it is over the budget.
 #
-# `--update` rewrites the baseline to the tree's sizes. On a tree that fails,
-# it records the growth: use it when the growth is the point, and the diff then
-# shows the number going up. On a tree that passes it can only lower a row or
-# drop one, and the check says when there is something to lower.
+# A file that is one thing and grew has its row raised, or added, by hand: one
+# row, one decision, and the diff shows the number going up. `--update`
+# rewrites every row to the tree's sizes instead, which on a tree that fails
+# records every growth in it at once. On a tree that passes it can only lower
+# a row or drop one, and the check says when there is something to lower.
 
 set -euo pipefail
 
@@ -90,7 +97,7 @@ if [ ! -f "$BASELINE" ]; then
   exit 1
 fi
 
-echo "Checking $LABEL file-size ratchet (budget ${THRESHOLD} LOC)..."
+echo "Checking $LABEL file sizes against their baseline (budget ${THRESHOLD} LOC, a guide)..."
 echo "================================================"
 
 # awk exits 10 when a file grew or crossed, and 11 when it saw no file over the
@@ -106,10 +113,10 @@ sizes | awk -v budget="$THRESHOLD" -v baseline="$BASELINE" '
   size[$1] > budget {
     over++
     if (!($1 in recorded)) {
-      printf "❌ %s: %d LOC — new file over the %d LOC budget\n", $1, size[$1], budget
+      printf "❌ %s: %d LOC — crossed the %d LOC budget, and has no baseline row\n", $1, size[$1], budget
       failed = 1
     } else if (size[$1] > recorded[$1]) {
-      printf "❌ %s: %d LOC — grew from %d, already over budget\n", $1, size[$1], recorded[$1]
+      printf "❌ %s: %d LOC — longer than its baseline row, %d\n", $1, size[$1], recorded[$1]
       failed = 1
     }
   }
@@ -126,24 +133,26 @@ sizes | awk -v budget="$THRESHOLD" -v baseline="$BASELINE" '
       printf "ℹ️  %d baseline row(s) are above their file: it shrank, or is gone.\n", loose
       print "   This tree passes, so --update now lowers or drops them and raises nothing."
     }
-    printf "✅ no file over budget grew, and nothing new crossed it (%d over budget)\n", over
+    printf "✅ no file is longer than its baseline row, and none crossed the budget without one (%d over the budget)\n", over
   }
 ' || status=$?
 
 case "$status" in
   0) ;;
   10)
-    echo "❌ $LABEL file-size ratchet failed."
-    echo "   Split the file, or run $0 $LANGUAGE $BASELINE --update"
-    echo "   to record the growth deliberately: the diff then shows the number going up."
+    echo "❌ $LABEL file-size check stopped. The budget is a guide: is each file above still one thing?"
+    echo "   It has taken on a second job: split it at that seam."
+    echo "   It is one thing that grew: keep it whole, and raise its row in $BASELINE"
+    echo "   by hand, or add one, so the diff shows the number going up."
+    echo "   Never add a sibling file to get under the number. CONTRIBUTING.md, \"File size\"."
     exit 1
     ;;
   11)
     # Liveness. A ratchet that scans nothing reports exactly what a ratchet
     # that found no growth reports.
     echo "❌ no $LABEL file over ${THRESHOLD} LOC was found"
-    echo "   Either every file is under the budget, in which case make this a hard"
-    echo "   threshold, or the scan is broken."
+    echo "   Either every file is under the budget, in which case this check has"
+    echo "   nothing left to compare, or the scan is broken."
     exit 1
     ;;
   *)

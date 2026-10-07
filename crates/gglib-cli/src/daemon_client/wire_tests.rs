@@ -3,9 +3,7 @@
 //! what the daemon sends.
 
 use super::*;
-use gglib_core::contracts::http::daemon_bodies::{
-    PROXY_START_CLI_FIELDS, SERVERS_START_CLI_FIELDS,
-};
+use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, SERVERS_START_CLI_FIELDS};
 
 /// The keys `body` puts on the wire, sorted.
 fn keys_of(body: &impl Serialize) -> Vec<String> {

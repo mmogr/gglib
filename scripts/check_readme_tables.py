@@ -221,7 +221,7 @@ def main() -> int:
             print(f"  skip {readme} (no file rows)")
 
     # Liveness: a walk that compared nothing prints exactly what a clean run
-    # prints, which is the shape `check_file_complexity.sh` guards against for
+    # prints, which is the shape `check_file_size.sh` guards against for
     # the same reason.
     if checked == 0:
         print("❌ no README with file-naming rows was found — nothing was compared.")

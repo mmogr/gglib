@@ -33,13 +33,26 @@ Code from outside contributors is not accepted yet. Issues, bug reports and idea
 
 ## Core Philosophy
 
-**Small, focused, low-complexity files.** If a module is growing, that is a signal to decompose it, not to add more to it. Functions should do one thing. Files should have one responsibility.
+**Files follow concepts.** A file holds one thing, whole: a type with its behaviour, one responsibility, a module's tests. Where a piece of code lives should say what it is, so that the structure itself can be read. Split a file at a real seam, where it has taken on a second job or grown a type with a life of its own, and never to make it shorter. Functions should do one thing. [File size](#file-size) below says what the 300-line budget is for.
 
 **DRY without ceremony.** When the same logic appears twice, extract it. When extraction requires a new abstraction, make sure that abstraction earns its existence — it should simplify the call sites, not complicate them.
 
 **No backwards compatibility obligation.** If an existing signature, struct layout, or module boundary is in the way of a cleaner design, refactor it. Callers are in the same workspace; update them. There is no public API contract to preserve here.
 
 **Minimum viable surface area.** Do not add configuration knobs, trait objects, or generic parameters for hypothetical future requirements. The right abstraction is the one that solves the problem at hand with the fewest moving parts.
+
+### File size
+
+`scripts/check_file_size.sh` counts lines, once for Rust and once for TypeScript/CSS, and both run in CI through `make enforce`. Its 300-line budget is a guide, not a limit. It is there so that a file which has taken on a second job is noticed, and it was never meant to be read literally: nothing is to be shaped to fit the number.
+
+When the check stops on a file, the question is whether the file is still one thing.
+
+- **It has taken on a second job.** Split it at that seam, so that each file holds one responsibility, whole. A type keeps its behaviour with it. A module's tests in `x_tests.rs` beside it are the house layout, and the tests are whole there.
+- **It is one thing that grew.** Keep it whole and record the growth: raise the file's row in `scripts/rust-complexity-baseline.txt` or `scripts/ts-complexity-baseline.txt` by hand, or add one, so the diff shows the number going up, and say in the pull request why the file is one concept. Lower a row when its file shrinks.
+
+Never add a sibling file to get under the number. Half of a type's methods, one test moved out of a full test file, a list parked beside the module that reads it: each passes the check and leaves a reader two files to open for one idea.
+
+[`scripts/README.md`](scripts/README.md#check_file_sizesh) has the check's mechanics: the baseline's rows, and what `--update` rewrites.
 
 ---
 
@@ -102,7 +115,7 @@ The design system already exists — use it rather than reinventing it inline. [
 - **Colour is semantic, never decorative.** `primary` = action, `success` = running/healthy, `warning` = degraded, `danger` = destructive/failure. A fact about a model (its quantization, its parameter count, its throughput) is not a state and should not borrow a state colour. An idle/stopped state is not a failure — it gets `--color-offline` (GUI) or `style::MUTED` (CLI), not danger red.
 - **Spacing and radius come from the token scale** (`--spacing-*`, `--radius-*` in `src/styles/base/variables.css`, bridged into Tailwind's `p-xs/sm/md/base/lg/xl`, `rounded-sm/base/md/lg/xl`), not raw Tailwind numerics (`p-2`, `rounded-[6px]`) or arbitrary bracket values, except where a value is genuinely one-off (e.g. matching an icon's exact pixel size).
 - **Reach for the existing primitives** (`src/components/primitives/`: `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`, `Readout`, `Sparkline`) before writing a bespoke `flex` wrapper or empty-state block by hand.
-- **Files stay small and single-responsibility.** `scripts/check_file_size.sh` holds a 300-LOC budget as a *ratchet*, run once for Rust and once for TypeScript/CSS, both in CI: a file already over it may shrink but not grow, and a file under it may not cross. `--update` records a deliberate growth as a visible line in the diff, and lowers the recorded size of a file that shrank. When a component grows past that, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half.
+- **A component file holds one responsibility.** When a component takes on a second one, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half. `scripts/check_file_size.sh` covers TypeScript and CSS as it covers Rust. Its 300-line budget is a guide, and [File size](#file-size) says what it is for and how a file that is one thing records its growth.
 
 ---
 

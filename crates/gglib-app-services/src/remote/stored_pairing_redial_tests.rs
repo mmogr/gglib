@@ -2,7 +2,7 @@
 //!
 //! [`settle`]'s codeless arm, split from `stored_pairing_tests.rs` when the
 //! two arms together crossed the 300-line budget
-//! `scripts/check_rust_complexity.sh` allows. The seam is the one the
+//! `scripts/check_file_size.sh` allows. The seam is the one the
 //! function already has: a dial that carries a code is pairing, and
 //! everything it decides is about the key that comes back; a dial without
 //! one is a machine this laptop already knows, and everything it decides is
