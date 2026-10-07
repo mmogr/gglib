@@ -121,9 +121,10 @@ impl Target {
     ///
     /// # Errors
     ///
-    /// On the paired machine, a daemon that is not running or not
-    /// connected, a model that machine does not have — before any turn
-    /// starts — and a settings write that failed.
+    /// Locally, a catalogue that cannot be read. On the paired machine, a
+    /// daemon that is not running or not connected, a model that machine
+    /// does not have — before any turn starts — and a settings write that
+    /// failed.
     pub(crate) async fn resolve_turn(
         self,
         ctx: &CliContext,
@@ -131,7 +132,7 @@ impl Target {
     ) -> Result<TurnModel> {
         match self {
             Self::Local => {
-                let model = self.local_model(ctx, &identifier).await;
+                let model = self.local_model(ctx, &identifier).await?;
                 Ok(TurnModel::here(identifier, model))
             }
             Self::Remote => {

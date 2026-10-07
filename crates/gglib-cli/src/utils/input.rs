@@ -4,7 +4,7 @@
 //! including strings and confirmations.
 
 use anyhow::{Context, Result};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 
 /// Prompts the user for a string input.
 ///
@@ -91,7 +91,7 @@ pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) ->
 ///
 /// Returns an error if reading from stdin fails.
 pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
-    confirm_from(&mut io::stdin().lock(), prompt, false)
+    confirm_from(&mut io::stdin().lock(), &mut io::stdout(), prompt, false)
 }
 
 /// Prompts the user for a yes/no confirmation, defaulting to yes.
@@ -111,17 +111,29 @@ pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
 ///
 /// Returns an error if reading from stdin fails.
 pub(crate) fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
-    confirm_from(&mut io::stdin().lock(), prompt, true)
+    confirm_from(&mut io::stdin().lock(), &mut io::stdout(), prompt, true)
 }
 
-/// Ask `prompt` until a line read from `input` answers it: `y` or `yes` is
-/// yes, `n` or `no` is no, in any case and with any space around them, and an
-/// empty line is `default`. The end of `input` is no whatever the default,
-/// since nobody is there to have agreed.
-fn confirm_from(input: &mut impl BufRead, prompt: &str, default: bool) -> Result<bool> {
+/// Ask `prompt` on `asked_on` until a line read from `input` answers it: `y`
+/// or `yes` is yes, `n` or `no` is no, in any case and with any space around
+/// them, and an empty line is `default`. The end of `input` is no whatever
+/// the default, since nobody is there to have agreed.
+///
+/// The one rule a yes/no answer is read by. The two prompts above ask on
+/// stdout; a command whose stdout is its result asks on stderr through this.
+///
+/// # Errors
+///
+/// Returns an error if the question cannot be written or the answer read.
+pub(crate) fn confirm_from(
+    input: &mut impl BufRead,
+    asked_on: &mut impl Write,
+    prompt: &str,
+    default: bool,
+) -> Result<bool> {
     let hint = if default { "(Y/n)" } else { "(y/N)" };
     loop {
-        println!("{prompt} {hint}: ");
+        writeln!(asked_on, "{prompt} {hint}: ").context("Failed to write the question")?;
 
         let mut line = String::new();
         let read = input

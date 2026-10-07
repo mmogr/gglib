@@ -4,7 +4,8 @@ use super::*;
 
 /// What the question is answered with when `typed` is all its input holds.
 fn answer(typed: &str, default: bool) -> bool {
-    confirm_from(&mut typed.as_bytes(), "Proceed?", default).expect("a string can be read")
+    confirm_from(&mut typed.as_bytes(), &mut io::sink(), "Proceed?", default)
+        .expect("a string can be read")
 }
 
 const DEFAULTS: [bool; 2] = [false, true];
@@ -74,10 +75,27 @@ fn anything_else_is_asked_again_and_the_next_line_answers() {
 fn a_question_reads_only_its_own_answer() {
     let mut typed: &[u8] = b"y\nn\nleft over\n";
 
-    let first = confirm_from(&mut typed, "Continue?", false).expect("a string can be read");
-    let second = confirm_from(&mut typed, "Apply?", true).expect("a string can be read");
+    let asked_on = &mut io::sink();
+    let first = confirm_from(&mut typed, asked_on, "Continue?", false).expect("read");
+    let second = confirm_from(&mut typed, asked_on, "Apply?", true).expect("read");
 
     assert!(first);
     assert!(!second);
     assert_eq!(typed, b"left over\n");
+}
+
+/// The question is written where the caller says, with the hint that shows
+/// which way Enter goes, and written again for each line that did not answer.
+#[test]
+fn the_question_is_written_where_asked_once_for_each_line_read() {
+    let mut asked_on = Vec::new();
+    let (mut asked_twice, mut entered): (&[u8], &[u8]) = (b"what\ny\n", b"\n");
+
+    confirm_from(&mut asked_twice, &mut asked_on, "Proceed?", false).expect("read");
+    confirm_from(&mut entered, &mut asked_on, "Carry on?", true).expect("read");
+
+    assert_eq!(
+        String::from_utf8(asked_on).expect("text"),
+        "Proceed? (y/N): \nProceed? (y/N): \nCarry on? (Y/n): \n"
+    );
 }

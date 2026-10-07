@@ -10,6 +10,9 @@ import type {
   QueueDownloadParams,
   QueueDownloadResponse,
 } from '../types/downloads';
+import type { QueueDownloadRequest } from '../../../types/generated/QueueDownloadRequest';
+import type { ReorderFullRequest } from '../../../types/generated/ReorderFullRequest';
+import type { ReorderRequest } from '../../../types/generated/ReorderRequest';
 
 /**
  * Get the download queue: the same snapshot a `queue_snapshot` event carries.
@@ -23,11 +26,9 @@ export async function getDownloadQueue(): Promise<QueueSnapshot> {
  * its row's in the queue snapshot.
  */
 export async function queueDownload(params: QueueDownloadParams): Promise<QueueDownloadResponse> {
-  return post<QueueDownloadResponse>('/api/models/downloads/queue', {
-    model_id: params.modelId,
-    quantization: params.quantization,
-    target_path: params.targetPath,
-  });
+  // An absent `quantization` is `None` to the daemon: it chooses one.
+  const body: QueueDownloadRequest = { model_id: params.modelId, quantization: params.quantization };
+  return post<QueueDownloadResponse>('/api/models/downloads/queue', body);
 }
 
 /**
@@ -56,7 +57,8 @@ export async function removeFromQueue(id: DownloadId): Promise<void> {
  *   2, so the order that results can differ from the one given.
  */
 export async function reorderQueue(ids: DownloadId[]): Promise<void> {
-  await post<void>('/api/models/downloads/reorder-full', { ids });
+  const body: ReorderFullRequest = { ids };
+  await post<void>('/api/models/downloads/reorder-full', body);
 }
 
 /**
@@ -67,9 +69,6 @@ export async function reorderQueue(ids: DownloadId[]): Promise<void> {
  * @returns Actual position after reorder
  */
 export async function reorderQueueItem(id: DownloadId, position: number): Promise<number> {
-  const response = await post<number>('/api/models/downloads/reorder', {
-    model_id: id,
-    position,
-  });
-  return response;
+  const body: ReorderRequest = { model_id: id, position };
+  return post<number>('/api/models/downloads/reorder', body);
 }

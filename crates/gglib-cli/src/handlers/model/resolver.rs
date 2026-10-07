@@ -7,7 +7,7 @@
 //! a non-zero exit. A lookup that has something to do on a miss is not a
 //! resolution and does not come here: `Target::local_model` answers `None`,
 //! because a session on `--port` may name a model this catalogue does not
-//! hold.
+//! hold. Neither takes a catalogue it could not read for a miss.
 //!
 //! A bare identifier means this machine, and is never sent anywhere else.
 //! When it misses here and this machine is paired, a command that

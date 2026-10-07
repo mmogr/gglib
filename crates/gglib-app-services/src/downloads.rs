@@ -125,11 +125,6 @@ impl DownloadOps {
         Ok(())
     }
 
-    /// Clear the record of how earlier downloads ended.
-    pub async fn clear_finished(&self) {
-        let _ = self.downloads.clear_finished().await;
-    }
-
     /// Cancel all active and queued downloads.
     pub async fn cancel_all(&self) {
         let _ = self.downloads.cancel_all().await;

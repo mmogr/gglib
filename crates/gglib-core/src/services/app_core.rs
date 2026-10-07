@@ -211,14 +211,6 @@ mod tests {
         ) -> Result<i64, ChatHistoryError> {
             Ok(0)
         }
-        async fn update_message(
-            &self,
-            _id: i64,
-            _content: String,
-            _metadata: Option<serde_json::Value>,
-        ) -> Result<(), ChatHistoryError> {
-            Ok(())
-        }
         async fn delete_message_and_subsequent(&self, _id: i64) -> Result<i64, ChatHistoryError> {
             Ok(0)
         }

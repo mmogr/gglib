@@ -233,11 +233,6 @@ impl DownloadQueue {
         ended
     }
 
-    /// Drop every entry of the finished list.
-    pub(crate) fn clear_finished(&mut self) {
-        self.finished.clear();
-    }
-
     // --- Private helpers ---
 
     fn check_not_queued(&self, id: &DownloadId) -> Result<(), DownloadError> {
@@ -451,7 +446,8 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Tests for new port methods: remove, reorder, retry, clear_finished, max_size
+    // Tests for what the port's queue methods do here: remove, reorder,
+    // the finished list, max_size
     // ─────────────────────────────────────────────────────────────────────────
 
     /// Taking a download off takes every pending file of it, in order, and
@@ -614,23 +610,6 @@ mod tests {
         let ids: Vec<_> = queue.pending.iter().map(|i| i.id.model_id()).collect();
         // Both shards at front, then a, then b
         assert_eq!(ids, vec!["sharded", "sharded", "a", "b"]);
-    }
-
-    /// Clearing the finished list drops every outcome and nothing else.
-    #[test]
-    fn clear_finished_drops_every_outcome_and_no_pending_file() {
-        let mut queue = DownloadQueue::new(10);
-        let waiting = test_id("w", None);
-        let key = test_completion_key(&waiting);
-        queue.queue(waiting, key, false).unwrap();
-        queue.record_outcome(&test_id("a", None), failed("err1"));
-        queue.record_outcome(&test_id("b", None), DownloadOutcome::Cancelled);
-        assert_eq!(queue.snapshot(0, None, None).finished.len(), 2);
-
-        queue.clear_finished();
-
-        assert!(queue.finished().is_empty());
-        assert_eq!(queue.pending_len(), 1);
     }
 
     /// An outcome carries the download's id and title, and the snapshot

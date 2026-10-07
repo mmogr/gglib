@@ -173,7 +173,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         Some(inference_config)
     };
 
-    let sight = Sight::of_session(ctx, &params).await;
+    let sight = Sight::of_session(ctx, &params).await?;
     images.judge(sight, &[]).await?;
     let agent = compose(
         ctx,

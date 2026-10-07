@@ -24,8 +24,9 @@ export type AgentRequestConfig = {
 /**
  * Maximum number of LLM→tool→LLM iterations.
  * Clamped to [`MAX_ITERATIONS_CEILING`](gglib_core::domain::agent::config::MAX_ITERATIONS_CEILING)
- * server-side. `None` (field absent) is the stored `max_tool_iterations`
- * setting, and the built-in default of 25 when none is stored.
+ * server-side. `None` (field absent) is the limit the run's conversation
+ * saved, then the stored `max_tool_iterations` setting, and the built-in
+ * default of 25 when none is stored.
  */
 max_iterations: number | null, 
 /**

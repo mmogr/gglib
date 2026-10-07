@@ -197,13 +197,14 @@ switched off back on. It is folded instead, once per database, gated on
 - Once stamped, a `proxy_loop_detection` row is a row no field answers to. One
   written afterwards, by a build older than this, is not folded.
 
-There is deliberately no `PRAGMA user_version` ladder over the column set.
-`CANONICAL_PATH_SCHEMA_VERSION` is already load-bearing for the canonical-path
-backfill (a blocking syscall per row, paid once per library), and the
-`template_caps` column post-dates the stamp — so a version-gated `ALTER` that
-propagated errors would abort startup with `duplicate column name` on real
-installs. A ladder can be layered on after v1 at no cost, because `PRAGMA
-table_info` keeps the shape introspectable either way.
+The `PRAGMA user_version` ladder has two rungs, and both gate a pass over
+rows that runs once per database: `1` the canonical-path backfill (a blocking
+syscall per row, paid once per library), `2` the loop guard's fold above. The
+column set is deliberately not on it. The `template_caps` column post-dates
+the first stamp, so a database stamped `1` or later may or may not carry it,
+and a version-gated `ALTER` that propagated errors would abort startup with
+`duplicate column name` on real installs. A column is added by asking the
+table its shape (`PRAGMA table_info`) instead.
 
 ## Testing
 

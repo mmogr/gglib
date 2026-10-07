@@ -555,27 +555,6 @@ impl BenchmarkRepositoryPort for SqliteBenchmarkRepository {
             .map_err(|e| RepositoryError::Storage(e.to_string()))?)
     }
 
-    async fn get_model_tune_history(
-        &self,
-        model_id: i64,
-        limit: i64,
-    ) -> Result<Vec<TuneCandidateResult>, RepositoryError> {
-        let rows = sqlx::query(
-            "SELECT config_json, source_json, composite_score, pruned, tg_tps, task_results_json
-             FROM benchmark_tune_results
-             WHERE model_id = ?
-             ORDER BY created_at DESC
-             LIMIT ?",
-        )
-        .bind(model_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
-
-        rows.iter().map(row_to_tune_result).collect()
-    }
-
     async fn get_tune_results(
         &self,
         run_id: i64,

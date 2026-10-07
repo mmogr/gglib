@@ -132,17 +132,6 @@ async fn get_message_count() {
 }
 
 #[tokio::test]
-async fn update_message_content() {
-    let repo = repo().await;
-    let cid = repo.create_conversation(make_conv("Edit")).await.unwrap();
-    let mid = repo.save_message(make_msg(cid, "original")).await.unwrap();
-    repo.update_message(mid, "updated".to_string(), None)
-        .await
-        .unwrap();
-    assert_eq!(repo.get_messages(cid).await.unwrap()[0].content, "updated");
-}
-
-#[tokio::test]
 async fn delete_message_and_subsequent_removes_tail() {
     let repo = repo().await;
     let cid = repo.create_conversation(make_conv("Tail")).await.unwrap();

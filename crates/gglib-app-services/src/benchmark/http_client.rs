@@ -177,18 +177,20 @@ mod client_tests {
     /// mid-body and reports it as a decode failure (#957).
     ///
     /// This test fails if a total-request deadline is ever reintroduced: the
-    /// stub keeps sending for ~1.2s, well past the 300ms idle timeout, and only
-    /// a client without a total deadline can read it.
+    /// stub keeps sending for ~1.2s, well past the 600ms idle timeout, and only
+    /// a client without a total deadline can read it. A frame arrives every
+    /// 50ms, so a runner that stalls for a few hundred milliseconds does not
+    /// trip the idle clock between two of them.
     #[tokio::test]
     async fn a_slow_but_progressing_stream_is_not_severed() {
-        let url = sse_stub(12, Duration::from_millis(100)).await;
+        let url = sse_stub(24, Duration::from_millis(50)).await;
         let client =
-            BenchmarkDeps::agentic_http_client(Duration::from_millis(300)).expect("client");
+            BenchmarkDeps::agentic_http_client(Duration::from_millis(600)).expect("client");
 
         let (outcome, elapsed) = drain(&url, &client).await;
 
         // It still ends in the idle timeout once the stub goes quiet — but only
-        // *after* outliving several times its own idle window, which a total
+        // *after* outliving its own idle window twice over, which a total
         // deadline of the same size would not have allowed.
         assert!(
             elapsed > Duration::from_secs(1),

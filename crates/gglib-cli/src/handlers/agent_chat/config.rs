@@ -137,7 +137,7 @@ pub(crate) async fn compose(
     let local_model = params
         .target
         .local_model(ctx, &params.model_identifier)
-        .await;
+        .await?;
     let (resolved_sampling, _sources) = match local_model {
         Some(model) => {
             let named = sampling.clone().unwrap_or_default();
@@ -202,6 +202,31 @@ pub(crate) async fn compose(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bootstrap::test_context;
+    use crate::target::target_tests::{UNREADABLE, with_unreadable_catalogue};
+
+    /// A session on `--port` composes over a model this catalogue does not
+    /// hold, its sampling sent as typed. Over a catalogue that cannot be read
+    /// it does not compose: nobody could say whether the model has a row.
+    #[tokio::test]
+    async fn a_session_composes_over_a_missing_model_and_not_over_an_unreadable_catalogue() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let args = ChatArgs {
+            identifier: "qwen3".into(),
+            port: Some(9),
+            ..chat_args()
+        };
+        let (params, banner) = (AgentSessionParams::from(&args), BannerInfo::default());
+
+        let lacking = test_context(dir.path()).await;
+        let composed = compose(&lacking, &params, None, None, &banner).await;
+        assert!(composed.is_ok(), "{:?}", composed.err());
+
+        let unreadable = with_unreadable_catalogue(&dir).await;
+        let composed = compose(&unreadable, &params, None, None, &banner).await;
+        let error = composed.err().expect("the read failed").to_string();
+        assert_eq!(error, UNREADABLE);
+    }
 
     /// A `ChatArgs` with every knob at rest, so each test states only the two
     /// or three fields it is actually about.

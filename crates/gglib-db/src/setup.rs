@@ -51,11 +51,12 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
 /// already present is a skip; anything else the ALTER hits fails the boot
 /// ([#921]).
 ///
-/// **Deliberately not a `PRAGMA user_version` ladder.** A field database
-/// stamped `1` may or may not carry `template_caps`, depending on which build
-/// last opened it, so a version-gated ALTER that propagates errors would abort
-/// startup with `duplicate column name`. `CANONICAL_PATH_SCHEMA_VERSION` also
-/// gates the per-row path backfill, so bumping it re-runs that for every user.
+/// **Columns are not on the `PRAGMA user_version` ladder.** Its versions gate
+/// passes over rows that run once per database (the path backfill at `1`, the
+/// loop guard's fold at `2`) and say nothing of columns: a field database
+/// stamped `1` or later may or may not carry `template_caps`, depending on
+/// which build last opened it, so a version-gated ALTER that propagates
+/// errors would abort startup with `duplicate column name`.
 ///
 /// The identifiers are interpolated rather than bound: `SQLite` accepts no
 /// parameters in DDL. Every caller passes a literal.

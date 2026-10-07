@@ -8,9 +8,11 @@
 //! of a question lives here too: it is the other place `q` reads from the
 //! person rather than the agent.
 
-use std::io::{self, Write as _};
+use std::io::{self, BufRead, Write};
 
 use anyhow::{Result, anyhow};
+
+use crate::utils::input;
 
 /// Build the user message, incorporating piped stdin or `--file` content.
 ///
@@ -75,29 +77,25 @@ pub(crate) fn build_user_message(
     Ok(user_message)
 }
 
-/// Prompt the user to continue into an interactive chat session.
+/// Ask whether to carry on into an interactive chat session.
 ///
-/// Returns `true` for 'y', 'Y', or empty input (Enter); `false` for
-/// anything else.  EOF (Ctrl+D) is treated as a clean decline.
+/// The answer is read by the rule every yes/no question of the CLI is
+/// ([`input::confirm_from`]), with Enter for yes; the end of input (Ctrl+D)
+/// declines. Asked on stderr: stdout holds the answer `q` printed, and may be
+/// a pipe.
 pub(super) fn ask_continue() -> Result<bool> {
     // Flush stdout to ensure the agent's final output is fully rendered
     // before we print the prompt — prevents interleaving.
     io::stdout().flush().ok();
     eprintln!();
-    eprint!("[Continue chatting? (y/n)] ");
-    io::stderr().flush().ok();
-
-    let mut input = String::new();
-    let bytes = io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| anyhow!("failed to read input: {e}"))?;
-
-    // EOF (Ctrl+D) → treat as 'n'
-    if bytes == 0 {
-        eprintln!();
-        return Ok(false);
-    }
-
-    let answer = input.trim();
-    Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
+    continue_from(&mut io::stdin().lock(), &mut io::stderr())
 }
+
+/// [`ask_continue`]'s question, asked on `asked_on` and answered from `input`.
+fn continue_from(input: &mut impl BufRead, asked_on: &mut impl Write) -> Result<bool> {
+    input::confirm_from(input, asked_on, "Continue chatting?", true)
+}
+
+#[cfg(test)]
+#[path = "question_input_tests.rs"]
+mod tests;

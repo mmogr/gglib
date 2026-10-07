@@ -53,7 +53,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         persistence,
         prior_messages,
     } = prepare(ctx, args).await?;
-    let sight = Sight::of_session(ctx, &params).await;
+    let sight = Sight::of_session(ctx, &params).await?;
     images.judge(sight, &prior_messages).await?;
 
     // 2. Compose the agent with the (possibly merged) args.

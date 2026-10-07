@@ -66,7 +66,9 @@ Context Length: 4096
 The one table of capability flags: each flag's name, its bit, and the field of
 an override request that sets it. `gglib model capabilities` takes its `--set`
 and `--unset` values from the table, and that command and `gglib model inspect`
-print from it.
+print from it. The module's tests write the table to
+`contracts/models/capability_flags.json` and fail when the file is stale; the
+page's test of its own four flags reads that file.
 
 **Key Items:**
 - `CAPABILITY_FLAGS` - The four flags, in the order they are listed

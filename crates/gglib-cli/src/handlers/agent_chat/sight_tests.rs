@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::bootstrap::test_context;
+use crate::target::target_tests::{UNREADABLE, with_unreadable_catalogue};
 
 /// One short reply, as llama-server streams it.
 const REPLY: &str = "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\
@@ -213,6 +214,7 @@ async fn a_local_session_is_judged_by_its_catalogue_row() {
     let ctx = with_unlinked_qwen(&dir).await;
 
     let sight = Sight::of_session(&ctx, &params("qwen", Target::Local, None)).await;
+    let sight = sight.expect("judged");
 
     let refused = sight.admit(true).await.expect_err("no projector linked");
     assert!(
@@ -229,7 +231,34 @@ async fn a_local_model_the_catalogue_does_not_hold_is_not_judged() {
 
     let sight = Sight::of_session(&ctx, &params("qwen", Target::Local, None)).await;
 
-    assert!(sight.admit(true).await.is_ok());
+    assert!(sight.expect("judged").admit(true).await.is_ok());
+}
+
+/// A catalogue that cannot be read ends the session. Its model is not left
+/// unjudged, which would send an image to a model that may not read one.
+#[tokio::test]
+async fn a_local_session_whose_catalogue_cannot_be_read_is_an_error() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = with_unreadable_catalogue(&dir).await;
+
+    let judged = Sight::of_session(&ctx, &params("qwen", Target::Local, None)).await;
+
+    let error = judged.err().expect("the read failed").to_string();
+    assert_eq!(error, UNREADABLE);
+}
+
+/// A session on `--port` asks its server and does not read the catalogue,
+/// so one that cannot be read does not stop it being judged.
+#[tokio::test]
+async fn a_port_session_is_judged_without_reading_the_catalogue() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = with_unreadable_catalogue(&dir).await;
+    let server = props_server(r#"{"modalities":{"vision":false}}"#);
+    let session = params("qwen", Target::Local, Some(server.port));
+
+    let sight = Sight::of_session(&ctx, &session).await.expect("judged");
+
+    assert!(sight.admit(true).await.is_err(), "the server cannot see");
 }
 
 /// The catalogue says `qwen` cannot see; the server `--port` names says it
@@ -241,7 +270,7 @@ async fn a_port_session_is_judged_by_its_server_not_the_catalogue() {
     let server = props_server(r#"{"modalities":{"vision":true}}"#);
     let session = params("qwen", Target::Local, Some(server.port));
 
-    let sight = Sight::of_session(&ctx, &session).await;
+    let sight = Sight::of_session(&ctx, &session).await.expect("judged");
 
     assert!(sight.admit(true).await.is_ok());
     assert_eq!(server.requests().len(), 1);
@@ -256,5 +285,5 @@ async fn a_far_session_is_not_judged_here() {
 
     let sight = Sight::of_session(&ctx, &params("qwen", Target::Remote, None)).await;
 
-    assert!(sight.admit(true).await.is_ok());
+    assert!(sight.expect("judged").admit(true).await.is_ok());
 }

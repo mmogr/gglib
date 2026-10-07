@@ -30,8 +30,9 @@ use gglib_core::domain::agent::{AgentConfig, AgentMessage, TurnLimits};
 pub(crate) struct AgentRequestConfig {
     /// Maximum number of LLM→tool→LLM iterations.
     /// Clamped to [`MAX_ITERATIONS_CEILING`](gglib_core::domain::agent::config::MAX_ITERATIONS_CEILING)
-    /// server-side. `None` (field absent) is the stored `max_tool_iterations`
-    /// setting, and the built-in default of 25 when none is stored.
+    /// server-side. `None` (field absent) is the limit the run's conversation
+    /// saved, then the stored `max_tool_iterations` setting, and the built-in
+    /// default of 25 when none is stored.
     pub max_iterations: Option<usize>,
 
     /// Maximum number of tool calls dispatched in parallel per iteration.
@@ -80,7 +81,8 @@ impl AgentRequestConfig {
     /// resolved against this machine's `settings` by the one rule the CLI
     /// uses too ([`TurnLimits::resolve`]).
     ///
-    /// An omitted `max_iterations` is the stored `max_tool_iterations`.
+    /// An omitted `max_iterations` is the stored `max_tool_iterations`: a
+    /// conversation's saved limit is put in its place before this is called.
     /// `max_stagnation_steps` comes from the settings alone, not the
     /// request: it stays a server-side knob, consistent with this DTO's
     /// "safe subset" policy of not exposing internal strike limits to

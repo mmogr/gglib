@@ -20,9 +20,10 @@ use common::origin::{bearer_token, shipped, shipped_cors};
 use gglib_axum::{CorsConfig, DaemonAccess};
 use gglib_core::contracts::http::daemon;
 
-/// A route that changes nothing, and one that does.
+/// A route that changes nothing, and one that does: a cancel, here of a
+/// download that is not queued, which the route answers as done.
 const READ: &str = daemon::MODELS_LIST_PATH;
-const WRITE: &str = "/api/models/downloads/finished/clear";
+const WRITE: &str = "/api/models/downloads/none/cancel";
 
 /// Stands for the daemon token, which is minted when the tests start.
 const TOKEN: (&str, &str) = ("authorization", "the daemon token");
@@ -52,7 +53,7 @@ const ANY_HEADER: (&str, &str) = ("access-control-allow-headers", "*");
 
 /// What each route answers once the guards have let a request through.
 const MODELS: &str = "[]";
-const CLEARED: &str = "";
+const CANCELLED: &str = "";
 const ORIGIN_REFUSED: &str = r#"{"error":"A page on another site may not change anything here. The daemon takes changes from its own pages, from the origins it lets read its answers, and from programs, which send no Origin.","status":403,"type":"ORIGIN_NOT_ALLOWED"}"#;
 const REBOUND_REFUSED: &str = r#"{"error":"Host 'evil.com:9887' is not allowed. The daemon answers to loopback and to hosts named with --allowed-host. Add --allowed-host evil.com if that is how you reach it.","status":403,"type":"HOST_NOT_ALLOWED"}"#;
 /// A `Host` that cannot be one is refused with no flag to suggest.
@@ -138,9 +139,9 @@ async fn each_kind_of_request_gets_its_status_its_cors_headers_and_its_body() {
     let app = shipped(&shipped_cors(), access).await;
     #[rustfmt::skip]
     let rows = [
-        row("its own page changes something", Method::POST, WRITE, &[TOKEN, OWN_HOST, OWN_PAGE], 200, &[VARY], CLEARED),
+        row("its own page changes something", Method::POST, WRITE, &[TOKEN, OWN_HOST, OWN_PAGE], 200, &[VARY], CANCELLED),
         row("its own page under another name", Method::POST, WRITE, &[TOKEN, HOST, OWN_PAGE], 403, &[VARY], ORIGIN_REFUSED),
-        row("a local page changes something", Method::POST, WRITE, &[TOKEN, HOST, LOCAL_PAGE, CROSS_SITE], 200, &[READS_LOCAL, VARY], CLEARED),
+        row("a local page changes something", Method::POST, WRITE, &[TOKEN, HOST, LOCAL_PAGE, CROSS_SITE], 200, &[READS_LOCAL, VARY], CANCELLED),
         row("a local page reads", Method::GET, READ, &[TOKEN, HOST, LOCAL_PAGE], 200, &[READS_LOCAL, VARY], MODELS),
         row("another site reads", Method::GET, READ, &[TOKEN, HOST, ELSEWHERE], 200, &[VARY], MODELS),
         row("another site asks for the headers alone", Method::HEAD, READ, &[TOKEN, HOST, ELSEWHERE], 200, &[VARY], ""),
@@ -148,7 +149,7 @@ async fn each_kind_of_request_gets_its_status_its_cors_headers_and_its_body() {
         row("another site, holding no token", Method::POST, WRITE, &[HOST, ELSEWHERE], 403, &[VARY], ORIGIN_REFUSED),
         row("a page that hides its origin", Method::POST, WRITE, &[TOKEN, HOST, ("origin", "null")], 403, &[VARY], ORIGIN_REFUSED),
         row("an origin that is not text", Method::POST, WRITE, &[TOKEN, HOST, ("origin", "http://\u{e9}vil.example")], 403, &[VARY], ORIGIN_REFUSED),
-        row("a program changes something", Method::POST, WRITE, &[TOKEN, HOST], 200, &[VARY], CLEARED),
+        row("a program changes something", Method::POST, WRITE, &[TOKEN, HOST], 200, &[VARY], CANCELLED),
         row("a program reads", Method::GET, READ, &[TOKEN, HOST], 200, &[VARY], MODELS),
         row("no origin, but sent across sites", Method::POST, WRITE, &[TOKEN, HOST, CROSS_SITE], 403, &[VARY], ORIGIN_REFUSED),
         row("a rebound name", Method::POST, WRITE, &[TOKEN, REBOUND, ("origin", "http://evil.com:9887")], 403, &[], REBOUND_REFUSED),
@@ -171,7 +172,7 @@ async fn each_kind_of_request_gets_them_under_a_config_that_lets_every_page_read
     #[rustfmt::skip]
     let rows = [
         row("another site reads", Method::GET, READ, &[TOKEN, HOST, ELSEWHERE], 200, &[READS_ANY, VARY], MODELS),
-        row("another site changes something", Method::POST, WRITE, &[TOKEN, HOST, ELSEWHERE], 200, &[READS_ANY, VARY], CLEARED),
+        row("another site changes something", Method::POST, WRITE, &[TOKEN, HOST, ELSEWHERE], 200, &[READS_ANY, VARY], CANCELLED),
         row("a page that hides its origin", Method::POST, WRITE, &[TOKEN, HOST, ("origin", "null")], 403, &[READS_ANY, VARY], ORIGIN_REFUSED),
         row("a preflight from another site", Method::OPTIONS, WRITE, &[HOST, ELSEWHERE, ASKS_POST], 200, &[ANY_HEADER, ANY_METHOD, READS_ANY, VARY], ""),
     ];

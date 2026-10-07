@@ -5,7 +5,8 @@
  */
 export type QueueDownloadRequest = { model_id: string, 
 /**
- * Quantization to download. The CLI sends it as "quant" and the page as
- * "quantization", so both field names are accepted.
+ * Quantization to download; left out, one is chosen. The page sends it
+ * as "quantization" and the CLI as "quant", so both field names are
+ * accepted.
  */
-quant: string | null, };
+quantization?: string, };
