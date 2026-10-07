@@ -37,7 +37,7 @@ fn sorted(contract: &[&str]) -> Vec<String> {
 fn a_populated_start_body_sends_exactly_the_contract_fields() {
     let body = StartProxyBody {
         host: Some("127.0.0.1".into()),
-        port: Some(8080),
+        port: Some(8123),
         default_context: Some(4096),
         cache: Some(true),
         slot_dir: Some("/slots".into()),
@@ -119,6 +119,18 @@ fn an_empty_allowed_hosts_omits_the_key() {
             .expect("a JSON object")
             .contains_key("allowed_hosts"),
         "an empty allowed_hosts must not put a key on the wire"
+    );
+}
+
+/// A body with no port puts none on the wire: the key is null or absent. The
+/// daemon reads either as no port and falls back to the stored `proxy_port`,
+/// which its `a_null_port_comes_from_settings_as_an_omitted_one_does` pins.
+#[test]
+fn a_start_body_with_no_port_puts_none_on_the_wire() {
+    let json = serde_json::to_value(StartProxyBody::default()).expect("serialises");
+    assert!(
+        json.get("port").is_none_or(serde_json::Value::is_null),
+        "{json}"
     );
 }
 

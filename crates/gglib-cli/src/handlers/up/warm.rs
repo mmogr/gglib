@@ -204,10 +204,12 @@ fn render_client_config(
 
 #[cfg(test)]
 mod tests {
+    use gglib_core::settings::DEFAULT_PROXY_PORT;
+
     use super::*;
 
     fn addr() -> SocketAddr {
-        ([127, 0, 0, 1], 8080).into()
+        ([127, 0, 0, 1], DEFAULT_PROXY_PORT).into()
     }
 
     /// The three values a user actually retypes. If any goes missing the
@@ -216,7 +218,7 @@ mod tests {
     fn the_pasteable_values_are_all_present() {
         let lines = render_client_config(addr(), "qwen3-30b-a3b", None, false);
         let text = lines.join("\n");
-        assert!(text.contains("http://127.0.0.1:8080/v1"));
+        assert!(text.contains(&format!("http://127.0.0.1:{DEFAULT_PROXY_PORT}/v1")));
         assert!(text.contains("qwen3-30b-a3b"));
         assert!(text.contains("not-needed"));
     }
@@ -270,6 +272,6 @@ mod tests {
         let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", None, false);
         let text = lines.join("\n");
         assert!(text.contains("http://127.0.0.1:9999/v1"));
-        assert!(!text.contains("8080"));
+        assert!(!text.contains(&DEFAULT_PROXY_PORT.to_string()));
     }
 }

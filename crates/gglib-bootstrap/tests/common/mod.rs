@@ -5,7 +5,6 @@
 //! duration of the test — `SQLite` holds the file open.
 
 use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -22,7 +21,6 @@ pub(crate) fn minimal_config(dir: &TempDir) -> BootstrapConfig {
     fs::create_dir_all(&models_dir).expect("create models dir");
     BootstrapConfig {
         db_path: dir.path().join("gglib.db"),
-        llama_server_path: PathBuf::from("/nonexistent/llama-server"),
         models_dir,
         hf_token: None,
     }

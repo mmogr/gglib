@@ -99,10 +99,55 @@ mod tests {
             Some(crate::commands::Commands::Up { yes, model, port }) => {
                 assert!(yes);
                 assert_eq!(model.as_deref(), Some("qwen"));
-                assert_eq!(port, 9999);
+                assert_eq!(port, Some(9999));
             }
             _ => panic!("expected the Up variant"),
         }
+    }
+
+    /// No `--port` flag carries a default of its own. A default typed into
+    /// clap reaches the handler as a port somebody chose, and on the five
+    /// commands that name the proxy's port it would outrank the stored
+    /// `proxy_port`; an absent flag has to arrive as absent.
+    #[test]
+    fn no_port_flag_carries_a_default_of_its_own() {
+        fn walk(cmd: &clap::Command, path: &str, seen: &mut Vec<(String, bool)>) {
+            for arg in cmd.get_arguments() {
+                if arg.get_long() == Some("port") {
+                    seen.push((path.to_owned(), !arg.get_default_values().is_empty()));
+                }
+            }
+            for sub in cmd.get_subcommands() {
+                walk(sub, &format!("{path} {}", sub.get_name()), seen);
+            }
+        }
+
+        let mut seen = Vec::new();
+        walk(&Cli::command(), "gglib", &mut seen);
+
+        // The five that name the proxy's port. Finding them is what shows the
+        // walk reads the tree rather than passing over an empty one.
+        for command in [
+            "gglib up",
+            "gglib serve",
+            "gglib proxy",
+            "gglib proxy dashboard",
+            "gglib proxy cache-clear",
+        ] {
+            assert!(
+                seen.iter().any(|(path, _)| path == command),
+                "`{command}` has no --port flag: {seen:?}"
+            );
+        }
+        let defaulted: Vec<&str> = seen
+            .iter()
+            .filter(|(_, has_default)| *has_default)
+            .map(|(path, _)| path.as_str())
+            .collect();
+        assert!(
+            defaulted.is_empty(),
+            "--port has a default on {defaulted:?}"
+        );
     }
 
     /// `--remote` and `--port` name different machines, so they are exclusive

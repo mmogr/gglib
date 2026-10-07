@@ -8,7 +8,7 @@
 
 use clap::Parser;
 
-use gglib_cli::{Cli, CliConfig, bootstrap, dispatch};
+use gglib_cli::{Cli, bootstrap, dispatch};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,8 +16,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     gglib_core::telemetry::init_tracing(cli.verbose)?;
-    let config = CliConfig::with_defaults()?;
-    let ctx = bootstrap(config).await?;
+    let ctx = bootstrap().await?;
 
     let Some(command) = cli.command else {
         use clap::CommandFactory;

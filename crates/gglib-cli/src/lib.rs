@@ -2,7 +2,7 @@
 
 // Nothing in the workspace depends on this crate: its only outside consumers
 // are its own `gglib` binary and its own `tests/`, and between them they need
-// the twelve names re-exported below and nothing else. So the module tree is
+// the eleven names re-exported below and nothing else. So the module tree is
 // crate-internal and the re-export list *is* the public API — which is what
 // lets `unreachable_pub` and then `dead_code` see inside `handlers/`.
 pub(crate) mod benchmark_commands;
@@ -35,7 +35,7 @@ pub(crate) mod upstream_args;
 pub(crate) mod utils;
 
 // Re-export primary types for convenient access
-pub use bootstrap::{CliConfig, CliContext, bootstrap};
+pub use bootstrap::{CliContext, bootstrap};
 pub use commands::Commands;
 pub use config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
 pub use dispatch::dispatch;

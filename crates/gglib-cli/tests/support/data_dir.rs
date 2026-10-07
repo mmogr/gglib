@@ -57,7 +57,6 @@ async fn open(root: &Path) -> BuiltCore {
     std::fs::create_dir_all(&models_dir).expect("models dir");
     let config = BootstrapConfig {
         db_path: database(root),
-        llama_server_path: "/nonexistent/llama-server".into(),
         models_dir,
         hf_token: None,
     };

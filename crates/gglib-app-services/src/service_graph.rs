@@ -79,7 +79,7 @@ pub struct ServiceGraphParams {
     pub loop_guard_trips: Arc<dyn LoopGuardTripSink>,
     /// Adapter-supplied base port for llama-server allocation.
     ///
-    /// `Some` is an explicit override (a CLI `--base-port`); `None` defers to
+    /// `Some` is an explicit override; `None` defers to
     /// `Settings.llama_base_port`, then the compiled default. See
     /// [`resolve_llama_base_port`](crate::proxy_port::resolve_llama_base_port).
     pub base_port: Option<u16>,

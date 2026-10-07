@@ -382,15 +382,6 @@ impl Settings {
         }
     }
 
-    /// Get the effective llama-server base port (with default fallback).
-    #[must_use]
-    pub const fn effective_llama_base_port(&self) -> u16 {
-        match self.llama_base_port {
-            Some(port) => port,
-            None => DEFAULT_LLAMA_BASE_PORT,
-        }
-    }
-
     /// What the loop guard does, reconciling [`Self::loop_guard_mode`] with
     /// the deprecated [`Self::proxy_loop_detection`].
     ///

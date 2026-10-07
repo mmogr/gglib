@@ -121,7 +121,7 @@ pub(crate) async fn start(
     // hard-coded default — `to_runtime_config` collapses that rung to `None`
     // so the launch is sized by the daemon instead of arriving with a floor
     // nobody chose.
-    let settings = state.settings.get().await?;
+    let settings = state.core.settings().get().await?;
     let runtime_cfg = to_runtime_config(&cfg, &settings);
 
     // Idempotent: if already running (Conflict), treat as success — unless

@@ -10,6 +10,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
+use crate::handlers::inference::proxy;
 
 /// Loopback only. `up` is the "get me working" path; exposing an
 /// unauthenticated endpoint to a network is a decision, and decisions belong to
@@ -30,8 +31,26 @@ pub(crate) struct UpArgs {
     pub yes: bool,
     /// Load this model rather than the recommended (or most recent) one.
     pub model: Option<String>,
-    /// Port the endpoint binds to.
-    pub port: u16,
+    /// Port the endpoint binds to; `None` leaves it to the daemon, which
+    /// binds the stored `proxy_port`.
+    pub port: Option<u16>,
+}
+
+/// What `up` asks the daemon to start: the unpinned proxy on loopback.
+///
+/// `port` is the `--port` flag as typed. An absent flag travels as no port,
+/// so a stored `proxy_port` is where the endpoint comes up and what the
+/// client configuration then prints.
+fn start_body(port: Option<u16>, default_context: Option<u64>) -> StartProxyBody {
+    StartProxyBody {
+        host: Some(HOST.to_string()),
+        port,
+        default_context,
+        // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
+        // discover anything. `up` warms one model; it does not restrict
+        // to it. Everything else is deliberately unconfigurable here.
+        ..Default::default()
+    }
 }
 
 /// Execute the up command.
@@ -71,18 +90,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    let status = handle
-        .start_proxy(&StartProxyBody {
-            host: Some(HOST.to_string()),
-            port: Some(args.port),
-            default_context,
-            // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
-            // discover anything. `up` warms one model; it does not restrict
-            // to it. Everything else is deliberately unconfigurable here.
-            ..Default::default()
-        })
-        .await?;
-    let proxy_port = status.port.unwrap_or(args.port);
+    let body = start_body(args.port, default_context);
+    let proxy_port = proxy::start_on(&handle, &body, &settings).await?;
 
     // Step 5: prove it. The warm request loads the model through the very
     // endpoint the user is about to point their client at.
@@ -91,7 +100,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // The endpoint now outlives this command — the daemon owns it. Attach the
     // dashboard so `up` keeps its "foreground until Ctrl-C" feel; detaching
     // leaves the endpoint serving.
-    crate::handlers::inference::proxy::attach_dashboard(ctx, proxy_port, None).await
+    proxy::attach_dashboard(ctx, proxy_port, None).await
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────
@@ -179,7 +188,44 @@ pub(super) fn render_row(label: &str, value: &str, note: Option<&str>, color: bo
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser as _;
+    use gglib_core::Settings;
+
     use super::*;
+    use crate::commands::Commands;
+    use crate::handlers::inference::proxy::tests::started;
+    use crate::parser::Cli;
+
+    /// The body `gglib up` sends for `argv`.
+    fn body_for(argv: &[&str]) -> StartProxyBody {
+        let Some(Commands::Up { port, .. }) = Cli::parse_from(argv).command else {
+            panic!("{argv:?} is not `gglib up`");
+        };
+        start_body(port, None)
+    }
+
+    /// Without `--port` the daemon is sent no port, so the endpoint comes up
+    /// on the stored `proxy_port`, where the desktop app would put it; and
+    /// the port the client configuration prints is the one the daemon answers.
+    #[tokio::test]
+    async fn without_a_port_flag_the_daemon_chooses_the_port_and_its_answer_is_reported() {
+        let body = body_for(&["gglib", "up"]);
+
+        let started = started(&body, Some(9000), &Settings::default()).await;
+
+        assert!(started.sent_no_port(), "{}", started.sent);
+        assert_eq!(started.port, 9000);
+    }
+
+    #[tokio::test]
+    async fn a_port_flag_is_sent_as_typed() {
+        let body = body_for(&["gglib", "up", "--port", "8123"]);
+
+        let started = started(&body, Some(8123), &Settings::default()).await;
+
+        assert_eq!(started.sent["port"], 8123);
+        assert_eq!(started.port, 8123);
+    }
 
     #[test]
     fn a_note_renders_in_parentheses_after_the_value() {

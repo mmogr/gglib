@@ -96,6 +96,10 @@ builder, so a model behaves identically however it was started.
 Sampling flags here act as proxy-wide defaults: per-request and per-model values
 still win. Subcommands: `dashboard` (live terminal view), `cache-clear`, `stop`.
 
+Without `--port`, `proxy`, `serve` and `up` start the endpoint on the stored
+`proxy_port` (`config settings set --proxy-port`), where the desktop app starts
+it, and `proxy dashboard` and `proxy cache-clear` look for it there.
+
 ### `serve <id>`
 
 The same proxy stack pinned to one model — requests naming any other are refused

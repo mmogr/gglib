@@ -32,27 +32,35 @@ impl Target {
     ///
     /// `proxy dashboard` and `proxy cache-clear` take a host, a port and a
     /// key because they connect to a proxy directly; on this machine those
-    /// are the flags as typed (the key falling back to the stored
-    /// `proxy_api_key`), and on the paired machine they are the tunnel's
-    /// loopback port and the key this machine received when it paired —
-    /// the flags then name a proxy that is not the one being asked about,
-    /// and are refused rather than quietly replaced.
+    /// are the flags as typed (the port falling back to the stored
+    /// `proxy_port`, the key to the stored `proxy_api_key`), and on the
+    /// paired machine they are the tunnel's loopback port and the key this
+    /// machine received when it paired — the flags then name a proxy that is
+    /// not the one being asked about, and are refused rather than quietly
+    /// replaced.
     ///
     /// # Errors
     ///
+    /// On this machine, settings that cannot be read when no port was given.
     /// On the paired machine, whatever [`far`](Self::far) says; and a host
     /// or port given beside `--remote`.
     pub(crate) async fn proxy_endpoint(
         self,
         ctx: &CliContext,
         host: String,
-        port: u16,
+        port: Option<u16>,
         api_key: Option<String>,
     ) -> Result<(String, u16, Option<String>)> {
         match self {
-            Self::Local => Ok((host, port, client_api_key(ctx, api_key).await)),
+            Self::Local => {
+                let port = match port {
+                    Some(port) => port,
+                    None => ctx.app.settings().get().await?.effective_proxy_port(),
+                };
+                Ok((host, port, client_api_key(ctx, api_key).await))
+            }
             Self::Remote => {
-                if host != "127.0.0.1" || port != 8080 || api_key.is_some() {
+                if host != "127.0.0.1" || port.is_some() || api_key.is_some() {
                     anyhow::bail!(
                         "--remote names the paired machine's proxy, so --host, --port and \
                          --api-key would name a different one; drop them"
@@ -79,3 +87,7 @@ async fn client_api_key(ctx: &CliContext, flag: Option<String>) -> Option<String
         .and_then(|s| s.proxy_api_key)
         .filter(|key| !key.trim().is_empty())
 }
+
+#[cfg(test)]
+#[path = "target_use_tests.rs"]
+mod target_use_tests;

@@ -7,9 +7,8 @@
 
 Shared composition root for gglib adapters.
 
-Wiring happens once, here, so every surface gets the same runtime, the same
-database, and the same shared process manager — the structural reason a model
-launched from one interface is the same model another sees.
+Wiring happens once, here, so every adapter gets its database, repositories,
+download manager and `AppCore` built the same way.
 
 This crate consolidates the infrastructure-wiring steps that were previously duplicated
 across the CLI, Axum, and Tauri bootstrap modules into a single
@@ -22,12 +21,12 @@ This crate is the **Composition Root** — sitting between adapter crates and pu
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                 Adapter Layer                                       │
-│   ┌───────────────┐   ┌───────────────┐   ┌───────────────┐   ┌───────────────┐    │
-│   │  gglib-tauri  │   │  gglib-axum   │   │   gglib-cli   │   │  gglib-gui    │    │
-│   │ (Desktop IPC) │   │  (HTTP API)   │   │   (CLI UX)    │   │ (App Services)│    │
-│   └───────┬───────┘   └───────┬───────┘   └───────┬───────┘   └───────┬───────┘    │
-│           │                   │                   │                   │            │
-│           └───────────────────┴───────────────────┴───────────────────┘            │
+│                  ┌───────────────┐             ┌───────────────┐                    │
+│                  │   gglib-axum  │             │   gglib-cli   │                    │
+│                  │   (HTTP API)  │             │    (CLI UX)   │                    │
+│                  └───────┬───────┘             └───────┬───────┘                    │
+│                          │                             │                            │
+│                          └──────────────┬──────────────┘                            │
 │                                         │                                           │
 └─────────────────────────────────────────┼───────────────────────────────────────────┘
                                           ▼
@@ -89,7 +88,7 @@ The test suite is split into three layers:
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | Unit | `src/download_trigger.rs` `#[cfg(test)]` | Inline tests for `DownloadTriggerAdapter` using a `MockDownloadManager`. Validates quantization mapping and error propagation without touching the database. |
-| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. Also validates config variants (HF token, `max_concurrent`, non-existent binary path). |
+| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. Also checks that an HF token is accepted. |
 | Error cases | `tests/build_error_cases.rs` | Exercises the failure paths of `build()` — missing DB directory and DB path pointing at a directory. |
 | Functional round-trips | `tests/functional.rs` | End-to-end data round-trips through the wired repositories: model insert/list, settings save/reload, empty-state assertions for downloads, chat history, and MCP servers. |
 
@@ -114,16 +113,14 @@ cargo test -p gglib-bootstrap
 ```rust,ignore
 use std::sync::Arc;
 use gglib_bootstrap::{BootstrapConfig, CoreBootstrap};
-use gglib_core::paths::{database_path, llama_server_path, resolve_models_dir};
+use gglib_core::paths::{database_path, resolve_models_dir};
 
 let emitter: Arc<dyn AppEventEmitter> = Arc::new(MyAdapterEmitter::new());
 let config = BootstrapConfig {
     db_path: database_path()?,
-    llama_server_path: llama_server_path()?,
-    max_concurrent: 4,
     models_dir: resolve_models_dir(None)?.path,
     hf_token: std::env::var("HF_TOKEN").ok(),
 };
 let core = CoreBootstrap::build(config, emitter).await?;
-// core.app, core.runner, core.downloads, core.hf_client … all ready
+// core.app, core.downloads, core.hf_client … all ready
 ```
