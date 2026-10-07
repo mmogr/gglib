@@ -11,13 +11,13 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures_util::StreamExt as _;
 use gglib_core::domain::runs::RunError;
+use gglib_core::sse::DataFrames;
 use gglib_proxy::models::ErrorResponse;
 use serde_json::Value;
 
 use super::cell::LOG_LIMIT;
 use super::door::{ProxyDoor, dial};
 use super::executor::{RunExecutor, RunLog};
-use super::sse::DataFrames;
 
 /// How long connecting to the proxy may take. The reply itself is not
 /// bounded: a run lasts as long as its reply.
