@@ -9,8 +9,9 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 
 use gglib_core::download::{ProgressThrottle, RateEstimator};
-use gglib_core::paths::{data_root, llama_server_path};
+use gglib_core::paths::{data_root, llama_config_path, llama_server_path};
 
+use super::config::{InstallRecord, PrebuiltRecord};
 use super::install_events::{InstallPhase, LlamaProgressEvent};
 
 /// Check if llama.cpp binaries are installed.
@@ -646,10 +647,15 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
     })?;
     completed(&tx, InstallPhase::FetchRelease).await;
 
-    let gglib_dir = data_root()?;
-    let download_dir = gglib_dir.join("downloads");
+    // The binaries go where the launcher runs them from, and the record
+    // where every reader looks for it. Only the archive is this install's
+    // own, to delete once it is unpacked.
+    let server_path = llama_server_path()?;
+    let bin_dir = server_path
+        .parent()
+        .context("llama-server's path has no directory")?;
+    let download_dir = data_root()?.join("downloads");
     let archive_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     started(&tx, InstallPhase::Download).await;
     download_archive(&client, &asset.browser_download_url, &archive_path, &tx).await?;
@@ -659,7 +665,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
     // success and the failure path.
     let post_download_result = async {
         started(&tx, InstallPhase::Extract).await;
-        extract_binaries(&archive_path, &bin_dir)?;
+        extract_binaries(&archive_path, bin_dir)?;
         completed(&tx, InstallPhase::Extract).await;
 
         // Windows + CUDA only: also download the CUDA runtime DLLs.
@@ -667,7 +673,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
         #[cfg(target_os = "windows")]
         if asset_pattern.contains("cuda") {
             started(&tx, InstallPhase::CudaRuntime).await;
-            download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+            download_cuda_runtime(&client, &release, bin_dir, &download_dir).await?;
             completed(&tx, InstallPhase::CudaRuntime).await;
         }
 
@@ -682,10 +688,10 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
 
     post_download_result?;
 
-    save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
+    InstallRecord::Prebuilt(PrebuiltRecord::new(&release.tag_name, &description))
+        .save(&llama_config_path()?)?;
 
     started(&tx, InstallPhase::Verify).await;
-    let server_path = llama_server_path()?;
     if !server_path.exists() {
         bail!("Installation verification failed: binaries not found after extraction");
     }
@@ -696,33 +702,6 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
             version: release.tag_name,
         })
         .await;
-
-    Ok(())
-}
-
-/// Save configuration for pre-built installation.
-fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Result<()> {
-    use serde::Serialize;
-
-    #[derive(Serialize)]
-    struct PrebuiltConfig {
-        version: String,
-        platform: String,
-        install_type: String,
-        installed_at: String,
-    }
-
-    let config = PrebuiltConfig {
-        version: version.to_string(),
-        platform: platform.to_string(),
-        install_type: "prebuilt".to_string(),
-        installed_at: chrono::Utc::now().to_rfc3339(),
-    };
-
-    let config_path = gglib_dir.join(".llama").join("llama-config.json");
-    let json = serde_json::to_string_pretty(&config)?;
-    fs::write(&config_path, &json)
-        .with_context(|| format!("Failed to write llama config: {}", config_path.display()))?;
 
     Ok(())
 }

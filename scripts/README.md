@@ -49,8 +49,8 @@ commands, under the names that module docs cite.
 
 | Script | Purpose | Run by |
 |--------|---------|--------|
-| `check-deps.sh` | The system dependencies of a build, checked before anything compiles: the Rust, Node and Python toolchains, git, the C/C++ toolchain and CMake that llama.cpp builds with, a GPU runtime and what building for it needs, and on Linux the libraries the desktop app links. It prints how to install what is missing | `make check-deps`, and `make setup` through it |
-| `install-llama.sh` | Picks the acceleration llama.cpp is built with (Metal, CUDA or Vulkan) and runs `gglib config llama install` with it. Where it finds none of the three it chooses `--cpu-only`, which that command does not accept, and nothing is installed | `make llama-install-auto`, and `make setup` through it |
+| `check-deps.sh` | What has to be installed before there is a gglib binary to ask: the Rust and Node toolchains, git, pkg-config, CMake and the C/C++ toolchain, and under WSL2 the kernel setting that crashes npm. It prints how to install what is missing. When a gglib binary exists it then runs `gglib config check-deps`, which holds the rest of the list (a GPU runtime and what building for it needs, and on Linux the libraries the desktop app links), and exits with that command's status | `make check-deps`, and `make setup` through it |
+| `install-llama.sh` | Runs `gglib config llama install`, which picks the acceleration itself (Metal, CUDA or Vulkan) and refuses a machine with none of them. With no terminal it answers the command's "Continue?" with yes | `make llama-install-auto`, and `make setup` through it |
 | `generate_submodule_readmes.sh` | Writes a README stub wherever a source directory lacks one | By hand |
 | `split_test_output.py` | Cuts one `cargo test` run into the per-crate files the badges read | `ci.yml`'s `test` job |
 | `check_issue_form_mapping.mjs` | The issue form's field ids are the ones `issue-labels.yml` maps to labels | `check-issue-form.yml` |

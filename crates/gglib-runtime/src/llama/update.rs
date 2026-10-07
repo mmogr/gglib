@@ -1,12 +1,11 @@
 //! Update command for llama.cpp.
 
 use super::build_events::{BuildEvent, BuildPhase};
-use super::config::BuildConfig;
-use super::detect::{Acceleration, detect_optimal_acceleration};
+use super::config::recorded_build;
+use super::detect::Acceleration;
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_config_path, llama_cpp_dir, llama_server_path};
 use gglib_core::utils::process::cmd;
-use std::io::{self, Write};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
@@ -37,7 +36,7 @@ pub struct LlamaUpdateCheck {
 
 impl LlamaUpdateCheck {
     /// The states where no comparison is possible: nothing installed, or a
-    /// prebuilt install with no source checkout, or no build record to read.
+    /// prebuilt install with no source checkout, or no build's record to read.
     fn not_comparable(installed: bool, repo_present: bool) -> Self {
         Self {
             installed,
@@ -68,11 +67,9 @@ pub async fn llama_update_check() -> Result<LlamaUpdateCheck> {
         return Ok(LlamaUpdateCheck::not_comparable(true, false));
     }
 
-    let config_path = llama_config_path()?;
-    if !config_path.exists() {
+    let Some(config) = recorded_build(&llama_config_path()?)? else {
         return Ok(LlamaUpdateCheck::not_comparable(true, true));
-    }
-    let config = BuildConfig::load(&config_path)?;
+    };
 
     // `git fetch` is a network round-trip and every one of these is a
     // blocking subprocess, so the whole group moves off the async workers.
@@ -226,27 +223,6 @@ pub async fn handle_check_updates() -> Result<()> {
     Ok(())
 }
 
-/// The acceleration an update should rebuild with.
-///
-/// Whatever the current build recorded, so an update never silently changes
-/// backend; detection only decides when there is no record or the recorded
-/// name is not one we build for. Detection is deliberately fallible — it
-/// refuses to fall back to CPU — so this can fail with the install hints.
-pub fn update_acceleration() -> Result<Acceleration> {
-    let config_path = llama_config_path()?;
-    let recorded = config_path
-        .exists()
-        .then(|| BuildConfig::load(&config_path))
-        .transpose()?;
-
-    Ok(match recorded.as_ref().map(|c| c.acceleration.as_str()) {
-        Some("Metal") => Acceleration::Metal,
-        Some("CUDA") => Acceleration::Cuda,
-        Some("Vulkan") => Acceleration::Vulkan,
-        _ => detect_optimal_acceleration()?,
-    })
-}
-
 /// Pull upstream, then rebuild and reinstall — the shared update pipeline
 /// behind `gglib config llama update` and the `system/update-llama` route.
 ///
@@ -265,8 +241,8 @@ pub async fn run_llama_update(
     let dir = llama_dir.clone();
     let pull_tx = tx.clone();
 
-    // `git pull` is blocking subprocess work, so it belongs on a blocking
-    // thread with `blocking_send`, matching the rest of the pipeline.
+    // `git pull` blocks, so it runs on a blocking thread. Its output is this
+    // process's own: git reports a pull itself, and the CLI draws no spinner.
     tokio::task::spawn_blocking(move || -> Result<()> {
         let _ = pull_tx.blocking_send(BuildEvent::PhaseStarted {
             phase: BuildPhase::CloneOrUpdateRepo,
@@ -294,88 +270,6 @@ pub async fn run_llama_update(
     .await??;
 
     super::run_llama_source_build(acceleration, llama_dir, server_path, tx).await
-}
-
-/// Update llama.cpp to the latest version.
-///
-/// Preconditions, the plan and the prompt live here; the work itself is
-/// [`run_llama_update`], shared with the GUI route.
-pub async fn handle_update() -> Result<()> {
-    let llama_dir = llama_cpp_dir()?;
-    let binary_path = llama_server_path()?;
-
-    if !binary_path.exists() {
-        println!("llama.cpp is not installed.");
-        println!("Run 'gglib config llama install' to install it.");
-        return Ok(());
-    }
-
-    if !llama_dir.exists() {
-        println!("Error: llama.cpp repository not found.");
-        println!("Run 'gglib config llama install' to reinstall.");
-        return Ok(());
-    }
-
-    let config_path = llama_config_path()?;
-    let old_config = if config_path.exists() {
-        Some(BuildConfig::load(&config_path)?)
-    } else {
-        None
-    };
-    let acceleration = update_acceleration()?;
-
-    println!("Updating llama.cpp...");
-    println!();
-
-    if let Some(ref config) = old_config {
-        println!("Current version: {}", config.version);
-        println!("Build config: {}", config.acceleration);
-    }
-
-    println!();
-    println!("This will:");
-    println!("  - Pull latest llama.cpp changes");
-    println!("  - Rebuild with {} support", acceleration.display_name());
-    println!("  - Replace current binary");
-    println!();
-    println!("Current models will NOT be affected.");
-    println!();
-
-    print!("Continue? [y/N]: ");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    if !input.trim().eq_ignore_ascii_case("y") {
-        println!("Update cancelled.");
-        return Ok(());
-    }
-
-    println!();
-    let (tx, mut rx) = mpsc::channel::<BuildEvent>(64);
-    let update = tokio::spawn(run_llama_update(acceleration, llama_dir, binary_path, tx));
-
-    // Print what the build reports; a dropped receiver would run it silently.
-    while let Some(event) = rx.recv().await {
-        match event {
-            BuildEvent::Log { message } => println!("{message}"),
-            BuildEvent::PhaseStarted { phase } => println!("→ {phase:?}"),
-            BuildEvent::Completed {
-                version,
-                acceleration,
-            } => {
-                println!();
-                println!("✓ llama.cpp updated successfully!");
-                println!("  New version: {version}");
-                println!("  Acceleration: {acceleration}");
-            }
-            BuildEvent::Failed { message } => println!("✗ {message}"),
-            BuildEvent::PhaseCompleted { .. } | BuildEvent::Progress { .. } => {}
-        }
-    }
-
-    update.await??;
-
-    Ok(())
 }
 
 #[cfg(test)]

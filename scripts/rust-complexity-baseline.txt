@@ -19,7 +19,6 @@ crates/gglib-axum/src/routes.rs 370
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 344
 crates/gglib-cli/src/handlers/benchmark.rs 1613
-crates/gglib-cli/src/handlers/config/llama_install.rs 332
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 418
 crates/gglib-cli/src/handlers/model/download/interactive.rs 396
 crates/gglib-cli/src/handlers/model/update.rs 612
@@ -127,8 +126,8 @@ crates/gglib-runtime/src/command.rs 689
 crates/gglib-runtime/src/launch_narration.rs 694
 crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
-crates/gglib-runtime/src/llama/download/mod.rs 1001
-crates/gglib-runtime/src/llama/update.rs 454
+crates/gglib-runtime/src/llama/download/mod.rs 980
+crates/gglib-runtime/src/llama/update.rs 348
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 342
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 304
 crates/gglib-runtime/src/process/admission/queue_tests.rs 973
@@ -137,6 +136,6 @@ crates/gglib-runtime/src/process/residency/launch.rs 538
 crates/gglib-runtime/src/process/residency/mod.rs 565
 crates/gglib-runtime/src/process/residency/vram.rs 361
 crates/gglib-runtime/src/proxy/supervisor.rs 569
-crates/gglib-runtime/src/system/mod.rs 630
+crates/gglib-runtime/src/system/mod.rs 623
 crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320

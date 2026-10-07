@@ -7,10 +7,10 @@ use gglib_app_services::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
 use gglib_core::domain::format_gib;
 use gglib_core::utils::system::SystemMemoryInfo;
 use gglib_runtime::DefaultSystemProbe;
-use gglib_runtime::llama::{AutoConfirmPrompt, CliPrompt, InstallPrompt, ensure_llama_initialized};
 
 use super::{require_tty, row, sgr, step};
 use crate::bootstrap::CliContext;
+use crate::handlers::config::llama_ensure::ensure_installed;
 use crate::presentation::style::{RESET, SUCCESS};
 
 /// Run steps 1 and 2, returning the memory figures the model choice needs.
@@ -44,13 +44,10 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
     if status.llama_installed {
         row("binaries", "already installed", None);
     } else {
-        let prompt: Box<dyn InstallPrompt> = if yes {
-            Box::new(AutoConfirmPrompt)
-        } else {
+        if !yes {
             require_tty("installing llama.cpp")?;
-            Box::new(CliPrompt::new())
-        };
-        ensure_llama_initialized(prompt.as_ref()).await?;
+        }
+        ensure_installed(yes).await?;
         println!("  {}\u{2713}{} llama.cpp ready", sgr(SUCCESS), sgr(RESET));
     }
 

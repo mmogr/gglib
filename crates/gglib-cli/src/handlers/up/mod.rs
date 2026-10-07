@@ -123,12 +123,10 @@ pub(super) fn sgr(code: &'static str) -> &'static str {
 
 /// Refuse to ask a question nobody is there to answer.
 ///
-/// Closed stdin reads as EOF, and both confirmation paths resolve EOF to their
-/// default: `CliPrompt` defaults to yes, so `gglib up </dev/null` would kick
-/// off a half-hour llama.cpp build unprompted, and `prompt_confirmation`
-/// defaults to no, so the user would be told they cancelled a download they
-/// never saw offered. Neither is an answer. The flag that *is* an answer is
-/// one word long, so name it.
+/// Closed stdin reads as EOF, which every confirmation takes for a no: the
+/// user would be told llama.cpp is required, or that they cancelled a
+/// download, over a question they never saw. That is not an answer. The flag
+/// that *is* an answer is one word long, so name it.
 pub(super) fn require_tty(action: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
         std::io::stdin().is_terminal(),

@@ -20,7 +20,6 @@ import { formatError } from '../../utils/errors';
 
 /** Human-readable names for the build phases, in the order they run. */
 const PHASE_LABELS: Record<string, string> = {
-  dependency_check: 'Checking dependencies',
   clone_or_update_repo: 'Updating repository',
   configure: 'Configuring',
   compile: 'Compiling',

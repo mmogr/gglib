@@ -11,7 +11,7 @@ mod build;
 pub mod build_events;
 mod config;
 mod deps;
-mod detect;
+pub(crate) mod detect;
 #[allow(
     clippy::case_sensitive_file_extension_comparisons,
     clippy::items_after_statements,
@@ -21,34 +21,28 @@ mod detect;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod download;
-mod ensure;
-pub mod error;
 mod install;
 pub mod install_events;
-pub mod prompt;
 pub mod runtime_probe;
 mod server_availability;
 mod status;
 mod uninstall;
 mod update;
+mod update_preflight;
 mod validate;
 
 // === Public API (facade) ===
 
-// Error types
-pub use error::{LlamaError, LlamaResult};
-
-// The installed build's recorded configuration. Exposed so a launch can name
-// which acceleration the binary it is about to spawn was compiled for.
+// The build an update replaces, as its record names it, and the one question
+// a launch asks of that record: which acceleration the binary it is about to
+// spawn was compiled for.
 pub use config::BuildConfig;
+pub(crate) use config::recorded_acceleration;
 pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama_server};
 
 // What the installed llama-server can do natively. Probed once per binary and
 // held for the run — see `runtime_probe` for why arbitration is static.
 pub use runtime_probe::probe as probe_runtime_capabilities;
-
-// Prompt trait and its three policies
-pub use prompt::{AutoConfirmPrompt, CliPrompt, InstallPrompt, NonInteractivePrompt};
 
 // Build pipeline event types
 pub use build_events::{BuildEvent, BuildPhase};
@@ -56,24 +50,22 @@ pub use build_events::{BuildEvent, BuildPhase};
 // Prebuilt install pipeline event types
 pub use install_events::{InstallPhase, LlamaProgressEvent};
 
-pub use deps::check_dependencies;
+// The tools a source build runs, and how to install them
+pub use deps::{BuildTool, build_tool_install_lines, build_tools, missing_build_tools};
 
 // Core functionality
 pub use detect::{
     Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status,
 };
 pub use download::check_llama_installed;
-pub use ensure::ensure_llama_initialized;
-pub use status::{LlamaBuildInfo, LlamaStatus, llama_status};
+pub use status::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaStatus, llama_status};
 pub use validate::{handle_status, validate_llama_binary};
 
 // Installation
 pub use install::run_llama_source_build;
-pub use uninstall::{UninstallOutcome, handle_uninstall, uninstall_llama};
-pub use update::{
-    LlamaUpdateCheck, handle_check_updates, handle_update, llama_update_check, run_llama_update,
-    update_acceleration,
-};
+pub use uninstall::{UninstallOutcome, llama_files_present, uninstall_llama};
+pub use update::{LlamaUpdateCheck, handle_check_updates, llama_update_check, run_llama_update};
+pub use update_preflight::{LOCAL_CHANGES_CAUTION, UpdatePlan, UpdateRefusal, update_preflight};
 
 // Args resolution
 pub use args::{
