@@ -25,7 +25,6 @@ gglib-sse = { path = "../gglib-sse" }
 
 # Shared deps
 async-trait = { workspace = true }
-chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
@@ -39,7 +38,6 @@ reqwest = { workspace = true }
 # Axum-specific dependencies - use workspace versions for consistency
 axum = { workspace = true }
 tower-http = { workspace = true }
-tracing-subscriber = { workspace = true }
 futures-util = { workspace = true }
 futures-core = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -49,9 +47,8 @@ ts-rs = { workspace = true, optional = true }
 #
 # `mime-guess` (hyphen) is rust-embed's own feature: it bakes each file's
 # content type into the generated `Metadata` at compile time. The similarly
-# named `mime_guess` (underscore) feature would instead add mime_guess as a
-# direct dependency of this crate, which `#![deny(unused_crate_dependencies)]`
-# would then require us to name in code. One dependency, not two.
+# named `mime_guess` (underscore) feature is the optional dependency
+# rust-embed's framework examples use, and bakes in nothing.
 #
 # `debug-embed` makes every profile use the `include_bytes!` implementation.
 # Without it rust-embed gates that on `#[cfg(not(debug_assertions))]` and debug
@@ -66,8 +63,7 @@ rust-embed = { version = "8.12", features = ["mime-guess", "debug-embed"] }
 
 [features]
 # Emit TypeScript for this crate's HTTP wire types. Optional dependency, so
-# nothing enters the build graph with the feature off and
-# `#![deny(unused_crate_dependencies)]` stays satisfied. Forwards to the crates
+# nothing enters the build graph with the feature off. Forwards to the crates
 # whose types these bodies embed — ts-rs needs `TS` on the whole reachable
 # graph, not just the outermost struct.
 ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-app-services/ts-bindings"]
@@ -81,10 +77,12 @@ gglib-sse = { path = "../gglib-sse", features = ["test-support"] }
 # A data root of each test binary's own, so a context resolves nothing into
 # the checkout (#955).
 gglib-core = { path = "../gglib-core", features = ["test-utils"] }
-tokio-test = { workspace = true }
+# The timestamp on a model row a test builds.
+chrono = { workspace = true }
+# Tests that read back what the code under test logged.
+tracing-subscriber = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
-hyper = "1.0"
 tempfile = "3.10"
 
 [lints]

@@ -345,18 +345,6 @@ pub(crate) fn spawn_log_readers(
     }
 }
 
-/// A no-op log sink that discards all log lines.
-///
-/// Useful for CLI usage where structured log capture is not needed.
-#[derive(Debug, Clone, Default)]
-pub struct NoopLogSink;
-
-impl ServerLogSinkPort for NoopLogSink {
-    fn append(&self, _port: u16, _stream_type: &str, _line: String) {
-        // Intentionally empty - logs are already going to tracing
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

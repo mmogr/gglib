@@ -18,7 +18,6 @@ path = "src/lib.rs"
 gglib-core = { path = "../gglib-core" }
 gglib-download = { path = "../gglib-download" }
 gglib-mcp = { path = "../gglib-mcp" }
-gglib-hf = { path = "../gglib-hf" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
 # For `loopback`, the one builder of an HTTP client for a server on this machine
 # (the far proxy over the pipe's local port, the benchmark's llama-server; see
@@ -47,7 +46,6 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 dirs = { workspace = true }
 ts-rs = { workspace = true, optional = true }
@@ -63,8 +61,7 @@ futures-util = "0.3"
 # Emit TypeScript for the wire types. Test-driven: `cargo test --features
 # ts-bindings export_bindings_` writes `src/types/generated/`. Off in every
 # ordinary build, so it costs nothing at runtime and nothing in the default
-# dependency graph — which is what keeps `#![deny(unused_crate_dependencies)]`
-# satisfied without the feature.
+# dependency graph.
 #
 # Forwards to `gglib-core`: the DTOs here embed domain types (`InferenceConfig`,
 # `DefaultsOrigin`, …), and ts-rs needs `TS` on the whole reachable graph, not
@@ -78,7 +75,6 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-proxy/ts-bindings"]
 # remote backend's watcher tests, and a dependency elsewhere in the graph
 # dropping `test-util` must not be what breaks them.
 tokio = { workspace = true, features = ["test-util"] }
-tokio-test = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }
 # A test that arms a tunnel keeps its endpoint key in a data root of this
 # binary's own, not the checkout's (#955).

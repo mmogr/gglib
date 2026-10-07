@@ -6,11 +6,6 @@ description = "GGUF file format parsing for gglib"
 license.workspace = true
 publish = false
 
-[features]
-default = ["mmap"]
-mmap = ["dep:memmap2"]
-std = []
-
 [dependencies]
 # Core domain types and port definitions
 gglib-core = { path = "../gglib-core" }
@@ -23,9 +18,6 @@ tracing = { workspace = true }
 minijinja = { version = "2", features = ["json", "loop_controls"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 serde_json = { workspace = true }
-
-# Memory-mapped file reading (optional, default enabled)
-memmap2 = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -1,30 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
-
-// Silence unused dev-dependency warnings for planned test infrastructure
-#[cfg(test)]
-use tempfile as _;
-#[cfg(test)]
-use tokio_test as _;
-
-// Dependencies used by handlers module (will be used as handlers are migrated)
-use anyhow as _;
-use dotenvy as _;
-use rustyline as _;
-use tokio as _;
-use tracing as _;
-use tracing_subscriber as _;
-
-// gglib-runtime used for process runner in bootstrap
-use gglib_runtime as _;
-
-// gglib-axum used for web command in main.rs
-use gglib_axum as _;
-
-// gglib-proxy used for the shared SlotSnapshot/tokens_in_use parser in
-// handlers/proxy_dashboard.rs
-use gglib_proxy as _;
 
 // Nothing in the workspace depends on this crate: its only outside consumers
 // are its own `gglib` binary and its own `tests/`, and between them they need

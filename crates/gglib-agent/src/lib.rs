@@ -1,9 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
-// Allow dev-only crates (gglib-runtime, reqwest) used exclusively in
-// integration-test files under `tests/`.
-#![cfg_attr(test, allow(unused_crate_dependencies))]
 
 pub(crate) mod agent_loop;
 pub(crate) mod context_pruning;

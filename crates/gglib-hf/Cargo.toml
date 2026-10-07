@@ -33,7 +33,5 @@ url = "2.5"
 urlencoding = "2.1"
 
 [dev-dependencies]
-mockall.workspace = true
 # #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
 tokio = { workspace = true, features = ["macros", "rt"] }
-tokio-test.workspace = true

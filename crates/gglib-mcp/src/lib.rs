@@ -1,6 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
 // No consumer names a module of this crate — every use outside it goes through
 // the re-exports below.
 //

@@ -23,8 +23,7 @@ gglib-core (ports)          gglib-runtime                       External
 │ ModelCatalogPort     │    │ CatalogPortImpl      │    │  llama-cli       │
 │ LlmCompletionPort    │    │ LlmCompletionAdapter │    └──────────────────┘
 │ SystemProbePort      │    │ DefaultSystemProbe   │
-│ ServerLogSinkPort    │    │ NoopLogSink,         │
-│                      │    │ LogManagerSink       │
+│ ServerLogSinkPort    │    │ LogManagerSink       │
 │ AdmissionRelease     │    │ AdmissionQueue       │
 └──────────────────────┘    └──────────────────────┘
                                      │

@@ -15,8 +15,7 @@ default = []
 # `test-utils`.
 test-support = []
 # Emit TypeScript for the dashboard/audit records the GUI reads. Optional
-# dependency, so the default graph is unchanged and
-# `#![deny(unused_crate_dependencies)]` stays satisfied with the feature off.
+# dependency, so the default graph is unchanged with the feature off.
 ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
 
 [dependencies]
@@ -49,9 +48,7 @@ bytes = "1"
 
 # Async utilities
 futures-util = "0.3"
-futures-core = "0.3"
 async-stream = "0.3"
-tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # Error handling
@@ -76,9 +73,6 @@ dashmap = "6"
 # Session ID generation
 uuid = { workspace = true, features = ["v4"] }
 
-# Async trait support
-async-trait = "0.1"
-
 # Free-disk-space probing for auto-sized slot cache eviction
 sysinfo = { workspace = true }
 
@@ -90,12 +84,12 @@ gglib-proxy = { path = ".", features = ["test-support"] }
 # dashboard publisher test observes through.
 gglib-sse = { workspace = true, features = ["test-support"] }
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is
-# deliberately not part of tokio's `full`. Declared explicitly rather than
-# inherited: it currently arrives only because `tokio-test` happens to enable
-# it, so removing that dependency would silently break the contention tests.
+# deliberately not part of tokio's `full`. Declared here rather than left to
+# feature unification, so the contention tests do not rest on what another
+# crate in the graph happens to enable.
 tokio = { version = "1.0", features = ["test-util"] }
-tokio-test = "0.4"
-tower = { version = "0.5", features = ["util"] }
+# The port doubles the tests implement.
+async-trait = "0.1"
 http-body-util = "0.1"
 tempfile = { workspace = true }
 serde_json = "1.0"

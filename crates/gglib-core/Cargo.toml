@@ -46,10 +46,8 @@ name = "isolated_data_root"
 required-features = ["test-utils"]
 
 [dev-dependencies]
-mockall = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
-tokio-test = { workspace = true }
 
 [lints]
 workspace = true

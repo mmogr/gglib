@@ -11,7 +11,7 @@ crates/gglib-build-info 0 0
 crates/gglib-mcp 9 9
 crates/gglib-proxy 76 9
 crates/gglib-runtime 90 17
-crates/gglib-agent 5 5
+crates/gglib-agent 4 4
 crates/gglib-sse 0 0
 crates/gglib-cli 101 12
 crates/gglib-axum 28 8

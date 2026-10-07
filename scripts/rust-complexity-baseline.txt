@@ -132,7 +132,7 @@ crates/gglib-proxy/tests/integration_mcp_gateway.rs 480
 crates/gglib-proxy/tests/integration_pinned_models.rs 311
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 615
-crates/gglib-runtime/src/command.rs 736
+crates/gglib-runtime/src/command.rs 717
 crates/gglib-runtime/src/launch_narration.rs 694
 crates/gglib-runtime/src/llama/args/cache_ram.rs 340
 crates/gglib-runtime/src/llama/build/mod.rs 418
@@ -149,5 +149,5 @@ crates/gglib-runtime/src/process/residency/vram.rs 361
 crates/gglib-runtime/src/proxy/supervisor.rs 569
 crates/gglib-runtime/src/system/mod.rs 641
 crates/gglib-runtime/src/unified_server_config.rs 508
-crates/gglib-sse/src/lib.rs 322
+crates/gglib-sse/src/lib.rs 320
 src-tauri/src/main.rs 303

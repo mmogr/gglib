@@ -3,7 +3,7 @@
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
         test test-helper check fmt lint doc doc-check dev pre-commit release \
-        lint-web typecheck-web deadcode-web test-web boundaries enforce \
+        lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         bindings bindings-check \
         clean clean-gui clean-llama clean-db clean-all \
         check-deps check-deps-bootstrap check-deps-verify check-rust \
@@ -261,6 +261,21 @@ test-web: ## Run the frontend test suite
 
 boundaries: ## Check crate boundaries
 	@./scripts/check_boundaries.sh
+
+# The Rust sibling of `deadcode-web`, and the second step of CI's `boundaries`
+# job. cargo-shear is a tool of its own: CI installs a prebuilt binary, and
+# `cargo binstall cargo-shear` or `brew install cargo-shear` does the same
+# here. Building it with `cargo install` can need a newer rustc than
+# rust-toolchain.toml pins.
+unused-deps: ## Find dependencies no crate uses (needs cargo-shear)
+	@echo "Checking for unused dependencies..."
+	@$(CARGO) shear --version >/dev/null 2>&1 || { \
+		echo "✗ cargo-shear is not installed: cargo binstall cargo-shear, or brew install cargo-shear"; \
+		exit 1; \
+	}
+	@# `--deny-warnings` as in ci.yml: an optional dependency nothing uses and
+	@# an `ignored` entry that is no longer needed fail too.
+	$(CARGO) shear --deny-warnings
 
 enforce: ## Run the architecture enforcement checks
 	@./scripts/check-tauri-commands.sh
@@ -570,10 +585,11 @@ dev: fmt lint test ## Format, lint and test
 #
 # These are exactly the jobs ci-success requires, in the same order: fmt,
 # clippy, cargo test, the eslint/tsc gate, the unimported-file check, the
-# frontend suite, the boundary and architecture scripts, the binding staleness
-# gate and rustdoc. It used to be `fmt lint check test` — all Cargo — which
-# meant a clean local run could still fail CI on eslint, on a type error in a
-# test file, or on any of the five shell checks.
+# frontend suite, the boundary script, the unused-dependency check, the
+# architecture scripts, the binding staleness gate and rustdoc. It used to be
+# `fmt lint check test` — all Cargo — which meant a clean local run could
+# still fail CI on eslint, on a type error in a test file, or on any of the
+# five shell checks.
 #
 # `bindings-check` earns its place for the same reason `doc-check` did: the
 # `test` job runs it, so a stale binding fails CI, and `enforce`'s
@@ -582,7 +598,7 @@ dev: fmt lint test ## Format, lint and test
 # Without it, adding a Rust wire field and forgetting `make bindings` passed
 # a target whose help text reads "everything CI requires" and then cost a
 # full Rust CI leg to discover.
-pre-commit: fmt lint check test lint-web typecheck-web deadcode-web test-web boundaries enforce bindings-check doc-check ## Run everything CI requires
+pre-commit: fmt lint check test lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce bindings-check doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow

@@ -35,7 +35,7 @@ This crate is a **Shared Facade** — sitting between adapters and infrastructur
                                       ▼
               ┌───────────────────────────────────────────────────────┐
               │  gglib-core, gglib-runtime, gglib-proxy, gglib-agent, │
-              │          gglib-download, gglib-hf, gglib-mcp          │
+              │               gglib-download, gglib-mcp               │
               └───────────────────────────────────────────────────────┘
 ```
 

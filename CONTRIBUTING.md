@@ -652,8 +652,8 @@ make lint
 make doc
 
 # Run all pre-commit checks in sequence: fmt, lint, check, test, lint-web,
-# typecheck-web, deadcode-web, test-web, boundaries, enforce, bindings-check,
-# doc-check
+# typecheck-web, deadcode-web, test-web, boundaries, unused-deps, enforce,
+# bindings-check, doc-check
 make pre-commit
 ```
 
@@ -678,6 +678,28 @@ cargo doc  -p gglib-runtime --features cli
 ### Lockfile discipline
 
 `Cargo.lock` is committed and must stay consistent. Before anything builds, the `test` job runs `cargo metadata --locked` for the workspace and for `src-tauri`, which fails when the lock does not already satisfy every manifest. After editing a `Cargo.toml`, run `make check`, which records the change in the lock, and commit the result. To move one third-party crate, run `cargo update -p <crate> --precise <version>`, and name in the PR every version the lock diff moves. Never run `cargo generate-lockfile`: it re-resolves every dependency against whatever the registry holds that minute, so its diff carries third-party upgrades nobody reviewed.
+
+### Unused dependencies
+
+CI's `boundaries` job runs `cargo shear --deny-warnings`, and `make unused-deps` runs the same command. It fails on:
+
+- a dependency a crate declares and none of its targets names;
+- a dependency under `[dependencies]` that only the crate's `tests/` name, which belongs under `[dev-dependencies]`;
+- an entry in `[workspace.dependencies]` that no member takes;
+- an optional dependency nothing names;
+- an `ignored` entry that is not needed.
+
+[cargo-shear](https://github.com/Boshen/cargo-shear) reads the source as text and compiles nothing. Code for another platform or behind a feature therefore counts as a use, and so does a `#[cfg(test)]` module under `src/`: a dependency that only unit tests name passes under `[dependencies]`, so put it under `[dev-dependencies]` yourself.
+
+A dependency that no code names but the build needs goes in that crate's `ignored` list, with the reason on the line above it:
+
+```toml
+[package.metadata.cargo-shear]
+# Named nowhere in code: it sets the features of the SQLite that sqlx links.
+ignored = ["libsqlite3-sys"]
+```
+
+Install the tool with `cargo binstall cargo-shear` or `brew install cargo-shear`. `cargo install cargo-shear`, run from this checkout, builds it with the toolchain `rust-toolchain.toml` pins, which can be older than the tool needs.
 
 ### Dependency updates
 
@@ -724,7 +746,7 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 |---|---|---|
 | `fmt` | `cargo fmt --all -- --check` | Consistent code style |
 | `quality` | `./scripts/check_workflow_yaml.sh`, `npm run lint -- --max-warnings 0`, `npm run typecheck` | No duplicate key in any YAML file under `.github/`, plus that script's `bump-version.yml` and `badges.yml` checks; the ESLint rules, warnings included; TypeScript types |
-| `boundaries` | `./scripts/check_boundaries.sh`, which also runs `check_readmes.sh --strict` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage |
+| `boundaries` | `./scripts/check_boundaries.sh`, which also runs `check_readmes.sh --strict`; `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
 | `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_context_floor.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_lint_inheritance.sh`, `check_ts_bindings.sh`, `check_readme_tables.py`, all in `scripts/` | Tauri commands only in the approved files; frontend `invoke()` only with allowlisted commands; no transport branching in frontend client modules; no catch-all over `ParamSource`; nothing outside the resolver fabricates the context floor; every setting reachable from a surface; no discarded `sqlx` result; the Rust and TypeScript/CSS file-size ratchets; every crate inherits the workspace lints, and allows no more lints than its baseline; the ts-rs binding annotations; TypeScript README tables that match their directories |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |

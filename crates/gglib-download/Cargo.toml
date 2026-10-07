@@ -24,7 +24,6 @@ async-trait.workspace = true
 # Serialization
 serde = { workspace = true }
 serde_json.workspace = true
-chrono.workspace = true
 
 # Collections
 indexmap = "2.0"
@@ -51,12 +50,11 @@ which = "8"
 # Home directory, for locating interpreters installed by conda/pyenv/uv
 dirs = { workspace = true }
 
-# Temp files
-tempfile.workspace = true
-
 [dev-dependencies]
-tokio-test.workspace = true
-mockall.workspace = true
+# The virtual clock behind `#[tokio::test(start_paused = true)]`.
+tokio = { workspace = true, features = ["test-util"] }
+# The timestamp on a model row a test builds.
+chrono.workspace = true
 tempfile.workspace = true
 # `Model::stored`, the row a recording registrar answers.
 gglib-core = { path = "../gglib-core", features = ["test-utils"] }
