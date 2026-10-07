@@ -15,6 +15,7 @@ use gglib_core::domain::benchmark::{
     BenchmarkModelResult, CompareConfig, DeltaWithheld, ModelCompareResult, ModelPerfResult,
     PerfConfig,
 };
+use gglib_core::format_duration_human;
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
@@ -927,8 +928,8 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
     );
     eprintln!(
         "  wall / run      {raw} {gglib} {colour}{factor}{RESET}",
-        raw = format_args!("{:>7}", fmt_duration(per_run_ms(&report.raw))),
-        gglib = format_args!("{:>8}", fmt_duration(per_run_ms(&report.gglib))),
+        raw = format_args!("{:>7}", format_duration_human(per_run_ms(&report.raw))),
+        gglib = format_args!("{:>8}", format_duration_human(per_run_ms(&report.gglib))),
         colour = factor_colour(report.delta.wall_time_speedup),
         factor = fmt_factor(report.delta.wall_time_speedup),
         RESET = style::RESET,
@@ -985,8 +986,8 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
     eprintln!(
         "  {MUTED}suite wall clock: raw {raw}, gglib {gglib} (all runs, timeouts \
          included){RESET}",
-        raw = fmt_duration(report.raw.total_wall_ms),
-        gglib = fmt_duration(report.gglib.total_wall_ms),
+        raw = format_duration_human(report.raw.total_wall_ms),
+        gglib = format_duration_human(report.gglib.total_wall_ms),
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
@@ -1053,19 +1054,9 @@ fn fmt_factor(factor: Option<f64>) -> String {
     )
 }
 
-/// Milliseconds as `4.8s` past a second, `336ms` below it.
-fn fmt_duration(millis: u64) -> String {
-    if millis >= 1_000 {
-        #[allow(clippy::cast_precision_loss)]
-        let secs = millis as f64 / 1_000.0;
-        format!("{secs:.1}s")
-    } else {
-        format!("{millis}ms")
-    }
-}
-
 fn fmt_ms(millis: Option<f64>) -> String {
-    millis.map_or_else(|| "—".to_owned(), |m| fmt_duration(m.round() as u64))
+    let time = millis.map(|m| format_duration_human(m.round() as u64));
+    time.unwrap_or_else(|| "—".to_owned())
 }
 
 fn fmt_count(count: Option<u64>) -> String {
@@ -1532,6 +1523,15 @@ mod tests {
             first_call_skew(&arm_with_first_call(Some(500.0), Some(0.0))).is_none(),
             "a zero median must not divide into an infinite factor"
         );
+    }
+
+    /// The dash and the rounding are this function's; the shapes are the shared formatter's.
+    #[test]
+    fn a_time_is_rounded_to_a_millisecond_and_a_missing_one_is_a_dash() {
+        assert_eq!(fmt_ms(None), "—");
+        assert_eq!(fmt_ms(Some(335.6)), "336ms");
+        assert_eq!(fmt_ms(Some(4_807.4)), "4.8s");
+        assert_eq!(fmt_ms(Some(94_000.0)), "1m 34s");
     }
 
     #[test]

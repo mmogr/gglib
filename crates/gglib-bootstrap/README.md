@@ -106,7 +106,7 @@ cargo test -p gglib-bootstrap
 
 1. **No Adapter Dependencies** — Must not depend on tauri, axum, tower, or CLI crates
 2. **Single Call** — All infrastructure wired via one `CoreBootstrap::build()` async call
-3. **Emitter Injection** — Event emission strategy supplied by the caller (Tauri/Axum/CLI each provide their own)
+3. **Emitter Injection** — Event emission strategy supplied by the caller (the daemon passes its SSE broadcaster, the CLI a `NoopEmitter`)
 4. **Owned Output** — `BuiltCore` owns all constructed values; adapters clone `Arc`s as needed
 
 ## Usage

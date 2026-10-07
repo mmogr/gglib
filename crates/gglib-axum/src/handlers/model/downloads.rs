@@ -14,8 +14,8 @@ use gglib_core::download::QueueSnapshot;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct QueueDownloadRequest {
     pub model_id: String,
-    /// Quantization to download. Accepts both "quant" and "quantization" field names
-    /// for compatibility with different frontends (Tauri uses "quantization", legacy uses "quant").
+    /// Quantization to download. The CLI sends it as "quant" and the page as
+    /// "quantization", so both field names are accepted.
     #[serde(alias = "quantization")]
     pub quant: Option<String>,
 }

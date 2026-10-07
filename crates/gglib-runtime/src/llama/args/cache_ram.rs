@@ -10,10 +10,10 @@
 //! budget from the machine's actual RAM, the model's weights, and its KV
 //! footprint at the launch context size.
 
-use crate::system::is_truthy_flag;
-use gglib_core::domain::format_gib;
-use gglib_core::server_config::{
-    CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, CacheRamSetting, compute_auto_cache_ram_mb,
+use gglib_core::cache_config::CacheRamSetting;
+use gglib_core::debug_switches;
+use gglib_core::domain::{
+    CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES, compute_auto_cache_ram_mb, format_gib,
 };
 
 /// Indicates how the `--cache-ram` budget was resolved.
@@ -62,9 +62,7 @@ pub struct CacheRamResolution {
 /// `GGLIB_DISABLE_CACHE_REUSE`; exists so a user can launch with
 /// llama-server's own `--cache-ram` default without editing config.
 fn autosize_disabled_via_env() -> bool {
-    std::env::var("GGLIB_DISABLE_CACHE_AUTOSIZE")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_DISABLE_CACHE_AUTOSIZE")
 }
 
 /// Resolve the `--cache-ram` budget for a llama-server launch.
@@ -326,15 +324,5 @@ mod tests {
         );
         assert_eq!(got.cache_ram_mb, Some(2048));
         assert_eq!(got.source, CacheRamSource::Explicit);
-    }
-
-    #[test]
-    fn truthy_flag_parsing_matches_the_other_kill_switches() {
-        for v in ["1", "true", "TRUE", " yes ", "On"] {
-            assert!(crate::system::is_truthy_flag(v), "{v:?} should be truthy");
-        }
-        for v in ["0", "false", "no", "off", "", "2"] {
-            assert!(!crate::system::is_truthy_flag(v), "{v:?} should be falsy");
-        }
     }
 }

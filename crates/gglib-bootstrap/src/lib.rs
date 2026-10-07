@@ -1,7 +1,7 @@
 //! Shared composition root for gglib adapters.
 //!
-//! This crate consolidates the common infrastructure-wiring steps that every
-//! adapter (CLI, Axum, Tauri) needs:
+//! This crate consolidates the common infrastructure-wiring steps that the
+//! adapters that build a backend (the CLI and the Axum daemon) need:
 //!
 //! 1. Database pool + repository set
 //! 2. GGUF parser + model registrar

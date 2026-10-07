@@ -25,12 +25,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
     LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort,
     Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
+use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};

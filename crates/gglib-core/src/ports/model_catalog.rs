@@ -126,7 +126,7 @@ pub struct ModelLaunchSpec {
     /// summed across all shards for multi-part GGUFs, plus the projector.
     ///
     /// Read at launch to budget host memory (see
-    /// [`crate::server_config::compute_auto_cache_ram_mb`]). `0` when the
+    /// [`crate::domain::compute_auto_cache_ram_mb`]). `0` when the
     /// size could not be determined — callers must treat that as "unknown"
     /// rather than "free".
     pub file_size_bytes: u64,

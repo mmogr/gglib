@@ -4,8 +4,8 @@
 //! with a [`CancellationToken`].  When the guard is dropped — either because
 //! the SSE stream has been fully consumed **or** because the HTTP client
 //! disconnected and the Axum response was dropped — `cancel.cancel()` fires
-//! cooperatively, signalling the benchmark task to stop at the next model
-//! boundary.
+//! cooperatively, signalling the benchmark task to stop at the next point
+//! where it checks the token.
 //!
 //! # Why not `JoinHandle::abort()`?
 //!
@@ -16,7 +16,7 @@
 //! in `Running` status.
 //!
 //! Using [`CancellationToken`] gives the benchmark loop a cooperative exit
-//! point between models, where it can call `stop_current()` and
+//! point between units of work, where it can call `stop_current()` and
 //! `fail_run("Aborted by user")` before returning — freeing VRAM and keeping
 //! the DB consistent.
 
@@ -32,7 +32,9 @@ use gglib_core::domain::benchmark::BenchmarkEvent;
 /// Wraps a [`ReceiverStream<BenchmarkEvent>`] and a [`CancellationToken`].
 ///
 /// Dropping this struct fires `cancel.cancel()`, cooperatively aborting the
-/// background benchmark task at its next inter-model `tokio::select!` check.
+/// background benchmark task at its next check of the token: before each
+/// model in compare and perf, each candidate in tune, and each seed of each
+/// task in the agentic eval.
 pub struct BenchmarkTaskGuard {
     inner: ReceiverStream<BenchmarkEvent>,
     cancel: CancellationToken,

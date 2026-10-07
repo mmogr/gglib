@@ -14,8 +14,8 @@
 //! (`--cache-type-v f16` is the usual fix) or set `GGLIB_DISABLE_KV_QUANT=1`
 //! to fall back to `f16`/`f16` entirely.
 
-use crate::system::is_truthy_flag;
 use gglib_core::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V, KvCacheType};
+use gglib_core::debug_switches;
 
 /// Indicates how the K/V cache types were resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,9 +68,7 @@ impl KvCacheTypeResolution {
 /// `GGLIB_DISABLE_CACHE_AUTOSIZE`; the escape hatch for the Flash Attention
 /// constraint documented in the module docs.
 fn kv_quant_disabled_via_env() -> bool {
-    std::env::var("GGLIB_DISABLE_KV_QUANT")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_DISABLE_KV_QUANT")
 }
 
 /// Resolve the `--cache-type-k`/`--cache-type-v` types for a llama-server launch.
@@ -182,6 +180,17 @@ mod tests {
         // v wasn't explicit, so the kill switch still forces f16 for it.
         assert_eq!(got.v, KvCacheType::F16);
         assert_eq!(got.source, KvCacheTypeSource::Explicit);
+    }
+
+    /// The public entry point reads the environment, so it must be the pure
+    /// form handed what the switch reads as now, whichever way that is.
+    #[test]
+    fn the_public_resolver_hands_the_pure_form_what_the_switch_reads_as() {
+        let disabled = debug_switches::enabled("GGLIB_DISABLE_KV_QUANT");
+        assert_eq!(
+            resolve_kv_cache_types(None, None),
+            resolve_kv_cache_types_inner(None, None, disabled)
+        );
     }
 
     #[test]

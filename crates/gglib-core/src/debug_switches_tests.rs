@@ -5,15 +5,50 @@
 //! it, because one of them walks the crate tree.
 
 use super::*;
+use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
+
+/// Values a switch reads as on: case and surrounding spaces do not matter.
+const ON: [&str; 8] = ["1", "true", "yes", "on", "TRUE", " On ", " yes ", "  on"];
+/// Values it reads as off, the empty string among them.
+const OFF: [&str; 8] = ["0", "false", "no", "off", "", "maybe", "2", "disable"];
 
 #[test]
 fn truthy_values_are_the_ones_the_tree_already_accepted() {
-    for v in ["1", "true", "yes", "on", "TRUE", " On "] {
+    for v in ON {
         assert!(is_truthy(v), "{v:?} should be truthy");
     }
-    for v in ["0", "false", "no", "off", "", "maybe"] {
+    for v in OFF {
         assert!(!is_truthy(v), "{v:?} should not be truthy");
     }
+}
+
+/// `enabled` is what every switch in the tree asks, so the same table is put
+/// through the environment: a switch is on for those values, and off for the
+/// rest and when it is not set at all.
+///
+/// The variable is one nothing else reads, and not a `GGLIB_DISABLE_` name,
+/// which `all_lists_every_switch_the_tree_reads` would then want in [`ALL`].
+/// Each reading is taken under the lock and judged after it is released, so a
+/// failure here does not poison it for the path tests that share it.
+#[test]
+fn a_switch_is_on_for_the_truthy_values_and_off_for_the_rest_and_when_unset() {
+    const SWITCH: &str = "GGLIB_SWITCH_ONLY_THIS_TEST_SETS";
+    let reads_as_on = |value: Option<&str>| {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _env = value.map_or_else(
+            || EnvVarGuard::unset(SWITCH),
+            |v| EnvVarGuard::set(SWITCH, v),
+        );
+        enabled(SWITCH)
+    };
+
+    for v in ON {
+        assert!(reads_as_on(Some(v)), "{v:?} should switch it on");
+    }
+    for v in OFF {
+        assert!(!reads_as_on(Some(v)), "{v:?} should leave it off");
+    }
+    assert!(!reads_as_on(None), "unset should leave it off");
 }
 
 /// [`ALL`] must name every `GGLIB_DISABLE_*` the tree reads, in both

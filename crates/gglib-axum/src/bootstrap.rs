@@ -164,8 +164,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 
     // 5. Build the shared domain-ops graph.
     //
-    // Assembly lives in gglib-app-services so this adapter and the Tauri one
-    // cannot drift; only genuinely Axum-shaped wiring stays here.
+    // Assembly lives in gglib-app-services, which owns every `*Ops` type and so
+    // knows how they fit together; only genuinely Axum-shaped wiring stays here.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
     let loop_guard_trip_writer = LoopGuardTripWriter::spawn(pool.clone());
     let loop_guard_trips = Arc::new(SqliteLoopGuardTripLog::new(pool.clone()));

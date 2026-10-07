@@ -42,7 +42,7 @@ pub fn create_private_dir(dir: &Path) -> io::Result<()> {
 /// Whatever creating the file returns, other than that it already exists. A
 /// tightening that fails is logged (see the module docs).
 pub fn create_private_file(file: &Path) -> io::Result<()> {
-    match create_file(file) {
+    match create_new_private_file(file) {
         Ok(_) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
             make_private(file);
@@ -87,9 +87,10 @@ fn create_dir(dir: &Path) -> io::Result<()> {
 }
 
 /// `open` asked for `0600`, and only if nothing is there: `create_new` is what
-/// makes truncating an existing file impossible here.
+/// makes truncating an existing file impossible here. A name that is taken, a
+/// link included, is refused with `AlreadyExists` and left as it was.
 #[cfg(unix)]
-fn create_file(file: &Path) -> io::Result<fs::File> {
+pub(crate) fn create_new_private_file(file: &Path) -> io::Result<fs::File> {
     use std::os::unix::fs::OpenOptionsExt;
     fs::OpenOptions::new()
         .write(true)
@@ -99,8 +100,9 @@ fn create_file(file: &Path) -> io::Result<fs::File> {
 }
 
 /// Windows has no mode to ask for; the file inherits its directory's ACL.
+/// `create_new` refuses a taken name as the Unix twin does.
 #[cfg(not(unix))]
-fn create_file(file: &Path) -> io::Result<fs::File> {
+pub(crate) fn create_new_private_file(file: &Path) -> io::Result<fs::File> {
     fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -168,9 +170,26 @@ mod tests {
         let root = tempfile::tempdir().expect("tempdir");
         let file = root.path().join("gglib.db");
 
-        create_file(&file).expect("create");
+        create_new_private_file(&file).expect("create");
 
         assert_eq!(mode(&file) & 0o077, 0, "{:o}", mode(&file));
+    }
+
+    /// The refusal both callers lean on: the database's create takes it to
+    /// mean "tighten what is there", and the secret writer to mean "remove the
+    /// leftover and try once more". Neither may get a handle on the old file.
+    #[test]
+    fn a_taken_name_is_refused_and_what_is_there_keeps_its_bytes_and_its_mode() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let file = root.path().join("gglib.db");
+        fs::write(&file, b"already here").expect("write");
+        set_mode(&file, 0o644);
+
+        let refused = create_new_private_file(&file).expect_err("the name is taken");
+
+        assert_eq!(refused.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&file).expect("read"), b"already here");
+        assert_eq!(mode(&file), 0o644);
     }
 
     /// Every start runs this against a database with the user's history in
