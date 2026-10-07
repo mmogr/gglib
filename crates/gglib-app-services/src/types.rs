@@ -329,7 +329,7 @@ pub struct ModelsDirectoryInfo {
 
 #[path = "types_settings.rs"]
 mod types_settings;
-pub use types_settings::{AppSettings, UpdateSettingsRequest};
+pub use types_settings::{AppSettings, InstalledTemplates, UpdateSettingsRequest};
 
 // ============================================================================
 // MCP Types

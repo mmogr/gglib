@@ -69,7 +69,8 @@ pub use remote::{
 };
 pub use runs::{Reservation, Reserved, RunEnded, RunLog, RunRegistry, RunSpec, RunWork, Stopped};
 pub use sampling_explain::{
-    ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,
+    ParamProvenanceDto, ProvenanceKindDto, PublishedDefaultDto, PublishedStateDto,
+    SamplingExplanationDto, SamplingLayerDto, SuppressedEffortDto,
 };
 pub use servers::ServerOps;
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};

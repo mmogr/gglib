@@ -83,24 +83,12 @@ impl ModelOps {
             .map_or((false, None), |h| (true, Some(h.port)))
     }
 
-    /// List all models with their serving status.
-    pub async fn list(&self) -> Result<Vec<GuiModel>, GuiError> {
-        let models = self.deps.core.models().list().await?;
-
-        let mut gui_models = Vec::new();
-        for model in models {
-            let (is_serving, port) = self.get_server_status(model.id).await;
-            gui_models.push(GuiModel::from_model(model, is_serving, port));
-        }
-
-        Ok(gui_models)
-    }
-
     /// List models filtered and sorted by the given query.
     ///
     /// Fetches all models from the repository, applies [`apply_query`] (the
     /// single source of truth for filter/sort semantics), then enriches each
-    /// surviving model with its current serving status.
+    /// surviving model with its current serving status. The one listing, for
+    /// `gglib model list` and `GET /api/models` alike.
     pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
         let models = self.deps.core.models().list().await?;
 

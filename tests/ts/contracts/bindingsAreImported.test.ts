@@ -45,7 +45,6 @@ const NOT_IMPORTED = [
   'ModelAgenticHistoryQuery',
   'ModelBenchmarkQuery',
   'ModelBenchmarkResponse',
-  'ModelListQueryParams',
   'ModelTuneHistoryQuery',
   'ModelTuneHistoryResponse',
   'ModelsResponse',

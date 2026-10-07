@@ -60,6 +60,25 @@ Quantization: Q4_K_M
 Context Length: 4096
 ```
 
+### Capability Flags
+**Module:** `capability_flags.rs`
+
+The one table of capability flags: each flag's name, its bit, and the field of
+an override request that sets it. `gglib model capabilities` takes its `--set`
+and `--unset` values from the table, and that command and `gglib model inspect`
+print from it.
+
+**Key Items:**
+- `CAPABILITY_FLAGS` - The four flags, in the order they are listed
+- `capability_lines(caps)` - One `name : yes|no` line per flag
+- `capability_names()` - The names as the values clap accepts
+
+### Sampling Values
+**Module:** `sampling_values.rs`
+
+**Key Functions:**
+- `stated_parameters(config: &InferenceConfig)` - Every field the config sets, by name, rendered as it was typed. The serve banner and `gglib model inspect` both list from it.
+
 ### Tables
 **Module:** `tables.rs`
 

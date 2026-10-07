@@ -131,7 +131,7 @@ let model_ops = ModelOps::new(ModelDeps {
 });
 
 // Use ops asynchronously in handlers
-// let models = model_ops.list().await?;
+// let models = model_ops.list_with_query(ModelListQuery::default()).await?;
 # }
 ```
 

@@ -75,16 +75,13 @@ vi.mock('../../../src/services/transport', async () => {
   };
 });
 vi.mock('../../../src/services/transport/api/client', () => ({
-  // The library list the page draws is the filtered fetch, not `listModels`;
-  // a model's sampling explanation is "none", which the inspector can draw.
+  // A model's sampling explanation is "none", which the inspector can draw.
   get: vi.fn(async (path: string) =>
-    path.startsWith('/api/models?')
-      ? library.models
-      : path.endsWith('/projectors')
-        ? here.projectors
-        : path.startsWith('/api/models/')
-          ? null
-          : [],
+    path.endsWith('/projectors')
+      ? here.projectors
+      : path.startsWith('/api/models/')
+        ? null
+        : [],
   ),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({

@@ -36,8 +36,9 @@ use crate::target::Target;
 
 /// `ModelOps` for a one-shot CLI command.
 ///
-/// An edit and a removal made in a terminal go through it, so each runs the
-/// operation the inspector's runs, as a capability change and an upgrade do.
+/// A listing, an explanation, an edit and a removal made in a terminal go
+/// through it, so each runs the operation the GUI's runs, as a capability
+/// change and an upgrade do.
 /// The reasons for what it is built with live here once:
 ///
 /// - `NoopModelRuntime` rather than `ctx.runner`: a one-shot command has no
@@ -66,8 +67,8 @@ pub(crate) async fn dispatch(
     dispatch_with(ctx, &one_shot_model_ops(ctx), command, target).await
 }
 
-/// [`dispatch`], with the `ModelOps` an update and a removal are made
-/// through, so a test can watch what either does with them.
+/// [`dispatch`], with the `ModelOps` a command reads and writes the library
+/// through, so a test can watch what it does with them.
 #[allow(
     clippy::too_many_lines,
     reason = "grandfathered at lint inheritance, #1157"
@@ -86,7 +87,7 @@ async fn dispatch_with(
             add::execute(ctx, &file_path, reimport).await?;
         }
         ModelCommand::List(args) => {
-            list::execute(target, ctx, args).await?;
+            list::execute(target, ctx, ops, args).await?;
         }
         ModelCommand::Remove { identifier, force } => {
             remove::execute(ctx, ops, &identifier, force).await?;
@@ -246,7 +247,7 @@ async fn dispatch_with(
             identifier,
             profile,
         } => {
-            explain::execute(ctx, &identifier, profile.as_deref()).await?;
+            explain::execute(ctx, ops, &identifier, profile.as_deref()).await?;
         }
     }
     Ok(())

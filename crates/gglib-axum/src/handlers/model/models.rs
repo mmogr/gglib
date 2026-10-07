@@ -198,8 +198,10 @@ pub(crate) async fn retag(
     Ok(Json(state.models.retag(id, body.full).await?))
 }
 
-/// Commit-SHA update check — `gglib model check-updates` for one model,
-/// distinct from the shard-level diff on `/{id}/updates`.
+/// Commit-SHA update check — the one `gglib model upgrade` runs before it
+/// downloads, distinct from the shard-level diff on `/{id}/updates`. Not
+/// `gglib model check-updates`, which declines to answer for a model with no
+/// recorded revision where this reports an update.
 pub(crate) async fn check_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,

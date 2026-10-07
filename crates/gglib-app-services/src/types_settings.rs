@@ -58,6 +58,21 @@ pub struct AppSettings {
     pub start_at_login: Option<bool>,
 }
 
+/// What installing the starter profiles did, and the settings it left.
+///
+/// The answer to `POST /api/config/profiles/install-templates`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledTemplates {
+    /// The names of the templates added.
+    pub installed: Vec<String>,
+    /// The names left out because a profile already had them.
+    pub kept: Vec<String>,
+    /// The settings as stored, the profile list among them.
+    pub settings: AppSettings,
+}
+
 impl From<gglib_core::Settings> for AppSettings {
     fn from(settings: gglib_core::Settings) -> Self {
         Self {

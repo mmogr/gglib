@@ -235,3 +235,26 @@ fn serializes_with_camel_case_keys() {
     assert!(json.get("listInModels").is_some());
     assert!(json.get("list_in_models").is_none());
 }
+
+/// The answer to a name that matches nothing, word for word: every surface
+/// that looks a profile up prints this.
+#[test]
+fn an_unknown_name_is_answered_with_the_profiles_there_are() {
+    let profiles = [&builtin_templates()[0], &builtin_templates()[1]].map(Clone::clone);
+
+    assert_eq!(
+        not_found_message("codign", &profiles),
+        "no profile named 'codign'; configured profiles are: coding, chat"
+    );
+}
+
+/// With none configured the list would be empty, so the message names the
+/// command that adds the starter profiles.
+#[test]
+fn an_unknown_name_with_none_configured_names_the_command_that_adds_some() {
+    assert_eq!(
+        not_found_message("coding", &[]),
+        "no profile named 'coding'; none are configured \
+         (run `gglib config profile install-templates`)"
+    );
+}

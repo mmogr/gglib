@@ -12,7 +12,7 @@ use gglib_core::services::AppCore;
 use gglib_core::utils::system::SystemMemoryInfo;
 
 use crate::error::GuiError;
-use crate::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
+use crate::types::{AppSettings, InstalledTemplates, ModelsDirectoryInfo, UpdateSettingsRequest};
 
 /// A probe that reports less RAM than this has not read it.
 const MIN_VALID_MEMORY: u64 = 256 * 1024 * 1024;
@@ -124,6 +124,23 @@ impl SettingsOps {
         Ok(settings.into())
     }
 
+    /// Add the starter profiles to the stored list, keeping any stored
+    /// profile that has a template's name.
+    ///
+    /// What the settings page's button does, by the function `gglib config
+    /// profile install-templates` runs. Only the command can put a template
+    /// in a stored profile's place, with `--force`.
+    pub async fn install_profile_templates(&self) -> Result<InstalledTemplates, GuiError> {
+        let settings = self.deps.core.settings();
+        let (settings, done) = settings.install_profile_templates(false).await?;
+
+        Ok(InstalledTemplates {
+            installed: done.installed,
+            kept: done.kept,
+            settings: settings.into(),
+        })
+    }
+
     /// Get system memory information.
     ///
     /// Returns None if memory information is unavailable (probe failed, too small, etc.).
@@ -139,3 +156,7 @@ mod tests;
 #[cfg(test)]
 #[path = "settings_models_dir_tests.rs"]
 mod models_dir_tests;
+
+#[cfg(test)]
+#[path = "settings_profile_templates_tests.rs"]
+mod profile_templates_tests;

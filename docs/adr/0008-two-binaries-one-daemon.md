@@ -108,7 +108,7 @@ the only deliverable.
 the desktop process to check for and install the llama.cpp toolchain, streaming
 progress over Tauri IPC. The daemon already exposes the same capability over
 HTTP (`POST /api/config/system/install-llama`,
-`GET /api/config/system/llama-status` in `crates/gglib-axum/src/routes.rs`), and
+`GET /api/config/system/llama-status` in `crates/gglib-axum/src/routes_config.rs`), and
 the frontend has both paths wired — the Tauri one is marked
 `TRANSPORT_EXCEPTION` in `src/services/platform/llamaInstall.ts`.
 

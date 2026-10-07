@@ -5,7 +5,9 @@ use axum::extract::State;
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_app_services::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
+use gglib_app_services::types::{
+    AppSettings, InstalledTemplates, ModelsDirectoryInfo, UpdateSettingsRequest,
+};
 use gglib_core::utils::system::SystemMemoryInfo;
 
 /// Get application settings.
@@ -19,6 +21,14 @@ pub(crate) async fn update(
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<AppSettings>, HttpError> {
     Ok(Json(state.settings.update(req).await?))
+}
+
+/// Add the starter profiles to the stored list. A stored profile that has
+/// one's name is kept as it is, and named in the answer's `kept`.
+pub(crate) async fn install_profile_templates(
+    State(state): State<AppState>,
+) -> Result<Json<InstalledTemplates>, HttpError> {
+    Ok(Json(state.settings.install_profile_templates().await?))
 }
 
 /// Get system memory information.

@@ -1,19 +1,20 @@
 //! List command handler.
 //!
-//! Fetches and displays GGUF models with optional sort / filter flags. Models
-//! are loaded from the local `SQLite` database and filtered in-process via
-//! [`gglib_core::domain::apply_query`], into a `Vec<GuiModel>` that is
-//! rendered by a single table function. A speed column (`⚡ t/s`) is shown
-//! only when at least one returned model has benchmark data, and an `Images`
-//! column says which models are linked to a projector. While this
+//! Fetches and displays GGUF models with optional sort / filter flags. The
+//! rows are [`ModelOps::list_with_query`]'s, the listing `GET /api/models`
+//! answers with, so a flag here and a filter on the library page narrow by
+//! one rule; a single table function renders them. A speed column (`⚡ t/s`)
+//! is shown only when at least one returned model has benchmark data, and an
+//! `Images` column says which models are linked to a projector. While this
 //! machine is paired, the list ends with one line on how the paired machine
 //! stands, which asks that machine nothing.
 
 use std::fmt::Write as _;
 
 use anyhow::Result;
+use gglib_app_services::ModelOps;
 use gglib_app_services::types::GuiModel;
-use gglib_core::domain::{ModelListQuery, apply_query};
+use gglib_core::domain::ModelListQuery;
 
 use crate::bootstrap::CliContext;
 use crate::model_list_args::ListArgs;
@@ -29,10 +30,15 @@ mod list_far;
 
 /// Execute the list command: this machine's catalogue, or the paired
 /// machine's as its proxy publishes it.
-pub(crate) async fn execute(target: Target, ctx: &CliContext, args: ListArgs) -> Result<()> {
+pub(crate) async fn execute(
+    target: Target,
+    ctx: &CliContext,
+    ops: &ModelOps,
+    args: ListArgs,
+) -> Result<()> {
     target
         .run(
-            async || list_here(ctx, args).await,
+            async || list_here(ctx, ops, args).await,
             async || list_far::execute(ctx, target).await,
         )
         .await
@@ -40,8 +46,8 @@ pub(crate) async fn execute(target: Target, ctx: &CliContext, args: ListArgs) ->
 
 /// This machine's catalogue, sorted and filtered as asked, and the paired
 /// machine's line when there is one.
-async fn list_here(ctx: &CliContext, args: ListArgs) -> Result<()> {
-    let models = fetch_models(ctx, &args).await?;
+async fn list_here(ctx: &CliContext, ops: &ModelOps, args: ListArgs) -> Result<()> {
+    let models = fetch_models(ops, &args).await?;
     let paired = list_far::summary(ctx).await;
     print!("{}", listing(&models, paired.as_deref()));
     Ok(())
@@ -71,11 +77,8 @@ fn listing(models: &[GuiModel], paired: Option<&str>) -> String {
 // Fetch helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async fn fetch_models(ctx: &CliContext, args: &ListArgs) -> Result<Vec<GuiModel>> {
-    let query = build_query(args);
-    let all = ctx.app.models().list().await?;
-    let filtered = apply_query(all, &query);
-    Ok(filtered.into_iter().map(GuiModel::from_domain).collect())
+async fn fetch_models(ops: &ModelOps, args: &ListArgs) -> Result<Vec<GuiModel>> {
+    Ok(ops.list_with_query(build_query(args)).await?)
 }
 
 fn build_query(args: &ListArgs) -> ModelListQuery {

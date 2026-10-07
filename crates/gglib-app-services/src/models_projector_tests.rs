@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gglib_core::GgufFileRole;
+use gglib_core::domain::ModelListQuery;
 use gglib_core::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopEmitter, NoopModelRuntime,
 };
@@ -89,7 +90,8 @@ async fn an_update_links_the_projector_and_every_dto_says_the_model_reads_images
 
     assert!(updated.image_input);
     assert!(ops.get(model.id).await.unwrap().image_input);
-    assert!(ops.list().await.unwrap()[0].image_input);
+    let listed = ops.list_with_query(ModelListQuery::default()).await;
+    assert!(listed.unwrap()[0].image_input);
     let detail = ops.get_detail(model.id).await.unwrap();
     assert!(detail.image_input);
     assert_eq!(

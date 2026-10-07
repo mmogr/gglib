@@ -28,4 +28,4 @@ pub use model_verification::{
 };
 pub use projector_choices::projector_choices;
 pub use settings_cache::{DEFAULT_TTL as SETTINGS_CACHE_TTL, SettingsCache};
-pub use settings_service::SettingsService;
+pub use settings_service::{SettingsService, TemplateInstall};
