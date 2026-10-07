@@ -176,7 +176,10 @@ a hierarchy different from the one that runs.
 Interactive session with tool access (filesystem plus any configured MCP
 servers). `--no-tools` for plain chat. Conversations persist: `--continue <id>`
 resumes one on the machine it ran on, and `gglib chat history` lists them, each
-model by its id and its machine.
+model by its id and its machine. A turn is saved as the web page's is: your
+message when you send it, and the reply when the turn ends, with its reasoning
+and how it was made. A turn stopped by Ctrl+C or an error keeps what had
+arrived of its reply, marked as stopped.
 
 Local models need guardrails to finish a tool-calling task, so the loop carries
 iteration limits (`--max-iterations`), a tool allowlist (`--tools`, evaluated

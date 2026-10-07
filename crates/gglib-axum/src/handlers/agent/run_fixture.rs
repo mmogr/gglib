@@ -125,7 +125,7 @@ pub(super) fn paced(
         model: "qwen".to_owned(),
         // A run on no model of this machine's; a test of what a local run
         // is made by resolves one (see `run_made_tests`).
-        made_by: super::compose::MadeBy {
+        made_by: gglib_app_services::transcript::MadeBy {
             model: "qwen".to_owned(),
             quantization: None,
             device: None,

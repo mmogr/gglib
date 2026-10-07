@@ -11,6 +11,7 @@
 //! models.
 
 use gglib_app_services::FarProxy;
+use gglib_app_services::transcript::MadeBy;
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
@@ -18,7 +19,7 @@ use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
 use super::AgentChatRequest;
-use super::compose::{MadeBy, Prepared};
+use super::compose::Prepared;
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
 

@@ -146,10 +146,11 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         selected_profile = selection.profile;
     }
 
-    let (persistence, prior_messages, saved) = if let Some(conv) = stored {
-        let (merged_args, conv, prior, saved) = resume_conversation(ctx, &args, conv).await?;
+    let (resumed, prior_messages, saved) = if let Some(conv) = stored {
+        let id = conv.id;
+        let (merged_args, prior, saved) = resume_conversation(ctx, &args, conv).await?;
         args = merged_args;
-        (Some(conv), prior, saved)
+        (Some(id), prior, saved)
     } else {
         args.identifier = args
             .target
@@ -191,10 +192,11 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         .await?;
     args.identifier.clone_from(&turn.identifier);
     let profile = selected_profile.as_ref();
-    let persistence = match persistence {
-        Some(conv) => {
+    let persistence = match resumed {
+        Some(id) => {
             let typed = typed_this_invocation;
             let kept = resume_settings::resumed_settings(saved, &args, typed, profile, &turn)?;
+            let conv = Conversation::resume(ctx.app.chat_history(), id, turn.made_by());
             Some(conv.record_settings(kept).await)
         }
         None => resume_settings::new_conversation(ctx, &args, profile, &turn).await,
@@ -228,16 +230,11 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
 /// whether their profile applies is [`resume_settings::restore_profile`]'s
 /// to decide, and what the resume saves in their place is
 /// [`resume_settings::resumed_settings`]'s.
-async fn resume_conversation<'a>(
-    ctx: &'a CliContext,
+async fn resume_conversation(
+    ctx: &CliContext,
     args: &ChatArgs,
     conv: gglib_core::domain::chat::Conversation,
-) -> Result<(
-    ChatArgs,
-    Conversation<'a>,
-    Vec<AgentMessage>,
-    Option<ConversationSettings>,
-)> {
+) -> Result<(ChatArgs, Vec<AgentMessage>, Option<ConversationSettings>)> {
     let history = ctx.app.chat_history();
     let conv_id = conv.id;
 
@@ -265,8 +262,5 @@ async fn resume_conversation<'a>(
     // The history as every surface reads it back. The system prompt is the
     // conversation's, unless this command line names another.
     let prior_messages = saved_history(merged.system_prompt.as_deref(), &db_messages);
-
-    // All of it is saved already, or is the prompt, which is never a row.
-    let persistence = Conversation::resume(history, conv_id, prior_messages.len()).await;
-    Ok((merged, persistence, prior_messages, conv.settings))
+    Ok((merged, prior_messages, conv.settings))
 }

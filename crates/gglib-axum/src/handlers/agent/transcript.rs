@@ -12,48 +12,24 @@
 //! The reply
 //! is saved when the run ends, all rows or none, with how long each turn
 //! thought: from its first reasoning event to its last, as they were logged.
+//!
+//! The message and the reply are written by `gglib_app_services::transcript`,
+//! which the CLI's chat saves through too. What is here is this door's own:
+//! its refusals, by code, and what it records on the conversation.
 
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Instant;
+use std::sync::Arc;
 
 use axum::http::StatusCode;
-use gglib_core::domain::agent::{AgentMessage, MADE_KEYS, rows_from_timed_frames, to_new_message};
+use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::runs::{RunError, RunStatus};
 use gglib_core::domain::{Machine, ModelRef, Thinking};
 use gglib_core::ports::ChatHistoryError;
 use gglib_core::services::AppCore;
-use serde_json::{Map, Value};
 
 use gglib_app_services::RunEnded;
+use gglib_app_services::transcript::{self, FrameTimes};
 
 use crate::error::HttpError;
-
-/// When each of a run's frames was logged, in ms from the run's start;
-/// shared by the loop that logs and the end that saves.
-#[derive(Clone)]
-pub(super) struct FrameTimes {
-    start: Instant,
-    logged: Arc<Mutex<Vec<u64>>>,
-}
-
-impl FrameTimes {
-    pub(super) fn new() -> Self {
-        Self {
-            start: Instant::now(),
-            logged: Arc::default(),
-        }
-    }
-
-    /// A frame was logged now.
-    pub(super) fn logged(&self) {
-        let ms = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
-        self.lock().push(ms);
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<u64>> {
-        self.logged.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-}
 
 fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> HttpError {
     HttpError::Coded {
@@ -113,8 +89,15 @@ pub(super) async fn keep_machine(
 }
 
 /// Save the request's last message, when it is the user's, to
-/// `conversation_id`; with `replace_from`, in place of that row and every
-/// later one, in one transaction. A paired `device`'s message says which.
+/// `conversation_id`, as [`transcript::save_user`] writes it; with
+/// `replace_from`, in place of that row and every later one. A paired
+/// `device`'s message says which.
+///
+/// # Errors
+///
+/// `message_not_found` (404) for a `replace_from` not in the conversation,
+/// the attachment store's refusal of an image the message names, and
+/// `internal_error` for a write that failed.
 pub(super) async fn save_user(
     core: &AppCore,
     conversation_id: i64,
@@ -122,26 +105,8 @@ pub(super) async fn save_user(
     last: Option<&AgentMessage>,
     device: Option<&str>,
 ) -> Result<(), HttpError> {
-    let Some(user @ AgentMessage::User { .. }) = last else {
-        return Ok(());
-    };
-    let mut row = to_new_message(user, conversation_id);
-    if let Some(device) = device {
-        let mut fields = match row.metadata.take() {
-            Some(Value::Object(fields)) => fields,
-            _ => Map::new(),
-        };
-        fields.insert(MADE_KEYS.device.to_owned(), Value::from(device));
-        row.metadata = Some(Value::Object(fields));
-    }
-    let saved = match replace_from {
-        Some(from) => core
-            .chat_history()
-            .replace_from(from, row)
-            .await
-            .map(|_| ()),
-        None => core.chat_history().save_message(row).await.map(|_| ()),
-    };
+    let history = core.chat_history();
+    let saved = transcript::save_user(history, conversation_id, replace_from, last, device).await;
     saved.map_err(|e| match e {
         ChatHistoryError::MessageNotFound(id) => coded(
             StatusCode::NOT_FOUND,
@@ -214,27 +179,27 @@ pub(super) async fn remember_thinking(
     }
 }
 
-/// Save the reply to `conversation_id` once the run ends, whatever the end:
+/// Save the reply to `conversation_id` once the run ends, whatever the end,
+/// as [`transcript::save_reply`] writes it from the run's logged frames:
 /// every row or none. A reply that could not be saved fails the run.
 pub(super) fn save_reply(core: Arc<AppCore>, conversation_id: i64, times: FrameTimes) -> RunEnded {
     Box::new(move |info, frames| {
         Box::pin(async move {
             let finished = info.status == RunStatus::Completed;
-            let logged = times.lock().clone();
+            let history = core.chat_history();
             // One time per frame by construction: the loop records it right
             // after the frame is logged, with no await between the two.
-            let at = |i: usize| logged.get(i).copied();
-            let with_times = frames.iter().enumerate().map(|(i, f)| (&**f, at(i)));
-            let rows = rows_from_timed_frames(with_times, finished, conversation_id);
-            let total = rows.len();
-            if core.chat_history().save_messages(rows).await.is_err() {
-                tracing::warn!(run = %info.id, conversation = conversation_id, rows = total,
+            let logged = frames.iter().map(|frame| &**frame);
+            let saved =
+                transcript::save_reply(history, conversation_id, logged, &times, finished).await;
+            let Ok(total) = saved else {
+                tracing::warn!(run = %info.id, conversation = conversation_id,
                     "an agent run's reply was not saved");
                 return Err(RunError {
                     code: "transcript_not_saved".to_owned(),
                     message: "The reply could not be saved to its conversation.".to_owned(),
                 });
-            }
+            };
             tracing::debug!(run = %info.id, conversation = conversation_id, rows = total,
                 "an agent run's reply was saved");
             Ok(())
