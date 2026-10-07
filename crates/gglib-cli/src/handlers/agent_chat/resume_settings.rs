@@ -165,7 +165,6 @@ pub(super) async fn new_conversation<'a>(
     match Conversation::create(
         ctx.app.chat_history(),
         args.system_prompt.clone(),
-        None,
         Some(settings),
     )
     .await
@@ -178,6 +177,9 @@ pub(super) async fn new_conversation<'a>(
     }
 }
 
+#[cfg(test)]
+#[path = "resume_rows_tests.rs"]
+mod resume_rows_tests;
 #[cfg(test)]
 #[path = "resume_settings_tests.rs"]
 mod tests;

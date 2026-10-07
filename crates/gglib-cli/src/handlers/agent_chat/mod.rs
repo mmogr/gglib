@@ -21,7 +21,7 @@ pub(crate) mod upstream;
 
 use anyhow::{Result, bail};
 
-use gglib_core::domain::agent::AgentMessage;
+use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
@@ -129,7 +129,7 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
     let stored = persistence::continued(ctx.app.chat_history(), args.continue_id).await?;
     if let Some(conv) = &stored {
         let pairing = profile_settings.remote_pairing.as_ref();
-        resume_settings::follow_stored_machine(&mut args, conv.settings.as_ref(), pairing)?;
+        resume_settings::follow_stored_machine(&mut args, conv, pairing)?;
     }
     let mut selected_profile = None;
     if let Some(selection) = crate::handlers::inference::profile_selection::select_before_resume(
@@ -262,23 +262,11 @@ async fn resume_conversation<'a>(
         );
     }
 
-    // Convert persisted messages to agent messages
-    let mut prior_messages: Vec<AgentMessage> = db_messages
-        .iter()
-        .map(gglib_core::Message::to_agent_message)
-        .collect();
+    // The history as every surface reads it back. The system prompt is the
+    // conversation's, unless this command line names another.
+    let prior_messages = saved_history(merged.system_prompt.as_deref(), &db_messages);
 
-    // The system prompt is stored on the conversation record (not as a
-    // message row), so prepend it if present.
-    if let Some(ref prompt) = merged.system_prompt {
-        prior_messages.insert(
-            0,
-            AgentMessage::System {
-                content: prompt.clone(),
-            },
-        );
-    }
-
-    let persistence = Conversation::resume(history, conv_id, msg_count).await;
+    // All of it is saved already, or is the prompt, which is never a row.
+    let persistence = Conversation::resume(history, conv_id, prior_messages.len()).await;
     Ok((merged, persistence, prior_messages, conv.settings))
 }

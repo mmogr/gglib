@@ -15,6 +15,7 @@ use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_path};
 use gglib_core::domain::AttachmentId;
+use gglib_core::domain::chat::NewConversation;
 use gglib_core::domain::runs::RunList;
 use gglib_core::request_pipeline::{MAX_IMAGE_BYTES, MAX_REQUEST_IMAGE_BYTES};
 use http_body_util::BodyExt;
@@ -136,7 +137,10 @@ async fn images_over_16_mib_together_are_refused_by_code() {
     let conversation = state
         .core
         .chat_history()
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
 

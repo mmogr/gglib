@@ -1,7 +1,99 @@
-//! The agent-message-to-row mapping.
+//! The agent-message-to-row mapping, and a saved chat read back.
 
 use super::*;
 use crate::domain::agent::{AssistantContent, ToolCall};
+
+/// A saved row saying `content` as `role`.
+fn row(role: MessageRole, content: &str) -> Message {
+    Message {
+        id: 1,
+        conversation_id: 42,
+        role,
+        content: content.to_owned(),
+        created_at: String::new(),
+        metadata: None,
+        images: Vec::new(),
+    }
+}
+
+/// A message as its role and what it says.
+fn said_by(message: &AgentMessage) -> (&'static str, &str) {
+    match message {
+        AgentMessage::System { content } => ("system", content),
+        AgentMessage::User { content, .. } => ("user", content),
+        AgentMessage::Assistant { content } => ("assistant", content.text.as_deref().unwrap_or("")),
+        AgentMessage::Tool { content, .. } => ("tool", content),
+    }
+}
+
+/// Each message as its role and what it says.
+fn said(messages: &[AgentMessage]) -> Vec<(&'static str, &str)> {
+    messages.iter().map(said_by).collect()
+}
+
+/// The prompt first, trimmed, then the rows in order: what the next turn
+/// starts from.
+#[test]
+fn a_saved_chat_reads_back_as_its_prompt_then_its_rows() {
+    let rows = [
+        row(MessageRole::User, "first"),
+        row(MessageRole::Assistant, "answer"),
+        row(MessageRole::Tool, "result"),
+    ];
+
+    let history = saved_history(Some("  Be brief.\n"), &rows);
+
+    assert_eq!(
+        said(&history),
+        [
+            ("system", "Be brief."),
+            ("user", "first"),
+            ("assistant", "answer"),
+            ("tool", "result")
+        ]
+    );
+}
+
+/// A chat saved when the prompt was kept as a message holds a system row.
+/// It is not sent: the prompt is the conversation's, and with none, none is
+/// sent, wherever in the rows the system one sits.
+#[test]
+fn a_saved_system_row_is_never_sent() {
+    let rows = [
+        row(MessageRole::System, "OLD-PROMPT"),
+        row(MessageRole::User, "first"),
+        row(MessageRole::System, "LATER-PROMPT"),
+        row(MessageRole::Assistant, "answer"),
+    ];
+
+    let with_a_prompt = saved_history(Some("Be brief."), &rows);
+    let with_none = saved_history(None, &rows);
+
+    assert_eq!(
+        said(&with_a_prompt),
+        [
+            ("system", "Be brief."),
+            ("user", "first"),
+            ("assistant", "answer")
+        ]
+    );
+    assert_eq!(
+        said(&with_none),
+        [("user", "first"), ("assistant", "answer")]
+    );
+}
+
+/// A prompt that is empty once trimmed is no prompt: no empty system
+/// message leads the history.
+#[test]
+fn a_blank_prompt_sends_no_system_message() {
+    let rows = [row(MessageRole::User, "first")];
+
+    for blank in [Some(""), Some("  \n\t"), None] {
+        assert_eq!(said(&saved_history(blank, &rows)), [("user", "first")]);
+    }
+    assert!(saved_history(Some(" "), &[]).is_empty());
+}
 
 #[test]
 fn system_message_maps_correctly() {

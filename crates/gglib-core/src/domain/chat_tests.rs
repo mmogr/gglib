@@ -1,6 +1,78 @@
-//! A saved message on the wire, and back as an agent message.
+//! A saved message on the wire, and back as an agent message; and the
+//! machine a stored conversation ran on.
 
 use super::*;
+
+/// A stored conversation with this `model_id`, and this model in its
+/// settings.
+fn conversation(model_id: Option<i64>, model: Option<ModelRef>) -> Conversation {
+    Conversation {
+        id: 12,
+        title: "t".to_owned(),
+        model_id,
+        system_prompt: None,
+        settings: model.map(|model| ConversationSettings {
+            model: Some(model),
+            ..ConversationSettings::default()
+        }),
+        created_at: String::new(),
+        updated_at: String::new(),
+    }
+}
+
+/// Model 3 of the paired machine.
+fn far() -> ModelRef {
+    let fingerprint = "0123456789ab".to_owned();
+    ModelRef {
+        machine: Machine::Paired { fingerprint },
+        id: 3,
+    }
+}
+
+/// The stored model's machine is the conversation's, whatever `model_id`
+/// says beside it: a row whose two fields disagree is its settings'.
+#[test]
+fn a_conversation_ran_on_its_stored_models_machine() {
+    let here = ModelRef {
+        machine: Machine::Local,
+        id: 3,
+    };
+
+    assert_eq!(
+        conversation(Some(3), Some(here.clone())).machine(),
+        Some(Machine::Local)
+    );
+    assert_eq!(
+        conversation(None, Some(here)).machine(),
+        Some(Machine::Local)
+    );
+    assert_eq!(
+        conversation(None, Some(far())).machine(),
+        Some(far().machine)
+    );
+    assert_eq!(
+        conversation(Some(3), Some(far())).machine(),
+        Some(far().machine)
+    );
+}
+
+/// A row from before a conversation stored its model holds only a
+/// `model_id`, which is this catalogue's: it ran here. One that stores
+/// neither, or settings that name no model, ran nowhere that is recorded.
+#[test]
+fn a_conversation_with_only_a_model_id_ran_on_this_machine() {
+    let mut named_only = conversation(None, None);
+    named_only.settings = Some(ConversationSettings {
+        model_name: Some("qwen3".to_owned()),
+        ..ConversationSettings::default()
+    });
+
+    assert_eq!(conversation(Some(3), None).machine(), Some(Machine::Local));
+    assert_eq!(conversation(None, None).machine(), None);
+    assert_eq!(named_only.machine(), None);
+    named_only.model_id = Some(3);
+    assert_eq!(named_only.machine(), Some(Machine::Local));
+}
 
 fn message(role: MessageRole, images: Vec<AttachmentInfo>) -> Message {
     Message {

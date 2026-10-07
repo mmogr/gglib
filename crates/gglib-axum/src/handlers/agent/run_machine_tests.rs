@@ -37,9 +37,8 @@ async fn registered(state: &AppState) -> i64 {
     state.core.models().add(model).await.unwrap().id
 }
 
-/// A conversation that stores `model` and the `model_id` it implies.
+/// A conversation that stores `model`, and so the `model_id` it implies.
 async fn made_for(state: &AppState, model: ModelRef) -> i64 {
-    let model_id = (model.machine == Machine::Local).then_some(model.id);
     let settings = ConversationSettings {
         model: Some(model),
         ..Default::default()
@@ -47,11 +46,10 @@ async fn made_for(state: &AppState, model: ModelRef) -> i64 {
     state
         .core
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
-            model_id,
-            system_prompt: None,
             settings: Some(settings),
+            ..NewConversation::default()
         })
         .await
         .unwrap()
@@ -130,7 +128,11 @@ async fn a_far_run_on_a_chat_with_a_model_id_is_refused() {
     let id = state
         .core
         .chat_history()
-        .create_conversation("t".to_owned(), Some(model), None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            model_id: Some(model),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     refused(&state, id, on("0a1b2c3d4e5f"), "continues here").await;
@@ -158,7 +160,10 @@ async fn a_chat_with_no_model_takes_the_runs_machine() {
     let id = state
         .core
         .chat_history()
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     launched(&state, id, on("0a1b2c3d4e5f")).await.expect("run");

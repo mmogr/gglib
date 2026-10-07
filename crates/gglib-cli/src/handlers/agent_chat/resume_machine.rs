@@ -2,15 +2,17 @@
 //!
 //! A `#[path]` child of `resume_settings.rs`. A conversation that stored its
 //! model goes back to that model's machine, by its id there, whatever the
-//! flag says; one that stored none, or a model named on the command line,
-//! follows the flag. A resume whose turn is on another model than the one
-//! stored saves that model, so the conversation names the model it last ran
-//! on.
+//! flag says; one that names no model, or a model named on the command line,
+//! follows the flag. The machine is read as the daemon reads it
+//! (`Conversation::machine`), so a row that stores only a `model_id` ran
+//! here: it refuses `--remote`, and resumes by the name it saved. A resume
+//! whose turn is on another model than the one stored saves that model, so
+//! the conversation names the model it last ran on.
 
 use anyhow::{Result, bail};
 use gglib_app_services::far_credentials;
 use gglib_core::RemotePairing;
-use gglib_core::domain::chat::ConversationSettings;
+use gglib_core::domain::chat::{Conversation, ConversationSettings};
 use gglib_core::domain::{InferenceProfile, Machine, UNNAMED_PAIRED};
 
 use super::session_profile;
@@ -69,13 +71,13 @@ pub(crate) fn resumed_settings(
 /// [`stored_machine`]'s refusals.
 pub(crate) fn follow_stored_machine(
     args: &mut ChatArgs,
-    saved: Option<&ConversationSettings>,
+    stored: &Conversation,
     pairing: Option<&RemotePairing>,
 ) -> Result<()> {
     let named = !args.identifier.is_empty();
     let paired_with = |fingerprint: &str| far_credentials(pairing, fingerprint).is_ok();
     let port = args.port.is_some();
-    let Some((target, identifier)) = stored_machine(saved, args.target, port, named, paired_with)?
+    let Some((target, identifier)) = stored_machine(stored, args.target, port, named, paired_with)?
     else {
         return Ok(());
     };
@@ -97,10 +99,12 @@ pub(crate) fn follow_stored_machine(
 /// model is named by its id there — with its profile, on the paired machine,
 /// where the profile is part of what goes on the wire.
 ///
-/// `None` when the flag decides: a row that stores no model, or a model
-/// named on the command line. `port` says whether `--port` names a server
-/// here; `paired_with`, whether the pairing this machine holds now is with
-/// the machine a fingerprint names.
+/// `None` when the flag decides: a row that names no model, or a model
+/// named on the command line. And for a row that stores only a `model_id`,
+/// once it is not refused: it ran here, and resumes by the name it saved.
+/// `port` says whether `--port` names a server here; `paired_with`, whether
+/// the pairing this machine holds now is with the machine a fingerprint
+/// names.
 ///
 /// # Errors
 ///
@@ -108,23 +112,22 @@ pub(crate) fn follow_stored_machine(
 /// machine this one is no longer paired with; one that ran on the paired
 /// machine, resumed with `--port`. One sentence each.
 pub(crate) fn stored_machine(
-    saved: Option<&ConversationSettings>,
+    stored: &Conversation,
     flag: Target,
     port: bool,
     named: bool,
     paired_with: impl Fn(&str) -> bool,
 ) -> Result<Option<(Target, String)>> {
-    let Some((model, saved)) = saved
-        .filter(|_| !named)
-        .and_then(|saved| Some((saved.model.as_ref()?, saved)))
-    else {
+    let Some(machine) = stored.machine().filter(|_| !named) else {
         return Ok(None);
     };
-    match &model.machine {
+    let saved = stored.settings.as_ref();
+    let model = saved.and_then(|saved| saved.model.as_ref());
+    let resumed = match &machine {
         Machine::Local if flag == Target::Remote => {
             bail!("this chat ran on this machine and continues here; drop --remote to resume it")
         }
-        Machine::Local => Ok(Some((Target::Local, model.id.to_string()))),
+        Machine::Local => model.map(|model| (Target::Local, model.id.to_string())),
         Machine::Paired { fingerprint } if !paired_with(fingerprint) => bail!(
             "this chat ran on a machine this one is no longer paired with, so it cannot be \
              resumed here"
@@ -133,11 +136,12 @@ pub(crate) fn stored_machine(
             "this chat ran on the paired machine, and --port names a server on this one; drop \
              --port to resume it there"
         ),
-        Machine::Paired { .. } => Ok(Some((
-            Target::Remote,
-            far_wire(model.id, saved.profile.as_deref()),
-        ))),
-    }
+        Machine::Paired { .. } => model.map(|model| {
+            let profile = saved.and_then(|saved| saved.profile.as_deref());
+            (Target::Remote, far_wire(model.id, profile))
+        }),
+    };
+    Ok(resumed)
 }
 
 #[cfg(test)]

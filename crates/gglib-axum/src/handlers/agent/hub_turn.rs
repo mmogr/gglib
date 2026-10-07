@@ -22,8 +22,8 @@ use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
-use gglib_core::domain::agent::AgentMessage;
-use gglib_core::domain::chat::{ConversationSettings, Message, MessageRole};
+use gglib_core::domain::agent::{AgentMessage, saved_history};
+use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::{
     AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
@@ -196,18 +196,8 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     }
     let rows = history.get_messages(id).await.map_err(unreadable)?;
     let model = model_for(state, &conversation, &rows).await?;
-    let prompt = conversation.system_prompt.as_deref().map(str::trim);
-    let mut messages: Vec<AgentMessage> = prompt
-        .filter(|p| !p.is_empty())
-        .map(|p| AgentMessage::System {
-            content: p.to_owned(),
-        })
-        .into_iter()
-        .collect();
-    // The prompt comes from the conversation, as the page takes it; a saved
-    // system row would send it twice.
-    let saved = rows.iter().filter(|row| row.role != MessageRole::System);
-    messages.extend(saved.map(Message::to_agent_message));
+    // The prompt comes from the conversation, as the page takes it.
+    let mut messages = saved_history(conversation.system_prompt.as_deref(), &rows);
     messages.push(AgentMessage::User {
         content: turn.content,
         images: turn.images,

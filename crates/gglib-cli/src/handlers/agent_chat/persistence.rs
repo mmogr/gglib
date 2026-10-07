@@ -37,18 +37,18 @@ pub(crate) struct Conversation<'a> {
 }
 
 impl<'a> Conversation<'a> {
-    /// Create a new conversation with a timestamp-based title.
+    /// Create a new conversation with a timestamp-based title. Its
+    /// `model_id` is the one its `settings` name, as the service decides it.
     pub(crate) async fn create(
         service: &'a ChatHistoryService,
         system_prompt: Option<String>,
-        model_id: Option<i64>,
         settings: Option<ConversationSettings>,
     ) -> Result<Conversation<'a>> {
         let title = format!("Agent session {}", Local::now().format("%Y-%m-%d %H:%M"));
         let id = service
-            .create_conversation_with_settings(NewConversation {
+            .create_conversation(NewConversation {
                 title,
-                model_id,
+                model_id: None,
                 system_prompt,
                 settings,
             })
@@ -62,8 +62,9 @@ impl<'a> Conversation<'a> {
 
     /// Resume an existing conversation for continued persistence.
     ///
-    /// Loads the existing message count so [`Conversation::save_new`] only
-    /// persists the delta.
+    /// `existing_message_count` is the length of the history the session
+    /// resumes with, its system prompt included, so
+    /// [`Conversation::save_new`] only persists what a turn adds to it.
     #[allow(
         clippy::unused_async,
         reason = "grandfathered at lint inheritance, #1157"

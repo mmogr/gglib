@@ -15,7 +15,9 @@ use serde::Deserialize;
 use crate::error::HttpError;
 use crate::handlers::chat_title;
 use crate::state::AppState;
-use gglib_core::domain::chat::{Conversation, Message, MessageRole, NewMessage};
+use gglib_core::domain::chat::{
+    Conversation, ConversationSettings, Message, MessageRole, NewConversation, NewMessage,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request/Response DTOs
@@ -134,18 +136,25 @@ pub(crate) async fn list_conversations(
     Ok(Json(conversations))
 }
 
-/// Create a new conversation.
+/// Create a new conversation. One made for a `model` keeps it as its
+/// settings' model, which then decides its `model_id`: a conversation's
+/// machine is fixed when it is made.
 /// POST /api/conversations
 pub(crate) async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
 ) -> Result<Json<i64>, HttpError> {
-    let title = req.title.unwrap_or_else(|| "New Conversation".to_string());
-    let id = state
-        .core
-        .chat_history()
-        .create_conversation_on(title, req.model_id, req.model, req.system_prompt)
-        .await?;
+    let settings = req.model.map(|model| ConversationSettings {
+        model: Some(model),
+        ..ConversationSettings::default()
+    });
+    let conv = NewConversation {
+        title: req.title.unwrap_or_else(|| "New Conversation".to_string()),
+        model_id: req.model_id,
+        system_prompt: req.system_prompt,
+        settings,
+    };
+    let id = state.core.chat_history().create_conversation(conv).await?;
     Ok(Json(id))
 }
 

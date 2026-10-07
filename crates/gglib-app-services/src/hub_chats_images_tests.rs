@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use gglib_core::domain::AttachmentId;
-use gglib_core::domain::chat::{MessageRole, NewMessage};
+use gglib_core::domain::chat::{MessageRole, NewConversation, NewMessage};
 use gglib_core::ports::{AttachmentError, HubChatsPort};
 use gglib_core::request_pipeline::estimate_image_tokens;
 
@@ -45,7 +45,10 @@ async fn a_devices_image_is_stored_shown_on_its_row_and_read_back() {
 
     let history = core.chat_history();
     let id = history
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let row = NewMessage {

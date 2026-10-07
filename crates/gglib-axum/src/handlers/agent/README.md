@@ -110,7 +110,8 @@ history names that is not stored is `400 attachment_not_found`, images over
 16 MiB together `400 request_images_too_large`, and an image for a model
 with no projector `400 model_cannot_read_images`, all before the model is
 loaded. The history is rebuilt from the hub's
-record (the system prompt, every row, the message), the limits from the
+record as a resumed CLI chat reads it (core's `saved_history`: the system
+prompt, then every row but a system one; then the message), the limits from the
 conversation's settings, no tools unless `enable --allow-mcp` opened the
 tunnel to them (then only those the settings name), and the reply runs on the chat's model
 (`hub_model`: its own, its settings', its last reply's, the one running on
