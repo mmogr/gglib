@@ -1,7 +1,9 @@
 //! Settling the proxy's bearer token at bind time.
 //!
 //! Split from the supervisor for the file-size gate; the rule it encodes is
-//! the supervisor's and is documented on the function.
+//! the supervisor's and is documented on the function. The daemon settles the
+//! token of a management API bound off loopback with the same function, so
+//! one machine key is read, minted and stored one way.
 
 use std::sync::Arc;
 
@@ -22,7 +24,7 @@ use tracing::{info, warn};
 /// A minted token is persisted rather than kept for the process: a client
 /// configured once should keep working across restarts, and a token that
 /// changed every launch would train people to turn the feature off.
-pub(super) async fn resolve_api_key(
+pub async fn resolve_api_key(
     configured: Option<String>,
     host: &str,
     settings_repo: &Arc<dyn SettingsRepository>,
@@ -191,6 +193,30 @@ mod tests {
                 0,
                 "{host}: never a save of the whole record, which loses a write landed since its read"
             );
+        }
+    }
+
+    /// A stored key that is only whitespace is no key. Off loopback it is
+    /// replaced like an absent one: minted once, by the one `modify`.
+    #[tokio::test]
+    async fn a_blank_stored_key_is_minted_over_and_written_once() {
+        for blank in ["", "   "] {
+            let store = Recording::with_key(Some(blank));
+            let (key, source) = resolve_api_key(None, "0.0.0.0", &repo(&store)).await;
+
+            let minted = key.expect("a bind off loopback must demand a token");
+            assert!(
+                !minted.trim().is_empty(),
+                "{blank:?}: a blank is not a token"
+            );
+            assert_eq!(source, ApiKeySource::Generated, "{blank:?}");
+            assert_eq!(
+                store.persisted_key().as_deref(),
+                Some(minted.as_str()),
+                "{blank:?}: the minted key replaces the blank"
+            );
+            assert_eq!(store.modifies(), 1, "{blank:?}: written exactly once");
+            assert_eq!(store.saves(), 0, "{blank:?}: never a whole-record save");
         }
     }
 

@@ -7,4 +7,4 @@
  * callers can surface install hints — so the failure is carried as data
  * rather than failing the whole diagnostics request.
  */
-export type AccelerationDto = { detected: string | null, detectionError: string | null, };
+export type AccelerationInfo = { detected: string | null, detectionError: string | null, };

@@ -247,3 +247,34 @@ async fn a_field_a_change_clears_loses_its_row() {
             .unwrap();
     assert!(row.is_none(), "the cleared field's row is gone");
 }
+
+/// The table is made as a database opens, and opening the same file again
+/// leaves the table and its rows as they were.
+#[tokio::test]
+async fn an_existing_database_opens_with_its_settings_table_and_rows_unchanged() {
+    async fn table_sql(pool: &SqlitePool) -> String {
+        sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE name = 'settings_kv'")
+            .fetch_one(pool)
+            .await
+            .expect("the settings table is there")
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("gglib.db");
+
+    let pool = crate::setup_database(&path).await.unwrap();
+    let repo = SqliteSettingsRepository::new(pool.clone());
+    repo.save(&Settings {
+        proxy_port: Some(9191),
+        ..Settings::with_defaults()
+    })
+    .await
+    .unwrap();
+    let (sql, stored) = (table_sql(&pool).await, repo.load().await.unwrap());
+    pool.close().await;
+
+    let pool = crate::setup_database(&path).await.unwrap();
+    assert_eq!(table_sql(&pool).await, sql);
+    let reopened = SqliteSettingsRepository::new(pool).load().await.unwrap();
+    assert_eq!(reopened, stored);
+    assert_eq!(reopened.proxy_port, Some(9191));
+}

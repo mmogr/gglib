@@ -8,6 +8,8 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+use super::config::{MODELS_DIR_KEY, persist_models_dir, persisted_models_dir};
+use super::ensure::{DirectoryCreationStrategy, ensure_directory};
 use super::error::PathError;
 use super::platform::normalize_user_path;
 
@@ -58,7 +60,14 @@ pub fn default_models_dir() -> Result<PathBuf, PathError> {
 /// Resolution order:
 /// 1. Explicit path provided by caller (highest priority)
 /// 2. `GGLIB_MODELS_DIR` environment variable
-/// 3. Default models directory (`~/.local/share/llama_models`)
+/// 3. The directory [`set_models_dir`] stored in the data root's `.env`
+/// 4. Default models directory (`~/.local/share/llama_models`)
+///
+/// Step 3 reads the file itself. A process loads a `.env` into its
+/// environment only from the directory it was started in or one above it,
+/// which holds the data root for a run from the checkout and seldom for an
+/// installed one, so a stored directory would otherwise be lost wherever the
+/// two differ.
 pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution, PathError> {
     if let Some(path_str) = explicit {
         return Ok(ModelsDirResolution {
@@ -67,11 +76,12 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
         });
     }
 
-    if let Ok(env_path) = env::var("GGLIB_MODELS_DIR")
-        && !env_path.trim().is_empty()
-    {
+    let from_env = env::var(MODELS_DIR_KEY)
+        .ok()
+        .filter(|path| !path.trim().is_empty());
+    if let Some(stored) = from_env.or_else(persisted_models_dir) {
         return Ok(ModelsDirResolution {
-            path: normalize_user_path(&env_path)?,
+            path: normalize_user_path(&stored)?,
             source: ModelsDirSource::EnvVar,
         });
     }
@@ -80,6 +90,22 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
         path: default_models_dir()?,
         source: ModelsDirSource::Default,
     })
+}
+
+/// Make `path` the models directory: resolve it, create it as `strategy`
+/// allows, and store it for every later run.
+///
+/// The one way a surface changes the directory. Storing a path that was
+/// never resolved or created, or creating one that is never stored, is how
+/// two surfaces come to disagree about where models live.
+pub fn set_models_dir(
+    path: &str,
+    strategy: DirectoryCreationStrategy,
+) -> Result<ModelsDirResolution, PathError> {
+    let resolved = resolve_models_dir(Some(path))?;
+    ensure_directory(&resolved.path, strategy)?;
+    persist_models_dir(&resolved.path)?;
+    Ok(resolved)
 }
 
 /// Resolve `path` to the one form the library identifies a model file by.
@@ -127,89 +153,5 @@ pub fn canonical_model_path_string(path: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
-
-    #[test]
-    fn test_default_models_dir_platform_path() {
-        let dir = default_models_dir().unwrap();
-        let path_str = dir.to_string_lossy();
-        // On Windows the path should be under %LOCALAPPDATA% and use native
-        // separators throughout — no forward-slash fragments.
-        #[cfg(target_os = "windows")]
-        {
-            assert!(
-                path_str.contains("llama_models"),
-                "Expected 'llama_models' in path: {path_str}"
-            );
-            assert!(
-                !path_str.contains('/'),
-                "Path must not contain forward slashes on Windows: {path_str}"
-            );
-        }
-        // On non-Windows the path should sit under ~/.local/share/llama_models.
-        #[cfg(not(target_os = "windows"))]
-        assert!(
-            path_str.contains(DEFAULT_MODELS_DIR_RELATIVE),
-            "Expected '{DEFAULT_MODELS_DIR_RELATIVE}' in path: {path_str}"
-        );
-    }
-
-    #[test]
-    fn test_resolve_models_dir_prefers_explicit() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = EnvVarGuard::set("GGLIB_MODELS_DIR", "/tmp/env-value");
-        let resolved = resolve_models_dir(Some("/tmp/explicit")).unwrap();
-        assert_eq!(resolved.source, ModelsDirSource::Explicit);
-        assert!(resolved.path.ends_with("explicit"));
-    }
-
-    #[test]
-    fn test_resolve_models_dir_env_value() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = EnvVarGuard::set("GGLIB_MODELS_DIR", "/tmp/from-env");
-        let resolved = resolve_models_dir(None).unwrap();
-        assert_eq!(resolved.source, ModelsDirSource::EnvVar);
-        assert!(resolved.path.ends_with("from-env"));
-    }
-
-    /// Two spellings of one file resolve to one answer. This is the property
-    /// the model key, the stored column and the duplicate lookup all lean on;
-    /// if it stops holding, a re-add silently merges two models into one row.
-    #[test]
-    fn canonical_model_path_agrees_across_spellings_of_one_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("Model.gguf");
-        std::fs::File::create(&file).unwrap();
-
-        let direct = canonical_model_path(&file).unwrap();
-        let indirect = canonical_model_path(&dir.path().join(".").join("Model.gguf")).unwrap();
-
-        assert_eq!(direct, indirect);
-    }
-
-    /// The fallible form reports a path it cannot resolve instead of handing
-    /// back the literal one. A caller that treats "cannot resolve" as "not a
-    /// duplicate" reinstates the silent overwrite, so the error has to be
-    /// reachable.
-    #[test]
-    fn canonical_model_path_reports_a_path_that_does_not_resolve() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(canonical_model_path(&dir.path().join("Absent.gguf")).is_err());
-    }
-
-    /// The string form is the one the database column stores, and it keeps
-    /// the literal path when the file is gone so an existing row still
-    /// round-trips.
-    #[test]
-    fn canonical_model_path_string_falls_back_to_the_literal_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let absent = dir.path().join("Absent.gguf");
-
-        assert_eq!(
-            canonical_model_path_string(&absent),
-            absent.to_string_lossy()
-        );
-    }
-}
+#[path = "models_tests.rs"]
+mod tests;

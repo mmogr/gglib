@@ -5,8 +5,10 @@
 
 import type { DependencyDto } from './generated/DependencyDto';
 import type { DiagnosticsDto } from './generated/DiagnosticsDto';
+import type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
 import type { RecommendationDto } from './generated/RecommendationDto';
 import type { ResolvedPathsDto } from './generated/ResolvedPathsDto';
+import type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
 
 /** GPU detection results. */
 export interface GpuInfo {
@@ -19,31 +21,22 @@ export interface GpuInfo {
   vulkanSpirvHeadersInstalled: boolean;
 }
 
-/** Models directory status. */
-export interface ModelsDirectory {
-  path: string;
-  exists: boolean;
-  writable: boolean;
-}
-
-/** System memory summary. */
-export interface SystemMemory {
-  totalRamBytes: number;
-  gpuMemoryBytes?: number | null;
-  isUnifiedMemory: boolean;
-}
-
-/** Combined setup status returned by the setup-status endpoint. */
+/**
+ * Combined setup status returned by the setup-status endpoint.
+ *
+ * The models directory and the memory are the types the settings routes send,
+ * so each has one shape wherever it is read.
+ */
 export interface SetupStatus {
   setupCompleted: boolean;
   llamaInstalled: boolean;
   llamaCanDownload: boolean;
   llamaPlatformDescription?: string | null;
   gpuInfo: GpuInfo;
-  modelsDirectory: ModelsDirectory;
+  modelsDirectory: ModelsDirectoryInfo;
   pythonAvailable: boolean;
   fastDownloadReady: boolean;
-  systemMemory?: SystemMemory | null;
+  systemMemory?: SystemMemoryInfo | null;
 }
 
 /** Pre-built install phases, in order. */

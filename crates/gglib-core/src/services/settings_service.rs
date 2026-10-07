@@ -41,6 +41,20 @@ impl SettingsService {
             .await
     }
 
+    /// Put every preference back to its default, keeping what
+    /// [`Settings::reset_preferences`] keeps.
+    ///
+    /// One step in the store, as [`Self::update`] is: what a reset keeps is
+    /// what is stored when it writes, not what an earlier read saw.
+    pub async fn reset_preferences(&self) -> Result<Settings, CoreError> {
+        self.repo
+            .modify(&|settings: &mut Settings| {
+                settings.reset_preferences();
+                Ok(())
+            })
+            .await
+    }
+
     /// Save complete settings (validates first).
     pub async fn save(&self, settings: &Settings) -> Result<(), CoreError> {
         validate_settings(settings)?;

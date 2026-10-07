@@ -9,9 +9,7 @@ use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::Serialize;
 
-use crate::dto::diagnostics::{
-    AccelerationDto, DiagnosticsDto, FastDownloadsDto, RecommendationDto, ResolvedPathsDto,
-};
+use crate::dto::diagnostics::{DiagnosticsDto, RecommendationDto, ResolvedPathsDto};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
@@ -106,18 +104,8 @@ pub(crate) async fn diagnostics(
     Ok(Json(DiagnosticsDto {
         dependencies: d.dependencies.iter().map(Into::into).collect(),
         paths: ResolvedPathsDto::from(d.paths),
-        acceleration: AccelerationDto {
-            detected: d.acceleration.detected,
-            detection_error: d.acceleration.detection_error,
-        },
-        fast_downloads: FastDownloadsDto {
-            provisioned: d.fast_downloads.provisioned,
-            env_dir: d.fast_downloads.env_dir,
-            legacy_path: d.fast_downloads.legacy_path,
-            builder: d.fast_downloads.builder,
-            available_builder: d.fast_downloads.available_builder,
-            error: d.fast_downloads.error,
-        },
+        acceleration: d.acceleration,
+        fast_downloads: d.fast_downloads,
     }))
 }
 

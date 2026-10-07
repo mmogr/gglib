@@ -351,7 +351,7 @@ pub struct UpgradeOutcome {
 // ============================================================================
 
 /// Current configuration for the models directory shown in settings UI.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelsDirectoryInfo {
     pub path: String,
