@@ -13,7 +13,7 @@ edition.workspace = true
 tauri-build.workspace = true
 
 [dependencies]
-tauri.workspace = true
+tauri = { workspace = true, features = ["devtools", "tray-icon", "image-png"] }
 tauri-plugin-dialog.workspace = true
 tauri-plugin-autostart.workspace = true
 serde.workspace = true
@@ -25,8 +25,8 @@ gglib-tauri.workspace = true
 gglib-axum.workspace = true
 gglib-app-services.workspace = true
 # For `loopback`, the one builder of an HTTP client for the daemon on this machine (#1085).
-gglib-proxy = { path = "../crates/gglib-proxy" }
-reqwest.workspace = true
+gglib-proxy.workspace = true
+reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-proxy"] }
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 # Note: axum and tower-http are used via gglib-axum re-exports, no direct dependency needed
 dotenvy.workspace = true

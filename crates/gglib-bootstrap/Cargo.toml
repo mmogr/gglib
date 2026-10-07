@@ -13,11 +13,11 @@ path = "src/lib.rs"
 
 [dependencies]
 # Internal crates — strictly infrastructure wiring only; no adapter crates (mcp, tauri, axum)
-gglib-core = { path = "../gglib-core" }
-gglib-db = { path = "../gglib-db" }
-gglib-download = { path = "../gglib-download" }
-gglib-gguf = { path = "../gglib-gguf" }
-gglib-hf = { path = "../gglib-hf" }
+gglib-core = { workspace = true }
+gglib-db = { workspace = true }
+gglib-download = { workspace = true }
+gglib-gguf = { workspace = true }
+gglib-hf = { workspace = true }
 
 # The download trigger implements an async port
 async-trait = { workspace = true }
@@ -27,7 +27,7 @@ anyhow = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -26,11 +26,11 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 # HTTP client (rustls to avoid OpenSSL headaches)
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+reqwest = { workspace = true, features = ["json", "rustls"] }
 
 # URL handling
-url = "2.5"
-urlencoding = "2.1"
+url.workspace = true
+urlencoding.workspace = true
 
 [dev-dependencies]
 # #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
