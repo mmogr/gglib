@@ -5,6 +5,7 @@ use std::io::{IsTerminal, Write, stdout};
 use anyhow::{Context, Result};
 use crossterm::{cursor, execute, terminal};
 use futures_util::StreamExt;
+use gglib_core::sse::DataFrames;
 
 /// Width (in bar cells) of every progress bar drawn by this dashboard.
 const BAR_WIDTH: usize = 20;
@@ -32,29 +33,20 @@ mod wire_sampling;
 use render::{render_frame, visual_row_count};
 use wire::DashboardSnapshot;
 
-/// Extract complete SSE `data:` payloads from a growing byte buffer.
-///
-/// Splits on the blank-line event terminator (`"\n\n"`), joining any
-/// `data:`-prefixed lines within an event (gglib-sse always emits single-line
-/// JSON, but multi-line `data:` framing is handled per spec anyway). Comment
-/// lines (leading `:`, used for SSE keep-alives) and events with no `data:`
-/// line are silently skipped. Any trailing partial event is left in `buffer`
-/// for the next call once more bytes arrive.
-fn drain_sse_events(buffer: &mut String) -> Vec<String> {
-    let mut payloads = Vec::new();
-    while let Some(idx) = buffer.find("\n\n") {
-        let event: String = buffer.drain(..idx + 2).collect();
-        let data = event
-            .lines()
-            .filter_map(|line| line.strip_prefix("data:"))
-            .map(str::trim_start)
-            .collect::<Vec<_>>()
-            .join("\n");
-        if !data.is_empty() {
-            payloads.push(data);
-        }
-    }
-    payloads
+/// Take `chunk` off the stream, and return every snapshot it completed. A
+/// payload that is not a snapshot is skipped.
+fn snapshots(frames: &mut DataFrames, chunk: &[u8]) -> Vec<DashboardSnapshot> {
+    frames
+        .push(chunk)
+        .iter()
+        .filter_map(|payload| match serde_json::from_str(payload) {
+            Ok(snapshot) => Some(snapshot),
+            Err(e) => {
+                tracing::debug!("skipping unparseable dashboard event: {e}");
+                None
+            }
+        })
+        .collect()
 }
 
 // =============================================================================
@@ -124,7 +116,7 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
     let _terminal_guard = TerminalGuard::new(is_tty);
 
     let mut byte_stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut frames = DataFrames::unbounded();
     let mut previous_frame_lines = 0u16;
 
     loop {
@@ -144,17 +136,8 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
                     return Ok(());
                 };
                 let chunk = chunk.context("error reading proxy dashboard stream")?;
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-                for payload in drain_sse_events(&mut buffer) {
-                    let snapshot: DashboardSnapshot = match serde_json::from_str(&payload) {
-                        Ok(snapshot) => snapshot,
-                        Err(e) => {
-                            tracing::debug!("skipping unparseable dashboard event: {e}");
-                            continue;
-                        }
-                    };
-
+                for snapshot in snapshots(&mut frames, &chunk) {
                     // Re-check on every tick (not just once) so a mid-session
                     // terminal resize is picked up rather than rendering
                     // against a stale width.
@@ -181,36 +164,5 @@ pub(crate) async fn execute(host: String, port: u16, api_key: Option<&str>) -> R
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn drain_sse_events_extracts_single_complete_event() {
-        let mut buffer = String::from("data: {\"a\":1}\n\n");
-        let events = drain_sse_events(&mut buffer);
-        assert_eq!(events, vec!["{\"a\":1}"]);
-        assert!(buffer.is_empty());
-    }
-
-    #[test]
-    fn drain_sse_events_leaves_partial_event_buffered() {
-        let mut buffer = String::from("data: {\"a\":1}\n\ndata: {\"a\":2}");
-        let events = drain_sse_events(&mut buffer);
-        assert_eq!(events, vec!["{\"a\":1}"]);
-        assert_eq!(buffer, "data: {\"a\":2}");
-    }
-
-    #[test]
-    fn drain_sse_events_skips_keepalive_comments() {
-        let mut buffer = String::from(": ping\n\ndata: {\"a\":1}\n\n");
-        let events = drain_sse_events(&mut buffer);
-        assert_eq!(events, vec!["{\"a\":1}"]);
-    }
-
-    #[test]
-    fn drain_sse_events_handles_multiple_events_in_one_chunk() {
-        let mut buffer = String::from("data: {\"a\":1}\n\ndata: {\"a\":2}\n\n");
-        let events = drain_sse_events(&mut buffer);
-        assert_eq!(events, vec!["{\"a\":1}", "{\"a\":2}"]);
-    }
-}
+#[path = "mod_tests.rs"]
+mod mod_tests;

@@ -4,6 +4,7 @@ use std::ops::ControlFlow;
 
 use futures_util::stream;
 use gglib_core::domain::runs::{RunInfo, RunKind, RunStatus};
+use gglib_core::sse::DataFrames;
 
 use super::{RunItem, drain_items, read_events};
 
@@ -31,8 +32,8 @@ fn wire() -> String {
 
 #[test]
 fn frames_carry_their_number_and_the_run_event_its_final_state() {
-    let mut buffer = wire();
-    let items = drain_items(&mut buffer).unwrap();
+    let mut frames = DataFrames::unbounded();
+    let items = drain_items(&mut frames, wire().as_bytes()).unwrap();
     assert_eq!(
         items,
         [
@@ -47,7 +48,6 @@ fn frames_carry_their_number_and_the_run_event_its_final_state() {
             RunItem::End(ended()),
         ]
     );
-    assert!(buffer.is_empty());
 }
 
 /// Split one byte at a time, so the `é` arrives in two halves.
@@ -82,4 +82,14 @@ async fn a_break_stops_reading_with_no_end() {
     .unwrap();
 
     assert_eq!((end, frames), (None, 1));
+}
+
+#[test]
+fn an_event_with_data_and_no_number_is_refused() {
+    let mut frames = DataFrames::unbounded();
+    let error = drain_items(&mut frames, b"id: one\ndata: {}\n\n").unwrap_err();
+    assert_eq!(error.to_string(), "an event without its number");
+
+    let error = drain_items(&mut frames, b"data: {}\n\n").unwrap_err();
+    assert_eq!(error.to_string(), "an event without its number");
 }
