@@ -9,10 +9,8 @@
 # Run this in CI to prevent architectural regression.
 # Policy: Only OS integration commands should be invoked from frontend.
 #
-# Allowlist (7 commands):
+# Allowlist (5 commands):
 #   - get_embedded_api_info (API discovery)
-#   - check_llama_status (binary management)
-#   - install_llama (binary management)
 #   - open_url (shell integration)
 #   - set_selected_model (menu sync)
 #   - sync_menu_state (menu sync)
@@ -43,8 +41,6 @@ ERRORS=0
 # Allowlisted commands (OS integration only)
 ALLOWED_COMMANDS=(
     "get_embedded_api_info"
-    "check_llama_status"
-    "install_llama"
     "open_url"
     "set_selected_model"
     "sync_menu_state"
@@ -58,14 +54,17 @@ ALLOWED_COMMANDS=(
 echo "Checking invoke() calls in frontend..."
 
 # Find all invoke( calls in TypeScript/TSX files
-# Pattern: invoke('command_name') or invoke("command_name")
+# Pattern: invoke('command_name') or invoke("command_name"), with or without a
+# type argument: `invoke<T>('command_name')` is the same call, and a pattern
+# that reads only the bare form passes every call written the typed way.
+INVOKE_OPEN='invoke[[:space:]]*(<.*>)?[[:space:]]*\('
 # `types/generated/` is excluded: it holds ts-rs output, which is type
 # declarations and TSDoc and contains no call of any kind. What it does contain
 # is Rust doc prose carried through verbatim — `ToolCall.arguments` is
 # documented as "the tool to invoke", which this pattern reads as a dynamic
 # command string. A generated file cannot violate an IPC policy it cannot
 # express.
-INVOKE_CALLS=$(grep -rn "invoke\s*(" src/ --include="*.ts" --include="*.tsx" 2>/dev/null \
+INVOKE_CALLS=$(grep -rnE "$INVOKE_OPEN" src/ --include="*.ts" --include="*.tsx" 2>/dev/null \
     | grep -v "^src/types/generated/" || true)
 
 # Track if we found any violations
@@ -91,11 +90,11 @@ while IFS= read -r line; do
     
     # Extract command string from invoke('command') or invoke("command")
     # Handle both single and double quotes
-    COMMAND=$(echo "$content" | sed -n "s/.*invoke\s*(\s*['\"]\\([^'\"]*\\)['\"].*/\\1/p")
+    COMMAND=$(echo "$content" | sed -nE "s/.*${INVOKE_OPEN}[[:space:]]*['\"]([^'\"]*)['\"].*/\\2/p")
     
     if [ -z "$COMMAND" ]; then
         # Check if invoke uses a variable or template literal (dynamic command - FORBIDDEN)
-        if echo "$content" | grep -qE 'invoke\s*\(\s*[^'\''"]+\s*[,)]'; then
+        if echo "$content" | grep -qE "${INVOKE_OPEN}[[:space:]]*[^'\"]+[[:space:]]*[,)]"; then
             # Allow internal helper functions (invokeTauri wrapper in platform layer)
             if echo "$file" | grep -qE '(platform/tauri|api/client)\.ts$'; then
                 # Internal helper - these only call allowlisted commands

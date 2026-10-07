@@ -63,14 +63,14 @@ State the tier in the PR description (recent PRs also carry it in the commit mes
 The event-channel pattern below is what makes Tier 1 parity cheap — use it for any long-running operation regardless of tier. Downloads, builds, agent loops, and model management all follow the same pattern:
 
 1. **Core logic in a runtime or domain crate** — emits typed events over a `tokio::sync::mpsc::Sender<T>` channel. It has no knowledge of the terminal, HTTP, or Tauri.
-2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE, which the desktop app's WebView reads as the browser does. The llama install is the one operation a Tauri command also runs, and that command forwards its events to the WebView as Tauri events.
+2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE, which the desktop app's WebView reads as the browser does.
 
 Concrete examples of established patterns:
 
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
-| llama install | `LlamaProgressEvent` | spinner + progress bar via `consume_install_events_cli` | SSE at `POST /api/config/system/install-llama` | `llama-install-progress` |
+| llama install | `LlamaProgressEvent` | spinner + progress bar via `consume_install_events_cli` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
 | llama build | `BuildEvent` | spinner + progress bar | none — #834 removed the route as dead | none — removed with it |
 
 Every row is a claim about code that exists. The `llama install` row was not
@@ -87,7 +87,7 @@ When adding a new long-running operation:
 - Wire the CLI adapter in its own function. Wire the Axum handler, which the desktop app's WebView calls as the browser does: a new operation gets no Tauri command, as the paragraph below says.
 - Tier 1: all three ship in the same PR. Tier 2: the CLI ships now and the remaining surfaces are tracked in a linked issue.
 
-**Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
+**Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
 **Frontend transport is unified.** The frontend client modules must not branch on the platform. If you find yourself writing `if (isDesktop()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. `services/platform/` is where that distinction is absorbed: `detect.ts` is the one module that asks whether this is the desktop app, as `isDesktop()`, and its sibling modules that reach for OS APIs carry a `TRANSPORT_EXCEPTION:` comment saying why.
 
@@ -376,7 +376,8 @@ Pre-built llama.cpp binary download support.
 |----------|--------------------------------------------------------|
 | CLI      | `indicatif` progress bar                               |
 | Axum     | SSE stream at `POST /api/config/system/install-llama`  |
-| Tauri    | `llama-install-progress` event to the WebView          |
+
+The desktop app reads the Axum stream; it has no consumer of its own.
 
 It is **not** responsible for rendering: no `println!`, no progress bar, no
 knowledge of a terminal, an HTTP response or a WebView.

@@ -132,9 +132,6 @@ fn main() {
             // OS integration: menu sync
             commands::util::set_selected_model,
             commands::util::sync_menu_state,
-            // OS integration: llama.cpp binary management
-            commands::llama::check_llama_status,
-            commands::llama::install_llama,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])

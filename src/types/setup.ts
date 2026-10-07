@@ -51,8 +51,8 @@ export type InstallPhase =
 /**
  * Streaming pre-built install events.
  *
- * One type for both transports: the SSE route streams these and the desktop
- * build emits the same payloads on `llama-install-progress`.
+ * The daemon's install route streams these, and it is the one source of them
+ * for the desktop app and a browser tab alike.
  *
  * `rateBps` and `etaSeconds` are absent until the backend's estimator has
  * warmed up, and absent is not zero — zero is a stalled transfer. Never derive

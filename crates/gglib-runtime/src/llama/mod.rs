@@ -95,6 +95,6 @@ pub use args::{
     resolve_reasoning_format,
 };
 
-// Prebuilt download (for adapters that need fine-grained control - Tauri + CLI)
+// Prebuilt download (for adapters that need fine-grained control: the daemon and the CLI)
 #[cfg(feature = "prebuilt")]
 pub use download::{PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries};
