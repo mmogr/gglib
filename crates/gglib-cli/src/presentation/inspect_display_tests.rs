@@ -150,3 +150,44 @@ fn a_far_linked_model_says_linked_without_a_path() {
 
     assert_eq!(projector_line(&far), "  Projector      : linked");
 }
+
+// ── Inference defaults ────────────────────────────────────────────────────────
+
+/// A model that stores only `frequency_penalty` and a reasoning budget has
+/// defaults, and the section lists them: every field that is set, by name.
+#[test]
+fn every_stored_default_is_listed_whichever_field_it_is() {
+    let stored = ModelDetailDto {
+        inference_defaults: Some(gglib_core::domain::InferenceConfig {
+            frequency_penalty: Some(0.25),
+            reasoning_budget_tokens: Some(4096),
+            ..Default::default()
+        }),
+        defaults_origin: Some(DefaultsOrigin::User),
+        ..detail(None)
+    };
+
+    assert_eq!(
+        inference_default_lines(&stored),
+        [
+            "",
+            "  Inference Defaults (user-set)",
+            &"-".repeat(SEP_WIDTH),
+            "  frequency_penalty       : 0.25",
+            "  reasoning_budget_tokens : 4096",
+        ]
+    );
+}
+
+/// A model with nothing stored, or with a stored config that sets nothing,
+/// gets no section at all.
+#[test]
+fn a_model_that_stores_no_defaults_gets_no_section() {
+    assert!(inference_default_lines(&detail(None)).is_empty());
+
+    let empty = ModelDetailDto {
+        inference_defaults: Some(gglib_core::domain::InferenceConfig::default()),
+        ..detail(None)
+    };
+    assert!(inference_default_lines(&empty).is_empty());
+}

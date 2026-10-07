@@ -137,6 +137,23 @@ impl InferenceProfile {
     }
 }
 
+/// Error text for a name that matches none of `profiles`: it lists the ones
+/// there are, or with none names the command that adds the starter profiles.
+#[must_use]
+pub fn not_found_message(name: &str, profiles: &[InferenceProfile]) -> String {
+    if profiles.is_empty() {
+        return format!(
+            "no profile named '{name}'; none are configured \
+             (run `gglib config profile install-templates`)"
+        );
+    }
+    let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+    format!(
+        "no profile named '{name}'; configured profiles are: {}",
+        names.join(", ")
+    )
+}
+
 /// Starting-point profiles a user can install and then edit.
 ///
 /// These are *templates*, not behaviour: nothing reads them at request time and

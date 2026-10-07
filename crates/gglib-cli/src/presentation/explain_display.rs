@@ -1,18 +1,21 @@
 //! Renders a resolved sampling config alongside the layer that supplied each
 //! parameter, for `gglib model explain`.
 //!
-//! Format-only, like the rest of [`crate::presentation`]: the resolution
-//! itself happens in `gglib-core`, and nothing here re-derives a value or a
-//! source. Plain text with no colour, matching [`super::inspect_display`] —
-//! a fact about a model is not a state, so it borrows no state colour.
+//! Format-only, like the rest of [`crate::presentation`]: it draws the
+//! [`SamplingExplanationDto`] that `ModelOps::explain_sampling` answers with,
+//! the one `GET /api/models/{id}/explain` sends, and re-derives no value,
+//! source or published comparison. Plain text with no colour, matching
+//! [`super::inspect_display`] — a fact about a model is not a state, so it
+//! borrows no state colour.
 
-use gglib_core::domain::{
-    DefaultsOrigin, FieldSources, InferenceConfig, ModelSamplingDefaults, ParamSource,
-    ReasoningEffort, SamplingLayer, SamplingOverride,
+use std::fmt::Write as _;
+
+use gglib_app_services::{
+    ProvenanceKindDto, PublishedDefaultDto, PublishedStateDto, SamplingExplanationDto,
+    SamplingLayerDto,
 };
-use gglib_core::request_pipeline::{CLIENT_AUTHORITATIVE_KEYS, SuppressedEffort};
-
-use super::tables::print_separator;
+use gglib_core::domain::{DefaultsOrigin, ReasoningEffort};
+use gglib_core::request_pipeline::CLIENT_AUTHORITATIVE_KEYS;
 
 /// Width of the parameter-name column.
 ///
@@ -69,73 +72,33 @@ const MARK_INFO: char = '\u{b7}';
 /// Marks a note gglib cannot draw a conclusion from.
 const MARK_UNKNOWN: char = '?';
 
-/// How the model's own defaults should be described, once resolved.
-///
-/// The wording matches `inspect_display`'s, so the two commands describe the
-/// same stored fact the same way.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ExplainContext<'a> {
-    /// The profile that was selected, if any.
-    pub profile: Option<&'a str>,
-    /// Whether the model carries the `reasoning` tag, which selects the floor.
-    pub is_reasoning: bool,
-    /// Whether the client's own sampling parameters are honoured at request
-    /// time. Shown as a caveat, since this command explains stored
-    /// configuration and cannot see a live request.
-    pub trust_client_sampling: bool,
-    /// What this model's own GGUF publishes, so a row can say whether gglib is
-    /// displacing the model author's recommendation.
-    ///
-    /// llama.cpp makes a `general.sampling.*` key the server's default for
-    /// every field gglib does not name (llama.cpp #17120), so the provenance
-    /// column alone is not the whole story: `unset by design` means *the
-    /// model's own number applies* on a model that published one, and means
-    /// *the build's default applies* on a model that did not. Without this the
-    /// two render identically.
-    pub model_sampling: ModelSamplingDefaults,
-    /// Where the model's stored defaults came from.
-    ///
-    /// `DefaultsOrigin::Published` and `DefaultsOrigin::AutoDetected` share a
-    /// ladder rung — both are unreviewed, so both rank below global settings —
-    /// which means the rung alone cannot name its own source. Without this, a
-    /// recipe fetched from the model author renders as "auto-detected:
-    /// reasoning tag", crediting gglib's guess for somebody else's numbers.
-    pub defaults_origin: Option<DefaultsOrigin>,
-    /// The `reasoning_effort` this model's template would ignore, when the
-    /// stored configuration resolves one it does not read.
-    ///
-    /// Needed for the same reason the HTTP DTO needs it: by the time a
-    /// suppression reaches this module, `resolved.reasoning_effort` is `None`
-    /// and the rung in `sources` has been overwritten with the marker, so the
-    /// table can say *that* a level was suppressed and neither which one nor
-    /// whose. The note hanging under the row is where those two go.
-    pub effort_suppressed: Option<SuppressedEffort>,
+/// Print the resolved parameters and their provenance.
+pub(crate) fn print_explanation(name: &str, id: i64, explanation: &SamplingExplanationDto) {
+    print!("{}", explanation_text(name, id, explanation));
 }
 
-/// Print the resolved parameters and their provenance.
-pub(crate) fn print_explanation(
-    model_name: &str,
-    model_id: i64,
-    resolved: &InferenceConfig,
-    sources: &FieldSources,
-    ctx: ExplainContext<'_>,
-) {
-    println!();
-    match ctx.profile {
-        Some(name) => println!("  Sampling for {model_name} (id {model_id}), profile '{name}'"),
-        None => println!("  Sampling for {model_name} (id {model_id})"),
-    }
-    print_separator(SEP_WIDTH);
+/// The table as text: its heading, a row per parameter between two rules,
+/// and the caveats.
+#[must_use]
+pub(crate) fn explanation_text(
+    name: &str,
+    id: i64,
+    explanation: &SamplingExplanationDto,
+) -> String {
+    let rule = "-".repeat(SEP_WIDTH);
+    let profile = explanation.profile.as_ref();
+    let profile = profile.map_or_else(String::new, |profile| format!(", profile '{profile}'"));
 
-    for line in explanation_lines(resolved, sources, ctx) {
-        println!("  {line}");
+    let mut out = format!("\n  Sampling for {name} (id {id}){profile}\n{rule}\n");
+    for line in explanation_lines(explanation) {
+        let _ = writeln!(out, "  {line}");
     }
-
-    print_separator(SEP_WIDTH);
-    for note in caveats(ctx) {
-        println!("  {note}");
+    let _ = writeln!(out, "{rule}");
+    for note in caveats(explanation) {
+        let _ = writeln!(out, "  {note}");
     }
-    println!();
+    out.push('\n');
+    out
 }
 
 /// The body of the table, one string per parameter.
@@ -145,20 +108,17 @@ pub(crate) fn print_explanation(
 ///
 /// # Every provenance row is rendered, and that is checked
 ///
-/// [`FieldSources::iter`] is the single display order every provenance surface
-/// reads, and this function pairs it with a value column using `zip`, which
-/// **truncates**. A field that gains provenance and no value row would
-/// disappear from `gglib model explain` with no compile error, no failing
-/// count, and no visible symptom — the same shape as a [`NAME_WIDTH`] too
-/// narrow for its longest name. `every_provenance_row_is_rendered` and the
-/// assertion below say that a row without a value column is a fault, with no
-/// register of approved omissions.
+/// [`SamplingExplanationDto::sources`] arrives in the single display order
+/// every provenance surface reads, and this function pairs it with a value
+/// column using `zip`, which **truncates**. A field that gains provenance and
+/// no value row would disappear from `gglib model explain` with no compile
+/// error, no failing count, and no visible symptom — the same shape as a
+/// [`NAME_WIDTH`] too narrow for its longest name.
+/// `every_provenance_row_is_rendered` and the assertion below say that a row
+/// without a value column is a fault, with no register of approved omissions.
 #[must_use]
-pub(crate) fn explanation_lines(
-    resolved: &InferenceConfig,
-    sources: &FieldSources,
-    ctx: ExplainContext<'_>,
-) -> Vec<String> {
+pub(crate) fn explanation_lines(explanation: &SamplingExplanationDto) -> Vec<String> {
+    let resolved = &explanation.resolved;
     let values = [
         ("temperature", fmt_f32(resolved.temperature)),
         ("top_p", fmt_f32(resolved.top_p)),
@@ -186,44 +146,38 @@ pub(crate) fn explanation_lines(
         ),
     ];
 
-    // What gglib actually puts on the wire, read from the patch the request
-    // pipeline merges into the body rather than from the struct fields. A
-    // parameter missing from this map is one gglib names nowhere, which is
-    // precisely the condition under which the model's own GGUF value survives
-    // to the sampler. Deriving it any other way would let this table and the
-    // request disagree.
-    let patch = resolved.to_openai_json_patch();
-
     // The `zip` below truncates, so this is the only thing standing between an
     // unrendered row and silence. See this function's own docs.
     debug_assert_eq!(
-        sources.iter().count(),
+        explanation.sources.len(),
         values.len(),
-        "a FieldSources row has no value column and would vanish from the table"
+        "a provenance row has no value column and would vanish from the table"
     );
 
-    sources
-        .iter()
-        .zip(values)
-        .flat_map(|((field, source), (value_field, value))| {
-            debug_assert_eq!(
-                field, value_field,
-                "provenance and value rows must stay aligned"
-            );
-            let row = format!(
-                "{field:<NAME_WIDTH$}{value:<VALUE_WIDTH$} {ARROW} {}",
-                describe(source, ctx)
-            );
-            // Two kinds of note can hang under a row and they never collide:
-            // the published comparison only ever fires on a field with a GGUF
-            // key, and no reasoning control has one.
-            let sending = patch.get(field).and_then(serde_json::Value::as_f64);
-            let note = suppression_note(field, ctx)
-                .or_else(|| published_note(&ctx.model_sampling.compare_field(field, sending)))
-                .map(|n| format!("{:NOTE_INDENT$}{n}", ""));
-            std::iter::once(row).chain(note)
-        })
-        .collect()
+    let rows = explanation.sources.iter().zip(values);
+    rows.flat_map(|(source, (field, value))| {
+        // The row is named as the CLI's flags are, and its source by the
+        // wire's camelCase key: one name, spelled two ways.
+        debug_assert_eq!(
+            source.param.to_lowercase(),
+            field.replace('_', ""),
+            "provenance and value rows must stay aligned"
+        );
+        let row = format!(
+            "{field:<NAME_WIDTH$}{value:<VALUE_WIDTH$} {ARROW} {}",
+            describe(source.kind, source.layer, explanation)
+        );
+        // Two kinds of note can hang under a row and they never collide:
+        // the published comparison only ever fires on a field with a GGUF
+        // key, and no reasoning control has one.
+        let mut published = explanation.published.iter();
+        let published = published.find(|entry| entry.param == source.param);
+        let note = suppression_note(field, explanation)
+            .or_else(|| published.map(published_note))
+            .map(|n| format!("{:NOTE_INDENT$}{n}", ""));
+        std::iter::once(row).chain(note)
+    })
+    .collect()
 }
 
 /// Name the level a suppression threw away and the rung that asked for it.
@@ -242,8 +196,8 @@ pub(crate) fn explanation_lines(
 ///
 /// The level and the rung are both unrecoverable by the time the table is
 /// drawn: the gate clears `resolved.reasoning_effort` and overwrites the rung in
-/// `sources`. They arrive on [`ExplainContext::effort_suppressed`] or not at
-/// all.
+/// `sources`. They arrive on [`SamplingExplanationDto::effort_suppressed`] or
+/// not at all.
 ///
 /// # The tense, and why the note is as terse as it is
 ///
@@ -259,50 +213,46 @@ pub(crate) fn explanation_lines(
 /// so a fuller phrasing overruns the rule it sits under on exactly the model
 /// that needs the note most. `the_reasoning_rows_and_their_note_fit_the_table_width`
 /// holds the corner.
-fn suppression_note(field: &str, ctx: ExplainContext<'_>) -> Option<String> {
+fn suppression_note(field: &str, explanation: &SamplingExplanationDto) -> Option<String> {
     if field != "reasoning_effort" {
         return None;
     }
-    let suppressed = ctx.effort_suppressed?;
+    let suppressed = explanation.effort_suppressed?;
     Some(format!(
         "{MARK_OVERRIDE} '{}' from {}; not sent",
         suppressed.level,
-        describe(suppressed.source, ctx)
+        describe(ProvenanceKindDto::Layer, suppressed.layer, explanation)
     ))
 }
 
-/// Describe what the model published for one field, if it published anything.
+/// Describe what the model published for one field.
 ///
-/// `None` for a field no model can reach (`presence_penalty`,
-/// `dry_multiplier`) and for one this model left alone — in both cases there is
+/// A field no model can reach (`presence_penalty`, `dry_multiplier`) and one
+/// this model left alone have no entry to describe — in both cases there is
 /// no author recommendation, so there is nothing to say and a note would be
 /// noise on every ordinary model.
-fn published_note(verdict: &SamplingOverride) -> Option<String> {
-    match verdict {
-        SamplingOverride::NotPublished => None,
-        SamplingOverride::Overridden {
-            key,
-            published,
-            sending,
-        } => Some(format!(
+fn published_note(entry: &PublishedDefaultDto) -> String {
+    let key = &entry.key;
+    match entry.state {
+        PublishedStateDto::Overridden { published, sending } => format!(
             "{MARK_OVERRIDE} {key} = {}; gglib is sending {}",
-            fmt_published(*published),
-            fmt_published(*sending)
-        )),
+            fmt_published(published),
+            fmt_published(sending)
+        ),
         // Named separately from `Restated` because the row above reads `—`, and
         // a dash with no note is indistinguishable from a gap. This is ADR
         // 0004's follow-up: the missing number is the model's, not nobody's.
-        SamplingOverride::Deferred { key, published } => Some(format!(
+        PublishedStateDto::Deferred { published } => format!(
             "{MARK_INFO} {key} = {}; gglib defers to it",
-            fmt_published(*published)
-        )),
-        SamplingOverride::Restated { key, published } => Some(format!(
+            fmt_published(published)
+        ),
+        PublishedStateDto::Restated { published } => format!(
             "{MARK_INFO} {key} = {}; gglib sends the same value",
-            fmt_published(*published)
-        )),
-        SamplingOverride::Unreadable { key, .. } => Some(format!(
-            "{MARK_UNKNOWN} {key} is set to a value gglib cannot read"
-        )),
+            fmt_published(published)
+        ),
+        PublishedStateDto::Unreadable => {
+            format!("{MARK_UNKNOWN} {key} is set to a value gglib cannot read")
+        }
     }
 }
 
@@ -337,18 +287,29 @@ fn trim_f32_artifact(value: f64) -> f64 {
 }
 
 /// Name the rung a parameter resolved from, in the user's terms.
-fn describe(source: ParamSource, ctx: ExplainContext<'_>) -> String {
-    match source {
-        ParamSource::Layer(index) => match SamplingLayer::from_index(index) {
+///
+/// The wording for the model's own defaults matches `inspect_display`'s, so
+/// the two commands describe the same stored fact the same way.
+fn describe(
+    kind: ProvenanceKindDto,
+    layer: Option<SamplingLayerDto>,
+    explanation: &SamplingExplanationDto,
+) -> String {
+    match kind {
+        ProvenanceKindDto::Layer => match layer {
             // The request rung is always empty for this command — nothing has
             // been asked yet — so reaching it would be a wiring bug.
-            Some(SamplingLayer::Request) => "request parameters".to_owned(),
-            Some(SamplingLayer::Profile) => ctx
+            Some(SamplingLayerDto::Request) => "request parameters".to_owned(),
+            Some(SamplingLayerDto::Profile) => explanation
                 .profile
+                .as_ref()
                 .map_or_else(|| "profile".to_owned(), |name| format!("profile '{name}'")),
-            Some(SamplingLayer::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
-            Some(SamplingLayer::Global) => "global settings".to_owned(),
-            Some(SamplingLayer::ModelAutoDetected) => match ctx.defaults_origin {
+            Some(SamplingLayerDto::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
+            Some(SamplingLayerDto::Global) => "global settings".to_owned(),
+            // `Published` and `AutoDetected` share this rung — both are
+            // unreviewed, so both rank below global settings — and the origin
+            // is what names whose numbers they are.
+            Some(SamplingLayerDto::ModelAutoDetected) => match explanation.defaults_origin {
                 Some(DefaultsOrigin::Published) => {
                     "per-model defaults (published by the model author)".to_owned()
                 }
@@ -357,13 +318,16 @@ fn describe(source: ParamSource, ctx: ExplainContext<'_>) -> String {
                 }
                 _ => "per-model defaults (auto-detected: reasoning tag)".to_owned(),
             },
-            None => format!("layer {index}"),
+            // A rung the explanation could not name, which none of the five it
+            // resolves is.
+            None => "an unnamed layer".to_owned(),
         },
-        ParamSource::Floor => format!("{} floor", floor_name(ctx)),
-        ParamSource::FloorCoupled => {
-            format!("{} floor (coupled to temperature layer)", floor_name(ctx))
-        }
-        ParamSource::Unset => "unset by design".to_owned(),
+        ProvenanceKindDto::Floor => format!("{} floor", floor_name(explanation)),
+        ProvenanceKindDto::FloorCoupled => format!(
+            "{} floor (coupled to temperature layer)",
+            floor_name(explanation)
+        ),
+        ProvenanceKindDto::Unset => "unset by design".to_owned(),
         // Reachable, and the reason this table exists for the reasoning
         // controls at all. `explain` resolves stored configuration with no
         // request in hand — but the *template* is a property of the model, not
@@ -375,13 +339,13 @@ fn describe(source: ParamSource, ctx: ExplainContext<'_>) -> String {
         // named something, which is the whole content of the suppression, and
         // "unset" would report that nobody configured a control somebody
         // configured.
-        ParamSource::SuppressedByTemplate => "suppressed by this model's template".to_owned(),
+        ProvenanceKindDto::SuppressedByTemplate => "suppressed by this model's template".to_owned(),
     }
 }
 
 /// Which of the two class floors applies, named so the difference is visible.
-const fn floor_name(ctx: ExplainContext<'_>) -> &'static str {
-    if ctx.is_reasoning {
+const fn floor_name(explanation: &SamplingExplanationDto) -> &'static str {
+    if explanation.is_reasoning {
         "reasoning"
     } else {
         "default"
@@ -406,11 +370,11 @@ const fn floor_name(ctx: ExplainContext<'_>) -> &'static str {
 /// past [`SEP_WIDTH`], and a caveat wider than the rule it sits under reads
 /// like the table overflowed. `caveats_fit_within_the_table_width` now holds
 /// that, so a third key has to be fitted rather than silently overrun.
-fn caveats(ctx: ExplainContext<'_>) -> Vec<String> {
+fn caveats(explanation: &SamplingExplanationDto) -> Vec<String> {
     let mut notes = vec![
         "Operator flags (gglib proxy --temperature, ...) outrank every layer above.".to_owned(),
     ];
-    notes.push(if ctx.trust_client_sampling {
+    notes.push(if explanation.trust_client_sampling {
         "Client sampling is trusted and outranks all but those flags.".to_owned()
     } else {
         format!(

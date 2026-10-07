@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+pub(crate) mod capability_flags;
 pub(crate) mod explain_display;
 #[allow(
     clippy::option_if_let_else,
@@ -8,6 +9,7 @@ pub(crate) mod explain_display;
 )]
 pub(crate) mod inspect_display;
 pub(crate) mod model_display;
+pub(crate) mod sampling_values;
 pub(crate) mod style;
 pub(crate) mod tables;
 

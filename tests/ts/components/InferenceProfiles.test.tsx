@@ -11,10 +11,12 @@ import { appSettings } from '../fixtures/settings';
 
 const getSettings = vi.fn();
 const updateSettings = vi.fn();
+const installProfileTemplates = vi.fn();
 
 vi.mock('../../../src/services/transport/api/settings', () => ({
   getSettings: (...args: unknown[]) => getSettings(...args),
   updateSettings: (...args: unknown[]) => updateSettings(...args),
+  installProfileTemplates: (...args: unknown[]) => installProfileTemplates(...args),
 }));
 
 function coding(overrides: Partial<InferenceProfile> = {}): InferenceProfile {
@@ -34,6 +36,7 @@ function settings(profiles: InferenceProfile[]): AppSettings {
 beforeEach(() => {
   getSettings.mockReset();
   updateSettings.mockReset();
+  installProfileTemplates.mockReset();
   getSettings.mockResolvedValue(settings([coding()]));
   // The backend stores a resolved profile, so the echo fills the config out
   // the way a real save does rather than handing the sparse request back.
@@ -166,6 +169,58 @@ describe('InferenceProfiles', () => {
     });
     // And `seed` still does not appear, which is the one deliberate omission.
     expect(saved.config).not.toHaveProperty('seed');
+  });
+});
+
+/**
+ * The starter profiles are the daemon's to install: it runs the function
+ * `gglib config profile install-templates` runs, so the page holds no copy of
+ * them and sends no list of its own. What it draws is the list that came back.
+ */
+describe('installing the starter profiles', () => {
+  const NINE = ['coding', 'chat', 'creative', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+  it('asks the daemon to install them and lists what it answers with', async () => {
+    installProfileTemplates.mockResolvedValue({
+      installed: NINE.slice(1),
+      kept: ['coding'],
+      settings: settings(NINE.map((name) => coding({ name, description: `the ${name} profile` }))),
+    });
+    const user = userEvent.setup();
+    render(<InferenceProfiles />);
+
+    await user.click(await screen.findByRole('button', { name: /install starter profiles/i }));
+
+    for (const name of NINE) {
+      expect(await screen.findByText(`the ${name} profile`)).toBeInTheDocument();
+    }
+    expect(installProfileTemplates).toHaveBeenCalledTimes(1);
+    expect(installProfileTemplates).toHaveBeenCalledWith();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('Installed: chat, creative, minimal, low, medium, high, xhigh, max. Kept yours: coding'),
+    ).toBeInTheDocument();
+  });
+
+  it('says so when there was nothing left to add', async () => {
+    installProfileTemplates.mockResolvedValue({ installed: [], kept: NINE, settings: settings([coding()]) });
+    const user = userEvent.setup();
+    render(<InferenceProfiles />);
+
+    await user.click(await screen.findByRole('button', { name: /install starter profiles/i }));
+
+    expect(await screen.findByText('Starter profiles are already installed')).toBeInTheDocument();
+  });
+
+  it('surfaces a refusal and leaves the list as it was', async () => {
+    installProfileTemplates.mockRejectedValue(new Error('the settings could not be saved'));
+    const user = userEvent.setup();
+    render(<InferenceProfiles />);
+
+    await user.click(await screen.findByRole('button', { name: /install starter profiles/i }));
+
+    expect(await screen.findByText(/could not be saved/)).toBeInTheDocument();
+    expect(screen.getByText('coding')).toBeInTheDocument();
   });
 });
 

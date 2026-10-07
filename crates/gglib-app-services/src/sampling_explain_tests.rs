@@ -44,23 +44,21 @@ fn finds_a_configured_profile_by_name() {
     );
 }
 
+/// A refusal the caller can fix, worded by the one message every profile
+/// lookup answers with, so a typo reads the same in a terminal and over HTTP.
 #[test]
-fn an_unknown_profile_errors_and_lists_the_configured_ones() {
+fn an_unknown_profile_is_refused_with_the_shared_message() {
     let profiles = vec![profile("coding", InferenceConfig::default())];
-    let err = find_profile("codign", Some(&profiles))
-        .unwrap_err()
-        .to_string();
 
-    assert!(err.contains("codign"), "{err}");
-    assert!(err.contains("coding"), "{err}");
-}
-
-/// An empty list is a different situation from a typo, and saying so saves
-/// the reader from hunting for a profile that was never there.
-#[test]
-fn an_unset_profile_list_is_not_an_empty_list() {
-    let err = find_profile("coding", None).unwrap_err().to_string();
-    assert!(err.contains("none are configured"), "{err}");
+    for stored in [Some(profiles.as_slice()), None] {
+        let Err(GuiError::ValidationFailed(message)) = find_profile("codign", stored) else {
+            panic!("an unknown profile is a validation failure");
+        };
+        assert_eq!(
+            message,
+            not_found_message("codign", stored.unwrap_or_default())
+        );
+    }
 }
 
 #[test]

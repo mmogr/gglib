@@ -3,17 +3,16 @@
 //! Resolves a model's sampling parameters through the same hierarchy the
 //! proxy uses and prints each one beside the layer that supplied it.
 //!
-//! The resolution is [`gglib_core::request_pipeline::explain_stored`] —
-//! the identical call the plain resolution makes, returning the provenance it
-//! otherwise discards. Nothing here re-implements the ladder, so this command
-//! cannot describe a hierarchy that differs from the one that runs.
+//! The resolution is [`ModelOps::explain_sampling`], the call `GET
+//! /api/models/{id}/explain` answers with, so a terminal and the inspector's
+//! Sampling section are told the same thing. Nothing here re-implements the
+//! ladder or looks a profile up, so this command cannot describe a hierarchy
+//! that differs from the one that runs.
 
 use anyhow::{Result, anyhow};
+use gglib_app_services::{GuiError, ModelOps, SamplingExplanationDto};
 use gglib_core::Settings;
-use gglib_core::domain::{
-    FitInputs, InferenceProfile, Model, ModelSamplingContext, ModelSamplingDefaults,
-};
-use gglib_core::request_pipeline;
+use gglib_core::domain::{FitInputs, Model};
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size_with_source};
 use gglib_runtime::llama::args::resolve_kv_cache_types;
 use gglib_runtime::ports_impl::model_shards::resident_bytes;
@@ -21,69 +20,37 @@ use gglib_runtime::process::residency::explain::explain_fit;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
-use crate::handlers::config::settings::profiles::not_found_message;
-use crate::presentation::explain_display::{self, ExplainContext};
+use crate::presentation::explain_display;
 
 /// Execute `gglib model explain <id> [--profile NAME]`.
 pub(crate) async fn execute(
     ctx: &CliContext,
+    ops: &ModelOps,
     identifier: &str,
     profile: Option<&str>,
 ) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
+    let explanation = explain(ops, model.id, profile).await?;
     let settings = ctx.app.settings().get().await?;
 
-    let selected = match profile {
-        Some(name) => Some(find_profile(name, settings.inference_profiles.as_deref())?),
-        None => None,
-    };
-
-    // The two facts about the model that change how resolution behaves. Built
-    // through the same constructor the live path uses, so this command cannot
-    // explain a resolution that differs from the one that runs — which is the
-    // entire value of the command.
-    let model_ctx = ModelSamplingContext::for_model(&model);
-
-    // An empty request layer: this command explains the stored configuration,
-    // so there are no per-request parameters to occupy the top rung.
-    let (resolved, sources, effort_suppressed) = request_pipeline::explain_stored(
-        selected.as_ref(),
-        model.inference_defaults.as_ref(),
-        settings.inference_defaults.as_ref(),
-        model_ctx,
-        &model.template_caps,
-    );
-
-    // The request pipeline's stage 5b, applied to the resolution rather than to
-    // a request — the shared predicate, for the reason this whole command
-    // exists: an explanation that re-derived the condition could describe a
-    // hierarchy, or a gate, that differs from the one that runs.
-    //
-    // A no-op unless this model's recorded template caps positively say the
-    // template does not read `reasoning_effort`. On the common model — never
-    // launched, so never probed — the answer is `Unknown` and the level stands.
-
-    explain_display::print_explanation(
-        &model.name,
-        model.id,
-        &resolved,
-        &sources,
-        ExplainContext {
-            profile: selected.as_ref().map(|p| p.name.as_str()),
-            is_reasoning: model_ctx.is_reasoning,
-            trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
-            // Read from the same stored GGUF metadata the baseline check reads,
-            // so `explain` and the proxy's readback cannot disagree about what
-            // this model published.
-            model_sampling: ModelSamplingDefaults::from_metadata(&model.metadata),
-            defaults_origin: model.defaults_origin,
-            effort_suppressed,
-        },
-    );
-
+    explain_display::print_explanation(&model.name, model.id, &explanation);
     print_context_explanation(&model, &settings);
 
     Ok(())
+}
+
+/// The explanation of model `id`'s stored sampling, with `profile` applied
+/// when one is named.
+///
+/// A name that is no configured profile is an error rather than a fall back
+/// to no profile: someone who passed `--profile` wants to see that profile's
+/// effect. Its message is the whole answer, so it is printed as it is.
+async fn explain(ops: &ModelOps, id: i64, profile: Option<&str>) -> Result<SamplingExplanationDto> {
+    let explained = ops.explain_sampling(id, profile).await;
+    explained.map_err(|refused| match refused {
+        GuiError::ValidationFailed(message) => anyhow!(message),
+        other => other.into(),
+    })
 }
 
 /// Print the context chain, and what the fit worked from where it reached one.
@@ -182,114 +149,6 @@ fn gib(v: Option<u64>) -> String {
     )
 }
 
-/// Look up a configured profile by name.
-///
-/// Errors rather than falling back to no profile: someone who passed
-/// `--profile` wants to see that profile's effect, and silently showing them
-/// the unprofiled resolution would answer a question they did not ask.
-fn find_profile(name: &str, profiles: Option<&[InferenceProfile]>) -> Result<InferenceProfile> {
-    let profiles = profiles.unwrap_or_default();
-    profiles
-        .iter()
-        .find(|p| p.name == name)
-        .cloned()
-        .ok_or_else(|| anyhow!(not_found_message(name, profiles)))
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    use gglib_core::domain::InferenceConfig;
-
-    fn profile(name: &str) -> InferenceProfile {
-        InferenceProfile {
-            name: name.to_owned(),
-            description: None,
-            config: InferenceConfig::default(),
-            list_in_models: false,
-        }
-    }
-
-    #[test]
-    fn finds_a_configured_profile_by_name() {
-        let profiles = vec![profile("coding"), profile("chat")];
-        assert_eq!(
-            find_profile("chat", Some(&profiles)).unwrap().name,
-            "chat".to_owned()
-        );
-    }
-
-    /// The error names what does exist, so a typo is self-correcting.
-    #[test]
-    fn an_unknown_profile_errors_and_lists_the_configured_ones() {
-        let profiles = vec![profile("coding")];
-        let err = find_profile("codign", Some(&profiles))
-            .unwrap_err()
-            .to_string();
-
-        assert!(err.contains("codign"), "{err}");
-        assert!(err.contains("coding"), "{err}");
-    }
-
-    fn model(weights: &std::path::Path, projector: Option<&std::path::Path>) -> Model {
-        let mut new = gglib_core::NewModel::new(
-            "qwen".to_owned(),
-            weights.to_path_buf(),
-            7.0,
-            chrono::Utc::now(),
-        );
-        new.projector_path = projector.map(std::path::Path::to_path_buf);
-        Model::stored(1, &new)
-    }
-
-    /// The resident figure is labelled for what `resident_bytes` summed.
-    #[test]
-    fn the_resident_figure_names_the_projector_when_it_counts_one() {
-        let weights = std::path::Path::new("/models/qwen.gguf");
-        let projector = std::path::Path::new("/models/mmproj-F16.gguf");
-
-        assert_eq!(resident_label(&model(weights, None)), "  weights");
-        assert_eq!(
-            resident_label(&model(weights, Some(projector))),
-            "  weights + projector"
-        );
-    }
-
-    /// The figure under that label: both files, and the same number a launch
-    /// of the model is sized by.
-    #[test]
-    fn the_fit_is_sized_by_the_weights_and_the_projector_as_a_launch_is() {
-        let dir = tempfile::tempdir().unwrap();
-        let weights = dir.path().join("qwen.Q8_0.gguf");
-        let projector = dir.path().join("mmproj-F16.gguf");
-        std::fs::write(&weights, vec![0u8; 4096]).unwrap();
-        std::fs::write(&projector, vec![0u8; 512]).unwrap();
-        let linked = model(&weights, Some(&projector));
-
-        let (_, inputs) = context_fit(&linked);
-
-        assert_eq!(inputs.weights_bytes, Some(4608));
-        let launch = gglib_runtime::ports_impl::model_catalog::model_to_launch_spec(linked);
-        assert_eq!(inputs.weights_bytes, Some(launch.file_size_bytes));
-    }
-
-    #[test]
-    fn the_fit_of_an_unlinked_model_is_sized_by_its_weights() {
-        let dir = tempfile::tempdir().unwrap();
-        let weights = dir.path().join("qwen.Q8_0.gguf");
-        std::fs::write(&weights, vec![0u8; 4096]).unwrap();
-
-        let (_, inputs) = context_fit(&model(&weights, None));
-
-        assert_eq!(inputs.weights_bytes, Some(4096));
-    }
-
-    /// With no profiles configured at all the message should point at the
-    /// command that creates some, rather than listing an empty set.
-    #[test]
-    fn an_unset_profile_list_is_not_an_empty_list() {
-        let err = find_profile("coding", None).unwrap_err().to_string();
-        assert!(err.contains("install-templates"), "{err}");
-    }
-}
+#[path = "explain_tests.rs"]
+mod tests;

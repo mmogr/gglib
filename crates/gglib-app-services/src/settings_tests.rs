@@ -14,7 +14,7 @@ use std::sync::Arc;
 use super::*;
 use crate::test_support::{MockDownloadManager, MockSystemProbePort, test_core};
 
-fn make_ops(core: Arc<AppCore>, probe: MockSystemProbePort) -> SettingsOps {
+pub(super) fn make_ops(core: Arc<AppCore>, probe: MockSystemProbePort) -> SettingsOps {
     SettingsOps::new(SettingsDeps {
         core,
         system_probe: Arc::new(probe),
@@ -31,7 +31,7 @@ async fn get_returns_default_settings() {
     assert!(settings.default_download_path.is_none());
 }
 
-fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
+pub(super) fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
     gglib_core::domain::InferenceProfile {
         name: name.to_owned(),
         description: None,

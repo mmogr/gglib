@@ -29,7 +29,7 @@ Axum backend (HTTP response) → typed result
 | `servers.ts` | llama.cpp server lifecycle and proxy |
 | `downloads.ts` | Download queue management |
 | `mcp.ts` | MCP server config, lifecycle and config test |
-| `settings.ts` | Application settings |
+| `settings.ts` | Application settings, and the starter-profile install the daemon runs |
 | `tags.ts` | Model tags |
 | `builtin.ts` | Built-in tool listing |
 | `verification.ts` | Model verification |

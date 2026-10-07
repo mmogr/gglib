@@ -4,9 +4,10 @@
 //! `handlers/model/inspect.rs` is kept thin — it only fetches the model,
 //! branches on `--json`, and delegates to [`print_model_detail`].
 
-use gglib_core::ModelCapabilities;
 use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS, ModelDetailDto};
 
+use crate::presentation::capability_flags::capability_lines;
+use crate::presentation::sampling_values::stated_parameters;
 use crate::presentation::{first_chars, format_relative_time, print_separator};
 
 const SEP_WIDTH: usize = 60;
@@ -90,73 +91,13 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     println!();
     println!("  Capabilities");
     print_separator(SEP_WIDTH);
-    let caps = dto.capabilities;
-    println!(
-        "  supports-system-role  : {}",
-        flag_str(caps.contains(ModelCapabilities::SUPPORTS_SYSTEM_ROLE))
-    );
-    println!(
-        "  requires-strict-turns : {}",
-        flag_str(caps.contains(ModelCapabilities::REQUIRES_STRICT_TURNS))
-    );
-    println!(
-        "  supports-tool-calls   : {}",
-        flag_str(caps.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS))
-    );
-    println!(
-        "  supports-reasoning    : {}",
-        flag_str(caps.contains(ModelCapabilities::SUPPORTS_REASONING))
-    );
+    for line in capability_lines(dto.capabilities) {
+        println!("{line}");
+    }
 
     // ── Inference Defaults ────────────────────────────────────────────────────
-    if let Some(inf) = &dto.inference_defaults {
-        let has_any = inf.temperature.is_some()
-            || inf.top_p.is_some()
-            || inf.top_k.is_some()
-            || inf.max_tokens.is_some()
-            || inf.repeat_penalty.is_some()
-            || inf.presence_penalty.is_some()
-            || inf.min_p.is_some()
-            || inf.dry_multiplier.is_some()
-            || inf.dry_base.is_some()
-            || inf.dry_allowed_length.is_some()
-            || inf.dry_penalty_last_n.is_some();
-
-        if has_any {
-            let origin_suffix = match dto.defaults_origin {
-                Some(DefaultsOrigin::AutoDetected) => {
-                    " (auto-detected — ranks below global settings)"
-                }
-                // Same rank as auto-detected, and said so: neither was
-                // reviewed by a person, so neither may outrank a setting
-                // somebody chose. What differs is the evidence behind it.
-                Some(DefaultsOrigin::Published) => {
-                    " (published by the model author — ranks below global settings)"
-                }
-                // Also below global — an automated apply is not a person —
-                // but the strongest evidence of the three, and the agentic
-                // ceiling defers to it.
-                Some(DefaultsOrigin::Measured) => {
-                    " (measured by a tune sweep — ranks below global settings)"
-                }
-                Some(DefaultsOrigin::User) => " (user-set)",
-                None => "",
-            };
-            println!();
-            println!("  Inference Defaults{origin_suffix}");
-            print_separator(SEP_WIDTH);
-            print_opt("  temperature      ", inf.temperature);
-            print_opt("  top_p            ", inf.top_p);
-            print_opt("  top_k            ", inf.top_k);
-            print_opt("  max_tokens       ", inf.max_tokens);
-            print_opt("  repeat_penalty   ", inf.repeat_penalty);
-            print_opt("  presence_penalty ", inf.presence_penalty);
-            print_opt("  min_p            ", inf.min_p);
-            print_opt("  dry_multiplier   ", inf.dry_multiplier);
-            print_opt("  dry_base         ", inf.dry_base);
-            print_opt("  dry_allowed_len  ", inf.dry_allowed_length);
-            print_opt("  dry_penalty_last ", inf.dry_penalty_last_n);
-        }
+    for line in inference_default_lines(dto) {
+        println!("{line}");
     }
 
     // ── Published Sampling Defaults ───────────────────────────────────────────
@@ -187,6 +128,48 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     }
 
     print_separator(SEP_WIDTH);
+}
+
+// ── Inference defaults ────────────────────────────────────────────────────────
+
+/// Render the sampling defaults stored on this model, if it stores any: a
+/// heading that says where they came from, and one row per field that is
+/// set. Every field, from [`stated_parameters`].
+fn inference_default_lines(dto: &ModelDetailDto) -> Vec<String> {
+    let stated = dto.inference_defaults.as_ref().map(stated_parameters);
+    let Some(stated) = stated.filter(|stated| !stated.is_empty()) else {
+        return Vec::new();
+    };
+    let origin_suffix = match dto.defaults_origin {
+        Some(DefaultsOrigin::AutoDetected) => " (auto-detected — ranks below global settings)",
+        // Same rank as auto-detected, and said so: neither was reviewed by a
+        // person, so neither may outrank a setting somebody chose. What
+        // differs is the evidence behind it.
+        Some(DefaultsOrigin::Published) => {
+            " (published by the model author — ranks below global settings)"
+        }
+        // Also below global — an automated apply is not a person — but the
+        // strongest evidence of the three, and the agentic ceiling defers to
+        // it.
+        Some(DefaultsOrigin::Measured) => {
+            " (measured by a tune sweep — ranks below global settings)"
+        }
+        Some(DefaultsOrigin::User) => " (user-set)",
+        None => "",
+    };
+
+    let mut lines = vec![
+        String::new(),
+        format!("  Inference Defaults{origin_suffix}"),
+        "-".repeat(SEP_WIDTH),
+    ];
+    // As wide as the longest field name, `reasoning_budget_tokens`.
+    lines.extend(
+        stated
+            .iter()
+            .map(|(field, value)| format!("  {field:<23} : {value}")),
+    );
+    lines
 }
 
 // ── Published sampling defaults ───────────────────────────────────────────────
@@ -284,10 +267,6 @@ fn projector_line(dto: &ModelDetailDto) -> String {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn flag_str(v: bool) -> &'static str {
-    if v { "yes" } else { "no" }
-}
 
 fn print_opt(label: &str, value: Option<impl std::fmt::Display>) {
     if let Some(v) = value {

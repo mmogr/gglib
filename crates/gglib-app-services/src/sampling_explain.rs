@@ -12,6 +12,7 @@
 //! plain resolution makes — so an explanation cannot describe a hierarchy that
 //! differs from the one that runs.
 
+use gglib_core::domain::inference_profile::not_found_message;
 use gglib_core::domain::{
     DefaultsOrigin, InferenceConfig, InferenceProfile, Model, ModelSamplingContext,
     ModelSamplingDefaults, ParamSource, ReasoningEffort, SamplingLayer, SamplingOverride,
@@ -332,7 +333,7 @@ fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
 /// Errors rather than falling back to no profile: someone who named a profile
 /// wants to see that profile's effect, and silently showing them the
 /// unprofiled resolution would answer a question they did not ask. The message
-/// names what does exist, so a typo is self-correcting.
+/// is [`not_found_message`], the one every profile lookup answers with.
 pub(crate) fn find_profile<'a>(
     name: &str,
     profiles: Option<&'a [InferenceProfile]>,
@@ -341,18 +342,7 @@ pub(crate) fn find_profile<'a>(
     profiles
         .iter()
         .find(|profile| profile.name == name)
-        .ok_or_else(|| {
-            let names = profiles
-                .iter()
-                .map(|profile| profile.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            GuiError::ValidationFailed(if names.is_empty() {
-                format!("no profile named '{name}'; none are configured")
-            } else {
-                format!("no profile named '{name}'; configured profiles are: {names}")
-            })
-        })
+        .ok_or_else(|| GuiError::ValidationFailed(not_found_message(name, profiles)))
 }
 
 /// Resolve a model's sampling parameters and describe where each came from.
@@ -364,10 +354,10 @@ pub(crate) fn explain(
     // The two facts about the model that change how resolution behaves.
     let model_ctx = ModelSamplingContext::for_model(model);
 
-    // The ladder plus stage 5b's effort gate, both from the shared kernel the
-    // CLI's `gglib model explain` also calls. Not a copy of either rule: an
-    // explanation that re-derived them could only drift into a confident
-    // account of a resolution that does not happen.
+    // The ladder plus stage 5b's effort gate, both from the shared kernel a
+    // request is resolved by. Not a copy of either rule: an explanation that
+    // re-derived them could only drift into a confident account of a
+    // resolution that does not happen.
     let (resolved, sources, effort_suppressed) = gglib_core::request_pipeline::explain_stored(
         profile,
         model.inference_defaults.as_ref(),

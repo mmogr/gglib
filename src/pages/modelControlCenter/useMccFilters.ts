@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FilterState } from '../../components/FilterPopover';
 import type { AddDownloadSubTab } from '../../components/ModelLibraryPanel/AddDownloadContent';
 import type { GgufModel } from '../../types';
-import { get } from '../../services/transport/api/client';
+import { getTransport } from '../../services/transport';
+import type { ModelListQuery } from '../../services/transport/api/models/local';
 
 type RefreshDeps = {
   loadModels: () => Promise<void>;
@@ -27,26 +28,27 @@ export interface UseMccFiltersResult {
   handleModelAdded: (filePath?: string) => Promise<void>;
 }
 
-/** Build a query string from the current FilterState. */
-function buildQueryParams(filters: FilterState): string {
-  const p = new URLSearchParams();
-  p.set('sort', filters.sortBy);
-  p.set('order', filters.sortOrder);
-  if (filters.paramRange !== null) {
-    p.set('min_params', String(filters.paramRange[0]));
-    p.set('max_params', String(filters.paramRange[1]));
-  }
-  if (filters.speedRange !== null) {
-    p.set('min_speed', String(filters.speedRange[0]));
-    p.set('max_speed', String(filters.speedRange[1]));
-  }
-  if (filters.selectedQuantizations.length > 0) {
-    p.set('quantizations', filters.selectedQuantizations.join(','));
-  }
-  if (filters.selectedTags.length > 0) {
-    p.set('tags', filters.selectedTags.join(','));
-  }
-  return p.toString();
+/**
+ * The daemon's list query for a FilterState: every filter that is set, and
+ * none that is not. A range the popover has not narrowed is `null` there and
+ * left out here, and so is an empty selection.
+ */
+function modelListQuery(filters: FilterState): ModelListQuery {
+  const [min_params, max_params] = filters.paramRange ?? [];
+  const [min_context, max_context] = filters.contextRange ?? [];
+  const [min_speed, max_speed] = filters.speedRange ?? [];
+  return {
+    sort: filters.sortBy,
+    order: filters.sortOrder,
+    min_params,
+    max_params,
+    min_context,
+    max_context,
+    min_speed,
+    max_speed,
+    quantizations: filters.selectedQuantizations.join(',') || undefined,
+    tags: filters.selectedTags.join(',') || undefined,
+  };
 }
 
 export function useMccFilters({
@@ -98,8 +100,7 @@ export function useMccFilters({
     let isCurrent = true;
     const timer = setTimeout(async () => {
       try {
-        const qs = buildQueryParams(filters);
-        const data = await get<GgufModel[]>(`/api/models?${qs}`);
+        const data = await getTransport().listModels(modelListQuery(filters));
         if (isCurrent) setServerModels(data);
       } catch {
         // Network error or backend down — keep the current list visible.
@@ -138,9 +139,7 @@ export function useMccFilters({
       }
       await refreshFilterDeps();
       try {
-        const qs = buildQueryParams(filters);
-        const data = await get<GgufModel[]>(`/api/models?${qs}`);
-        setServerModels(data);
+        setServerModels(await getTransport().listModels(modelListQuery(filters)));
       } catch {
         // Ignore; the debounced effect will retry shortly.
       }

@@ -30,6 +30,7 @@ import {
 } from '../../../../src/services/transport/api/models/local';
 import { killRemote } from '../../../../src/services/transport/api/remote';
 import { stopServer } from '../../../../src/services/transport/api/servers';
+import { installProfileTemplates } from '../../../../src/services/transport/api/settings';
 import { addModelTag } from '../../../../src/services/transport/api/tags';
 import { repairModel } from '../../../../src/services/transport/api/verification';
 
@@ -53,6 +54,14 @@ describe('what a typed request body sends', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('installing the starter profiles posts to the install route and names none', async () => {
+    expect(await sent(() => installProfileTemplates())).toStrictEqual({
+      method: 'POST',
+      path: '/api/config/profiles/install-templates',
+      body: null,
+    });
   });
 
   it('adding a model sends its file path and nothing else', async () => {

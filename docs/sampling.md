@@ -739,12 +739,10 @@ gglib config profile set chat --list-in-models
 Listing is opt-in per profile because the full cross product of models and
 profiles would swamp a client's model picker. Unlisted profiles remain fully
 usable by name. Profiles can also be managed from the GUI under
-**Settings → Inference Profiles** — with one gap worth knowing about: the GUI's
-"Install starter templates" seeds the three sampling profiles only. Its profile
-editor rebuilds a profile's config from its own field list on every save and
-drops anything not on that list, so seeding the six reasoning rungs there would
-install profiles the first edit silently empties. `gglib config profile
-install-templates` installs all nine.
+**Settings → Inference Profiles**. Its "Install starter profiles" button runs
+the install `gglib config profile install-templates` runs, so it adds the same
+nine. A profile you already have under one of their names is kept as it is;
+only the command's `--force` puts the starter profile in its place.
 
 ## Server launch defaults
 

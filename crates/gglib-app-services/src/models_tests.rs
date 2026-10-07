@@ -33,8 +33,8 @@ fn make_ops_with_emitter(core: Arc<AppCore>, emitter: Arc<dyn AppEventEmitter>) 
 async fn list_returns_empty_on_fresh_db() {
     let core = test_core().await;
     let ops = make_ops(core);
-    let models = ops.list().await.expect("list should succeed");
-    assert!(models.is_empty());
+    let models = ops.list_with_query(ModelListQuery::default()).await;
+    assert!(models.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -74,9 +74,9 @@ async fn add_and_list_model() {
     let canonical = std::fs::canonicalize(&gguf_path).unwrap();
     assert_eq!(added.file_path, canonical.to_str().unwrap());
 
-    let models = ops.list().await.unwrap();
-    assert_eq!(models.len(), 1);
-    assert_eq!(models[0].id, added.id);
+    let models = ops.list_with_query(ModelListQuery::default()).await;
+    let ids: Vec<i64> = models.unwrap().iter().map(|m| m.id).collect();
+    assert_eq!(ids, [added.id]);
 }
 
 /// **The link production actually crosses.** The duplicate leaves the core

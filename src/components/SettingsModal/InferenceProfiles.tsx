@@ -11,7 +11,11 @@
  */
 
 import { FC, useCallback, useEffect, useState } from "react";
-import { getSettings, updateSettings } from "../../services/transport/api/settings";
+import {
+  getSettings,
+  installProfileTemplates,
+  updateSettings,
+} from "../../services/transport/api/settings";
 import type { SparseInferenceConfig, SparseInferenceProfile } from "../../types";
 import { INFERENCE_CONFIG_KEYS } from "../../constants/inferenceDefaults";
 import { PARAM_LABELS } from "../../utils/samplingProvenance";
@@ -47,35 +51,6 @@ function wireLabel(key: (typeof INFERENCE_CONFIG_KEYS)[number]): string {
   return label ? label.toLowerCase().replace(/\s+/g, "-") : key;
 }
 
-/**
- * The CLI's starter templates (`gglib config profile install-templates`),
- * transcribed from `gglib_core::domain::inference_profile::builtin_templates`.
- * Templates, not behaviour: installing them only seeds the user's own list.
- * Sparse on purpose — a template that filled every field would silently
- * override per-model tuning. Drift is guarded by a contract test that reads
- * the Rust source.
- */
-export const STARTER_PROFILES: SparseInferenceProfile[] = [
-  {
-    name: 'coding',
-    description: 'Low-variance sampling for code generation and tool use.',
-    config: { temperature: 0.2, topP: 0.9 },
-    listInModels: false,
-  },
-  {
-    name: 'chat',
-    description: 'Balanced sampling for conversational use.',
-    config: { temperature: 0.7, topP: 0.95 },
-    listInModels: true,
-  },
-  {
-    name: 'creative',
-    description: 'Wider sampling for brainstorming and prose.',
-    config: { temperature: 1.1, topP: 0.98 },
-    listInModels: false,
-  },
-];
-
 export const InferenceProfiles: FC = () => {
   const [profiles, setProfiles] = useState<SparseInferenceProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +58,8 @@ export const InferenceProfiles: FC = () => {
   const [error, setError] = useState<string | null>(null);
   /** `null` = not editing; `""` = creating; otherwise the name being edited. */
   const [editing, setEditing] = useState<string | null>(null);
+  /** What the last starter-profile install did, once there has been one. */
+  const [installed, setInstalled] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +86,7 @@ export const InferenceProfiles: FC = () => {
   const persist = useCallback(async (next: SparseInferenceProfile[]) => {
     setSaving(true);
     setError(null);
+    setInstalled(null);
     try {
       const settings = await updateSettings({ inferenceProfiles: next });
       setProfiles(settings.inferenceProfiles ?? []);
@@ -140,20 +118,28 @@ export const InferenceProfiles: FC = () => {
   );
 
   /**
-   * Seed the CLI's starter templates, skip-existing — the same merge
-   * `gglib config profile install-templates` performs (without --force).
+   * Add the starter profiles. The daemon runs the install `gglib config
+   * profile install-templates` runs, so the nine and what happens to a
+   * profile already under one of their names are decided there: it is kept.
    */
-  const handleInstallTemplates = useCallback(() => {
-    const missing = STARTER_PROFILES.filter(
-      (t) => !profiles.some((p) => p.name === t.name),
-    );
-    if (missing.length === 0) return;
-    void persist([...profiles, ...missing]);
-  }, [profiles, persist]);
-
-  const templatesMissing = STARTER_PROFILES.some(
-    (t) => !profiles.some((p) => p.name === t.name),
-  );
+  const handleInstallTemplates = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const done = await installProfileTemplates();
+      setProfiles(done.settings.inferenceProfiles ?? []);
+      setInstalled(
+        done.installed.length === 0
+          ? "Starter profiles are already installed"
+          : `Installed: ${done.installed.join(", ")}` +
+              (done.kept.length ? `. Kept yours: ${done.kept.join(", ")}` : ""),
+      );
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setSaving(false);
+    }
+  }, []);
 
   if (loading) {
     return <p className="text-sm text-text-secondary">Loading profiles…</p>;
@@ -247,18 +233,15 @@ export const InferenceProfiles: FC = () => {
         <Button disabled={saving} onClick={() => setEditing("")}>
           Add profile
         </Button>
-        {templatesMissing ? (
-          <Button
-            variant="secondary"
-            disabled={saving}
-            title="Seed the coding / chat / creative starter profiles; existing names are kept"
-            onClick={handleInstallTemplates}
-          >
-            Install starter profiles
-          </Button>
-        ) : (
-          <span className="text-xs text-text-muted">Starter profiles installed</span>
-        )}
+        <Button
+          variant="secondary"
+          disabled={saving}
+          title="Add the starter profiles: three for sampling and six for reasoning effort. A profile you already have under one of their names is kept"
+          onClick={() => void handleInstallTemplates()}
+        >
+          Install starter profiles
+        </Button>
+        {installed && <span className="text-xs text-text-muted">{installed}</span>}
       </div>
     </Stack>
   );

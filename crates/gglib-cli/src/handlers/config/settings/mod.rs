@@ -3,7 +3,7 @@
     clippy::option_if_let_else,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-pub(crate) mod profiles;
+mod profiles;
 mod reset;
 mod set;
 mod settings_display;

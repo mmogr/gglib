@@ -20,16 +20,28 @@ import type {
   UpgradeOutcome,
 } from '../../../../types';
 import type { AddModelRequest } from '../../../../types/generated/AddModelRequest';
+import type { ModelListQueryParams } from '../../../../types/generated/ModelListQueryParams';
 import type { ProjectorChoice } from '../../../../types/generated/ProjectorChoice';
 import type { RemoveModelRequest } from '../../../../types/generated/RemoveModelRequest';
 import type { RetagBody } from '../../../../types/generated/RetagBody';
 import type { UpdateModelsDirectoryRequest } from '../../../../types/generated/UpdateModelsDirectoryRequest';
 
 /**
- * List all local models.
+ * The sort and filters `GET /api/models` reads, by the daemon's own names.
+ * A key left out, or `null`, is a filter that is not set.
  */
-export async function listModels(): Promise<GgufModel[]> {
-  return get<GgufModel[]>('/api/models');
+export type ModelListQuery = Partial<ModelListQueryParams>;
+
+/**
+ * List local models, sorted and narrowed by `query` when one is given.
+ */
+export async function listModels(query: ModelListQuery = {}): Promise<GgufModel[]> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== null && value !== undefined) params.set(key, String(value));
+  }
+  const search = params.toString();
+  return get<GgufModel[]>(search ? `/api/models?${search}` : '/api/models');
 }
 
 /**
@@ -144,7 +156,7 @@ export async function setModelCapabilities(
   return patch<GgufModel>(`/api/models/${modelId}/capabilities`, request);
 }
 
-/** Commit-SHA update check (`gglib model check-updates` for one model). */
+/** Commit-SHA update check: the one `gglib model upgrade` runs before it downloads. */
 export async function checkModelUpgrade(modelId: number): Promise<UpgradeCheck> {
   return get<UpgradeCheck>(`/api/models/${modelId}/upgrade-check`);
 }

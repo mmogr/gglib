@@ -6,6 +6,7 @@
 use clap::Subcommand;
 
 use crate::model_list_args::ListArgs;
+use crate::presentation::capability_flags::capability_names;
 use crate::projector_args::ProjectorArgs;
 
 /// Model management commands.
@@ -320,15 +321,12 @@ pub enum ModelCommand {
         /// Name or ID of the model to inspect or modify
         identifier: String,
         /// Set a capability flag (can be repeated).
-        ///
-        /// Accepted values: `supports-system-role`, `requires-strict-turns`,
-        /// `supports-tool-calls`, `supports-reasoning`.
         #[arg(long = "set", value_name = "FLAG", action = clap::ArgAction::Append)]
+        #[arg(value_parser = capability_names())]
         set: Vec<String>,
         /// Clear a capability flag (can be repeated).
-        ///
-        /// Accepted values: same as `--set`.
         #[arg(long = "unset", value_name = "FLAG", action = clap::ArgAction::Append)]
+        #[arg(value_parser = capability_names())]
         unset: Vec<String>,
     },
 

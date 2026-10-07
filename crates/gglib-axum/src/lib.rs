@@ -17,6 +17,7 @@ pub(crate) mod handlers;
 pub(crate) mod proxy_watch;
 pub(crate) mod routes;
 pub(crate) mod routes_benchmark;
+pub(crate) mod routes_config;
 pub(crate) mod routes_remote;
 pub(crate) mod routes_runs;
 pub(crate) mod sse;
