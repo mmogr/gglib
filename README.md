@@ -283,7 +283,8 @@ An 18-crate Rust workspace (17 under `crates/`, plus the desktop app in
 `src-tauri`) and a React front end. Dependencies point one way: adapters →
 facades → infrastructure → `gglib-agent` → core, and
 `scripts/check_boundaries.sh` checks part of that in CI. See
-[`crates/`](crates/) for per-crate READMEs and architecture diagrams,
+[`crates/README.md`](crates/README.md#architecture-overview) for the layer
+diagram and the catalog of crates, each with its own README,
 [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, and
 [generated API docs](https://mmogr.github.io/gglib).
 

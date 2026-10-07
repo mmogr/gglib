@@ -1,11 +1,18 @@
 #!/bin/bash
 # check_boundaries.sh - Validate workspace crate dependency boundaries
 #
-# This script enforces the Phase 5 architecture rules:
-# - gglib-core: Pure domain types, no adapter/infra deps
-# - gglib-db: Core + sqlx only, no adapter deps
-# - Adapters (cli, axum, tauri): Core + db + their local deps only
-# - Infrastructure crates: no direct dependency on a surface crate
+# The rules are CONTRIBUTING.md's "Crate Boundaries" section, which also says
+# which of them this script checks. It reads each checked crate's direct
+# dependencies and fails on:
+# - an external crate on that crate's forbidden list (ADAPTER_DEPS and the
+#   *_FORBIDDEN arrays in main);
+# - a surface crate (gglib-cli, gglib-axum, gglib-tauri) that depends on
+#   another, except gglib-cli on gglib-axum;
+# - an infrastructure crate that depends on a surface crate.
+#
+# It also fails when a Rust file under crates/, outside BOOTSTRAP_ALLOWED_DIRS,
+# names one of the shared composition entry points (BOOTSTRAP_GUARDS), and
+# when check_readmes.sh --strict fails, whose results it merges into its own.
 #
 # Usage: ./scripts/check_boundaries.sh [--verbose]
 # Output: boundary-status.json with pass/fail per crate

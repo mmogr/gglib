@@ -2,7 +2,21 @@
 
 <!-- module-docs:start -->
 
-Benchmark service — shared between CLI and web adapters.
+Benchmark service: the compare, perf, tune and agentic runs.
+
+[`BenchmarkOps`] is built in `service_graph.rs` and called only by the daemon's
+HTTP handlers, in `gglib-axum`'s `handlers/benchmark/`. The CLI and the GUI
+reach a run through those routes.
+
+# Cancellation
+
+Every run takes a `CancellationToken`. The handler wraps the run's event
+stream in a [`guard::BenchmarkTaskGuard`], which cancels the token when it is
+dropped: when the stream ends, or when the client goes away, which is what
+Ctrl-C in the CLI does. The run stops at the next point where it checks the
+token: compare and perf before each model, tune before each candidate, and the
+agentic eval before each seed of each task. It then marks the run failed as
+`Aborted by user` and calls `stop_current()`.
 
 # Module Layout
 

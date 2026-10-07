@@ -1,4 +1,18 @@
 #!/bin/bash
+# install-llama.sh - Install llama.cpp for Metal, CUDA or Vulkan
+#
+# Picks one of --metal, --cuda and --vulkan and runs
+# `gglib config llama install` with it. The choice is the gglib binary's
+# (`gglib config llama detect --json`) when it names one, and otherwise this
+# script's own look at the machine. It exits 1 without installing when a Vulkan
+# GPU is there and what a Vulkan build needs is not, so that a missing package
+# cannot turn into a CPU-only build, and when it finds no gglib binary.
+#
+# Where its own look finds none of the three it chooses --cpu-only, a flag
+# `gglib config llama install` does not have: the command refuses it and
+# nothing is installed.
+#
+# Usage: ./scripts/install-llama.sh    (`make llama-install-auto`)
 set -e
 
 # Locate the gglib binary (prefer local builds, then PATH).

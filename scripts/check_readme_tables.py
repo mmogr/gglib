@@ -155,10 +155,9 @@ HEADER = """\
 # tick. Recording one is a reviewable line in a diff, which is the same
 # bargain `scripts/rust-complexity-baseline.txt` strikes.
 #
-# Two are exemptions by design — `src/types` and `src/styles` tabulate type
-# names and migration phases rather than files. The rest describe their
-# directory with no file table; each is a directory nothing compares, and
-# shortening this list is the way to fix that.
+# One is an exemption by design: `src/types` tabulates type names rather than
+# files. The rest describe their directory with no file table; each is a
+# directory nothing compares, and shortening this list is the way to fix that.
 """
 
 

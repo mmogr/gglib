@@ -9,13 +9,14 @@ Over the files git tracks, this checks:
    tracked file or a directory holding one, and a `#fragment` must name a
    heading's id in it or an HTML `id`/`name` anchor.
 2. A `https://github.com/mmogr/gglib/blob/main/docs/adr/...` URL in any
-   tracked text file, fragment included. URLs into other repositories, such
-   as modelpipe's ADRs, are not read.
+   tracked text file, fragment included: the form doc comments use. URLs into
+   other repositories, such as modelpipe's ADRs, are not read.
 3. A bare `docs/adr/NNNN-name.md` or `docs/adr/log-NNNN.md` mention in any
    tracked text file, resolved from the repository root, fragment included.
 4. Inside `docs/adr/*.md`, the `log-*.md` files included, every reference
    link (`[text][label]`, `[text][]`, `[label]`) has its `[label]: ...`
-   definition in the same file.
+   definition in the same file. A block moved into a log without its
+   definitions fails here.
 
 What it does NOT check, so that nobody reads more into a pass than is there:
 
@@ -45,6 +46,11 @@ What it does NOT check, so that nobody reads more into a pass than is there:
 Usage:
     ./scripts/check_adrs.py --check      # self-test, then scan the repository
     ./scripts/check_adrs.py --self-test  # run the fixtures only
+
+The self-test is a fixture tree that plants faults for each of the four checks
+beside constructs that must not be read as links, and passes when exactly the
+planted faults are reported. The scan fails when it finds no ADR or reads no
+link, since a scan that read nothing prints what a clean one prints.
 
 Exit codes:
     0  every link resolves and every reference is defined
