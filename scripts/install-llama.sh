@@ -136,4 +136,11 @@ if [ -z "$GGLIB_BIN" ]; then
 fi
 
 echo "Running: $GGLIB_BIN config llama install $GPU_FLAGS"
-$GGLIB_BIN config llama install $GPU_FLAGS
+if [ -t 0 ]; then
+    $GGLIB_BIN config llama install $GPU_FLAGS
+else
+    # No terminal to answer the command's "Continue?" (make run from a script
+    # or CI). This script was run to install, so answer yes: end of input
+    # alone would cancel, and the make target would still report success.
+    printf 'y\n' | $GGLIB_BIN config llama install $GPU_FLAGS
+fi

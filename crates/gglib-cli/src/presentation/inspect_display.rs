@@ -7,7 +7,7 @@
 use gglib_core::ModelCapabilities;
 use gglib_core::domain::{DefaultsOrigin, MODEL_SAMPLING_KEYS, ModelDetailDto};
 
-use crate::presentation::{format_relative_time, print_separator};
+use crate::presentation::{first_chars, format_relative_time, print_separator};
 
 const SEP_WIDTH: usize = 60;
 
@@ -68,7 +68,7 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
         }
         if let Some(sha) = &dto.hf_commit_sha {
             // Show first 12 chars — enough to identify, not overwhelming.
-            println!("  Commit SHA     : {}", &sha[..sha.len().min(12)]);
+            println!("  Commit SHA     : {}", first_chars(sha, 12));
         }
         if let Some(dl) = &dto.download_date {
             println!("  Downloaded     : {dl} ({})", format_relative_time(dl));

@@ -41,8 +41,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
         return Ok(());
     }
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let body = daemon_client::QueueDownloadBody {
         model_id: args.model_id.to_string(),
         quant: args.quantization.map(String::from),

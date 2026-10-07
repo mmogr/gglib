@@ -131,8 +131,7 @@ pub(crate) async fn execute(
     let default_context = resolve_default_context(default_context.as_deref(), &settings)?;
     let body = start_body(host, port, default_context, sampling, &cache, &access);
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let proxy_port = start_on(&handle, &body, &settings).await?;
     attach_dashboard(ctx, proxy_port, access.api_key).await
 }
@@ -154,17 +153,7 @@ pub(in crate::handlers) async fn attach_dashboard(
 
     // The stored key is the same row the daemon's supervisor resolves, so the
     // dashboard presents whatever the proxy demands.
-    let key = match api_key_flag {
-        Some(flag) => Some(flag),
-        None => ctx
-            .app
-            .settings()
-            .get()
-            .await
-            .ok()
-            .and_then(|s| s.proxy_api_key)
-            .filter(|k| !k.trim().is_empty()),
-    };
+    let key = daemon_client::auth::proxy_key(ctx, api_key_flag).await;
 
     let result =
         crate::handlers::proxy_dashboard::execute("127.0.0.1".into(), proxy_port, key.as_deref())
@@ -179,22 +168,10 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
-#[allow(
-    clippy::single_match_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
-    match daemon_client::probe(&client).await {
-        daemon_client::DaemonProbe::Running => {}
-        _ => {
-            eprintln!("  Daemon is not running \u{2014} no proxy to stop.");
-            return Ok(());
-        }
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    let Ok(handle) = daemon_client::running(ctx).await else {
+        eprintln!("  Daemon is not running \u{2014} no proxy to stop.");
+        return Ok(());
     };
     let status = handle.stop_proxy().await?;
     if status.running {

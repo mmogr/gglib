@@ -24,8 +24,7 @@ use crate::daemon_client;
 /// what a person is shown is the same thing, and the only reason `enable`
 /// can show it is that it happens to be offering a code at the time.
 pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
 
     let offered = handle.remote_invite().await?;
 

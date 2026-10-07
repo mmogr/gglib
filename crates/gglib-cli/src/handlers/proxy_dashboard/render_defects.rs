@@ -10,8 +10,9 @@
 
 use std::collections::BTreeMap;
 
-use super::render::{thousands, truncate};
+use super::render::thousands;
 use super::wire::ModelDefectCounts;
+use crate::presentation::truncate_string;
 
 /// Render the per-model signals section — what failed, what merely went in
 /// circles, and for which model.
@@ -93,12 +94,12 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
         if counts.requests == 0 && counts.agent_guard_scanned > 0 {
             out.push_str(&format!(
                 "  {:<28} no proxy requests\n",
-                truncate(model, 28)
+                truncate_string(model, 28)
             ));
         } else {
             out.push_str(&format!(
                 "  {:<28} {} request(s)\n",
-                truncate(model, 28),
+                truncate_string(model, 28),
                 thousands(counts.requests)
             ));
         }

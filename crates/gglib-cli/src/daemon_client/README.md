@@ -11,6 +11,13 @@ answers, spawn `gglib daemon run` detached (own process group, output to
 `<data_root>/logs/daemon.log`) and poll until it is up. A port held by
 something that is *not* a gglib daemon is a hard error, never fought over.
 
+[`running`] is the same probe for a command that only reports on the daemon,
+or stops something on it: it hands back the daemon when one is up, says what
+is there instead when none is, and never launches one. Either way the
+[`DaemonHandle`] carries the credential [`auth::daemon_api_key`] resolves, and
+every call made through it sends that credential, so no command resolves or
+attaches one itself.
+
 This module is responsible for finding or starting the daemon and for the
 thin request wrappers commands share. It is **not** responsible for
 rendering — handlers own their output — and it never falls back to

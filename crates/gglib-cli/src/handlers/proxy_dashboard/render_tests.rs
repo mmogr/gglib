@@ -56,18 +56,6 @@ fn format_elapsed_secs_over_a_minute() {
 }
 
 #[test]
-fn truncate_leaves_short_strings_unchanged() {
-    assert_eq!(truncate("qwen3", 24), "qwen3");
-}
-
-#[test]
-fn truncate_cuts_long_strings_with_ellipsis() {
-    let result = truncate("a-very-long-model-name-that-overflows", 10);
-    assert_eq!(result.chars().count(), 10);
-    assert!(result.ends_with('\u{2026}'));
-}
-
-#[test]
 fn render_frame_shows_placeholder_when_no_connections() {
     let snapshot = DashboardSnapshot {
         active_connections: vec![],

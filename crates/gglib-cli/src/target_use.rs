@@ -14,6 +14,7 @@ use anyhow::Result;
 
 use super::Target;
 use crate::bootstrap::CliContext;
+use crate::daemon_client::auth::proxy_key;
 
 impl Target {
     /// Run `here` on this machine, or `far` on the paired one.
@@ -57,7 +58,7 @@ impl Target {
                     Some(port) => port,
                     None => ctx.app.settings().get().await?.effective_proxy_port(),
                 };
-                Ok((host, port, client_api_key(ctx, api_key).await))
+                Ok((host, port, proxy_key(ctx, api_key).await))
             }
             Self::Remote => {
                 if host != "127.0.0.1" || port.is_some() || api_key.is_some() {
@@ -71,21 +72,6 @@ impl Target {
             }
         }
     }
-}
-
-/// The key a proxy client sends to a proxy on this machine: the flag, or
-/// the stored `proxy_api_key` when there is one and it is not blank.
-async fn client_api_key(ctx: &CliContext, flag: Option<String>) -> Option<String> {
-    if flag.is_some() {
-        return flag;
-    }
-    ctx.app
-        .settings()
-        .get()
-        .await
-        .ok()
-        .and_then(|s| s.proxy_api_key)
-        .filter(|key| !key.trim().is_empty())
 }
 
 #[cfg(test)]

@@ -158,6 +158,14 @@ impl DaemonHandle {
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
+    /// The daemon's setup status as the JSON it answers with, whatever the
+    /// status code: the benchmark report reads this machine's hardware from
+    /// it, and has nothing to say about a refusal.
+    pub(crate) async fn setup_status(&self) -> Result<serde_json::Value> {
+        let response = self.get(paths::SETUP_STATUS_PATH).send().await?;
+        Ok(response.json().await?)
+    }
+
     /// The request that asks the daemon to judge tune run `run_id` against the
     /// apply gate, carrying this handle's credential. A builder, because the
     /// caller reads a refusal as a verdict rather than an error.

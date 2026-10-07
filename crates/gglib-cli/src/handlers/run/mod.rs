@@ -9,7 +9,7 @@ use clap::{Args, Subcommand};
 use gglib_core::domain::runs::is_run_id;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonHandle};
+use crate::daemon_client::ensure_daemon;
 
 /// `gglib run`.
 #[derive(Args)]
@@ -56,21 +56,17 @@ pub(crate) async fn dispatch(ctx: &CliContext, args: RunArgs) -> Result<()> {
             model,
             prompt,
             follow,
-        } => start::start(&daemon(ctx).await?, &model, &prompt, follow).await,
-        RunCommand::List => read::list(&daemon(ctx).await?).await,
+        } => start::start(&ensure_daemon(ctx).await?, &model, &prompt, follow).await,
+        RunCommand::List => read::list(&ensure_daemon(ctx).await?).await,
         RunCommand::Show { id, follow } => {
             checked(&id)?;
-            read::show(&daemon(ctx).await?, &id, follow).await
+            read::show(&ensure_daemon(ctx).await?, &id, follow).await
         }
         RunCommand::Cancel { id } => {
             checked(&id)?;
-            read::cancel(&daemon(ctx).await?, &id).await
+            read::cancel(&ensure_daemon(ctx).await?, &id).await
         }
     }
-}
-
-async fn daemon(ctx: &CliContext) -> Result<DaemonHandle> {
-    daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await
 }
 
 /// Refuse an id that is not one before it reaches a request path, where a

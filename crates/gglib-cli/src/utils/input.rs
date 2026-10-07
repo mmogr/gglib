@@ -4,7 +4,7 @@
 //! including strings and confirmations.
 
 use anyhow::{Context, Result};
-use std::io;
+use std::io::{self, BufRead};
 
 /// Prompts the user for a string input.
 ///
@@ -76,8 +76,8 @@ pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) ->
 
 /// Prompts the user for a yes/no confirmation.
 ///
-/// Accepts 'y', 'yes', 'n', 'no' (case insensitive).
-/// Empty input is treated as 'no'.
+/// Accepts 'y', 'yes', 'n', 'no' (case insensitive), and asks again for
+/// anything else. Empty input is treated as 'no', and so is the end of input.
 ///
 /// # Arguments
 ///
@@ -90,28 +90,15 @@ pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) ->
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
-#[allow(
-    clippy::needless_continue,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
-    loop {
-        let input = prompt_string(&format!("{prompt} (y/N)"))?;
-        match input.to_lowercase().as_str() {
-            "y" | "yes" => return Ok(true),
-            "n" | "no" | "" => return Ok(false),
-            _ => {
-                eprintln!("Please enter 'y' for yes or 'n' for no.");
-                continue;
-            }
-        }
-    }
+    confirm_from(&mut io::stdin().lock(), prompt, false)
 }
 
 /// Prompts the user for a yes/no confirmation, defaulting to yes.
 ///
-/// Accepts 'y', 'yes', 'n', 'no' (case insensitive). Empty input is treated
-/// as 'yes'.
+/// Accepts 'y', 'yes', 'n', 'no' (case insensitive), and asks again for
+/// anything else. Empty input is treated as 'yes'; the end of input is still
+/// 'no', because a line nobody typed is not somebody pressing Enter.
 ///
 /// The sibling of [`prompt_confirmation`], for the other kind of question.
 /// That one guards an action the user has to actively want; this one offers
@@ -123,20 +110,31 @@ pub(crate) fn prompt_confirmation(prompt: &str) -> Result<bool> {
 /// # Errors
 ///
 /// Returns an error if reading from stdin fails.
-#[allow(
-    clippy::needless_continue,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn prompt_confirmation_default_yes(prompt: &str) -> Result<bool> {
+    confirm_from(&mut io::stdin().lock(), prompt, true)
+}
+
+/// Ask `prompt` until a line read from `input` answers it: `y` or `yes` is
+/// yes, `n` or `no` is no, in any case and with any space around them, and an
+/// empty line is `default`. The end of `input` is no whatever the default,
+/// since nobody is there to have agreed.
+fn confirm_from(input: &mut impl BufRead, prompt: &str, default: bool) -> Result<bool> {
+    let hint = if default { "(Y/n)" } else { "(y/N)" };
     loop {
-        let input = prompt_string(&format!("{prompt} (Y/n)"))?;
-        match input.to_lowercase().as_str() {
-            "y" | "yes" | "" => return Ok(true),
+        println!("{prompt} {hint}: ");
+
+        let mut line = String::new();
+        let read = input
+            .read_line(&mut line)
+            .context("Failed to read user input")?;
+        if read == 0 {
+            return Ok(false);
+        }
+        match line.trim().to_lowercase().as_str() {
+            "y" | "yes" => return Ok(true),
             "n" | "no" => return Ok(false),
-            _ => {
-                eprintln!("Please enter 'y' for yes or 'n' for no.");
-                continue;
-            }
+            "" => return Ok(default),
+            _ => eprintln!("Please enter 'y' for yes or 'n' for no."),
         }
     }
 }
@@ -219,3 +217,7 @@ pub(crate) fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> R
         }
     }
 }
+
+#[cfg(test)]
+#[path = "input_tests.rs"]
+mod tests;

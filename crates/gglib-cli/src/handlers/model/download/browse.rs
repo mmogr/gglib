@@ -6,6 +6,8 @@ use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 
+use crate::presentation::{format_number, truncate_with};
+
 /// Execute the browse command.
 ///
 /// Browses popular/recent/trending GGUF models on `HuggingFace` Hub.
@@ -79,12 +81,7 @@ pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) 
         if let Some(ref desc) = model.description
             && !desc.is_empty()
         {
-            let short_desc = if desc.len() > 100 {
-                format!("{}...", &desc[..97])
-            } else {
-                desc.clone()
-            };
-            println!("    {short_desc}");
+            println!("    {}", truncate_with(desc, 100, "..."));
         }
 
         println!();
@@ -94,19 +91,4 @@ pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) 
     println!("💡 To see all quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
-}
-
-/// Format large numbers with K/M suffixes.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn format_number(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
 }

@@ -65,14 +65,47 @@ pub(crate) fn format_relative_time(datetime_str: &str) -> String {
 /// truncate_string("Hello World", 8)  == "Hello W…"
 /// ```
 pub(crate) fn truncate_string(s: &str, max_len: usize) -> String {
+    truncate_with(s, max_len, "\u{2026}")
+}
+
+/// [`truncate_string`] with the mark of the caller's choosing: `s` when it has
+/// at most `max_len` characters, and otherwise its start with `marker` after
+/// it, `max_len` characters in all.
+pub(crate) fn truncate_with(s: &str, max_len: usize, marker: &str) -> String {
     if s.chars().count() <= max_len {
-        // String fits — return as-is (no allocation needed beyond this clone).
-        s.to_string()
+        return s.to_string();
+    }
+    let kept = max_len.saturating_sub(marker.chars().count());
+    format!("{}{marker}", first_chars(s, kept))
+}
+
+/// The first `max` characters of `s`, or all of it when it has no more.
+///
+/// The cut is made by characters: a byte offset can land inside one, and
+/// slicing there panics.
+pub(crate) fn first_chars(s: &str, max: usize) -> &str {
+    s.char_indices().nth(max).map_or(s, |(end, _)| &s[..end])
+}
+
+/// The first 8 characters of a commit SHA or a file hash, or all of it when
+/// it is shorter. `HuggingFace` returns 40 and 64, but a truncated or empty
+/// value must not panic a command whose whole job is repairing a model.
+pub(crate) fn short_sha(sha: &str) -> &str {
+    first_chars(sha, 8)
+}
+
+/// Format large numbers with K/M suffixes.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "grandfathered at lint inheritance, #1157"
+)]
+pub(crate) fn format_number(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
     } else {
-        // String exceeds max_len — take max_len-1 chars and append the ellipsis
-        // so that the output is exactly max_len characters wide.
-        let prefix: String = s.chars().take(max_len.saturating_sub(1)).collect();
-        format!("{prefix}…")
+        n.to_string()
     }
 }
 
@@ -109,6 +142,92 @@ mod tests {
     #[test]
     fn truncate_empty_string() {
         assert_eq!(truncate_string("", 10), "");
+    }
+
+    /// One-byte letters up to byte `at`, one `wide` character there, and
+    /// enough after it that the whole is longer than any limit tried.
+    fn wide_at(at: usize, wide: char) -> String {
+        format!("{}{wide}{}", "a".repeat(at), "b".repeat(120))
+    }
+
+    /// The cuts `model search` and `model browse` make of a description, and
+    /// the tables' own: a character of three or four bytes at every byte
+    /// offset around the cut comes out whole or not at all.
+    #[test]
+    fn a_cut_never_lands_inside_a_character() {
+        for wide in ['\u{1f600}', '\u{8a9e}'] {
+            for (limit, marker) in [(80, "..."), (100, "..."), (24, "\u{2026}")] {
+                for at in limit - 8..=limit + 2 {
+                    let text = wide_at(at, wide);
+
+                    let cut = truncate_with(&text, limit, marker);
+
+                    let kept = limit - marker.chars().count();
+                    let start: String = text.chars().take(kept).collect();
+                    assert_eq!(cut, format!("{start}{marker}"), "{wide} at byte {at}");
+                    assert_eq!(cut.chars().count(), limit, "{wide} at byte {at}");
+                }
+            }
+        }
+    }
+
+    /// Text of one-byte characters is cut as it always was: 77 of them and
+    /// three dots at 80, and nothing at all when it fits.
+    #[test]
+    fn a_description_of_plain_letters_keeps_its_old_cut() {
+        let fits = "x".repeat(80);
+        let over = "x".repeat(81);
+
+        assert_eq!(truncate_with(&fits, 80, "..."), fits);
+        assert_eq!(
+            truncate_with(&over, 80, "..."),
+            format!("{}...", "x".repeat(77))
+        );
+        assert_eq!(
+            truncate_with(&"x".repeat(101), 100, "..."),
+            format!("{}...", "x".repeat(97))
+        );
+    }
+
+    /// Characters are counted, not bytes: text that fits is left whole however
+    /// many bytes it takes.
+    #[test]
+    fn text_that_fits_in_characters_is_left_whole() {
+        let cjk = "\u{8a9e}".repeat(80);
+        assert_eq!(truncate_with(&cjk, 80, "..."), cjk);
+    }
+
+    #[test]
+    fn the_first_characters_of_text_are_whole_characters() {
+        for wide in ['\u{1f600}', '\u{8a9e}'] {
+            for at in 0..=13 {
+                let text = wide_at(at, wide);
+                for max in [8, 12] {
+                    let start: String = text.chars().take(max).collect();
+                    assert_eq!(first_chars(&text, max), start, "{wide} at byte {at}");
+                }
+            }
+        }
+        assert_eq!(first_chars("abc", 8), "abc");
+        assert_eq!(first_chars("", 8), "");
+        assert_eq!(first_chars("abc", 0), "");
+    }
+
+    #[test]
+    fn a_short_sha_is_eight_characters_or_all_there_is() {
+        assert_eq!(
+            short_sha("0123456789abcdef0123456789abcdef01234567"),
+            "01234567"
+        );
+        assert_eq!(short_sha("abc"), "abc");
+        assert_eq!(short_sha(""), "");
+    }
+
+    #[test]
+    fn test_format_number() {
+        assert_eq!(format_number(500), "500");
+        assert_eq!(format_number(1_500), "1.5K");
+        assert_eq!(format_number(1_500_000), "1.5M");
     }
 
     #[test]

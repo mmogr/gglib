@@ -9,6 +9,8 @@ use anyhow::{Context, Result, bail};
 
 use gglib_core::DAEMON_PORT;
 
+use crate::bootstrap::CliContext;
+
 /// How long one identity probe may take. The daemon answers `/health` from
 /// memory; anything slower than this is not a healthy daemon.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
@@ -134,14 +136,47 @@ pub(crate) struct DaemonHandle {
     /// Client for talking to the daemon. No global timeout — long calls
     /// (model start) set their own.
     pub client: reqwest::Client,
-    /// The bearer token `/api/*` wants, or `None` against an unauthenticated
-    /// daemon — which is every loopback daemon. Resolved by
-    /// [`auth::daemon_api_key`] and attached by [`DaemonHandle::request`], so
-    /// no call site decides this for itself.
+    /// The bearer token `/api/*` wants, or `None` when this CLI has none to
+    /// present. Resolved by [`auth::daemon_api_key`] and attached by
+    /// [`DaemonHandle::request`], so no call site decides this for itself.
     pub api_key: Option<String>,
 }
 
-/// Find the daemon, launching it if nothing is running.
+impl DaemonHandle {
+    /// A handle over `client` carrying the credential this CLI presents
+    /// ([`auth::daemon_api_key`]). It asks the daemon nothing: [`running`]
+    /// and [`ensure_daemon`] are the ones that find out whether it is there.
+    pub(crate) async fn new(ctx: &CliContext, client: reqwest::Client) -> Self {
+        Self {
+            client,
+            api_key: auth::daemon_api_key(ctx).await,
+        }
+    }
+}
+
+/// Why [`running`] has no daemon to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Absent {
+    /// Nothing is listening on the daemon's port.
+    NotRunning,
+    /// Something is, and it is not a gglib daemon.
+    ForeignServer,
+}
+
+/// The daemon, when one is running, and never a launch. A command that only
+/// reports on the daemon, or stops something on it, asks here and says in
+/// its own words what [`Absent`] means for it.
+pub(crate) async fn running(ctx: &CliContext) -> Result<DaemonHandle, Absent> {
+    let client = gglib_proxy::loopback::client();
+    match probe(&client).await {
+        DaemonProbe::Running => Ok(DaemonHandle::new(ctx, client).await),
+        DaemonProbe::NotRunning => Err(Absent::NotRunning),
+        DaemonProbe::ForeignServer => Err(Absent::ForeignServer),
+    }
+}
+
+/// Find the daemon, launching it if nothing is running, and present this
+/// CLI's credential to it ([`auth::daemon_api_key`]).
 ///
 /// The launch is `current_exe() daemon run`, fully detached: its own process
 /// group (so Ctrl-C on this command never reaches it), stdin closed, output
@@ -153,7 +188,8 @@ pub(crate) struct DaemonHandle {
 /// - the daemon binary cannot be spawned,
 /// - the launched daemon does not become healthy within the wait window
 ///   (the log file path is named in the error).
-pub(crate) async fn ensure_daemon(api_key: Option<String>) -> Result<DaemonHandle> {
+pub(crate) async fn ensure_daemon(ctx: &CliContext) -> Result<DaemonHandle> {
+    let api_key = auth::daemon_api_key(ctx).await;
     let client = gglib_proxy::loopback::client();
 
     match probe(&client).await {
@@ -208,6 +244,11 @@ async fn wait_for_launch<F: Future<Output = DaemonProbe>>(
 
 /// Spawn `gglib daemon run` detached; returns the log file path.
 fn spawn_daemon() -> Result<std::path::PathBuf> {
+    // Never from a test: the binary launched would be the test harness
+    // itself, which reads `daemon run` as two filters and runs those tests.
+    if cfg!(test) {
+        bail!("a test launches no daemon");
+    }
     let exe = std::env::current_exe().context("resolving the gglib binary path")?;
 
     let log_dir = gglib_core::paths::data_root()?.join("logs");
@@ -244,3 +285,7 @@ pub(crate) mod runs;
 pub(crate) mod wire;
 
 pub(crate) use wire::{QueueDownloadBody, StartProxyBody, StartServerBody};
+
+#[cfg(test)]
+#[path = "handle_tests.rs"]
+mod handle_tests;

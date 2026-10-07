@@ -8,7 +8,7 @@ use gglib_app_services::{RemoteJoinBody, RemoteJoinResponse, RemoteStatus};
 use gglib_core::domain::UNNAMED_PAIRED;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonProbe};
+use crate::daemon_client;
 
 /// What `gglib remote join` was asked for.
 #[derive(Debug, Clone, Default)]
@@ -25,8 +25,7 @@ pub(crate) struct JoinArgs {
 
 /// Execute `gglib remote join`.
 pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
 
     let first_pairing = args
         .pairing
@@ -109,22 +108,10 @@ fn joined_lines(joined: &RemoteJoinResponse) -> Vec<String> {
 }
 
 /// Execute `gglib remote disconnect`.
-#[allow(
-    clippy::single_match_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn disconnect(ctx: &CliContext) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
-    match daemon_client::probe(&client).await {
-        DaemonProbe::Running => {}
-        _ => {
-            eprintln!("  Daemon is not running \u{2014} nothing is connected.");
-            return Ok(());
-        }
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    let Ok(handle) = daemon_client::running(ctx).await else {
+        eprintln!("  Daemon is not running \u{2014} nothing is connected.");
+        return Ok(());
     };
     let status = handle.remote_disconnect().await?;
     if status.connected.is_some() {

@@ -46,8 +46,7 @@ pub(crate) async fn resolve_port(
         );
     }
 
-    let handle =
-        crate::daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let started = handle
         .start_model_server(&body)
         .await

@@ -83,13 +83,9 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // The stored key, if any, is what the proxy about to start will demand of
     // this very probe: `up` binds loopback and passes no `--api-key`, so the
     // supervisor resolves the same settings row we read here.
-    let api_key = settings
-        .proxy_api_key
-        .clone()
-        .filter(|key| !key.trim().is_empty());
+    let api_key = daemon_client::auth::proxy_key(ctx, None).await;
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let body = start_body(args.port, default_context);
     let proxy_port = proxy::start_on(&handle, &body, &settings).await?;
 

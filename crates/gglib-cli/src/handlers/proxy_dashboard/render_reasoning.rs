@@ -10,8 +10,9 @@
 //!
 //! [`super::render`]: crate::handlers::proxy_dashboard::render
 
-use super::render::{thousands, truncate};
+use super::render::thousands;
 use super::wire_sampling::{EffortSupport, SamplingAudit};
+use crate::presentation::truncate_string;
 
 /// Render the reasoning controls: what the running template says about
 /// `reasoning_effort`, what the last request resolved, and why none of it is an
@@ -40,7 +41,7 @@ pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width
     out.push_str(&format!(
         "  {:<24} {}\n",
         "Template reads effort",
-        truncate(&effort_support_label(&reasoning.effort_support), max_chars)
+        truncate_string(&effort_support_label(&reasoning.effort_support), max_chars)
     ));
 
     let Some(latest) = reasoning.latest.as_ref() else {
@@ -75,7 +76,7 @@ pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width
     if latest.effort.is_some() || latest.budget.is_some() {
         out.push_str(&format!(
             "  ! {}\n",
-            truncate(&reasoning.wire_blind_reason, max_chars)
+            truncate_string(&reasoning.wire_blind_reason, max_chars)
         ));
     }
     out
@@ -165,7 +166,7 @@ pub(super) fn render_client_fields_section(audit: Option<&SamplingAudit>) -> Str
         }
         out.push_str(&format!(
             "  {:<24} {}\n",
-            truncate(&tally.field, 24),
+            truncate_string(&tally.field, 24),
             what.join(", ")
         ));
     }

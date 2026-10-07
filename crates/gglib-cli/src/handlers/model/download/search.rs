@@ -6,6 +6,8 @@ use anyhow::{Result, anyhow};
 use gglib_core::ports::huggingface::HfClientPort;
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 
+use crate::presentation::{format_number, truncate_with};
+
 /// Execute the search command.
 ///
 /// Searches `HuggingFace` Hub for models matching the query.
@@ -109,12 +111,7 @@ pub(crate) async fn execute(
         if let Some(ref desc) = model.description
             && !desc.is_empty()
         {
-            let short_desc = if desc.len() > 80 {
-                format!("{}...", &desc[..77])
-            } else {
-                desc.clone()
-            };
-            println!("    {short_desc}");
+            println!("    {}", truncate_with(desc, 80, "..."));
         }
 
         println!();
@@ -124,31 +121,4 @@ pub(crate) async fn execute(
     println!("💡 To list quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
-}
-
-/// Format large numbers with K/M suffixes.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn format_number(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_number() {
-        assert_eq!(format_number(500), "500");
-        assert_eq!(format_number(1_500), "1.5K");
-        assert_eq!(format_number(1_500_000), "1.5M");
-    }
 }
