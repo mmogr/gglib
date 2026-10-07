@@ -4,7 +4,10 @@
 //! A `#[path]` child of `types.rs`, and everything here is re-exported from
 //! `types`.
 
+use gglib_core::ports::HfRepoInfo;
 use serde::{Deserialize, Serialize};
+
+pub use gglib_core::ports::HfSortField;
 
 /// Summary of a `HuggingFace` model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +27,7 @@ pub struct HfModelSummary {
     pub likes: u64,
     /// Last modified timestamp
     pub last_modified: Option<String>,
-    /// Total parameter count in billions (from safetensors.total)
+    /// Total parameter count in billions (the GGUF header's, when the Hub gives it)
     pub parameters_b: Option<f64>,
     /// Model description/README excerpt
     pub description: Option<String>,
@@ -33,18 +36,22 @@ pub struct HfModelSummary {
     pub tags: Vec<String>,
 }
 
-/// Sort field options for `HuggingFace` model search.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "lowercase")]
-pub enum HfSortField {
-    #[default]
-    Downloads,
-    Likes,
-    Modified,
-    Created,
-    #[serde(rename = "id")]
-    Alphabetical,
+/// What the browser shows of a repository, whether a search found it or it
+/// was looked up by its ID.
+impl From<HfRepoInfo> for HfModelSummary {
+    fn from(info: HfRepoInfo) -> Self {
+        Self {
+            id: info.model_id,
+            name: info.name,
+            author: info.author,
+            downloads: info.downloads,
+            likes: info.likes,
+            last_modified: info.last_modified,
+            parameters_b: info.parameters_b,
+            description: info.description,
+            tags: info.tags,
+        }
+    }
 }
 
 /// Request for searching `HuggingFace` models.

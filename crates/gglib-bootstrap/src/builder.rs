@@ -1,5 +1,6 @@
 //! [`CoreBootstrap`] — the shared composition root for all gglib adapters.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -19,6 +20,26 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 use crate::built::BuiltCore;
 use crate::config::BootstrapConfig;
 use crate::download_trigger::DownloadTriggerAdapter;
+
+/// What `build` makes from the Hub token, one for each thing that holds it.
+struct TokenHolders {
+    /// The Hub client's config. Search, browse and the registrar's recipe
+    /// lookup ask through that client.
+    client_config: HfClientConfig,
+    /// The download manager's config, for its transfers.
+    download_config: DownloadManagerConfig,
+    /// `AppCore`'s token, for an upgrade's check and its download.
+    core_token: Option<String>,
+}
+
+/// Each holder, handed `hf_token`: all three hold it, or none does.
+fn token_holders(hf_token: Option<String>, models_dir: PathBuf) -> TokenHolders {
+    TokenHolders {
+        client_config: HfClientConfig::default().with_optional_token(hf_token.clone()),
+        download_config: DownloadManagerConfig::new(models_dir).with_hf_token(hf_token.clone()),
+        core_token: hf_token,
+    }
+}
 
 /// Shared composition root that wires common infrastructure for all adapters.
 ///
@@ -60,13 +81,20 @@ impl CoreBootstrap {
         //    registrar uses it to look up a model author's published sampling
         //    recipe at import time.
         //
-        //    The token is passed through so a gated base repo — Llama and
-        //    Gemma, routinely — can answer that lookup for a user who has
+        //    It carries the token, so a gated base repo — Llama and Gemma,
+        //    routinely — can answer that lookup for a user who has
         //    configured one. Without it the lookup 401s and the import falls
         //    back to the tag guess, which is the designed degradation.
-        let hf_client: Arc<dyn HfClientPort> = Arc::new(DefaultHfClient::new(
-            &HfClientConfig::default().with_optional_token(config.hf_token.clone()),
-        ));
+        //
+        //    The token is read here and nowhere else, and no adapter is
+        //    asked for it. `token_holders` hands it to this client, to the
+        //    download manager's transfers (9) and to `AppCore` (11).
+        let TokenHolders {
+            client_config,
+            download_config,
+            core_token,
+        } = token_holders(gglib_core::hf_token::from_env(), config.models_dir);
+        let hf_client: Arc<dyn HfClientPort> = Arc::new(DefaultHfClient::new(&client_config));
 
         // 6. Model registrar — composes model repository + GGUF parser so
         //    that both GUI and CLI download paths use the identical
@@ -80,16 +108,7 @@ impl CoreBootstrap {
             .with_hf_client(hf_client.clone()),
         );
 
-        // 7. Download manager configuration
-        let download_config = {
-            let mut cfg = DownloadManagerConfig::new(config.models_dir);
-            if let Some(token) = config.hf_token {
-                cfg = cfg.with_hf_token(Some(token));
-            }
-            cfg
-        };
-
-        // 9. Download manager
+        // 9. Download manager, with the configuration made in (5)
         let downloads: Arc<dyn DownloadManagerPort> =
             Arc::new(build_download_manager(DownloadManagerDeps {
                 model_registrar,
@@ -106,11 +125,10 @@ impl CoreBootstrap {
 
         // 11. AppCore, whose verification service checks for updates against
         //     the HF client and queues a repair through the trigger
-        let app = Arc::new(AppCore::new(
-            repos.clone(),
-            hf_client.clone(),
-            download_trigger,
-        ));
+        let app = Arc::new(
+            AppCore::new(repos.clone(), hf_client.clone(), download_trigger)
+                .with_hf_token(core_token),
+        );
 
         tracing::debug!(
             db_path = %config.db_path.display(),
@@ -125,5 +143,44 @@ impl CoreBootstrap {
             repos,
             pool,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Not a token of any account.
+    const FAKE_TOKEN: &str = "hf_fake_token_for_a_test";
+
+    #[test]
+    fn a_token_is_handed_to_the_hub_client_the_download_manager_and_the_core() {
+        let holders = token_holders(Some(FAKE_TOKEN.to_owned()), PathBuf::from("models"));
+
+        assert!(holders.client_config.has_token());
+        assert_eq!(
+            holders.download_config.hf_token.as_deref(),
+            Some(FAKE_TOKEN)
+        );
+        assert_eq!(holders.core_token.as_deref(), Some(FAKE_TOKEN));
+    }
+
+    #[test]
+    fn with_no_token_none_of_the_three_is_handed_one() {
+        let holders = token_holders(None, PathBuf::from("models"));
+
+        assert!(!holders.client_config.has_token());
+        assert_eq!(holders.download_config.hf_token, None);
+        assert_eq!(holders.core_token, None);
+    }
+
+    #[test]
+    fn the_download_manager_keeps_the_models_directory_it_is_given() {
+        let holders = token_holders(None, PathBuf::from("somewhere/models"));
+
+        assert_eq!(
+            holders.download_config.models_directory,
+            PathBuf::from("somewhere/models")
+        );
     }
 }

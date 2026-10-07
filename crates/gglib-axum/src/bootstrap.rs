@@ -134,7 +134,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let bootstrap_config = BootstrapConfig {
         db_path,
         models_dir: models_resolution.path,
-        hf_token: None,
     };
     let emitter: Arc<dyn AppEventEmitter> = sse.clone();
     let BuiltCore {

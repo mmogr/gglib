@@ -22,7 +22,6 @@ pub(crate) fn minimal_config(dir: &TempDir) -> BootstrapConfig {
     BootstrapConfig {
         db_path: dir.path().join("gglib.db"),
         models_dir,
-        hf_token: None,
     }
 }
 

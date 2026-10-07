@@ -66,6 +66,10 @@ impl<B: HttpBackend> HfClient<B> {
 }
 
 #[cfg(test)]
+#[path = "token_tests.rs"]
+mod token_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::http::testing::{CannedResponse, FakeBackend};

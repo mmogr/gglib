@@ -29,7 +29,7 @@ likes: number,
  */
 last_modified: string | null, 
 /**
- * Total parameter count in billions (from safetensors.total)
+ * Total parameter count in billions (the GGUF header's, when the Hub gives it)
  */
 parameters_b: number | null, 
 /**

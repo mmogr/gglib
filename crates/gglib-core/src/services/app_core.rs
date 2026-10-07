@@ -32,6 +32,7 @@ pub struct AppCore {
     chat_history: ChatHistoryService,
     attachments: AttachmentService,
     verification: ModelVerificationService,
+    pub(crate) hf_token: Option<String>, // set and read in `crate::hf_token`
 }
 
 impl AppCore {
@@ -53,6 +54,7 @@ impl AppCore {
             settings: SettingsService::new(repos.settings),
             chat_history: ChatHistoryService::new(repos.chat_history),
             attachments: AttachmentService::new(repos.attachments),
+            hf_token: None,
         }
     }
 

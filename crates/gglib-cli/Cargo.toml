@@ -18,7 +18,6 @@ gglib-build-info.workspace = true
 gglib-core = { workspace = true }
 gglib-db = { workspace = true }
 gglib-download = { workspace = true }
-gglib-hf = { workspace = true }
 gglib-mcp = { workspace = true }
 gglib-proxy = { workspace = true }
 gglib-runtime = { workspace = true, features = ["cli"] }

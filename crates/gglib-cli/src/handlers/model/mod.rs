@@ -214,20 +214,15 @@ async fn dispatch_with(
         ModelCommand::Upgrade { identifier, force } => {
             download::update_model(ctx, &identifier, force).await?;
         }
-        ModelCommand::Search {
-            query,
-            limit,
-            sort,
-            gguf_only,
-        } => {
-            download::search(query, limit, sort, gguf_only).await?;
+        ModelCommand::Search { query, limit, sort } => {
+            download::search(ctx.hf_client.as_ref(), query, limit, sort.into()).await?;
         }
         ModelCommand::Browse {
             category,
             limit,
             size,
         } => {
-            download::browse(category, limit, size).await?;
+            download::browse(ctx.hf_client.as_ref(), category, limit, size).await?;
         }
         ModelCommand::Capabilities {
             identifier,

@@ -25,7 +25,7 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 396
 crates/gglib-cli/src/handlers/model/update.rs 612
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 351
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 534
-crates/gglib-cli/src/model_commands.rs 380
+crates/gglib-cli/src/model_commands.rs 378
 crates/gglib-cli/src/presentation/explain_display.rs 426
 crates/gglib-cli/src/presentation/explain_display_tests.rs 700
 crates/gglib-core/src/domain/admission.rs 325
@@ -87,9 +87,7 @@ crates/gglib-download/src/queue/mod.rs 1088
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 423
 crates/gglib-hf/src/http.rs 381
-crates/gglib-hf/src/models.rs 412
-crates/gglib-hf/src/parsing.rs 523
-crates/gglib-hf/src/port.rs 401
+crates/gglib-hf/src/parsing.rs 429
 crates/gglib-integration-tests/tests/integration_huggingface.rs 339
 crates/gglib-integration-tests/tests/integration_models.rs 309
 crates/gglib-mcp/src/builtin/mod.rs 337

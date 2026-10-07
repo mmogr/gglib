@@ -83,12 +83,13 @@ Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-tauri`,
 
 ## Testing
 
-The test suite is split into three layers:
+The test suite is split into these layers:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | Unit | `src/download_trigger.rs` `#[cfg(test)]` | Inline tests for `DownloadTriggerAdapter` using a `MockDownloadManager`. Validates quantization mapping and error propagation without touching the database. |
-| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. Also checks that an HF token is accepted. |
+| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. |
+| Hub token | `src/builder.rs` `#[cfg(test)]`, `tests/hub_token.rs` | Inline: one token is handed to the Hub client's config, the download manager's config and `AppCore`, or to none of them. `tests/hub_token.rs`: `build()` reads `HF_TOKEN` itself, and the `AppCore` it returns holds it. That test runs itself again in a process started with the variable, since a running process cannot safely set it. |
 | Error cases | `tests/build_error_cases.rs` | Exercises the failure paths of `build()` — missing DB directory and DB path pointing at a directory. |
 | Functional round-trips | `tests/functional.rs` | End-to-end data round-trips through the wired repositories: model insert/list, settings save/reload, empty-state assertions for downloads, chat history, and MCP servers. |
 
@@ -119,8 +120,12 @@ let emitter: Arc<dyn AppEventEmitter> = Arc::new(MyAdapterEmitter::new());
 let config = BootstrapConfig {
     db_path: database_path()?,
     models_dir: resolve_models_dir(None)?.path,
-    hf_token: std::env::var("HF_TOKEN").ok(),
 };
 let core = CoreBootstrap::build(config, emitter).await?;
 // core.app, core.downloads, core.hf_client … all ready
 ```
+
+`build()` reads the `HuggingFace` token from `HF_TOKEN` itself
+(`gglib_core::hf_token::from_env`, the one place it is read) and hands it to
+the Hub client, the download manager and `AppCore`. The config has no field
+for it, so an adapter cannot be wired without it.

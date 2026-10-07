@@ -11,16 +11,26 @@ use gglib_core::services::AppCore;
 
 use super::*;
 use crate::models::ModelDeps;
-use crate::test_support::test_core;
 
 const REPO: &str = "owner/zeta-GGUF";
 const RECORDED: &str = "1111111111111111111111111111111111111111";
 const NEWER: &str = "2222222222222222222222222222222222222222";
 
+/// Not a token of any account.
+const FAKE_TOKEN: &str = "hf_fake_token_for_a_test";
+
 /// A library holding one model downloaded from [`REPO`] at [`RECORDED`],
 /// and the model's id.
 async fn library() -> (Arc<AppCore>, ModelOps, i64) {
-    let core = test_core().await;
+    library_asking_as(None).await
+}
+
+/// [`library`], over a core that asks the Hub as `token`.
+async fn library_asking_as(token: Option<&str>) -> (Arc<AppCore>, ModelOps, i64) {
+    gglib_core::paths::isolate_data_root();
+    let pool = gglib_db::setup_test_database().await.expect("a database");
+    let core = AppCore::bare(gglib_db::CoreFactory::build_repos(pool));
+    let core = Arc::new(core.with_hf_token(token.map(str::to_string)));
     let mut model = NewModel::new(
         "zeta".to_string(),
         PathBuf::from("/models/old/zeta.Q8_0.gguf"),
@@ -129,4 +139,40 @@ async fn a_current_model_is_not_downloaded() {
         .await
         .unwrap();
     assert_eq!(model.hf_commit_sha.as_deref(), Some(RECORDED));
+}
+
+/// The check and the download both ask the Hub with the core's token: the
+/// one the shared bootstrap read, on whichever surface runs the upgrade.
+#[tokio::test]
+async fn an_upgrade_asks_the_hub_with_the_cores_token() {
+    for token in [Some(FAKE_TOKEN), None] {
+        let (_core, ops, id) = library_asking_as(token).await;
+        let asked = Arc::new(Mutex::new(Vec::new()));
+
+        let checked = Arc::clone(&asked);
+        let check = move |repo: String, recorded, token: Option<String>| {
+            checked.lock().unwrap().push(("check", token));
+            finds(&repo, recorded, NEWER)
+        };
+        let downloaded = Arc::clone(&asked);
+        let download = move |request: CliUpdateRequest, _| {
+            downloaded.lock().unwrap().push(("download", request.token));
+            std::future::ready(Ok(CliDownloadResult {
+                downloaded_paths: vec![request.model_path.clone()],
+                primary_path: request.model_path,
+                quantization: request.quantization,
+                repo_id: request.repo_id,
+                commit_sha: NEWER.to_string(),
+            }))
+        };
+        ops.apply_upgrade_with(id, None, check, download)
+            .await
+            .expect("an upgrade");
+
+        let token = token.map(str::to_string);
+        assert_eq!(
+            *asked.lock().unwrap(),
+            [("check", token.clone()), ("download", token)]
+        );
+    }
 }

@@ -12,6 +12,8 @@ mod interactive;
 mod monitor;
 mod remote;
 mod search;
+#[cfg(test)]
+mod test_hub;
 mod update_model;
 
 pub(crate) use browse::execute as browse;

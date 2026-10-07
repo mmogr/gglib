@@ -2431,7 +2431,6 @@ dependencies = [
  "gglib-core",
  "gglib-db",
  "gglib-download",
- "gglib-hf",
  "gglib-mcp",
  "gglib-proxy",
  "gglib-runtime",

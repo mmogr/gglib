@@ -11,8 +11,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelCatalogPort, NoopEmitter,
-    SettingsRepository,
+    AppEventEmitter, DownloadManagerPort, GgufParserPort, HfClientPort, ModelCatalogPort,
+    NoopEmitter, SettingsRepository,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
@@ -35,6 +35,10 @@ pub struct CliContext {
     pub mcp: Arc<McpService>,
     /// Download manager for model downloads.
     pub downloads: Arc<dyn DownloadManagerPort>,
+    /// The one `HuggingFace` client, holding the Hub token: the client the
+    /// registrar and the download manager ask through, and the one
+    /// `model search` and `browse` search with.
+    pub hf_client: Arc<dyn HfClientPort>,
     /// GGUF parser for file validation and metadata extraction.
     pub gguf_parser: Arc<dyn GgufParserPort>,
     /// Shared model catalog, for `gglib_core::request_pipeline::resolve`.
@@ -74,7 +78,6 @@ pub async fn bootstrap() -> Result<CliContext> {
     let bootstrap_config = BootstrapConfig {
         db_path: database_path()?,
         models_dir: models_resolution.path,
-        hf_token: std::env::var("HF_TOKEN").ok(),
     };
     bootstrap_with(bootstrap_config).await
 }
@@ -92,7 +95,7 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
     let BuiltCore {
         app,
         downloads,
-        hf_client: _,
+        hf_client,
         gguf_parser,
         repos,
         pool,
@@ -107,6 +110,7 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
         app,
         mcp,
         downloads,
+        hf_client,
         gguf_parser,
         catalog: Arc::new(CatalogPortImpl::new(repos.models)),
         http_client: gglib_proxy::loopback::client(),
@@ -126,7 +130,6 @@ pub(crate) async fn test_context(dir: &std::path::Path) -> CliContext {
     bootstrap_with(BootstrapConfig {
         db_path: dir.join("gglib.db"),
         models_dir,
-        hf_token: None,
     })
     .await
     .expect("the database opens")

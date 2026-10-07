@@ -31,7 +31,6 @@
 //! let config = BootstrapConfig {
 //!     db_path: database_path()?,
 //!     models_dir: resolve_models_dir(None)?.path,
-//!     hf_token: std::env::var("HF_TOKEN").ok(),
 //! };
 //! let core = CoreBootstrap::build(config, emitter).await?;
 //! // core.app, core.downloads, core.hf_client, … all ready
@@ -39,7 +38,7 @@
 //!
 //! # Testing
 //!
-//! The test suite uses three layers:
+//! The test suite uses these layers:
 //!
 //! - **Unit** (`src/download_trigger.rs`): inline `#[cfg(test)]` block with a
 //!   `MockDownloadManager` to verify quantization mapping and error propagation
@@ -47,6 +46,11 @@
 //! - **Happy path / config** (`tests/build_happy_path.rs`): full
 //!   `CoreBootstrap::build()` calls that confirm wiring succeeds and the
 //!   returned [`BuiltCore`] is live.
+//! - **Hub token** (`src/builder.rs`, `tests/hub_token.rs`): inline tests
+//!   that one token is handed to the Hub client's config, the download
+//!   manager's config and `AppCore`, or to none of them; and a test that
+//!   `build()` reads `HF_TOKEN` itself and the returned `AppCore` holds it,
+//!   which runs itself again in a process started with the variable.
 //! - **Error cases** (`tests/build_error_cases.rs`): failure paths such as a
 //!   missing database directory.
 //! - **Functional round-trips** (`tests/functional.rs`): data round-trips
