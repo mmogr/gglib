@@ -2,6 +2,46 @@
 
 use super::*;
 
+/// How long a stand-in may stay busy before the helper stops waiting for it.
+#[cfg(unix)]
+const BUSY_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// What `run` answers once it no longer fails because the program is busy.
+///
+/// Linux does not run a file that a process has open for writing. A test
+/// binary whose other tests spawn processes can fork while this thread is
+/// writing a script, and the child holds a copy of that descriptor until it
+/// execs. No copy is left once a run has started: the writer closed its own
+/// before the first attempt, so a later fork inherits none.
+#[cfg(unix)]
+fn once_not_busy<T>(mut run: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let started = std::time::Instant::now();
+    loop {
+        match run() {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::ExecutableFileBusy
+                    && started.elapsed() < BUSY_LIMIT =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            outcome => return outcome,
+        }
+    }
+}
+
+/// A script at `python` that answers the version probe with `version`. It
+/// has run once by the time this returns, so the next run of it starts.
+#[cfg(unix)]
+fn write_stand_in(python: &Path, version: &str) {
+    fs::write(
+        python,
+        format!("#!/bin/sh\necho /fake/python3\necho {version}\n"),
+    )
+    .expect("write the stand-in");
+    fs::set_permissions(python, fs::Permissions::from_mode(0o755)).expect("make it executable");
+    once_not_busy(|| std::process::Command::new(python).output()).expect("the stand-in runs");
+}
+
 /// A stand-in interpreter: a script that answers the version probe with
 /// `version`, in an environment directory laid out as a venv is.
 #[cfg(unix)]
@@ -10,18 +50,89 @@ fn environment_reporting(version: &str) -> (tempfile::TempDir, PythonEnvironment
     let env_dir = root.path().join(ENV_NAME);
     let python = env_dir.join("bin").join("python3");
     fs::create_dir_all(python.parent().expect("bin directory")).expect("create bin");
-    fs::write(
-        &python,
-        format!("#!/bin/sh\necho /fake/python3\necho {version}\n"),
-    )
-    .expect("write the stand-in");
-    fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).expect("make it executable");
+    write_stand_in(&python, version);
 
     let env = PythonEnvironment {
         env_dir,
         script_path: root.path().join("helper.py"),
     };
     (root, env)
+}
+
+/// A program the kernel calls busy is run again until a run starts, and what
+/// that run answers is handed back.
+#[cfg(unix)]
+#[test]
+fn a_busy_program_is_run_again_until_it_starts() {
+    let mut runs = 0;
+
+    let outcome = once_not_busy(|| {
+        runs += 1;
+        if runs < 3 {
+            Err(std::io::ErrorKind::ExecutableFileBusy.into())
+        } else {
+            Ok(runs)
+        }
+    });
+
+    assert_eq!(outcome.expect("the third run starts"), 3);
+}
+
+/// Only a busy program is waited for: any other failure is the answer.
+#[cfg(unix)]
+#[test]
+fn a_program_that_fails_for_another_reason_is_not_run_again() {
+    let mut runs = 0;
+
+    let outcome = once_not_busy(|| -> std::io::Result<()> {
+        runs += 1;
+        Err(std::io::ErrorKind::NotFound.into())
+    });
+
+    assert_eq!(
+        outcome.expect_err("it does not start").kind(),
+        std::io::ErrorKind::NotFound
+    );
+    assert_eq!(runs, 1);
+}
+
+/// A stand-in another thread still has open for writing is not handed back
+/// until that thread lets go of it. That is so wherever the kernel refuses to
+/// run such a file; macOS runs it, and there is nothing to wait out there.
+#[cfg(unix)]
+#[test]
+fn a_stand_in_still_open_for_writing_is_waited_out() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let root = tempfile::tempdir().expect("tempdir");
+    let python = root.path().join("python3");
+    write_stand_in(&python, "3.9");
+    let held = fs::OpenOptions::new()
+        .append(true)
+        .open(&python)
+        .expect("open the stand-in for writing");
+    let refused = std::process::Command::new(&python).output();
+    if !matches!(&refused, Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy) {
+        return;
+    }
+    let let_go = Arc::new(AtomicBool::new(false));
+    let holder = std::thread::spawn({
+        let let_go = Arc::clone(&let_go);
+        move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let_go.store(true, Ordering::SeqCst);
+            drop(held);
+        }
+    });
+
+    write_stand_in(&python, "3.9");
+
+    assert!(
+        let_go.load(Ordering::SeqCst),
+        "handed back while still open for writing"
+    );
+    holder.join().expect("the holder ends");
 }
 
 /// An environment built before the floor rose to 3.10 holds an interpreter

@@ -2,6 +2,8 @@
 
 mod capabilities;
 mod error;
+#[cfg(any(test, feature = "test-utils"))]
+mod fixture;
 mod format;
 mod parser;
 mod reader;
@@ -20,3 +22,7 @@ pub use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserP
 
 // Re-export tool support detector
 pub use capabilities::tool_calling::ToolSupportDetector;
+
+// A GGUF file written without a model, for another crate's tests.
+#[cfg(any(test, feature = "test-utils"))]
+pub use fixture::write_string_gguf;

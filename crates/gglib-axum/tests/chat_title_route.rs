@@ -8,15 +8,12 @@
 mod common;
 
 use axum::Router;
-use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use tower::ServiceExt;
 
 use common::harness::test_app;
-use common::origin::authed;
+use common::origin::call;
 
 /// What the page sends for a title.
 fn title_request() -> Value {
@@ -29,17 +26,7 @@ fn title_request() -> Value {
 }
 
 async fn post(app: &Router, body: &Value) -> (StatusCode, String) {
-    let request = authed()
-        .method(Method::POST)
-        .uri("/api/chat")
-        .header("Host", "127.0.0.1:9887")
-        .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .unwrap();
-    let response = app.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, String::from_utf8_lossy(&bytes).into_owned())
+    call(app, Method::POST, "/api/chat", Some(body.clone())).await
 }
 
 #[tokio::test]

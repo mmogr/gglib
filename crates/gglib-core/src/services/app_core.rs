@@ -95,12 +95,10 @@ mod tests {
     use crate::domain::{AttachmentBlob, AttachmentId, AttachmentInfo, Model, NewModel};
     use crate::ports::{
         AttachmentError, AttachmentStore, ChatHistoryError, ChatHistoryRepository,
-        McpRepositoryError, McpServerRepository, ModelRepository, RepositoryError,
-        SettingsRepository,
+        InMemorySettings, McpRepositoryError, McpServerRepository, ModelRepository,
+        RepositoryError,
     };
-    use crate::settings::Settings;
     use async_trait::async_trait;
-    use std::sync::Mutex;
 
     struct MockModelRepo;
 
@@ -253,35 +251,12 @@ mod tests {
         }
     }
 
-    struct MockSettingsRepo {
-        settings: Mutex<Settings>,
-    }
-
-    impl MockSettingsRepo {
-        fn new() -> Self {
-            Self {
-                settings: Mutex::new(Settings::with_defaults()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl SettingsRepository for MockSettingsRepo {
-        async fn load(&self) -> Result<Settings, RepositoryError> {
-            Ok(self.settings.lock().unwrap().clone())
-        }
-        async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
-            *self.settings.lock().unwrap() = settings.clone();
-            Ok(())
-        }
-    }
-
     #[tokio::test]
     async fn test_app_core_creation() {
         let repos = Repos {
             models: Arc::new(MockModelRepo),
             model_files: Arc::new(Rows(Vec::new())),
-            settings: Arc::new(MockSettingsRepo::new()),
+            settings: Arc::new(InMemorySettings::default()),
             mcp_servers: Arc::new(MockMcpRepo),
             chat_history: Arc::new(MockChatHistoryRepo),
             attachments: Arc::new(MockAttachmentStore),

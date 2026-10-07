@@ -10,7 +10,6 @@
 mod common;
 
 use axum::Router;
-use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_path};
@@ -18,31 +17,10 @@ use gglib_core::domain::AttachmentId;
 use gglib_core::domain::chat::NewConversation;
 use gglib_core::domain::runs::RunList;
 use gglib_core::request_pipeline::{MAX_IMAGE_BYTES, MAX_REQUEST_IMAGE_BYTES};
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
-use common::origin::authed;
-
-async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
-    let mut request = authed()
-        .method(method)
-        .uri(uri)
-        .header("Host", "127.0.0.1:9887");
-    if body.is_some() {
-        request = request.header("content-type", "application/json");
-    }
-    let body = body.map_or_else(Body::empty, |value| Body::from(value.to_string()));
-    let response = app
-        .clone()
-        .oneshot(request.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap_or_default())
-}
+use common::origin::call_json;
 
 /// A PNG's signature and `IHDR`, then `fill` up to `len` bytes.
 fn png(fill: u8, len: usize) -> Vec<u8> {
@@ -84,7 +62,7 @@ fn far(messages: &Value) -> Value {
 
 async fn put(app: &Router, body: Value) -> (StatusCode, String) {
     let uri = format!("{}?kind=agent", run_path("a1"));
-    let (status, error) = call(app, Method::PUT, &uri, Some(body)).await;
+    let (status, error) = call_json(app, Method::PUT, &uri, Some(body)).await;
     (
         status,
         error["type"].as_str().unwrap_or_default().to_owned(),
@@ -92,7 +70,7 @@ async fn put(app: &Router, body: Value) -> (StatusCode, String) {
 }
 
 async fn no_runs(app: &Router) {
-    let (_, list) = call(app, Method::GET, RUNS_PATH, None).await;
+    let (_, list) = call_json(app, Method::GET, RUNS_PATH, None).await;
     let list: RunList = serde_json::from_value(list).unwrap();
     assert!(list.runs.is_empty(), "{list:?}");
 }

@@ -1,6 +1,6 @@
 //! Mock ports for `{model}:{profile}` routing tests.
 //!
-//! Richer than the single-profile `ProfileSettingsRepo` in [`super::common`]:
+//! Richer than the single-profile `settings_listing` in [`super::common`]:
 //! these tests need several profiles at once and a toggleable
 //! `trust_client_sampling`, because the questions they ask are about which
 //! rung of the sampling ladder won.
@@ -12,8 +12,8 @@ use async_trait::async_trait;
 use gglib_core::Settings;
 use gglib_core::domain::{InferenceConfig, InferenceProfile};
 use gglib_core::ports::{
-    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
-    ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
+    CatalogError, InMemorySettings, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
+    ModelRuntimePort, ModelSummary, RunningTarget,
 };
 
 pub(crate) const MODEL: &str = "qwen";
@@ -70,22 +70,8 @@ pub(crate) struct NamedCatalog {
 impl NamedCatalog {
     fn summary(&self, id: u32, name: &str) -> ModelSummary {
         ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id,
-            name: name.to_owned(),
-            tags: Vec::new(),
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
-            image_input: false,
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
             inference_defaults: self.inference_defaults.clone(),
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(id, name)
         }
     }
 }
@@ -112,22 +98,14 @@ impl ModelCatalogPort for NamedCatalog {
     }
 }
 
-/// Settings repository serving a fixed profile list.
-pub(crate) struct ProfileSettings {
-    pub(crate) profiles: Vec<InferenceProfile>,
-    pub(crate) trust_client_sampling: bool,
-}
-
-#[async_trait]
-impl SettingsRepository for ProfileSettings {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings {
-            inference_profiles: Some(self.profiles.clone()),
-            trust_client_sampling: Some(self.trust_client_sampling),
-            ..Settings::with_defaults()
-        })
-    }
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
+/// Settings serving a fixed profile list.
+pub(crate) fn profile_settings(
+    profiles: Vec<InferenceProfile>,
+    trust_client_sampling: bool,
+) -> InMemorySettings {
+    InMemorySettings::with(Settings {
+        inference_profiles: Some(profiles),
+        trust_client_sampling: Some(trust_client_sampling),
+        ..Settings::with_defaults()
+    })
 }

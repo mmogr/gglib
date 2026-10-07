@@ -22,9 +22,9 @@ use std::sync::Arc;
 use reqwest::Client;
 use serde_json::Value;
 
-use fixtures::common::{
-    MockSettingsRepo, NoopRuntime, ProfileSettingsRepo, spawn_proxy_with_settings,
-};
+use gglib_core::ports::InMemorySettings;
+
+use fixtures::common::{NoopRuntime, settings_listing, spawn_proxy_with_settings};
 use fixtures::pinned::{EnforcingPinnedRuntime, PinnedRuntime, StaticCatalog};
 
 const PINNED: &str = "qwen2.5";
@@ -56,7 +56,7 @@ async fn pinned_proxy_advertises_only_the_pinned_model() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN, "mistral-7b"])),
-        Arc::new(MockSettingsRepo),
+        Arc::new(InMemorySettings::default()),
     )
     .await;
 
@@ -82,7 +82,7 @@ async fn unpinned_proxy_advertises_the_whole_catalog() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(NoopRuntime),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
-        Arc::new(MockSettingsRepo),
+        Arc::new(InMemorySettings::default()),
     )
     .await;
 
@@ -108,7 +108,7 @@ async fn pinned_proxy_keeps_variants_of_the_pinned_model_only() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
-        Arc::new(ProfileSettingsRepo("coding")),
+        Arc::new(settings_listing("coding")),
     )
     .await;
 
@@ -133,7 +133,7 @@ async fn pinned_proxy_advertises_nothing_when_the_model_is_absent() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::numbered(&[(2, FOREIGN)])),
-        Arc::new(MockSettingsRepo),
+        Arc::new(InMemorySettings::default()),
     )
     .await;
 
@@ -157,7 +157,7 @@ async fn pinned_proxy_serves_the_dashboard() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::new(&[PINNED])),
-        Arc::new(MockSettingsRepo),
+        Arc::new(InMemorySettings::default()),
     )
     .await;
 
@@ -199,7 +199,7 @@ async fn pinned_proxy_refuses_a_foreign_model_over_http() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(EnforcingPinnedRuntime::over(PINNED, &[PINNED, FOREIGN])),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
-        Arc::new(MockSettingsRepo),
+        Arc::new(InMemorySettings::default()),
     )
     .await;
 
@@ -241,7 +241,7 @@ async fn pinned_proxy_still_admits_the_pinned_model_over_http() {
     let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(EnforcingPinnedRuntime::over(PINNED, &[PINNED, FOREIGN])),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
-        Arc::new(MockSettingsRepo),
+        Arc::new(InMemorySettings::default()),
     )
     .await;
 

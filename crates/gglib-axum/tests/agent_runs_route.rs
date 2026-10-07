@@ -8,36 +8,14 @@
 mod common;
 
 use axum::Router;
-use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_path};
 use gglib_core::domain::runs::{RunInfo, RunKind, RunList};
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
-use common::origin::authed;
-
-async fn call(app: &Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
-    let mut request = authed()
-        .method(method)
-        .uri(uri)
-        .header("Host", "127.0.0.1:9887");
-    if body.is_some() {
-        request = request.header("content-type", "application/json");
-    }
-    let body = body.map_or_else(Body::empty, |value| Body::from(value.to_string()));
-    let response = app
-        .clone()
-        .oneshot(request.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap_or_default())
-}
+use common::origin::call_json;
 
 fn agent(id: &str) -> String {
     format!("{}?kind=agent", run_path(id))
@@ -48,7 +26,7 @@ fn chat_request() -> Value {
 }
 
 async fn no_runs(app: &Router) {
-    let (_, list) = call(app, Method::GET, RUNS_PATH, None).await;
+    let (_, list) = call_json(app, Method::GET, RUNS_PATH, None).await;
     let list: RunList = serde_json::from_value(list).unwrap();
     assert!(list.runs.is_empty(), "{list:?}");
 }
@@ -59,7 +37,7 @@ async fn an_unknown_conversation_is_a_404_and_nothing_runs() {
     let mut body = chat_request();
     body["conversation_id"] = json!(4242);
 
-    let (status, error) = call(&app, Method::PUT, &agent("a1"), Some(body)).await;
+    let (status, error) = call_json(&app, Method::PUT, &agent("a1"), Some(body)).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
     assert_eq!(error["type"], "conversation_not_found");
@@ -74,7 +52,7 @@ async fn with_every_agent_slot_taken_it_is_a_429_and_nothing_runs() {
         .try_acquire_many_owned(u32::try_from(slots).unwrap())
         .unwrap();
 
-    let (status, error) = call(&app, Method::PUT, &agent("a1"), Some(chat_request())).await;
+    let (status, error) = call_json(&app, Method::PUT, &agent("a1"), Some(chat_request())).await;
 
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{error}");
     assert_eq!(error["type"], "agent_busy");
@@ -87,9 +65,9 @@ async fn with_every_agent_slot_taken_it_is_a_429_and_nothing_runs() {
 async fn a_request_the_chat_route_refuses_is_refused_alike_with_a_code() {
     let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let (chat_status, chat_error) =
-        call(&app, Method::POST, "/api/agent/chat", Some(chat_request())).await;
+        call_json(&app, Method::POST, "/api/agent/chat", Some(chat_request())).await;
 
-    let (status, error) = call(&app, Method::PUT, &agent("a1"), Some(chat_request())).await;
+    let (status, error) = call_json(&app, Method::PUT, &agent("a1"), Some(chat_request())).await;
 
     assert_eq!(
         (chat_status, status),
@@ -105,7 +83,7 @@ async fn a_body_that_is_not_an_agent_request_is_refused_without_quoting_it() {
     let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let body = json!({ "port": "BODY-SECRET", "messages": [] });
 
-    let (status, error) = call(&app, Method::PUT, &agent("a1"), Some(body)).await;
+    let (status, error) = call_json(&app, Method::PUT, &agent("a1"), Some(body)).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
     assert_eq!(error["type"], "invalid_request");
@@ -120,10 +98,10 @@ async fn a_body_that_is_not_an_agent_request_is_refused_without_quoting_it() {
 async fn a_repeated_id_answers_with_its_run_before_any_check() {
     let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let chat = json!({ "model": "qwen", "messages": [] });
-    let (status, _) = call(&app, Method::PUT, &run_path("r1"), Some(chat)).await;
+    let (status, _) = call_json(&app, Method::PUT, &run_path("r1"), Some(chat)).await;
     assert_eq!(status, StatusCode::CREATED);
 
-    let (status, info) = call(&app, Method::PUT, &agent("r1"), Some(chat_request())).await;
+    let (status, info) = call_json(&app, Method::PUT, &agent("r1"), Some(chat_request())).await;
 
     assert_eq!(status, StatusCode::OK, "{info}");
     let info: RunInfo = serde_json::from_value(info).unwrap();
@@ -135,7 +113,7 @@ async fn an_unknown_kind_is_refused() {
     let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
     let uri = format!("{}?kind=essay", run_path("a1"));
 
-    let (status, error) = call(&app, Method::PUT, &uri, Some(chat_request())).await;
+    let (status, error) = call_json(&app, Method::PUT, &uri, Some(chat_request())).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
     assert_eq!(error["type"], "invalid_request");
@@ -149,7 +127,7 @@ async fn kind_chat_starts_a_chat_run() {
     let uri = format!("{}?kind=chat", run_path("c1"));
     let chat = json!({ "model": "qwen", "messages": [] });
 
-    let (status, info) = call(&app, Method::PUT, &uri, Some(chat)).await;
+    let (status, info) = call_json(&app, Method::PUT, &uri, Some(chat)).await;
 
     assert_eq!(status, StatusCode::CREATED, "{info}");
     let info: RunInfo = serde_json::from_value(info).unwrap();

@@ -18,8 +18,8 @@ use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::inference_profile::InferenceProfile;
 use gglib_core::ports::{
-    Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
-    ModelRuntimePort, ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
+    Admission, CatalogError, InMemorySettings, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec,
+    ModelRuntimeError, ModelRuntimePort, ModelSummary, RunningTarget, SettingsRepository,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer};
 use gglib_mcp::McpService;
@@ -84,59 +84,20 @@ impl ModelCatalogPort for EmptyCatalog {
     }
 }
 
-// ─── SettingsRepository mock ──────────────────────────────────────────────
-
-/// Returns default settings; save is a no-op.
-pub(crate) struct MockSettingsRepo;
-
-#[async_trait]
-impl SettingsRepository for MockSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings::with_defaults())
-    }
-
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
-
-/// Settings repository returning a caller-supplied [`Settings`] verbatim —
-/// for tests exercising settings-gated proxy behaviour (e.g. the loop
-/// guard's `off` mode).
-pub(crate) struct StaticSettingsRepo(pub Settings);
-
-#[async_trait]
-impl SettingsRepository for StaticSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(self.0.clone())
-    }
-
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
+// ─── Settings ─────────────────────────────────────────────────────────────
 
 /// Settings carrying one listed inference profile, so `/v1/models` emits
 /// `{model}:{name}` variant entries.
-pub(crate) struct ProfileSettingsRepo(pub &'static str);
-
-#[async_trait]
-impl SettingsRepository for ProfileSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings {
-            inference_profiles: Some(vec![InferenceProfile {
-                name: self.0.to_string(),
-                description: None,
-                config: InferenceConfig::default(),
-                list_in_models: true,
-            }]),
-            ..Settings::with_defaults()
-        })
-    }
-
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
+pub(crate) fn settings_listing(profile: &str) -> InMemorySettings {
+    InMemorySettings::with(Settings {
+        inference_profiles: Some(vec![InferenceProfile {
+            name: profile.to_string(),
+            description: None,
+            config: InferenceConfig::default(),
+            list_in_models: true,
+        }]),
+        ..Settings::with_defaults()
+    })
 }
 
 // ─── McpServerRepository mock (includes update_last_connected) ────────────
@@ -299,21 +260,8 @@ impl TaggedCatalog {
     fn summary(&self) -> ModelSummary {
         ModelSummary {
             dialect: self.dialect.clone(),
-            template_caps: None,
-            id: 1,
-            name: self.name.clone(),
             tags: self.tags.clone(),
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
-            image_input: false,
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(1, &self.name)
         }
     }
 }
@@ -892,11 +840,11 @@ pub(crate) async fn spawn_proxy_with_catalog(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,
 ) -> (String, CancellationToken) {
-    spawn_proxy_with_settings(runtime, catalog, Arc::new(MockSettingsRepo)).await
+    spawn_proxy_with_settings(runtime, catalog, Arc::new(InMemorySettings::default())).await
 }
 
 /// [`spawn_proxy_with_catalog`] with the settings repository supplied too —
-/// for tests exercising settings-gated behaviour (see [`StaticSettingsRepo`]).
+/// for tests exercising settings-gated behaviour (see [`InMemorySettings`]).
 pub(crate) async fn spawn_proxy_with_settings(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,

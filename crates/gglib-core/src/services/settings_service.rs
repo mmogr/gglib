@@ -112,37 +112,11 @@ impl SettingsService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::RepositoryError;
-    use async_trait::async_trait;
-    use std::sync::Mutex;
-
-    struct MockSettingsRepo {
-        settings: Mutex<Settings>,
-    }
-
-    impl MockSettingsRepo {
-        fn new() -> Self {
-            Self {
-                settings: Mutex::new(Settings::with_defaults()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl SettingsRepository for MockSettingsRepo {
-        async fn load(&self) -> Result<Settings, RepositoryError> {
-            Ok(self.settings.lock().unwrap().clone())
-        }
-
-        async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
-            *self.settings.lock().unwrap() = settings.clone();
-            Ok(())
-        }
-    }
+    use crate::ports::InMemorySettings;
 
     #[tokio::test]
     async fn test_get_default_settings() {
-        let repo = Arc::new(MockSettingsRepo::new());
+        let repo = Arc::new(InMemorySettings::default());
         let service = SettingsService::new(repo);
 
         let settings = service.get().await.unwrap();
@@ -152,7 +126,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_settings() {
-        let repo = Arc::new(MockSettingsRepo::new());
+        let repo = Arc::new(InMemorySettings::default());
         let service = SettingsService::new(repo);
 
         let update = SettingsUpdate {
@@ -180,7 +154,7 @@ mod tests {
 
     #[tokio::test]
     async fn installing_the_templates_stores_all_nine() {
-        let service = SettingsService::new(Arc::new(MockSettingsRepo::new()));
+        let service = SettingsService::new(Arc::new(InMemorySettings::default()));
 
         let (stored, done) = service.install_profile_templates(false).await.unwrap();
 
@@ -195,7 +169,7 @@ mod tests {
     /// kept, where it is in the list, and the rest are added after it.
     #[tokio::test]
     async fn a_profile_with_a_templates_name_is_kept() {
-        let service = SettingsService::new(Arc::new(MockSettingsRepo::new()));
+        let service = SettingsService::new(Arc::new(InMemorySettings::default()));
         let mut mine = builtin_templates().remove(1);
         mine.config.temperature = Some(0.123);
         let update = SettingsUpdate {
@@ -220,7 +194,7 @@ mod tests {
     /// With `force` the template takes the stored profile's place.
     #[tokio::test]
     async fn force_puts_the_template_in_the_stored_profiles_place() {
-        let service = SettingsService::new(Arc::new(MockSettingsRepo::new()));
+        let service = SettingsService::new(Arc::new(InMemorySettings::default()));
         let mut mine = builtin_templates().remove(1);
         mine.config.temperature = Some(0.123);
         let update = SettingsUpdate {
@@ -242,7 +216,7 @@ mod tests {
     /// it that was valid.
     #[tokio::test]
     async fn an_update_that_fails_validation_stores_nothing() {
-        let repo = Arc::new(MockSettingsRepo::new());
+        let repo = Arc::new(InMemorySettings::default());
         let service = SettingsService::new(repo);
 
         let refused = service

@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 use gglib_core::domain::{InferenceConfig, InferenceProfile};
 use gglib_proxy::ServeConfig;
 
-use super::profile_mocks::{MODEL, NamedCatalog, ProfileSettings, RecordingRuntime};
+use super::profile_mocks::{MODEL, NamedCatalog, RecordingRuntime, profile_settings};
 
 // ─── Harness ───────────────────────────────────────────────────────────────
 
@@ -140,10 +140,7 @@ pub(crate) async fn spawn_with_default_profile(
             inference_defaults: model_defaults,
         }),
         cancel: cancel.clone(),
-        settings_repo: Arc::new(ProfileSettings {
-            profiles,
-            trust_client_sampling,
-        }),
+        settings_repo: Arc::new(profile_settings(profiles, trust_client_sampling)),
         default_profile,
         ..super::spawn::defaults().await
     })

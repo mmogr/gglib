@@ -15,7 +15,7 @@ use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, PinnedSpec, RunningTarget,
 };
 
-use fixtures::common::{ProfileSettingsRepo, spawn_proxy_with_settings};
+use fixtures::common::{settings_listing, spawn_proxy_with_settings};
 use fixtures::pinned::{StaticCatalog, pin};
 
 /// The profile the settings configure, so `qwen:coding` routes.
@@ -87,7 +87,7 @@ async fn proxy(runtime: Resident) -> (String, tokio_util::sync::CancellationToke
     spawn_proxy_with_settings(
         Arc::new(runtime),
         Arc::new(catalog),
-        Arc::new(ProfileSettingsRepo(PROFILE)),
+        Arc::new(settings_listing(PROFILE)),
     )
     .await
 }

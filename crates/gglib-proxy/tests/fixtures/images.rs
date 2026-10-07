@@ -56,22 +56,8 @@ impl Sight {
 
     fn model(id: u32, name: &str, image_input: bool) -> ModelSummary {
         ModelSummary {
-            dialect: None,
-            template_caps: None,
-            id,
-            name: name.into(),
-            tags: Vec::new(),
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
             image_input,
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(id, name)
         }
     }
 }

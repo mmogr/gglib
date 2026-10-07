@@ -93,22 +93,9 @@ impl ModelCatalogPort for OneModelCatalog {
 
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok((name == "1" || name == self.0).then(|| ModelSummary {
-            id: 1,
-            name: self.0.to_owned(),
-            tags: Vec::new(),
             capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
-            image_input: false,
-            dialect: None,
-            template_caps: None,
             param_count: String::new(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(1, self.0)
         }))
     }
 

@@ -21,22 +21,8 @@ use crate::bootstrap::{CliContext, test_context};
 /// A GGUF v3 file in `dir` holding only `pairs` as string metadata, under its
 /// canonical path.
 pub(super) fn write_gguf(dir: &Path, name: &str, pairs: &[(&str, &str)]) -> PathBuf {
-    let string = |text: &str| {
-        let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
-        bytes.extend_from_slice(text.as_bytes());
-        bytes
-    };
-    let mut bytes = b"GGUF".to_vec();
-    bytes.extend_from_slice(&3_u32.to_le_bytes());
-    bytes.extend_from_slice(&0_u64.to_le_bytes());
-    bytes.extend_from_slice(&(pairs.len() as u64).to_le_bytes());
-    for (key, value) in pairs {
-        bytes.extend(string(key));
-        bytes.extend_from_slice(&8_u32.to_le_bytes());
-        bytes.extend(string(value));
-    }
     let path = dir.join(name);
-    std::fs::write(&path, bytes).unwrap();
+    gglib_gguf::write_string_gguf(&path, pairs);
     path.canonicalize().unwrap()
 }
 

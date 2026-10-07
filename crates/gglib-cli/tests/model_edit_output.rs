@@ -14,20 +14,8 @@ const RULE: &str = "━━━━━━━━━━━━━━━━━━━━
 /// A GGUF v3 file in `dir` whose only metadata is its architecture, under
 /// its canonical path.
 fn write_gguf(dir: &Path, name: &str) -> PathBuf {
-    let string = |text: &str| {
-        let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
-        bytes.extend_from_slice(text.as_bytes());
-        bytes
-    };
-    let mut bytes = b"GGUF".to_vec();
-    bytes.extend_from_slice(&3_u32.to_le_bytes());
-    bytes.extend_from_slice(&0_u64.to_le_bytes());
-    bytes.extend_from_slice(&1_u64.to_le_bytes());
-    bytes.extend(string("general.architecture"));
-    bytes.extend_from_slice(&8_u32.to_le_bytes());
-    bytes.extend(string("qwen3"));
     let path = dir.join(name);
-    std::fs::write(&path, bytes).expect("the file is written");
+    gglib_gguf::write_string_gguf(&path, &[("general.architecture", "qwen3")]);
     path.canonicalize().expect("its canonical path")
 }
 

@@ -19,12 +19,12 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::ports::{
-    Admission, LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ModelRuntimePort,
-    RunningTarget,
+    Admission, InMemorySettings, LaunchOverrides, ModelCatalogPort, ModelRuntimeError,
+    ModelRuntimePort, RunningTarget,
 };
 use gglib_core::{LoopGuardMode, Settings};
 
-use super::common::{StaticSettingsRepo, TaggedCatalog, spawn_proxy_with_settings};
+use super::common::{TaggedCatalog, spawn_proxy_with_settings};
 
 /// Spawn a proxy whose loop guard runs in `mode`.
 ///
@@ -45,7 +45,7 @@ pub(crate) async fn spawn_proxy_in_mode(
         loop_guard_mode: Some(mode),
         ..Settings::with_defaults()
     };
-    spawn_proxy_with_settings(runtime, catalog, Arc::new(StaticSettingsRepo(settings))).await
+    spawn_proxy_with_settings(runtime, catalog, Arc::new(InMemorySettings::with(settings))).await
 }
 
 /// One assistant turn carrying a single tool call.

@@ -19,22 +19,8 @@ impl ModelCatalogPort for OneModelCatalog {
 
     async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
         Ok((name == MODEL).then(|| ModelSummary {
-            id: 1,
-            name: MODEL.to_owned(),
-            tags: vec![],
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
-            image_input: false,
-            dialect: None,
-            template_caps: None,
             param_count: String::new(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(1, MODEL)
         }))
     }
 
